@@ -208,8 +208,15 @@ int AZUREMain::operator()() {
     // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
     // in the first evaluation's report.
     AZUREProfile::Report(std::cerr, "set-up");
+    // MIGRAD's function calls as reported (fitStatus.out, the log): counted by the objective itself and reset before
+    // each MIGRAD, so that only Minuit2's calls are in it.  Minuit2's NFcn() is not used: its counter is a plain int
+    // that its OpenMP numerical gradient increments from several threads (lost increments, a count a few low, varying
+    // from run to run); Minuit2 still stops at --max-calls by that counter, so under threads the limit is approximate
+    // by as much.  Declared before theFunc, which holds its address.
+    std::atomic<long> migradCallCount{0};
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), results, compound(), configure(), &limitsManager);
+    theFunc.CountCallsInto(&migradCallCount);
     // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
     if (priorCov && priorCov->Size() > 0) {
       const std::vector<std::string> replaced = ReplaceDiagonalPriors(compound(), data(), *priorCov);
@@ -332,12 +339,12 @@ int AZUREMain::operator()() {
         status = "converged";
         configure().outStream << std::endl << "MIGRAD converged: valid minimum, EDM " << std::scientific << std::setprecision(3)
                               << m.Edm() << " (goal " << goal << ")" << std::defaultfloat << std::setprecision(6)
-                              << ", " << m.NFcn() << " function calls, call limit " << callLimitText << "."
+                              << ", " << migradCallCount.load() << " function calls, call limit " << callLimitText << "."
                               << std::endl;
       } else {
         if (m.HasReachedCallLimit()) {
           status = "call_limit";
-          why << "stopped at the call limit (" << m.NFcn() << " function calls, limit " << callLimitText << ")";
+          why << "stopped at the call limit (" << migradCallCount.load() << " function calls, limit " << callLimitText << ")";
         } else {
           status = "invalid";
           why << "invalid minimum";
@@ -345,7 +352,7 @@ int AZUREMain::operator()() {
           if (!m.HasValidCovariance()) why << ", no valid covariance";
           if (m.HasMadePosDefCovar()) why << ", covariance forced positive definite";
           if (m.HesseFailed()) why << ", HESSE failed";
-          why << "; " << m.NFcn() << " function calls";
+          why << "; " << migradCallCount.load() << " function calls";
         }
         why << "; EDM " << m.Edm() << " (goal " << goal << ")";
         configure().outStream << std::endl << "WARNING: MIGRAD did NOT converge: " << why.str()
@@ -353,7 +360,7 @@ int AZUREMain::operator()() {
                               << " the fit from param.sav" << (status == "call_limit" ? " or raise --max-calls" : "")
                               << "." << std::endl;
       }
-      writeFitStatus("MIGRAD", status, m.IsValid(), m.Edm(), goal, m.NFcn());
+      writeFitStatus("MIGRAD", status, m.IsValid(), m.Edm(), goal, migradCallCount.load());
     };
 
     if (configure().paramMask & Config::PERFORM_FIT) {
@@ -504,7 +511,7 @@ int AZUREMain::operator()() {
                                   << std::endl;
             const ROOT::Minuit2::FCNBase &fb = theFunc;
             ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
-            ROOT::Minuit2::FunctionMinimum min = migrad(migradCalls);
+            ROOT::Minuit2::FunctionMinimum min = (migradCallCount = 0, migrad(migradCalls));
             reportMigrad(min);
             params.GetMinuitParams() = min.UserParameters();
             captureMinuitCov(min.UserCovariance().Data());
@@ -528,7 +535,7 @@ int AZUREMain::operator()() {
                                   << std::endl;
             const ROOT::Minuit2::FCNBase &fb = theFunc;
             ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
-            ROOT::Minuit2::FunctionMinimum min = migrad(migradCalls);
+            ROOT::Minuit2::FunctionMinimum min = (migradCallCount = 0, migrad(migradCalls));
             reportMigrad(min);
             params.GetMinuitParams() = min.UserParameters();
             captureMinuitCov(min.UserCovariance().Data());
@@ -552,11 +559,11 @@ int AZUREMain::operator()() {
               else
                 configure().outStream << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
               ROOT::Minuit2::MnMigrad migrad(theFunc, start);
-              return migrad(migradCalls);
+              return (migradCallCount = 0, migrad(migradCalls));
             } else {
               const ROOT::Minuit2::FCNBase &fb = theFunc;
               ROOT::Minuit2::MnMigrad migrad(fb, start);
-              return migrad(migradCalls);
+              return (migradCallCount = 0, migrad(migradCalls));
             }
           };
           ROOT::Minuit2::FunctionMinimum min = runMigrad(params.GetMinuitParams());
@@ -824,7 +831,7 @@ int AZUREMain::operator()() {
           std::vector<std::string> names;
           for (unsigned int i = 0; i < mp.Params().size(); i++) {
             const ParamKind kind = params.Kind((int)i);
-            if (!mp.Parameter(i).IsFixed() && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma))
+            if (!mp.Parameter(i).IsFixed() && IsLevelSlot(kind))
               names.push_back(mp.GetName(i));
           }
           if ((int)names.size() == bandCov.size()) bandCov.names = names;

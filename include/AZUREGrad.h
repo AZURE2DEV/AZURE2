@@ -219,6 +219,11 @@ struct GradAccum {
    * parameter (AMatrixFunc::LevelAdjoint).  Not owned.
    */
   const FreeLevelMask *mask = nullptr;
+  /// The compound whose evaluation fills the accumulator (Init): Scatter pulls the cotangents of its gamma_decay
+  /// records' photon amplitudes back to the records' numbers (GammaDecaySet::PullBack).  Not owned.
+  CNuc *source = nullptr;
+  /// Contributions to the full vector by index, added as they are (a term in the parameters alone: T11).
+  std::vector<std::pair<int, double>> direct;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);

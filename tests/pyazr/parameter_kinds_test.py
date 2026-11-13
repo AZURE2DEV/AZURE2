@@ -66,6 +66,8 @@ def name_from_record(r, project):
         return f"energy_{r['level_number']}"
     if k == "width":
         return f"width_{r['level_number']}_{r['channel']}"
+    if k == "radiative":  # <record>.<part>[.<final state>] (GammaDecaySet::AddParameter)
+        return f"{r['decay_record']}.{r['decay_part']}" + (f".{r['final_state']}" if r["final_state"] else "")
     if k == "apparatus":  # the owner's values joined by '.' (ApparatusDeclaration::Name)
         return ".".join(v for _, v in r["owner"])
     if k == "cbkg":
@@ -166,18 +168,18 @@ def load_module(name, path):
 # -- the table ----------------------------------------------------------------------------------------------------
 print("the table of kinds")
 kinds = parameter_kinds()
-check("codes 0..12 in order", [k["code"] for k in kinds] == list(range(13)), [k["code"] for k in kinds])
+check("codes 0..13 in order", [k["code"] for k in kinds] == list(range(14)), [k["code"] for k in kinds])
 keys = [k["key"] for k in kinds]
 check("keys", keys == ["energy", "width", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                       "density", "doppler", "thickness", "cbkg", "apparatus"], keys)
+                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"], keys)
 check("every row has a unit, owner and doc", all(k["unit"] and k["owner"] and k["doc"] for k in kinds))
-check("own_prior: the nuisance kinds 2..10 and 12",
-      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["apparatus"])
+check("own_prior: the nuisance kinds 2..10, 12 and 13",
+      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["apparatus", "radiative"])
 check("segment_field: norm, the shifts, thickness",
       [k["key"] for k in kinds if k["segment_field"]] == ["norm", "shift", "shift_sqrt", "shift_fn", "thickness"])
 check("vary_from_project: the shifts, screening, density, Doppler, thickness, apparatus parameters",
       [k["key"] for k in kinds if k["vary_from_project"]] ==
-      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "apparatus"])
+      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "apparatus", "radiative"])
 
 seen = set()
 with tempfile.TemporaryDirectory() as tmp:
@@ -230,6 +232,12 @@ with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(os.path.join(d, sub))
     kinds_rr = check_project("rectangular_resolution", os.path.join(d, "fit.azr"), d, {"apparatus"})
     check("rectangular_resolution: one apparatus parameter for the two data sets", kinds_rr.get("apparatus") == 1, kinds_rr)
+
+    print("tests/gamma_decay/models/record.azr: a level written as Gamma_gamma, branchings and mixing ratios")
+    d = copy_project(os.path.join(ROOT, "tests", "gamma_decay", "models"), os.path.join(tmp, "gamma"))
+    kinds_gd = check_project("gamma_decay", os.path.join(d, "record.azr"), d, {"radiative", "width"})
+    check("gamma_decay: one radiative parameter per photon channel of level 5 (8)", kinds_gd.get("radiative") == 8, kinds_gd)
+    seen |= set(kinds_gd)
 
 check("the projects hold every kind", seen == set(keys), sorted(set(keys) - seen))
 

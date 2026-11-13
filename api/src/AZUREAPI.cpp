@@ -1100,7 +1100,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
     // THM coherent backgrounds (cbackground=) are columns of the THM rows above.
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm ||
                kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
                kind == ParamKind::ThmCoherent))
       continue;
@@ -1511,7 +1511,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
       // width parameters (one per channel)
       for (int ch = 1; ch <= jg->NumChannels(); ++ch) {
         AChannel *chan = jg->GetChannel(ch);
-        push(1, j, J, parity, la, levelE, ch, chan->GetL(), chan->GetS(),
+        push(nuc->GetGammaDecays().OwnsSlot(j, la, ch) ? 13 : 1, j, J, parity, la, levelE, ch, chan->GetL(), chan->GetS(),
              chan->GetPairNum(), (double)chan->GetRadType(), -1,
              chan->GetWignerLimit(),
              level->GammaIsRWA(ch) ? 1.0 : 0.0);

@@ -27,6 +27,8 @@ Sections
      - ``datum``
    * - ``<potentials>``
      - ``potential``
+   * - ``<gammaDecays>``
+     - ``gamma_decay``
 
 Value types
 -----------
@@ -661,6 +663,60 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - ``<number> <length unit>``
      - optional (default ``0.0275 fm``)
      - the step of the inward integration, adjusted so that the channel radius is a node
+
+gamma_decay
+~~~~~~~~~~~
+
+Radiative decay of a level, in ``<gammaDecays>``.  A level's radiative partial widths written as its total radiative width, branchings and mixing ratios (docs/upgrade/gamma_parametrisation.md).  Gamma_gamma is the sum of the level's radiative widths; like them it stays out of the resonance's total width, which is the sum of the particle widths.  The level's photon lines of <levels> carry 0.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``J``
+     - ``<J><parity>``
+     - required
+     - must equal the level's J^pi (F13)
+   * - ``total_width``
+     - ``<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - required
+     - Gamma_gamma, the sum of the radiative widths
+   * - ``branching``
+     - ``<particle>+<nucleus>[<E_x>] <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - optional; repeatable
+     - b_f of one final state
+   * - ``remainder``
+     - ``<particle>+<nucleus>[<E_x>] [prior <number> ...]``
+     - optional
+     - the final state that takes 1 - sum of the others
+   * - ``mixing``
+     - ``<particle>+<nucleus>[<E_x>] <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - optional; repeatable
+     - delta_f of a final state with L and L+1 (Krane-Steffen)
+   * - ``sign``
+     - ``<particle>+<nucleus>[<E_x>] +|-``
+     - optional; repeatable
+     - the sign of a final state's L amplitude
+   * - ``source``
+     - ``<text>``
+     - optional
+     - where the numbers come from; never read by the physics
+   * - ``exfor``
+     - ``<text>``
+     - optional
+     - the EXFOR entry and subentry
+   * - ``doi``
+     - ``<text>``
+     - optional
+     - the DOI of the publication
 
 Quantities
 ----------
@@ -1923,7 +1979,22 @@ Diagnostic codes
      - a reaction or pair that two pairs of <levels> have (a data set or a potential says which with a pair key)
    * - ``E_NOT_A_CHANNEL``
      - error
-     - a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair
+     - a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair; a gamma_decay's final state that is no photon channel of its level
+   * - ``E_GAMMA_MIXTURE``
+     - error
+     - a gamma_decay level that also has a non-zero photon width in <levels> (write 0 there or delete the record)
+   * - ``E_BRANCHING_SUM``
+     - error
+     - gamma_decay branchings that are all fixed and do not sum to 1, or a fitted one without a remainder
+   * - ``E_BRANCHING_REMAINDER``
+     - error
+     - gamma_decay branchings whose sum exceeds 1, leaving a negative remainder
+   * - ``E_MIXING_ONE_MULTIPOLE``
+     - error
+     - a gamma_decay mixing ratio for a final state with one multipolarity in the level's channels
+   * - ``E_GAMMA_RECORD``
+     - error
+     - a gamma_decay record that names a level twice, a final state twice, a level without photon channels, or a malformed remainder prior
    * - ``E_PAIR_KEY``
      - error
      - entrance_pair / exit_pair / pair_key where the label names one pair, or a key the label does not name

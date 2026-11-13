@@ -178,6 +178,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 struct Forms {
   FormSpec shift, quadrature, secondaryGamma, orders, function, param, epoch, stopping, straggling,
       isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
+  FormSpec branching, remainder, mixing, decaySign;
   FormSpec reference;
 };
 
@@ -246,6 +247,17 @@ Forms MakeForms() {
   f.udr = {{Unkeyed({Kw("file", Spec(ValueType::Path)), Kw("flight_path", PositiveWithUnit("length")), Kw("burst", WithUnit("time")),
                      Kw("channel", WithUnit("time")), Kw("centred", Words({"yes", "no"}))},
                     "SAMMY's time-of-flight resolution (UDR)")}};
+  f.branching = {{Unkeyed({Pos("final", Spec(ValueType::Pair), "the photon pair of the final state, g+<nucleus>[<E_x>]"),
+                           Pos("value", Nuis(""), "b_f = Gamma_f / Gamma_gamma")},
+                          "the branching of the level's gamma decay to one final state")}};
+  f.remainder = {{Unkeyed({Pos("final", Spec(ValueType::Pair), "the photon pair of the final state"),
+                           OptionalKw("prior", Spec(ValueType::NumberList), "a Gaussian prior '<centre> <width>' on 1 - sum b_f")},
+                          "the final state whose branching is 1 - the sum of the others (not a parameter)")}};
+  f.mixing = {{Unkeyed({Pos("final", Spec(ValueType::Pair), "the photon pair of the final state"),
+                        Pos("value", Nuis(""), "delta_f, Krane-Steffen sign: delta^2 = Gamma_{L+1} / Gamma_L")},
+                       "the mixing ratio of a final state with two multipolarities")}};
+  f.decaySign = {{Unkeyed({Pos("final", Spec(ValueType::Pair), "the photon pair of the final state"), Pos("sign", Words({"+", "-"}))},
+                          "the interference sign of the final state's L amplitude (default +)")}};
   f.channelSpin = {{Keyword("coherent", {}, "the coherent scattering length"), Unkeyed({Pos("spin", Spec(ValueType::Spin))}, "the channel spin")}};
   f.central = {{Keyword("woods_saxon",
                         {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("radius", PositiveWithUnit("length"), "R"),
@@ -492,6 +504,27 @@ RecordKind DatumKind() {
   return k;
 }
 
+RecordKind GammaDecayKind() {
+  const Forms &f = StructuredValues();
+  RecordKind k;
+  k.kind = "gamma_decay";
+  k.sections = {"gammaDecays"};
+  k.title = "Radiative decay of a level";
+  k.doc = "A level's radiative partial widths written as its total radiative width, branchings and mixing ratios "
+          "(docs/upgrade/gamma_parametrisation.md).  Gamma_gamma is the sum of the level's radiative widths; like them it "
+          "stays out of the resonance's total width, which is the sum of the particle widths.  The level's photon lines of "
+          "<levels> carry 0.";
+  k.fields = Concat({{Req("level", "Level", IntAtLeast(0), "the level ID of <levels> (column 9)"),
+                      Req("J", "J^pi", Spec(ValueType::SpinParity), "must equal the level's J^pi (F13)"),
+                      Req("total_width", "Total radiative width", Nuis("energy"), "Gamma_gamma, the sum of the radiative widths"),
+                      Repeatable(Opt("branching", "Branching", Structured(f.branching), "b_f of one final state")),
+                      Opt("remainder", "Remainder", Structured(f.remainder), "the final state that takes 1 - sum of the others"),
+                      Repeatable(Opt("mixing", "Mixing ratio", Structured(f.mixing), "delta_f of a final state with L and L+1 (Krane-Steffen)")),
+                      Repeatable(Opt("sign", "Interference sign", Structured(f.decaySign), "the sign of a final state's L amplitude"))},
+                     TextFields()});
+  return k;
+}
+
 RecordKind PotentialKind() {
   const Forms &f = StructuredValues();
   RecordKind k;
@@ -627,6 +660,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>> &Schema::Sec
       {"extrapolations", {"extrapolation"}},
       {"modelData", {"datum"}},
       {"potentials", {"potential"}},
+      {"gammaDecays", {"gamma_decay"}},
   };
   return sections;
 }
@@ -646,7 +680,8 @@ const RecordKind *Schema::FindKind(const std::string &kind) {
 const std::vector<RecordKind> &Schema::Kinds() {
   static const std::vector<RecordKind> kinds = {DatasetKind(),       NormalizationKind(), EnergyScaleKind(),
                                                 ExtrapolationKind(), TargetKind(),        BeamKind(),
-                                                DetectorKind(),      DatumKind(),         PotentialKind()};
+                                                DetectorKind(),      DatumKind(),         PotentialKind(),
+                                                GammaDecayKind()};
   return kinds;
 }
 
