@@ -96,4 +96,19 @@ file restored from git after each):
 Added with the Fit tab (each shown failing on 2026-11-13 with `work/uifit/inject.py`, outside the repository; the
 file restored from git after each):
 
-INJECTIONS_PLACEHOLDER
+- a request's setting is converted by its type: `merged_settings` keeps the value as sent; fails
+  `jobs_test.py::test_settings_listed_with_types_and_converted`.
+- Accept writes the job's best point as pyazr's `save_fit` does: `job_accept` applies the working x instead; fails
+  `jobs_test.py::test_accept_writes_what_pyazr_writes_back_and_undo_restores`.
+- a stopped job keeps its best point: the stop drops it; fails
+  `jobs_test.py::test_stopped_job_leaves_its_best_point_which_is_accepted`.
+- the trace is thinned past `TRACE_POINTS`; a GET with `wait` answers at a state change; the parameter table is
+  readable while a job holds the budget; a job's record has no `rev` (only `text_rev`): each in turn broken (no
+  thinning; the wait ignores the state; the budget refuses the parameter table; the field named `rev`); each fails
+  `jobs_test.py::test_trace_log_wait_and_parameters_during_a_job`.
+- MINOS's intervals are in the result: the key renamed; fails `jobs_test.py::test_minos_after_an_iminuit_fit`.
+- Stop is not offered while a job is stopping; a widget exists for every setting type; the trace's y axis is
+  logarithmic; the job's columns appear only with a job: each broken in turn; each fails `node_test.py`
+  (`js/fitting.test.mjs`).
+- the Stop button of the job panel is found and pressed: its `data-action` removed; fails `smoke_test.py` on T1 and
+  T2.
