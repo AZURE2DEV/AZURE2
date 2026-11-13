@@ -12,6 +12,7 @@ import copy
 import os
 import re
 import shutil
+import sys
 import tempfile
 
 import numpy as np
@@ -27,6 +28,8 @@ except ImportError as err:                            # pragma: no cover
         "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
+from .errors import ParameterError, ParameterKeyError, close_names, listed
+from . import session_checks
 from .parameters import (Pair, PairSet, Parameter,
                          ParameterSet)
 from .project import require_format3
@@ -73,6 +76,15 @@ class ScatteringLength(NamedTuple):
 
 
 class azure2(_HybridPotentials):
+    """One calculation session: a format-3 project set up by the engine in this interpreter (options: see __init__).
+
+    Parameters: :attr:`params_rwa` (the free vector, start values, engine order), :attr:`parameters` (what each entry
+    is), :attr:`pairs`, :meth:`physical_levels`.  Data: :attr:`datasets`, :attr:`energies`, :attr:`cross`.  At a
+    free vector: :meth:`objective`, :meth:`objective_and_grad`, :meth:`calculate_chi2_rwa`, :meth:`segment_chi2`,
+    :meth:`calculate_rwa`, :meth:`penalties`.  Files: :meth:`write_output_files`, :meth:`save_fit`.
+    :meth:`describe` (plain data), :meth:`close` (or a ``with`` block).  Errors: :mod:`pyazr.errors`.
+    """
+
     #: Energy-shift penalties are measured from 0, (dE/sigma)^2, not from the
     #: .azr value (2026-10-25).  rmfit reads this to match the engine it runs.
     SHIFT_PENALTY_FROM_ZERO = True
@@ -121,8 +133,8 @@ class azure2(_HybridPotentials):
             multipole operator as well as its charge (extended Siegert) part
             (the default; CLI ``--no-ec-convection-current`` turns it off).
             No effect in the long-wavelength approximation.
-        use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
-            Brune; mutually exclusive with ``use_brune`` (Brune wins).
+        use_rmc : Reich-Moore approximation for capture (neutron capture only), CLI ``--use-rmc``.  The program
+            then drops ``--use-brune`` and ``--use-park``; a session does not: pass ``use_brune=False`` with it.
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
             C 104, 064612), the CLI's ``--use-park``.  The rwa vector then
             holds the *observed* reduced width amplitudes,
@@ -133,8 +145,17 @@ class azure2(_HybridPotentials):
 
         Raises
         ------
-        _azure2.AZURE2Error
-            if the file is missing or the model will not initialize.
+        pyazr.MissingFile
+            (a ``FileNotFoundError``) if the file or ``cwd`` does not exist.
+        pyazr.FormatError
+            if the file is not a format-3 project (the message names the conversion).
+        pyazr.AZURE2Error
+            (``pyazr.EngineError``) if the model will not initialize.
+
+        Warns
+        -----
+        pyazr.EngineWarning
+            for an engine notice met while setting up (an external-capture amplitude file that cannot be written).
         """
         self._sess = None
         self._azr_cache = {}
@@ -143,7 +164,7 @@ class azure2(_HybridPotentials):
         self.cwd = os.path.abspath(cwd if cwd is not None else (
             os.path.dirname(self.file) or "."))
         if not os.path.isdir(self.cwd):
-            raise FileNotFoundError(f"working directory {self.cwd!r} does not exist.")
+            raise session_checks.missing_directory(self.cwd, self.file)
 
         # Kept so a session can be reproduced elsewhere -- a worker process
         # rebuilding this same model needs the formalism options, not just the
@@ -179,10 +200,9 @@ class azure2(_HybridPotentials):
 
     @property
     def sess(self):
-        """The underlying engine, or a clear error once it has been released."""
+        """The underlying engine, or :class:`pyazr.SessionClosed` (a ``RuntimeError``) once it has been released."""
         if self._sess is None:
-            raise RuntimeError(
-                "this azure2 session is closed; open a new one for more work.")
+            raise session_checks.session_closed(self.file, sys._getframe(1).f_code.co_name)
         return self._sess
 
     def close(self):
@@ -193,6 +213,13 @@ class azure2(_HybridPotentials):
         over model variants, where the collector may hold two at once.
         """
         self._sess = None
+
+    def describe(self):
+        """What this session holds, as plain data: project, options, Coulomb table, pairs, levels, data sets,
+        extrapolations, parameters (name, kind, unit, value, free).
+        The keys: :func:`pyazr.described.describe_session`."""
+        from .described import describe_session
+        return describe_session(self)
 
     def is_alive(self):
         """Is the engine still open? False once close() has run."""
@@ -230,6 +257,7 @@ class azure2(_HybridPotentials):
         self._parameters = None
         self._pairs = None
         self._azr_cache = {}
+        session_checks.warn_engine_notices(self._sess)
 
     # -- the .azr, parsed once per version of the file ------------------------
 
@@ -371,10 +399,12 @@ class azure2(_HybridPotentials):
         """
         pair = int(pair)
         if not any(p.number == pair for p in self.pairs):
-            raise KeyError(f"no pair {pair} in this model "
-                           f"(have {[p.number for p in self.pairs]}).")
+            raise ParameterKeyError(f"set_channel_radius: no pair {pair} in this model (have "
+                                    f"{[p.number for p in self.pairs]}); azure2.pairs lists the pairs.")
         if not radius > 0:
-            raise ValueError(f"channel radius must be positive, got {radius}.")
+            raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
+                                 f"in fm, got {radius}; azure2.pairs.by_number({pair}).channel_radius is the "
+                                 f"current one.")
         if not self.sess.set_radius(pair, float(radius)):
             raise RuntimeError(
                 f"AZURE2 could not rebuild with pair {pair} at "
@@ -482,19 +512,23 @@ class azure2(_HybridPotentials):
         Raises if the selector is ambiguous or matches nothing.
         """
         keys = self.physical_levels()
+        have = listed([str(k) for k in keys])
         if level is not None:
             if level in keys:
                 return level
-            raise KeyError(f"{level!r} is not a level of this model.")
+            raise ParameterKeyError(f"{level!r} is not a level of this model (its levels: {have}); "
+                                    f"azure2.physical_levels() gives the keys.")
         hits = [k for k in keys
                 if (jpi is None or k.jpi == jpi)
                 and (energy is None or (k.energy is not None
                                         and abs(k.energy - energy) <= tol))]
         if not hits:
-            raise KeyError(f"no level matches jpi={jpi} energy={energy}.")
+            raise ParameterKeyError(f"no level matches jpi={jpi} energy={energy} (MeV, within {tol}); the levels: "
+                                    f"{have}; azure2.physical_levels() gives the keys.")
         if len(hits) > 1:
-            raise KeyError(f"ambiguous selector jpi={jpi} energy={energy}: "
-                           f"matches {[str(h) for h in hits]}.")
+            raise ParameterKeyError(f"ambiguous selector jpi={jpi} energy={energy}: "
+                                    f"matches {[str(h) for h in hits]}; give energy= (MeV) as well, or level= one "
+                                    f"key of azure2.physical_levels().")
         return hits[0]
 
     def level_free_width_indices(self, level=None, jpi=None, energy=None,
@@ -761,6 +795,8 @@ class azure2(_HybridPotentials):
         free = {p.name: float(best[p.free_index]) for p in self.parameters
                 if not p.fixed and p.free_index is not None and p.free_index < best.size}
         sav = os.path.join(self.output_dir, 'param.sav')
+        if not os.path.isfile(sav):
+            raise session_checks.missing_parameter_file(sav, "update_sav_from_rwa_params")
         rows, tag, seen = [], None, set()
         with open(sav) as fh:
             for line in fh:
@@ -809,30 +845,24 @@ class azure2(_HybridPotentials):
         Two things a ``<levels>`` block cannot carry, which is why this is not
         just a write of the level values into ``<levels>``:
 
-        - **Normalizations and energy shifts are not in it.** They live in the
-          ``<segmentsData>`` lines, whose norm (and shift) field AZURE2 reads
-          as the *start value* of a fit or calculation and, unless the file
-          has an explicit ``prior_centre`` row for it in
-          ``<parameterSettings>``, also as the *centre of the prior* (the
-          penalty ``((n - n0)/(n0 sigma%/100))^2``, likewise for the shift).
-          ``norms`` chooses:
+        - **Normalizations, energy shifts and the other nuisances are not in
+          it.** They are values of the data-set and effect records (their
+          nuisances: a start value, ``fit`` or ``fixed``, and a prior that
+          states its centre).  ``norms`` chooses:
 
           ``"fitted"`` (default)
-              the free norms and free shifts of the fit are written into
-              their segment lines, and the centre of every prior that thereby
-              leaves its field is written as an explicit ``prior_centre`` row
-              (the centre the fit used: the loaded field, or the loaded
-              row).  The snapshot run on its own gives the fitted data
-              chi-squared *and* the fit's priors (both checked by ``verify``).
-              A format-3 project: the free norms, shift terms and shift
-              function parameters go into the records' nuisances (in their
-              units), whose priors state their centres.
+              every free parameter that is not a level parameter (norms,
+              shift terms, shift-function parameters, abundances, ...) is
+              written into the record it comes from, in that record's unit;
+              the priors keep the centres they state.  The snapshot run on
+              its own gives the fitted data chi-squared *and* the fit's
+              priors (both checked by ``verify``).
           ``"nominal"``
-              the segment lines keep the loaded file's values; the fitted
-              norms and shifts are in the ``.sav`` only (needs
-              ``param_sav``).  Run with that ``.sav`` as the external
-              parameter file (CLI: "use previous parameters"; GUI: Run tab,
-              Parameters File) to reproduce the fit.
+              the records keep the loaded file's values (but the abundances,
+              written at the fit's values); the fitted norms and shifts are
+              in the ``.sav`` only (needs ``param_sav``).  Run with that
+              ``.sav`` as the external parameter file (CLI: "use previous
+              parameters") to reproduce the fit.
 
           ``param_sav`` (the default) writes the companion ``<name>.sav``
           beside the file, carrying every parameter, free and fixed.
@@ -869,15 +899,16 @@ class azure2(_HybridPotentials):
         Returns ``(azr_path, sav_path_or_None)``.
         """
         if norms not in ("fitted", "nominal"):
-            raise ValueError(f"norms must be 'fitted' or 'nominal', not {norms!r}.")
+            raise ParameterError(f"save_fit: norms must be 'fitted' or 'nominal', not {norms!r} (see "
+                                 f"help(pyazr.azure2.save_fit)).")
         if norms == "nominal" and not param_sav:
-            raise ValueError("norms='nominal' keeps the fitted norms in the .sav "
-                             "only; it needs param_sav=True.")
+            raise ParameterError("save_fit: norms='nominal' keeps the fitted norms in the .sav "
+                                 "only; it needs param_sav=True.")
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
         free = [i for i, p in enumerate(self.parameters) if not p.fixed]
         if x.size != len(free):
-            raise ValueError(f"x has {x.size} entries; the session has "
-                             f"{len(free)} free parameters.")
+            raise ParameterError(f"save_fit: x has {x.size} entries; the session has {len(free)} free parameters "
+                                 f"(azure2.params_rwa is such a vector, azure2.parameters.free names its entries).")
         # Every parameter, with the free ones from x, and every parameter's
         # physical value, fixed ones included (see above).
         full = self._all_rwa(x)
@@ -964,16 +995,12 @@ class azure2(_HybridPotentials):
                 rtol = 1e-4 if self.basis == 0 else 1e-6
                 if not np.isclose(chi_got, chi_want, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
-                    raise RuntimeError(
-                        f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
-                        f"the fit {chi_want:.10g}; it has been removed.")
+                    raise session_checks.snapshot_mismatch("chi2", chi_got, chi_want, rtol)
                 got_p = sum(float(np.sum(v)) for v in pen_got.values())
                 want_p = sum(float(np.sum(v)) for v in pen_want.values())
                 if not np.isclose(got_p, want_p, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
-                    raise RuntimeError(
-                        f"the snapshot's priors give {got_p:.10g}, the fit's "
-                        f"{want_p:.10g}; it has been removed.")
+                    raise session_checks.snapshot_mismatch("priors", got_p, want_p, rtol)
         return path, sav
 
     @staticmethod
@@ -1223,10 +1250,14 @@ class azure2(_HybridPotentials):
     # -- chi-squared ----------------------------------------------------------
 
     def calculate_chi2_rwa(self, params):
-        """Total data chi-squared at a free RWA vector, as a one-element list.
+        """Data chi-squared plus the model terms at a free RWA vector, as a one-element list.
 
-        Excludes the normalization and energy-shift penalties AZURE2's own
-        objective adds.  A THM segment with a free norm is treated as the CLI
+        The data chi-squared (data covariances included) plus the model's
+        terms (``AZUREAPI::FilledModelPenalties``: Park's wall, abundance
+        priors and their sum, measured scattering lengths; 0 in most
+        projects; :meth:`segment_chi2` sums the data part alone).  Excludes
+        the norm and shift penalties and the prior covariance of
+        :meth:`objective`.  A THM segment with a free norm is treated as the CLI
         treats it: its arbitrary scale is profiled out (n* = S_mm/S_md, chi2 =
         S_dd - S_md^2/S_mm, no penalty) and is not an entry of ``params`` --
         see :meth:`segment_norms` for the n* it lands on.
@@ -1318,8 +1349,8 @@ class azure2(_HybridPotentials):
         """
         reports = self.thm_experiments(params)
         if experiment not in reports:
-            raise KeyError(f"no THM experiment {experiment!r} "
-                           f"(have: {', '.join(reports) or 'none'})")
+            raise ParameterKeyError(f"no THM experiment {experiment!r} (have: {', '.join(reports) or 'none'})"
+                                    f"{close_names(experiment, reports)}; azure2.thm_experiments() lists them.")
         return reports[experiment]
 
     def thm_lineshape(self, experiment, energies, params=None):
@@ -1505,8 +1536,9 @@ class azure2(_HybridPotentials):
 
         The residual vector of :meth:`residual_jacobian` (same rows, in segment
         order) without its Jacobian, so it is as cheap as one chi-squared and
-        never refuses a model.  ``sum(r**2) == calculate_chi2_rwa``: THM
-        segments with a free norm use their profiled ``n*``.
+        never refuses a model.  ``sum(r**2)`` is the data part of
+        ``calculate_chi2_rwa`` (equal to it without model terms, see there):
+        THM segments with a free norm use their profiled ``n*``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         return np.asarray(self.sess.calculate_residuals_rwa(x.ravel()), float)
@@ -1543,6 +1575,7 @@ class azure2(_HybridPotentials):
             self.sess.update_segments_rwa(x)
         if not self.sess.write_output_files():
             raise RuntimeError("AZURE2 has no data object to write from.")
+        session_checks.warn_engine_notices(self._sess, stacklevel=3)
         return self.output_dir
 
     # -- chi-squared, per segment and per dataset -----------------------------
@@ -1553,8 +1586,10 @@ class azure2(_HybridPotentials):
         ``calculate_chi2_rwa`` returns only the total, but the standardized
         residuals carry the split: they come back in segment order, so summing
         their squares between the segment boundaries recovers each one.  The
-        sum of this equals ``calculate_chi2_rwa`` exactly (THM segments with
-        a free norm at their profiled optimum, as in the CLI's chiSquared.out).
+        sum of this is the data part of ``calculate_chi2_rwa``: equal to it
+        when the model terms are 0 (no free target abundance, Park wall or
+        measured scattering length; :meth:`penalties`), THM segments with a
+        free norm at their profiled optimum, as in the CLI's chiSquared.out.
 
         Segments with a data covariance (``covariance <file>``) carry whitened
         residuals w = W r (W^T W = M^-1, a mixture of the group's rows), so
@@ -1952,7 +1987,16 @@ class azure2(_HybridPotentials):
         The values follow the run's own configuration, so the same call returns
         the accurate Coulomb routine's answer, GSL's (``use_gsl_coul=True`` at
         construction), or the hybrid model's Numerov solution: compare them.
+
+        Zeros by design: at E <= 0 (a closed channel) all but ``S`` (the shift
+        function at the channel radius; 0 at another radius); at an energy
+        where the engine's Coulomb routine fails, all.  Raises
+        :class:`pyazr.ParameterIndexError` (an ``IndexError``) for an unknown
+        pair key, :class:`pyazr.DomainError` (a ``ValueError``) for a photon
+        pair or an L that is not a whole number >= 0, ``ValueError`` for a J
+        a spin-orbit pair needs or cannot make (E_SO_ codes).
         """
+        pair, L = session_checks.channel_request(self.pairs, pair, L)
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, L, -1 if J is None else round(2 * J), radius, e.size], e])
         resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
@@ -2022,6 +2066,7 @@ class azure2(_HybridPotentials):
             raise RuntimeError(
                 "AZURE2 could not recompute the external-capture integrals; "
                 "check that output/ exists and is writable.")
+        session_checks.warn_engine_notices(self._sess, stacklevel=3)
         return self
 
     def cache_stats(self):
@@ -2077,7 +2122,8 @@ class azure2(_HybridPotentials):
             return rwa
         p = np.asarray(params, float).ravel()
         if p.size != rwa.size:
-            raise ValueError(f"expected {rwa.size} free parameters, got {p.size}.")
+            raise ParameterError(f"expected the free parameter vector ({rwa.size} values), got {p.size}; "
+                                 f"azure2.params_rwa is such a vector, azure2.parameters.free names its entries.")
         n = self.n_rmatrix
         rwa[n:] = p[n:]
         return rwa
@@ -2270,6 +2316,7 @@ class azure2(_HybridPotentials):
         self.sess.initialize()
         self.mode = "extrap" if extrap else "data"
         self._sync_layout()
+        session_checks.warn_engine_notices(self._sess, stacklevel=3)
 
     def _sync_layout(self):
         """Follow the engine's parameter layout after a mode switch.

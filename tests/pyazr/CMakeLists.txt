@@ -875,6 +875,22 @@ add_test(NAME pyazr_stopping
                  ${CMAKE_CURRENT_SOURCE_DIR}/stopping_test.py)
 set_tests_properties(pyazr_stopping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# pyazr's errors (pyazr/errors.py): a table of wrong calls on tests/13N, each raising its class (a pyazr.Error and the
+# builtin it raised before) with a message that says what was wrong, what is allowed and which call helps; the
+# engine's notice of an EC amplitude file that cannot be written is a pyazr.EngineWarning.
+add_test(NAME pyazr_errors
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/errors_test.py)
+set_tests_properties(pyazr_errors PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The package describes itself from the engine's tables: pyazr.describe(), pyazr.kinds() (record, data and parameter
+# kinds against AZURE2 --schema / --describe, options against the binding's RuntimeOptions and AZURE2 --help),
+# azure2.describe() on tests/upgrade/T1, and the session of the package docstring runs.
+add_test(NAME pyazr_describe
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
+set_tests_properties(pyazr_describe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

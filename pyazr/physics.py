@@ -5,6 +5,7 @@ Each one calls the C++ function of ``physics/`` through ``_azure2`` element-wise
 import numpy as np
 
 from .azure2 import _azure2
+from .errors import DomainError, EngineError
 
 __all__ = ["whittaker_wave"]
 
@@ -30,27 +31,35 @@ def whittaker_wave(l, eta_b, rho):
     is outside the double range), ``rho_dlog`` (rho W'/W, primes d/drho: the bound-channel shift function at
     rho = kappa a).
 
+    Outside the double range W is returned as 0 or inf in ``W`` by design (``mantissa`` and ``log10_scale`` keep
+    the value); that is not an error.
+
     Raises
     ------
-    ValueError
-        if l is not an integer in 0-10000, or an element of eta_b is negative or not finite, or of rho not positive
-        and finite (the first such element is named).
-    RuntimeError
-        if the computation fails for an element (not seen on the tested range).
+    pyazr.DomainError
+        (a ``ValueError``) if l is not an integer in 0-10000, or an element of eta_b is negative or not finite, or of
+        rho not positive and finite (the first such element is named, with the domain).
+    pyazr.EngineError
+        (a ``RuntimeError``) if the computation fails for an element (not seen on the tested range).
     """
     L, E, R = np.broadcast_arrays(np.asarray(l), np.asarray(eta_b, float), np.asarray(rho, float))
     if not np.all(np.equal(np.mod(L, 1), 0)):
-        raise ValueError("whittaker_wave: l must be an integer")
+        i = int(np.flatnonzero(~np.equal(np.mod(L, 1), 0).ravel())[0])
+        raise DomainError(f"whittaker_wave: l must be an integer in 0-10000, got {float(L.ravel()[i])!r} at "
+                          f"element {i} (help(pyazr.whittaker_wave))")
     shape = L.shape
     res = _azure2.whittaker(L.astype(np.int32).ravel(), E.ravel(), R.ravel())
     status = np.asarray(res["status"])
-    for code, kind in ((1, ValueError), (2, RuntimeError)):
+    for code, kind in ((1, DomainError), (2, EngineError)):
         bad = np.flatnonzero(status == code)
         if bad.size:
             i = bad[0]
+            domain = ("; the domain: l an integer in 0-10000, eta_b finite >= 0, rho finite > 0 "
+                      "(help(pyazr.whittaker_wave); pyazr.kinds()['physics']['whittaker'])" if code == 1 else
+                      "; please report it with these arguments")
             raise kind(f"whittaker_wave: {'invalid argument' if code == 1 else 'computation failed'} at element {i} "
-                       f"(l = {L.ravel()[i]}, eta_b = {E.ravel()[i]!r}, rho = {R.ravel()[i]!r}); "
-                       f"{bad.size} element(s) in all")
+                       f"(l = {int(L.ravel()[i])}, eta_b = {float(E.ravel()[i])!r}, rho = {float(R.ravel()[i])!r}); "
+                       f"{bad.size} element(s) in all{domain}")
     mantissa = np.asarray(res["mantissa"], float).reshape(shape)
     scale = np.asarray(res["log10_scale"]).reshape(shape)
     log10_W = np.log10(mantissa) + scale

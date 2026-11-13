@@ -69,15 +69,82 @@ Session options
 
 ``azure2(file, cwd=None, data_mode=True, use_brune=True,
 ignore_externals=True, transform=True, use_long_wavelength=True,
-use_gsl_coul=False, use_rmc=False, use_park=False)`` takes the runtime
+use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime
 options of the CLI (:doc:`../reference/command_line`) as keywords; as on the
-CLI they are not read from the ``.azr``. ``use_park=True`` is ``--use-park``:
+CLI they are not read from the ``.azr``.  ``pyazr.kinds()["options"]`` lists
+them all with type, default, flag and meaning. ``use_park=True`` is ``--use-park``:
 ``params_rwa`` then holds Park's amplitudes, ``park_norms()`` gives every
 level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard, Brune, Park:
 the ``#parametrization`` tag of ``param.sav``). With ``transform=False``
 (``--no-transform``) nothing is converted: the numbers of the file are taken
 as they stand as formal level energies and reduced-width amplitudes, so a
 file that holds physical widths (eV) and energies is a different model.
+
+Asking the package about itself
+-------------------------------
+
+Three calls answer, as plain data (dicts and lists that ``json.dumps`` takes), what an agent or a script would
+otherwise look up in the sources:
+
+.. code-block:: python
+
+   import pyazr
+   pyazr.describe()        # version, engine build (git, MCMC, NLopt, OpenMP), threads,
+                           # the Coulomb table in use (path and content identity, or "exact"),
+                           # the stopping library and its citation, the mass table
+   k = pyazr.kinds()
+   k["records"]            # record kinds of format 3 and their fields (type, grammar, units, doc)
+   k["data"]               # data kinds (quantities): units, engine unit, energy frames, angle columns
+   k["parameters"]         # parameter kinds (Parameter.kind): unit, owner fields, doc
+   k["options"]            # session options: type, default, the program's flag, doc
+   k["physics"]            # the physics functions the compiled module binds
+   k["errors"]             # the error classes below, with their bases
+   s = pyazr.azure2("model.azr")
+   s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
+                           # parameters (name, kind, unit, value, free), options in effect, output directory
+
+``kinds()`` is read from the engine's own tables (the schema of ``AZURE2 --schema``, the parameter-kind table, the
+binding's option table, the names the binding registers): a data kind or a parameter kind added to the engine appears
+there without an edit of Python (``tests/pyazr/describe_test.py`` compares it with the program).
+``pyazr.describe(path)`` (with a path) is, as before, the engine's description of a project (``AZURE2 --describe``),
+and ``help(pyazr)`` names the objects and shows a session of ten lines.
+
+Errors
+------
+
+Every error pyazr raises on purpose derives from ``pyazr.Error``; each class also derives from the builtin exception
+the call raised before, so an existing ``except ValueError`` or ``except KeyError`` keeps catching it.
+
+========================  ========================================  ================================================
+class                     also a                                    raised for
+========================  ========================================  ================================================
+``FormatError``           ``ValueError``                            a project text or record edit the engine refuses
+``ParameterError``        ``ValueError``                            a parameter vector, name or value that is wrong
+``ParameterKeyError``     ``ParameterError``, ``KeyError``          an unknown parameter, level, pair, data set
+``ParameterIndexError``   ``ParameterError``, ``IndexError``        an unknown pair key (``coulomb_functions``)
+``ParameterVectorError``  ``ParameterError``, ``AZURE2Error``       a free vector of the wrong length, or a NaN
+``EngineError``           ``RuntimeError``                          a set-up or evaluation the engine refuses;
+                                                                    the class ``AZURE2Error``, which keeps its name
+``DomainError``           ``ValueError``                            a physics argument outside its domain
+``DomainZeroDivision``    ``DomainError``, ``ZeroDivisionError``    the same, where the formula divided by zero
+``SessionClosed``         ``RuntimeError``                          a call on a closed session
+``MissingFile``           ``FileNotFoundError``                     a project, directory or ``param.sav`` missing
+========================  ========================================  ================================================
+
+A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
+
+   pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
+   every entry must be a finite number.  azure2.params_rwa is such a vector (the start values);
+   azure2.parameters.free names its entries in order.
+
+A notice of the engine that a session meets -- an external-capture amplitude file that cannot be written because the
+output directory does not exist, a normalization or shift file that cannot be written -- is a ``pyazr.EngineWarning``
+naming the file and the consequence (it was a line on standard output before).  Make it an error with
+``warnings.simplefilter("error", pyazr.EngineWarning)``.
+
+Documented zeros stay zeros: ``coulomb_functions`` below threshold (E <= 0) gives the shift function alone, and an
+energy at which the Coulomb routine fails gives zeros; ``whittaker_wave`` gives ``W`` 0 or inf outside the double
+range (``mantissa`` and ``log10_scale`` keep the value).
 
 Two parameter conventions
 -------------------------
