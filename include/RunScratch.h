@@ -56,8 +56,9 @@ struct ThreadScratch {
 /*!
  * The run's scratch (docs/upgrade/evaluation.md: no hidden state): per thread, and tables shared by the threads.
  * Owned by the run's Config (Config::scratch), so two runs in one process -- two pyazr sessions, the web UI's
- * server -- never share a value, and released with the run.  A thread's slot is made on its first request and used by that thread only; the lookup
- * takes a lock, so callers take the slot once per object (an integral, a vertex boundary), not per value.
+ * server -- never share a value, and released with the run.  A thread's slot is made on its first request and used
+ * by that thread only; the lookup takes a lock, so callers take the slot once per object (an integral, a vertex
+ * boundary), not per value.
  */
 class RunScratch {
  public:
