@@ -403,10 +403,9 @@ bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &r
                            std::map<Unit *, vector_r> &gradByPoint,
                            bool skipTHM = false);
 
-/// True when AZURE2_THM_FD is set (and not empty or "0"): THM (HOES) model
-/// derivatives by central differences, as before the HOES adjoint -- for
-/// testing the analytic path against.
-bool ThmFiniteDifferencesRequested();
+/// True when the run's AZURE2_THM_FD is set (Config::environment.thmByDifferences): THM (HOES) model
+/// derivatives by central differences, as before the HOES adjoint -- for testing the analytic path against.
+bool ThmFiniteDifferencesRequested(const Config &config);
 
 /// THM (HOES) rows of one THM segment: model, residuals and their parameter
 /// derivatives with the segment norm profiled (see ComputeTHMRows).

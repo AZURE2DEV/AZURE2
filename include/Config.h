@@ -10,8 +10,12 @@
 #include "azure2/experiment/HybridPotentialSettings.h"
 #include "ThmOptions.h"
 
+namespace AZUREProfile {
+class Account;
+}
 namespace azure2 {
 class RunScratch;
+struct RunDiagnostics;
 namespace experiment {
 struct Format3Project;
 }
@@ -158,7 +162,7 @@ class Config {
   /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
   /// off).  Without a table file the run warns once and uses the exact routines.
   bool useCoulombTable;
-  /// The table file; empty = $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin.
+  /// The table file; empty = environment.coulombTableDefault.
   std::string coulombTablePath;
   /// External-capture integrals from per-term energy tables (ECTable) instead of a
   /// direct integral at every energy, and shifted points evaluated at their shifted
@@ -169,7 +173,7 @@ class Config {
   /// convection-current (tangential) part of the electric multipole operator, not only its charge (extended
   /// Siegert) part.  On by default; --no-ec-convection-current leaves the charge part alone.
   bool ecConvectionCurrent;
-  /// Nodes per decade of E_out of those tables ($AZURE2_EC_TABLE_NODES overrides).
+  /// Nodes per decade of E_out of those tables (environment.ecTableNodes overrides).
   int ecTableNodesPerDecade;
   /// Lay the adaptive sub-point grids of experimental effects out again on every
   /// evaluation, for the current levels and energy shifts (WorkingCopy::ReplaceSubPointGrids);
@@ -228,12 +232,40 @@ class Config {
   /// between calls, keyed by everything it depends on.  Owned by the run, never process-wide; copies of a Config share
   /// it.  Made by the constructor, not touched by Reset().
   std::shared_ptr<azure2::RunScratch> scratch;
+  /// What the run's diagnostics count (RunDiagnostics.h: the profile accounting, the Coulomb table's lookups, the
+  /// call counters of the printing switches).  Owned by the run, shared by copies of the Config, as scratch is; made
+  /// by the constructor, not touched by Reset().
+  std::shared_ptr<azure2::RunDiagnostics> diagnostics;
+  /// The run's profile account (diagnostics->profile) when AZURE_PROFILE is on, else null: what every Timer of the run
+  /// is given (Profile.h).
+  AZUREProfile::Account *profile = nullptr;
   /// Read input files (the .azr, data, covariance and target-effect files) through InputFiles, which keeps
   /// their contents in memory and reads a file again only when it changes on disk.  Set by AZUREAPI: a
   /// rebuild there (SetRadius, a potential change, a mode switch) used to re-read every file, which on
   /// /groups stalled 16 forked MCMC workers (2026-11-03).  False -- read from disk -- for the CLI and GUI.
   /// Not touched by Reset().
   bool cacheInputFiles = false;
+  /*!
+   * The settings the process's environment gives the run: the switches that can move a number
+   * (azure2/support/Environment.h; docs/upgrade/evaluation.md section 8.2), copied from the process's record by
+   * Reset().  The code reads them here, never the environment, so that a command-line or pyazr option for one of them
+   * is one assignment after Reset (the PI's decision; none exists).
+   */
+  struct EnvironmentSettings {
+    std::string coulombTableDefault;   ///< AZURE2_COULOMB_TABLE, else <home>/.azure2/coulomb_table.bin
+    std::string srimDataDirectory;     ///< AZURE2_SRIM_DATA_DIR; "" = the stopping library's compiled copy
+    int ecTableNodes = 0;              ///< AZURE2_EC_TABLE_NODES; > 0 overrides ecTableNodesPerDecade
+    bool boundShiftNumerical = false;  ///< AZURE_BOUND_SHIFT_NUMERICAL: bound S from the numerical derivative
+    bool noNeutralClosedForm = false;  ///< AZURE_NO_NEUTRAL_CLOSED_FORM
+    bool shiftDerivative1eV = false;   ///< AZURE_SHIFT_DE_1EV: dS/dE by a 1 eV difference of the exact S
+    bool levelSpaceOnly = false;       ///< AZURE_LEVEL_SPACE: no channel-space solves
+    bool thmByDifferences = false;     ///< AZURE2_THM_FD: THM rows of the gradient by differences
+    bool gradientByAdjoint = false;    ///< AZURE_GRAD_ADJOINT: the adjoint gradient, not the Jacobian path
+    bool denseAdjoint = false;         ///< AZURE_GRAD_DENSE: the dense level-matrix adjoint
+    bool foldWeightsByDifferences = false;  ///< AZURE_TE_WEIGHTS_FD: combiner weights by differences
+    bool serialPointPass = false;      ///< AZURE_SERIAL_CHI2: the points one by one (the same bits)
+  };
+  EnvironmentSettings environment;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// What ReadConfigFile returns besides 0.

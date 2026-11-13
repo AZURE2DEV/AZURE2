@@ -178,8 +178,8 @@ int Validate(const CoulombTable &t, long n, unsigned seed, int threads, double e
       auto t0 = std::chrono::steady_clock::now();
       CoulombTable::Open to;
       double tb = 0;
-      bool okO = t.LookupOpen(l, eta, rho, to);
-      bool okB = t.LookupBound(l, eta, rho, tb);
+      bool okO = t.LookupOpen(l, eta, rho, to, nullptr);
+      bool okB = t.LookupBound(l, eta, rho, tb, nullptr);
       auto t1 = std::chrono::steady_clock::now();
       CoulombTable::Open eo = CoulombTable::ExactOpen(l, eta, rho);
       double eb = CoulombTable::ExactBound(l, eta, rho);

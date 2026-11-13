@@ -207,7 +207,7 @@ int AZUREMain::operator()() {
     azure2::Results results;
     // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
     // in the first evaluation's report.
-    AZUREProfile::Report(std::cerr, "set-up");
+    AZUREProfile::Report(configure().profile, std::cerr, "set-up");
     // MIGRAD's function calls as reported (fitStatus.out, the log): counted by the objective itself and reset before
     // each MIGRAD, so that only Minuit2's calls are in it.  Minuit2's NFcn() is not used: its counter is a plain int
     // that its OpenMP numerical gradient increments from several threads (lost increments, a count a few low, varying
@@ -757,7 +757,7 @@ int AZUREMain::operator()() {
     data()->SetErrorAnalysis(false);
     double chiSquared = 0.0;
     {
-      AZUREProfile::ScopedReport profileReport((configure().paramMask & Config::PERFORM_FIT) ? "final evaluation" : "calculation");
+      AZUREProfile::ScopedReport profileReport(configure().profile, (configure().paramMask & Config::PERFORM_FIT) ? "final evaluation" : "calculation");
       chiSquared = theFunc(params.GetMinuitParams().Params());
     }
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {

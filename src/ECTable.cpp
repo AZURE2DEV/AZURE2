@@ -1,5 +1,6 @@
 #include "RunScratch.h"
 #include "ECTable.h"
+#include "azure2/support/Environment.h"
 #include "ChannelTable.h"
 #include "ECIntegral.h"
 #include "CoulFunc.h"
@@ -21,26 +22,12 @@ namespace {
 using NodeValue = ECTermNodes::Value;
 using Term = ECTermNodes;
 
-std::atomic<long long> g_nodes(0), g_lookups(0), g_direct(0);
-std::atomic<long long> g_nodesReport(0);
-std::mutex g_checkMutex;
-double g_maxDeviation = -1.0;
-
 const int kStencil = 8;  // Lagrange points; the stencil is nodes i0-3 .. i0+4
 
-bool CheckMode() {
-  static const bool on = [] {
-    const char *v = std::getenv("AZURE2_EC_TABLE_CHECK");
-    return v && *v && std::string(v) != "0";
-  }();
-  return on;
-}
+bool CheckMode() { return azure2::support::ProcessEnvironment().On(azure2::support::Switch::kEcTableCheck); }
 
 int NodesPerDecade(const Config &configure) {
-  static const int fromEnv = [] {
-    const char *v = std::getenv("AZURE2_EC_TABLE_NODES");
-    return v ? std::atoi(v) : 0;
-  }();
+  const int fromEnv = configure.environment.ecTableNodes;  // AZURE2_EC_TABLE_NODES
   int n = fromEnv > 0 ? fromEnv : configure.ecTableNodesPerDecade;
   return n > 0 ? n : 200;
 }
@@ -118,6 +105,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture, const ChannelTable *table, int finalPairNum) {
+  ECTermStore &counts = configure.scratch->ecTerms;  // the run's counters (Report)
   const double threshold = finalPair->GetSepE() + finalPair->GetExE();
   // The channel energy by the channel table's expression, (E - S) - e (docs/upgrade/channel_table.md).
   const double outEnergy = (inEnergy - finalPair->GetSepE()) - finalPair->GetExE();
@@ -132,7 +120,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   if (row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
   else if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
-    ++g_direct;
+    ++counts.direct;
     return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
@@ -189,7 +177,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
       node.ok = false;
     }
     promises[s]->set_value(node);
-    ++g_nodes;
+    ++counts.nodes;
   }
 
   complex sum(0.0, 0.0);
@@ -206,11 +194,11 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
     sum += w * node.value;
   }
   if (!ok) {
-    ++g_direct;
+    ++counts.direct;
     return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
-  ++g_lookups;
+  ++counts.lookups;
   complex result = sum * reduction;
 
   if (CheckMode()) {
@@ -230,20 +218,21 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
         term->eMin = std::min(term->eMin, outEnergy);
         term->eMax = std::max(term->eMax, outEnergy);
       }
-      std::lock_guard<std::mutex> lock(g_checkMutex);
-      if (dev > g_maxDeviation) g_maxDeviation = dev;
+      std::lock_guard<std::mutex> lock(counts.checkMutex);
+      if (dev > counts.maxDeviation) counts.maxDeviation = dev;
     }
   }
   return result;
 }
 
-long long ECTable::NodesComputed() { return g_nodes; }
-long long ECTable::Lookups() { return g_lookups; }
-long long ECTable::DirectCalls() { return g_direct; }
+long long ECTable::NodesComputed(const Config &configure) { return configure.scratch->ecTerms.nodes; }
+long long ECTable::Lookups(const Config &configure) { return configure.scratch->ecTerms.lookups; }
+long long ECTable::DirectCalls(const Config &configure) { return configure.scratch->ecTerms.direct; }
 
-double ECTable::MaxCheckDeviation() {
-  std::lock_guard<std::mutex> lock(g_checkMutex);
-  return g_maxDeviation;
+double ECTable::MaxCheckDeviation(const Config &configure) {
+  ECTermStore &store = configure.scratch->ecTerms;
+  std::lock_guard<std::mutex> lock(store.checkMutex);
+  return store.maxDeviation;
 }
 
 std::string ECTable::Report(const Config &configure) {
@@ -254,13 +243,13 @@ std::string ECTable::Report(const Config &configure) {
     terms = store.terms.size();
   }
   std::ostringstream s;
-  s << "External capture table: " << (g_lookups + g_direct) << " integrals, " << (g_nodes - g_nodesReport)
+  s << "External capture table: " << (store.lookups + store.direct) << " integrals, " << (store.nodes - store.nodesAtReset)
     << " computed at table nodes (" << terms << " terms)";
-  if (g_direct > 0) s << ", " << g_direct << " directly";
+  if (store.direct > 0) s << ", " << store.direct << " directly";
   if (CheckMode()) {
     {
-      std::lock_guard<std::mutex> lock(g_checkMutex);
-      s << "; check: largest relative difference from the direct integrals " << g_maxDeviation;
+      std::lock_guard<std::mutex> lock(store.checkMutex);
+      s << "; check: largest relative difference from the direct integrals " << store.maxDeviation;
     }
     // One line per term: li lf L type, E_out range, the worst point, and the
     // largest difference relative to the term's largest value.
@@ -279,12 +268,13 @@ std::string ECTable::Report(const Config &configure) {
   return s.str();
 }
 
-void ECTable::ResetCounters() {
-  g_lookups = 0;
-  g_direct = 0;
-  g_nodesReport = g_nodes.load();
-  std::lock_guard<std::mutex> lock(g_checkMutex);
-  g_maxDeviation = -1.0;
+void ECTable::ResetCounters(const Config &configure) {
+  ECTermStore &store = configure.scratch->ecTerms;
+  store.lookups = 0;
+  store.direct = 0;
+  store.nodesAtReset = store.nodes.load();
+  std::lock_guard<std::mutex> lock(store.checkMutex);
+  store.maxDeviation = -1.0;
 }
 
 void ECTable::Clear(const Config &configure) {

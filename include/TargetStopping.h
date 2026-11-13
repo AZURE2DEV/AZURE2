@@ -1,6 +1,7 @@
 #ifndef TARGETSTOPPING_H
 #define TARGETSTOPPING_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/experiment/SetupSpecs.h"
 #include "azure2/stopping/Material.h"
+#include "azure2/stopping/Tables.h"
 
 class Config;
 
@@ -65,6 +67,11 @@ class TargetStopping {
   azure2::stopping::Projectile projectile_;
   double activeFraction_ = 1.0;
   std::string error_;
+  /// SRIM's tables of the run's directory (Config::environment.srimDataDirectory: AZURE2_SRIM_DATA_DIR), for an
+  /// evaluation made with a Config; null for the stopping of --validate and --describe, which take the library's
+  /// SrimTables().  srimError_: why they could not be read.
+  std::shared_ptr<const azure2::stopping::SrimData> srim_;
+  std::string srimError_;
   void SetUpLibrary(const azure2::experiment::StoppingSpec &, const std::string &projectDirectory);
 };
 

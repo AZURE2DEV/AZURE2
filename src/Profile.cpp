@@ -7,8 +7,6 @@
 namespace AZUREProfile {
 
 namespace {
-std::atomic<long long> g_ns[kNumStages];
-std::atomic<long long> g_calls[kNumStages];
 const char *const kNames[kNumStages] = {"evaluation",     "points",          "E-dependent values",
                                         "matrix fill",    "factor/solve",    "T-matrix",
                                         "channel solves", "cross sections",  "gradient",
@@ -16,7 +14,6 @@ const char *const kNames[kNumStages] = {"evaluation",     "points",          "E-
                                         "grad level matrix", "grad rows",
                                         "shift cols (segment)", "shift cols (full)",
                                         "energy tasks: set-up"};
-std::atomic<long long> g_count[kNumCounters];
 const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level route: size",
                                                  "level route: no formal set-up", "level route: near pole",
                                                  "level route: pivot", "level route: forced",
@@ -25,45 +22,32 @@ const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level 
                                                  "units of the energy tasks", "energy tasks rebuilt"};
 }  // namespace
 
-void CountEvent(Counter counter) { g_count[counter].fetch_add(1, std::memory_order_relaxed); }
-void CountEvents(Counter counter, long long n) { g_count[counter].fetch_add(n, std::memory_order_relaxed); }
-
-void Add(Stage stage, long long ns) {
-  g_ns[stage].fetch_add(ns, std::memory_order_relaxed);
-  g_calls[stage].fetch_add(1, std::memory_order_relaxed);
-}
-
-void Report(std::ostream &out, const char *label) {
-  if (!Enabled()) return;
+void Account::Report(std::ostream &out, const char *label) {
   std::ostringstream s;
   s << "[profile] " << label << " (ms, thread-summed; calls):";
   for (int k = 0; k < kNumStages; k++) {
-    const long long ns = g_ns[k].exchange(0);
-    const long long calls = g_calls[k].exchange(0);
+    const long long ns = ns_[k].exchange(0);
+    const long long calls = calls_[k].exchange(0);
     if (calls == 0) continue;
     s << "\n[profile]   " << std::left << std::setw(22) << kNames[k] << std::right << std::fixed
       << std::setprecision(1) << std::setw(10) << ns / 1.0e6 << "  " << calls;
   }
   for (int k = 0; k < kNumCounters; k++) {
-    const long long n = g_count[k].exchange(0);
+    const long long n = count_[k].exchange(0);
     if (n == 0) continue;
     s << "\n[profile]   " << std::left << std::setw(32) << kCounterNames[k] << std::right << n;
   }
   out << s.str() << std::endl;
 }
 
-namespace {
-std::atomic<int> g_depth{0};
-}
-
-ScopedReport::ScopedReport(const char *label) : label_(label), outer_(false) {
-  if (Enabled()) outer_ = (g_depth.fetch_add(1) == 0);
+ScopedReport::ScopedReport(Account *account, const char *label) : account_(account), label_(label), outer_(false) {
+  if (account_) outer_ = account_->Enter();
 }
 
 ScopedReport::~ScopedReport() {
-  if (!Enabled()) return;
-  g_depth.fetch_sub(1);
-  if (outer_) Report(std::cerr, label_);
+  if (!account_) return;
+  account_->Leave();
+  if (outer_) account_->Report(std::cerr, label_);
 }
 
 }  // namespace AZUREProfile

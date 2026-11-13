@@ -1,6 +1,7 @@
 #ifndef AZURE2_EXPERIMENT_PROJECTPATHS_H
 #define AZURE2_EXPERIMENT_PROJECTPATHS_H
 
+#include <filesystem>
 #include <string>
 
 namespace azure2 {
@@ -21,6 +22,16 @@ inline std::string PathToOpen(const std::string &directory, const std::string &p
   if (absolute || directory.empty()) return path;
   if (path.empty()) return directory;
   return directory.back() == '/' ? directory + path : directory + "/" + path;
+}
+
+/// The directory a project's relative paths are resolved against when the caller names none: the project file's
+/// directory, made absolute once against the working directory (the file's name is the caller's, relative to where
+/// the command was given).  "" when it cannot be made absolute.  A run (Config::ReadConfigFile), --validate,
+/// --describe, pyazr.validate and pyazr.describe all use it: one rule.
+inline std::string ProjectDirectoryOf(const std::string &projectFile) {
+  std::error_code ec;
+  const std::filesystem::path file = std::filesystem::absolute(projectFile, ec);
+  return ec ? std::string() : file.parent_path().lexically_normal().string();
 }
 
 }  // namespace experiment

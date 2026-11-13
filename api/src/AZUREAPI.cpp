@@ -182,7 +182,7 @@ int AZUREAPI::Initialize() {
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
   if (data()->Initialize(compound(), configure()) == -1) return -1;
-  AZUREProfile::Report(std::cerr, "api set-up");
+  AZUREProfile::Report(configure().profile, std::cerr, "api set-up");
   // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
   // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
   results_ = azure2::Results();
@@ -328,7 +328,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
   calculatedSegmentsE2_.clear();
   calculatedExcitationEnergies_.clear();
   if (!localData) return 0;
-  AZUREProfile::ScopedReport profileReport("api segments");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api segments");
   const std::vector<const Segment *> segments = ReportedSegments(localData->Data().GetSegments());
   const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
   for (const Segment *segment : segments) {
@@ -795,7 +795,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   // Rows of the segments of a THM experiment, filled once it is profiled.
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->Data().NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
-  AZUREProfile::ScopedReport profileReport("api chi2");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
   const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, configure(), results());
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
     const Segment *segment = ld->Data().GetSegment(i);
@@ -1199,7 +1199,7 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
 }
 
 vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) const {
-  AZUREProfile::ScopedReport profileReport("api jacobian");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api jacobian");
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // One request at a time: operate on the canonical compound/data in place

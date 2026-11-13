@@ -193,6 +193,42 @@ own snapshot after a fit with a free abundance. (2) `calculate_chi2_rwa` include
 docstring says data only. (3) `parallel_points_test` and `upgrade_thread_independence_test` run the engine at four
 threads whatever the caller's budget. (4) The PI's decisions of the note's section 5 before step 5 of its plan.
 
+## 2026-11-13 (agent, branch `feature/upgrade-6-evaluation-4`) — the environment record and the run's diagnostics
+
+**Done.** Milestone 5 of `evaluation.md` (design section 8, record section 7.6).
+- One table of the 39 environment switches (`support/include/azure2/support/Environment.h`,
+  `support/src/Environment.cpp`, library `azure2_support`): name, type, value when unset, kind (numbers 14, cost 1,
+  prints 22, test 2), what it does, its page; one reader, `ProcessEnvironment()`, read once.  No other `getenv` in the
+  engine, its libraries or the binding (check 39); the manual's list (`command_line.rst`, "Environment switches") is
+  the table's (check 40).
+- The switches that can move a number are copied into the run's `Config` (`Config::environment`, by `Reset`) and read
+  there or from the pair's settings; SRIM's directory reaches the stopping library through `TargetStopping`.  The
+  printing switches and the test hooks read the record.  The engine no longer sets variables inside the process
+  (pool check: a `Config` copy; gradient check: `AZURECalc::GradientBy`).  `thm_adjoint_test.py` runs its
+  `AZURE2_THM_FD` half in a child process.
+- The counters are the run's: `include/RunDiagnostics.h` (`Config::diagnostics`): profile account (`Config::profile`),
+  Coulomb table lookups (printed when the run ends; `ExitRun` before an early exit), the call counters of the checks;
+  the EC table's counters in `ECTermStore`.  29 allow-list rows removed; the scanner reports `std::once_flag` members
+  (kind `once`), the Coulomb table's content identity is a permanent row.  Pending 53, permanent 15.
+- `--describe` ends with the switches that are set.  `--validate`, `--describe`, `pyazr.validate`, `pyazr.describe`
+  read data files relative to the project file's directory (`experiment::ProjectDirectoryOf`); the validate test
+  converts T2 beside its data.  `pyazr.rst` says what two sessions may do at once and what is still shared.  The
+  recipe "Add a diagnostic switch" is in `CLAUDE.md`.
+- Merged `feature/upgrade-4-data` at 441a0907 (no conflict).
+
+**Verified** (build `work/b-eval4`, 0 warnings; base `work/b-gecm`, reference `tab-gecm-1`): all projects x 3 bases
+identical (tag `tab-ev4-full2`: 887 / 851 / 887); the eight fits identical to the base build; T1, T2, T3, 13N at 3
+threads identical to the 1-thread reference; the converted-tree gate (tag `gev4-1`); every switch set, base against
+branch, the same outputs and the same log but for times and progress bars (`work/eval4/switch_results.tsv`);
+user-space instructions not higher on T1, T2, 13N, natural_neon calculations and T2, 13N gradient fits; `ctest -LE
+slow` 224 of 224; the slow tests 11 of 11 (`pyazr_concurrent_sessions` included; `pyazr_session_isolation` is in the
+first set); `tests/run_tests.sh` 165 passed after two tests that compare the whole `--describe` text, or ran it on a
+project away from its data, were fixed (`ratio_to_rutherford`, `units_scales`).
+
+**Open.** `api/src/AZUREAPI.cpp` (another agent's file tonight): the unused `intEC_cache` file name and the lazily
+read nuisance layout (`mutable`) stay.  The PI's decisions of `evaluation.md` section 6 (options for the *numbers*
+switches, removal of the unused ones) are not taken.
+
 ## 2026-11-13 (director, 07:32) — merged: the `gamma_decay` record on a level whose transitions have external capture
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):

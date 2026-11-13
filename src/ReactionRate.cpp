@@ -494,7 +494,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
     } else {
       os << "\tWarning: could not write " << gridFile << std::endl;
     }
-    if (configure.useECTable && ECTable::Lookups() + ECTable::DirectCalls() > 0)
+    if (configure.useECTable && ECTable::Lookups(configure) + ECTable::DirectCalls(configure) > 0)
       os << "\t" << ECTable::Report(configure) << std::endl;
   }
 

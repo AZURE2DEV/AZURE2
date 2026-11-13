@@ -3,6 +3,7 @@
 
 #include "Constants.h"
 #include <future>
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -70,6 +71,12 @@ struct ECTermNodes {
 struct ECTermStore {
   std::mutex mutex;
   std::map<std::vector<double>, std::unique_ptr<ECTermNodes>> terms;
+  /// What ECTable::Report counts for the run: node values computed (all, and at the last ResetCounters), integrals
+  /// answered from the table and directly, and the largest table - direct difference of AZURE2_EC_TABLE_CHECK (-1:
+  /// none yet; behind checkMutex).
+  std::atomic<long long> nodes{0}, nodesAtReset{0}, lookups{0}, direct{0};
+  std::mutex checkMutex;
+  double maxDeviation = -1.0;
 };
 
 class ECTable {
@@ -79,17 +86,17 @@ class ECTable {
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture, const ChannelTable *table = nullptr, int finalPairNum = 0);
-  /// Node values (exact integrals) computed so far, over all terms.
-  static long long NodesComputed();
-  /// Integrals answered from the table, and directly (sub-threshold or failed nodes).
-  static long long Lookups();
-  static long long DirectCalls();
-  /// Largest relative table - direct difference seen with AZURE2_EC_TABLE_CHECK=1 (else -1).
-  static double MaxCheckDeviation();
+  /// Node values (exact integrals) the run computed so far, over all terms.
+  static long long NodesComputed(const Config &configure);
+  /// Integrals the run answered from the table, and directly (sub-threshold or failed nodes).
+  static long long Lookups(const Config &configure);
+  static long long DirectCalls(const Config &configure);
+  /// Largest relative table - direct difference the run saw with AZURE2_EC_TABLE_CHECK=1 (else -1).
+  static double MaxCheckDeviation(const Config &configure);
   /// One line for the run log: the run's terms, nodes and lookups since the last ResetCounters.
   static std::string Report(const Config &configure);
-  /// Restart the counters of Report (the nodes stay).
-  static void ResetCounters();
+  /// Restart the run's counters of Report (the nodes stay).
+  static void ResetCounters(const Config &configure);
   /// Forget every node of the run (tests).
   static void Clear(const Config &configure);
 };

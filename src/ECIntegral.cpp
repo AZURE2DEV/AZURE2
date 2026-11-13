@@ -28,7 +28,7 @@ ECIntegral::ECIntegral(PPair *pPair, const Config &configure) : scratch_(configu
   // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);
   params_.whitFunc = std::make_unique<WhitFunc>(pPair);
-  params_.whitFunc->SetScaledMemo(&scratch_.whittaker);
+  params_.whitFunc->SetScaledMemo(&scratch_.whittaker, configure.profile);
   params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
   params_.useChargeFunction = false;  // set per term in CalculateDirect
   pair_ = pPair;

@@ -17,7 +17,7 @@
 namespace azure2 {
 
 bool ThmThroughEnergyTasks(const WorkingCopy &data, const Config &config) {
-  if (ThmFiniteDifferencesRequested() || (config.paramMask & Config::USE_RMC_FORMALISM)) return false;
+  if (ThmFiniteDifferencesRequested(config) || (config.paramMask & Config::USE_RMC_FORMALISM)) return false;
   if (data.Data().NumThmCoherentParams() > 0) return false;
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
     const Segment *segment = data.Data().GetSegment(s);

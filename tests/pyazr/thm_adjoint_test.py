@@ -3,7 +3,10 @@
 
 The model Jacobian of a THM point comes from the reverse-mode adjoint of the
 HOES cross section (THMMatrixFunc::THMPointAdjoint, used by ComputeTHMRows);
-AZURE2_THM_FD=1 restores the central differences it replaced.  Checked here on
+AZURE2_THM_FD=1 restores the central differences it replaced.  The engine reads
+the variable once per process (azure2/support/Environment.h), so the
+differences come from a child process started with it set; this process runs
+without it.  Checked here on
 tests/18O_p_a_thm (two 1/2+ levels, Gaussian folding, two segments of one THM
 experiment), every level energy and amplitude free, for <thm> blocks that
 between them take every branch of the adjoint:
@@ -28,10 +31,18 @@ Needs numpy and the compiled engine; exits 77 (skipped) without them.
 
 Run from anywhere:  python3 tests/pyazr/thm_adjoint_test.py
 """
+import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+
+# The analytic half runs here, so without AZURE2_THM_FD: started with it, run again without it, before the engine
+# reads the environment.
+if os.environ.get("AZURE2_THM_FD") and "--fd-child" not in sys.argv:
+    env = {k: v for k, v in os.environ.items() if k != "AZURE2_THM_FD"}
+    os.execve(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:], env)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -101,17 +112,31 @@ def stage(tmp, name, block):
     return path
 
 
-def jacobians(m, x, fd):
-    if fd:
-        os.environ["AZURE2_THM_FD"] = "1"
-    else:
-        os.environ.pop("AZURE2_THM_FD", None)
-    try:
-        r, J = m.residual_jacobian(x)
-        G = np.vstack(m.model_gradients(x))
-    finally:
-        os.environ.pop("AZURE2_THM_FD", None)
+def jacobians(m, x):
+    r, J = m.residual_jacobian(x)
+    G = np.vstack(m.model_gradients(x))
     return r, J, G
+
+
+def fd_jacobians(path, kw, x, tmp):
+    """The same in a child process started with AZURE2_THM_FD=1 (the THM rows by central differences)."""
+    xfile, out = os.path.join(tmp, "x.npy"), os.path.join(tmp, "fd.npz")
+    np.save(xfile, x)
+    env = dict(os.environ, AZURE2_THM_FD="1")
+    p = subprocess.run([sys.executable, os.path.abspath(__file__), "--fd-child", path, json.dumps(kw), xfile, out],
+                       env=env, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError("the AZURE2_THM_FD=1 child failed:\n" + p.stdout[-2000:] + p.stderr[-2000:])
+    d = np.load(out)
+    return d["r"], d["J"], d["G"]
+
+
+if len(sys.argv) == 6 and sys.argv[1] == "--fd-child":
+    _, _, path, kw, xfile, out = sys.argv
+    m = azure2(path, **json.loads(kw))
+    r, J, G = jacobians(m, np.load(xfile))
+    np.savez(out, r=r, J=J, G=G)
+    sys.exit(0)
 
 
 def colrel(a, b):
@@ -126,8 +151,8 @@ try:
         path = stage(tmp, name, block)
         m = azure2(path, **kw)
         x = np.asarray(m.params_rwa, float)
-        rA, JA, GA = jacobians(m, x, False)
-        rF, JF, GF = jacobians(m, x, True)
+        rA, JA, GA = jacobians(m, x)
+        rF, JF, GF = fd_jacobians(path, kw, x, tmp)
         check("residuals identical in both modes", np.array_equal(rA, rF))
         check("free columns", JA.shape[1] >= 6, f"{JA.shape}")
         rel = colrel(JA, JF)
