@@ -21,6 +21,23 @@ public names are a contract.
   The argument checks of the session's calls live in `session_checks.py`, not in `azure2.py`.
 - An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
   `Config::outStream` passes through that buffer); every other line still goes to standard output.
+- `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
+  `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
+  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `azure2(...).channel_functions`.
+
+## Recipe: add a physics function
+
+1. The library computes it (`physics/`, `experiment/`, `stopping/`); if it does not, a thin free function there with
+   its unit test (as `physics/include/azure2/physics/Widths.h`).  New physics is a design note first, not a row.
+2. One row in `BuildTable()` of `api/src/pybind_physics.cpp`: name, summary, doc, library function, axis, arguments
+   (`Real`/`Integer`/`Flag`/`Choice` with unit and domain: `.gt`, `.ge`, `.lt`, `.le`, `.otherwise` for a default),
+   returns (name, unit, doc), and an adapter that converts the arguments and calls the library (no formula there);
+   the adapter returns 0, `kJointly` (-2) for arguments outside the domain together, `kFailed` (-1), or the 1-based
+   index of an argument.
+3. A `row_test("<name>", ...)` in `tests/pyazr/physics_table_test.py` against mpmath, a published table or the
+   engine's own use on a project (consistency check 39 fails without one).
+4. `python3 tools/gen_physics_docs.py` (the user-guide page; the test fails until it is run).
+Nothing in Python: `pyazr/physics.py` builds the function, its signature and docstring from the row.
 
 ## How it is built
 
@@ -42,9 +59,10 @@ public names are a contract.
   `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
   (`convert_azr`, `convert_params`).
 - `transform.py` is a Python port of the engine's `TransformOut`, and
-  `widths.py` and `bands.py` re-derive engine quantities. Any such duplicate
-  needs a test against the engine (see `tests/pyazr/`). Where possible, call
-  through `_azure2` instead of adding another copy.
+  `widths.py` and `bands.py` re-derive engine quantities. Their formulas are
+  compared with the rows of `pyazr.physics` that replace them
+  (`tests/pyazr/physics_table_test.py`) and go in the rename step. Never add
+  another copy: a missing function is a row of the physics table.
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 

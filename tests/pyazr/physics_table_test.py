@@ -281,6 +281,17 @@ def main():
     formula("transform.shift_derivative", "shift_derivative", dS_row, dS_py, "four pairs, l = 0, 2, a = 5 fm, "
             "E = 0.1-20 MeV (absolute below 1e-6 MeV^-1)", floor=1e-6)
 
+    # M_l(p) = (B - 1) j_l(pa) - pa j_l'(pa), j_l by mpmath (spherical Bessel through besselj of order l + 1/2)
+    jl = lambda l, x: mp.sqrt(mp.pi / (2 * x)) * mp.besselj(l + mp.mpf(1) / 2, x)
+    worst_M = 0.0
+    for l in range(4):
+        for p in (0.05, 0.3, 1.0, 2.5):
+            for B in (-2.0, 0.0, 1.5):
+                x = mp.mpf(p) * 5
+                ref = (B - 1) * jl(l, x) - x * mp.diff(lambda y: jl(l, y), x)
+                worst_M = max(worst_M, abs(ph.thm_vertex_function(l, p, 5.0, B) - float(ref)))
+    row_test("thm_vertex_function", f"(B - 1) j_l(pa) - pa j_l'(pa) (mpmath), l = 0-3, p = 0.05-2.5 fm^-1, a = 5 fm, "
+             f"B = -2-1.5: largest abs diff {worst_M:.1e} (<= 1e-9)", worst_M <= 1e-9)
     # ------------------------------------------------------------------ widths
     print("widths")
     for label, z1, z2, m1, m2, _, _ in pairs:
@@ -427,6 +438,16 @@ def main():
     check("every generated function has the row's signature and a docstring with units",
           all(list(__import__("inspect").signature(ph.functions[n]).parameters)[:-1] ==
               [a["name"] for a in rows[n]["arguments"]] and "Returns" in ph.functions[n].__doc__ for n in rows))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gen_physics_docs", os.path.join(ROOT, "tools", "gen_physics_docs.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    with open(gen.PAGE) as f:
+        check("docs/source/user_guide/physics_functions.rst is what tools/gen_physics_docs.py makes of the rows",
+              f.read() == gen.generate(rows), "run tools/gen_physics_docs.py")
+    import json
+    check("the rows are strict JSON (no NaN or infinity: the web UI's /api/physics)",
+          json.loads(json.dumps(rows, allow_nan=False)) == rows)
     missing = sorted(set(rows) - tested)
     check("every row has a row_test here (check 39 asks for one in some test)", not missing, missing)
 

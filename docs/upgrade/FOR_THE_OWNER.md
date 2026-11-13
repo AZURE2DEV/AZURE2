@@ -129,6 +129,10 @@ pyazr spells no field, quantity or unit itself: the calls and their help text ar
 and every edit is checked by the engine's one validator, so a wrong unit or a reference to a missing target is
 refused at once with the engine's message. An edit changes only the lines it touches.
 
+The engine's physics functions (penetrability, shift, Coulomb and Whittaker functions, kinematics, Wigner limit, ...)
+are `pyazr.physics.<name>` on numpy arrays, each a row of one table in the binding (`api/src/pybind_physics.cpp`)
+that states its arguments, units and domain; a new one is a row and a test.
+
 **Structure.**
 
 - What an evaluation computes lives in a buffer the caller owns, not in the data points; the model's prediction for

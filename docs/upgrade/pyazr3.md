@@ -129,23 +129,23 @@ functions), `pybind_project.cpp` 18, `pybind_nuclear_part.cpp` 17, `pybind_physi
 
 17 formulas; 2 have a test against the engine; the penetrability is compared here (use case (c)).
 
-| formula (pyazr) | engine or library counterpart | test against it |
+| formula (pyazr) | replaced by (`pyazr.physics`, library) | largest rel. difference (`physics_table_test`) |
 |---|---|---|
-| `transform.sommerfeld_eta`, `coulomb_rho` | `ChannelFunctions.h` (`eta`), `CoulFunc` | none |
-| `transform.coulomb_waves` (mpmath; derivatives numerical) | `physics/coulomb` (`coulomb`) | none |
-| `transform.penetrability` | `ChannelFunctions.h`; `coulomb_functions` (`P`) | none; here 3.8e-10 (13N, l = 0–2) |
-| `transform.shift` | same (`S`) | none |
-| `transform.shift_derivative` (central difference) | the engine's analytic dS/dE | none |
-| `transform.whittaker` (mpmath) | `physics/coulomb/Whittaker.h` (bound as `whittaker_wave`) | none |
-| photon penetrability (E_γ/ħc)^(2L+1) (`transform`) | the engine's photon channel | none |
-| `transform_out`, `partial_widths`, `LevelWidthTransformer` | `TransformOut` (`transform_rwa`) | none |
-| `transform.ancs` | the engine's ANCs (`parameters.out`) | none |
-| `widths.weisskopf_width` | `include/PPair.h` | none |
-| `widths.teichmann_wigner`, `lane_thomas_wigner` | `AChannel::SetWignerLimit` | `wigner_convention_test` |
-| `nds.cm_to_lab` | the engine's kinematics | none |
-| `nds.elastic_lab_to_cm` (angle and Jacobian) | `EPoint` conversions | none |
-| `bands.sensitivities`, `uncertainty_bands` (linear propagation) | `CovarianceBand` | none (no test enters them) |
-| the rate integral of `examples/reaction_rate.py` | `ReactionRate.cpp` (menu 5) | none |
+| `transform.sommerfeld_eta`, `coulomb_rho` | `sommerfeld_eta`, `wave_number` (`ChannelFunctions.h`) | 0; 2.2e-16 |
+| `transform.coulomb_waves` (mpmath) | `coulomb_waves` (`physics/coulomb`) | 5.2e-10 for η > 0 (η = 0: see 1.6) |
+| `transform.penetrability` | `penetrability` (`ChannelFunctions.h`) | 9.7e-10 (four pairs, l = 0–3) |
+| `transform.shift` | `shift` (same) | 2.6e-8 (3e-9 absolute; Python right) |
+| `transform.shift_derivative` (central difference) | `shift_derivative` (same) | 9.5e-6 (Python right, 1.6) |
+| `transform.whittaker` (scipy, mpmath) | `whittaker_wave` (`Whittaker.h`) | 3.6e-10 |
+| photon penetrability (E_γ/ħc)^(2L+1) (`transform`) | `photon_penetrability` (`Widths.h`) | 0 |
+| `transform_out`, `partial_widths`, `LevelWidthTransformer` | the session's `transform_rwa` | not a row |
+| `transform.ancs` | the session's ANCs (`parameters.out`) | not a row |
+| `widths.weisskopf_width` | none: the engine has no Weisskopf estimate | not bound |
+| `widths.teichmann_wigner`, `lane_thomas_wigner` | `wigner_limit` (`Widths.h`, `AChannel`) | 0 |
+| `nds.cm_to_lab` | `cm_to_lab_energy` (`experiment/Frames.h`) | 2.2e-16 |
+| `nds.elastic_lab_to_cm` (angle and Jacobian) | `elastic_lab_to_cm_angle` (`Frames.h`) | 2.5e-16; J 1.6e-14 |
+| `bands.sensitivities`, `uncertainty_bands` | `CovarianceBand` (not bound) | not a row |
+| the rate integral of `examples/reaction_rate.py` | `ReactionRate.cpp` (not bound) | not a row |
 
 `azure2.wigner_widths` obtains the penetrability at the level energy by setting every reduced width to a small value
 and reading the engine's widths back (a workaround for a function the binding did not have).
@@ -276,6 +276,14 @@ Defects found (not fixed here):
 5. The documentation of `use_rmc` contradicts the program's (1.1).
 6. Two tests of `tests/pyazr/` run the engine at four threads whatever the caller's budget:
    `parallel_points_test` (`OMP_NUM_THREADS=4` in its environment) and `upgrade_thread_independence_test`.
+
+Found when the physics table was compared with mpmath (2026-11-13, `tests/pyazr/physics_table_test.py`), all in the
+library, none changed: the engine's shift function S is good to about 3e-9 absolute (2.6e-8 relative at S = -0.06,
+α + 12C, l = 1, 20 MeV, a = 5.5 fm), from the 5e-10 precision of coulsm's F and G; the engine's dS/dE (Richardson's
+difference of S with h = 1e-3 E) carries that noise to 9.5e-6 relative (p + 12C, l = 0, 3.42 MeV, a = 5 fm), against
+the 1e-8 that `ChannelFunctions.h` states; the Python formula (mpmath, a five-point difference with h = 1e-3 MeV) is
+right there to 1e-11.  coulsm and coul return a wrong F for η = 0, l ≥ 2 at small ρ (factor 4 at l = 6, ρ = 0.2),
+as `physics/coulomb/README.md` records; P, S and φ take F only through F/G and are not affected.
 
 ### 1.7 The scripts (in `work/pyazr3/`, outside the repository)
 
@@ -634,6 +642,21 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    phase, kinematics, widths, the transfer functions; `Session.channel_functions` and `level_matrix`.
    `pybind_physics.cpp` (240 → about 700), `physics.py` (generated, about 150). About 900 lines; one test per row
    (about 20) and the consistency check. Needs 1 (for `DomainError`).
+   **Done** (branch `feature/upgrade-8-pyazr3-physics`).  `api/src/pybind_physics.cpp` (about 760 lines): 24 rows
+   (kinematics 6, Coulomb 3, channel functions 4, THM plane-wave vertex 1, widths 3, resonance quantities, Coulomb
+   scattering and S factor 7;
+   the seven bound one by one before moved into the table), one template with a status per element (0; argument k
+   outside its domain; -2 the arguments together; -1 not converged); `_azure2.physics_functions()` returns the rows
+   and `_azure2.physics_evaluate` evaluates one.  `pyazr/physics.py` (170 lines) builds a function per row;
+   `errors="mask"` is the keyword for NaN and a status array.  `kinds()["physics"]` is the rows (with `axis`, the
+   argument a plot puts on its horizontal axis, for the web UI), `kinds()["stopping"]` the stopping functions.
+   `physics/Widths.h` adds `wigner_limit`, `single_particle_width`, `photon_penetrability` (the engine calls the
+   first and the last).  `Session.channel_functions` in `pyazr/session_physics.py` (a mixin; the rename step moves
+   it into `session.py`).  Differs from the plan: `level_matrix` not written (the engine hands out no R or U matrix
+   without new code in `AZUREAPI`: the collision matrices live inside the evaluation), the transfer functions on
+   potentials not bound (they take potentials and return functions of r, not one number per element), no
+   Weisskopf width (no engine function: new physics, a decision); the Python formulas are untouched (the rename
+   step deletes them).
 5. **Rename and remove.** `Session` (`azure2.py` split into `session.py`, `data.py`, `system.py`), one parameter
    basis, the `_rwa`/physical pairs, `calculate_*`, the mode switch, the per-session edits; delete the formulas of
    `transform.py` and `widths.py`, the 20 unused bindings, the old-format words. Port the tests (105 files of

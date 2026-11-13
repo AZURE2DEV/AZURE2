@@ -27,6 +27,7 @@
 #include "azure2/physics/Widths.h"
 #include "azure2/physics/coulomb/Coulomb.h"
 #include "azure2/physics/coulomb/Whittaker.h"
+#include "azure2/physics/transfer/ThmVertex.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -321,6 +322,19 @@ std::vector<PhysicsRow> BuildTable() {
                  o[0] = v.dS_dE;
                  return FromCoulomb(v.status);
                }});
+  // -- THM
+  t.push_back({"thm_vertex_function", "Plane-wave surface vertex M_l(p) of a Trojan-horse level (dimensionless).",
+               "M_l(p) = (B - 1) j_l(pa) - pa j_l'(pa) (docs/upgrade/transfer.md eq. 8.3, THM.md section 1): the "
+               "surface term of the vertex int_0^a w V u dr for the plane wave w = r j_l(pr) of the transferred "
+               "particle, p its momentum, a the channel radius, B the level's boundary value.",
+               "physics/transfer/ThmVertex.h: PlaneWaveSurfaceVertex", "p",
+               {L(), Real("p", "fm^-1", "momentum of the transferred particle").gt(0), Radius(),
+                Real("boundary", "", "boundary value B = a u'(a)/u(a) of the level")},
+               {{"M", "", "plane-wave surface vertex M_l(p)"}},
+               [](const double *a, double *o) {
+                 o[0] = azure2::physics::transfer::PlaneWaveSurfaceVertex(Int(a[0]), a[1], a[2], a[3]);
+                 return std::isfinite(o[0]) ? kOk : kFailed;
+               }});
   // -- widths
   t.push_back({"wigner_limit", "Wigner limit gamma_W^2 = 3 hbar^2 / (2 mu a^2) of a reduced width (MeV).",
                "The engine's convention (Parameter.wigner_limit; the Teichmann-Wigner sum-rule unit); hbar^2 / (mu a^2) "
@@ -543,8 +557,8 @@ py::list Describe() {
       d["doc"] = s.doc;
       d["kind"] = KindName(s.kind);
       d["domain"] = DomainText(s);
-      d["lower"] = s.lo;
-      d["upper"] = s.hi;
+      d["lower"] = std::isfinite(s.lo) ? py::object(py::float_(s.lo)) : py::object(py::none());  // None: unbounded
+      d["upper"] = std::isfinite(s.hi) ? py::object(py::float_(s.hi)) : py::object(py::none());
       d["lower_open"] = s.lo_open;
       d["upper_open"] = s.hi_open;
       d["choices"] = s.choices;
@@ -587,8 +601,8 @@ void BindPhysics(py::module_ &m) {
   m.def("physics_functions", &Describe,
         "The table of physics functions, one dict per row: name, summary, doc, library (the function called), axis "
         "(the argument a plot puts on its horizontal axis), arguments (name, unit, doc, kind real / integer / flag / "
-        "choice, domain in words, lower, upper, lower_open, upper_open, choices, default or None) and returns (name, "
-        "unit, doc).  pyazr.physics builds one Python function per row from it.");
+        "choice, domain in words, lower and upper (None: unbounded), lower_open, upper_open, choices, default or None) "
+        "and returns (name, unit, doc); plain JSON data.  pyazr.physics builds one Python function per row from it.");
   m.def("physics_evaluate", &Evaluate, py::arg("name"), py::arg("arguments"),
         "Row `name` element-wise on equal-length 1-d float arrays, one per argument in the row's order (a choice as "
         "its index, a flag as 0 or 1): (values, status), values of shape (n_returns, n), NaN where status != 0; "
