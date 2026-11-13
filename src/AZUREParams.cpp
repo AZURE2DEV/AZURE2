@@ -52,12 +52,12 @@ bool AZUREParams::ReadUserParameters(const Config &configure) {
   // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
   const std::vector<std::string> projectNames =
       azure2::experiment::ParameterNamesOf(configure.project->built);
-  return ApplyUserParameterFile(configure.OpenPath(configure.paramfile), configure.outStream,
+  return ApplyUserParameterFile(configure.paramfile, configure.OpenPath(configure.paramfile), configure.outStream,
                                 (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, projectNames);
 }
 
 bool AZUREParams::ReadUserParameters(const std::string &filename) {
-  return ApplyUserParameterFile(filename, std::cout);
+  return ApplyUserParameterFile(filename, filename, std::cout);
 }
 
 /*!
@@ -73,7 +73,7 @@ bool AZUREParams::ReadUserParameters(const std::string &filename) {
  * parameter's step size as it was; a line without a readable value is skipped
  * with a warning.
  */
-bool AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries,
+bool AZUREParams::ApplyUserParameterFile(const std::string &filename, const std::string &pathToOpen, std::ostream &out, bool segmentEntries,
                                          const std::vector<std::string> &otherRunNames) {
   std::vector<std::string> names;
   int segmentSkipped = 0;
@@ -81,7 +81,7 @@ bool AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
   vector_r errors;
   std::vector<bool> fixed;
 
-  std::ifstream in(filename.c_str());
+  std::ifstream in(pathToOpen.c_str());  // `filename` as written names it in the messages
   if (!in) {
     out << "Could not read user parameter file." << std::endl;
     return true;  // the prompt checked that it opens; a file gone since keeps the project's values, as before
