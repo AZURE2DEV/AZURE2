@@ -127,7 +127,8 @@ message; the level keeps the partial widths. Also refused: a photon channel to t
 
 With q the record's parameters of level λ and p_k = γ_λ,k the amplitudes of its photon channels:
 
-    ∂p_k/∂q = (p_k / 2Γ_k) ∂Γ_k/∂q   (Γ_k ≠ 0; 0 for Γ_k = 0),      ∂Γ_k/∂q from (2.3), analytic
+    ∂p_k/∂q = (p_k / 2Γ_k) ∂Γ_k/∂q   (Γ_γ, b; Γ_k ≠ 0; 0 for Γ_k = 0),      ∂Γ_k/∂q from (2.3), analytic
+    ∂p_L/∂δ = −p_L δ/(1+δ²),   ∂p_L+1/∂δ = K/(1+δ²)^{3/2},   K = 2^½ p_L+1 at δ = 1    (regular through δ = 0)
     ∂p_k/∂γ_c = p_k γ_c S'_c / n_λ   (particle channel c of λ, Brune; 0 in Park's basis)
     ∂p_k/∂E_λ   by a central difference of the map (step 10⁻⁶ MeV)                                          (2.5)
 
@@ -153,7 +154,10 @@ MCMC samples in the external coordinates and rejects a proposal outside the limi
 Σ_{f≠r} b_f > 1 the map uses b_r = 0 and the others divided by their sum (no negative width, no NaN), and the objective
 adds the wall ((Σ_{f≠r} b_f − 1)/10⁻³)² so that the minimum stays on Σ ≤ 1 (to 10⁻³ of the wall's width); a fit that ends
 with a branching or the remainder at 0 says so in the run log and in `parameters.out`. At b_f = 0 the amplitude is 0
-and ∂p/∂b is infinite (p ∝ b^½); the Jacobian is set to 0 there, as for a width written 0.
+and ∂p/∂b is infinite (p ∝ b^½); the Jacobian is set to 0 there, as for a width written 0. δ = 0 is regular: the L+1
+amplitude is linear in δ, and its derivative is taken in that form, not through p/(2Γ) (0/0 at δ = 0), so δ = 0 is an
+allowed start; with angle-integrated data alone, which depend on δ², the sign of δ is not determined and δ = 0 is a
+stationary point by symmetry: start away from 0 or give an angular distribution.
 
 ## 3. The file and the API
 

@@ -385,13 +385,33 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
     for (double g : gbar) any = any || g != 0.0;
     if (!any) continue;
     for (int ch = 1; ch <= group->NumChannels(); ch++) particle[ch - 1] = level->GetFitGamma(ch);
-    // The record's numbers: dp_k/dq_i = p_k / (2 Gamma_k) dGamma_k/dq_i (0 where Gamma_k = 0).
+    // Gamma_gamma and the branchings: dp_k/dq_i = p_k / (2 Gamma_k) dGamma_k/dq_i (0 where Gamma_k = 0: p ~ b^1/2
+    // has no finite derivative at b = 0).
     std::vector<double> dGdq;
     const std::vector<double> widths = PartialWidths(L, q, &dGdq);
+    auto slotOf = [&](int ch) {
+      for (std::size_t k = 0; k < m; k++)
+        if (L.photonChannels[k] == ch) return k;
+      return m;
+    };
     for (std::size_t i = 0; i < m; i++) {
       double v = 0.0;
-      for (std::size_t k = 0; k < m; k++)
-        if (widths[k] != 0.0) v += gbar[k] * amp[k] / (2.0 * widths[k]) * dGdq[k * m + i];
+      if (L.slots[i].part == GammaDecayLevel::Part::Mixing) {
+        // A mixing ratio, in the amplitudes' own form, regular through delta = 0 (the width form is 0/0 there):
+        // p_L ~ (1 + d^2)^-1/2, so dp_L/dd = -p_L d / (1 + d^2); p_L+1 = K d (1 + d^2)^-1/2, so dp_L+1/dd =
+        // K (1 + d^2)^-3/2, with K = 2^1/2 p_L+1 at d = 1 (the map at d = 1, the other numbers as they are).
+        const ex::GammaFinalState &f = L.spec.finals[L.slots[i].final];
+        const std::size_t kL = slotOf(f.channels[0]), kL1 = slotOf(f.channels[1]);
+        const double d = q[i], w = 1.0 + d * d;
+        std::vector<double> unit = q;
+        unit[i] = 1.0;
+        const double K = std::sqrt(2.0) * PhotonAmplitudes(compound, *structure_, park_, gslCoulomb_, rmc_, L,
+                                                           level->GetFitE(), unit, particle)[kL1];
+        v = -gbar[kL] * amp[kL] * d / w + gbar[kL1] * K / (w * std::sqrt(w));
+      } else {
+        for (std::size_t k = 0; k < m; k++)
+          if (widths[k] != 0.0) v += gbar[k] * amp[k] / (2.0 * widths[k]) * dGdq[k * m + i];
+      }
       add(map.GammaIndexFlat(j, la, L.photonChannels[i]), v);
     }
     // The particle amplitudes (Brune): p_k^2 = |Gamma_k| n / (2 P_k), n = 1 + sum_c gamma_c^2 S'_c.

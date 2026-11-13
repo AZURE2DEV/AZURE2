@@ -2,6 +2,17 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-branchings`) — the gradient in a mixing ratio at δ = 0
+
+**Done.** `GammaDecaySet::PullBack` took ∂p/∂δ as p/(2Γ)·∂Γ/∂δ, which is 0/0 for the L+1 channel at δ = 0 and was
+skipped: the gradient in δ was exactly 0 there (AZURE_GRAD_CHECK on an angular distribution: analytic 0, finite
+difference −1.29e6), so an LM fit started at δ = 0 did not move. Now ∂p_L/∂δ = −p_L δ/(1+δ²) and ∂p_L+1/∂δ =
+K/(1+δ²)^{3/2}, K = 2^½ p_L+1 from the map at δ = 1. Test `tests/gamma_decay/check.sh` (g) on
+`models/sign_ad.azr` (the sign case's dσ/dΩ as data): the gradient at δ = 0 and 0.3 (2e-11, 4e-11) and MIGRAD and LM
+fits from 0 ending at +0.5; on the old code the gradient check at 0 and the LM fit failed (MIGRAD with the gradient
+still reached 0.5 through Minuit's own line search). Note §2.5/2.6 and the user guide say δ = 0 is regular and that
+angle-integrated data alone leave the sign of δ open.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-branchings`) — MIGRAD's call count is AZURE2's own
 
 **Done.** `fitStatus.out` and the MIGRAD log lines report the calls counted by the objective (`AZURECalc::CountCallsInto`,
@@ -13,7 +24,7 @@ a `std::atomic<long>` owned by the fit run in `AZUREMain`, reset before each MIG
 
 **Verified how.** At 1 thread the count equals `NFcn()` (record 66, twin 63 = `b-head3`); ten 3-thread runs each: 66
 and 63 every time; check (f) failed on its first run with `NFcn()` put back; the eight fits of `fits_vs_base2.sh`, the
-tree x 3 bases against `tab-gridm-1`, `ctest -LE slow`, consistency (results in the report).
+tree x 3 bases against `tab-gridm-1` (827/800/827 identical), `ctest -LE slow` 221/221, consistency.
 
 ## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — implementation: the `gamma_decay` record
 

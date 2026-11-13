@@ -191,6 +191,27 @@ if [ "$n" -ge 9 ] && [ "$d" -eq 0 ] && [ -s "$WORK/thr1/output/fitStatus.out" ];
   ok "$n output files identical at 1 and 3 threads ($(awk '/^calls/ { print $2 " calls" }' "$WORK/thr1/output/fitStatus.out"))"
 else bad "$d of $n output files differ between 1 and 3 threads"; fi
 
+echo "-- (g) a mixing ratio fitted from 0 to an angular distribution (models/sign_ad.azr: the sign case's dsigma/dOmega)"
+# delta = 0 is regular: the L+1 amplitude is linear in delta there, so its derivative is not 0 (the width form
+# p / (2 Gamma) dGamma/ddelta is 0/0 at delta = 0 and gave a gradient of exactly 0)
+"$PY" "$M/make_record.py" "$M/sign_ad.azr" "$WORK/sad.azr" 1 5.183 fixed
+for start in 0 0.3; do
+  edited "$WORK/sad.azr" "$WORK/sad$start.azr" sed "s/^\(    mixing       g+15O\[5.183\]\) 0.5 fixed$/\1 $start fit/" || bad "mixing start $start"
+  project "sad$start" "$WORK/sad$start.azr"
+  (cd "$WORK/sad$start" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+  line="$(grep '\[grad-check\] idx' "$WORK/sad$start/grad.log" | head -1)"
+  rel="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
+  an="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "analytic") print $(k + 1) }')"
+  if [ -n "$line" ] && awk -v r="$rel" -v a="$an" 'BEGIN { exit !(r < 1e-6 && a != 0) }'; then
+    ok "delta = $start: d chi^2 / d delta $an, gradient and Jacobian paths against central differences, rel. $rel"
+  else bad "delta = $start: d chi^2 / d delta ${an:-missing}, rel. ${rel:-missing} (limit 1e-6)"; fi
+done
+for m in --use-gradient --use-lm; do
+  project "sadfit$m" "$WORK/sad0.azr"
+  run "sadfit$m" 2 $m
+  check "$m from delta = 0: the fitted delta is the twin's +0.5" "$(sav "sadfit$m" 'level1.mixing.g+15O[5.183]')" 0.5 1e-4
+done
+
 echo "-- (e) the boundary"
 # Without the data sets of 6.8594 and 5.183 MeV, priors below 0 on b(6.8594) and on the remainder (5.183 MeV).
 edited "$M/record.azr" "$WORK/record_zero.azr" sed -e 's/^\(    branching    g+15O\[6.8594\] [^ ]* fit\)$/\1 prior -0.01 0.01/' \

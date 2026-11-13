@@ -13,7 +13,12 @@ with partial widths. `check.sh` says what each part checks; run it as `./check.s
   (1 eV) and E2 (-0.25 eV), the case a of the note's section 2.3: the record (delta = +0.5) gives the same angular
   distribution, a2/a0 = -0.99282 as Krane, Steffen and Wheeler's formula for delta = +0.5.
 
+* `models/sign_ad.azr`: the sign case with its angular distribution as data (`models/data/sign_ad.dat`, nine angles,
+  3 %): the record's mixing ratio fitted from 0 must end at +0.5, and its gradient at 0 must not be 0.
+
 Errors this check was shown to catch (each injected once into `src/GammaDecayMap.cpp`, then removed): the sign of the
 L+1 width in the map (the sign case and its a2/a0 fail), a wrong remainder (identity, parameters.out and the
 gradient fail), no pull-back to the level energy or to a particle amplitude (the gradient rows fail), no wall on the
-sum of the branchings (the sum ends at 1.2), the sign of the remainder prior's gradient (the gradient rows fail).
+sum of the branchings (the sum ends at 1.2), the sign of the remainder prior's gradient (the gradient rows fail), the derivative in a mixing ratio taken through
+p/(2 Gamma) (0 at delta = 0: the gradient check at 0 and the LM fit from 0 fail), Minuit2's call count in fitStatus.out
+(the 1-against-3-thread comparison fails).

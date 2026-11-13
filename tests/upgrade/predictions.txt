@@ -300,6 +300,9 @@ data g6793: sigma(1->3)
 data g6176: sigma(1->6)
 data g5183: sigma(1->4)
 data g6859: sigma(1->7)
+== tests/gamma_decay/models/sign_ad.azr
+data ad_data: dsdo_cm(1->2)
+extrapolation ad: dsdo_cm(1->2)
 == tests/gamma_decay/models/sign_partial.azr
 extrapolation ad: dsdo_cm(1->2)
 == tests/gamma_lab_frame/models/cm.azr

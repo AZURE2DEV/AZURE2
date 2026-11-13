@@ -73,7 +73,9 @@ Fitting and reading
 The record's numbers are fit parameters of the kind ``radiative``, named ``level5.total_width``,
 ``level5.branching.g+15O[6.7931]``, ``level5.mixing.g+15O[6.7931]``; they appear in ``param.par``, ``param.sav``
 and pyazr's ``Session.parameters`` (``Parameter.decay_record``, ``decay_part``, ``final_state``). A branching is kept
-in :math:`[0, 1]` and :math:`\Gamma_\gamma \ge 0`; when the free branchings sum above 1 the remainder is 0 and a wall
+in :math:`[0, 1]` and :math:`\Gamma_\gamma \ge 0`. A mixing ratio may start at 0, but angle-integrated data depend on
+:math:`\delta^2` alone, so they do not determine its sign and :math:`\delta = 0` is a stationary point there: start away
+from 0 or fit an angular distribution as well. When the free branchings sum above 1 the remainder is 0 and a wall
 in the objective brings the sum back. ``parameters.out`` ends with a block that gives :math:`\Gamma_\gamma`, every
 :math:`b_f` (the remainder included), :math:`\delta_f` and the partial widths, with a note for a branching at 0.
 
