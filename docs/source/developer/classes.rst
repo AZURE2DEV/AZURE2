@@ -125,17 +125,18 @@ Front ends
 The program's ``AZUREMain`` and the binding's ``AZUREAPI`` own the same pair of
 engine objects, ``CNuc`` and ``WorkingCopy``, and set them up with the same
 calls. ``_azure2.Session`` (``api/src/pybind_api.cpp``) owns a ``Config`` and
-an ``AZUREAPI``; pyazr's ``azure2`` owns the session. ``pyazr.Project`` owns
+an ``AZUREAPI``; ``pyazr.Session`` owns one of them and makes the
+``pyazr.Objective`` (which keeps the session) and the ``pyazr.Evaluation``
+(copies, no session). ``pyazr.Project`` owns
 the project's ``Document`` and hands out ``Record`` objects; it does not
 evaluate. In the web UI the ``Server`` owns the edit history (``State``, which
 owns the ``Project``), the session worker and the job table; the session
-itself lives in the worker process, where ``Engine`` owns an ``azure2``.
+itself lives in the worker process, where ``Engine`` owns a ``pyazr.Session``.
 
 .. note:: **Planned.**
    When ``CNuc`` is split, the grey ``CNuc`` boxes become an immutable
    ``CompoundSystem`` (shared like the ``DataSet``) and a per-evaluation
-   ``LevelState``; ``pyazr``'s ``azure2`` becomes ``pyazr.Session``. The
-   tables below then change by those rows.
+   ``LevelState``. The tables below then change by those rows.
 
 Changing the scheme
 -------------------

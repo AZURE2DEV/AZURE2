@@ -109,7 +109,7 @@ From Python, an agent reads the record, changes one branching and refits:
 
 .. code-block:: python
 
-   from pyazr import Project, Nuisance, azure2
+   from pyazr import Project, Nuisance, Session
 
    project = Project.open("record.azr")
    print(project["level5"]["branching"])            # the lines as written
@@ -118,7 +118,7 @@ From Python, an agent reads the record, changes one branching and refits:
             for l in project["level5"]["branching"]]
    project.set("level5", branching=lines)
    project.save("record_changed.azr")
-   with azure2("record_changed.azr") as s:
+   with Session("record_changed.azr") as s:
        print([(p.name, p.value) for p in s.parameters if p.kind == "radiative"])
 
 A new record is ``project.add("gamma_decay", "level5", level=5, J="1/2+", total_width=..., branching=[...],

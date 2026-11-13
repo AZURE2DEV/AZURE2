@@ -65,7 +65,7 @@ def direct(client, recipe, settings):
     path = state.session_file("direct")  # the session's text of the current revision, beside the project
     with open(path, "wb") as f:
         f.write(state.session_text().encode())
-    s = pyazr.azure2(path, cwd=state.directory)
+    s = pyazr.Session(path, cwd=state.directory)
     names = [p.name for p in s.parameters if p.free_index is not None and not p.fixed]
     tracker = Tracker(s.objective_and_grad, names)
     status = recipe(tracker, np.asarray(s.params_rwa, float), settings, names)
@@ -193,7 +193,7 @@ def written_back(client, best_x):
     """What pyazr's own write-back gives for ``best_x`` ({name: value}): save_fit on a session of the user's file."""
     import pyazr
     path = client.path
-    s = pyazr.azure2(path, cwd=os.path.dirname(path))
+    s = pyazr.Session(path, cwd=os.path.dirname(path))
     names = [p.name for p in s.parameters if p.free_index is not None and not p.fixed]
     out = os.path.join(os.path.dirname(path), "written_back.azr")
     s.save_fit(out, np.array([best_x[n] for n in names]), param_sav=False)

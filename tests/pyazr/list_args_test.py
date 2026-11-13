@@ -38,12 +38,12 @@ def check(name, ok, detail=""):
 
 def main():
     try:
-        from pyazr import azure2
+        from pyazr import Session
         import pyazr._azure2  # noqa: F401
     except ImportError as e:
         print(f"pyazr engine module not built ({e}); nothing to test")
         return 0
-    with azure2(AZR, cwd=PROJECT, use_brune=True) as s:
+    with Session(AZR, cwd=PROJECT, use_brune=True) as s:
         x = np.asarray(s.params_rwa, float)
         xa = np.asarray(s.sess.params_all_rwa(), float)
         print(f"{os.path.basename(AZR)}: {x.size} free of {xa.size} parameters")

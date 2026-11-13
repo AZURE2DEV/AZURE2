@@ -19,10 +19,10 @@ zeroing it -- i.e. running the original parameters again.
 
 import numpy as np
 
-from pyazr import azure2, Project
+from pyazr import Session, Project
 
 
-azr = azure2("13N.azr")
+azr = Session("13N.azr")
 best = np.asarray(azr.params_rwa, float)          # the fitted free parameters
 
 # What are the levels?  Each is a LevelKey you can hand to the toggles below.
@@ -63,7 +63,7 @@ model = Project.open("13N.azr")
 model.set_level((target.jpi, target.energy), active=False)
 print(f"\ndeactivated in file: {target.jpi} at {target.energy} MeV")
 path = model.save("13N_no_level.azr")             # original untouched
-azr2 = azure2(path)                               # refit / analyze this reduced model
+azr2 = Session(path)                               # refit / analyze this reduced model
 print(f"wrote {path}: {len(azr2.params)} free parameters "
       f"(was {len(azr.params)})")
 

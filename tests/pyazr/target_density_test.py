@@ -48,7 +48,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project, FormatError  # noqa: E402
+    from pyazr import Session, Project, FormatError  # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -107,7 +107,7 @@ def bare_average(e_fine, s_fine, lo, hi):
 
 
 def session(work, **kw):
-    return azure2(make_model(work, **kw), cwd=work)
+    return Session(make_model(work, **kw), cwd=work)
 
 
 work = tempfile.mkdtemp(prefix="pyazr_density_")

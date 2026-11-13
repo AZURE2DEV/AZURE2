@@ -27,7 +27,7 @@ def _open(path, threads):
     """A pool worker's initializer: its own session and Objective."""
     global _objective
     os.environ["OMP_NUM_THREADS"] = str(threads)
-    _objective = pyazr.azure2(path).fit_objective()
+    _objective = pyazr.Session(path).fit_objective()
 
 
 def log_prob(x):
@@ -55,7 +55,7 @@ def sample(path, nwalkers=None, nsteps=100, spread=1e-3, seed=1, processes=0, th
     Returns the emcee sampler (``get_chain()``, ``get_log_prob()``) and the parameters' names."""
     import emcee
     global _objective
-    _objective = pyazr.azure2(path).fit_objective()
+    _objective = pyazr.Session(path).fit_objective()
     f = _objective
     ndim = len(f.x0)
     nwalkers = nwalkers or 2 * ndim + 2

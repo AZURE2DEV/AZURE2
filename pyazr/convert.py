@@ -1,6 +1,6 @@
 """The converter of old project files: ``AZURE2 --convert OLD NEW`` and ``--convert-params`` from Python.
 
-pyazr reads project format 3 only (``pyazr.Project``, ``pyazr.azure2``); a format-1 or format-2 file is refused with
+pyazr reads project format 3 only (``pyazr.Project``, ``pyazr.Session``); a format-1 or format-2 file is refused with
 the engine's message (:func:`pyazr.project.require_format3`), which names this conversion.  The converter is the
 engine's (``convert/``, through ``_azure2.convert_format3_text`` and ``_azure2.convert_parameter_file``): this module
 only hands the texts over and writes the results.

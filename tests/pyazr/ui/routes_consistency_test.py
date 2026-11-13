@@ -7,8 +7,9 @@
      serve the route);
   3. every public name of pyazr.Project is served by a row or listed, with its reason, in PROJECT_NOT_SERVED;
   4. every public operation of the adapter is a route or a call the server makes itself; every public method of
-     today's pyazr.azure2 is called by the adapter or listed, with its reason, in engine.AZURE2_NOT_SERVED; no other
-     file of pyazr/ui names the class azure2;
+     pyazr.Session is called by the adapter or listed, with its reason, in engine.SESSION_NOT_SERVED; no other
+     file of pyazr/ui makes or imports a Session or calls its methods through the class (the route rows may name
+     a call of it as text);
   5. the app serves exactly the rows (method and path), and the OpenAPI document lists every one of them;
   6. ``import pyazr`` imports neither fastapi nor uvicorn nor pyazr.ui;
   7. every job row runs a recipe or names the call it waits for;
@@ -71,9 +72,9 @@ def test_every_public_name_of_project_is_served_or_listed():
     assert not stale, f"PROJECT_NOT_SERVED names what Project does not have: {stale}"
 
 
-def test_adapter_and_azure2_covered():
+def test_adapter_and_session_covered():
     import pyazr
-    from pyazr.ui.engine import AZURE2_NOT_SERVED, Engine
+    from pyazr.ui.engine import SESSION_NOT_SERVED, Engine
     from pyazr.ui.routes import ROUTES
     rows = {r.call.rsplit(".", 1)[1] for r in ROUTES if r.handler == "session"}
     with open(os.path.join(UI, "server.py")) as f:
@@ -82,15 +83,15 @@ def test_adapter_and_azure2_covered():
         assert op in rows or f'"{op}"' in server_source, f"Engine.{op}: neither a route nor called by the server"
     with open(os.path.join(UI, "engine.py")) as f:
         adapter = f.read()
-    listed = {n for names in AZURE2_NOT_SERVED.values() for n in names.split()}
-    public = {n for n in dir(pyazr.azure2) if not n.startswith("_") and n.upper() != n}
+    listed = {n for names in SESSION_NOT_SERVED.values() for n in names.split()}
+    public = {n for n in dir(pyazr.Session) if not n.startswith("_") and n.upper() != n}
     left = sorted(n for n in public - listed if not re.search(rf"\.{n}\b", adapter))
-    assert not left, f"public names of pyazr.azure2 neither called by the adapter nor listed: {left}"
-    assert not sorted(listed - public), f"AZURE2_NOT_SERVED names what azure2 does not have: {sorted(listed - public)}"
+    assert not left, f"public names of pyazr.Session neither called by the adapter nor listed: {left}"
+    assert not sorted(listed - public), f"SESSION_NOT_SERVED names what Session does not have: {sorted(listed - public)}"
     for path in glob.glob(os.path.join(UI, "*.py")):
         if os.path.basename(path) != "engine.py":
             with open(path) as f:
-                assert not re.search(r"\bazure2\(|pyazr\.azure2\b|import azure2", f.read()), path
+                assert not re.search(r"\bSession\(|import Session|pyazr\.Session\.\w+\(", f.read()), path
 
 
 def test_app_serves_the_rows_and_openapi_lists_them(tmp_path):

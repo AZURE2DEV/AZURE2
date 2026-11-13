@@ -13,7 +13,7 @@ linear propagation,
 where g is the per-point sensitivity matrix.  AZURE2 computes g analytically --
 one reverse-mode adjoint per point, so the whole matrix costs about two forward
 evaluations no matter how many parameters the fit has -- and pyazr asks for it
-over the API (``azure2.model_gradients``).  ``uncertainty_bands`` puts the two
+over the API (``Session.model_gradients``).  ``uncertainty_bands`` puts the two
 together and reproduces the ``.band`` files AZURE2 writes itself to six
 decimals, on whatever grid you ask for, without re-running a fit.
 
@@ -48,7 +48,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")   # set BEFORE importing numpy
 
 import numpy as np
 
-from pyazr import azure2, extrapolation_bands, trimmed_model, uncertainty_bands
+from pyazr import Session, extrapolation_bands, trimmed_model, uncertainty_bands
 
 AZR = "7Be.azr"
 
@@ -57,7 +57,7 @@ def main():
     # ------------------------------------------------------------------
     # 1.  The one-liner: bands on segments the .azr already declares.
     #     Keys are the 1-based <segmentsTest> numbers -- print
-    #     azure2(...).extrapolations.table() to see them.
+    #     Session(...).extrapolations.table() to see them.
     # ------------------------------------------------------------------
     t = time.time()
     b = extrapolation_bands(AZR, keys=[113], quantity="sfactor")[113]
@@ -78,7 +78,7 @@ def main():
     print(extrapolation_bands(AZR, grids=[grid], quantity="sfactor")[1])
 
     # ------------------------------------------------------------------
-    # 3.  Data and band from a single session.  Opening two azure2 sessions in
+    # 3.  Data and band from a single session.  Opening two sessions in
     #     one interpreter is asking for trouble, so when a plot needs both the
     #     measured points and the band, trim the model yourself, read the data
     #     in data mode, then switch and call uncertainty_bands.  This is what
@@ -86,7 +86,7 @@ def main():
     # ------------------------------------------------------------------
     tmp, workdir = trimmed_model(AZR, keys=[113])
     try:
-        with azure2(tmp, cwd=os.path.dirname(os.path.abspath(AZR)) or ".") as m:
+        with Session(tmp, cwd=os.path.dirname(os.path.abspath(AZR)) or ".") as m:
             capture = [i for i, s in enumerate(m.datasets)
                        if s.observable == "total-capture" and s.entrance_key == 1]
             print(f"\n{len(capture)} 3He+4He capture datasets, "

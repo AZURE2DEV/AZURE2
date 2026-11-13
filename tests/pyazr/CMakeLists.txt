@@ -36,7 +36,7 @@ add_test(NAME pyazr_physical_norm
                  ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
 set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A channel radius set with azure2.set_channel_radius survives every later rebuild of the session
+# A channel radius set with Session.set_channel_radius survives every later rebuild of the session
 # (another pair's radius, a nuclear-potential change, a mode switch); before 2026-11-02 each rebuild
 # re-read the .azr with only its own call's radius.  The wrapper checks the read-back radius.
 add_test(NAME pyazr_radius_override
@@ -470,7 +470,7 @@ add_test(NAME pyazr_relativistic
                  ${CMAKE_CURRENT_SOURCE_DIR}/relativistic_test.py)
 set_tests_properties(pyazr_relativistic PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Scattering lengths: the <scatteringLengths> block helpers, azure2.scattering_lengths against the
+# Scattering lengths: the <scatteringLengths> block helpers, Session.scattering_lengths against the
 # tests/scattering_length reference values, the constraint chi2, its gradient and Jacobian rows.
 add_test(NAME pyazr_scattering_length
          COMMAND ${Python3_EXECUTABLE}
@@ -862,7 +862,7 @@ add_test(NAME pyazr_composite_gradient
 set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      TIMEOUT 900)
 
-# azure2.ec_integrals at the energy the engine uses for the final state (ALevel::GetECEnergy) in every basis: the
+# Session.ec_integrals at the energy the engine uses for the final state (ALevel::GetECEnergy) in every basis: the
 # formal basis gives the Brune basis's integrals on tests/13N (they were at the formal energy before 2026-11-10).
 add_test(NAME pyazr_ec_integrals_formal
          COMMAND ${Python3_EXECUTABLE}
@@ -902,7 +902,7 @@ set_tests_properties(pyazr_errors PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The package describes itself from the engine's tables: pyazr.describe(), pyazr.kinds() (record, data and parameter
 # kinds against AZURE2 --schema / --describe, options against the binding's RuntimeOptions and AZURE2 --help),
-# azure2.describe() on tests/upgrade/T1, and the session of the package docstring runs.
+# Session.describe() on tests/upgrade/T1, and the session of the package docstring runs.
 add_test(NAME pyazr_describe
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
@@ -965,14 +965,19 @@ set_tests_properties(pyazr_config_options PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 add_test(NAME pyazr_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cli_test.py)
 set_tests_properties(pyazr_cli PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# pyazr's Objective (azure2.fit_objective()) against today's objective_and_grad, residuals and residual_jacobian bit for
+# pyazr's Objective (Session.fit_objective()) against today's objective_and_grad, residuals and residual_jacobian bit for
 # bit on T1-T3, 13N_fast, three nuisance kinds and the gamma_decay record with priors; its rows' squares, gradient and
 # Jacobian; log_prob at the sampler's excluded points and against the engine's sampler; two threads (about 55 s at one
 # thread).
 add_test(NAME pyazr_objective_object COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/objective_object_test.py)
 set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
-# pyazr's Evaluation (azure2.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
+# The session's lock: every public member that reaches the engine takes it; two threads on one session get what each
+# gets alone, bit for bit.
+add_test(NAME pyazr_session_lock COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/session_lock_test.py)
+set_tests_properties(pyazr_session_lock PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# pyazr's Evaluation (Session.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
 # per Evaluation, and the self-description of the objects.
 add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
 set_tests_properties(pyazr_evaluation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

@@ -7,7 +7,7 @@ api/src/AZUREAPI.cpp	1779
 api/src/pybind_api.cpp	1235
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
-pyazr/azure2.py	2363
+pyazr/session.py	2131
 pyazr/nds.py	1450
 src/AMatrixFunc.cpp	2766
 src/AZURE2.cpp	1639

@@ -224,7 +224,7 @@ Output files
    ``loglikelihood`` includes the measured scattering lengths of a
    ``<scatteringLengths>`` block (:doc:`../theory/scattering_length`).  For the
    posterior of a scattering length itself, evaluate
-   ``azure2.scattering_lengths`` on the chain's rows in pyazr.
+   ``Session.scattering_lengths`` on the chain's rows in pyazr.
 
 ``walkers.mcmc``
    The final position of every walker, so a later run continues the same

@@ -20,7 +20,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 T2 = os.path.join(ROOT, "tests", "upgrade", "T2")
 sys.path.insert(0, ROOT)
 import numpy as np  # noqa: E402
-from pyazr import azure2  # noqa: E402
+from pyazr import Session  # noqa: E402
 
 failures = []
 
@@ -41,7 +41,7 @@ def main():
         text = open(p).read().replace("<parameterSettings>\n",
                                       "<parameterSettings>\nLevel 1 Channel 3 Width (eV) 80000 0 0 5000 0 1 level 0\n")
         open(p, "w").write(text)
-        with azure2(p, cwd=d) as m:
+        with Session(p, cwd=d) as m:
             x = np.array(m.params_rwa, float)
             m.objective_and_grad(x)
             check("the nuisance prior is 1 at the start", abs(m.penalties(x)["nuisance"] - 1.0) < 1e-9,
@@ -50,7 +50,7 @@ def main():
             x = np.array(m.params_rwa, float)
             o_a, g_a = m.objective_and_grad(x)
             n_a = m.penalties(x)["nuisance"]
-        with azure2(p, cwd=d) as m:
+        with Session(p, cwd=d) as m:
             m.set_channel_radius(1, 5.0)
             x = np.array(m.params_rwa, float)
             o_b, g_b = m.objective_and_grad(x)

@@ -35,12 +35,12 @@ SESSION_ROWS = {
     "channel_functions": {
         "name": "channel_functions", "group": "this project", "op": "channel_functions", "broadcast": False,
         "summary": "The session's channel functions of a pair: Coulomb functions, P, S and the hard-sphere phase.",
-        "doc": "As the session computes them (pyazr azure2.channel_functions): the Coulomb table when one is in use "
+        "doc": "As the session computes them (pyazr Session.channel_functions): the Coulomb table when one is in use "
                "(about 1e-7 from the exact routine of the physics functions), GSL with use_gsl_coul, the hybrid "
                "model's Numerov solution for a pair with a nuclear potential.  Where the channel is closed (E <= 0, "
                "or the functions undefined there) the status is -2: F, G, P and delta_hs are 0 and S is the "
                "closed-channel shift function at the channel radius.",
-        "library": "pyazr: azure2.channel_functions (the session's)", "axis": "e_cm",
+        "library": "pyazr: Session.channel_functions (the session's)", "axis": "e_cm",
         "arguments": [
             dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels>", domain="a pair of the project"),
             dict(_ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,

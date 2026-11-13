@@ -26,7 +26,7 @@ PROJECT = os.path.join(ROOT, "tests", "beam_profile_kernel")
 def main():
     try:
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77
@@ -43,7 +43,7 @@ def main():
         shutil.copy(os.path.join(PROJECT, "beam_profile_kernel.azr"), work)
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
-        with azure2(os.path.join(work, "beam_profile_kernel.azr"), cwd=work, use_brune=False) as a:
+        with Session(os.path.join(work, "beam_profile_kernel.azr"), cwd=work, use_brune=False) as a:
             x = np.array(a.params_rwa, float)
             target = [p for p in a.parameters if str(p).find("width_9_2,") >= 0 and not p.fixed]
             check("width_9_2 is a free parameter", len(target) == 1)

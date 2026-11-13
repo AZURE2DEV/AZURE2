@@ -7,7 +7,7 @@ an arbitrary energy means writing a file that requests it and evaluating that.
 
 :func:`angular_distribution` does exactly that and cleans up after itself. For
 coefficients at the grids a model already declares, use
-``azure2.calculate_angular_dists`` on a live instance instead -- no temporary
+``Session.calculate_angular_dists`` on a live instance instead -- no temporary
 file, no second process.
 """
 
@@ -16,7 +16,7 @@ import tempfile
 
 import numpy as np
 
-from .azure2 import azure2
+from .session import Session
 from .project import Project
 
 
@@ -44,7 +44,7 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
     lab : bool
         Whether ``energies`` are laboratory (default) or centre-of-mass.
     **azure2_kwargs
-        Passed through to :class:`~pyazr.azure2.azure2` (``binary``, ``cwd``…).
+        Passed through to :class:`~pyazr.Session` (``binary``, ``cwd``…).
 
     Returns
     -------
@@ -89,7 +89,7 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
         # run where the original file lives.
         azure2_kwargs.setdefault("cwd", os.path.dirname(os.path.abspath(azr_file)) or ".")
 
-        with azure2(tmp_azr, **azure2_kwargs) as m:
+        with Session(tmp_azr, **azure2_kwargs) as m:
             m.extrap_mode()
 
             # The grid energies do not depend on the parameters, and

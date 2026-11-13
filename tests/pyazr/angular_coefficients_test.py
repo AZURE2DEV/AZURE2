@@ -71,7 +71,7 @@ def main():
 
         print("\n2. through the engine")
         try:
-            from pyazr import azure2
+            from pyazr import Session
             import pyazr._azure2  # noqa: F401
         except Exception as e:
             print(f"  skip  engine not importable ({e})")
@@ -80,7 +80,7 @@ def main():
         os.makedirs(os.path.join(work, "ext", "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "ext", "checks"), exist_ok=True)
         shutil.copy(src, os.path.join(work, "ext", "m.azr"))
-        with azure2(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
+        with Session(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
             coef = m.calculate_angular_dists_rwa(m.params_rwa)[0]   # test segment 1: one array per energy
         n_e = len(coef)
         check("the legendre extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))
@@ -95,7 +95,7 @@ def main():
         os.makedirs(os.path.join(work, "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "checks"), exist_ok=True)
         dm.save()
-        with azure2(azr, cwd=work) as m:
+        with Session(azr, cwd=work) as m:
             chi2 = float(m.calculate_chi2_rwa(m.params_rwa)[0])
             vals = np.asarray(m.calculate_rwa(m.params_rwa)[0], float)
             data = np.asarray(m.cross[0], float)

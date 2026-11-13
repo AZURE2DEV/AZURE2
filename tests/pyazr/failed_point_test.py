@@ -36,8 +36,8 @@ MODELS = [("sum_lab_frame", "sum_data", "sum.dat", 3, 5, "SUM component", 0.05),
 
 def worker(work, model, out):
     import numpy as np
-    from pyazr import azure2
-    with azure2(os.path.join(work, model + ".azr"), cwd=work) as a:
+    from pyazr import Session
+    with Session(os.path.join(work, model + ".azr"), cwd=work) as a:
         v = np.asarray(a.calculate_rwa(np.array(a.params_rwa, float))[0], float)
     json.dump([None if not np.isfinite(x) else float(x) for x in v], open(out, "w"))
 
@@ -45,7 +45,7 @@ def worker(work, model, out):
 def main():
     try:
         import numpy as np  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

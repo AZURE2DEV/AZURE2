@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A channel radius set with azure2.set_channel_radius must survive every later rebuild of the session.
+"""A channel radius set with Session.set_channel_radius must survive every later rebuild of the session.
 
 Before 2026-11-02 the API's SetRadius rebuilt the model from the .azr with only its own call's
 override, and Rebuild()/Initialize() with none: setting pair 2 put pair 1 back to its file radius,
@@ -45,7 +45,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, Project
+        from pyazr import Session, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -71,12 +71,12 @@ def main():
         mdl.set_pair(2, radius=R2)
         ref_azr = os.path.join(ref_dir, "both.azr")
         mdl.save(ref_azr)
-        with azure2(ref_azr, cwd=ref_dir) as r:
+        with Session(ref_azr, cwd=ref_dir) as r:
             check("reference file has both radii", [p.channel_radius for p in r.pairs][:2] == [R1, R2],
                   f"{[p.channel_radius for p in r.pairs]}")
             x_ref = np.asarray(r.params_rwa, float)
             chi_ref = float(np.sum(r.calculate_chi2_rwa(x_ref)))
-        with azure2(base, cwd=work) as f:
+        with Session(base, cwd=work) as f:
             x_file = np.asarray(f.params_rwa, float)
             chi_file = float(np.sum(f.calculate_chi2_rwa(x_file)))
         check("the radii matter (reference chi2 differs from the file's)", rel(chi_ref, chi_file) > 1e-3,
@@ -84,7 +84,7 @@ def main():
 
         # The .azr holds physical widths, so the session's reduced widths are recomputed at each rebuild
         # from the radii in force: compare them with the reference file's, and chi2 at them.
-        with azure2(base, cwd=work) as m:
+        with Session(base, cwd=work) as m:
 
             def radii():
                 return [p.channel_radius for p in m.pairs][:2]

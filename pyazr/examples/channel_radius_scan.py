@@ -10,8 +10,8 @@ standard way of choosing it.
 The scan is a loop over *files*: the radius lives in the <levels> block, and a
 session reads its model once at startup, so each radius is a new .azr and a new
 session.  `Project.set_pair(pair, radius=)` rewrites every row of that pair.
-Every session is in-process (``pyazr.azure2`` owns the engine directly), so the
-loop just opens and closes one ``azure2()`` per radius -- no subprocesses.
+Every session is in-process (``pyazr.Session`` owns the engine directly), so the
+loop just opens and closes one ``Session()`` per radius -- no subprocesses.
 
 The external-capture caches are keyed on the grid, not on the radius, so
 `output/intEC.dat` and `intEC.extrap` must go with each change -- keeping them
@@ -32,7 +32,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 
 def main() -> int:
@@ -61,7 +61,7 @@ def main() -> int:
             if f.exists():
                 f.unlink()
         try:
-            with azure2(str(path), cwd=str(here)) as m:
+            with Session(str(path), cwd=str(here)) as m:
                 x = np.asarray(m.params_rwa, float)
                 n = int(sum(len(m.energies[i]) for i in range(m.nsegments)))
                 chi2 = float(np.sum(m.calculate_chi2_rwa(x)))

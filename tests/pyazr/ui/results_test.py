@@ -129,7 +129,7 @@ def test_model_data_and_neutral_entrance(tmp_path):
     with make_client(azr) as client:
         e = client.get("/api/evaluation").json()
         reactions = {r["name"]: r["fields"].get("reaction", "") for r in client.get("/api/project/records").json()}
-    session = pyazr.azure2(azr)  # at the text's x, as the server's working x before any edit
+    session = pyazr.Session(azr)  # at the text's x, as the server's working x before any edit
     want = [dataclasses.asdict(m) for m in pyazr.model_data(session)]
     session.close()
     assert e["model_data"] and e["model_data"] == want

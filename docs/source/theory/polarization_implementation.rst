@@ -443,8 +443,8 @@ The data file carries ``E_lab  theta_cm  A_y  dA_y``. From Python:
 
 .. code-block:: python
 
-   from pyazr import azure2
-   with azure2("13N.azr") as azr:
+   from pyazr import Session
+   with Session("13N.azr") as azr:
        ay = azr.calculate_analyzing_power_rwa(azr.params_rwa)
 
 Because :math:`A_y` is reported in place of the cross section, everything

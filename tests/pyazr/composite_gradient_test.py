@@ -54,7 +54,7 @@ def make_project(work, part):
 def check_one(work):
     """Analytic gradient against central differences; prints and returns the relative error."""
     os.chdir(work)
-    m = pyazr.azure2("p.azr")
+    m = pyazr.Session("p.azr")
     x = np.asarray(m.params_rwa, float)
     f0, g = m.objective_and_grad(x)
     fd = np.zeros_like(g)

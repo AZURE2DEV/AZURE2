@@ -73,7 +73,7 @@ try:
     try:
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         from pyazr import _azure2  # noqa: F401  the compiled engine
     except Exception as err:  # engine not built
         print(f"skip engine part: {type(err).__name__}: {err}")
@@ -85,7 +85,7 @@ try:
         os.makedirs(os.path.join(work, "checks"))
         shutil.copy(os.path.join(SRC, "grad.azr"), work)
         os.symlink(DATA, os.path.join(work, "data"))
-        session = azure2(os.path.join(work, "grad.azr"))
+        session = Session(os.path.join(work, "grad.azr"))
 
     if session is not None:
         scr = list(session.parameters.screenings)

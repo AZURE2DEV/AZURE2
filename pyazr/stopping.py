@@ -23,7 +23,7 @@ Example::
 """
 import numpy as np
 
-from .azure2 import _azure2
+from . import _azure2
 
 __all__ = ["CITATION", "IMPLEMENTATION", "Material", "projectile", "stopping", "energy_loss", "energy_after",
            "areal_density_between", "range_of", "straggling", "provenance", "table", "evaluate"]

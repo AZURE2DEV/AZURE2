@@ -128,7 +128,7 @@ try:
     sys.path.insert(0, ROOT)
     try:
         import pyazr
-        from pyazr import azure2
+        from pyazr import Session
     except Exception as e:
         print(f"  skip  engine not importable ({e})")
     else:
@@ -143,7 +143,7 @@ try:
         azr = os.path.join(work, "rth.azr")
         with open(azr, "w") as f:
             f.write(head + "\n<data>\n" + rec_lb + "</data>\n<extrapolations>\n</extrapolations>\n<targets>\n</targets>\n")
-        with azure2(azr, cwd=work) as m:
+        with Session(azr, cwd=work) as m:
             ang = np.asarray(m.angles[0], float)
             xs = np.asarray(m.cross[0], float)
         tcm, _ = N.elastic_lab_to_cm(np.array(angles), MT, MP)

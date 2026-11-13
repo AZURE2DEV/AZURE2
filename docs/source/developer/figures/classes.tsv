@@ -87,9 +87,11 @@ CNuc	include/CNuc.h	compound nuclei and level parameters	frontends	class	evaluat
 WorkingCopy	include/WorkingCopy.h	the data of one evaluation	frontends	class	evaluation
 AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient	frontends	class	run
 AZUREAPI	api/include/AZUREAPI.h	the engine as a session	frontends	class	run
-Session	api/src/pybind_api.cpp	_azure2.Session: a Config and an AZUREAPI	frontends	class	run
+_azure2::Session	api/src/pybind_api.cpp	the binding's session: a Config and an AZUREAPI	frontends	class	run
 RuntimeOptions	api/src/pybind_api.cpp	what a session is given beyond the project	frontends	class	run
-azure2	pyazr/azure2.py	pyazr's session object	frontends	class	run
+pyazr::Session	pyazr/session.py	pyazr's session: one project set up by the engine	frontends	class	run
+pyazr::Objective	pyazr/objective.py	the fit's objective as a callable	frontends	class	run
+pyazr::Evaluation	pyazr/evaluate.py	the numbers at one x (copies)	frontends	class	run
 ParameterSet	pyazr/parameters.py	the fit parameters as a table	frontends	class	run
 Project	pyazr/project.py	the project, edited with the engine's grammars	frontends	class	run
 Record	pyazr/project.py	one record of the project	frontends	class	run

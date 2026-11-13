@@ -1,7 +1,7 @@
 """A structured, printable view of an AZURE2 R-matrix level scheme.
 
-Turns the flat parameter / pair metadata (``azure2.parameters`` and
-``azure2.pairs``) into a small object model grouped the way a physicist reads it
+Turns the flat parameter / pair metadata (``Session.parameters`` and
+``Session.pairs``) into a small object model grouped the way a physicist reads it
 -- particle pairs, then J-groups, then levels, then the channels of each level
 with their (L, S, radiation type, partial width, fixed flag, Wigner limit).
 
@@ -85,7 +85,7 @@ class LevelScheme:
     """The full level scheme of an AZURE2 model: pairs + levels + channels.
 
     Build one from a running instance with :meth:`from_azr` (or the convenience
-    property ``azure2.level_scheme``).  ``str(scheme)`` / ``print(scheme)`` gives
+    property ``Session.level_scheme``).  ``str(scheme)`` / ``print(scheme)`` gives
     a grouped, human-readable listing.
     """
 

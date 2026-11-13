@@ -96,11 +96,20 @@ project as a document: it opens a format-3 file, edits records, levels, pairs
 and ``<config>`` keys through the engine's grammars, and saves it; an
 unedited project is written back byte for byte. It does not evaluate.
 
-``pyazr.azure2`` (``pyazr/azure2.py``) is a session: it owns one
+``pyazr.Session`` (``pyazr/session.py``) is a session: it owns one
 ``_azure2.Session`` and offers the parameters (``ParameterSet``), the data
-sets, the objective and its gradient, residuals, observables and
-extrapolations, the output files, and the THM views. Fits, bands and model
-averages are Python on top of it (``pyazr/bands.py``, ``pyazr/modelavg.py``).
+sets, the objective (``pyazr.Objective``, ``pyazr/objective.py``) and the
+numbers at one parameter point (``pyazr.Evaluation``, ``pyazr/evaluate.py``),
+residuals, observables and extrapolations, the output files, and the THM
+views (``pyazr/session_thm.py``). Its methods that need the session's pairs
+and options are mixins of one job each (``session_physics.py``,
+``session_thm.py``, ``potentials.py``), listed one per line in the class
+statement. Every public method that enters the engine holds the session's
+lock (``pyazr/locking.py``: ``engine_call``), as ``Objective`` and
+``Evaluation`` do, so two threads on one session run one after the other;
+``tests/pyazr/session_lock_test.py`` fails for a member that reaches the
+engine without it. Fits, bands and model averages are Python on top of it
+(``pyazr/bands.py``, ``pyazr/modelavg.py``).
 
 ``python -m pyazr`` (``pyazr/cli.py``) is one table of commands
 (``COMMANDS``), each calling one ``pyazr`` function.
@@ -108,13 +117,12 @@ averages are Python on top of it (``pyazr/bands.py``, ``pyazr/modelavg.py``).
 The web UI (``pyazr/ui``) is a server (``Server``, ``server.py``) that owns
 the open project and its edit history (``State``), the jobs (``JobTable``)
 and a session worker (``SessionWorker``): the session lives in a separate
-process, where ``Engine`` (``engine.py``) owns a ``pyazr.azure2``. Every route
+process, where ``Engine`` (``engine.py``) owns a ``pyazr.Session``. Every route
 of its API is one row of ``ROUTES`` (``routes.py``). The page
 (``pyazr/ui/static``) holds no state of the project and computes no physical
 number.
 
 .. note:: **Planned.**
-   ``pyazr`` 3.0 replaces the class ``azure2`` by ``pyazr.Session``, with
-   ``Objective`` and ``Evaluation`` objects in place of the ``calculate_*``
-   methods and ``Parameters`` in place of ``ParameterSet``; ``engine.py`` is
-   then the only file of the web UI that changes.
+   The session's ``calculate_*`` methods give way to ``Evaluation`` and
+   ``Objective``, and ``ParameterSet`` to ``Parameters``; ``engine.py`` is then
+   the only file of the web UI that changes.

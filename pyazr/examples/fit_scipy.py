@@ -58,7 +58,7 @@ def least_squares(f, **options):
 
 
 def main(path):
-    with pyazr.azure2(path) as s:
+    with pyazr.Session(path) as s:
         f = s.fit_objective()
         r, x = minimize(f)
         print(f"minimize (L-BFGS-B): objective {r.fun:.10g}, {r.nfev} evaluations, {r.message}")

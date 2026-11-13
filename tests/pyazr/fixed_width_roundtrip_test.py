@@ -45,7 +45,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory() as tmp:
     with open(azr, "w") as fh:
         fh.write("\n".join(out))
 
-    with azure2(azr) as m:
+    with Session(azr) as m:
         ps = m.parameters
         free = [p.name for p in ps if not p.fixed]
         names = [p.name for p in ps]
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
               f"with width_2_1 x 1.5 (fixed amplitude {allx[k]:.6g})")
         saved, _ = m.save_fit(os.path.join(work, "saved.azr"), x)
 
-    with azure2(saved) as s:
+    with Session(saved) as s:
         chi2_back = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
         amp_back = float(np.asarray(s.sess.params_all_rwa(), float)[k])
         written = float(np.asarray(s.transform_all_rwa(

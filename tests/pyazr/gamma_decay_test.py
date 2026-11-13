@@ -41,7 +41,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from scipy.optimize import least_squares
-    from pyazr import azure2, Project, Nuisance
+    from pyazr import Session, Project, Nuisance
 except Exception as err:  # pragma: no cover
     print(f"skip: engine or scipy not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory() as tmp:
              total_width=Nuisance(0.0385027, "fit", unit="eV"),
              branching=[f"{t}" for t in rec["branching"]], remainder=REMAINDER)
     proj.save(built)
-    with azure2(record, cwd=d) as a, azure2(built, cwd=d) as b:
+    with Session(record, cwd=d) as a, Session(built, cwd=d) as b:
         na = [p.name for p in a.parameters]
         nb = [p.name for p in b.parameters]
         check("the same parameters, by name and kind", na == nb and
@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("Gamma_gamma's parameter: eV, the record's value", abs(tw.value - 0.0385027) < 1e-15, tw.value)
 
     print("2. fits in both parametrisations, and the errors of the branchings")
-    with azure2(os.path.join(d, "partial.azr"), cwd=d) as s:
+    with Session(os.path.join(d, "partial.azr"), cwd=d) as s:
         xp, chi_p, cov_p, names_p = fit(s)
         # b_f of the partial widths (eV) of the five free photon channels, in channel order = FINALS
         def branchings(x):
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as tmp:
             dn[k] -= h
             G[:, k] = (branchings(up) - branchings(dn)) / (2 * h)
         sig_p = np.sqrt(np.diag(G @ cov_p @ G.T))
-    with azure2(record, cwd=d) as s:
+    with Session(record, cwd=d) as s:
         xr, chi_r, cov_r, names_r = fit(s)
         idx = {n: k for k, n in enumerate(names_r)}
         explicit = [f for f in FINALS if f != REMAINDER]
@@ -136,7 +136,7 @@ with tempfile.TemporaryDirectory() as tmp:
     changed = [("g+15O[6.7931] 0.35 fit" if l.startswith("g+15O[6.7931]") else l) for l in lines]
     proj.set("level5", branching=changed)
     proj.save(os.path.join(d, "agent.azr"))
-    with azure2(os.path.join(d, "agent.azr"), cwd=d) as s:
+    with Session(os.path.join(d, "agent.azr"), cwd=d) as s:
         p = [q for q in s.parameters if q.name == "level5.branching.g+15O[6.7931]"][0]
         check("the session starts from the new branching", abs(p.value - 0.35) < 1e-15, p.value)
         chi0 = s.objective()
@@ -163,7 +163,7 @@ with tempfile.TemporaryDirectory() as tmp:
     twin, rec = os.path.join(d, "partial_ec.azr"), os.path.join(d, "record_ec.azr")
     with_capture(os.path.join(d, "partial.azr"), twin)
     subprocess.run([sys.executable, os.path.join(MODELS, "make_record.py"), twin, rec, "5", "5.183", "fit"], check=True)
-    with azure2(twin, cwd=d) as t, azure2(rec, cwd=d) as s:
+    with Session(twin, cwd=d) as t, Session(rec, cwd=d) as s:
         radiative = {p.name: p for p in s.parameters if p.kind == "radiative"}
         check("the record's parameters by name, Gamma_gamma in eV",
               "level5.branching.g+15O[6.1763]" in radiative
@@ -179,7 +179,7 @@ with tempfile.TemporaryDirectory() as tmp:
     lines = [("g+15O[6.1763] 0.55 fit" if l.startswith("g+15O[6.1763]") else l) for l in proj["level5"]["branching"]]
     proj.set("level5", branching=lines)
     proj.save(os.path.join(d, "record_ec_055.azr"))
-    with azure2(os.path.join(d, "record_ec_055.azr"), cwd=d) as s:
+    with Session(os.path.join(d, "record_ec_055.azr"), cwd=d) as s:
         c_file = s.objective()
     check("its chi^2 is that of the project written with it (gamma^ext at the set point)",
           abs(c_set - c_file) <= 1e-10 * abs(c_file) and abs(c_set - cr) > 1.0, f"{c_set} {c_file} {cr}")
@@ -193,7 +193,7 @@ with tempfile.TemporaryDirectory() as tmp:
         proj = Project.open(rec_f)
         proj.set("level5", total_width=Nuisance(0.0385027 * 1.2, "fit", unit="eV"))
         proj.save(scaled)
-        with azure2(twin_f, cwd=d) as t, azure2(rec_f, cwd=d) as s, azure2(scaled, cwd=d) as f:
+        with Session(twin_f, cwd=d) as t, Session(rec_f, cwd=d) as s, Session(scaled, cwd=d) as f:
             names = [p.name for p in s.parameters if not p.fixed]
             i = names.index("level5.total_width")
             phys = np.asarray(s.sess.params_values(), float)

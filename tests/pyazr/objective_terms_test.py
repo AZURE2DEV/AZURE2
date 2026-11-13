@@ -39,7 +39,7 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -51,7 +51,7 @@ for project, azr in MODELS:
         d = os.path.join(work, project)
         for sub in ("output", "checks"):
             os.makedirs(os.path.join(d, sub), exist_ok=True)
-        s = azure2(os.path.join(d, azr), cwd=d)
+        s = Session(os.path.join(d, azr), cwd=d)
         # Off the priors' centres, so that every prior term and its gradient is exercised: each free parameter
         # moved by 2 % of its value (alternating sign), the norms and shifts included.
         x0 = np.asarray(s.params_rwa, float)

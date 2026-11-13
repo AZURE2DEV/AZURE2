@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A session parses its .azr once, not on every evaluation.
 
-Before 2026-11-03 every azure2.calculate_rwa / calculate / calculate_all_rwa call re-read and
+Before 2026-11-03 every Session.calculate_rwa / calculate / calculate_all_rwa call re-read and
 re-parsed the whole .azr once PER SEGMENT (_segment_values looked up the segment's observable
 through active_datasets -> datasets -> a Python reader of the file), and every penalties()/objective()
 call once more.  On the 3H+d model from /groups (NFS) that was 83 ms per calculate_rwa against
@@ -71,7 +71,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, Project
+        from pyazr import Session, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -90,7 +90,7 @@ def main():
         p.save(azr)
         text = open(azr).read()
 
-        with azure2(azr, cwd=work) as m:
+        with Session(azr, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             n = m.nsegments
             names = [d.name for d in m.active_datasets]

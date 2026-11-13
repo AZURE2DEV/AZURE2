@@ -34,7 +34,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -60,7 +60,7 @@ try:
     shutil.copytree(os.path.join(ROOT, "tests", "13N", "data"), os.path.join(work, "data"))
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
-    a = azure2(make_model(work), cwd=work)
+    a = Session(make_model(work), cwd=work)
     x = np.array(a.params_rwa, float)
     free = [p for p in a.parameters if not p.fixed]
     sh = [i for i, p in enumerate(free) if p.kind == "shift"]

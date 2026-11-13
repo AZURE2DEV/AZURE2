@@ -47,11 +47,11 @@ def write_model(path, rmatrix, level_energy=None):
 
 def worker(work, rmatrix, brune, out):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     rmatrix, brune = rmatrix == "1", brune == "1"
     base = os.path.join(work, f"base_{int(rmatrix)}.azr")
     write_model(base, rmatrix)
-    with azure2(base, cwd=work, use_brune=brune) as a:
+    with Session(base, cwd=work, use_brune=brune) as a:
         x = np.array(a.params_rwa, float)
         vb = [np.asarray(v, float).tolist() for v in a.calculate_rwa(x)]
         en = [np.asarray(e, float) for e in a.energies]
@@ -61,7 +61,7 @@ def worker(work, rmatrix, brune, out):
         e_hit = float(en[el][k] + pair.sep_energy + pair.excitation)
     zw = os.path.join(work, f"zw_{int(rmatrix)}.azr")
     write_model(zw, rmatrix, e_hit)
-    with azure2(zw, cwd=work, use_brune=brune) as a:
+    with Session(zw, cwd=work, use_brune=brune) as a:
         x = np.array(a.params_rwa, float)
         vz = [np.asarray(v, float).tolist() for v in a.calculate_rwa(x)]
         r, J = (np.asarray(v, float) for v in a.residual_jacobian(x))
@@ -74,7 +74,7 @@ def worker(work, rmatrix, brune, out):
 def main():
     try:
         import numpy as np
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

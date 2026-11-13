@@ -71,7 +71,7 @@ shutil.rmtree(rt, ignore_errors=True)
 
 print("\n2-4. with the engine")
 try:
-    from pyazr import azure2
+    from pyazr import Session
     have_engine = True
 except Exception as e:                              # pragma: no cover
     print(f"  skip  engine not built ({e})")
@@ -96,7 +96,7 @@ if have_engine:
         chi = {}
         for model in ("plain", "diag"):
             azr, d = project(work, model)
-            with azure2(azr, cwd=d) as mdl:
+            with Session(azr, cwd=d) as mdl:
                 x0 = np.asarray(mdl.params_rwa, float)
                 chi[model] = (float(np.sum(mdl.calculate_chi2_rwa(x0))), np.asarray(mdl.segment_chi2(x0), float))
         check("diag(e^2) covariance: chi2 = no covariance",
@@ -104,7 +104,7 @@ if have_engine:
         check("... segment by segment", float(np.max(np.abs(chi["diag"][1] - chi["plain"][1]))) < 1e-9 * chi["plain"][0])
 
         azr, d = project(work, "dense")
-        with azure2(azr, cwd=d) as mdl:
+        with Session(azr, cwd=d) as mdl:
             x0 = np.asarray(mdl.params_rwa, float)
             c0 = float(np.sum(mdl.calculate_chi2_rwa(x0)))
             w, J = mdl.residual_jacobian(x0)
@@ -136,7 +136,7 @@ if have_engine:
             check(f"gradient = central differences for all {len(x0)} free parameters", worst < 1e-5, worst)
 
         azr, d = project(work, "rel")
-        with azure2(azr, cwd=d) as mdl:
+        with Session(azr, cwd=d) as mdl:
             x0 = np.asarray(mdl.params_rwa, float)
             c0 = float(np.sum(mdl.calculate_chi2_rwa(x0)))            # freezes m at x0
             g0 = np.asarray(mdl.chi2_and_grad(x0)[1], float)

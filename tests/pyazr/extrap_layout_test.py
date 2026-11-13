@@ -48,7 +48,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as tmp:
                               energies=f"range {0.1 + 0.1 * k:.1f} {0.2 + 0.1 * k:.1f} MeV lab step 0.05")
     path = mdl.save(os.path.join(work, "layout.azr"))
 
-    with azure2(path, cwd=work) as m:
+    with Session(path, cwd=work) as m:
         x0 = np.asarray(m.params_rwa, float).copy()
         chi0 = m.calculate_chi2_rwa(x0)[0]
         n_data = counts(m, table=False)       # leave pyazr's parameter table unbuilt
@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("chi2 unchanged after the round trip", abs(chi1 / chi0 - 1) < 1e-12, f"{chi0!r} {chi1!r}")
 
     # 6: a session started in extrapolation mode
-    with azure2(path, cwd=work, data_mode=False) as m:
+    with Session(path, cwd=work, data_mode=False) as m:
         n0 = counts(m)
         check("extrapolation start: counts agree", len(set(n0)) == 1, str(n0))
         m.data_mode()

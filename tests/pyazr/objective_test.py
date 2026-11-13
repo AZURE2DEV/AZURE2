@@ -43,7 +43,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project, Nuisance
+    from pyazr import Session, Project, Nuisance
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory() as tmp:
     model.save(azr)
 
     print("1. the per-segment split adds up")
-    with azure2(azr, cwd=work) as m:
+    with Session(azr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         seg = m.segment_chi2(x)
         total = float(np.sum(m.calculate_chi2_rwa(x)))
@@ -153,7 +153,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sg.set("G", offset=Nuisance(0.004, "fit", unit="MeV", prior=(0, 0.01)))
     azr = os.path.join(work, "sg.azr")
     sg.save(azr)
-    with azure2(azr, cwd=work) as m:
+    with Session(azr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         pen = m.penalties(x)["shift"]
         chi2 = float(np.sum(m.calculate_chi2_rwa(x)))

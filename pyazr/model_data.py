@@ -7,7 +7,7 @@ parameters (docs/upgrade/project_format3.md section 3.10).  The engine reads
 and checks them (``AZURE2 --validate`` checks the records alone), evaluates
 them from the observed energies and widths at every evaluation, and adds
 ((q - d)/e)^2 to its objective: the term "model data" of
-:meth:`pyazr.azure2.penalties` (key ``"scattering_length"``, which holds the
+:meth:`pyazr.Session.penalties` (key ``"scattering_length"``, which holds the
 whole term) and ``Total-Model-Data-Chi-Squared`` of ``chiSquared.out``.
 
 :func:`model_data` gives the model value of each datum at a parameter vector.
@@ -46,7 +46,7 @@ class ModelDatum:
 
 
 def model_data(model, params=None) -> List[ModelDatum]:
-    """The ``<modelData>`` data of ``model`` (a :class:`pyazr.azure2`) at a
+    """The ``<modelData>`` data of ``model`` (a :class:`pyazr.Session`) at a
     free RWA vector (default ``model.params_rwa``), one :class:`ModelDatum`
     per datum in file order; empty without the section."""
     x = np.asarray(model.params_rwa if params is None else params, float)

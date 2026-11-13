@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
     def model(d, x):
-        with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+        with Session(os.path.join(d, "run.azr"), cwd=d) as s:
             return np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
 
     block = "experiment[A] theta=50-70"
@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI (theta=50-70)")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}",
@@ -164,13 +164,13 @@ with tempfile.TemporaryDirectory() as tmp:
     m_nokey, m_full = model(nokey_dir, x), model(full_dir, x)
     worst = float(np.max(np.abs(4 * math.pi * m_full / m_nokey - 1)))
     check(f"4 pi model(0-180) == model (worst rel {worst:.1e}, {m_full.size} points)", worst < 1e-12)
-    with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
+    with Session(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
         r_nokey = s.residuals(x)
         _, J_nokey = s.residual_jacobian(x)
-    with azure2(os.path.join(all_dir, "run.azr"), cwd=all_dir) as s:
+    with Session(os.path.join(all_dir, "run.azr"), cwd=all_dir) as s:
         check("theta=all: residuals bit for bit those without the key",
               np.array_equal(s.residuals(x), r_nokey))
-    with azure2(os.path.join(full_dir, "run.azr"), cwd=full_dir) as s:
+    with Session(os.path.join(full_dir, "run.azr"), cwd=full_dir) as s:
         r_full = s.residuals(x)
         _, J_full = s.residual_jacobian(x)
     d_r = float(np.max(np.abs(r_full - r_nokey)) / np.max(np.abs(r_nokey)))

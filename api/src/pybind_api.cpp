@@ -349,13 +349,13 @@ class Session {
     if (v.size() != nall)
       throw ParameterVectorError(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
                                  " values, fixed ones included), got " + std::to_string(v.size()) + ".  " +
-                                 "azure2.sess.params_all_rwa() is such a vector.");
+                                 "Session.sess.params_all_rwa() is such a vector.");
     std::vector<int> slot(nall);
     for (size_t k = 0; k < nall; ++k) slot[k] = (int)k;
     expect_finite(v, slot, what, "parameter vector");
   }
   static constexpr const char *kVectorHint =
-      "azure2.params_rwa is such a vector (the start values); azure2.parameters.free names its entries in order.";
+      "Session.params_rwa is such a vector (the start values); Session.parameters.free names its entries in order.";
   // The first entry that is not finite, by its index and the parameter's name.
   void expect_finite(const vector_r &v, const std::vector<int> &slot, const char *what, const char *vector) const {
     size_t bad = 0, count = 0;

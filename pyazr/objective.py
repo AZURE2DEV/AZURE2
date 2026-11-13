@@ -11,21 +11,10 @@ engine; this module holds no formula.  Recipes (``pyazr/examples/fit_scipy.py``,
     m = iminuit.Minuit(f, f.x0, grad=f.grad, name=f.names); m.limits = f.bounds; m.migrad(); m.hesse()
     sampler = emcee.EnsembleSampler(nwalkers, len(f.x0), f.log_prob)
 """
-import threading
-
 import numpy as np
 
 from .errors import EngineError
-
-
-def session_lock(session):
-    """The lock every engine call of an :class:`Objective` or :func:`pyazr.evaluate.evaluate` of ``session`` takes:
-    the engine evaluates on the session's one compound nucleus and data, so two calls at once would race; with the
-    lock they run one after the other."""
-    lock = session.__dict__.get("_engine_lock")
-    if lock is None:
-        lock = session.__dict__.setdefault("_engine_lock", threading.RLock())
-    return lock
+from .locking import session_lock
 
 
 def require_data_mode(session, what):
@@ -38,17 +27,17 @@ def require_data_mode(session, what):
 class Objective:
     """The engine's fit objective as a callable: chi-squared of the data plus every prior and constraint.
 
-    Built by ``azure2.fit_objective()``.  Everything is on the free vector x (``x0``, ``names``, ``bounds``, in
+    Built by ``Session.fit_objective()``.  Everything is on the free vector x (``x0``, ``names``, ``bounds``, in
     ``parameters.free`` order), in the basis the session fits in (Brune, Park or formal amplitudes; norms, shifts and
     the other nuisances as they are).
 
-    - ``f(x)``: the objective, ``azure2.objective(x)`` bit for bit; the same terms and order as the program's fit.
+    - ``f(x)``: the objective, ``Session.objective(x)`` bit for bit; the same terms and order as the program's fit.
     - ``f.grad(x)``, ``f.value_and_grad(x)``: its gradient (analytic, finite differences for energy shifts).
     - ``f.residuals(x)``, ``f.jacobian(x)``, ``f.residuals_and_jacobian(x)``: the objective as least-squares rows,
       ``sum(r**2) == f(x)`` (to rounding): the data rows (whitened where a data covariance joins points), the model
       data, the prior covariance, Park's wall, the ``gamma_decay`` priors, the abundance sums, then one row
-      ``(p - centre)/sigma`` per prior of a nuisance parameter.  The first rows are ``azure2.residuals(x)`` and the
-      rows of ``azure2.residual_jacobian(x)``, bit for bit.
+      ``(p - centre)/sigma`` per prior of a nuisance parameter.  The first rows are ``Session.residuals(x)`` and the
+      rows of ``Session.residual_jacobian(x)``, bit for bit.
     - ``f.log_prob(x)``: ``-0.5 * f(x)`` (no constant), ``-inf`` where the engine's ensemble sampler puts zero
       probability: outside the bounds of a parameter whose record has ``sampler_support`` (today a ``gamma_decay``
       record's numbers) and where Park's overlap J of a level is negative.  For walls at every bound:
@@ -63,7 +52,7 @@ class Objective:
     """
 
     errordef = 1.0
-    BUILT_BY = "azure2.fit_objective()"
+    BUILT_BY = "Session.fit_objective()"
     FIELDS = {
         "__call__(x)": "the objective at x: data chi-squared plus every prior and constraint",
         "grad(x)": "its gradient over the free vector",

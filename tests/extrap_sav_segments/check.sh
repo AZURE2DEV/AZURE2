@@ -83,8 +83,8 @@ if [ -n "$PY" ] && (cd /tmp && PYTHONPATH="$ROOT" "$PY" -c "import pyazr._azure2
   prep py; cp "$WORK/shift.sav" "$WORK/py/"
   out="$(cd "$WORK/py" && PYTHONPATH="$ROOT" "$PY" - <<'EOF' 2>&1
 import numpy as np
-from pyazr import azure2
-with azure2("t.azr", cwd=".", data_mode=False) as m:
+from pyazr import Session
+with Session("t.azr", cwd=".", data_mode=False) as m:
     e0 = np.asarray(m.calculate_energies(m.params_rwa)[0], float)
     x = m.load_sav("shift.sav")
     e1 = np.asarray(m.calculate_energies(x)[0], float)

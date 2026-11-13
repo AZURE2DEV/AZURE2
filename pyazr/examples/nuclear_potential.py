@@ -28,7 +28,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")   # before numpy
 
 import numpy as np
 
-from pyazr import azure2
+from pyazr import Session
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.normpath(os.path.join(HERE, "..", "..", "tests",
@@ -47,7 +47,7 @@ def chi2(model):
     return float(np.sum(model.calculate_chi2_rwa(np.asarray(model.params_rwa, float))))
 
 
-with azure2(AZR, cwd=PROJECT) as m:
+with Session(AZR, cwd=PROJECT) as m:
 
     print("what each pair resolves to as the file is written")
     print("-" * 62)

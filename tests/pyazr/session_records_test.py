@@ -40,8 +40,8 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     import pyazr  # noqa: E402
-    from pyazr import azure2, Project, FormatError, records_from_csv  # noqa: E402
-    pyazr.azure2  # the engine module is loaded on first use
+    from pyazr import Session, Project, FormatError, records_from_csv  # noqa: E402
+    pyazr.Session  # the engine module is loaded on first use
     from pyazr import _azure2  # noqa: F401,E402
 except ImportError as err:
     print(f"skip: pyazr or its engine module cannot be imported ({err})")
@@ -62,7 +62,7 @@ def session(work):
     print("1. the session's data sets on format 3")
     f3 = t2_dir(work, "T2f3")
     names = [n for n, r in Project.open(f3).records().items() if r.record_kind == "dataset"]
-    with azure2(f3) as m:
+    with Session(f3) as m:
         ds, active = m.datasets, m.active_datasets
         chi = m.dataset_chi2()
         total = m.calculate_chi2_rwa(m.params_rwa)[0]
@@ -79,7 +79,7 @@ def session(work):
         del described
     tree = shutil.copytree(T2, os.path.join(work, "T2tree"))
     os.makedirs(os.path.join(tree, "output"), exist_ok=True)
-    with azure2(os.path.join(tree, "T2.azr"), cwd=tree) as m:
+    with Session(os.path.join(tree, "T2.azr"), cwd=tree) as m:
         old = m.dataset_chi2()
     check("dataset_chi2 equals the tree's T2's per data set",
           set(old) == set(chi) and all(abs(old[k][0] - chi[k][0]) <= 1e-9 * max(1.0, old[k][0]) and old[k][1] == chi[k][1]
@@ -87,7 +87,7 @@ def session(work):
     d = os.path.join(work, "rth")
     shutil.copytree(RTH, d)
     os.makedirs(os.path.join(d, "output"), exist_ok=True)
-    with azure2(os.path.join(d, "aC_hs.azr"), data_mode=False) as m:
+    with Session(os.path.join(d, "aC_hs.azr"), data_mode=False) as m:
         x = m.extrapolations
         names = [n for n, r in Project.open(os.path.join(d, "aC_hs.azr")).records().items()
                  if r.record_kind == "extrapolation"]

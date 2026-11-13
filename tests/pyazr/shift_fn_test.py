@@ -80,7 +80,7 @@ except FormatError as err:
 
 print("\n3. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
-    from pyazr import azure2
+    from pyazr import Session
     have_engine = True
 except Exception as e:                              # pragma: no cover
     print(f"  skip  engine not built ({e})")
@@ -100,7 +100,7 @@ if have_engine:
             t = l.strip().split(",")
             if len(t) == 5 and t[0].isdigit():
                 expected[int(t[0])] = float(t[1])
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             fn = mdl.parameters.fn_shifts
             check("three shift_fn parameters (data sets 2, 3, 5)", [p.segment_key for p in fn] == [2, 3, 5],
                   [(p.name, p.segment_key) for p in fn])

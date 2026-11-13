@@ -37,7 +37,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -50,7 +50,7 @@ try:
         shutil.copytree(os.path.join(SRC, "data"), os.path.join(d, "data"))
         shutil.copy(os.path.join(SRC, "13N.azr"), os.path.join(d, "13N.azr"))
         kw = dict(use_park=True, use_brune=False) if mode == "park" else {}
-        M = azure2(os.path.join(d, "13N.azr"), cwd=d, **kw)
+        M = Session(os.path.join(d, "13N.azr"), cwd=d, **kw)
         x0 = np.asarray(M.params_rwa, float).copy()
         kinds = {p.free_index: p.kind for p in M.parameters if p.free_index is not None and not p.fixed}
         energy = np.array([kinds.get(i) == "energy" for i in range(x0.size)])
@@ -74,7 +74,7 @@ try:
         check(f"{mode}: the objective is unchanged by the transforms in between",
               M.objective(X[0]) == o_before, f"{M.objective(X[0])!r} vs {o_before!r}")
         del M
-        F = azure2(os.path.join(d, "13N.azr"), cwd=d, **kw)
+        F = Session(os.path.join(d, "13N.azr"), cwd=d, **kw)
         check(f"{mode}: a fresh session gives the same transform", np.array_equal(np.asarray(F.transform_rwa(X[0]), float), first))
         del F
 finally:

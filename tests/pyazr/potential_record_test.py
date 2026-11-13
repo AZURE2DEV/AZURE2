@@ -47,7 +47,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, convert_azr
+    from pyazr import Session, convert_azr
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -105,16 +105,16 @@ try:
     contrast = min(abs(ref[(5.0, L, E, "P")] / ref[(3.5, L, E, "P")] - 1) for L in (0, 1, 2) for E in ENERGIES)
     check(f"the table sees the radius: P(5 fm) and P(3.5 fm) differ by >= {contrast:.1e} > 1e-4", contrast > 1e-4)
 
-    A50 = azure2(f50, cwd=work)
+    A50 = Session(f50, cwd=work)
     v50 = functions(A50)
     against(v50, 5.0, "(2) record with coulomb_radius 5 fm")
-    A35 = azure2(f35, cwd=work)
+    A35 = Session(f35, cwd=work)
     against(functions(A35), 3.5, "(3) record as converted (3.5 fm)")
 
     p1 = A50.nuclear_potential(1)
     check("(4) the view: pair 1 enabled, own, coulomb_radius 5.0; no default",
           p1.enabled and p1.own and p1.coulomb_radius == 5.0 and not A50.nuclear_potential(0).enabled, repr(p1))
-    B = azure2(f35, cwd=work)
+    B = Session(f35, cwd=work)
     check("(4) the converted record's Coulomb radius is 3.5 fm", B.nuclear_potential(1).coulomb_radius == 3.5)
     B.set_nuclear_potential(1, coulomb_radius=5.0)
     vB = functions(B)
@@ -122,7 +122,7 @@ try:
           str(max(abs(vB[k] - v50[k]) for k in v50)))
 
     # (5) the writer
-    C = azure2(f35, cwd=work)
+    C = Session(f35, cwd=work)
     same = os.path.join(work, "same.azr")
     C.save_fit(same, verify=False, norms="nominal")
     check("(5) save_fit without a change keeps <potentials> as read", section(open(same).read(), "potentials") == pot)
@@ -133,7 +133,7 @@ try:
     check("(5) save_fit writes the record p12C with coulomb_radius 5 fm",
           "potential p12C" in written and re.search(r"coulomb_radius +5 fm", written) and written.count("\npotential ") == 1,
           written)
-    D = azure2(moved, cwd=work)
+    D = Session(moved, cwd=work)
     check("(5) the written project gives the record's channel functions", functions(D) == v50)
 finally:
     shutil.rmtree(work, ignore_errors=True)

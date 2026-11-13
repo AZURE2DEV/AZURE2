@@ -1,6 +1,5 @@
-"""The adapter of the web UI to today's pyazr session: the only file of ``pyazr/ui`` that names the class
-:class:`pyazr.azure2` and its methods (docs/upgrade/web_ui.md section 11).  When pyazr 3.0's ``Session``,
-``Parameters`` and ``Evaluation`` replace ``azure2`` (pyazr3.md step 5), this file is the one that changes.
+"""The adapter of the web UI to the pyazr session: the only file of ``pyazr/ui`` that names the class
+:class:`pyazr.Session` and its methods (docs/upgrade/web_ui.md section 11).
 
 It runs inside a worker process (:mod:`pyazr.ui.workers`), never in the server: a session build holds the GIL for its
 whole length (12.8 s on 13N, web_ui.md section 2.1).  Every answer is plain JSON data (lists, dicts, floats); a
@@ -19,9 +18,9 @@ import numpy as np
 
 from pyazr import errors, session_checks
 
-# Today's methods of pyazr.azure2 the UI does not call, by reason (the route-table consistency test,
+# The methods of pyazr.Session the UI does not call, by reason (the route-table consistency test,
 # tests/pyazr/ui/routes_consistency_test.py, requires every public method to be called here or listed here).
-AZURE2_NOT_SERVED = {
+SESSION_NOT_SERVED = {
     "replaced by evaluate / evaluation (one call per evaluation, pyazr3.md 2.3)":
         "calculate calculate_all_rwa calculate_sfactor calculate_sfactor_rwa calculate_analyzing_power "
         "calculate_analyzing_power_rwa calculate_angular_dists calculate_angular_dists_rwa calculate_energies "
@@ -72,7 +71,7 @@ def _plain(a):
 
 
 class Engine:
-    """One session of today's pyazr (``pyazr.azure2``) and what the routes ask of it."""
+    """One :class:`pyazr.Session` and what the routes ask of it."""
 
     def __init__(self):
         self.s = None
@@ -85,7 +84,7 @@ class Engine:
         if self.s is not None:
             self.s.close()
             self.s = None
-        s = pyazr.azure2(file, cwd=cwd)
+        s = pyazr.Session(file, cwd=cwd)
         os.makedirs(s.output_dir, exist_ok=True)  # the external-capture cache and chiSquared.out are written there
         self.s = s
         self.info = [_dataset_info(d) for d in s.active_datasets]  # in the engine's order (a copy per access)
@@ -126,7 +125,7 @@ class Engine:
         s = self.s
         x = np.asarray(x, float)
         terms = s.sess.objective_terms_rwa(x)
-        # azure2.write_output_files(x) is these two calls; made here so that the data chi-squared it computes is kept
+        # Session.write_output_files(x) is these two calls; made here so that the data chi-squared it computes is kept
         chi2 = float(s.sess.calculate_chi2_rwa(x))
         os.makedirs(s.output_dir, exist_ok=True)
         if not s.sess.write_output_files():
@@ -280,7 +279,7 @@ def _dataset_info(d):
 
 def session_text(path):
     """The Python line that opens a session on the project file ``path`` (the Physics tab's Copy as Python)."""
-    return f"session = pyazr.azure2({path!r})  # the saved file; the page evaluates the working text"
+    return f"session = pyazr.Session({path!r})  # the saved file; the page evaluates the working text"
 
 
 def open_objective(file, cwd):

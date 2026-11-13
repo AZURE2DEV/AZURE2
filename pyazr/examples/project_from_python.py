@@ -56,7 +56,7 @@ def main(workdir):
     # 5. What the engine makes of it, before computing.
     print(p.describe("Y_curve"))
 
-    # 6. Calculate: the project is saved and opened as a pyazr.azure2 session.
+    # 6. Calculate: the project is saved and opened as a pyazr.Session session.
     with p.session() as m:
         chi2 = float(sum(m.segment_chi2()))
     print(f"chi2 = {chi2:.6g} on {len(m.energies[0])} points; the project is {p.path}")
