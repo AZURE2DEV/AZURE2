@@ -15,6 +15,8 @@ import os
 
 import numpy as np
 
+from pyazr import errors, session_checks
+
 # Today's methods of pyazr.azure2 the UI does not call, by reason (the route-table consistency test,
 # tests/pyazr/ui/routes_consistency_test.py, requires every public method to be called here or listed here).
 AZURE2_NOT_SERVED = {
@@ -80,18 +82,12 @@ class Engine:
         return [dict(d, points=len(self.s.energies[i])) for i, d in enumerate(self.info)]
 
     def _parameters(self):
-        """One row per parameter of the engine (fixed and free): name, kind, whether it is free and its index in x,
-        its value as read (physical: MeV, eV, fm^-1/2, or the record's unit) and x0 (fit basis) when free."""
-        s = self.s
-        x0 = np.asarray(s.params_rwa, float)
-        rows = []
-        for p in s.parameters:
-            free = p.free_index is not None and not p.fixed
-            rows.append({"name": p.name, "kind": p.kind, "free": bool(free),
-                         "free_index": int(p.free_index) if free else None,
-                         "value": float(p.value), "x0": float(x0[p.free_index]) if free else None,
-                         "jpi": p.jpi, "level_energy": p.level_energy, "pair": p.pair, "l": p.L, "s": p.S,
-                         "prior_nominal": p.prior_nominal, "prior_sigma": p.prior_sigma})
+        """One row per parameter of the engine (fixed and free), the session's own description (``describe()``): name,
+        kind, unit, whether it is free and its index in x, ``x`` (fit basis), ``physical_value``, bounds, owner
+        fields; ``x0`` is ``x`` of a free parameter."""
+        rows = self.s.describe()["parameters"]
+        for r in rows:
+            r["x0"] = r["x"] if r["free"] else None
         return rows
 
     def _free_names(self):
@@ -111,6 +107,7 @@ class Engine:
         os.makedirs(s.output_dir, exist_ok=True)
         if not s.sess.write_output_files():
             raise RuntimeError("the engine wrote no output files (no data object)")
+        session_checks.warn_engine_notices(s.sess, stacklevel=2)  # the engine's notices of these calls as warnings
         rows, totals = _read_chi_squared(os.path.join(s.output_dir, "chiSquared.out"))
         if len(rows) != len(self.names):
             raise RuntimeError(f"chiSquared.out has {len(rows)} rows, the session {len(self.names)} data sets")
@@ -141,7 +138,8 @@ class Engine:
 
     def _index(self, name):
         if name not in self.names:
-            raise KeyError(f"no active data set {name!r} (the data sets: {', '.join(self.names)})")
+            raise errors.ParameterKeyError(f"no active data set {name!r}{errors.close_names(name, self.names)} "
+                                           f"(the data sets: {errors.listed(self.names)}); GET /api/session lists them")
         return self.names.index(name)
 
     def transform(self, x):

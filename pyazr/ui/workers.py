@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 
 from .errors import Busy, WorkerCrashed, WorkerError, describe_exception
 
@@ -183,6 +184,7 @@ class SessionWorker:
         self.process = None
         self.lock = threading.Lock()
         self.built_from = None  # the session file text the worker's session was built from
+        self.warnings = []  # the warnings of the last call (the engine's notices among them)
 
     def call(self, op, **args):
         """``op`` of :class:`pyazr.ui.engine.Engine` with ``args``; its answer, or its exception as WorkerError.
@@ -196,8 +198,9 @@ class SessionWorker:
         except WorkerCrashed:
             self.process, self.built_from = None, None
             raise
+        self.warnings = answer.get("warnings", [])
         if not answer["ok"]:
-            raise WorkerError(answer["error"], answer["message"], answer.get("diagnostics"))
+            raise WorkerError(answer["classes"], answer["message"], answer.get("diagnostics"))
         return answer["result"]
 
     def pid(self):
@@ -271,12 +274,17 @@ def serve_session(channel):
         message = channel.receive()
         if message is None:
             return
-        try:
-            result = getattr(engine, message["op"])(**message.get("args", {}))
-            channel.send({"ok": True, "result": result})
-        except Exception as e:  # noqa: BLE001  -- the server maps the class to an HTTP status
-            cls, text, diagnostics = describe_exception(e)
-            channel.send({"ok": False, "error": cls, "message": text, "diagnostics": diagnostics})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                result = getattr(engine, message["op"])(**message.get("args", {}))
+                answer = {"ok": True, "result": result}
+            except Exception as e:  # noqa: BLE001  -- the server maps the classes to an HTTP status
+                classes, text, diagnostics = describe_exception(e)
+                answer = {"ok": False, "classes": classes, "message": text, "diagnostics": diagnostics}
+        # the engine's notices (pyazr.EngineWarning) and pyazr's other warnings of this request, for the client
+        answer["warnings"] = [{"category": w.category.__name__, "message": str(w.message)} for w in caught]
+        channel.send(answer)
 
 
 def main(argv=None):

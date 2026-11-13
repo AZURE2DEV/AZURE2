@@ -262,14 +262,32 @@ def test_token_required_on_every_route(t1):
 def test_host_header_must_be_loopback(t1):
     r = t1.get("/api/project", headers={"Host": "evil.example:80"})
     assert r.status_code == 403
-    assert t1.get("/api/project", headers={"Host": "localhost:1234"}).status_code == 200
+    for host in ("localhost:1234", "127.0.0.1", "[::1]", "[::1]:28400", "localhost"):
+        assert t1.get("/api/project", headers={"Host": host}).status_code == 200, host
+    for host in ("[::2]:80", "127.0.0.2", "localhost.evil.example"):
+        assert t1.get("/api/project", headers={"Host": host}).status_code == 403, host
+
+
+def test_origin_must_be_the_servers_own(t1):
+    label, ch = _first_channel(t1)
+    url = f"/api/project/levels/{label}/channels/{ch['pair']}/{ch['l']}/{ch['s']}"
+    for origin in ("http://127.0.0.1:8888", "http://localhost", "null", "https://127.0.0.1"):
+        r = t1.patch(url, json={"width": 1.0, "rev": rev(t1)}, headers={"Origin": origin})
+        assert r.status_code == 403 and "Origin" in r.json()["message"], (origin, r.text)
+    r = t1.get("/api/project", headers={"Origin": "http://127.0.0.1"})  # TestClient's own origin
+    assert r.status_code == 200
+    r = t1.get("/api/project", headers={"Host": "localhost:28400", "Origin": "http://localhost:28400"})
+    assert r.status_code == 200
 
 
 # -- 7. errors ---------------------------------------------------------------------------------------------------------
 
 def test_error_statuses_and_fields(t1):
+    r = t1.get("/api/evaluation/data/no_such_set")  # raised in the session worker: its classes travel
+    assert r.status_code == 404 and "no_such_set" in r.json()["message"], r.text
+    assert r.json()["classes"][:2] == ["ParameterKeyError", "ParameterError"]
     r = t1.get("/api/project/records/no_such_record")
-    assert r.status_code == 404 and "no_such_record" in r.json()["message"]
+    assert r.status_code == 404 and "no_such_record" in r.json()["message"], r.text
     r = t1.get("/api/jobs/nojob")
     assert r.status_code == 404 and r.json()["error"] == "NotFound"
     x = t1.get("/api/x").json()
@@ -278,12 +296,61 @@ def test_error_statuses_and_fields(t1):
     assert r.status_code == 422 and "fixed" in r.json()["message"], r.text
     r = t1.patch("/api/x", json={"values": {"no_such_parameter": 1.0}})
     assert r.status_code == 404 and set(r.json()["known"]) == set(x["x"])
-    r = t1.get("/api/kinds")
-    assert r.status_code == 501 and r.json()["missing"] == "pyazr.kinds"
+    r = t1.post("/api/evaluate/grid", json={})
+    assert r.status_code == 501 and r.json()["missing"] == "pyazr.Session.evaluate"
     r = t1.post("/api/jobs", json={"kind": "fit", "method": "engine_migrad"})
     assert r.status_code == 501 and "fit_with_engine" in r.json()["missing"]
     r = t1.post("/api/evaluate", content=b"[1, 2]", headers={"Content-Type": "application/json"})
     assert r.status_code == 422
+
+
+def test_every_pyazr_error_class_has_a_status():
+    """Every public exception class of pyazr.errors maps to a status other than 500, by the table's rule; a lookup
+    that found nothing is 404, a closed session 409, a missing file 404, any other refusal 422."""
+    import inspect
+    import pyazr.errors as errors
+    from pyazr.ui.errors import STATUS, status_of, to_http
+    expected = {"SessionClosed": 409, "ParameterKeyError": 404, "ParameterIndexError": 404, "MissingFile": 404}
+    classes = [c for _, c in inspect.getmembers(errors, inspect.isclass)
+               if issubclass(c, Exception) and not issubclass(c, Warning)  # EngineWarning is warned, not raised
+               and c.__module__ == errors.__name__ and not c.__name__.startswith("_")]
+    assert classes
+    for c in classes:
+        names = [b.__name__ for b in c.__mro__ if b not in (BaseException, object)]
+        status = status_of(names)
+        assert status != 500 and any(n in dict(STATUS) for n in names), c
+        assert status == expected.get(c.__name__, 422), (c, status)
+        e = c("/x", "no file /x") if c.__name__ == "MissingFile" else c("a message")
+        assert to_http(e)[0] == status
+
+
+def test_tables_of_the_engine(t1):
+    import pyazr
+    kinds = t1.get("/api/kinds").json()
+    assert kinds == pyazr.kinds()
+    assert t1.get("/api/physics").json() == kinds["physics"]
+    d = t1.get("/api/describe").json()
+    assert d["package"]["pyazr"] == pyazr.__version__ and d["package"]["coulomb_table"]
+    assert set(d["session_options"]) == set(kinds["options"])
+    assert all(o["value"] == o["default"] for o in d["session_options"].values())
+
+
+def test_evaluation_carries_the_engines_notices(tmp_path):
+    """An engine notice (pyazr.EngineWarning) of the session worker reaches the client in the answer's warnings: the
+    UI's output directory made read-only, the session build cannot write its external-capture cache."""
+    path = copy_project("T1", tmp_path)
+    engine_dir = os.path.join(os.path.dirname(path), ".T1.ui", "engine")
+    os.makedirs(engine_dir)
+    os.chmod(engine_dir, 0o555)
+    try:
+        with make_client(path) as client:
+            name = next(r["name"] for r in client.get("/api/project/records").json() if r["kind"] == "dataset")
+            r = client.get(f"/api/evaluation/data/{name}")  # the first request: the session is built in it
+    finally:
+        os.chmod(engine_dir, 0o755)
+    assert r.status_code == 200, r.text
+    notices = [w for w in r.json()["warnings"] if w["category"] == "EngineWarning"]
+    assert notices and "intEC.dat" in notices[0]["message"], r.json()["warnings"]
 
 
 def test_openapi_lists_every_route(t1):

@@ -45,3 +45,18 @@ Each line: the rule; the change made (then removed); the test that failed. Run o
   `jobs_test.py::test_stop_kill_and_resume_from_the_checkpoint`.
 - no engine kind is spelled in the UI: the adapter drops data sets whose quantity is `"sigma"`; fails
   `routes_consistency_test.py::test_no_engine_kind_is_spelled_in_the_ui`.
+
+Added after the merge of pyazr's errors and self-description (each shown failing the same way, with
+`work/uiserver/inject/inject2.py`):
+
+- every public exception class of `pyazr.errors` has a status other than 500, by the order of `errors.STATUS` (a
+  failed lookup 404 though also a `ValueError`): the `KeyError` row moved below `ParameterError`; fails
+  `api_test.py::test_every_pyazr_error_class_has_a_status`.
+- an exception raised in the session worker maps by its class and bases: the worker sends its class name only;
+  fails `api_test.py::test_error_statuses_and_fields`.
+- a request with an `Origin` other than the server's own (scheme, host, port) is refused: the Origin check
+  removed; fails `api_test.py::test_origin_must_be_the_servers_own`.
+- a Host header `[::1]` (with or without a port) is a loopback name: the old parse (`rsplit(":", 1)`); fails
+  `api_test.py::test_host_header_must_be_loopback`.
+- an evaluation carries the engine's notices to the client: the worker drops its warnings; fails
+  `api_test.py::test_evaluation_carries_the_engines_notices`.

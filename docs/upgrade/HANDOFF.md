@@ -2,6 +2,24 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-server`) — the web UI server on pyazr's errors and description
+
+**Done.** Merged `feature/upgrade-8-pyazr3-errors` into the server branch and adapted `pyazr/ui`: the status of an
+exception is the first row of one ordered table naming its class or any base (`pyazr/ui/errors.py`; every class of
+`pyazr.errors` maps to 404, 409 or 422 by it), and a worker sends the names of the class and its bases; the
+engine's notices (`EngineWarning`) of a request in the session worker come back in the answer's `warnings`;
+`/api/kinds` and `/api/physics` are served by `pyazr.kinds()`; `/api/describe` carries `pyazr.describe()` and the
+session options (the engine's table with the value in use); the adapter's parameter rows are `azure2.describe()`'s;
+a request whose `Origin` is not the server's own is refused, and a Host `[::1]` is parsed. `web_ui.md` 11.1 and 12
+say what the errors branch delivered and what is still missing.
+
+**How.** Build `work/b-uiserver` at two jobs (0 warnings); the four UI test files at one thread (api 18, jobs 5,
+server 2, consistency 8: all pass); `errors_test.py` and `describe_test.py` of the merged branch (all ok); each new
+rule shown failing with an injected error (`tests/pyazr/ui/README.md`); `ctest -R pyazr_ui`.
+
+**Open.** The three parts of a message are one text, not attributes: `allowed` and `fix` of the JSON body stay empty
+outside the engine's diagnostics. A job's notices go to its log, not to the client.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-errors`) — pyazr: errors, engine notices, self-description
 
 **Done** (additions only: no public name renamed or removed, no engine number changed).

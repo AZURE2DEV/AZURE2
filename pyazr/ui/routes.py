@@ -49,13 +49,15 @@ P, S, V, M, L = "project", "session", "server", "missing", "later"
 ROUTES = (
     # -- tables of the engine and the server
     Route("GET", "/api/describe", V, "server.Server.describe",
-          "The server: versions, the compute budget, the open project, the job table and this route table."),
+          "The server: pyazr.describe() (versions, build, Coulomb table, data in use), the session options, the "
+          "compute budget, the open project, the job table and this route table.", serves=("pyazr.describe",)),
     Route("GET", "/api/server", V, "server.Server.processes",
           "PIDs and memory (kB) of the server and its worker processes."),
     Route("GET", "/api/schema", V, "server.Server.schema", "The engine's schema of the project format.",
           serves=("pyazr.schema",)),
-    Route("GET", "/api/kinds", M, "pyazr.kinds",
-          "Record, data, parameter kinds, session options and physics functions of the engine."),
+    Route("GET", "/api/kinds", V, "server.Server.kinds",
+          "Record, data, parameter kinds, session options, physics functions and error classes of the engine.",
+          serves=("pyazr.kinds",)),
     # -- the project: the state
     Route("GET", "/api/project", V, "server.Server.project_state",
           "Path, root, revision, unsaved, can undo / redo, the crash copy found at start-up."),
@@ -157,7 +159,9 @@ ROUTES = (
     Route("GET", "/api/data/{name}/kernel", M, "pyazr.DataSet.kernel", "The kernel rows K_i(E_n) of a data set."),
     Route("POST", "/api/session/level_matrix", M, "pyazr.Session.level_matrix",
           "R and U matrix elements, eigenphases, poles at energies."),
-    Route("GET", "/api/physics", M, "pyazr.kinds", "The physics functions' table (pyazr3.md 2.7)."),
+    Route("GET", "/api/physics", V, "server.Server.physics",
+          "The physics functions the engine binds: signature and doc (the rows of pyazr.kinds()).",
+          serves=("pyazr.kinds",)),
     Route("POST", "/api/physics/{fn}", M, "pyazr.physics.functions", "A physics function on arrays."),
     Route("GET", "/api/system", L, "step 2 (Nucleus tab); today the session's pairs and physical_levels",
           "The built system: pairs, levels, channels, Wigner limits."),

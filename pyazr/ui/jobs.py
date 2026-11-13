@@ -196,7 +196,8 @@ def run_job(channel):
                               "start_objective": tracker.first,
                               "elapsed": time.perf_counter() - tracker.t0, **extra})
     except Exception as e:  # noqa: BLE001  -- reported as the job's failure
-        cls, text, _ = describe_exception(e)
+        classes, text, _ = describe_exception(e)
+        cls = classes[0]
         record.update(state="failed", result={"status": "failed", "error": cls, "message": text})
     write_checkpoint(checkpoint, record)
     channel.send({"event": "done", "record": record})

@@ -18,8 +18,10 @@ Files, all inside the project's directory (``<name>`` the project file's name wi
   checkpoints and logs), ``snapshots/``, ``logs/``, ``url``.
 
 **Session options** (Brune, Park, transform, the Coulomb table) are not in the project file today; they are the
-session's keyword arguments.  Provisional, until they become ``<config>`` keys (web_ui.md decision 7): the server
-uses pyazr's defaults and holds no options of its own (:data:`SESSION_OPTIONS`, the one place to change that).
+session's keyword arguments, listed by the engine's table (``pyazr.kinds()["options"]``: keyword, type, default,
+the program's flag, doc).  Provisional, until they become ``<config>`` keys (web_ui.md decision 7): the server uses
+the engine's defaults; :data:`SESSION_OPTIONS` (empty) holds the values it would set instead, the one place to change
+that, and :func:`session_options` is the table with the value in use.
 """
 import difflib
 import os
@@ -30,9 +32,15 @@ from collections import Counter
 
 from .errors import Conflict, NotFound, OutsideRoot, RevisionRequired, StaleRevision
 
-# Provisional home of the session options (web_ui.md section 5 and decision 7): keyword arguments of the session,
-# pyazr's defaults.  Not editable through the API in this step.
+# Provisional home of the session options (web_ui.md section 5 and decision 7): the values the server sets instead of
+# the engine's defaults, by keyword of the session (none).  Not editable through the API in this step.
 SESSION_OPTIONS = {}
+
+
+def session_options():
+    """The engine's table of session options (``pyazr.kinds()["options"]``) with ``value``: the one in use."""
+    import pyazr
+    return {k: dict(row, value=SESSION_OPTIONS.get(k, row["default"])) for k, row in pyazr.kinds()["options"].items()}
 
 _ENCODING = ("utf-8", "surrogateescape")
 

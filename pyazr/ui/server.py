@@ -17,7 +17,7 @@ import time
 
 from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
-from .state import SESSION_OPTIONS, State
+from .state import SESSION_OPTIONS, State, session_options
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -102,6 +102,16 @@ class Server:
         import pyazr
         return pyazr.schema()
 
+    @staticmethod
+    def kinds():
+        import pyazr
+        return pyazr.kinds()
+
+    @staticmethod
+    def physics():
+        import pyazr
+        return pyazr.kinds()["physics"]
+
     # -- the session and the working vector x ---------------------------------------------------------------------
 
     def session_request(self, op, **args):
@@ -110,17 +120,20 @@ class Server:
         from .engine import Engine
         with self.worker.lock:
             self.budget.require_session()
-            rev = self._ensure_built()
+            notices = []
+            rev = self._ensure_built(notices)
             if "x" in inspect.signature(getattr(Engine, op)).parameters:
                 args["x"] = self._vector(args.get("x"))
             result = self.worker.call(op, **args)
+            notices += self.worker.warnings
         if isinstance(result, dict):
-            result = dict(result, rev=rev)
+            result = dict(result, rev=rev, warnings=notices)
         return result
 
-    def _ensure_built(self):
+    def _ensure_built(self, notices=None):
         """(Re)build the worker's session when the project text differs from the one it was built from.  The working
-        x keeps the value of a free parameter whose start value the edit did not change."""
+        x keeps the value of a free parameter whose start value the edit did not change.  The build's warnings (the
+        engine's notices) are added to ``notices``."""
         with self.state.lock:
             text, rev = self.state.project.text, self.state.rev
         if self.worker.built_from == text and self.worker.pid() is not None:
@@ -132,6 +145,8 @@ class Server:
         t0 = time.perf_counter()
         description = self.worker.call("open", file=path, cwd=self.state.directory, **SESSION_OPTIONS)
         self.build_s = time.perf_counter() - t0
+        if notices is not None:
+            notices += self.worker.warnings
         self.worker.built_from, self.session_text_built = text, session_text
         names = [p["name"] for p in description["parameters"] if p["free"]]
         x0 = {p["name"]: p["x0"] for p in description["parameters"] if p["free"]}
@@ -159,7 +174,7 @@ class Server:
             rev = self._ensure_built()
             return {"rev": rev, "pid": self.worker.pid(), "build_s": self.build_s, "options": self.session["options"],
                     "n_free": self.session["n_free"], "datasets": self.session["datasets"],
-                    "parameters": self.session["parameters"], "session_options": dict(SESSION_OPTIONS)}
+                    "parameters": self.session["parameters"], "session_options": session_options()}
 
     def parameters(self):
         rows = self.session_describe()["parameters"]
@@ -244,9 +259,9 @@ class Server:
     def describe(self):
         import pyazr
         from .routes import describe_routes
-        return {"server": "pyazr.ui", "pyazr": pyazr.__version__, "python": sys.version.split()[0],
+        return {"server": "pyazr.ui", "package": pyazr.describe(), "python": sys.version.split()[0],
                 "budget": self.budget.describe(), "project": self.state.describe(), "jobs": job_table(),
-                "session_options": dict(SESSION_OPTIONS), "routes": describe_routes()}
+                "session_options": session_options(), "routes": describe_routes()}
 
     def processes(self):
         """PIDs and memory (kB, from /proc: resident and its peak) of the server and its workers."""
@@ -295,10 +310,17 @@ def create_app(project, *, threads=1, token, root=None):
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
+        host_header = request.headers.get("host") or ""
+        host = host_name(host_header)
         if host not in LOOPBACK:
             return JSONResponse({"error": "Forbidden", "message": f"Host {host!r} is not a loopback name",
                                  "allowed": list(LOOPBACK)}, status_code=403)
+        origin = request.headers.get("origin")
+        if origin is not None and origin != f"{request.url.scheme}://{host_header}":
+            # every port of localhost is one site for the browser: a page of another local server would carry the
+            # cookie; only the server's own page (same scheme, host and port) may send a request with an Origin
+            return JSONResponse({"error": "Forbidden", "message": f"Origin {origin!r} is not this server's",
+                                 "allowed": f"{request.url.scheme}://{host_header}"}, status_code=403)
         given = _token_of(request)
         if given is None or not hmac.compare_digest(given, token):
             return JSONResponse({"error": "Unauthorized", "message": "the token is missing or wrong",
@@ -311,6 +333,15 @@ def create_app(project, *, threads=1, token, root=None):
 
     install(app, server)
     return app
+
+
+def host_name(header):
+    """The host of a Host header without its port: ``[::1]:8000`` and ``[::1]`` give ``::1``, ``localhost:80`` gives
+    ``localhost``."""
+    header = header.strip()
+    if header.startswith("["):
+        return header[1:header.index("]")] if "]" in header else header
+    return header.rsplit(":", 1)[0] if header.count(":") == 1 else header
 
 
 def _token_of(request):

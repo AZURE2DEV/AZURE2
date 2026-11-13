@@ -1,24 +1,27 @@
 """Errors of the web UI's API: pyazr's exceptions and the server's own refusals as HTTP statuses (docs/upgrade/web_ui.md
 section 4.3).
 
-Every refusal is a JSON body with ``error`` (the class name), ``message`` (the whole text) and the three parts of
-pyazr 3.0's messages as fields: ``what`` (what was wrong), ``allowed`` (what is allowed), ``fix`` (which call shows or
-fixes it); a :class:`pyazr.FormatError` adds the engine's ``diagnostics``.  Today's pyazr exceptions carry one text,
-not the three parts (web_ui.md finding 9): ``what`` is that text and ``allowed`` / ``fix`` stay empty unless the
-diagnostics give them.  :func:`status_of` is the one place that maps a class to a status, by class name, so that an
-exception raised in a worker process (which reaches the server as its class name and message) maps as one raised in
-the server.
+Every refusal is a JSON body with ``error`` (the class name), ``message`` (the whole text) and the three parts of pyazr
+3.0's messages as fields: ``what`` (what was wrong), ``allowed`` (what is allowed), ``fix`` (which call shows or fixes
+it); a :class:`pyazr.FormatError` adds the engine's ``diagnostics``. Today's pyazr exceptions carry one text, not the
+three parts as attributes (web_ui.md finding 9): ``what`` is that text and ``allowed`` / ``fix`` stay empty unless the
+engine's diagnostics give them. :func:`status_of` is the one place that maps a class to a status, by class name, so that
+an exception raised in a worker process (which reaches the server as the names of its class and bases, most derived
+first, and its message) maps as one raised in the server.
 """
 
-# pyazr's classes (today's and those of pyazr3.md section 2.5) and Python's builtins -> HTTP status.  A class not
-# listed falls back along its bases (FormatError is a ValueError, so a subclass of it maps as it does).
-STATUS = {
-    "FormatError": 422, "ParameterError": 422, "DomainError": 422, "ValueError": 422, "TypeError": 422,
-    "EngineError": 422, "AZURE2Error": 422,
-    "SessionClosed": 409,
-    "KeyError": 404, "IndexError": 404, "FileNotFoundError": 404,
-    "WorkerCrashed": 500, "RuntimeError": 500,
-}
+# The HTTP status of an exception: the first row of this table that names the exception's class or one of its bases
+# (any base, in any order of the class's bases).  The order is the rule: a lookup that found nothing is 404 even when
+# the class is also a ValueError (pyazr.ParameterKeyError), a closed session 409, a refused value or edit 422, an
+# engine refusal 422; pyazr.Error, the base of every pyazr class, is 422, so a new class of pyazr.errors cannot be a
+# 500.  Only an exception that is none of these (a bug) is 500.
+STATUS = (
+    ("SessionClosed", 409),
+    ("KeyError", 404), ("IndexError", 404), ("FileNotFoundError", 404),
+    ("FormatError", 422), ("ParameterError", 422), ("DomainError", 422), ("AZURE2Error", 422),
+    ("ValueError", 422), ("TypeError", 422), ("ZeroDivisionError", 422),
+    ("Error", 422),
+)
 
 
 class UIError(Exception):
@@ -79,22 +82,35 @@ class WorkerError(Exception):
     """An exception raised inside a worker process, re-raised in the server: the class name, message and
     diagnostics travel, the class does not."""
 
-    def __init__(self, cls, message, diagnostics=None):
+    def __init__(self, classes, message, diagnostics=None):
         super().__init__(message)
-        self.cls, self.diagnostics = cls, diagnostics
+        self.classes, self.diagnostics = list(classes), diagnostics
+        self.cls = self.classes[0]
 
 
 def status_of(names):
-    """The HTTP status of an exception whose class and bases are ``names`` (most derived first)."""
-    for name in names:
-        if name in STATUS:
-            return STATUS[name]
+    """The HTTP status of an exception whose class and bases are ``names`` (:data:`STATUS`; 500 when none is)."""
+    names = set(names)
+    for name, status in STATUS:
+        if name in names:
+            return status
     return 500
 
 
+def class_names(e):
+    """The names of the class of ``e`` and of all its bases, most derived first (what a worker sends)."""
+    return [c.__name__ for c in type(e).__mro__ if c not in (BaseException, object)]
+
+
 def describe_exception(e):
-    """(class name, message, diagnostics or None) of an exception, for the pipe of a worker."""
-    return type(e).__name__, str(e), _diagnostics(e)
+    """(class names, message, diagnostics or None) of an exception, for the pipe of a worker."""
+    return class_names(e), _message(e), _diagnostics(e)
+
+
+def _message(e):
+    if isinstance(e, KeyError) and type(e).__str__ is KeyError.__str__ and e.args:
+        return str(e.args[0])  # KeyError's str() quotes its argument
+    return str(e)
 
 
 def _diagnostics(e):
@@ -109,14 +125,13 @@ def to_http(e):
         body.update(e.fields)
         return e.status, body
     if isinstance(e, WorkerError):
-        cls, message, diagnostics = e.cls, str(e), e.diagnostics
-        status = status_of([cls])
+        classes, message, diagnostics = e.classes, str(e), e.diagnostics
     else:
-        cls, message, diagnostics = describe_exception(e)
-        status = status_of([c.__name__ for c in type(e).__mro__])
-    if isinstance(e, KeyError) and e.args:
-        message = str(e.args[0])  # KeyError's str() quotes its argument
-    body = {"error": cls, "message": message, "what": message, "allowed": None, "fix": None}
+        classes, message, diagnostics = describe_exception(e)
+    status = status_of(classes)
+    # pyazr's exceptions carry the three parts of a message as one text (no attributes): what holds the whole text
+    body = {"error": classes[0], "classes": classes, "message": message, "what": message, "allowed": None,
+            "fix": None}
     if diagnostics:
         body["diagnostics"] = diagnostics
         firsts = [d for d in diagnostics if d.get("severity") == "error"] or diagnostics
