@@ -448,6 +448,28 @@ def main():
     import json
     check("the rows are strict JSON (no NaN or infinity: the web UI's /api/physics)",
           json.loads(json.dumps(rows, allow_nan=False)) == rows)
+    # what the web UI's Physics tab needs of a row to draw a first plot without typing (web_ui.md section 6.6)
+    def inside(a, x):
+        lo, hi = a["lower"], a["upper"]
+        return ((lo is None or (x > lo if a["lower_open"] else x >= lo))
+                and (hi is None or (x < hi if a["upper_open"] else x <= hi)))
+    bad = []
+    for n, r in rows.items():
+        names = {a["name"]: a for a in r["arguments"]}
+        if not r["group"] or r["axis"] not in names or names[r["axis"]]["sweep"] is None:
+            bad.append(f"{n}: group {r['group']!r}, axis {r['axis']!r} without a sweep")
+        for a in r["arguments"]:
+            if a["default"] is None and a["example"] is None and a["name"] != r["axis"]:
+                bad.append(f"{n}.{a['name']}: neither a default nor an example")
+            if a["example"] is not None and not inside(a, a["example"]):
+                bad.append(f"{n}.{a['name']}: example {a['example']} outside {a['domain']}")
+            w = a["sweep"]
+            if w is not None and not (w["lower"] < w["upper"] and w["spacing"] in ("linear", "log")
+                                      and inside(a, w["lower"]) and inside(a, w["upper"])
+                                      and (w["spacing"] == "linear" or w["lower"] > 0)):
+                bad.append(f"{n}.{a['name']}: sweep {w} not inside {a['domain']}")
+    check("every row has a group, its axis a sweep, every argument a default or an example, all inside the domain",
+          not bad, bad)
     missing = sorted(set(rows) - tested)
     check("every row has a row_test here (check 41 asks for one in some test)", not missing, missing)
 

@@ -288,6 +288,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
+      First part done (2026-11-13, `web_ui.md` section 11.5): every row of the physics table and the session's
+      channel functions, a form generated from the row, the plot with gaps and the status line, CSV, Copy as Python.
+      Stopping rows next; the level matrix, the transfer functions on potentials and the rate wait for pyazr.
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.
 - [x] Qt parity checklist written from the Qt code before its removal (`docs/upgrade/qt_parity.md`, 201 items and 32

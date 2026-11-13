@@ -213,3 +213,18 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
   .two-columns, .form-and-description, .record-extras { grid-template-columns: minmax(0, 1fr); }
   aside.describe { border-left: none; padding-left: 0; border-top: 1px solid var(--line); padding-top: 6px; }
 }
+
+/* the Physics tab: the list of functions beside the form and its plots */
+.physics { display: grid; grid-template-columns: minmax(170px, 230px) 1fr; gap: 12px; align-items: start; }
+.physics-list { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; font-size: 13px; }
+.physics-list input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+.physics-list .group-title { font-weight: 600; color: var(--muted); margin-top: 6px; }
+.physics-list a.fn { display: block; padding: 1px 6px; color: var(--fg); text-decoration: none;
+  font-family: var(--font-mono); }
+.physics-list a.fn.active { background: var(--grid); border-radius: 3px; }
+.physics-main h2 { margin: 0 0 4px; font-size: 15px; }
+.physics-status { margin: 6px 0; font-weight: 600; }
+pre.python { white-space: pre-wrap; background: var(--grid); padding: 6px 8px; border-radius: 3px; font-size: 12px; }
+.physics-main form.record-form { display: flex; flex-wrap: wrap; column-gap: 18px; align-items: flex-end; }
+.physics-main form.record-form .form-line { border-bottom: 0; }
+.physics-main form.record-form .form-actions { flex-basis: 100%; }

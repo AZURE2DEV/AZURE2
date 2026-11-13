@@ -18,16 +18,26 @@ program whose `chiSquared.out` the API's numbers are compared with.
   directory excepted: minified third-party code), the file-head route inside the root.
 - `node_test.py`: runs `js/*.test.mjs` with node's own test runner (`node --test`; node from PATH or `NODE`; skipped
   without it) on the page's modules `forms.js`, `tables.js`, `api.js`, `plots.js`, `fitting.js` and the setting
-  widgets of `tabs/fitjob.js`, with the engine's schema and the server's job table.
+  widgets of `tabs/fitjob.js`, the Physics tab's rules of `physicsform.js` (a form for every row of the engine's
+  tables on every axis it allows, and for a row injected by the test; lines, gaps, the status line, the CSV, the
+  bound, hash parameters), with the engine's schema, the server's job table and the function tables.
 - `results_test.py`: the Results payload (`GET /api/evaluation`) against the program's own files: every data set's
   points, model, normalized datum and error and S factor against `AZUREOut_*` (menu 1) and every extrapolation
   against `AZUREOut_*.extrap` (menu 3) to eleven digits on T1 and T2; the χ² table against `chiSquared.out`; the
   residuals' squares against each data set's χ² (and the covariance group's sum on T2); model data on T3; the output
   files written into the project's output directory (`POST`/`GET /api/outputs`).
+- `physics_routes_test.py`: the physics routes: the rows are `pyazr.kinds()["physics"]`, the values a direct call's,
+  NaN with the status outside the domain, the refusals, the bound, the session's channel functions.
+- `physics_tab_test.py`: what the Physics tab asks of the server: every row plots with its examples and its axis's
+  sweep, every element computed; the answer's Python text executed gives the route's arrays bit for bit (every row,
+  a masked axis, several values as lines, a list of choices by name, an integer axis); the axis refused with what /
+  allowed / fix; the session's functions as rows, their answer equal to the session's call, their Python text too.
 - `smoke_test.py` (label `browser`): a real server on T1 and T2, headless Chrome runs the page's `#selftest?edit=1`
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
   record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
-  and undone with the buttons) and takes a screenshot per tab
+  and undone with the buttons; in the Physics tab the first function, a Coulomb function with elements outside its
+  domain, its table view and the session's channel functions, each with its status line and Python text) and takes a
+  screenshot per tab (and of the masked Coulomb function)
   (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
 - `uitest.py`: shared helpers.
 
@@ -139,3 +149,20 @@ Chrome's work in each run's fresh profile: 0 of 25 runs with `--disable-extensio
 `--disable-component-update --disable-background-networking`, 6 of 25 with Safe Browsing off. The test's Chrome now
 runs with those three flags (`QUIET_PROFILE` of `smoke_test.py`); a test artefact (a browser in use has loaded its
 extensions before the page opens), not hidden by a retry. Scripts: `work/uiresults/diag/` (outside the repository).
+
+Added with the Physics tab (each shown failing on 2026-11-13 with `work/uiphys/inject/inject.py`, outside the
+repository, the file restored after each; every one failed):
+
+- the copied Python makes the route's arrays: a log axis written as `np.linspace`; fails `physics_tab_test.py::
+  test_every_row_plots_without_typing_and_its_python_is_the_route`.
+- a log axis with from <= 0 is refused: the check removed; fails `physics_tab_test.py::test_axis_refusals`.
+- the answer's arguments are those used: the axis echoed as sent; fails `test_masked_elements_lines_and_choices`.
+- a session function's status comes from `open`: `open` ignored; fails `test_session_functions`.
+- an element not computed is a gap: drawn with its value (a 0 of a closed channel); the status line lists each other
+  status's words: words left out; the CSV keeps 17 digits: the shortest text; the CSV's arguments are broadcast to
+  each element: the first value on every line; a kind of argument has its row: the `flag` row renamed; several
+  values are dimensions of their own: all on the last axis; an integer axis has integer spacing and no points: the
+  sweep's spacing; the page's bound is the server's: 10000; each fails `node_test.py` (`js/physics.test.mjs`).
+- the page's status line counts what the answer computed: every element counted; fails `smoke_test.py` on T1.
+- every row of the binding has a group, its axis a sweep, every argument a default or an example (a first plot
+  without typing): the radius's example removed and the module rebuilt; fails `tests/pyazr/physics_table_test.py`.

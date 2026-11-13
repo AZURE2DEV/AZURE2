@@ -275,6 +275,11 @@ def _dataset_info(d):
             "observable": d.observable, "entrance": d.entrance_key, "exit": d.exit_key}
 
 
+def session_text(path):
+    """The Python line that opens a session on the project file ``path`` (the Physics tab's Copy as Python)."""
+    return f"session = pyazr.azure2({path!r})  # the saved file; the page evaluates the working text"
+
+
 def open_objective(file, cwd):
     """For a job: ``(objective_and_grad(x) -> (f, g), x0, names of x)`` of a new session of ``file``."""
     e = Engine()

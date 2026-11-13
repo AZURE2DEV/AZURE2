@@ -189,6 +189,21 @@ class Server:
         from .physics import call  # in the server's process: no session needed (pyazr/ui/physics.py)
         return call(fn, arguments)
 
+    @staticmethod
+    def session_functions():
+        from .physics import session_rows
+        return session_rows()
+
+    def session_function_call(self, fn, **arguments):
+        """A session function (``physics.SESSION_ROWS``) on the session of the current text, answered in the shape of
+        a physics function's answer, with the Python text that opens a session on the project's file."""
+        from .engine import session_text
+        from .physics import session_answer, session_request
+        row, kwargs, used, lines, texts = session_request(fn, arguments)
+        out = self.session_request(row["op"], **kwargs)
+        answer = session_answer(fn, row, out, used, lines, texts, session_text(self.state.path))
+        return dict(answer, rev=out.get("rev"), warnings=out.get("warnings", []))
+
     # -- the session and the working vector x ---------------------------------------------------------------------
 
     def session_request(self, op, **args):

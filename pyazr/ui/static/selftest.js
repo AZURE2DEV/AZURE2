@@ -8,6 +8,12 @@ import { LAYOUT } from "./layout.js";
 import { fitCheck } from "./selftestfit.js";
 import { NUCLEUS_SECTIONS } from "./tabs/records.js";
 
+/** The Physics tab's views the self-test visits: the first row as it opens, a Coulomb function with elements
+ * outside the domain (rho <= 0) and four lines of l, its table view, and the session's channel functions. */
+export const PHYSICS_ROUTES = ["#/physics",
+  "#/physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3&fields=F,G",
+  "#/physics/coulomb_waves?plot=table", "#/physics/channel_functions"];
+
 export function selftest(ctx, tabs, draw) {
   const errors = [];
   addEventListener("error", (e) => errors.push(`${e.message} (${e.filename}:${e.lineno})`));
@@ -40,6 +46,7 @@ export function selftest(ctx, tabs, draw) {
     if (other) routes.push(`#/data/${encodeURIComponent(other.name)}`);
     routes.push("#/data/+new", "#/fit", ...tabs.filter((t) => t.later).map((t) => `#/${t.id}`));
     routes.push("#/results", "#/results?plot=table", "#/results?x=e_x&levels=1&logy=1");
+    routes.push(...PHYSICS_ROUTES);
     for (const route of routes) {
       const s = performance.now();
       location.hash = join(route);
@@ -47,8 +54,11 @@ export function selftest(ctx, tabs, draw) {
       await draw();
       await new Promise((r) => setTimeout(r, 30));  // forms and descriptions that load after the draw
       const plot = document.querySelector(".plot[data-drawn]");
+      const physics = document.querySelector(".physics-status");
       steps.push({ route, ms: Math.round(performance.now() - s), plot: plot ? plot.dataset.drawn : null,
         forms: document.querySelectorAll("form.record-form").length,
+        physics: physics ? { computed: +physics.dataset.computed, elements: +physics.dataset.elements,
+          text: physics.textContent, python: document.querySelector("pre.python")?.textContent || "" } : null,
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);

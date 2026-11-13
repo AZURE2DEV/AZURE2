@@ -2,6 +2,24 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-physics`) — the web UI's Physics tab
+
+**Done, first part** (the tab on the physics routes; design in `web_ui.md` section 6.6, as built in 11.5). The tab
+lists the rows of `/api/physics` and the session's functions (`/api/session/functions`, new) grouped by the row's
+`group`, with a search box; each row becomes a form of the existing generator (`physicsform.js`: the table
+`ARGUMENT_KINDS` maps an argument kind to a value type of `forms.js`); the axis is sent as `{from, to, points,
+spacing}` and made by the server with numpy; several values of an argument are a broadcast dimension each (one line
+per combination); the plot has one trace per field and line with gaps (null) where the status is not 0; the status
+line counts each status with its words; CSV of the arrays as returned; the answer's `python` (made by the server from
+the request) shown, copied, saved. The binding's rows gained `group` and, per argument, `example` and `sweep`
+(binding code only, `api/src/pybind_physics.cpp`; no engine number); the row check in `physics_table_test.py`.
+
+**Verified how** (build `work/b-uiphys`, 0 warnings): T1, T2, T3, 13N x 3 bases identical to `tab-t50-1` (tag
+`tab-uiphys-1`, 78 files per basis); the consistency test; `physics_table_test.py`; the UI tests as scripts
+(`physics_tab_test` 4, `physics_routes_test` 6, `routes_consistency_test` 8, `static_test` 9, `node_test` 46 node
+tests); the smoke test on T1 and T2 with screenshots (`work/uiphys/shots*`); each new check shown failing once with
+an injected error (14 cases, `tests/pyazr/ui/README.md`).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler on the fit's objective, its state
 
 **Measured first** (`docs/upgrade/objective.md` section 6, with the table term by term and line numbers): at the

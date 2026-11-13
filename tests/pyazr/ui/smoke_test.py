@@ -25,6 +25,7 @@ import subprocess
 import sys
 import time
 from html import unescape
+from urllib.parse import quote
 
 import pytest
 
@@ -36,7 +37,8 @@ CHROME = os.environ.get("CHROME") or next((shutil.which(n) for n in ("google-chr
 # Chrome's own work in a fresh profile kept out of the test: extensions, component updates, background requests.
 QUIET_PROFILE = ("--disable-extensions", "--disable-component-update", "--disable-background-networking")
 VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
-         "physics", "thm")
+         "physics", ("physics-masked", "physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3"
+                     "&fields=F,G"), "thm")
 
 
 def extra_projects():
@@ -142,6 +144,14 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert result["plotly"], "plotly.js did not load"
         for step in result["steps"]:
             assert not step["errorBoxes"], step
+        # the Physics tab: every view drew its plot from the route's answer with the status line and the pyazr call;
+        # the Coulomb function asked on rho from -2 has elements outside its domain, counted and shown as gaps
+        physics = {s["route"]: s["physics"] for s in result["steps"] if s["route"].startswith("#/physics")}
+        assert len(physics) == 4 and all(v and v["computed"] > 0 and v["python"].startswith("import numpy")
+                                         for v in physics.values()), physics
+        masked = next(v for r, v in physics.items() if "from=-2" in r)
+        assert masked["elements"] == 444 and masked["computed"] == 4 * 100, masked  # rho = -2, -1.8, ..., 0 not
+        assert "rho outside its domain" in masked["text"], masked
         edit = result["edit"]  # a width typed in and Enter, then the Undo button: the engine's chi2 moves and returns
         if "skipped" not in edit:
             assert edit["edited"] and edit["undone"], edit
@@ -174,13 +184,15 @@ def take_screenshots(server, tmp_path, label, shots, result):
         sets = [(t, w, h) for t in ("light", "dark") for (w, h) in ((1400, 900), (1000, 700))]
     for theme, width, height in sets:
         for view in VIEWS:
+            name, view = view if isinstance(view, tuple) else (None, view)
             keys = re.findall(r"\{(\w+)\}", view)
             if any(fill[k] is None for k in keys):
                 continue
             route = view.format(**fill)
-            name = re.sub(r"[^A-Za-z0-9]+", "-", view.replace("{", "").replace("}", "")).strip("-")
+            name = name or re.sub(r"[^A-Za-z0-9]+", "-", view.replace("{", "").replace("}", "")).strip("-")
             path = os.path.join(shots, f"{label}_{theme}_{width}x{height}_{name}.png")
-            chrome(tmp_path, f"{server.url}#/{route}?theme={theme}", f"--window-size={width},{height}",
+            url = f"{server.url}#/{quote(route, safe='/?=&,.-_')}{'&' if '?' in route else '?'}theme={theme}"
+            chrome(tmp_path, url, f"--window-size={width},{height}",
                    "--virtual-time-budget=30000", f"--screenshot={path}", mode="old")
             assert os.path.getsize(path) > 10000, f"{path}: no page drawn"
 
