@@ -1742,6 +1742,18 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         x = np.asarray(self.params_rwa if params is None else params, float)
         return float(self.sess.calculate_objective_rwa(x))
 
+    def fit_objective(self):
+        """The fit's objective as one object for any minimiser or sampler (:class:`pyazr.objective.Objective`):
+        ``f(x)``, ``f.grad``, ``f.residuals``, ``f.jacobian``, ``f.log_prob``, ``f.x0``, ``f.names``, ``f.bounds``."""
+        from .objective import Objective
+        return Objective(self)
+
+    def evaluate(self, x=None):
+        """Every number of the session at the free vector ``x`` (default ``params_rwa``) from one engine evaluation:
+        a :class:`pyazr.evaluate.Evaluation` (objective, terms, data chi-squared, each data set's arrays)."""
+        from .evaluate import evaluate
+        return evaluate(self, x)
+
     def objective_and_grad(self, params):
         """Value and gradient of :meth:`objective` at the free RWA parameters.
 

@@ -948,6 +948,18 @@ add_test(NAME pyazr_ui_physics_routes
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_routes_test.py)
 set_tests_properties(pyazr_ui_physics_routes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# pyazr's Objective (azure2.fit_objective()) against today's objective_and_grad, residuals and residual_jacobian bit for
+# bit on T1-T3, 13N_fast, three nuisance kinds and the gamma_decay record with priors; its rows' squares, gradient and
+# Jacobian; log_prob at the sampler's excluded points and against the engine's sampler; two threads (about 55 s at one
+# thread).
+add_test(NAME pyazr_objective_object COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/objective_object_test.py)
+set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# pyazr's Evaluation (azure2.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
+# per Evaluation, and the self-description of the objects.
+add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
+set_tests_properties(pyazr_evaluation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

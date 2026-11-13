@@ -284,8 +284,15 @@ def _build_kinds():
                       "units": list(q.get("units", {})), "frames": list(columns.get("energy", [])),
                       "angle_columns": list(columns.get("angle", [])), "angle_axis": columns.get("angle_axis", ""),
                       "target_kinds": list(q.get("target_kinds", [])),
-                      # the engine's quantity table does not declare extra outputs (docs/upgrade/pyazr3.md 2.2)
+                      # the numbers a point carries depend on the data set, not on the quantity alone: they are the
+                      # rows of "data_outputs" (docs/upgrade/pyazr3.md section 7.1)
                       "extra_outputs": None}
+    # the binding's table of point outputs (api/src/pybind_evaluation.cpp): Evaluation.data[i].extra
+    data_outputs = {row["name"]: {k: v for k, v in row.items() if k != "name"} for row in engine.point_output_fields()}
+    from .evaluate import EvaluatedData, Evaluation
+    from .objective import Objective
+    objects = {cls.__name__: {"doc": _first_line(cls.__doc__), "built_by": cls.BUILT_BY, "fields": dict(cls.FIELDS)}
+               for cls in (Objective, Evaluation, EvaluatedData)}
     parameters = {row["key"]: {"unit": row["unit"], "owner": list(row["owner"]),
                                "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
                                "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
@@ -318,7 +325,8 @@ def _build_kinds():
     return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
             "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
             "options": options, "physics": physics, "stopping": stopping, "units": schema.get("units", {}),
-            "dimensions": schema.get("dimensions", {}), "errors": error_classes}
+            "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
+            "objects": objects}
 
 
 def kinds():
@@ -330,7 +338,11 @@ def kinds():
       grammar, whether required, units or dimension, doc; ``Project.add_<kind>`` takes them);
     - ``data``: the data kinds (quantities of a ``dataset``): title, doc, aliases, record kinds, ``engine_unit``,
       ``units`` accepted, ``frames`` (energy columns), angle columns and axis, target kinds, ``extra_outputs``
-      (None: the engine's table does not declare them);
+      (None: they depend on the data set; see ``data_outputs``);
+    - ``data_outputs``: the numbers a point carries beside its model value (``Evaluation.data[i].extra``): unit
+      (``"model"``: the data set's engine unit), when (the data sets it applies to), doc, per_point;
+    - ``objects``: pyazr's objects of a fit and a calculation (``Objective``, ``Evaluation``, ``EvaluatedData``):
+      what builds each and its fields with a line of doc;
     - ``parameters``: the kinds of fit parameter (``Parameter.kind``), in their order in the vector: unit (of the
       value in the fit vector), ``owner`` (the record fields that say what it belongs to), own_prior, segment_field,
       vary_from_project, doc;
