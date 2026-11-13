@@ -123,6 +123,8 @@ class Server:
             written = self.worker.call("outputs", x=self._vector())
         os.makedirs(target, exist_ok=True)
         for name in written["files"]:
+            if not name or os.path.basename(name) != name or name in (".", ".."):
+                raise Refused(f"the worker named {name!r} among the output files: not a plain file name")
             shutil.copy2(os.path.join(written["directory"], name), os.path.join(target, name))
         return {"rev": rev, "directory": os.path.relpath(target, self.state.directory), "files": written["files"],
                 "listing": self.outputs_list()["files"]}

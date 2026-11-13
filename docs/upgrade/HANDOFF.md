@@ -12,7 +12,10 @@ model data), `POST`/`GET /api/outputs`, `tabs/results.js`, plot rows in `plots.j
 log axes, CSV with 17 digits, SVG/PNG). `web_ui.md` 11.3 and findings 17–19; user guide; `pyazr/CLAUDE.md`.
 
 **How.** `ctest -R pyazr_ui` equivalents run as scripts at one thread (api, jobs, server, routes, static, node,
-results, smoke: all ok; the smoke test failed once with two "Failed to fetch" requests and passed on the rerun);
+results, smoke: all ok); the smoke test's "Failed to fetch" (1 in 10 runs on T2, 4 in 10 on the page's merge commit)
+came from Chrome loading component extensions into each run's fresh profile, which cancels requests not yet sent;
+the test's Chrome now runs without extensions, component updates and background requests: 0 failures in 20 runs
+(`tests/pyazr/ui/README.md`);
 `results_test.py` compares the payload with the program's `AZUREOut_*`, `.extrap` and `chiSquared.out` on T1 and
 T2; each new check shown failing with an injected error (`tests/pyazr/ui/README.md`); screenshots in both themes
 and sizes looked at (`work/uiresults/shots/`). No C++ changed.

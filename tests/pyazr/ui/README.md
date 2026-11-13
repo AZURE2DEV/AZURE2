@@ -105,3 +105,13 @@ Added with the Results tab (each shown failing once, the file restored from git 
 - the CSV keeps 17 significant digits (`toPrecision(15)` fails `js/plots.test.mjs`); residuals on the second y axis
   (drawn on the first fails `js/results.test.mjs`); level markers only against excitation energy (drawn on every x
   fails `js/results.test.mjs`).
+
+The smoke test's "Failed to fetch" (2026-11-13): requests of the page cancelled in Chrome's renderer
+(`Network.loadingFailed`, net::ERR_ABORTED, canceled; absent from Chrome's network log and from the server's request
+log, which saw every other request answered), on T2 in 1 of 10 runs of this branch and 4 of 10 of the page's merge
+commit, in real time as with the virtual-time budget. Not caused by the page's navigation (hash or history API: none
+of about 2200 fetches in flight cancelled in a direct test), duplicate requests, keep-alive or the server. Caused by Chrome's work
+in each run's fresh profile: 0 of 25 runs with `--disable-extensions`, 0 of 25 with `--disable-component-update
+--disable-background-networking`, 6 of 25 with Safe Browsing off. The test's Chrome now runs with those three flags
+(`QUIET_PROFILE` of `smoke_test.py`); a test artefact (a browser in use has loaded its extensions before the page
+opens), not hidden by a retry. Scripts: `work/uiresults/diag/` (outside the repository).
