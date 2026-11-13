@@ -172,7 +172,7 @@ function drawPlots(ctx, el, series, marks) {
     const area = h("div.plot.results-plot");
     panel.appendChild(area);
     const file = `${plot.title.split(":")[0]}_${view.y}_${view.x}`.replace(/[^A-Za-z0-9_.-]+/g, "_");
-    const height = (plot.residual ? 120 : 0) + (view.together ? 400 : 300);
+    const height = (plot.residual ? 140 : 0) + (view.together ? 420 : 360);
     area.dataset.drawn = drawPlot(area, plot, file, { usePlotly: ctx.route.params.plot !== "table", height });
   }
   const orders = chosen.filter((s) => ctx.schema.quantities?.[s.d.quantity]?.columns?.order);

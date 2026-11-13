@@ -283,9 +283,9 @@ export function plotlyFigure(plot, theme = {}) {
     }
     return { ...common, mode: "lines", line: { color: t.color || fg, width: 2, dash: t.dash || "solid" } };
   };
-  const axis = (a) => ({ title: { text: head(a.title, a.unit) }, color: fg, gridcolor: grid, zeroline: false,
+  const axis = (a) => ({ title: { text: head(a.title, a.unit), font: { size: 11 } }, color: fg, gridcolor: grid, zeroline: false,
     ticks: "outside", mirror: true, showline: true, linecolor: fg, exponentformat: "power",
-    type: a.log ? "log" : "linear" });
+    type: a.log ? "log" : "linear", automargin: true });
   const many = plot.traces.length > 4;
   const layout = { title: { text: plot.title, font: { size: 13 }, x: 0, xref: "paper", xanchor: "left" },
     paper_bgcolor: bg, plot_bgcolor: bg,
