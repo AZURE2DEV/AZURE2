@@ -653,12 +653,12 @@ The row of `SwitchTable()` gains the option's name (`SwitchRow::option`). A swit
 
 | Variable | Option | Project or run | Why |
 |---|---|---|---|
-| `AZURE2_COULOMB_TABLE` | `--coulomb-table=FILE` (exists) | run | a file of this machine (the table, equal to the exact functions to 1e-7) |
-| `AZURE2_SRIM_DATA_DIR` | `--srim-data-dir=DIR` | run | a directory of this machine; the data, not a choice of the project |
+| `AZURE2_COULOMB_TABLE` | `--coulomb-table=FILE` (exists) | run | a file of this machine (equal to the exact functions to 1e-7) |
+| `AZURE2_SRIM_DATA_DIR` | `--srim-data-dir=DIR` | run | a directory of this machine, not a choice of the project |
 | `AZURE_OPTIONS_FILE` | `--options-file=FILE` | run | a file of more options |
-| `AZURE_REFINE_QUADRATURE` | `--refine-quadrature=K` | run (doubt) | a convergence check of the fold quadrature, K = 1..64 |
+| `AZURE_REFINE_QUADRATURE` | `--refine-quadrature=K` | run (doubt) | a convergence check of the fold quadrature |
 | `AZURE2_EC_TABLE_NODES` | `--ec-table-nodes=N` | run (doubt) | a convergence check of the external-capture tables |
-| `AZURE2_SWAP_COUPLING_ORDER` | `--swap-coupling-order` | run (doubt) | a test of convention invariance, not a convention to keep |
+| `AZURE2_SWAP_COUPLING_ORDER` | `--swap-coupling-order` | run (doubt) | a test of convention invariance |
 | `AZURE_BOUND_SHIFT_NUMERICAL` | `--bound-shift-numerical` | run | an older route of the bound-state S |
 | `AZURE_NO_NEUTRAL_CLOSED_FORM` | `--no-neutral-closed-form` | run | an older route of the neutral bound S |
 | `AZURE_SHIFT_DE_1EV` | `--shift-derivative-1ev` | run | the older dS/dE route |
@@ -714,8 +714,8 @@ is bit-identical to the serial one, which the tree's 1-against-N-threads compari
   `  --refine-quadrature=K (AZURE_REFINE_QUADRATURE) = 4 (option)`, with its value in force (the row's "unset" text
   when not set) and its source (`option`, `options file`, `environment`, `default`); then the other switches that are
   set (`Environment switches set:`, kinds cost, prints, test). The tests that compare a committed description cut the
-  text at that header: it depends on the machine. `--json`: the members `threads` and `switches` (`{"AZURE_REFINE_QUADRATURE": {"option":
-  "--refine-quadrature", "value": "4", "source": "option"}, ...}`).
+  text at that header: it depends on the machine. `--json`: the members `threads` and `switches`
+  (`{"AZURE_REFINE_QUADRATURE": {"option": "--refine-quadrature=K", "value": "4", "source": "option"}, ...}`).
 - The manual's list of switches gains the option column; check 40 (the list against the table) checks it; the flag
   count check counts the switch options; a row of kind numbers without an option, or an option of another kind, fails
   the consistency test (check 43).
