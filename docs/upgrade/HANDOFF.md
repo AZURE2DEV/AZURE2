@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-4-session-options`) — the options of the calculation are `<config>` keys
+
+**Measured** (the table of `project_format3.md` §3.12): eleven options of `RuntimeOptions` and the program's flags
+change what a project computes (`use_brune`, `use_park`, `transform` — conventions; `ignore_externals`,
+`use_long_wavelength`, `ec_convection_current`, `use_rmc` — physics; `use_gsl_coul`, `use_coulomb_table`,
+`use_ec_table`, `replace_grids` — numerics); three are not project state (`data_mode`, the Coulomb table file,
+`cwd`); the fit's, output, program and command flags and the environment switches are left out. The defaults of the
+program and a session are the same for all eleven; two rules of combination differ: `--use-rmc` drops Brune and Park
+with a warning where a session keeps them, and the program applies `--use-park`/`--no-brune` in the given order where
+a session lets Park win. Not unified (decision for the PI; recommendation in §3.12).
+
+**Done.** The options are bool keys of `<config>` under the pyazr keyword names; a flag or keyword given wins over the
+key, the key over the default. One table: the option rows of `io::ConfigKeys()` (flags, default, effect) with the
+implications and contradictions beside it; `src/ProjectOptions.cpp` keeps where `Config` stores each and the sources;
+the program's parser and `--help` read the rows; the binding's option table is derived (plus the three non-project
+options with their reasons). `--validate`, the run and `Project.set_config` refuse a bad value
+(`E_CONFIG_OPTION_VALUE`) and a contradiction with a key (`E_CONFIG_OPTIONS_CONTRADICT`, both named with their
+sources). `--describe` (text and JSON) and `azure2.describe()["option_sources"]` say each option's source. pyazr's
+signature is unchanged: a decorator records the keywords a call named (`pyazr/session_options.py`). The web UI's
+`SESSION_OPTIONS` is gone: the options shown are the project's with a `source` field; edited through the config route.
+
+**Verified**: see the commit messages and the final report of the branch (tree, fits, gate, ctest, run_tests).
+
+**Open.** The two combination rules above (PI). `save_fit` on T1 in the formal basis fails its own verification and
+`use_rmc` on T1 fails a session's set-up but not the program's run (both as before; not of this branch).
+
 ## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
 
 **Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged

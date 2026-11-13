@@ -2,6 +2,7 @@
 #define PROJECT_OPTIONS_H
 
 #include <string>
+#include <vector>
 
 class Config;
 namespace azure2 {
@@ -42,6 +43,15 @@ bool ApplyOptionFlag(Config &config, const std::string &arg);
  * whose value is not one the engine reads is skipped (ReadFormat3Project refused it before).
  */
 bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &section, int tagLine);
+
+/// The options of the calculation for the project text `projectText` as a run with these command-line arguments would
+/// have them: each flag of an option row in `args` (other arguments ignored), then the project's keys.  False (ERROR
+/// lines printed) when a flag and a key contradict each other.
+bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config);
+/// A description of the project (experiment::DescribeText or DescribeJson) with the options of `config` after it: the
+/// lines "options of the calculation (value, source):" and OptionsText, or the JSON member "options" (OptionsJson).
+/// AZURE2 --describe and pyazr.describe give the same text.
+std::string WithOptions(const std::string &described, bool json, const Config &config);
 
 /// "  use_brune = 1 (default)" per option, one line each, in the table's order.
 std::string OptionsText(const Config &config);

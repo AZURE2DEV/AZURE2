@@ -9,6 +9,7 @@
 #include "Config.h"
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/io/ConfigSection.h"
+#include "azure2/io/Document.h"
 
 namespace {
 
@@ -138,6 +139,23 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
     config.outStream << "ERROR: " << d.ToText() << std::endl;
   }
   return config.refusedOptions.empty();
+}
+
+bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config) {
+  for (const std::string &arg : args) ApplyOptionFlag(config, arg);
+  const azure2::io::Document doc = azure2::io::Document::Parse(projectText);
+  std::size_t open = 0;
+  return ApplyProjectOptions(config, azure2::io::ReadConfigSection(azure2::io::ConfigLinesOf(doc, open)), (int)open + 1);
+}
+
+std::string WithOptions(const std::string &described, bool json, const Config &config) {
+  std::string out = described;
+  const std::size_t close = out.rfind('}');
+  if (json && close != std::string::npos)
+    out.insert(close, ",\n \"options\": " + OptionsJson(config) + "\n");
+  else if (!json)
+    out += "options of the calculation (value, source):\n" + OptionsText(config);
+  return out;
 }
 
 std::string OptionsText(const Config &config) {
