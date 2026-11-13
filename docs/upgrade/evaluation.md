@@ -653,7 +653,7 @@ The row of `SwitchTable()` gains the option's name (`SwitchRow::option`). A swit
 
 | Variable | Option | Project or run | Why |
 |---|---|---|---|
-| `AZURE2_COULOMB_TABLE` | `--coulomb-table=FILE` (exists) | run | a file of this machine (equal to the exact functions to 1e-7) |
+| `AZURE2_COULOMB_TABLE` | `--coulomb-table=FILE` (exists) | run | a file of this machine (equal to exact to 1e-7) |
 | `AZURE2_SRIM_DATA_DIR` | `--srim-data-dir=DIR` | run | a directory of this machine, not a choice of the project |
 | `AZURE_OPTIONS_FILE` | `--options-file=FILE` | run | a file of more options |
 | `AZURE_REFINE_QUADRATURE` | `--refine-quadrature=K` | run (doubt) | a convergence check of the fold quadrature |

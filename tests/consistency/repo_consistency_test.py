@@ -1025,7 +1025,13 @@ def manual_switches(text):
     part = text.split("Environment switches\n--------------------\n", 1)
     if len(part) < 2:
         return None
-    return re.findall(r"^   \* - ``([A-Z0-9_]+)``\n     - (\w+)$", part[1].split("\nExamples\n", 1)[0], re.M)
+    return [(n, k) for n, _o, k in manual_switch_rows(part[1])]
+
+
+def manual_switch_rows(part):
+    """(variable, option or "none", kind) of each row of the manual's list of switches."""
+    return re.findall(r"^   \* - ``([A-Z0-9_]+)``\n     - (?:``(--[a-z0-9-]+(?:=[A-Z]+)?)``|none)\n     - (\w+)$",
+                      part.split("\nExamples\n", 1)[0], re.M)
 
 
 _table = [(n, k.lower()) for n, k in switch_table(read(ENV_READER))]
@@ -1041,6 +1047,36 @@ else:
     for _n, _k in sorted(set(_manual) - set(_table)):
         problems.append(f"docs/source/reference/command_line.rst: {_n} ({_k}) is listed but is no row of {ENV_READER} "
                         "(check 40)")
+
+# 43. Every switch that can move a number is an option of the program (docs/upgrade/evaluation.md section 9): a row
+#     of kind numbers has its option, no row of another kind has one, the options are unique, and the manual's list
+#     names each row's option (and none that is no row's).
+
+
+def switch_options(text):
+    return re.findall(r'\{Switch::k\w+, "([A-Z0-9_]+)", T::k\w+, "[^"]*", K::k(\w+),\s*"[^"]*",\s*kManual,\s*'
+                      r'"([^"]*)", (-?\d+), (-?\d+)\}', text, re.S)
+
+
+_options = switch_options(read(ENV_READER))
+if len(_options) != len(_table):
+    problems.append(f"{ENV_READER}: {len(_options)} rows with an option column read of {len(_table)} (check 43: the "
+                    "pattern no longer matches the table)")
+for _n, _k, _o, _lo, _hi in _options:
+    if _k == "Numbers" and not _o:
+        problems.append(f"{ENV_READER}: the switch {_n} can move a number and has no option of the program (check 43)")
+    if _k != "Numbers" and _o:
+        problems.append(f"{ENV_READER}: the switch {_n} ({_k.lower()}) has an option; only a switch of kind numbers "
+                        "is one (check 43)")
+_names = [_o.split("=")[0] for _n, _k, _o, _lo, _hi in _options if _o]
+for _dup in sorted({o for o in _names if _names.count(o) > 1}):
+    problems.append(f"{ENV_READER}: the option {_dup} is the option of two switches (check 43)")
+_doc_part = read("docs/source/reference/command_line.rst").split("Environment switches\n--------------------\n", 1)
+_doc_options = {n: o for n, o, k in manual_switch_rows(_doc_part[1])} if len(_doc_part) == 2 else {}
+for _n, _k, _o, _lo, _hi in _options:
+    if _doc_options.get(_n, "") != _o:
+        problems.append(f"docs/source/reference/command_line.rst: the switch {_n} is listed with the option "
+                        f"'{_doc_options.get(_n, '')}', the table's is '{_o}' (check 43)")
 
 # 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
 #     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
@@ -1104,5 +1140,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
-      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, {len(_rows)} physics rows tested, "
       f"{len(_cli.COMMANDS)} pyazr commands")

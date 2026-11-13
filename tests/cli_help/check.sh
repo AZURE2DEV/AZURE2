@@ -11,7 +11,8 @@
 #
 #   1. every flag the help prints is accepted (no "Unknown option" error);
 #   2. every flag literal of src/AZURE2.cpp and src/ProjectCommands.cpp (the --convert, --validate and --schema
-#      commands) is either accepted and printed,
+#      commands), of the option table and of the switch table (support/src/Environment.cpp) is either accepted and
+#      printed,
 #      or neither (compiled out);
 #   3. the flag table of docs/source/reference/command_line.rst names every
 #      printed flag, and no flag the source does not have.
@@ -34,6 +35,7 @@ export OMP_NUM_THREADS=1
 SRC="$HERE/../../src/AZURE2.cpp"
 SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
 SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
+SRC_SWITCHES="$HERE/../../support/src/Environment.cpp"  # the options of the switches that move numbers (their table)
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
@@ -48,11 +50,13 @@ fi
 # The flags as printed: "<tab>--flag:" at the start of a line.
 (cd "$WORK" && $RUN "$AZURE2_BIN" --help < /dev/null 2>&1 | head -c 100000 | tr -d '\r' > help.txt)
 # A flag that takes a value prints as "--flag[=FILE]:".
-printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
+printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
-literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" | tr -d '\r' | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" | tr -d '\r' | grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
-documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p' | sort -u)"
+# and the switch options without a value: the "Option" column of the list "Environment switches".
+documented="$( (tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p';
+  tr -d '\r' < "$DOC" | sed -n '/^Environment switches$/,$s/^     - ``\(--[a-z][a-z0-9-]*\)``$/\1/p') | sort -u)"
 
 if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then
   bad "could not read the flags (help: $(echo $printed | wc -w), source: $(echo $literals | wc -w), docs: $(echo $documented | wc -w))"

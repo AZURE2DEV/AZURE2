@@ -469,6 +469,23 @@ default, what it changes); the program's parser and help, `--describe`, pyazr's 
 there. A new option is that row, its place in the engine's configuration (`src/ProjectOptions.cpp`), and its keyword
 in pyazr's constructor; tests fail when one of the three is missing.
 
+**The switches that move numbers are options of the program.** Each of the fourteen environment switches that
+can change an output number (the Coulomb table file, the SRIM data directory, the options file, the quadrature
+refinement, the external-capture table density, the coupling-order test, the older routes of the shift function, the
+level-space solve and the gradient routes) is also an option of the program, from the same row of the table:
+`--coulomb-table=FILE`, `--srim-data-dir=DIR`, `--options-file=FILE`, `--refine-quadrature=K`, `--ec-table-nodes=N`,
+`--swap-coupling-order`, `--bound-shift-numerical`, `--no-neutral-closed-form`, `--shift-derivative-1ev`,
+`--level-space`, `--thm-by-differences`, `--gradient-adjoint`, `--gradient-dense`, `--fold-weights-by-differences`.
+`AZURE2 --help` lists them; `AZURE2 --describe` prints, for every project, the value in force of each and where it
+came from (option, options file, environment, default). The variables still work with the same effect; the option on
+the command line wins over the options file, the file over the variable. A new switch that moves numbers is its row
+(with the option), its reader, and its line in the manual; a check fails when the option or the line is missing.
+`--threads=N` states the threads of a run (over `OMP_NUM_THREADS`, which still works); the run prints the count and
+where it came from after its banner. Waiting for your word, unchanged: the ten switches no test uses
+(`AZURE2_SWAP_COUPLING_ORDER`, `AZURE_BOUND_SHIFT_NUMERICAL`, `AZURE_NO_NEUTRAL_CLOSED_FORM`, `AZURE_SHIFT_DE_1EV`,
+`AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`, `AZURE_GRAD_DEBUG`,
+`AZURE_CHANNEL_DEBUG`): kept, and the seven of them that move numbers now have options.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the
