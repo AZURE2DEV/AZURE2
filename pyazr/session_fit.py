@@ -21,7 +21,7 @@ import numpy as np
 
 from . import _azure2
 from .errors import EngineError
-from .locking import session_lock
+from .locking import engine_call
 from .objective import require_data_mode
 
 #: A stop request for :meth:`SessionFit.fit_with_engine`: ``set()`` from any thread ends the fit at its best point.
@@ -89,6 +89,7 @@ def _stop_request(stop):
 class SessionFit:
     """Mixed into :class:`pyazr.Session`: uses its ``_engine``, ``mode`` and ``parameters``."""
 
+    @engine_call
     def fit_with_engine(self, method="migrad", minos=False, x0=None, max_calls=None, progress=None, stop=None):
         """The program's fit on this session's objective, through the engine's own fitters.
 
@@ -134,9 +135,8 @@ class SessionFit:
             raise ValueError("max_calls must be a whole number >= 0 (None: no limit).")
         request, finish = _stop_request(stop)
         try:
-            with session_lock(self):
-                out = self._engine.fit_with_engine(method, bool(minos), start, calls, progress, request)
-                fixed = np.asarray(self._engine.params_fixed(), bool)
+            out = self._engine.fit_with_engine(method, bool(minos), start, calls, progress, request)
+            fixed = np.asarray(self._engine.params_fixed(), bool)
         except ValueError as e:  # the engine's refusal (std::invalid_argument)
             raise EngineError(str(e)) from e
         finally:
