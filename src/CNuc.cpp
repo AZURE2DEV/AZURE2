@@ -9,6 +9,7 @@
 #include <tuple>
 #include "CNuc.h"
 #include "RunScratch.h"
+#include "RunDiagnostics.h"
 #include "azure2/physics/Constants.h"
 #include <mutex>
 #include <exception>
@@ -214,6 +215,11 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   pairSettings.relativistic = configure.relativistic;
   pairSettings.useCoulombTable = configure.useCoulombTable;
   pairSettings.coulombTablePath = configure.coulombTablePath;
+  pairSettings.coulombTableDefault = configure.environment.coulombTableDefault;
+  pairSettings.boundShiftNumerical = configure.environment.boundShiftNumerical;
+  pairSettings.noNeutralClosedForm = configure.environment.noNeutralClosedForm;
+  pairSettings.shiftDerivative1eV = configure.environment.shiftDerivative1eV;
+  pairSettings.tableUse = &configure.diagnostics->coulombTable;
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order

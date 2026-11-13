@@ -36,7 +36,10 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
   const PairFunctionSettings &settings = pPair->FunctionSettings();
-  if (settings.useCoulombTable && z1_ * z2_ != 0 && !potential_) table_ = CoulombTable::Shared(settings.coulombTablePath);
+  if (settings.useCoulombTable && z1_ * z2_ != 0 && !potential_)
+    table_ = CoulombTable::Shared(settings.coulombTablePath, settings.coulombTableDefault);
+  shiftDerivative1eV_ = settings.shiftDerivative1eV;
+  tableUse_ = settings.tableUse;
 }
 
 bool CoulFunc::TableLookup(int l, double radius, double energy) {
@@ -47,7 +50,7 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
   const double eta = kin_.Eta(energy);
   const double rho = kin_.Rho(radius, energy);
   CoulombTable::Open o;
-  tOk_ = energy > 0.0 && table_->LookupOpen(l, eta, rho, o);
+  tOk_ = energy > 0.0 && table_->LookupOpen(l, eta, rho, o, tableUse_);
   if (tOk_) {
     tP_ = o.P;
     tS_ = o.S;
@@ -225,11 +228,10 @@ double CoulFunc::PEShiftExact(int l, int two_j, double radius, double energy) {
 
 double CoulFunc::PEShift_dE(int l, int two_j, double radius, double energy, double step) {
   // A Richardson-extrapolated central difference with a step of 1e-3 E, accurate
-  // to ~1e-10.  AZURE_SHIFT_DE_1EV=1 restores the route used before 2026-10-19, a
+  // to ~1e-10.  AZURE_SHIFT_DE_1EV (the pair's settings) restores the route used before 2026-10-19, a
   // 1 eV central difference of the exact S, which carries its rounding noise: up
   // to 3e-5 relative at a few MeV for alpha+12C.
-  static const bool richardson = (std::getenv("AZURE_SHIFT_DE_1EV") == nullptr);
-  if (richardson && energy > 0.0) {
+  if (!shiftDerivative1eV_ && energy > 0.0) {
     const double h = 1e-3 * energy;
     // One route for the whole stencil: when a point of it falls outside the Coulomb table, every point is
     // taken from the exact routine.  Mixing the table (~1e-7 interpolation error) with the exact value across

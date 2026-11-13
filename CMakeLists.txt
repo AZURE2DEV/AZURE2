@@ -113,6 +113,8 @@ endif()
 # (which it must not see): a subdirectory inherits the directory properties as they stand when it is added.
 enable_testing()  # before the subdirectory, so that its tests are registered (repeated below for the rest)
 add_subdirectory(physics)
+# support/: plumbing every module may use (the environment switches and their one reader), which uses nothing.
+add_subdirectory(support)
 # io/: the project model (docs/upgrade/project.md), which uses nothing either.
 add_subdirectory(io)
 # experiment/: model expressions and frames (docs/upgrade/data_model.md), which use physics/ only.

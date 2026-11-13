@@ -41,6 +41,8 @@ Source = "https://github.com/rdeboer1/AZURE2"
 # What the worked examples in pyazr/examples/ need, beyond the core.
 examples = ["matplotlib", "emcee", "multiprocess"]
 zeus = ["zeus-mcmc"]
+# The web UI's server (python -m pyazr.ui project.azr); httpx for its tests and for scripts that use the API.
+web = ["fastapi", "uvicorn", "httpx"]
 all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
 
 [project.scripts]
@@ -53,7 +55,7 @@ all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
 # not installed by pip. The in-process engine is the pybind11 extension module
 # _azure2.<platform>.so, built by CMake into the pyazr/ directory; ship it as
 # package data so a pip install keeps working.
-packages = ["pyazr"]
+packages = ["pyazr", "pyazr.ui"]
 
 [tool.setuptools.package-data]
 pyazr = ["_azure2*.so", "_azure2*.dylib", "_azure2*.pyd", "data/mass_1.mas20", "data/README.md"]

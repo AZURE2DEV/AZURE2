@@ -423,7 +423,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     }
   }
   ecUsePrevious_ = usePrevious;
-  ECTable::ResetCounters();
+  ECTable::ResetCounters(configure);
 
   if (usePrevious)
     in.open(configure.OpenPath(configure.integralsfile).c_str());
@@ -546,7 +546,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     out.close();
   }
   if (!usePrevious && configure.useECTable && !(configure.paramMask & Config::USE_API) &&
-      ECTable::Lookups() + ECTable::DirectCalls() > 0)
+      ECTable::Lookups(configure) + ECTable::DirectCalls(configure) > 0)
     configure.outStream << "\t" << ECTable::Report(configure) << std::endl;
   // Remember where the regular-segment integrals end so the component-segment
   // integrals (appended to the same file) can be resumed from here on read.

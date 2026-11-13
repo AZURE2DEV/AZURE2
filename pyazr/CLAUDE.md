@@ -3,6 +3,25 @@
 Read the root `CLAUDE.md` first. pyazr is how most users script AZURE2, so its
 public names are a contract.
 
+## Using pyazr as an agent: ask the package first
+
+- `help(pyazr)`: the objects of today's API and a ten-line session (tested by `tests/pyazr/describe_test.py`).
+- `pyazr.describe()`: version, engine build, Coulomb table in use (path, content identity or "exact"), stopping and
+  mass data, threads.  `pyazr.describe(path)` is still the engine's description of a project.
+- `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
+  options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
+  (`described.py`); never add a hand-typed list of kinds in Python.
+- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect.
+- Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
+  `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
+  which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are
+  `EngineWarning`.  A new error derives from the class above and from the builtin the call raised before; its
+  message says what was wrong, what is allowed and which call shows or fixes it (`tests/pyazr/errors_test.py`
+  holds the table of wrong calls).
+  The argument checks of the session's calls live in `session_checks.py`, not in `azure2.py`.
+- An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
+  `Config::outStream` passes through that buffer); every other line still goes to standard output.
+
 ## How it is built
 
 - `azure2.py` drives the engine **in-process** through the pybind11 module
@@ -65,3 +84,48 @@ public names are a contract.
 `tests/pyazr/CMakeLists.txt`, with `OMP_NUM_THREADS=2` and `LABELS slow` if it
 takes more than a minute. Without the engine module, a test prints `skip:` and
 exits 0. Read the output and confirm it says `ok`, not `skip`.
+
+## The web UI's server (`pyazr/ui`)
+
+A subpackage `import pyazr` does not load (it needs fastapi and uvicorn: the extra `web`). Design and status:
+`docs/upgrade/web_ui.md` (section 11.1 is what is built). An agent that works beside the user on the user's live
+project starts or reuses the server and asks it what it serves:
+
+```bash
+python -m pyazr.ui project.azr --port 28400 --token "$TOKEN"   # prints http://127.0.0.1:28400/?token=...
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:28400/api/describe   # every route, its call, status
+```
+
+The URL of a running server is in `.<name>.ui/url` beside the project (mode 0600). Every edit carries the revision
+it was made on (`"rev"`); refusals are JSON with `error`, `message` and the engine's `diagnostics`. An agent that
+does not need the user's live state uses pyazr directly.
+
+- `engine.py` is the only file that names today's class `azure2`; when pyazr 3.0's `Session` lands, only it
+  changes. Every public method of `azure2` is either called there or listed in `AZURE2_NOT_SERVED` with a reason.
+- A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`. No file of `pyazr/ui` names a data,
+  record or parameter kind of the engine (`tests/pyazr/ui/routes_consistency_test.py` checks all of this).
+- The server never builds a session (a build holds the GIL); workers are separate processes and die with it.
+- Tests: `tests/pyazr/ui/*_test.py` (pytest files run as scripts, `ctest -R pyazr_ui`).
+
+## The web UI's page (`pyazr/ui/static`)
+
+Plain JavaScript modules served as they are (no build step, no package manager, nothing from the network); design
+`docs/upgrade/web_ui.md` (section 11.2 is what is built). The page holds no state of the project: it shows what the
+server answers, sends every edit with its revision and re-reads; it never computes a physical number.
+
+- `app.js` (header, the tab table `TABS`, hash routes, keys `KEYS`), `api.js` (fetch, revision, errors),
+  `tables.js`, `forms.js` (schema → form: the widget table `WIDGETS`), `formview.js` (draws a form), `layout.js`
+  (the only per-kind table: which fields share a line), `plots.js` (the plot table `PLOTS`, palette, CSV), `ui.js`,
+  `tabs/*.js`, `selftest.js`, `vendor/` (plotly.js 4.1.2, MIT; its hash is checked by `static_test.py`).
+- **A widget** (a new value type of the schema): one row of `WIDGETS` in `forms.js` turning (field, text, ctx) into
+  controls and back into text; `static_test.py` and `js/forms.test.mjs` fail until it exists.
+- **A tab**: a module `tabs/<name>.js` exporting `render(ctx, element, args)` and one row of `TABS` in `app.js`
+  (replacing its `later` text); it appears in the self-test by itself; add its route to `VIEWS` of `smoke_test.py`.
+- **A plot row**: one row of `PLOTS` in `plots.js` (`applies`, `build` → axes with quantity and unit, traces) and its
+  case in `js/plots.test.mjs`.
+- No module but `layout.js` names a record kind, quantity or parameter kind (`static_test.py` checks it); the
+  sections the Nucleus tab shows are `NUCLEUS_SECTIONS` in `tabs/records.js`, every other section is a group of Data.
+- Tests: `ctest -R pyazr_ui` (with `node` on PATH or `NODE=...` for `pyazr_ui_node`). The smoke test:
+  `AZURE2_UI_SCREENSHOTS=<dir> [AZURE2_UI_SHOTS=all] python3 tests/pyazr/ui/smoke_test.py` (or `ctest -L browser`):
+  a server on T1 and T2, headless Chrome (`CHROME=...` to choose) runs `#selftest?edit=1` and takes one screenshot
+  per tab into `<dir>` (a temporary directory otherwise); more projects with `AZURE2_UI_SMOKE_PROJECTS=a.azr:b.azr`.

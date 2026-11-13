@@ -16,6 +16,7 @@ import warnings
 from collections import Counter
 
 from .described import _engine as _engine_module
+from .errors import FormatError, MissingFile, ParameterKeyError, _diagnostic_text, close_names, listed
 from .nuclear_part import NuclearPart
 
 __all__ = ["Project", "Record", "Nuisance", "FormatError", "records_from_csv"]
@@ -31,27 +32,7 @@ def _bytes(s):
     return s.encode(*_ENCODING) if isinstance(s, str) else s
 
 
-class FormatError(ValueError):
-    """A project or an edit the engine refuses.
-
-    ``diagnostics`` is the engine's list (``AZURE2 --validate --json``, docs/upgrade/project_format3.md section 6.2):
-    dicts with ``severity``, ``code``, ``line``, ``record``, ``field``, ``found``, ``allowed``, ``message`` and a
-    syntax-only ``fix``; ``codes`` the codes in order.  The message is the engine's text, one line per diagnostic.
-    """
-
-    def __init__(self, message, diagnostics=()):
-        self.diagnostics = list(diagnostics)
-        lines = [message] + ["  " + _diagnostic_text(d) for d in self.diagnostics]
-        super().__init__("\n".join(lines))
-
-    @property
-    def codes(self):
-        return [d.get("code") for d in self.diagnostics]
-
-
-def _diagnostic_text(d):
-    where = ".".join(x for x in (d.get("record") or "", d.get("field") or "") if x)
-    return f"{d.get('code')}: {where + ': ' if where else ''}{d.get('message')}"
+# FormatError (the engine's refusal of a project or an edit) is pyazr.errors.FormatError, imported above.
 
 
 class Nuisance:
@@ -313,7 +294,9 @@ class Project(NuclearPart):
             for r in s["records"]:
                 if _text(r["name"]) == name:
                     return s, r
-        raise KeyError(f"no record {name!r} in {self.path}")
+        names = [_text(r["name"]) for s in self._sections(doc) for r in s["records"]]
+        raise ParameterKeyError(f"no record {name!r} in {self.path}{close_names(name, names)}; its records: "
+                                f"{listed(names)}; Project.records() lists them by name.")
 
     def records(self):
         """``{name: Record}`` of every record, in file order."""
@@ -694,11 +677,30 @@ def require_format3(path):
     project), which names the conversion ``AZURE2 --convert OLD NEW`` (:func:`pyazr.convert_azr`).  The one refusal of
     an old file in pyazr: every entry point that takes a path (a session, :meth:`Project.open`, the functions that
     open a project) calls it."""
+    if not os.path.isfile(os.fspath(path)):
+        raise MissingFile(path, _missing_project_message(path))
     with open(os.fspath(path), "rb") as f:
         data = f.read()
     message = _engine_module().not_format3_message(data, os.fspath(path))
     if message:
         raise FormatError(message)
+
+
+def _missing_project_message(path):
+    """What a missing project file needs: the path as given and as resolved, the .azr files beside it, the calls."""
+    given = os.fspath(path)
+    full = os.path.abspath(given)
+    folder = os.path.dirname(full)
+    what = "is a directory, not a project file" if os.path.isdir(full) else "does not exist"
+    if os.path.isdir(folder):
+        beside = sorted(f for f in os.listdir(folder) if f.endswith(".azr"))
+        there = (f"the .azr files in {folder}: {', '.join(beside[:8])}{', ...' if len(beside) > 8 else ''}"
+                 if beside else f"{folder} holds no .azr file")
+    else:
+        there = f"its directory {folder} does not exist either"
+    return (f"project file {given!r} {what} (resolved: {full}; the working directory is {os.getcwd()}); a session "
+            f"and Project.open need an existing format-3 project file ({there}).  Give its path, or convert an old "
+            f"project with pyazr.convert_azr(OLD, NEW).")
 
 
 def write_parameter_values(path, values):

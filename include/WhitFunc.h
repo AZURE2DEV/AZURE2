@@ -139,11 +139,11 @@ class WhitFunc {
     const WhitScaledMemo::Key key{l, etaB, rho};
     const auto it = memo_->values.find(key);
     if (it != memo_->values.end()) {
-      AZUREProfile::Count(AZUREProfile::kWhitMemoHit);
+      AZUREProfile::Count(profile_, AZUREProfile::kWhitMemoHit);
       log10Scale = it->second.log10Scale;
       return it->second.mantissa;
     }
-    AZUREProfile::Count(AZUREProfile::kWhitMemoMiss);
+    AZUREProfile::Count(profile_, AZUREProfile::kWhitMemoMiss);
     namespace co = azure2::physics::coulomb;
     const co::WhittakerScaled ws = co::whittaker_scaled(l, etaB, rho);
     WhitScaledMemo::Value v{0.0, 0.0};
@@ -153,8 +153,12 @@ class WhitFunc {
     log10Scale = v.log10Scale;
     return v.mantissa;
   };
-  /// Keep ScaledMemo's values in `memo` (the caller's, used by one thread at a time); null: none.
-  void SetScaledMemo(WhitScaledMemo *memo) { memo_ = memo; }
+  /// Keep ScaledMemo's values in `memo` (the caller's, used by one thread at a time); null: none.  Its hits and misses
+  /// are counted in `profile` (the run's profile account, Config::profile; null: not profiling).
+  void SetScaledMemo(WhitScaledMemo *memo, AZUREProfile::Account *profile) {
+    memo_ = memo;
+    profile_ = profile;
+  }
 
  private:
   /// A hybrid pair: W~_l(r) of the radial equation with the potential (physics/ DecayingSolution; non-relativistic,
@@ -186,6 +190,7 @@ class WhitFunc {
   /// The pair (PPair::SpinOrbitFactor gives <2 l.i> of a two_j key).
   const PPair *pair_;
   WhitScaledMemo *memo_ = nullptr;
+  AZUREProfile::Account *profile_ = nullptr;
 };
 
 #endif

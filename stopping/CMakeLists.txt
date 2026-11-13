@@ -48,7 +48,7 @@ add_library(azure2_stopping STATIC
   ${CMAKE_CURRENT_BINARY_DIR}/generated/TableText.cpp)
 add_library(azure2::stopping ALIAS azure2_stopping)
 target_include_directories(azure2_stopping PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(azure2_stopping PUBLIC azure2_physics)
+target_link_libraries(azure2_stopping PUBLIC azure2_physics azure2_support)
 target_compile_features(azure2_stopping PUBLIC cxx_std_17)
 set_target_properties(azure2_stopping PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

@@ -24,6 +24,12 @@ TargetStopping::TargetStopping(const azure2::experiment::StoppingSpec &spec, con
     return;
   }
   this->SetUpLibrary(spec, configure.baseDirectory);
+  if (source_ != Source::Evaluation) return;
+  try {
+    srim_ = azure2::stopping::SrimTablesIn(configure.environment.srimDataDirectory);
+  } catch (const std::exception &e) {
+    srimError_ = e.what();
+  }
 }
 
 TargetStopping::TargetStopping(const azure2::experiment::StoppingSpec &spec, const std::string &projectDirectory)
@@ -79,7 +85,10 @@ double TargetStopping::PerActiveNucleus(double eLab, const Config &configure) co
 double TargetStopping::LibraryPerActiveNucleus(double eLab) const {
   if (source_ == Source::Formula || !error_.empty()) return std::numeric_limits<double>::quiet_NaN();
   try {
-    return azure2::stopping::kStoppingToMeVcm2 * azure2::stopping::Stopping(material_, projectile_, eLab).total / activeFraction_;
+    if (!srimError_.empty()) return std::numeric_limits<double>::quiet_NaN();
+    const azure2::stopping::StoppingValue v = srim_ ? azure2::stopping::Stopping(*srim_, material_, projectile_, eLab)
+                                                    : azure2::stopping::Stopping(material_, projectile_, eLab);
+    return azure2::stopping::kStoppingToMeVcm2 * v.total / activeFraction_;
   } catch (const std::exception &) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -92,14 +101,21 @@ std::string TargetStopping::Check(double eLab, bool &dataMissing) const {
     dataMissing = true;
     return error_;
   }
+  if (!srimError_.empty()) {
+    dataMissing = true;
+    return srimError_;
+  }
   try {
-    if (source_ == Source::Evaluation) azure2::stopping::SrimTables();
+    if (source_ == Source::Evaluation && !srim_) azure2::stopping::SrimTables();
   } catch (const std::exception &e) {
     dataMissing = true;
     return e.what();
   }
   try {
-    azure2::stopping::Stopping(material_, projectile_, eLab);
+    if (srim_)
+      azure2::stopping::Stopping(*srim_, material_, projectile_, eLab);
+    else
+      azure2::stopping::Stopping(material_, projectile_, eLab);
   } catch (const std::exception &e) {
     return e.what();
   }
@@ -119,7 +135,8 @@ std::string TargetStopping::Provenance() const {
   o << "  per atom of the active element: the material's stopping per atom / " << activeFraction_
     << " (the active element's atom fraction)\n";
   try {
-    std::istringstream text(azure2::stopping::StoppingProvenance(material_, projectile_));
+    std::istringstream text(srim_ ? azure2::stopping::StoppingProvenance(*srim_, material_, projectile_)
+                                  : azure2::stopping::StoppingProvenance(material_, projectile_));
     for (std::string line; std::getline(text, line);) o << "  " << line << "\n";
   } catch (const std::exception &e) {
     o << "  (no provenance: " << e.what() << ")\n";

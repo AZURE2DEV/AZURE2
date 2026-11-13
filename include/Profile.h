@@ -7,12 +7,14 @@
 #include <iosfwd>
 #include <string>
 
+#include "azure2/support/Environment.h"
+
 /// Per-stage wall-clock accounting of the calculation, switched on with AZURE_PROFILE=1.
 
 /*!
  * Each stage accumulates the time spent inside it, summed over threads, until
- * the next Report().  With AZURE_PROFILE unset a Timer costs one test of a
- * cached flag; nothing is read from the clock.
+ * the next Report(), in the run's Account.  With AZURE_PROFILE unset a Timer
+ * costs one test of a null pointer; nothing is read from the clock.
  *
  * Stages nest: the level-matrix stages (fill, factor, T-matrix) run inside
  * the point stage, and the channel solves inside the T-matrix stage, so the
@@ -58,53 +60,74 @@ enum Counter {
   kNumCounters
 };
 
-/// True when AZURE_PROFILE is set to anything but "0" (read once).
+/// True when AZURE_PROFILE is set to anything but "0" (the process's environment record, read once).
 inline bool Enabled() {
-  static const bool on = [] {
-    const char *e = std::getenv("AZURE_PROFILE");
-    return e && *e && std::string(e) != "0";
-  }();
+  static const bool on = azure2::support::ProcessEnvironment().On(azure2::support::Switch::kProfile);
   return on;
 }
 
-/// Adds `ns` nanoseconds to a stage (and one call).
-void Add(Stage stage, long long ns);
+/*!
+ * The accounting of one run: stage times and calls, event counts, and the nesting depth of the reports.  Owned by the
+ * run (RunDiagnostics::profile); Config::profile points to it when AZURE_PROFILE is on and is null otherwise, so a
+ * Timer of a run without profiling reads no clock and writes nothing.
+ */
+class Account {
+ public:
+  /// Adds `ns` nanoseconds to a stage (and one call).
+  void Add(Stage stage, long long ns) {
+    ns_[stage].fetch_add(ns, std::memory_order_relaxed);
+    calls_[stage].fetch_add(1, std::memory_order_relaxed);
+  }
+  /// Counts `n` events.
+  void CountEvents(Counter counter, long long n) { count_[counter].fetch_add(n, std::memory_order_relaxed); }
+  /// Writes the stages accumulated since the last report under `label`, then clears them.
+  void Report(std::ostream &out, const char *label);
+  /// ScopedReport's nesting: true for the outermost report.
+  bool Enter() { return depth_.fetch_add(1) == 0; }
+  void Leave() { depth_.fetch_sub(1); }
 
-/// Counts one event (only when profiling).
-void CountEvent(Counter counter);
-inline void Count(Counter counter) {
-  if (Enabled()) CountEvent(counter);
+ private:
+  std::atomic<long long> ns_[kNumStages] = {};
+  std::atomic<long long> calls_[kNumStages] = {};
+  std::atomic<long long> count_[kNumCounters] = {};
+  std::atomic<int> depth_{0};
+};
+
+/// Counts one event in `account` (null: not profiling).
+inline void Count(Account *account, Counter counter) {
+  if (account) account->CountEvents(counter, 1);
 }
 
-/// Counts `n` events at once (only when profiling).
-void CountEvents(Counter counter, long long n);
-inline void CountMany(Counter counter, long long n) {
-  if (Enabled()) CountEvents(counter, n);
+/// Counts `n` events at once in `account` (null: not profiling).
+inline void CountMany(Account *account, Counter counter, long long n) {
+  if (account) account->CountEvents(counter, n);
 }
 
-/// Writes the stages accumulated since the last report under `label`, then clears them.
-void Report(std::ostream &out, const char *label);
+/// Writes `account`'s stages under `label` (nothing when null).
+inline void Report(Account *account, std::ostream &out, const char *label) {
+  if (account) account->Report(out, label);
+}
 
-/// Times the enclosing scope into one stage.
+/// Times the enclosing scope into one stage of `account` (null: nothing).
 class Timer {
  public:
-  explicit Timer(Stage stage) : stage_(stage), on_(Enabled()) {
-    if (on_) start_ = std::chrono::steady_clock::now();
+  Timer(Account *account, Stage stage) : account_(account), stage_(stage) {
+    if (account_) start_ = std::chrono::steady_clock::now();
   }
   ~Timer() { Stop(); }
   /// Ends the timing before the end of the scope.
   void Stop() {
-    if (on_)
-      Add(stage_, std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_)
-                      .count());
-    on_ = false;
+    if (account_)
+      account_->Add(stage_, std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() -
+                                                                                  start_).count());
+    account_ = nullptr;
   }
   Timer(const Timer &) = delete;
   Timer &operator=(const Timer &) = delete;
 
  private:
+  Account *account_;
   Stage stage_;
-  bool on_;
   std::chrono::steady_clock::time_point start_;
 };
 
@@ -115,12 +138,13 @@ class Timer {
  */
 class ScopedReport {
  public:
-  explicit ScopedReport(const char *label);
+  ScopedReport(Account *account, const char *label);
   ~ScopedReport();
   ScopedReport(const ScopedReport &) = delete;
   ScopedReport &operator=(const ScopedReport &) = delete;
 
  private:
+  Account *account_;
   const char *label_;
   bool outer_;
 };

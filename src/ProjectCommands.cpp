@@ -3,6 +3,9 @@
 // (section 6.1) and --print-predictions (docs/upgrade/data_model.md section 3).
 #include "ProjectCommands.h"
 
+#include "azure2/experiment/ProjectPaths.h"
+#include "azure2/support/Environment.h"
+
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -164,7 +167,7 @@ int validateProject(const std::string &file, bool json) {
   }
   azure2::experiment::Format3ReadOptions read;
   read.fileName = file;
-        // data files as the engine opens them: relative to the working directory
+  read.projectDir = azure2::experiment::ProjectDirectoryOf(file);  // data files relative to the project, as a run
   azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
   // the stopping of each target from the library (energy_grid.md section 6): its source, or why it has none
   const StoppingReport stopping = ReportTargetStoppings(c.Ok() ? TargetEffectSpecs(c) : std::vector<azure2::experiment::TargetEffectSpec>(),
@@ -228,7 +231,8 @@ int describeProject(const std::string &file, bool json, const std::string &recor
     return 3;
   }
   azure2::experiment::Format3ReadOptions read;
-  read.fileName = file;  // data files as the engine opens them: relative to the working directory
+  read.fileName = file;
+  read.projectDir = azure2::experiment::ProjectDirectoryOf(file);  // data files relative to the project, as a run
   const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
   for (const azure2::experiment::Diagnostic &d : c.diagnostics)
     (d.severity == azure2::experiment::Severity::Error ? std::cout : std::cerr) << d.ToText() << std::endl;
@@ -253,6 +257,8 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c), read.projectDir);
   for (const azure2::experiment::Diagnostic &d : stopping.refusals) std::cout << d.ToText() << std::endl;
   if (!json && record.empty()) std::cout << stopping.text << std::flush;
+  // the environment switches that are set (the table's, azure2/support/Environment.h), text form only
+  if (!json) std::cout << azure2::support::SetSwitchesText(azure2::support::ProcessEnvironment()) << std::flush;
   return stopping.refusals.empty() ? 0 : 2;
 }
 

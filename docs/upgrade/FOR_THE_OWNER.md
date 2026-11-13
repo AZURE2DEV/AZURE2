@@ -334,7 +334,7 @@ Open from the drill: the three non-default Legendre definitions follow `docs/upg
 checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
 `calculate_sfactor` knows only the plain S factor.
 
-## No hidden state (three steps, 2026-11-12 and 13; not finished)
+## No hidden state (four steps, 2026-11-12 and 13; not finished)
 
 The aim: every number the engine prints depends only on the project, the command line and a short list of
 environment switches (`docs/upgrade/evaluation.md` section 2), not on what ran before in the same process or on how
@@ -356,12 +356,20 @@ run side by side, and the command-line program started from anywhere reads and w
 write started in the project's directory (`tests/run_from_elsewhere`).  This is a change of behaviour of the
 command-line program: before, relative paths were the working directory's.  A fit and the MCMC make a copy of the
 working data only when no idle one exists (one copy less in memory), and the signature of `intEC.dat` names the
-Coulomb table by its content, so a file written with another table is recomputed, not reused.  What is not done: the
-diagnostic switches and counters (44 switches read in many places; they become one record read once), the fitter's
-and the sampler's own members, the MCMC's progress globals.  Every one is a row of
-`tests/consistency/allowed_state.tsv` with the step that removes it (82 rows; 14 more are permanent: constant
-tables, locks of output streams, and the bytes of input files, kept per process under a key of path, size and
-modification time, which `cache_stats()` counts: say if you want them per session).  What you
+Coulomb table by its content, so a file written with another table is recomputed, not reused.  The fourth step: every
+environment variable the engine reads is one row of one table (`support/src/Environment.cpp`, 39 switches, each with
+its kind: changes numbers, changes cost, prints, test hook), read once when the process starts, and the manual's list
+(`command_line.rst`, "Environment switches") is checked against it; no other code reads the environment.  The
+switches that can move a number are copied into the run's settings (`Config::environment`), so making one of them an
+option is one line; `AZURE2 --describe` ends with the switches that are set.  The counters of the diagnostics
+(profiling, the Coulomb table's lookups, the gradient checks) belong to the run.  A variable set inside a running
+process (pyazr's `os.environ`) is no longer seen: set it before the process, or the first session, starts.  To add a
+switch: the recipe "Add a diagnostic switch" in `CLAUDE.md`.  What is not done: the fitter's and the sampler's own
+members, the MCMC's progress globals.  Every one is a row of
+`tests/consistency/allowed_state.tsv` with the step that removes it (53 rows; 15 more are permanent: constant
+tables, the Coulomb table's content identity, locks of output streams, and the bytes of input files, kept per
+process under a key of path, size and modification time, which `cache_stats()` counts: say if you want them per
+session).  What you
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 
@@ -633,6 +641,20 @@ fallback, the coincident-level limits, pyazr NUTS sampling) are redone in the ne
 them the two on automatic target-effect windows, which the upgrade deletes (the
 assessment is in `HANDOFF.md`). Until the merge, new physics is best written on the upgrade branch, following the
 recipes.
+
+## The web interface: the page (2026-11-13)
+
+`python -m pyazr.ui project.azr` prints a URL; the browser shows the project. The page has a header (project, unsaved
+mark, revision, Undo, Redo, Save, the engine's total χ²) and the tabs Project (file, the validator's problems with
+links, `<config>`, the session's options read-only, history, text, engine), Nucleus (pairs, levels and channels: a
+width typed in changes the χ², Undo takes it back; γ-decay and potential records) and Data (every section of the file,
+the χ² per data set, one form per record generated from the engine's schema with the engine's description beside it,
+the first rows of the data file, a preview plot of data and model). Fit, Results, Physics and THM are placeholders
+naming the step that brings them. Nothing is hand-written per record kind except which fields share a line; a new
+value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle, MIT licence) is vendored under
+`pyazr/ui/static/vendor/`: the page loads nothing from the network, and without plotly the plots are tables. It was
+checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
+User guide: "The web interface".
 
 ## For the maintainers to decide
 

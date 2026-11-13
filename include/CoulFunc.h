@@ -166,6 +166,10 @@ class CoulFunc {
   // Config::useCoulombTable is set), with a one-deep memo of its last lookup: a
   // point asks for P, S and the phase of the same (l, radius, energy) in turn.
   const CoulombTable *table_ = nullptr;
+  /// dS/dE by a 1 eV difference of the exact S (AZURE_SHIFT_DE_1EV, PairFunctionSettings).
+  bool shiftDerivative1eV_ = false;
+  /// The run's count of table lookups (PairFunctionSettings::tableUse).
+  CoulombTableUse *tableUse_ = nullptr;
   bool TableLookup(int l, double radius, double energy);
   /// PEShift by the exact routine (never the table): one route for every point of a difference stencil.
   double PEShiftExact(int l, int two_j, double radius, double energy);
