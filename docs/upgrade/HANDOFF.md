@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler samples the fit's objective and owns its state
+
+**Measured first** (`docs/upgrade/objective.md` section 6, with the table term by term and line numbers): at the
+branch start, every term of the fit was in the sampler's posterior up to the Gaussian priors' normalisation (the
+difference sampler − (−½ χ²) constant at three points: T2 0.881047, 13N_fast 2.076794, `nuisance_prior` 3.686232,
+0 for the record without priors, 13N, `energy_shift_sqrt`, the THM toy, `identical_pp_res` under Park), in both
+bases, except (1) the `gamma_decay` record's priors and wall (difference 3.06 / 0.90 / 81.1 at the three points of
+the record with priors; 20161.8 with Σb > 1) and (2) the limits of every parameter (never read by the sampler:
+b = −0.1, Γ_γ = −0.01, an abundance of −0.001 all finite).
+
+**Done.** The rule: ln P = −½ × the objective from the same table of terms + C (the Gaussian priors'
+normalisation), −∞ outside the support. Each `ObjectiveTerm` says how the sampler takes it (`AddForSampler`, default
+its whole value, so a new term reaches the sampler with no edit of `AZURECalcMCMC.cpp`; `ExcludesForSampler` for
+Park); `Objective::SamplerChi2` replaces the hand-written sum (bit for bit the same where the posterior did not
+change). The limits: −∞ outside the MINUIT limits of a kind whose row says `samplerSupport` (the record's numbers
+only). The state: the 17 process-wide variables of `AZURECalcMCMC.cpp` are gone: the run's file, steps and best
+walker are a record owned by `RunMCMCSampling`; the callbacks are `std::function` members, the stop request an
+atomic member (`RequestStop`); `g_param_names` was a copy of `paramNames_`; the two write-only counters are dropped.
+numcmc takes `std::function` callbacks (source compatible). The CLI's two progress globals in `AZURE2.cpp` became
+captures of a lambda. 18 rows of `allowed_state.tsv` removed.
+
+**Verified how** (build `work/b-sampler`, 0 warnings): the new ctest `sampler_objective` (identity at three points
+in Brune/Park × both sampling bases, −∞ outside the limits, a chain pulled below 0 stays inside, the record's priors
+move ln P by −½ × their term, T2's identity with its constant, two samplers in two threads = two runs alone), each
+check shown to fail with one injected error (limits off; T11 not taken by the sampler; the run record made
+static); the MCMC check scripts (`mcmc_classification`, `mcmc_park_start`, `mcmc_physical_norm`,
+`mcmc_snapshot_components`, `nuisance_prior`, `prior_covariance`, `thm_park`, `clone_composite`, `cli_eof`) pass;
+chains of 8 walkers × 100 steps before (`b-trial45`, and again `b-trial50` after the merge) and after: identical `samples.mcmc`, `walkers.mcmc`,
+`param.mcmc` for the record without priors (Brune RWA and observed, Park RWA), 13N_fast (both bases),
+`energy_shift_sqrt`, T2; changed for the record with priors (mean ln P over steps 50–99 −25.72 → −29.43, Γ_γ
+0.038374 → 0.038389 eV): the record's priors, as intended.
+On the merged state (the data branch at 3298f372 merged in; build 0 warnings): all projects × 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical; `ctest -LE slow` 236 of 236; the slow tests 11 of 11; `tests/run_tests.sh`
+166 passed, 0 failed; the converted-tree gate 679 / 643 / 679 identical; T1, T2, T3, 13N × 3 bases at 1 against 2
+threads identical; `tests/gamma_decay/check.sh` 63 ok; the MCMC check scripts and `prior_centre` pass; the eight
+fits against `b-trial50`: 8 of 8 identical. The scratch measurement re-run on the merged engine: sampler − (−½ χ²) equals
+the documented constant `LogPriorNormalisation()` at every point (0 for the record with priors, 0.881047 for T2),
+−∞ outside the record's limits.
+
+**Open, for the director.** The limits of the other kinds (abundances, thickness, densities, Doppler temperatures,
+apparatus parameters, reduced widths, `<parameterSettings>` limits) are not applied by the sampler; doing it is one
+column of `ParamKindTable()` but changes those posteriors (objective.md section 6). Outside a limit the fit reads a
+clamped density for its prior, the sampler the raw value (0.496 in T2's −½ χ²). The `loglikelihood` column now holds
+the record's priors (it is `logprob − logprior`; documented in the user guide).
+
 ## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
 
 **Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged
