@@ -1,4 +1,6 @@
 #include "AZURECalc.h"
+#include "RunDiagnostics.h"
+#include "azure2/support/Environment.h"
 #include "ModelPass.h"
 #include "Objective.h"
 #include "ShiftedFold.h"
@@ -42,25 +44,6 @@
 
 #ifdef _OPENMP
 #include <omp.h>
-
-// setenv/unsetenv are POSIX and missing from the Windows (MinGW) runtime.
-// There, _putenv("NAME=value") sets a variable for getenv and "NAME=" removes it.
-namespace {
-void setEnvVar(const char *name, const char *value) {
-#ifdef _WIN32
-  _putenv((std::string(name) + "=" + value).c_str());  // _putenv copies its argument
-#else
-  setenv(name, value, 1);
-#endif
-}
-void unsetEnvVar(const char *name) {
-#ifdef _WIN32
-  _putenv((std::string(name) + "=").c_str());  // _putenv copies its argument
-#else
-  unsetenv(name);
-#endif
-}
-}  // namespace
 #endif
 
 namespace {
@@ -86,12 +69,6 @@ double FdStep(ParamKind kind, double x0, double scale) {
   if (kind == ParamKind::Norm && x0 != 0.0) return scale * std::fabs(x0);
   return scale * (std::fabs(x0) + 1.0);
 }
-
-// AZURE_GRAD_CHECK on the Jacobian path: the Jacobian-path gradient, handed to
-// the finite-difference check that the adjoint gradient runs, so both are
-// compared with the same finite differences before any exit.
-std::vector<double> g_jacGradForCheck;
-bool g_deferCheckExit = false;
 
 // chi^2 contribution of a single segment: its data term plus its own energy-shift nuisance penalty, evaluated at the
 // segment's current shift, as AZURECalc::Chi2Value has it, so a finite difference of this over the segment's shift
@@ -261,7 +238,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     ld->MoveSegmentsToShift(group, lc, config);
   };
   for (const LocalShift &ls : localCols) {
-    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftLocal);
+    AZUREProfile::Timer profileColumn(config.profile, AZUREProfile::kShiftLocal);
     const std::vector<int> &segs = ls.target.segs;
     std::vector<vector_r> rP(segs.size()), rM(segs.size());
     const double x0 = full[ls.f];
@@ -290,7 +267,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
 
   vector_r rPlus, rMinus;
   for (int f : fullShifts) {
-    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftFull);
+    AZUREProfile::Timer profileColumn(config.profile, AZUREProfile::kShiftFull);
     const int packed = pmap.FullToPacked(f);
     const double x0 = full[f];
     // A few eV: far inside any quoted beam-energy calibration uncertainty,
@@ -326,11 +303,10 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
  * target-effect sub-points).  At most 20 dumps per run.
  */
 void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const {
-  double threshold = std::atof(std::getenv("AZURE_DUMP_NONFINITE"));
+  double threshold = azure2::support::ProcessEnvironment().Number(azure2::support::Switch::kDumpNonFinite, 0.0);
   if (!(threshold > 1.0)) threshold = 1.0e10;
   if (std::isfinite(chi) && chi <= threshold) return;
-  static std::atomic<int> nDump{0};
-  const int d = ++nDump;
+  const int d = ++configure().diagnostics->nonFiniteDumps;
   if (d > 20) return;
   AZUREParams names;
   compound()->FillMnParams(names, &configure());
@@ -415,8 +391,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
 }
 
 double AZURECalc::operator()(const vector_r &p) const {
-  AZUREProfile::ScopedReport profileReport("evaluation");
-  AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
+  AZUREProfile::ScopedReport profileReport(configure().profile, "evaluation");
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kEvaluation);
   if (callCounter_) callCounter_->fetch_add(1, std::memory_order_relaxed);  // CountCallsInto
   // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
   const int thisIteration = data()->Iterate();
@@ -448,10 +424,10 @@ double AZURECalc::operator()(const vector_r &p) const {
 
   // Calculate all points in one parallel pass when not already inside a parallel
   // region (MIGRAD with the analytic gradient, line searches, plain calculations).
-  const bool pre = PrecalculatePoints(localCompound, localData, results);
-  if (std::getenv("AZURE_GRAD_TIMING")) {
-    static std::atomic<int> evals{0};
-    const int c = ++evals;
+  const bool pre = PrecalculatePoints(localCompound, localData, results, configure());
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  if (environment.Set(azure2::support::Switch::kGradTiming)) {
+    const int c = ++configure().diagnostics->evaluationTimings;
     if (c <= 20 || c % 50 == 0) {
       auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
       std::cerr << "[eval-timing] evaluation " << c << ": parameters + energy shifts " << ms(te0, te1)
@@ -466,15 +442,16 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
   double chiSquared = Objective::Engine().Chi2(context);
 
-  if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData, results);
-  if (const char *trace = std::getenv("AZURE_TRACE_FCN")) {
+  if (environment.Set(azure2::support::Switch::kDumpNonFinite)) DumpNonFinite(p, chiSquared, localCompound, localData, results);
+  if (environment.Set(azure2::support::Switch::kTraceFcn)) {
+    const std::string &trace = environment.Text(azure2::support::Switch::kTraceFcn);
     // Diagnostic (docs/upgrade/fit_threads.md): each objective value with its parameter vector, bit for bit
     // (hexadecimal floating point), so two runs can be compared value by value.  With "fresh", a fit's value is
     // also computed on a fresh clone of the master objects: a pooled working copy must give the same bits.
     std::ostringstream os;
     os << std::hexfloat << "[fcn] " << thisIteration << " " << chiSquared << " |";
     for (double v : p) os << " " << v;
-    if (isFit && std::string(trace) == "fresh") {
+    if (isFit && trace == "fresh") {
       std::vector<double> segPool, segFresh;
       Chi2On(localCompound, localData, results, p, &segPool);
       std::unique_ptr<CNuc> fc(compound()->Clone());
@@ -570,7 +547,8 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   }
 }
 
-bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, bool thmOnly) const {
+bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
+                                   bool thmOnly) const {
   // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
   std::vector<const Segment *> segments;
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
@@ -578,7 +556,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &r
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
     segments.push_back(seg);
   }
-  return ld->CalculatePointsInParallel(segments, lc, configure(), results) >= 0;
+  return ld->CalculatePointsInParallel(segments, lc, config, results) >= 0;
 }
 
 /*!
@@ -590,21 +568,26 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &r
  */
 double AZURECalc::Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
                          bool thmOnly) const {
+  return Chi2OnWith(configure(), lc, ld, results, p, segChis, thmOnly);
+}
+
+double AZURECalc::Chi2OnWith(const Config &config, CNuc *lc, WorkingCopy *ld, azure2::Results &results,
+                             const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, lc, &config);
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
-  const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
+  if (config.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(config, false);
+  const bool pre = PrecalculatePoints(lc, ld, results, config, thmOnly);
 
   for (int i = 1; i <= ld->Data().NumSegments(); i++)
     if (!thmOnly || ld->Data().GetSegment(i)->IsTHM())
-      azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, configure(), results,
+      azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, config, results,
                                    pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
   // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
-  ObjectiveContext context{lc, ld, results, p, configure()};
+  ObjectiveContext context{lc, ld, results, p, config};
   context.segmentChi2 = segChis;
   context.thmOnly = thmOnly;
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
@@ -619,20 +602,20 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   CNuc *lc = GetPooledCNuc();
   WorkingData *working = GetPooledData();
   std::vector<double> segPooled;
-  const bool poolCheck = std::getenv("AZURE_POOL_CHECK") != nullptr;
+  const bool poolCheck = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kPoolCheck);
   const double chi = Chi2On(lc, working->data.get(), working->results, p, poolCheck ? &segPooled : nullptr, thmOnly);
   ReturnPooledCNuc(lc);
   ReturnPooledData(working);
   if (poolCheck) {
-    static std::atomic<int> pc{0};
-    if (++pc <= 5) {
+    if (++configure().diagnostics->poolChecks <= 5) {
       CNuc *fc = compound()->Clone();
       WorkingCopy *fd = data()->Clone();
       std::vector<double> segFresh;
-      setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
+      // The reference: the per-point (serial) path on a fresh copy, as AZURE_SERIAL_CHI2 runs it.
+      Config serial(configure());
+      serial.environment.serialPointPass = true;
       azure2::Results freshResults;
-      const double chiFresh = Chi2On(fc, fd, freshResults, p, &segFresh, thmOnly);
-      unsetEnvVar("AZURE_SERIAL_CHI2");
+      const double chiFresh = Chi2OnWith(serial, fc, fd, freshResults, p, &segFresh, thmOnly);
       delete fc;
       delete fd;
       std::cerr << "[pool-check] pooled+parallel " << chi << " fresh+serial " << chiFresh << std::endl;
@@ -648,9 +631,11 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   return chi;
 }
 
-std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
-  AZUREProfile::ScopedReport profileReport("gradient");
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradient);
+std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const { return GradientBy(p, GradientRoute()); }
+
+std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const GradientRoute &route) const {
+  AZUREProfile::ScopedReport profileReport(configure().profile, "gradient");
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradient);
   {
     std::lock_guard<std::mutex> lk(lastGradMutex_);
     lastGradP_ = p;
@@ -659,25 +644,21 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   const auto tg0 = std::chrono::steady_clock::now();
   // With G2 enabled, one residual Jacobian gives both the gradient (2 J^T r +
   // penalties) and Minuit's G2, which it requests at the same point next.
-  if (g2Enabled_ && !std::getenv("AZURE_GRAD_ADJOINT") && GradientFromJacobian(p, grad)) {
-    if (std::getenv("AZURE_GRAD_TIMING")) {
-      static std::atomic<int> jc{0};
-      int c = ++jc;
+  if (g2Enabled_ && !configure().environment.gradientByAdjoint && !route.adjointOnly && GradientFromJacobian(p, grad)) {
+    const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+    if (environment.Set(azure2::support::Switch::kGradTiming)) {
+      int c = ++configure().diagnostics->jacobianPathTimings;
       if (c <= 5 || c % 50 == 0)
         std::cerr << "[grad-timing] call " << c << " (Jacobian path, gradient + G2): "
                   << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tg0).count() << " ms" << std::endl;
     }
     // AZURE_GRAD_CHECK: on the first call also take the adjoint gradient (which
     // itself runs the sampled finite-difference check) and compare all components.
-    static std::atomic<bool> jChecked{false};
-    if (std::getenv("AZURE_GRAD_CHECK") && !jChecked.exchange(true)) {
-      setEnvVar("AZURE_GRAD_ADJOINT", "1");
-      g_jacGradForCheck = grad;
-      g_deferCheckExit = true;
-      std::vector<double> ga = Gradient(p);
-      g_deferCheckExit = false;
-      g_jacGradForCheck.clear();
-      unsetEnvVar("AZURE_GRAD_ADJOINT");
+    if (environment.Set(azure2::support::Switch::kGradCheck) && !configure().diagnostics->jacobianPathChecked.exchange(true)) {
+      GradientRoute adjoint;
+      adjoint.adjointOnly = true;
+      adjoint.jacobianPathGradient = &grad;
+      const std::vector<double> ga = GradientBy(p, adjoint);
       AZUREParams fpc;
       compound()->FillMnParams(fpc, &configure());
       data()->FillMnParams(fpc);
@@ -693,7 +674,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       std::cerr << "[grad-check] Jacobian-path vs adjoint gradient over " << nFree << " free parameters: worst relative difference " << worst << " at idx "
                 << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
                 << std::endl;
-      if (std::string(std::getenv("AZURE_GRAD_CHECK")) == "exit") std::exit(0);
+      if (environment.Text(azure2::support::Switch::kGradCheck) == "exit") ExitRun(configure(), 0);
     }
     {
       std::lock_guard<std::mutex> lk(lastGradMutex_);
@@ -773,7 +754,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   const std::unique_ptr<ThmAdjointContext> hoes = azure2::ThmGradientContext(lc, *ld, configure(), sdp);
   bool eg = AccumulateEGammaGradient(lc, ld, results, configure(), pmap, sdp, fitBarFn, accum, hoes.get());
   const auto tg1 = std::chrono::steady_clock::now();
-  if (!eg && std::getenv("AZURE_GRAD_DEBUG")) {
+  if (!eg && azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
                  "differences (no speed-up). An unsupported segment/config is "
                  "present (RMC, or a not-yet-handled case)."
@@ -833,7 +814,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // Chi2Value(.., true) does, so its level / coherent-background gradient is 2 J^T r.  THM norms keep the central
   // differences of the THM-only chi^2 below (with its norm penalty); AZURE2_THM_FD=1 for every THM column.
   bool thmAnalytic = eg && hoes;
-  if (eg && haveTHM && !hoes && !ThmFiniteDifferencesRequested()) {
+  if (eg && haveTHM && !hoes && !ThmFiniteDifferencesRequested(configure())) {
     ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
     std::vector<THMRows> thm = ComputeTHMRows(lc, ld, results, configure(), p, tmap);
     const int nCols = tmap.NumPacked();
@@ -935,7 +916,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         // difference for this shift.  Enable with AZURE_SHIFT_GRAD_CHECK=1 to
         // validate the fast path on real data (one gradient evaluation), then
         // disable it for the actual fit.
-        if (std::getenv("AZURE_SHIFT_GRAD_CHECK")) {
+        if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kShiftGradCheck)) {
           vector_r pp = p;
           pp[idx] = x0 + step;
           vector_r pm = p;
@@ -967,9 +948,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
 
   const auto tg2 = std::chrono::steady_clock::now();
-  static std::atomic<int> gradCalls{0};
-  if (std::getenv("AZURE_GRAD_CHECK") || std::getenv("AZURE_GRAD_TIMING")) {
-    int c = ++gradCalls;
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  if (environment.Set(azure2::support::Switch::kGradCheck) || environment.Set(azure2::support::Switch::kGradTiming)) {
+    int c = ++configure().diagnostics->gradientTimings;
     if (c <= 5 || c % 50 == 0) {
       auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
       int nfd = 0;
@@ -988,24 +969,23 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // it): on the first call, compare every non-fixed gradient component with a
   // central finite difference of the side-effect-free chi-squared and list the
   // worst disagreements.  Minuit itself never checks (CheckGradient() is false).
-  static std::atomic<bool> gradChecked{false};
-  if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
-    if (!gradChecked.exchange(true)) {
+  if (environment.Set(azure2::support::Switch::kGradCheck)) {
+    const std::string &gc = environment.Text(azure2::support::Switch::kGradCheck);
+    if (!configure().diagnostics->gradientChecked.exchange(true)) {
       static const char *const kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
                                        "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
       int nBad[kNumKinds] = {}, nAll[kNumKinds] = {}, nBadJ[kNumKinds] = {};
-      const bool haveJ = g_jacGradForCheck.size() == grad.size();
+      const bool haveJ = route.jacobianPathGradient && route.jacobianPathGradient->size() == grad.size();
       const auto tc0 = std::chrono::steady_clock::now();
       const double f0 = Chi2Value(p);
       std::cerr << "[grad-check] one Chi2Value: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count() << " s" << std::endl;
       std::vector<int> freeIdx;
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++)
         if (!(idx < nMn && fixedMask[idx])) freeIdx.push_back(idx);
-      const char *cn = std::getenv("AZURE_GRAD_CHECK_N");
-      const int nCheck = cn ? std::atoi(cn) : 16;
+      const int nCheck = static_cast<int>(environment.Integer(azure2::support::Switch::kGradCheckCount, 16));
       const int stride = std::max(1, (int)freeIdx.size() / std::max(1, nCheck));
       std::vector<int> checkIdx;
       for (int q = 0; q < (int)freeIdx.size(); q += stride) checkIdx.push_back(freeIdx[q]);
@@ -1013,7 +993,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       // indices) and AZURE_GRAD_CHECK_SEGS = "s,a-b" (1-based segment numbers
       // in data order: their norm and energy-shift parameters).  Fixed
       // parameters are skipped.
-      auto parseList = [](const char *spec) {
+      auto parseList = [](const std::string &spec) {
         std::vector<int> out;
         std::stringstream ss(spec);
         std::string item;
@@ -1027,10 +1007,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         return out;
       };
       std::vector<int> extra;
-      if (const char *ci = std::getenv("AZURE_GRAD_CHECK_IDX"))
-        for (int v : parseList(ci)) extra.push_back(v);
-      if (const char *cs = std::getenv("AZURE_GRAD_CHECK_SEGS"))
-        for (int sNum : parseList(cs)) {
+      if (environment.Set(azure2::support::Switch::kGradCheckIndices))
+        for (int v : parseList(environment.Text(azure2::support::Switch::kGradCheckIndices))) extra.push_back(v);
+      if (environment.Set(azure2::support::Switch::kGradCheckSegments))
+        for (int sNum : parseList(environment.Text(azure2::support::Switch::kGradCheckSegments))) {
           if (sNum < 1 || sNum > ld->Data().NumSegments()) continue;
           extra.push_back(pmap.NormIndex(sNum));
           extra.push_back(pmap.EnergyShiftIndex(sNum));
@@ -1045,7 +1025,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         // AZURE_GRAD_CHECK_H scales the finite-difference step (default 1e-6
         // relative): a component that moves with it is truncation error of the
         // FD (e.g. near a narrow level), not of the analytic value.
-        static const double hScale = std::getenv("AZURE_GRAD_CHECK_H") ? std::atof(std::getenv("AZURE_GRAD_CHECK_H")) : 1.0e-6;
+        const double hScale = environment.Number(azure2::support::Switch::kGradCheckStep, 1.0e-6);
         double x0 = p[idx], h = FdStep(pmap.Desc(idx).kind, x0, hScale);
         vector_r pp = p, pm = p;
         pp[idx] = x0 + h;
@@ -1055,7 +1035,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           return std::fabs(g - fd) / (std::fabs(fd) + std::fabs(g) + 1.0e-6 * std::fabs(f0) + 1.0);
         };
         double score = scoreOf(grad[idx]);
-        double gj = haveJ ? g_jacGradForCheck[idx] : 0.0, scoreJ = haveJ ? scoreOf(gj) : 0.0;
+        double gj = haveJ ? (*route.jacobianPathGradient)[idx] : 0.0, scoreJ = haveJ ? scoreOf(gj) : 0.0;
         ParamDesc d = pmap.Desc(idx);
         int k = (int)d.kind;
         nAll[k]++;
@@ -1078,7 +1058,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       // Full precision, so two runs (e.g. two builds, or two thread counts) can be
       // compared value by value; AZURE_GRAD_CHECK_ROWS lists more than 60.
       const std::streamsize prec = std::cerr.precision(15);
-      const int maxRows = std::getenv("AZURE_GRAD_CHECK_ROWS") ? std::atoi(std::getenv("AZURE_GRAD_CHECK_ROWS")) : 60;
+      const int maxRows = static_cast<int>(environment.Integer(azure2::support::Switch::kGradCheckRows, 60));
       for (int r = 0; r < (int)rows.size() && r < maxRows; r++) {
         const Row &w = rows[r];
         std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
@@ -1088,7 +1068,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         std::cerr << std::endl;
       }
       std::cerr.precision(prec);
-      if (std::string(gc) == "exit" && !g_deferCheckExit) std::exit(0);
+      if (gc == "exit" && !route.jacobianPathGradient) ExitRun(configure(), 0);  // else the caller exits after it
     }
   }
 
@@ -1157,9 +1137,8 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
-  static std::atomic<int> g2Calls{0};
-  if (std::getenv("AZURE_GRAD_TIMING")) {
-    int c = ++g2Calls;
+  if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradTiming)) {
+    int c = ++configure().diagnostics->g2Timings;
     if (c <= 5 || c % 50 == 0)
       std::cerr << "[g2-timing] call " << c << ": " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count()
                 << " ms" << std::endl;
@@ -1188,7 +1167,7 @@ bool AZURECalc::HasNuisanceParameters() const {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && !fp.Record(i).Row().segmentField) continue;  // the limits manager's numbering
     if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) {
-      if (std::getenv("AZURE_GRAD_DEBUG"))
+      if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
       return true;
     }
@@ -1246,9 +1225,8 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     nShiftLocal = cols.local;
     nShiftFull = cols.full;
   }
-  if (std::getenv("AZURE_GRAD_TIMING")) {
-    static std::atomic<int> rjCalls{0};
-    const int c = ++rjCalls;
+  if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradTiming)) {
+    const int c = ++configure().diagnostics->residualJacobianTimings;
     if (c <= 5 || c % 50 == 0) {
       auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
       std::cerr << "[grad-timing] residual Jacobian " << c << ": adjoint rows " << ms(tj0, tj1) << " ms, energy-shift columns "

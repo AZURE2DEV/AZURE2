@@ -19,7 +19,7 @@
 #       (each data set is folded with the fitted width);
 #   (e) with a prior (width 21 keV fit prior 21 0.05): the run's objective minus the data's chi^2 is ((w - 21)/0.05)^2,
 #       chiSquared.out's Total-Kernel-Parameter-Chi-Squared too, and w lies between the prior centre and the data's 20;
-#   (f) refusals: a prior centred away from the value (E_NOT_BUILT), grid_max below the value and a width 0
+#   (f) refusals: grid_max below the value and a width 0
 #       (E_OUT_OF_RANGE), no mode (E_NUISANCE_MODE), `profiled` (E_MODE_NOT_ALLOWED), the width beside a target.
 #   (g) the triangular resolution (experiment/src/KernelTriangular.cpp), base width w fitted the same way: noise-free
 #       data made here as triangle-weighted averages of the bare output at w = 20 keV, models/fit.azr with
@@ -156,7 +156,6 @@ report(line is not None and abs(total - data - penalty) <= 1e-3 * max(1.0, penal
        f"((w - 21 keV)/0.05 keV)^2 = {penalty:.4f}, chiSquared.out {line}")
 sys.exit(1 if failures else 0)
 PY
-refused "a prior centred away from the value" E_NOT_BUILT "${W}width 14 keV fit prior 15 1/"
 refused "grid_max below the value" E_OUT_OF_RANGE "${W}width 14 keV fit grid_max 10/"
 refused "a width of 0" E_OUT_OF_RANGE "${W}width 0 keV fit/"
 refused "a width without its mode" E_NUISANCE_MODE "${W}width 14 keV/"

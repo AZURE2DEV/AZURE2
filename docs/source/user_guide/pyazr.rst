@@ -55,14 +55,26 @@ data — rather than waiting for the garbage collector; without it, call
    (``cwd``, by default the ``.azr`` file's), and the process's working
    directory is neither used nor changed.
 
-   **But drive them from one thread.** The engine is not reentrant and keeps
-   process-wide state. For parallelism give each *process* its own session
-   (see `Running in parallel`_).
+   **Two sessions may run on two threads at once; one session on one
+   thread at a time.** A session owns its model, its results, its scratch and
+   its diagnostics' counters; the evaluations release the GIL, so two
+   sessions' χ² or Jacobians run side by side and give the bytes each gives
+   alone (``tests/pyazr/concurrent_sessions_test.py``).  What a process still
+   shares: immutable tables (the Coulomb tables, SRIM's stopping data, the
+   bytes of input files read with the cache, keyed by path and file stamp),
+   the environment switches (read once, when the first session is made: a
+   variable set later changes nothing), GSL's error handler, and the state of
+   an MCMC run, which is process-wide until the sampler's run object exists
+   (run one MCMC per process).  A session's set-up keeps the GIL.  For more
+   cores than one evaluation uses, give each *process* its own session (see
+   `Running in parallel`_).
 
    **The** ``.azr`` **stores its** ``output/``, ``checks/`` **and data paths
    relative to itself**, which is what ``cwd=`` handles; it defaults to the
    ``.azr``'s own directory, so paths you pass ``pyazr`` are resolved from
-   wherever *you* are.
+   wherever *you* are.  ``pyazr.validate(path)`` and ``pyazr.describe(path)``
+   read a project's data files by the same rule, relative to the ``.azr``'s
+   directory (before November 2026: relative to the working directory).
 
 Session options
 ---------------
@@ -1276,8 +1288,10 @@ Running in parallel
 -------------------
 
 There are no AZURE2 instances to pool — every ``azure2()`` object is already an
-independent engine in-process. But the engine is not thread-safe, so the unit
-of parallelism is the *process*: give each worker its own session by
+independent engine in-process. Two sessions can evaluate on two threads at
+once (above), but a sampler's walkers share one session, and a session is used
+by one thread at a time, so the simple unit of parallelism is the *process*:
+give each worker its own session by
 constructing it at module scope in the worker module. That works whichever way
 the pool starts its workers — under ``spawn`` each re-imports the module and
 builds its own engine, under ``fork`` each inherits a copy — and each then
@@ -1298,7 +1312,8 @@ Inside one session the engine uses threads: every evaluation (``calculate_chi2_r
 its data points over ``OMP_NUM_THREADS`` threads, as the command-line χ² does, and so
 does ``residual_jacobian``. (Before 2026-10-30 the evaluations ran their points one at a
 time on one thread.) With several worker processes, keep workers × ``OMP_NUM_THREADS``
-at or below the cores you have; ``AZURE_SERIAL_CHI2=1`` restores the one-at-a-time
+at or below the cores you have; ``AZURE_SERIAL_CHI2=1``, set before the first
+session is made (the environment is read once), restores the one-at-a-time
 evaluation. The results agree with it to rounding (a few units in the last place).
 
 The same applies inside ``pyazr`` itself: ``sensitivities``,
@@ -1368,3 +1383,9 @@ back* are c.m. Convert with ``E_lab = E_cm · (m_beam + m_target) / m_target``.
 Plot different reaction channels against **excitation energy**
 (``calculate_excitation_energy``); it is the only axis shared by all entrance
 channels.
+
+The web UI's server
+-------------------
+
+``python -m pyazr.ui project.azr`` serves a project to the web UI's API (JSON over HTTP on 127.0.0.1, with a
+token); it needs the optional packages of ``pip install pyazr[web]``.  See :doc:`web_ui_api`.

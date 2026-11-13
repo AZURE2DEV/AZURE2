@@ -252,6 +252,8 @@ class Segment {
   bool IsVaryEnergyShift() const;
   /// Uncertainty on the sqrt(E) coefficient (MeV^1/2).
   double GetEnergyShiftSqrtError() const;
+  /// The centre of the sqrt(E) term's prior (MeV^1/2): as written, 0 unless written.
+  double GetEnergyShiftSqrtCentre() const { return energyShiftSqrtCentre_; }
   /// Is the sqrt(E) coefficient a free fit parameter?
   bool IsVaryEnergyShiftSqrt() const;
   /// Shift-group label ("" if none): segments with one label share one constant shift.
@@ -299,6 +301,8 @@ class Segment {
   std::string GetDeclaredShiftFn() const;
   const std::vector<double> &GetNominalShiftFnValues() const;
   const std::vector<double> &GetShiftFnErrors() const;
+  /// The centres of the shift function's priors, one per parameter: as written, 0 unless written.
+  const std::vector<double> &GetShiftFnCentres() const;
   bool IsVaryShiftFn(int j) const;
   /// Does this line carry a "sqrtshift" block?
   bool HasSqrtShiftBlock() const;
@@ -452,6 +456,8 @@ class Segment {
   bool HasThicknessFit() const { return thicknessFit_; }
   bool IsThicknessVaried() const { return thicknessFit_ && thicknessVary_ == 1 && thicknessLeaderPos_ < 0; }
   double GetThicknessSigma() const { return thicknessSigma_; }
+  /// The centre of its prior (atoms/b): as written, else the start value (docs/upgrade/parameter_kinds.md section 4).
+  double GetThicknessCentre() const { return thicknessCentre_; }
   /// "thicknessgroup <label>" ("" = none); the follower's leader position in WorkingCopy's segment list (-1: none).
   const std::string &GetThicknessGroup() const { return thicknessGroup_; }
   /// The names of the segment's fit parameters, as its spec gives them (WorkingCopy::FillMnParams).
@@ -466,7 +472,7 @@ class Segment {
   /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
   double ThicknessPenalty(const SegmentState &state) const {
     if (!IsThicknessVaried() || thicknessPriorReplaced_ || !(thicknessSigma_ > 0.0)) return 0.0;
-    const double d = (state.thickness - GetNominalThickness()) / thicknessSigma_;
+    const double d = (state.thickness - thicknessCentre_) / thicknessSigma_;
     return d * d;
   }
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
@@ -580,6 +586,7 @@ class Segment {
   bool varyEnergyShift_;
   double startEnergyShiftSqrt_;
   double energyShiftSqrtError_;
+  double energyShiftSqrtCentre_ = 0.0;  // the prior's centre (MeV^1/2), 0 unless written
   bool varyEnergyShiftSqrt_;
   std::string shiftGroup_;
   int shiftLeaderPos_;
@@ -593,6 +600,7 @@ class Segment {
   std::string shiftFnDeclared_;
   std::vector<double> shiftFnNominal_;
   std::vector<double> shiftFnError_;
+  std::vector<double> shiftFnCentre_;  // the priors' centres, 0 unless written
   std::vector<bool> shiftFnVary_;
   bool normPriorReplaced_ = false, shiftPriorReplaced_ = false, shiftSqrtPriorReplaced_ = false;
   bool thicknessPriorReplaced_ = false;
@@ -615,6 +623,7 @@ class Segment {
   bool thicknessFit_ = false;  // HasThicknessFit
   int thicknessVary_ = 0;
   double thicknessSigma_ = 0.0;
+  double thicknessCentre_ = 0.0;  // the prior's centre (atoms/b): as written, else the start (GetNominalThickness)
   std::string thicknessGroup_;
   azure2::experiment::ParameterNames parameterNames_;
   int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower

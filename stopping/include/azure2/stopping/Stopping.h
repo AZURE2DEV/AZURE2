@@ -38,6 +38,8 @@ struct StoppingValue {
  * material without constituents or with a compound correction <= 0.
  */
 StoppingValue Stopping(const Material &material, const Projectile &projectile, double energy_MeV);
+/// The same with \p data instead of SrimTables().
+StoppingValue Stopping(const SrimData &data, const Material &material, const Projectile &projectile, double energy_MeV);
 
 /// The energies (MeV, ascending) where epsilon(E) of the material changes form: the branch boundaries of the
 /// electronic stopping (2 keV/u, the end of the light-ion fit and 1.2 times it, 30 MeV/u for heavy ions; continuous,
@@ -52,6 +54,8 @@ const UserStopping *FindUserStopping(const Material &material, const Projectile 
 /// as the implementation, the data source, the phase and compound correction used, per element the SCOEF03.DAT row,
 /// mean excitation energy, mass, phase factor and the uncertainties; or the user source.
 std::string StoppingProvenance(const Material &material, const Projectile &projectile);
+/// The same with \p data instead of SrimTables().
+std::string StoppingProvenance(const SrimData &data, const Material &material, const Projectile &projectile);
 
 }  // namespace stopping
 }  // namespace azure2

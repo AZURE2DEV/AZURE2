@@ -1,4 +1,5 @@
 #include "AdaptiveIntegrationGrid.h"
+#include "azure2/support/Environment.h"
 #include "JGroup.h"
 #include "ALevel.h"
 #include "PPair.h"
@@ -11,7 +12,7 @@
 
 namespace {
 bool DebugGridEnabled() {
-  static const bool enabled = (std::getenv("AZR_DEBUG_GRID") != nullptr);
+  static const bool enabled = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kDebugGrid);
   return enabled;
 }
 }  // namespace

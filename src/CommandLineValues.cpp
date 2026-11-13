@@ -1,6 +1,8 @@
 // The values of the command line's value-taking flags and of AZURE_REFINE_QUADRATURE (include/CommandLineValues.h).
 #include "CommandLineValues.h"
 
+#include "azure2/support/Environment.h"
+
 #include <cerrno>
 #include <cstdlib>
 #include <iostream>
@@ -49,9 +51,10 @@ std::string OptionText(const std::string &option, const std::string &flag) {
 
 int RefineQuadratureFromEnvironment() {
   // A diagnostic that silently did not refine would pass a gate it never ran: a bad value is an error.
-  const char *v = std::getenv("AZURE_REFINE_QUADRATURE");
-  if (!v) return 1;
-  return static_cast<int>(WholeNumber(v, 1, 64, "AZURE_REFINE_QUADRATURE"));
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  if (!environment.Set(azure2::support::Switch::kRefineQuadrature)) return 1;
+  return static_cast<int>(
+      WholeNumber(environment.Text(azure2::support::Switch::kRefineQuadrature), 1, 64, "AZURE_REFINE_QUADRATURE"));
 }
 
 int OptionError(const std::string &message) {

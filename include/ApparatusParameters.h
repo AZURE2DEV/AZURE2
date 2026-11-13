@@ -23,7 +23,8 @@ struct ApparatusDeclaration {
   /// What it belongs to, in the order of its name (the values joined by '.'): ParameterRecord::owner.
   std::vector<std::pair<std::string, std::string>> owner;
   std::string unit;  ///< the value's unit
-  double nominal = 0.0;   ///< start value and prior centre
+  double nominal = 0.0;   ///< start value (the base of the limits and of the layout)
+  double centre = 0.0;    ///< the prior's centre: as written, else the start (docs/upgrade/parameter_kinds.md section 4)
   bool vary = false;
   double sigma = 0.0;     ///< prior width, the value's unit; 0 = no prior
   double layout = 0.0;    ///< the largest value the sub-point grids span (the upper limit of a fitted one)

@@ -22,7 +22,7 @@
  * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
  */
 void GenMatrixFunc::CalculateCrossSection(Site *point, azure2::Results &results) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kCrossSection);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kCrossSection);
   this->CalculateBareCrossSection(point, results);
   if (point->GetScreeningParam() == 0) return;
   if (point->IsAngularDist() || point->IsPhase()) return;

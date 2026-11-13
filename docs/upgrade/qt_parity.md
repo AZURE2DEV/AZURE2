@@ -7,6 +7,9 @@ dropped on purpose and the reason is written next to it. Each item names the sou
 stays on `dev` and `qt5` for reference; any file can be read with `git show 4bf7aa06:gui/src/<file>` or
 `git show 4bf7aa06:gui/include/<file>`. Files under `tests/gui/` are named by their basename.
 
+Twenty items are ticked as dropped by the PI's decision of 2026-11-13: Qt-only behaviour, the grammar of format
+1 and 2 that the converter handles, or what a format-3 property replaces; the reason is written under each.
+
 ## 1. The .azr file
 
 The GUI rebuilds the whole file from its tabs on every save (`AZURESetup::writeProject`). Blocks are read in the
@@ -84,27 +87,37 @@ because the engine also searches the whole file for them.
 - [ ] `<parameterSettings>`: comment header, `# level numbering: engine`, then
       `name value lower upper error fitError nuisance category minuitIndex`, then optional
       `segment_N_norm|segment_N_energy_shift prior_centre <value>` rows (`FittingTab.cpp`)
-- [ ] `<parameterSettings>` read: older 12- and 14-token rows (names with spaces); an unmarked block is read by
+- [x] `<parameterSettings>` read: older 12- and 14-token rows (names with spaces); an unmarked block is read by
       engine numbering or by GUI row, whichever matches more current values; rows for segments beyond the table and
       for no active level are dropped (`FittingTab.cpp`)
-- [ ] `<lastRun>`: run mask (calculation mode, minimizer, formalism and option bits), `"param file"`,
+      *Dropped (the PI, 2026-11-13): old 12/14-token rows: the converter's job.*
+- [x] `<lastRun>`: run mask (calculation mode, minimizer, formalism and option bits), `"param file"`,
       `"integrals file"`, rate entrance and exit keys, `0|1 "temperature file"`, T_min T_max T_step (GK; `-1.` when
       blank) (`AZURESetup.cpp`)
-- [ ] `<mcmc>` (MCMC builds): `nwalkers`, `nsteps`, `chainspread`, `energyspread`, `nthreads`, `usereducedwidths`,
+      *Dropped (the PI, 2026-11-13): <lastRun> run mask: the job request carries its settings; the page remembers the
+      last one.*
+- [x] `<mcmc>` (MCMC builds): `nwalkers`, `nsteps`, `chainspread`, `energyspread`, `nthreads`, `usereducedwidths`,
       `<parameters>` rows `name value priorMean priorStd useGaussian` (`MCMCTab.cpp`)
-- [ ] `<externalCapture>` (legacy, read only): its multipolarity masks are moved onto the pairs (`PairsTab.cpp`)
+      *Dropped (the PI, 2026-11-13): <mcmc> of numcmc: numcmc goes (decision 3b); sampler settings belong to the job.*
+- [x] `<externalCapture>` (legacy, read only): its multipolarity masks are moved onto the pairs (`PairsTab.cpp`)
+      *Dropped (the PI, 2026-11-13): legacy block: the converter's job.*
 
 ### 1.2 Segment keyword tails
 
-- [ ] Whitelist of tail keywords carried verbatim (case-insensitive match): `sqrtshift`, `sample`, `natural`,
+- [x] Whitelist of tail keywords carried verbatim (case-insensitive match): `sqrtshift`, `sample`, `natural`,
       `shiftgroup`, `shiftfngroup`, `normgroup`, `covariance`, `shiftfn`, `total`, `absolute`, `spin`,
       `transmission`, `yield`, `thicknessgroup`, `mixture` (`SegmentKeywords.h`)
-- [ ] Block lengths: `sqrtshift` 4 tokens, `shiftfn "<f>" N ...` 3+3N, retired `mixture` 3+2n, `transmission` and
+      *Dropped (the PI, 2026-11-13): segment keyword tails: format 1/2 only; format 3 has fields.*
+- [x] Block lengths: `sqrtshift` 4 tokens, `shiftfn "<f>" N ...` 3+3N, retired `mixture` 3+2n, `transmission` and
       `yield` 2 or 4 (fit form), every other keyword 2 (`SegmentKeywords.h`)
-- [ ] Edited by dialogs: `sample`/`natural`, `covariance`, `spin`, the four group labels, `transmission`/`yield`;
+      *Dropped (the PI, 2026-11-13): segment keyword tails: format 1/2 only; format 3 has fields.*
+- [x] Edited by dialogs: `sample`/`natural`, `covariance`, `spin`, the four group labels, `transmission`/`yield`;
       each edit rewrites its own block only and a new block goes before the `sample` block (`SegmentKeywords.h`)
-- [ ] Not edited, carried only: `sqrtshift`, `shiftfn`, `total`, `absolute`, `mixture` (`SegmentKeywords.h`)
-- [ ] A quoted path with spaces in a `covariance` block stays one token (`SegmentKeywords.h`)
+      *Dropped (the PI, 2026-11-13): segment keyword tails: format 1/2 only; format 3 has fields.*
+- [x] Not edited, carried only: `sqrtshift`, `shiftfn`, `total`, `absolute`, `mixture` (`SegmentKeywords.h`)
+      *Dropped (the PI, 2026-11-13): segment keyword tails: format 1/2 only; format 3 has fields.*
+- [x] A quoted path with spaces in a `covariance` block stays one token (`SegmentKeywords.h`)
+      *Dropped (the PI, 2026-11-13): segment keyword tails: format 1/2 only; format 3 has fields.*
 
 ### 1.3 Round-trip guarantees and known differences
 
@@ -112,16 +125,19 @@ because the engine also searches the whole file for them.
       opt-in, segment renumbering and the Experimental Effects tail (`segments_roundtrip_test.cpp`,
       `thm_block_test.cpp`, `scattering_lengths_test.cpp`, `thm_opt_in_test.cpp`)
 - [ ] Inactive lines (levels, segments, effects, scattering lengths) are kept with their flags (`*Model.cpp`)
-- [ ] Unknown segment tails are kept only if they start with a whitelisted keyword (`SegmentKeywords.h`)
+- [x] Unknown segment tails are kept only if they start with a whitelisted keyword (`SegmentKeywords.h`)
+      *Dropped (the PI, 2026-11-13): format-1/2 write-back artefacts: no rewrite of untouched lines in format 3.*
 - [ ] Numbers are written with the fewest digits (6 or more) that read back to the same double; fixed-width columns
       get a separating space when full (`RoundTripNumber.h`)
 - [ ] Comments: kept in `<thm>` (inline comments of unchanged keys too); dropped in `<scatteringLengths>`,
       `<abundances>` and `<parameterSettings>`, which write their own header comments (`AZURESetupThm.cpp`,
       `ThmSettings.h`)
-- [ ] Known write-back difference: older files hold `1 0 0` in `<levels>` columns 24-26; the GUI writes `0 0 0.0`
+- [x] Known write-back difference: older files hold `1 0 0` in `<levels>` columns 24-26; the GUI writes `0 0 0.0`
       (`gui/CLAUDE.md`, `LevelsTab.cpp`)
-- [ ] Known write-back difference: levels re-sorted by nucleus, J, parity, E and the level id renumbered
+      *Dropped (the PI, 2026-11-13): format-1/2 write-back artefacts: no rewrite of untouched lines in format 3.*
+- [x] Known write-back difference: levels re-sorted by nucleus, J, parity, E and the level id renumbered
       (`LevelsTab.cpp`)
+      *Dropped (the PI, 2026-11-13): format-1/2 write-back artefacts: no rewrite of untouched lines in format 3.*
 - [ ] Known write-back difference: pyazr-written files format numbers differently. `gui/CLAUDE.md` still says the
       GUI saves 6 significant digits; that predates `roundTripNumber` (see section 15) (`gui/CLAUDE.md`)
 - [ ] A saved width conversion snapshot (`GuiStateSnapshot`) writes the current state to a temporary `.azr` without
@@ -140,13 +156,16 @@ because the engine also searches the whole file for them.
 - [ ] File > Save (Ctrl+S; Save As when untitled), Save As... (Shift+Ctrl+S), Quit (Ctrl+Q) (`AZURESetup.cpp`)
 - [ ] Opening sets the working directory to the project's directory (`AZURESetup.cpp`)
 - [ ] First non-`--` command-line argument is opened as the project (`main.cpp`)
-- [ ] After open: a non-modal warning when the last run used GSL Coulomb functions, with "Use the default
+- [x] After open: a non-modal warning when the last run used GSL Coulomb functions, with "Use the default
       functions" (clears the bit) and "Keep GSL" (`AZURESetup.cpp`)
+      *Dropped (the PI, 2026-11-13): the GSL bit lived in <lastRun>; use_gsl_coul is a session option shown with the
+      others.*
 - [ ] Documentation > Show Documentation For Current Tab (Ctrl+D): HTML help by tab index 0-5 (Pairs, Levels,
       Segments, Effects, Calculate, Plot). The indices predate the Nuclear Potential and Fitting tabs, so on
       Fitting it shows the Calculate text and on Calculate the Plot text (`AZURESetup.cpp`, `InTabDocs.cpp`)
 - [ ] Documentation > Open AZURE Website... opens https://azure.nd.edu (`AZURESetup.cpp`)
-- [ ] Status bar message after a segment renumbering removes effect lines or THM experiments (`AZURESetup.cpp`)
+- [x] Status bar message after a segment renumbering removes effect lines or THM experiments (`AZURESetup.cpp`)
+      *Dropped (the PI, 2026-11-13): no renumbering: records are named.*
 
 ## 3. Configure menu
 
@@ -200,7 +219,8 @@ because the engine also searches the whole file for them.
       `[E_x MeV]` (`PairsModel.cpp`)
 - [ ] Editing or adding a pair regenerates every level's channels, keeping widths and fix flags of channels that
       survive; deleting a pair removes its channels and shifts higher keys (`LevelsTab.cpp`)
-- [ ] Deleting a pair moves per-pair nuclear-potential settings down with the keys (`NuclearPotentialTab.cpp`)
+- [x] Deleting a pair moves per-pair nuclear-potential settings down with the keys (`NuclearPotentialTab.cpp`)
+      *Dropped (the PI, 2026-11-13): potential records name their pair; no keys to shift.*
 - [ ] Isotopic abundances box (only with more than one compound nucleus): Compound Nucleus (target pair),
       Abundance, Fit?, Prior Sigma; parameter `abundance[_<sample>]_<Z>_<A>` (`PairsTab.cpp`, `AbundancesModel.cpp`)
 - [ ] Samples: combo, "+ sample" (one-word name, no `:` or `#`), "- sample" (confirm), per-sample sum-to-one σ
@@ -253,8 +273,9 @@ because the engine also searches the whole file for them.
 - [ ] Measured scattering lengths appear as rows after the segments in the same table (`SegmentsTab.cpp`)
 - [ ] Buttons: `+`, `-`, up, down, Check All, Uncheck All, EXFOR; Filter by entrance and exit pair
       (`SegmentsTab.cpp`)
-- [ ] Moving or deleting a line renumbers what names segments: effect segment lists (line dropped when empty), THM
+- [x] Moving or deleting a line renumbers what names segments: effect segment lists (line dropped when empty), THM
       `segments=` and `weight[k]`, `segment_N_*` settings and prior centres (`SegmentsTab.cpp`, `AZURESetup.cpp`)
+      *Dropped (the PI, 2026-11-13): no renumbering: records are named.*
 - [ ] Add/Edit a Segment From Data: Entrance Pair and Exit Pair drop-downs (by name; exit lists reactions and
       "Total capture (all γ pairs)") (`AddSegDataDialog.cpp`, `PairKeyCombo.cpp`)
 - [ ] Lab Energy [MeV] low/high; Lab Angle [degrees] low/high, retitled C.M. Angle for C.M. data and A_y
@@ -307,9 +328,10 @@ because the engine also searches the whole file for them.
 
 - [ ] Table of effect lines with `+`, `-`, double-click edit; columns include Segment List, Int. Points, flags and
       parameters of each effect, Effects summary (`TargetIntTab.cpp`, `TargetIntModel.cpp`)
-- [ ] Segments List ("5, 8, 13", "4-12", "3,6,7-14"); Number of Integration Points (`AddTargetIntDialog.cpp`).
+- [x] Segments List ("5, 8, 13", "4-12", "3,6,7-14"); Number of Integration Points (`AddTargetIntDialog.cpp`).
       Not to be built: Apply in Energy Ranges, Blend Width, Auto Tolerance (deleted with decision D3: every point of
       a folded data set is folded)
+      *Dropped (the PI, 2026-11-13): no renumbering: records are named.*
 - [ ] Adaptive grid: Resonance Width Multiplier, Points Per Width (`AddTargetIntDialog.cpp`)
 - [ ] Gaussian convolution: σ [MeV, lab] as a number or expression of lab energy x; parameters of σ(E) table;
       lab or legacy c.m. reading; Convert to lab form (`AddTargetIntDialog.cpp`)
@@ -367,7 +389,8 @@ because the engine also searches the whole file for them.
 - [ ] Uncertainty (band) for fit, extrapolation and MINOS; Scale covariance (fit/MINOS with band); Set Wigner
       limits (`RunTab.cpp`)
 - [ ] Parameters File: Create New / Use: <file> with Choose... (`RunTab.cpp`)
-- [ ] External Capture Integrals File: Create New / Use: <file> (hidden for rates) (`RunTab.cpp`)
+- [x] External Capture Integrals File: Create New / Use: <file> (hidden for rates) (`RunTab.cpp`)
+      *Dropped (the PI, 2026-11-13): the session caches intEC.dat by its signature.*
 - [ ] Reaction Rate Parameters: Entrance Pair, Exit Pair (drop-downs), Minimum / Maximum Temperature (GK),
       Temperature Step (GK), or Use Temperature File (`RunTab.cpp`)
 - [ ] Save and Run (Alt+R) saves first, then validates: no active segments; total capture without capture pair;
@@ -401,8 +424,9 @@ because the engine also searches the whole file for them.
 
 - [ ] Segment lists From Data and Without Data, each filtered by In and Out pair; multi-select; Draw, Clear
       (`PlotTab.cpp`)
-- [ ] Reads `output/AZUREOut_aa=<in>_R=<out>.out` or `_TOTAL_CAPTURE.out` (data), `.extrap` (no data), and the
+- [x] Reads `output/AZUREOut_aa=<in>_R=<out>.out` or `_TOTAL_CAPTURE.out` (data), `.extrap` (no data), and the
       `.band` sibling; block within the file by segment order (`PlotTab.cpp`, `AZUREPlot.cpp`)
+      *Dropped (the PI, 2026-11-13): no AZUREOut files read: arrays from the API.*
 - [ ] X axis: CoM Energy, Excitation Energy, CoM Angle; log scale (`PlotTab.cpp`)
 - [ ] Y axis: Cross Section or S-Factor; log scale; title per quantity: Cross Section [b] / [b/sr], S-Factor
       [MeV b] / [MeV b/sr], Phase Shift [degrees], Analyzing Power, Angular Distribution Coefficient
@@ -451,7 +475,8 @@ because the engine also searches the whole file for them.
 
 - [ ] Runs on a worker thread with its own copy of the Config (every field the GUI sets, including hard-sphere,
       abundance prior, relativistic, prior covariance); output streamed to the log (`AZUREMainThread.h`)
-- [ ] File > Save before every run; runs use the saved file (`AZURESetup.cpp`)
+- [x] File > Save before every run; runs use the saved file (`AZURESetup.cpp`)
+      *Dropped (the PI, 2026-11-13): jobs read the working text; the user's file is written only by Save.*
 - [ ] Pair keys are never typed: drop-downs list "k: label [E MeV]"; a key beyond the list kept as
       "(no such pair)" (`PairKeyCombo.cpp`)
 - [ ] Azure theme (Fusion style, palette, watermark); `AZURE2_THEME=system` turns it off (`AzureTheme.cpp`)

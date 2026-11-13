@@ -512,13 +512,13 @@ std::string PriorCentresFromOldRows(std::istream *section, SpecList<DatasetSpec>
       return "ERROR: <parameterSettings> row \"" + trimmed + "\": a normalization prior centre must be positive.";
     DatasetSpec &d = datasets.items[key - 1].spec;  // keys are 1, 2, ... in item order
     if (isNorm) {
-      d.hasNormCentre = true;
-      d.normCentre = centre;
-      d.normCentreSource = trimmed;
+      d.normCentre.written = true;
+      d.normCentre.value = centre;
+      d.normCentre.source = trimmed;
     } else {
-      d.hasShiftCentre = true;
-      d.shiftCentre = centre;
-      d.shiftCentreSource = trimmed;
+      d.shiftCentre.written = true;
+      d.shiftCentre.value = centre;
+      d.shiftCentre.source = trimmed;
     }
   }
   return std::string();

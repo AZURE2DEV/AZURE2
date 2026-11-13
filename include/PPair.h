@@ -12,6 +12,8 @@ class LevelRow;
 }
 }  // namespace azure2
 
+struct CoulombTableUse;
+
 /*!
  * What the run's Config says about how a pair's functions are computed: the same for every pair of a run, given when
  * the pair is built (CNuc::Fill).  The readers deep in the channel functions (Kinematics::Channel, CoulFunc, ShftFunc,
@@ -23,8 +25,19 @@ struct PairFunctionSettings {
   bool relativistic = false;
   /// The universal Coulomb table where it covers the pair (Config::useCoulombTable; --no-coulomb-table turns it off).
   bool useCoulombTable = false;
-  /// The table's file (Config::coulombTablePath, "" = the default file), loaded on first use (CoulombTable::Shared).
+  /// The table's file (Config::coulombTablePath, "" = coulombTableDefault), loaded on first use (CoulombTable::Shared).
   std::string coulombTablePath;
+  /// The table's file when none is named (Config::environment.coulombTableDefault: AZURE2_COULOMB_TABLE, else
+  /// ~/.azure2/coulomb_table.bin).
+  std::string coulombTableDefault;
+  /// The older routes of the shift function, from the run's environment (Config::environment): the bound-state S
+  /// from the numerical derivative (AZURE_BOUND_SHIFT_NUMERICAL), the neutral bound S without its closed form
+  /// (AZURE_NO_NEUTRAL_CLOSED_FORM), dS/dE by a 1 eV difference (AZURE_SHIFT_DE_1EV).
+  bool boundShiftNumerical = false;
+  bool noNeutralClosedForm = false;
+  bool shiftDerivative1eV = false;
+  /// The run's count of Coulomb-table lookups (RunDiagnostics::coulombTable); null: not counted.
+  CoulombTableUse *tableUse = nullptr;
 };
 
 /// An AZURE Particle Pair

@@ -570,9 +570,9 @@ void NormInto(const Nuisance &n, DatasetSpec &d) {
     // The engine's prior width is in per cent of the nominal norm (AZURECalc: n0 sigma / 100).
     d.normError = n.priorPercent ? n.priorWidth.value : 100.0 * n.priorWidth.value / n.priorCentre.value;
     if (n.priorCentre.value != n.value.value) {
-      d.hasNormCentre = true;
-      d.normCentre = n.priorCentre.value;
-      d.normCentreSource = "norm prior " + n.priorCentre.text;
+      d.normCentre.written = true;
+      d.normCentre.value = n.priorCentre.value;
+      d.normCentre.source = "norm prior " + n.priorCentre.text;
     }
   }
 }
@@ -585,9 +585,9 @@ void OffsetInto(const Nuisance &n, DatasetSpec &d) {
     d.energyShiftError = Context::InBase(n.priorWidth, n.unit);
     const double centre = Context::InBase(n.priorCentre, n.unit);
     if (centre != 0.0) {
-      d.hasShiftCentre = true;
-      d.shiftCentre = centre;
-      d.shiftCentreSource = "shift offset prior " + n.priorCentre.text;
+      d.shiftCentre.written = true;
+      d.shiftCentre.value = centre;
+      d.shiftCentre.source = "shift offset prior " + n.priorCentre.text;
     }
   }
 }
@@ -597,6 +597,7 @@ void SqrtInto(const Nuisance &n, DatasetSpec &d) {
   d.energyShiftSqrt = Context::InBase(n.value, n.unit);
   d.varyEnergyShiftSqrt = n.mode == NuisanceMode::Fit;
   if (n.hasPrior) d.energyShiftSqrtError = Context::InBase(n.priorWidth, n.unit);
+  d.shiftSqrtCentre = build::PriorCentreOf(n, Context::InBase(n.priorCentre, n.unit), "shift sqrt");
 }
 
 void FunctionInto(const ValidatedRecord &scale, DatasetSpec &d) {
@@ -611,6 +612,7 @@ void FunctionInto(const ValidatedRecord &scale, DatasetSpec &d) {
     d.shiftFunctionValues.push_back(n.value.value);
     d.shiftFunctionErrors.push_back(n.hasPrior ? n.priorWidth.value : 0.0);
     d.shiftFunctionVary.push_back(n.mode == NuisanceMode::Fit);
+    d.shiftFunctionCentres.push_back(build::PriorCentreOf(n, n.priorCentre.value, "shift function parameter"));
   }
 }
 
@@ -821,17 +823,18 @@ void NameParameters(Context &c) {
     for (std::size_t j = 0; j < d.shiftFunctionValues.size(); j++) d.names.shiftFunction.push_back(scale + ".a" + std::to_string(j));
     // where each value is written (a follower's parameter of a group is fixed and written nowhere)
     if (d.normGroup.empty())
-      sources[d.names.norm] = {name, "norm", 0, ""};
+      sources[d.names.norm] = {name, "norm", 0, "", ""};
     else if (normLeader[d.normGroup] == d.key)
-      sources[d.names.norm] = {d.normGroup, "value", 0, ""};
+      sources[d.names.norm] = {d.normGroup, "value", 0, "", ""};
     const int offset = shiftOccurrence(*m.record, "offset"), sqrt = shiftOccurrence(*m.record, "sqrt");
     if (!d.shiftGroup.empty()) {
-      if (shiftLeader[d.shiftGroup] == d.key) sources[d.names.energyShift] = {d.shiftGroup, "offset", 0, ""};
+      if (shiftLeader[d.shiftGroup] == d.key) sources[d.names.energyShift] = {d.shiftGroup, "offset", 0, "", ""};
     } else if (offset >= 0) {
-      sources[d.names.energyShift] = {name, "shift", offset, "value"};
+      sources[d.names.energyShift] = {name, "shift", offset, "value", ""};
     }
-    if (sqrt >= 0) sources[d.names.energyShiftSqrt] = {name, "shift", sqrt, "value"};
-    for (std::size_t j = 0; j < d.names.shiftFunction.size(); j++) sources[d.names.shiftFunction[j]] = {scale, "param", (int)j, "value"};
+    if (sqrt >= 0) sources[d.names.energyShiftSqrt] = {name, "shift", sqrt, "value", ""};
+    for (std::size_t j = 0; j < d.names.shiftFunction.size(); j++)
+      sources[d.names.shiftFunction[j]] = {scale, "param", (int)j, "value", ""};
     if (d.thicknessFit && !d.thicknessGroup.empty()) {
       const int leader = thicknessLeader.emplace(d.thicknessGroup, d.key).first->second;
       if (leader != d.key) d.names.thickness += "[" + name + "]";
