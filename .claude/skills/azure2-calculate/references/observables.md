@@ -2,7 +2,7 @@
 
 How to compute and fit the observables that are not a plain σ or dσ/dΩ. The fields of each quantity:
 `docs/source/reference/format3.rst`; what each computes: `docs/source/user_guide/segments.rst`; the chooser:
-azure2-setup `references/data-kinds.md`.
+azure2-setup (its data-kinds reference).
 
 ## Analyzing power A_y (`quantity analyzing_power`)
 
@@ -56,7 +56,7 @@ channel spin; several channel spins for one (J, l) without `s` are refused.
   Q value, another compound nucleus of a natural target) carries J_first/J_term. A lab-frame differential ratio is
   first/denominator in the lab, each term with its own Jacobian. `AZURE2 --print-predictions` shows the tree.
 - A ratio whose denominator is exactly 0 is NaN, with one warning per run.
-- Two data sets on one data file are not summed (azure2-setup, `references/data-kinds.md` §3).
+- Two data sets on one data file are not summed (azure2-setup, its data-kinds reference, §3).
 
 ## Total capture
 

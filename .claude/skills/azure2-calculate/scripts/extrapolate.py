@@ -11,7 +11,8 @@ parameters and writes the record's points as text columns:
 ``value`` in the record's unit (b, b/sr, deg, 1); ``S_MeV_b`` is ``model * extra["sfactor_conversion"]`` of the
 engine (0 where it gives none, e.g. a phase shift). The grid is the record's ``energies`` field (format 3:
 ``"range 0.01 0.6 MeV cm points 120 log"``, ``"list 0.1 0.2 MeV lab"``, ``"range 0.1 2 MeV lab step 0.01"``), its frame
-stated in it; the output energies are c.m. The copy is removed unless ``--keep``.
+stated in it; the output energies are c.m. The copy and its own output directory (``output_<stem>_extrap/``, so that
+the project's capture caches are not rewritten) are removed unless ``--keep``.
 
 S(0): give a grid that starts well below the data (a log grid from about 1 keV) and read S at its lowest energies;
 check that halving the lowest energy does not move it.
@@ -19,6 +20,7 @@ check that halving the lowest energy does not move it.
 Exit status: 0, 1 when the engine refuses the record or the evaluation, 2 on a usage error.
 """
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -43,6 +45,9 @@ def extrapolate(azr, fields, params=None, options=None, name="skill_grid", keep=
     azr = Path(azr).resolve()
     p = pyazr.Project.open(azr)
     p.add("extrapolation", name, **fields)
+    out = azr.parent / f"output_{azr.stem}_extrap"  # its own output directory: the project's caches stay untouched
+    out.mkdir(exist_ok=True)
+    p.set_config(output_dir=f"{out.name}/")
     copy = p.save(azr.with_name(f"{azr.stem}_extrap.azr"))
     try:
         with pyazr.Session(str(copy), data_mode=False, **(options or {})) as s:
@@ -56,6 +61,7 @@ def extrapolate(azr, fields, params=None, options=None, name="skill_grid", keep=
     finally:
         if not keep:
             Path(copy).unlink(missing_ok=True)
+            shutil.rmtree(out, ignore_errors=True)
 
 
 def main(argv=None):

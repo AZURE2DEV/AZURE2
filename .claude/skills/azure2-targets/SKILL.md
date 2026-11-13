@@ -29,7 +29,7 @@ lattices) is in `docs/source/developer/edata_and_target_effects.rst`.
 
 | Script | Does |
 |---|---|
-| `scripts/layer.py` | SRIM stopping of a material, the loss of a layer (range integral and first order), straggling, the record |
+| `scripts/layer.py` | SRIM stopping, the loss of a layer (range integral, first order), straggling, the record |
 | `scripts/target_check.py` | the engine's thin-target fold of a data set against an integral outside it |
 | `scripts/selftest.py` | the loss against a quadrature of 1/ε, a round trip, the record and the fold checked in T1 |
 
