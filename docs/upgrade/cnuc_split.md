@@ -1309,3 +1309,549 @@ Met while doing step 6:
   pair: 1.95e-9 against 4.32e-9 at the first point, fit column of AZUREOut; `GetECIntegrals` returns the second
   pair's 8 pathways, as the engine computes them).  The defect is in `ParseExternalCapture`, not in `GetECIntegrals`; not fixed.
 
+## 12. The end of `CNuc`: design (2026-11-13)
+
+This section lists again what `CNuc` still holds, measured on the code at 6e8d000b (the data head; the engine sources
+are those of `work/b-trial50`), and designs the last steps so that agents can carry them out without a second design
+round. It replaces "Remaining steps" (section 6), §11.9 "What remains" and the remaining items of §11.12; where those
+and the code disagree, the code is taken (§12.1.5). No code was changed for this section.
+
+### 12.1 Inventory, measured
+
+Scripts and outputs in `work/cnucdesign/` (run from the worktree root):
+`defs.py CNuc src/CNuc*.cpp src/*.cpp` (every `CNuc::` definition with its length: `cnuc_defs.tsv`);
+`members.py . <own files> <names>` (calls `.M(`/`->M(` of each member per file outside the class's files:
+`cnuc_callers.tsv`, `alevel_members.tsv`); `naming.py`, `group.py` (the files naming `CNuc`: `naming.tsv`,
+`groups.tsv`); `clone_probe.cpp` (bytes and time of a copy, below); `grep` counts as quoted. Counts are name searches:
+a member name another class also has (`GetNucleus`, `Fill`, `Initialize`, `FillMnParams`, `GetE`) is over-counted (≈).
+
+**Size.** `src/CNuc.cpp` 1,527 lines (1,237 in definitions), `include/CNuc.h` 327; with `src/CNuc*.cpp` (seven files,
+1,463 lines) and their headers, 3,647 lines. About 69 member functions (62 defined in `.cpp` files, the rest in the
+header) and 17 data members.
+
+#### 12.1.1 The members of `CNuc`
+
+Classes: **(a)** immutable after set-up; **(a′)** set-up input that a re-set-up rewrites (a physical vector handed in
+again: `FillCompoundFromParamsPhysical` + `TransformIn`, per evaluation in the sampler's physical mode); **(b)** the
+fit's working state (changes with the parameter vector); **(c)** scratch of one evaluation or one report; **(d)** dead
+or reachable only inside the class. "Ext." is calls outside `src/CNuc*.cpp` / files.
+
+- `pairs_`, `NumPairs`, `GetPair` ×2, `GetPairNumFromKey`, `GetPairFromKey`, `IsPairKey` (3+4+3+12+4+9) — written when:
+  `Fill`; `PPair::SetEntrance` by the data set-up (`WorkingCopy.cpp` ×4, `AZUREMain.cpp`, `AZUREAPI.cpp`) after `Fill`;
+  ext. calls / files (main readers): 18/9, 190/40, 114/31, 8/6, 34/14 (WorkingCopy 76, matrix functions 108); class: (a)
+  but for the entrance flag; goes to: `CompoundSystem`; the entrance set an input of the build (step 1).
+- `jgroups_`, `NumJGroups`, `GetJGroup` ×2, `IsJGroup` (3+4+3+16) — written when: `Fill`, `AddHardSphereGroups`, B_c in
+  `Initialize`; ext. calls / files (main readers): 60/23, 192/26 (RMatrixFunc 41, AMatrixFunc 32, GenMatrixFunc 18,
+  GammaDecayMap 15), 1/1; class: (a), holding the (b) levels; goes to: `CompoundSystem` (groups, channels, level set-up
+  data); the levels' (b) part to `LevelState`.
+- `nuclei_`, `NumNuclei`, `GetNucleus` ×2, `NucleusLabel`, `FindOrAddNucleus` (3+3+3+5+9) — written when: `Fill`; ext.
+  calls / files (main readers): 4/2, ≈42/12, 8/2; class: (a); goes to: `CompoundSystem`.
+- `CapturePairKeys`, `RatePairsProblem` (9, 15) — ext. calls / files (main readers): 2/1, 1/1; class: (a) queries; goes
+  to: `CompoundSystem`.
+- `IsPair`, `AddPair`, `AddJGroup`, `AddHardSphereGroups`, `ParseExternalCapture`, `Fill` (12, 4, 3, 48, 71, 215) —
+  written when: set-up; ext. calls / files (main readers): 0, 0, 0, 0, 0, ≈12/6; class: set-up; goes to:
+  `BuildCompoundSystem` (step 5); `IsPair`/`Add*` private.
+- `Initialize`, `CalcBoundaryConditions`, `BuildPathways`, `RequestCaptureAy`, `captureAyRequests_`, `pathways_`,
+  `Pathways` (35, 35, 10, 6, —, —, 4) — written when: set-up; ext. calls / files (main readers): ≈15/8, 0, 0, 1/1, —, —,
+  14/7; class: (a); goes to: `BuildCompoundSystem`; the table handle on `CompoundSystem` (§11.11 decision 1).
+- `SetUpECFinalBlocks`, `ecFinalBlocks_`, `SetUpFormalCaptureMasks`, `captureMaskSetup_` (53, 34) — written when:
+  `Initialize`; ext. calls / files (main readers): 0; class: (a), shared by copies; goes to: `CompoundSystem`
+  (external-capture set-up).
+- `ECFinalStatesFromFormal`, `FormalCaptureMasksFromParams`, `captureMasks_`, `FormalCaptureMask`,
+  `FormalCaptureMasksOutsideAdjoint`, `MaskedLevelCoupled`, `HasFormalECFinalBlocks` (25, 34, —, 5, 12, 5, 1) — written
+  when: per vector (`FillCompoundFromParams`); ext. calls / files (main readers): 0, 0, —, 1/1, 1/1, 0, 1/1; class: (b);
+  goes to: `LevelState` (step 3).
+- `TransformIn`, `transformedIn_`, `IsTransformedIn`, `transformError_`, `TransformError` (117, 1, 1) — written when:
+  `Initialize`; again after a physical vector; ext. calls / files (main readers): 6/3 (MCMC 3, API 2, limits 1), 2/1, 0;
+  class: (a′); the error (c); goes to: `LevelInputs` (a value; step 4).
+- `CalcShiftFunctions`, `InvalidateShiftFunctions` (168, 10) — written when: per vector; ext. calls / files (main
+  readers): 32/10, 1/1; class: (b); goes to: `LevelState` (step 3).
+- `FillCompoundFromParams`, `SetFitLevelParameter` (24, 16) — written when: per vector; ext. calls / files (main
+  readers): 35/8, 3/1 (ModelData); class: (b); goes to: `FillLevelState` (steps 3–4).
+- `FillCompoundFromParamsPhysical` (22) — written when: re-set-up; ext. calls / files (main readers): 8/5; class: (a′);
+  goes to: `LevelInputs` from an observed vector (step 4).
+- `FillMnParams`, `ConvertAmplitudeBasis` (65, 46) — written when: creates θ; ext. calls / files (main readers): ≈36/8,
+  1/1; class: parameter vector; goes to: `LevelParameterLayout` (step 4).
+- `TransformOut`, `TransformToBrune`, `ObservedWidths`, `ObservedWidthsAt`, `ObservedOfFitValues`, `GetTransformParams`
+  (4, 62, 42, 12, 21, 19) — written when: per report; `ObservedOfFitValues` inside an evaluation (model data); ext.
+  calls / files (main readers): 13/8, —, —, 3/2, 1/1, 10/6; class: (c), writing the levels' report slots; goes to:
+  `ObservedLevelTable`, a value returned (step 3).
+- `ParkNormPenalty`, `kParkNormScale` (14) — written when: per vector; ext. calls / files (main readers): 3/2
+  (Objective, MCMC); class: (b) reader; goes to: a term of `Objective` reading `LevelState` (step 2).
+- `samples_`, `hasAbundanceBlock_`, `SetAbundances`, `ReadAbundances` and 14 abundance accessors (43, 3, ≈60) — written
+  when: set-up; the values per vector; ext. calls / files (main readers): 1–8 each in 6 files (Objective, AZUREGrad,
+  ParameterLabel, AZUREAPI, ModelPass, WorkingCopy); class: spec (a), values (b); goes to: spec in `DataSet`, values in
+  the working copy, penalties as terms (step 2).
+- `AbundancePenalty`, `AbundanceSumPenalty` (13, 9) — written when: per vector; ext. calls / files (main readers): 1/1,
+  2/1; class: (b) reader; goes to: `Objective` terms (step 2).
+- `modelData_`, `GetModelData` — written when: `Fill`; ext. calls / files (main readers): 10/5; class: (a), shared; goes
+  to: `CompoundSystem`.
+- `gammaDecays_`, `GetGammaDecays` — written when: `Fill`; ext. calls / files (main readers): 9/3; class: (a), shared;
+  goes to: `CompoundSystem`.
+- `gammaDecayFills_`, `GammaDecayFillOf`, `GammaDecayValues`, `HasGammaDecayValues`, `SetGammaDecayFill` — written when:
+  per vector (`GammaDecaySet::ToEngine`); ext. calls / files (main readers): 10/1 (GammaDecayMap); class: (b); goes to:
+  `LevelState`.
+- `gammaDecayInputs_` — written when: `Fill`, `FillCompoundFromParamsPhysical`; ext. calls / files (main readers): 0;
+  class: (a′); goes to: `LevelInputs`.
+- `thmCoherentValues_`, `ThmCoherentValues`, `SetThmCoherentValues` — written when: per vector, by the data
+  (`ThmNorm.cpp` ×2); ext. calls / files (main readers): 2/1, 2/1; class: (b), written by another object; goes to: the
+  working copy, which owns the parameters (step 2).
+- `Clone` (4) — ext. calls / files (main readers): 17/5 (AZURECalc 8, MCMC 4, ReactionRate 3); goes to: deleted (step
+  4).
+- `GammaDecayInputs()` (getter), `IsPair`, `AddPair`, `AddJGroup`, `TransformError`, `AbundanceParamName`,
+  `BuildPathways`, `CalcBoundaryConditions` — ext. calls / files (main readers): 0 outside; class: (d) or internal only;
+  goes to: private or deleted (step 1).
+
+By class, of the 1,237 lines in definitions of `CNuc.cpp`: set-up and structure (a) ≈ 590 (`Fill` 215,
+`ParseExternalCapture` 71, `AddHardSphereGroups` 48, accessors ≈ 110, `Initialize` and B_c 70, abundances' set-up 46,
+pathways 30); (a′) `TransformIn` and the physical refill 139; (b) ≈ 270 (`CalcShiftFunctions` 168, fills 40, Park and
+abundance penalties 36, abundance values ≈ 25); (c) reports 140; the parameter vector 111 (`FillMnParams`,
+`ConvertAmplitudeBasis`). Another 168 lines of (b) are in `src/CNucExternalCapture.cpp` and 37 in `CNucObserved.cpp`.
+
+#### 12.1.2 The classes that hang from it
+
+**`ALevel`** (`include/ALevel.h` 217, `src/ALevel.cpp` 504; 544 bytes plus 19 vectors). Three parallel sets of values
+and the set-up data, by writer (calls outside `ALevel.cpp`, `alevel_members.tsv`):
+
+- `ids_`, `isinrmatrix_`, `energyfixed_`, `channelfixed_`, `gamma_is_rwa_`, `isECLevel_`, `ecPairNum_`, `ecMultMask_`,
+  `nf_integrals_`, `ec_conv_factors_`, `ec_energy_` — written by: `Fill`, `ParseExternalCapture`, `SetUpECFinalBlocks`;
+  read by (calls/files): `IsInRMatrix` 87/20, EC data 30/8; class: (a).
+- `zero_input_`, `external_gammas_`, `level_e_`, `gammas_` (the input set) — written by: `Fill`, `TransformIn`,
+  `FillCompoundFromParamsPhysical`, `GammaDecayMap` (one `SetGamma`); read by (calls/files): `GetE` ≈33/13, `GetGamma`
+  12/6, `ZeroInputWidth` 10/4; class: (a′).
+- `fitlevel_e_`, `fitgammas_`, `ec_gammas_`, `sqrt_nf_factor_`, `shifts_`, `shift_cache_energy_`, `park_norm_`,
+  `shift_derivs_`, `shift_derivs2_`, `shift_d2_energy_`, `stamp_` (the fit set) — written by: `FillCompoundFromParams`,
+  `CalcShiftFunctions`, `ECFinalStatesFromFormal`, `SetFitLevelParameter`, and three copies outside (`THMMatrixFunc.cpp`
+  446–463 on a copy of the level, `TargetSetup.cpp` 199–200, `ReactionRate.cpp` 112–114); read by (calls/files):
+  `GetFitGamma` 57/14, `GetFitE` 41/15, `GetShiftFunction` 13/5, `GetParkNorm` 13/8, `GetShiftDerivative` 10/5,
+  `GetSqrtNFFactor` 5/4, `GetECGamma` 4/2, `Stamp` 3/1 (`ChannelSpace` keys its memo on the level's address and stamp);
+  class: (b).
+- `transform_e_`, `transform_gammas_`, `big_gammas_`, `observed_values_`, `observed_kinds_`, `transform_iter_` (the
+  report set) — written by: `TransformToBrune`, `ObservedWidths`; read by (calls/files): `CNucReport` 12, `ModelData` 5,
+  `AdaptiveExtrapolation` 4, `CNucChecks` 3, `GammaDecayMap` 1; class: (c).
+- `NumGammas`, `SetShiftDerivatives` — read by (calls/files): 0; class: (d).
+
+**`PPair`** (183 + 283 lines; 368 bytes): immutable after `Fill` except `entrance_` (`SetEntrance`, six writers in the
+data set-up, read by `BuildPathways` and the external-capture set-up). `binding_energy_`'s setter `SetBindingEnergy` has
+no caller; `ec_entrance_` is written (false) and never read: (d). It carries the run's `PairFunctionSettings` (two
+strings and a pointer to the run's Coulomb-table counters) and the hybrid potential, which the System does not hold.
+**`JGroup`** (81 + 136; 80 bytes): immutable after `Fill` (`SetInRMatrix`, `SetNucleusLabelled` in `Fill`).
+**`AChannel`** (56 + 129; 40 bytes): immutable after `Initialize` (B_c written by `CalcBoundaryConditions`; the Wigner
+limit in `Fill`). Read: `GetBoundaryCondition` 20 calls in 11 files; the channel kind is tested inline,
+`GetRadType()` 62 times in 20 files and `PPair::GetPType()` 93 times in 30 files (155 tests in 37 files).
+
+**The external-capture members.** Set-up: the final state of a photon pair (`ParseExternalCapture`: N_f integrals,
+Whittaker conversion factors, `SetECParams`; `SetUpECFinalBlocks`: the Brune energy), immutable. Per vector:
+`ec_gammas_` and `sqrt_nf_factor_` (`FillCompoundFromParams`; `CalcShiftFunctions` again in Park's basis with J;
+`ECFinalStatesFromFormal` in the formal basis), and `captureMasks_`. Per report: `external_gammas_` written by
+`ObservedWidths` (and at `TransformIn`). The adapter `SqrtNFFactor(...)` is called in five places
+(`TransformIn`, `CalcShiftFunctions`, `FillCompoundFromParams`, `FillCompoundFromParamsPhysical`, `TransformToBrune`)
+plus `CNucObserved.cpp` and `CNucExternalCapture.cpp`.
+
+#### 12.1.3 The files that name `CNuc`
+
+134 files of `src/`, `include/`, `api/` name the class at 6e8d000b (`grep -lw CNuc`; 133 when this work was
+planned), and 75 files elsewhere (tests, documents, `physics/`/`io/`/`experiment/` comments). Grouped by the first of:
+the class; printing; calls to the parameter vector or set-up; reads of level values; the pathway table; channel data;
+nothing but the type (`group.py`):
+
+- **the class (`CNuc*.h/.cpp`)** — files: 17.
+- **type only: forward declarations, signatures that pass `CNuc *` on, comments (64 files, e.g. `Unit.h`, `Site.h`,
+  `NodeTable.h`, `PointPass.cpp`, `EnergyPass.cpp`)** — files: 64; what they want: nothing of their own: a parameter
+  type.
+- **parameter vector and set-up, the owners (`AZURE2.cpp`, `AZUREMain.cpp`, `AZURECalc.cpp`, `AZURECalcMCMC.cpp`,
+  `AZUREAPI.cpp`, `AZUREAPIModelData.cpp`, `pybind_api.cpp`, `AZUREGrad.cpp`, `Objective.cpp/.h`, `CovarianceBand.cpp`,
+  `ParameterLimitsManager.cpp`, `ReactionRate.cpp`, `TargetSetup.cpp`, `AdaptiveExtrapolation.cpp`, `Predictions.cpp`,
+  `ProjectSetup.cpp`, `ModelPass.cpp`, `WorkingCopy.cpp`, `GammaDecayMap.cpp`, `THMMatrixFunc.cpp`, `ThmNorm.cpp`)** —
+  files: 22; what they want: `Fill`, `Initialize`, `Clone`, `FillMnParams`, `FillCompoundFromParams*`,
+  `TransformIn/Out`, `CalcShiftFunctions`, abundances; and channel data.
+- **channel data only (`ChannelTables.cpp`, `ChannelTable.cpp`, `NodeTable.cpp`, `Unit.cpp`, `UnitLegendre.cpp`,
+  `Segment.cpp`, `ShiftFrames.cpp`, `MeshSlots.cpp`, `WorkingCopyUnits.cpp`, `PolarizationFunc.cpp`,
+  `ScatteringLength.cpp`, `CoulombReference.cpp`, `GradEnergyTasks.cpp`, `AdaptiveIntegrationGrid.cpp`,
+  `AZUREAPIChannelFunctions.cpp`, `pybind_potentials.cpp`)** — files: 16; what they want: pairs, groups, channels.
+- **level values (`AMatrixFunc.cpp` 45 reads of the fit set, `RMatrixFunc.cpp` 24, `ModelData.cpp` 7,
+  `ThmVertexBoundary.cpp` 3, `ThmLineshape.cpp` 2, `AZUREParams.cpp`)** — files: 6; what they want: the fit set of the
+  levels, B_c, channel data.
+- **the pathway table and channel data (`GenMatrixFunc.cpp`, `ExternalCaptureSetup.cpp`, `UnitExternalCapture.cpp`,
+  `SiteObservables.cpp`, `CaptureAyRequests.cpp`)** — files: 5; what they want: `Pathways()`, pairs, groups.
+- **printing (`DataCheckFiles.cpp`, `ParameterLabel.cpp/.h`, `ThmReports.cpp`)** — files: 4; what they want: channel
+  data, labels.
+
+The fit set of the levels is also read by files that do not name `CNuc`: `ChannelSpace.cpp` (keys and values),
+`THMMatrixFunc.cpp` (19). In all, 907 calls of the structure accessors and 539 of `GetLevel`/`GetChannel`/`NumLevels`/
+`NumChannels` outside the class.
+
+#### 12.1.4 What `Clone` copies, and what a copy needs
+
+`Clone` is the implicit copy: every pair (with its two strings), group, channel and level (19 vectors each), the
+samples, the per-vector members; the set-up objects behind `shared_ptr` (pathway table, model data, `gamma_decay` set,
+external-capture set-up) are shared. Measured with `clone_probe.cpp` (linked against `work/b-trial50`'s libraries, so
+`Clone`, `FillCompoundFromParams` and `CalcShiftFunctions` are the build's; the probe loads a project as
+`tests/upgrade/system_from_cnuc_test.cpp` does, Brune basis, external capture on, one thread; heap bytes counted from
+the vectors' capacities; times are means over 2,000 copies, 100 for the shift functions, on this shared host):
+
+| project | pairs/groups/levels/level-channels/θ | copy: bytes | (b) | (c) | time | refill | refill + S_c |
+|---|---|---|---|---|---|---|---|
+| T2 | 3 / 2 / 5 / 20 / 26 | 7.8 kB | 0.8 kB | 0.5 kB | 5.2 µs | 0.9 µs | 16.5 µs |
+| 13N | 2 / 8 / 12 / 30 / 42 | 12.9 kB | 1.4 kB | 0.9 kB | 7.5 µs | 1.1 µs | 7.2 µs |
+| `natural_neon` | 7 / 41 / 86 / 416 / 505 | 130.6 kB | 21.8 kB | 13.6 kB | 56 µs | 9.9 µs | 81 µs |
+
+"Copy" is all the bytes `Clone` copies, "(b)" and "(c)" the fit set and the report set within them, "time" the time
+of one `Clone`, "refill" one `FillCompoundFromParams`, "refill + S_c" a refill after `InvalidateShiftFunctions` with
+every shift function recomputed (`CalcShiftFunctions` without second derivatives). `natural_neon` has the largest
+`<levels>` of the tree (502 rows).
+
+A copy needs only the (b) part, 10–17 % of the bytes; the rest is set-up the copy could share. A calculation makes
+almost no copies: the program at one thread (`printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline`, under `gdb` with a
+counting breakpoint) cloned 1 (T2), 0 (13N) and 1 (`natural_neon`) times, against 0.23 s, 8.0 s and 1.35 s of wall
+time; `FillCompoundFromParams` ran 3 times, `CalcShiftFunctions` once. A fit keeps one copy per thread in a pool
+(`cnuc_pool_`), and the sampler one per concurrent walker plus one per snapshot (every 10 steps). The end of `CNuc`
+therefore gains no measurable time in a calculation or a fit; it gains a copy that cannot write the shared model
+(state owned by the evaluation) and 85–90 % less memory per copy, which matters only for many sessions of a large
+project (the web UI: 130 kB per session and per pooled copy for `natural_neon`, 22 kB after).
+
+#### 12.1.5 Where the notes and the code disagree (the code is taken)
+
+1. `ROADMAP.md` ("`CNuc`, to finish") gives `CNuc.cpp` 1,774 lines (1,527) and lists as remaining the external-capture
+   amplitudes at set-up with the decay-position defect, and the deletion of the pathway trees: all three are done
+   (§11.12; `ExternalCaptureExit`, `include/ExternalCaptureExit.h`; the trees' classes are gone).
+2. Section 6, "Remaining steps": `ExitPairKeysInFile` no longer exists. `ParseExternalCapture` reads the exit keys from
+   the format-3 specs (`ProjectExitPairKeys`, `src/ProjectSetup.cpp` 66–75), so a malformed segment line is the format-3
+   reader's matter; nothing is left to decide. Step 6b is complete (steps 3 and 8 are done, §11.12).
+3. §11.12, last paragraph: "`ParseExternalCapture` sets the level's capture pair twice ... not fixed" contradicts the
+   bullet above it and the code: two photon pairs naming one final state are refused (`FinalStateOfAnotherPair`,
+   `CNuc.cpp` 649–652, commit a629a391 "fix(cnuc): refuse two photon pairs that name the same final state";
+   `tests/ec_final_state_ambiguous` (d), (e)).
+4. `ROADMAP.md` (Phase 1, `Convention`) and `physics_system.md`: "the engine does not call it". The engine calls eleven
+   functions of `level_parameters` (`amplitudes_from_observed`, `subtract_external_capture`, `formal_from_brune`,
+   `brune_from_formal`, `park_from_brune`, `brune_from_park`, `boundary_values`, `observed_levels`,
+   `internal_channels`, `external_reduced_width`, `capture_mask`, through `src/CNuc*.cpp` and `GammaDecayMap.cpp`).
+   It does not call the convention part (`level_parameters()`, `convention_transform`, `project_channels`,
+   `recoupling_coefficient`): no project states a convention, so there is nothing to convert. It rebuilds the
+   `System` from `CNuc` at every use (twelve calls of `BuildSystemFromCNuc`, one per `TransformIn`, `TransformToBrune`,
+   `ObservedWidths`, `ConvertAmplitudeBasis`, set-up), since the structure it reads can still be written.
+5. §2.1 lists `ScatteringLengthConstraints` and `HasScatteringLengthConstraints` on `CNuc`: gone. `CNuc.h` still calls
+   `ReadAbundances` "TEMPORARY (step 3d)".
+
+### 12.2 The end state
+
+When `CNuc` is gone, the compound-nucleus side of the engine is six objects, one of which exists already:
+
+- `azure2::physics::System` (exists) — one job: partitions, channels, J^π blocks of the R-matrix; owner: held by
+  `CompoundSystem`, built once at set-up (two: R-matrix blocks, and all groups for the reports); immutable: yes; file:
+  `physics/include/azure2/physics/System.h`.
+- `CompoundSystem` — one job: the project's compound nuclei as set up: nuclei, pairs (`PPair`), J^π groups (`JGroup`)
+  with channels (`AChannel`, B_c) and the levels' set-up data (`ALevel`: IDs, flags, external-capture final-state data),
+  the pair-key map, the entrance pairs, the `System` with its index map, the external-capture set-up (formal-basis
+  final-state blocks, capture-mask set-up), the model data, the `gamma_decay` set, the pathway table, the
+  level-parameter layout; owner: `shared_ptr<const CompoundSystem>`, made by `BuildCompoundSystem`, held by the run or
+  the session and shared by every evaluation, thread and walker; immutable: yes; file: `include/CompoundSystem.h`,
+  `src/CompoundSystem.cpp` (queries), `src/CompoundSystemBuild.cpp` (from `Fill`, `AddHardSphereGroups`, `Initialize`),
+  `src/ExternalCaptureFinalStates.cpp` (from `ParseExternalCapture`, `SetUpECFinalBlocks`, `SetUpFormalCaptureMasks`).
+- `LevelInputs` — one job: the levels' starting values in the engine's basis (what `TransformIn` makes of `<levels>` or
+  of an observed vector): E, γ, zero-input flags, the input external amplitudes and Park J, the `gamma_decay` numbers;
+  owner: a value, held by the run or the session; the sampler's physical mode makes one per evaluation; immutable: yes
+  (a value; a new physical vector makes a new one); file: `include/LevelInputs.h`, `src/LevelInputs.cpp`
+  (`TransformIn`), `src/LevelInputMessages.cpp` (now `CNucTransformMessages.cpp`).
+- `LevelState` — one job: the levels at one parameter vector and what follows from it: E_λ, γ_λc per group as flat
+  arrays laid out like `JpiBlock` (λ n_c + k), the external-capture amplitude and N_f^½, S_c(E_λ) with the energy it is
+  valid at, Park's J, dS/dE, d²S/dE², the formal capture-mask projectors, the `gamma_decay` fills, a version per level
+  (the memo key `ChannelSpace` takes now from `ALevel::Stamp`); owner: the evaluation, like `Results` (one per pooled
+  evaluation, thread or walker); immutable: no; file: `include/LevelState.h`, `src/LevelState.cpp`
+  (`FillCompoundFromParams`, `CalcShiftFunctions`), `src/LevelStateExternalCapture.cpp` (`ECFinalStatesFromFormal`,
+  `FormalCaptureMasksFromParams`).
+- `ObservedLevelTable` — one job: the Brune (Park) and observed values of every level at a `LevelState`: E, γ, Γ, C, μ,
+  Q, B, kinds, iterations, external amplitudes; the observed vector (`GetTransformParams`); owner: returned by
+  `ObservedLevelsOf(system, inputs, state)`, held by its caller (reports, model data, the rate and sub-point grids, the
+  sampler's output); immutable: a value; file: `include/ObservedLevelTable.h`, `src/ObservedLevelTable.cpp`
+  (`TransformToBrune`, `ObservedWidths`).
+- `LevelParameterLayout` — one job: where each level's energy and amplitudes sit in θ, with their records and kinds; the
+  one walk of the level block; owner: member of `CompoundSystem`; immutable: yes; file:
+  `include/LevelParameterLayout.h`, `src/LevelParameterVector.cpp` (`FillMnParams`, `ConvertAmplitudeBasis`, the level
+  part of `BuildParamIndexMap`, `SetFitLevelParameter`).
+
+The rest goes to objects that exist: the abundance samples (names, nominal values, priors, sum widths) to the
+`DataSet` (they describe targets), their current values and the THM coherent values to the working copy (the data own
+those parameters already: `WorkingCopy::FillThmCoherentFromParams`); the Park wall and the abundance priors and sums to
+rows of the `Objective` (`src/Objective.cpp`), reading `LevelState` and the working copy; the reports
+(`CNucReport.cpp`, `CNucChecks.cpp`) become `LevelReport.cpp` and `CompoundSystemChecks.cpp` reading
+`CompoundSystem` and an `ObservedLevelTable`. An evaluation then reads `(const CompoundSystem &, const LevelState &)`
+where it reads `CNuc *` today; set-up code reads `const CompoundSystem &`.
+
+**Where each of today's members goes**: the "goes to" of each item of §12.1.1, and for `ALevel` (§12.1.2): (a) stays
+on `ALevel` inside `CompoundSystem`; (a′) to `LevelInputs`; (b) to `LevelState`; (c) to `ObservedLevelTable`; (d)
+deleted.
+
+**The physics objects instead of second copies.**
+- *Level-parameter transforms.* The engine already calls them (§12.1.5, item 4); what remains is glue that copies the
+  fit set out of the levels into arrays for each call. `LevelState` holds the arrays in `JpiBlock`'s layout, so the
+  calls take them directly. The convention part (`level_parameters()`) waits for a convention keyword in format 3
+  (a new feature, not part of this work); after this work it has one caller to gain, `LevelInputs`' constructor.
+- *`System`.* What stops the engine from holding one today: the structure it is built from can still be written
+  after `Fill` (the entrance flags by the data set-up, B_c in `Initialize`), so each use rebuilds it. Step 1 freezes the
+  structure and builds the `System` once; that closes the second copy in time. The engine's `PPair`/`JGroup`/
+  `AChannel` remain as the set-up view the `System` is built from.
+- *`JpiBlock`.* Its E and γ are values of a `System` (immutable); the per-vector values are `LevelState`'s arrays in
+  the same layout, passed to the physics functions beside the `System`, as they already take them.
+
+**Two designs for the structure; chosen: (1).**
+1. *Keep `PPair`, `JGroup`, `AChannel`, `ALevel` (stripped to set-up data) as the engine's immutable view inside
+   `CompoundSystem`, with the `System` built once from them.* The 907 + 539 reader calls change only from `CNuc *` to
+   `const CompoundSystem &` and `const` pointers (mechanical; numbers read are the same objects). Cost: the structure
+   is described twice (the view and the `System`), but the `System` is derived from the view once and both are
+   immutable, so they cannot drift.
+2. *The `System` is the only structure; the four classes are deleted*, the engine's extras (pair key, function
+   settings, hybrid potential, Wigner limit, external-capture final-state data, level flags) become tables indexed by
+   partition, block and level. Every reader changes from 1-based pointer accessors to 0-based indices: about 1,450
+   calls in about 50 files, with an off-by-one risk at each, and the `System` gains fields `physics_system.md` §5
+   keeps out on purpose (fit flags, the potential). Cost ≈ 3–4 agent-days and a conflict with every open branch that
+   touches a matrix function.
+
+(1) now; (2) when Phase 5 rewrites the readers for one collision-matrix solve per grid energy (§11.9), since those
+readers change then anyway. Both give the state rule: an immutable shared structure and caller-owned state.
+
+### 12.3 The steps
+
+Each step is one branch an agent can do in a day or less. Steps 1–5 are bit-identical (every output file of the 183
+projects × 3 bases against the reference tag; 1 against several threads); step 2b changes numbers on purpose. Each
+bit-identical step ends with the pattern of §11.12 step 8: one commit in which what is moved away aborts if reached
+(an accessor, a setter, a copy), the whole tree run identical, then the deletion in the next commit. Line counts are
+estimates from §12.1.
+
+**Step 1. The structure frozen after set-up; the `System` built once.** (≈ 300 lines changed, −80 net; 14 files:
+`CNuc.h/.cpp`, `CNucSystem.*`, `CNucExternalCapture.cpp`, `CNucPathways.cpp`, `GammaDecayMap.cpp`, `WorkingCopy.cpp`,
+`AZUREMain.cpp`, `AZUREAPI.cpp`, `PPair.*`, `ALevel.*`.)
+- The entrance pairs become an input of the set-up, collected from the specs before `Initialize` (as the capture-A_y
+  requests are, `RequestCaptureAyTerms`; `ProjectReactionPairs` and the rate's entrance), instead of six
+  `SetEntrance` calls in the data set-up. First commit: both sets computed and compared, abort on a difference, the
+  tree run; then the old calls go.
+- `BuildSystemFromCNuc` runs once after `Fill` (the content `Structure` and `AllGroups`; neither holds B_c nor levels,
+  `CNucSystem.h`), held as `shared_ptr<const CNucSystem>`; the twelve calls read it.
+- Deleted: `PPair::SetBindingEnergy`, `ec_entrance_`, `ALevel::NumGammas`, `ALevel::SetShiftDerivatives`,
+  `CNuc::GammaDecayInputs()`; `IsPair`, `AddPair`, `AddJGroup` private.
+- The check: the non-`const` `GetPair`/`GetJGroup` abort after set-up in one commit (the tree run), then readers that
+  only read take `const` pointers.
+- Byte-identical because: the `System` is a function of `Fill`'s structure only (radii, hybrid potential, pairs,
+  groups, channels, R-matrix flags), all fixed when `Fill` returns, so one build equals each of the twelve; the entrance
+  set, if equal (the comparison commit shows it), gives the same pathway table and external-capture set-up.
+
+**Step 2. Abundances, THM coherent values and the two penalties out of `CNuc`.** (≈ 350 lines moved; `CNuc.h/.cpp`,
+`ProjectSetup.cpp`, `Objective.cpp/.h`, `AZUREGrad.cpp`, `ParameterLabel.cpp`, `ModelPass.cpp`, `WorkingCopy.*`,
+`DataSet.*`, `ThmNorm.cpp`, `THMMatrixFunc.cpp`, `AZUREAPI.cpp`, `AZURECalcMCMC.cpp`.)
+- The samples (`AbundanceSample`, `SampleAbundance`, `SetAbundances`) into the `DataSet`; the current abundances and
+  the THM coherent values into the working copy; `WorkingCopy::FillMnParams` creates the abundance parameters first,
+  at the position `CNuc::FillMnParams` gives them now (right after the level block), so θ's layout is unchanged.
+- `ParkNormPenalty`, `AbundancePenalty`, `AbundanceSumPenalty` become the bodies of their `Objective` terms (the terms
+  already exist and call these members).
+- Byte-identical because the same numbers are summed in the same order by the same expressions; the parameter names
+  and records are made by the same functions.
+- Can run side by side with step 1 (different functions of `CNuc.cpp` and different lines of `AZUREAPI.cpp` and
+  `WorkingCopy.cpp`; merge conflicts at most in includes).
+
+**Step 2b. Defect 1 fixed (changes numbers; its own step).** (≈ 30 lines in `TargetSetup.cpp` and a test project.)
+The sub-point-grid copy takes the evaluation's N_f^½ and external-capture amplitudes with E and γ (§12.4, defect 1).
+The acceptance rule for a step that changes a number: per output file, the largest distance to the refined reference
+at most 1.2 times the old engine's and the rms at most 1.03 times, or at most 10⁻⁷; every file of the tree that moves
+named with its size and cause. Side by side with steps 1 and 2 (one file of its own); before step 3, so that steps 3
+and 4 need no exception to bit-identity.
+
+**Step 3. `LevelState` and `ObservedLevelTable`: the fit and report sets out of `ALevel`.** (≈ 800 lines changed:
+about 200 reader calls; `ALevel` −250 lines; new `LevelState` ≈ 350 and `ObservedLevelTable` ≈ 200 lines; ≈ 25 files:
+`ALevel.*`, `CNuc.*`, `CNucExternalCapture.*`, `CNucObserved.cpp` (deleted), `CNucReport.cpp`, `CNucChecks.cpp`,
+`CNucTransformMessages.cpp`, `AMatrixFunc.cpp`, `RMatrixFunc.cpp`, `THMMatrixFunc.cpp`, `ChannelSpace.cpp`,
+`AZUREGrad.cpp`, `Objective.cpp`, `ModelData.cpp`, `GammaDecayMap.cpp`, `TargetSetup.cpp`, `ReactionRate.cpp`,
+`ThmLineshape.cpp`, `ThmVertexBoundary.cpp`, `ThmReports.cpp`, `AdaptiveExtrapolation.cpp`,
+`AdaptiveIntegrationGrid.cpp`, `AZUREAPI.cpp`, `AZURECalcMCMC.cpp`.) After step 1.
+- `CNuc` holds one `LevelState` while the owners do not change (its copy still copies it); `FillCompoundFromParams`,
+  `CalcShiftFunctions`, `ECFinalStatesFromFormal`, `FormalCaptureMasksFromParams`, `SetFitLevelParameter` write it;
+  every reader of the fit set reads it (`state.E(j, λ)`, `state.Gamma(j, λ, c)`, ...). `ChannelSpace` keys its memo on
+  (state, level, version) instead of (level address, stamp).
+- `TransformOut` returns an `ObservedLevelTable`; `GetTransformParams`, the reports, `ModelData`, `ObservedWidthsAt`
+  read it. `ObservedOfFitValues` no longer saves and restores N_f^½ (it computes a table and changes nothing).
+  `THMMatrixFunc`'s numerical width derivative perturbs a copy of the level's values, not of the `ALevel`.
+- Byte-identical because every value is computed by the same function from the same inputs in the same order; the
+  memos (`ChannelSpace`, the levels' shift-function energies, `RunScratch::shiftDerivatives`) are keyed exactly, so a
+  hit returns what the computation gives and a different key changes only whether it is recomputed (with step 2b
+  merged, no copy reads a stale value).
+- The check: the moved `ALevel` accessors abort (one commit, the tree run), then deleted; `ALevel` keeps (a) only.
+
+**Step 4. The parameter vector; the copies replaced.** (≈ 600 lines changed; `CNuc.cpp` −400 into
+`LevelParameterVector.cpp` and `LevelInputs.cpp`; files: `CNuc.*`, `AZUREGrad.cpp`, `AZUREParams.cpp`,
+`ParameterLabel.cpp`, `AZURECalc.*`, `AZURECalcMCMC.*`, `AZUREAPI.*`, `AZUREAPIModelData.cpp`, `AZURE2.cpp`,
+`AZUREMain.cpp`, `ReactionRate.cpp`, `TargetSetup.cpp`, `ParameterLimitsManager.cpp`, `CovarianceBand.cpp`,
+`AdaptiveExtrapolation.cpp`, `ModelData.cpp`, `tests/consistency/allowed_state.tsv`.) After steps 2 and 3.
+- `LevelParameterLayout` built at set-up; `FillMnParams`, `FillCompoundFromParams` (now `FillLevelState`),
+  `FillCompoundFromParamsPhysical` (now a `LevelInputs` from an observed vector), `GetTransformParams`,
+  `ConvertAmplitudeBasis`, `SetFitLevelParameter` and the level part of `BuildParamIndexMap` read it (one walk instead
+  of eight).
+- `TransformIn` returns a `LevelInputs`; the sampler's physical mode makes one per evaluation.
+- The owners hold the `CNuc` as `shared_ptr<const CNuc>` plus their `LevelInputs`; `cnuc_pool_` (fitter and sampler)
+  becomes a pool of `LevelState`; `Clone` is deleted; `ReactionRate`'s and `TargetSetup`'s copies become
+  `ObservedLevelsOf` on the evaluation's state (the same values since step 2b). The two `cnuc_pool_` rows
+  and `pool_mutex_` of `allowed_state.tsv` (milestone 4) go.
+- Byte-identical because θ's order and records are unchanged (the layout lists the slots in the order of today's
+  loops, `BuildParamIndexMap`'s comment says it mirrors them), and each evaluation reads the same values from a
+  `LevelState` as from its copy; the check: `Clone` aborts in one commit (the tree, `ctest -LE slow`, the sampler's
+  chains of the check scripts identical), then deleted.
+
+**Step 5. The set-up out and the name gone.** (≈ 900 lines touched, mostly signatures in ≈ 110 files; `CNuc.cpp`
+→ `CompoundSystemBuild.cpp` and `ExternalCaptureFinalStates.cpp`; the `CNuc*` files renamed: `CNucReport` →
+`LevelReport`, `CNucChecks` → `CompoundSystemChecks`, `CNucSystem` → `SystemOfCompound`, `CNucLevelParameters` →
+`EngineChannelFunctions`, `CNucPathways` into the build, `CNucTransformMessages` → `LevelInputMessages`.) Last.
+- `Fill`, `AddHardSphereGroups`, `ParseExternalCapture`, `ReadAbundances`/`SetAbundances` (already moved in step 2),
+  `Initialize` become `BuildCompoundSystem(const Config &, const SetupRequests &)` returning
+  `shared_ptr<const CompoundSystem>`; `SetupRequests` carries what the data set-up collects first (entrance pairs,
+  capture-A_y terms). Every `CNuc *` becomes `const CompoundSystem &` (set-up and readers) and, in evaluation
+  signatures, `const LevelState &` beside it.
+- A consistency check (the next free number after the highest in `repo_consistency_test.py`) refuses the names `CNuc`,
+  `Clone()` of the compound and `cnuc_pool_` in `src/`, `include/`, `api/`, as check 31 does for the data classes; the
+  `file_sizes.tsv` row of `CNuc.cpp` is removed by the director (or lowered with `--tighten-sizes` on the way).
+- Byte-identical because it renames and moves code that steps 1–4 left without state: no function body changes but for
+  the receiver of its accessors. The check is the build itself plus the tree.
+
+**Side by side.** Steps 1, 2 and 2b together; then 3; then 4; then 5. Step 3 cannot run beside 1 (both edit every
+external-capture function and `CNuc.cpp`'s fills), nor 4 beside 3 (the same owners' lines). Step 5 is the conflict
+magnet (≈ 110 files): it should start when no other branch edits the engine's signatures (the sampler, the records,
+the session options and the physics table, §12.6, merged first) and be merged within the day.
+
+**Total.** ≈ 2,980 lines changed over six branches; `CNuc.cpp` (1,527) and `CNuc.h` (327) deleted, ≈ 1,700 lines of
+new files (each under 1,000), net ≈ −500 lines; `ALevel` from 721 to ≈ 450 lines.
+
+**What would change a number.** Nothing in steps 1–5 by design; step 2b by design. Named risks, each with the check
+above: the entrance set from the specs differing from the data set-up's (step 1: then the pathway table differs; the
+comparison commit finds it before anything moves); a reader that read a fit value after a report had overwritten a slot
+it shares with the calculation (step 3: only N_f^½ is shared, by `ObservedOfFitValues` and `TransformToBrune` in the
+formal basis, and both restore or recompute it; a difference would show in the formal-basis external-capture projects);
+the order of the abundance parameters (step 2: the records' names and `param.par` would differ). The fix of defect 1
+changes numbers and is its own step, 2b.
+
+### 12.4 Defects in the way
+
+1. **The sub-point-grid copy reads a stale N_f^½** (found while reading; not run). `WorkingCopy::ReplaceSubPointGrids`
+   (`TargetSetup.cpp` 190–202) keeps one clone of the compound for the whole run (`gridNuc_`), copies only E and γ of
+   the fit into it before each `TransformOut`, and the observed photon widths with external capture are formed with the
+   final state's N_f^½ the clone had when it was made (`ExternalReducedWidth`, `initial = false`, reads
+   `GetSqrtNFFactor()`; `TransformToBrune` refreshes it only in the formal and Park bases). In the Brune basis, with
+   external capture and a fitted final-state amplitude, the grids are laid out from widths at the start values of N_f.
+   `ReactionRate`'s copy is made fresh at each call, so it does not have the defect. Fixed before step 3, in its own
+   step (2b) with the acceptance rule; a test project with a fitted final state and a target effect, and the run of
+   the tree naming every file that moves (in a menu-1 calculation the copy is made at the vector it is used at, so
+   only fits and the API's repeated evaluations can move).
+2. **Decay position of the external-capture amplitudes**: fixed (§11.12, decision 3 of §11.11). Nothing to do.
+3. **Two photon pairs with one final state** (`ParseExternalCapture`): refused since a629a391. Nothing to do; the
+   contradicting paragraph of §11.12 is stale (§12.1.5).
+4. **`ExitPairKeysInFile` and a malformed segment line**: the function is gone; the exit keys come from the format-3
+   specs (§12.1.5). Nothing to do.
+5. **Write-only and dead members** (§12.1.2): `PPair::ec_entrance_`, `PPair::SetBindingEnergy`, `ALevel::NumGammas`,
+   `ALevel::SetShiftDerivatives`, `CNuc::GammaDecayInputs()`. Deleted in step 1.
+6. **A report that writes the calculation's state.** `ObservedOfFitValues` saves and restores N_f^½ around
+   `TransformToBrune`, and `TransformToBrune` in Park's basis calls `CalcShiftFunctions` (it fills the second
+   derivatives into the evaluation's copy as a side effect). Not wrong today; removed by step 3.
+7. **A positional boolean** `ExternalReducedWidth(..., bool initial, ...)` (`CNucExternalCapture.cpp` 142) chooses
+   between the input set and the report set; step 3 replaces it by the two sources it reads from.
+8. **The parameter layout written eight times** (`FillMnParams`, `FillCompoundFromParams`,
+   `FillCompoundFromParamsPhysical`, `GetTransformParams`, `ConvertAmplitudeBasis`, `BuildParamIndexMap`,
+   `ParameterLabel.cpp`'s two walks); kept in lock-step by comments. Step 4.
+
+Radiative widths stay out of a level's total width (the PI's decision); nothing here touches it.
+
+### 12.5 The PI's measure, before and after
+
+- **(i) a new kind of level parameter (e.g. a reduced-width amplitude in another convention, or a new map like
+  `gamma_decay`)** — places today: the record (`Schema.cpp`, its build in `experiment/`), the map file, a member of
+  `CNuc` beside `gammaDecays_` and its lines in `Fill`, `FillMnParams`, `FillCompoundFromParams`,
+  `FillCompoundFromParamsPhysical`, `GetTransformParams`; `ParameterKind.h`; `BuildParamIndexMap`; `AZUREGrad`'s
+  pull-back; the objective's prior rows; `CNucReport.cpp`; the binding: ≈ 12 files; after step 5: the record and its
+  build, the map file, one entry in the list of maps `CompoundSystem` holds (which `FillLevelState`, `LevelInputs` and
+  the layout walk), `ParameterKind.h`, the pull-back, the report, the binding: ≈ 8 files. A convention keyword
+  specifically: the record, the converter, `LevelInputs`' constructor calling `level_parameters()`.
+- **(ii) a new channel type (the spin–orbit (α, l, j) channel of `spin_orbit_potential.md` option (b))** — places today:
+  the `System` (`ChannelKind`), `AChannel`, `Fill`, the adapter `CNucSystem.cpp`, the channel table key (done for 2J),
+  and 155 inline tests of the pair or radiation type in 37 files, of which the matrix functions hold 39; after step 5:
+  the same, but for `Fill` → `CompoundSystemBuild.cpp`: the end of `CNuc` does not touch the inline tests. Removing them
+  needs a channel-kind table (P, S, φ, the observed-width factor, predicates) read by the matrix functions: a Phase 5
+  item with the readers' rewrite.
+- **(iii) a new particle-pair property read from the project** — places today: as the light-particle excitation
+  (`c49acd17`): the `<levels>` column (`io/LevelRows`), `LevelTables`/`LevelEdits` in `experiment/`, `PPair.h/.cpp`,
+  `CNuc::Fill` (its consistency check), `CNucSystem.cpp`, `CNucReport.cpp`, the binding's pair record and pyazr
+  (`nuclear_part.py`, `scheme.py`, `parameters.py`, `azure2.py`), its readers: ≈ 20 files; after step 5: the same less
+  one (`CNuc.cpp` → the build file); the engine side stays: `PPair`, the build, `SystemOfCompound.cpp` if physics reads
+  it, the report. No gain worth claiming.
+- **an AI agent changing the level transforms safely** — places today: physics `LevelParameters`, `ExternalCapture`
+  (1,353 lines), the adapters `CNucLevelParameters`, `CNucSystem` (381), the transform members of `CNuc.cpp` (532),
+  `CNucExternalCapture` (463), `CNucObserved` (49), `CNucTransformMessages` (222), `ALevel` (721, to know which of its
+  three sets a function reads), `GammaDecayMap` (930): ≈ 4,650 lines in 18 files, and the rule which object a function
+  may write is nowhere written down; after step 5: physics (1,353, unchanged), `LevelInputs` with its messages (≈ 450),
+  `LevelState` with its external capture (≈ 550), `ObservedLevelTable` (≈ 200), the channel-functions adapter (≈ 160),
+  `GammaDecayMap` (930): ≈ 3,650 lines in 12 files, and the rule in the types: inputs and the structure are `const`,
+  only `FillLevelState` writes a `LevelState`, a report returns a table.
+
+Honestly: the end of `CNuc` improves (i) and the level transforms, and the state rule everywhere; it does not improve
+(ii) or (iii) much, because their cost is in the inline channel-type tests and in the number of front ends, not in
+`CNuc`.
+
+### 12.6 Costs and risks
+
+**Lines.** Step 1: ≈ 300 changed, −80; step 2: ≈ 350 moved, ±0; step 2b: ≈ 30 and a test; step 3: ≈ 800 changed,
+−150 (`ALevel` −250, new files +550, readers ±0); step 4: ≈ 600 changed, −250 (eight walks become one); step 5:
+≈ 900 touched, ±0 (renames).
+
+**The file-size ratchet** (`tests/consistency/file_sizes.tsv`): `CNuc.cpp` (1,548 recorded, 1,527 now) only shrinks
+and is deleted; `AMatrixFunc.cpp` (2,766), `AZUREAPI.cpp` (1,779), `AZURECalc.cpp` (2,018), `AZURECalcMCMC.cpp`
+(1,433), `AZUREGrad.cpp` (1,273), `WorkingCopy.cpp` (1,372) may not grow: steps 2–5 replace calls one for one or
+remove walks, so none grows if the agent does not add helpers there; a new file stays under 1,000 lines.
+
+**Copy size and time.** A copy of today's `CNuc`: 7.8 / 12.9 / 131 kB and 5 / 7.5 / 56 µs (T2 / 13N / `natural_neon`);
+after: a `LevelState` of 0.8 / 1.4 / 22 kB, made by a refill (0.9 / 1.1 / 9.9 µs) instead of a copy. **The sampler**
+gains a walker's copy that holds only its state and cannot write the shared model, and loses the snapshot's clone
+every 10 steps; no measurable time. **The web UI's sessions** may share one `CompoundSystem` when they open the same
+project and hold a `LevelState` each; the gain is memory (≈ 110 kB per session for `natural_neon`) and the guarantee
+that two sessions evaluating at once do not see each other (today they do not share a `CNuc`, so they do not either).
+
+**Other open work on the same files** (read in their worktrees; not merged at 6e8d000b; what is assumed):
+- *The sampler* (`feature/upgrade-6-sampler-objective`, HANDOFF entry on its branch): rewrites `AZURECalcMCMC.cpp`
+  (the posterior from the objective's terms, the 17 globals into a run record) and `Objective.cpp/.h`,
+  `ParameterKind.h`, `AZURE2.cpp`. Assumed merged before steps 2 and 4: step 2 then edits only `Objective.cpp`'s terms
+  for the penalties (the sampler's own calls of `ParkNormPenalty`/`AbundanceSumPenalty` at lines 72–175 go with that
+  branch), step 4 replaces its `cnuc_pool_`.
+- *The parameter records* (`feature/upgrade-8-pyazr3-records`): deletes `AZUREAPI::GetParameterInfo`/`GetPairsInfo`
+  and adds `pybind_records.cpp` (a table of the fields of a parameter record and a pair record, with "the reader of the
+  engine object"). Assumed merged before step 2: the abundance and pair readers of that table then follow the moves
+  (its pair rows read `PPair`, unchanged by these steps; its abundance rows read `CNuc::GetAbundance` today).
+- *The session options* (`feature/upgrade-4-session-options`): touches `AZURE2.cpp` and `ProjectOptions` only; no
+  conflict beyond step 5's signatures.
+- *The physics table* (`feature/upgrade-8-pyazr3-physics`): its two engine calls (`AChannel::SetWignerLimit` through
+  `physics/Widths.h`, `ChannelFunctionsFromCNuc`'s photon penetrability in `src/CNucLevelParameters.cpp`) stay where
+  they are through steps 1–4; step 5 renames the second file. Assumed merged before step 5.
+- *Phase 6, milestone 4* (`evaluation.md` §5): "`CNuc` split, the parameter vector out" is step 4 here; its gate (memory
+  of a fit at 1, 3 and 12 threads equal within the `Results` size per thread) is step 4's speed and memory measurement.
+
+### 12.7 What this design rests on, and decisions
+
+**Taken from notes or inferred, not checked by a run:**
+- that the six `SetEntrance` calls mark exactly the entrances of the active data sets, leaves, extrapolations and the
+  rate (step 1's comparison commit decides it);
+- that `boundary_values` and the other users of the `Structure` content read no B_c from the `System` (the adapter's
+  comment says the content holds B_c = 0);
+- defect 1 (read in `TargetSetup.cpp`, `CNucExternalCapture.cpp`, `CNuc.cpp`; no project was run to show it);
+- that `ChannelSpace`'s memo returns only exact values (its key holds every input, by reading of `ChannelSpace.cpp`);
+- the line estimates of §12.3 and §12.6 (from the counts of §12.1, not from a trial cut);
+- the open branches' content (from their diffs and HANDOFF entries, not built).
+**Measured**: the counts of §12.1 (scripts named there); the bytes and times of §12.1.4 (`clone_probe`, one thread);
+the clone and refill counts of one calculation of T2, 13N and `natural_neon` (`gdb` breakpoints on `b-trial50`).
+
+**Decisions for the director or the PI** (each with the choice taken here):
+1. *Structure: keep the engine's view classes inside `CompoundSystem` (design 1) or replace them by the `System` now
+   (design 2)?* Chosen: design 1; the `System` replaces them in Phase 5 with the readers' rewrite.
+2. *Names.* `CompoundSystem`, `LevelInputs`, `LevelState`, `ObservedLevelTable`, `LevelParameterLayout`; `PPair`,
+   `JGroup`, `AChannel`, `ALevel` keep their names (renaming them touches ≈ 1,450 lines of every open branch for no
+   change of meaning). Alternative: rename them in step 5.
+3. *Abundances: owned by the data (samples in the `DataSet`, values in the working copy) or by `CompoundSystem` and
+   `LevelState`?* Chosen: the data, since a sample describes a target and a segment chooses it; θ's order is kept.
+4. *A `LevelState` per evaluation or a pool?* Chosen: a pool of `LevelState` in step 4 (the shift-function memo
+   keeps its hits, the order of evaluations as today); a fresh state per evaluation (`evaluation.md`'s `Evaluation`)
+   costs one refill with all shift functions (16–81 µs here) and is Phase 6's choice.
+5. *Defect 1*: fix it in its own step before step 3 with the acceptance rule (chosen), or keep it and name it (then
+   steps 3 and 4 must copy it on purpose to stay bit-identical).
+6. *Order against other work*: the sampler and the records branches merged before step 2, the physics table before
+   step 5 (chosen), so that no step of this list rebases over them.
