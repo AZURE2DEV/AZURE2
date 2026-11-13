@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-docs-developer-guide`) — the Developer Guide (documents only)
+
+**Done.** `docs/source/developer/` rewritten for the code at ad6235e6: `architecture.rst` (the libraries from the
+CMake link lines, a run step by step for the program and for a pyazr session), `classes.rst` (the scheme of the
+classes: five figures, libraries and four layers), `state_and_ownership.rst`, `extending.rst` (each kind of extension
+with its places and the test that fails), `data_model.rst` (replaces `edata_and_target_effects.rst`, which stays as an
+orphan page pointing to it), `level_matrix.rst` (history, timings and source line numbers removed; under 500 lines),
+`physics_core.rst` and `api.rst` (were stubs), `index.rst` in reading order; one paragraph in `whats_new.rst`;
+`contributing.rst`'s keyword section points to `extending.rst`; `theory/conventions.rst` names sections of
+`level_matrix.rst` instead of its line numbers. The scheme is drawn from `docs/source/developer/figures/classes.tsv`
+and `arrows.tsv` by `make_figures.py` (standard library, Graphviz `dot`); the SVGs are committed. Consistency check
+44: every type of `classes.tsv` is declared in the file it names, every arrow joins two boxes of its figure.
+
+**Verified how.** `python3 tests/consistency/repo_consistency_test.py` passes; check 44 shown to fail with a renamed
+row, an arrow left without its box and a class renamed in `include/Segment.h` (restored). A name check (scratch
+script) finds every file path and code name of the pages in the sources but the planned names and include-path
+notation. Every figure rendered with headless Chrome at 800 px and looked at. The site was not built (no Sphinx on
+this machine); the markup was checked by script (underlines, list tables, inline literals, `:doc:` targets, figure
+paths) and by reading.
+
+**Open.** `coulomb_table.rst` and `ec_table.rst` keep dates, status lines and paths of the fit archive. When `CNuc`
+is split or pyazr 3.0 lands, the rows naming `CNuc`, `azure2`, `ParameterSet` in `classes.tsv`/`arrows.tsv` change
+(then `make_figures.py`), and the "Planned" boxes of the pages go.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-4-cnuc-finish-design`) — the end of `CNuc`: design (documents only)
 
 **Done.** `cnuc_split.md` §12: the inventory of `CNuc` measured on the code at 6e8d000b (every member with its writers,
