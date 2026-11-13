@@ -1,303 +1,198 @@
 ---
 name: azure2-calculate
-description: Compute AZURE2 observables from an existing .azr and parameter file -- cross sections, S factors, differential cross sections, analyzing powers, Legendre coefficients, phase shifts and scattering lengths at any E and angle; extrapolation (mode 3, extrap_mode), S(0), reaction rates (mode 5), level/interference/external-capture decomposition, adaptive cross-section tables, the CLI menu and pyazr sessions. Use for "calculate", "extrapolate", "rate", "S factor", "decompose". For fitting use azure2-fit; trust checks azure2-check; bands azure2-uncertainty; figures azure2-plot.
+description: Compute AZURE2 observables from a format-3 project and a parameter file without changing the parameters - cross sections, S factors, differential cross sections, A_y, Legendre coefficients, phase shifts and scattering lengths on the data or on any grid (extrapolation records), S(0), reaction rates, level/interference/external-capture decomposition, adaptive tables; the CLI menu and pyazr sessions. Use for "calculate", "extrapolate", "rate", "S factor", "decompose". Fitting: azure2-fit; trust checks: azure2-check; bands: azure2-uncertainty; figures: azure2-plot.
 ---
 
 # Calculating observables with AZURE2
 
-An AZURE2 calculation takes a project (`.azr`: particle pairs, levels and channels, data and test segments) and a
-parameter vector (the `<levels>` block, or a fit's `param.sav`) and returns, per segment and point, the c.m.
-observable: σ (b), dσ/dΩ_c.m. (b/sr), the S factor (MeV b), A_y, Legendre coefficients a_k, or a phase shift
-(deg). This skill says how to run that calculation without changing the parameters: on the data points (data mode),
-on user grids (extrapolation), as a thermonuclear rate N_A⟨σv⟩ (cm³ mol⁻¹ s⁻¹), or as a decomposition into level,
-interference and external-capture parts.
-
-## When to use, and when a sibling instead
+A calculation takes a project (`.azr`, format 3: `<levels>`, data sets and extrapolations as records) and a parameter
+vector (the project's own `<levels>` values, or a fit's `param.sav` matched by name) and returns, per point, the c.m.
+observable: σ (b), dσ/dΩ_c.m. (b/sr), S (MeV b), A_y, Legendre coefficients, a phase shift (deg). This skill runs that
+calculation on the data points, on grids of your choice, as a rate N_A⟨σv⟩ (cm³ mol⁻¹ s⁻¹), or as a decomposition.
 
 | Task | Skill |
 |---|---|
 | any forward evaluation, extrapolation, rate, decomposition, output files | this one |
-| build a new project, masses, levels, EXFOR data, segment syntax | azure2-setup |
-| move parameters (fits, free/fixed, priors, editing levels, `.sav` names) | azure2-fit |
-| decide whether a result can be trusted (pulls, χ²/ν, Wigner limits, radius) | azure2-check |
-| uncertainty bands, covariance, sampling | azure2-uncertainty |
-| figures, and showing a result to a person | azure2-plot |
-| target integration, resolution, Doppler, transmission | azure2-targets |
-| THM (HOES) segments | azure2-thm |
+| build a project, masses, levels, data records | azure2-setup |
+| move parameters (fits, priors, editing levels) | azure2-fit |
+| decide whether a result can be trusted | azure2-check |
+| bands, covariance, sampling | azure2-uncertainty |
+| figures | azure2-plot |
+| target, beam, detector effects | azure2-targets |
+| THM data | azure2-thm |
+
+Behaviour: `docs/source/user_guide/calculate.rst`, `docs/source/user_guide/pyazr.rst` ("The objective and the
+evaluation", "Frames and units"), `docs/source/reference/command_line.rst`, `docs/source/reference/output_files.rst`.
+Worked examples: `pyazr/examples/` (`references/examples.md`).
+
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/extrapolate.py` | one bare extrapolation record on any grid: E_c.m., E_x, θ, value, S |
+| `scripts/decompose.py` | full, level off, level only, bare; interference; the pairwise term of two levels |
+| `scripts/selftest.py` | runs both on `tests/upgrade/T1` |
+
+```bash
+S=.claude/skills/azure2-calculate/scripts
+python3 $S/extrapolate.py model.azr --params output/param.sav --reaction "12C(p,g)13N" \
+    --energies "range 0.001 0.6 MeV cm points 200 log" --out sfactor.txt
+python3 $S/decompose.py model.azr --params output/param.sav --level "1/2+ 2.365" --with "3/2- 3.502" \
+    --dataset cap_g0 --out decomposition.txt
+```
 
 ## Two ways to run the engine
 
-- **CLI** (`$AZURE2_BINARY --no-gui --no-readline project.azr`): one-shot calculate, fit, extrapolate, MINOS, rate or
-  MCMC run that writes the standard output files. Use it when the files are the product.
-- **pyazr** (`from pyazr import Session, Project`; format-3 projects only): the engine compiled into the extension module `pyazr/_azure2`,
-  running in the interpreter. Use it for all evaluation work: χ², scans, decompositions, custom fitters and
-  samplers. pyazr does not call the CLI binary; rebuilding `_azure2` is the update. Its version is
-  `pyazr.__version__`.
+- **The program** (`AZURE2 --no-gui --no-readline project.azr`, the menu piped): one-shot calculate (1), fit (2),
+  calculate the extrapolations (3), MINOS (4), rate (5), MCMC (6). Use it when its output files are the product.
+- **pyazr** (`pyazr.Session`): the engine in the interpreter, for everything else (scans, decompositions, samplers,
+  figures). Installed by `pip install .` from the repository; the Coulomb table once with
+  `pyazr coulomb-table fetch` (or `build`).
 
-Install pyazr from the repository root: `pip install .` builds the engine (scikit-build-core, CMake) and installs
-the package with `_azure2`, the commands `pyazr` and `AZURE2` (core: numpy, mpmath, scipy); `".[examples]"` adds
-matplotlib, emcee, multiprocess; `".[all]"` adds zeus-mcmc. The Coulomb table once: `pyazr coulomb-table fetch`
-(or `build`). In a checkout, the CMake build (`USE_API=ON`, the default) places `_azure2` in `pyazr/`.
+## Procedure A: the program
 
-Behaviour reference: `docs/source/reference/command_line.rst` (flags, prompts, exit status),
-`docs/source/reference/output_files.rst`, `docs/source/user_guide/calculate.rst`, `docs/source/user_guide/pyazr.rst`,
-`docs/source/user_guide/segments.rst`. Worked examples: `pyazr/examples/` (catalogue in `references/examples.md`).
-Runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`.
-
-## Procedure A: the CLI
-
-1. **Use the project's options.** A project can state them as `<config>` keys under the pyazr keyword names
-   (`use_brune=0`, `transform=0`, ...): a flag given wins over the key, the key over the default, and
-   `AZURE2 --describe` prints each option with its source. Without keys, pass the flags every time, taken from the
-   project's own job scripts, never from memory or defaults. The parametrization is a flag:
-   Brune is the default; `--use-park` selects Park's observed amplitudes; `--no-brune` the Lane–Thomas basis with
-   constant boundary conditions; `--use-rmc --no-brune` the Reich–Moore formalism (for (n,γ) only; `--use-rmc` with Brune on is refused).
-   Conventions and conversions between bases: azure2-exchange.
-2. **Write the flags out.** zsh does not word-split an unquoted variable: `F="--no-readline --use-brune"; AZURE2 $F x.azr`
-   passes one argument, which AZURE2 reports as an unknown option and ignores, so the run uses other physics. Use a
-   zsh array (`F=(--no-readline --use-brune)`) or `${=F}`; csh job scripts with literal flags are fine.
-3. **Create `checks/` and `output/`** in a new run directory. A missing `checks/` stops the run before it starts
-   ("Could not find checks directory"), and the job still ends normally with no output.
-4. **Answer the prompts in order** (`docs/source/reference/command_line.rst`, "Scripted input"):
-   menu choice → (modes 2, 3, 4) "Calculate cross-section uncertainty band? (y/n)", and after a yes in a fit mode the
-   reduced-χ² scaling question → external parameter file (blank: `<levels>`) → external-capture amplitude file
-   (blank: compute) → `7` to exit. Both file prompts appear whether or not the model has capture.
+1. **The options are the project's.** A project states its options as `<config>` keys (`use_brune=0`,
+   `use_long_wavelength=0`, ...); a flag given wins over the key. `AZURE2 --describe project.azr` prints every option
+   with its value and source: read it before trusting a run of an inherited project. Without keys, take the flags
+   from the project's job scripts, never from defaults. Bases and their conversion: azure2-exchange.
+2. **Pass flags as words.** zsh does not split an unquoted variable (`F="--use-brune --no-readline"; AZURE2 $F` passes
+   one unknown argument, which is ignored): use an array or a shell function.
+3. **Create `output/` and `checks/`** beside the project (paths in `<config>` are relative to the project file).
+4. **Answer the prompts in order** (`command_line.rst`, "Scripted input"): menu → (2, 3, 4) the band question →
+   parameter file (blank: the project's `<levels>`) → capture-amplitude file (blank: compute) → `7`.
 
    ```bash
-   az() { "$AZURE2_BINARY" <flags> --no-gui --no-readline "$@"; }   # a function, not a string variable (step 2)
-   printf '1\n\n\n7\n'                  | az project.azr  # calculate from the .azr <levels>, both files blank
-   printf '1\noutput/param.sav\n\n7\n'    | az project.azr  # calculate at a fit's parameters
-   printf '2\nn\n\n\n7\n'               | az project.azr  # fit from <levels> (band: no)
-   printf '2\nn\noutput/param.sav\n\n7\n' | az project.azr  # fit from saved parameters
-   printf '3\nn\noutput/param.sav\n\n7\n' | az extrap.azr   # extrapolate: a copy with <targetInt> inactive
+   az() { AZURE2 --no-gui --no-readline "$@"; }
+   printf '1\n\n\n7\n'                     | az project.azr   # calculate at the project's values
+   printf '1\noutput/param.sav\n\n7\n'     | az project.azr   # calculate at a fit (names matched)
+   printf '3\nn\noutput/param.sav\n\n7\n'  | az project.azr   # calculate the extrapolation records
+   printf '5\noutput/param.sav\n1\n-1\nyes\ntemperatures.dat\n' | az project.azr   # rate, pair 1, total capture
    ```
 
-   Give a saved `output/param.sav` at the parameter-file prompt to start from the best-fit formal parameters, or a
-   blank line to start from the `.azr` levels.
-
-   `--covariance-band` (with `--scale-covariance`) answers the band question yes without a prompt.
-5. **Confirm the parameter file was read.** The log prints `Reading User Parameter File...` when it was, and
-   `Creating New param.par File...` when the run started from `<levels>`. Current builds stop a piped run with exit
-   status 1 when a y/n prompt receives a file name; builds before 2026-11-01 (expires: 2027-02-01) took any other
-   answer as "no" and silently ran from `<levels>`.
-6. **Check the exit status and `output/chiSquared.out`.** Exit status 1 follows "Calculation was aborted." or a
-   refused project. The last line of `chiSquared.out` (total χ²) is the quickest scalar check.
-
-| Mode | What it does | Main output |
-|---|---|---|
-| 1 | calculate the data segments | `AZUREOut_*.out`, `chiSquared.out` |
-| 2 | fit (Minuit2), see azure2-fit | `param.sav`, `parameters.out` |
-| 3 | calculate the test segments (extrapolate) | `AZUREOut_*.extrap` |
-| 4 | MINOS errors | `param.errors`, `covariance_matrix.out` |
-| 5 | reaction rate | `reactionrates.out`, `cross_section_grid.dat` |
-| 6 | MCMC sampling, see azure2-uncertainty | `samples.mcmc` |
-| 7 | exit | |
+   A y/n prompt that receives anything else stops a piped run with exit 1; the log says
+   `Reading User Parameter File...` when a parameter file was applied.
+5. **Check the exit status and `output/chiSquared.out`** (its `Total-Chi-Squared` line is the quickest check).
 
 ## Procedure B: pyazr
 
 ```python
-import os
-os.environ.setdefault("OMP_NUM_THREADS", "4")      # before importing numpy
-import numpy as np
-from pyazr import Session
-
-with Session("project.azr", cwd=HERE) as m:          # a session is a context manager: close it
-    x = m.load_sav("output/param.sav")              # free rwa vector of a fit (load by NAME)
-    ev = m.evaluate(x)                              # every number at x, from one evaluation
-    chi2 = ev.chi2                                  # the data chi-squared
+import pyazr
+with pyazr.Session("project.azr") as s:          # cwd defaults to the project's directory
+    x = s.parameters.read("output/param.sav")    # the fit vector, matched by name (or s.parameters.x0)
+    ev = s.evaluate(x)                           # every number of one evaluation
+    d = ev.data[0]                               # per data set: model, energies (c.m.), angles, values, errors
+    print(ev.chi2, d.name, d.model[:3])
 ```
 
-- **Pass the same physics options as the project's CLI fits.** pyazr's defaults can differ from an archive's job
-  scripts: `Session()` defaults to `use_long_wavelength=True`, while many archives run `--no-long-wavelength`. Pass
-  `use_long_wavelength=False`, `use_brune`/`use_park`, `ignore_externals`, … explicitly to match.
-- **One session per process for parallel work.** Several sessions may be open in one process (each is an independent
-  engine that enters its own directory per call), but the engine is not thread-safe. Create the session at module
-  level of the worker module; every pool worker then owns one, under `spawn` or `fork`. Builds before 2026-10-07 (expires: 2027-02-01)
-   shared the external-capture amplitude cache between sessions of one process: the first
-  session computed wrong capture cross sections (up to 28 %) once a second session on the same model existed;
-  multi-session capture results from such a build are suspect (test `tests/pyazr/shared_state_test.py`).
-- **A session parses its `.azr` once** and re-reads it when the file changes on disk or `configure()` runs. In builds
-  before 2026-11-03 (expires: 2027-02-01) every evaluation re-parsed the file per segment (3–75 ms per call on
-  NFS); look for this before blaming the worker pool.
-- `m.datasets`, `m.active_datasets` and `m.extrapolations` return copies; editing them changes nothing in the
-  session.
-- **Never point an exploratory session at a live fit's `output/`.** Opening a session whose runtime options or
-  segment count differ from the cached ones recomputes and overwrites `output/intEC.dat`/`intEC.extrap` there, even
-  for a calculation. Work on a copy with its own output directory (`Project.set_config(output_dir="out2/")`). To repair, rerun a
-  CLI mode-1 calculate under the project's flags and confirm `chiSquared.out` reads as before.
-
-### Two parameter vectors
-
-- `m.evaluate(x)` and `m.objective()` take the **reduced-width-amplitude** free vector `m.params_rwa` (the fit
-  vector): the fit space and the only one with analytic derivatives. Its content depends on the basis (`m.basis`:
-  1 Brune, 2 Park, 0 standard); a vector from one basis is meaningless in another.  A physical vector is no input.
-- `m.params` is the **physical** free vector (E_λ in MeV, partial widths Γ in eV), for reports.
-- `m.transform_rwa(x)` maps rwa → physical for the leading R-matrix block only (energies and widths) and returns that
-  block, indexed by `free_index`, whatever the input length.  A vector of the wrong length raises
-  `ParameterVectorError: ... expected the free parameter vector (N values ...)`.
-- Both vectors hold only free parameters, in `.azr` order: `p.free_index` is the position in the vector, `p.index`
-  the position among all parameters (`m.fixed_params`, `param.sav` lines). Parameter names and `.sav` handling:
-  azure2-fit.
-- `m.evaluate(x).data[i].model` is, per data set, the quantity χ² is built from: the E1 or E2 component for an
-  `angle-integrated-E1`/`-E2` data set, the total otherwise.
-
-### Data mode and extrapolation mode
-
-`m.data_mode()` (default) evaluates the `<segmentsData>` segments; `m.extrap_mode()` the `<segmentsTest>` grids. Both
-re-initialise the session; switch rarely and batch the work.
-
-- Data mode: segment `i` ↔ `m.datasets[i]` (the i-th `<segmentsData>` line); `len(m.energies[i])` is its point count.
-- Extrapolation mode: only active test segments are returned, in file order: segment `i` ↔
-  `m.extrapolations.active[i]`, not `m.extrapolations[i]`.
+- **Options**: `Session(file, use_brune=..., use_long_wavelength=..., ...)`; a keyword wins over the `<config>` key.
+  `s.options` holds the values in effect and `s.option_sources` where each came from. Pass the project's own options
+  when comparing with an archived CLI run (pyazr's default is `use_long_wavelength=True`).
+- **One vector**: the fit vector `x` (reduced-width amplitudes in the session's basis, energies in MeV, norms, shifts,
+  ...); `s.parameters` names its entries (`print(s.parameters.free.table())`). A vector of one basis means nothing in
+  another (`s.basis`: 0 standard, 1 Brune, 2 Park). Physical values (Γ in eV, ANCs): `s.transform_rwa(x)`.
+- **Data or extrapolations**: a session evaluates either its data sets (default) or its extrapolation records
+  (`Session(file, data_mode=False)`); open one session of each kind rather than switching. In extrapolation mode only
+  active records are evaluated and every χ² field is `None`; find a record by `d.name`, not by position.
+- **Threads**: every evaluation uses `OMP_NUM_THREADS` threads; two sessions may evaluate on two threads at once; for
+  more cores give each worker process its own session (`pyazr.rst`, "Running in parallel").
+- **Never point an exploratory session at a live fit's output directory**: a session whose options or points differ
+  from the cached ones rewrites `intEC.dat`/`intEC.extrap` there. Give the copy its own directory
+  (`Project.set_config(output_dir="out2/")`, and create it).
 
 ### Observables
 
 ```python
-d = m.evaluate(x).data[i]           # data set i (extrapolation i in extrapolation mode)
-d.model                             # σ (b) or dσ/dΩ_c.m. (b/sr), A_y of an analyzing-power data set
-d.model * d.extra["sfactor_conversion"]   # S factor (MeV b)
-d.energies                          # E_c.m. (MeV) of the calculated points
-d.excitation_energies               # E_x of the compound nucleus (MeV)
-d.angles                            # θ_c.m. (deg); differ from the lab angles in the .azr
-d.extra["legendre"]                 # Legendre coefficients of an angular distribution, one array per point
-d.extra                             # every number a point carries: pyazr.kinds()["data_outputs"]
-m.write_output_files(x)             # AZUREOut_*, chiSquared.out into the existing output directory
+d = s.evaluate(x).data[i]
+d.model                                  # σ (b), dσ/dΩ_c.m. (b/sr), A_y, phase (deg): as χ² uses it
+d.model * d.extra["sfactor_conversion"]  # S factor (MeV b)
+d.energies, d.excitation_energies        # E_c.m. and E_x (MeV)
+d.angles                                 # θ_c.m. (deg)
+d.extra["legendre"]                      # Legendre coefficients of an angular distribution, per point
+d.extra                                  # every per-point number: pyazr.kinds()["data_outputs"]
+s.write_output_files(x)                  # AZUREOut_*, chiSquared.out into the output directory
 ```
 
-E_x is the only axis common to all entrance pairs; E_c.m. = E_x − (threshold of the pair). `write_output_files` runs
-the χ² evaluation first in data mode, so `chiSquared.out` is filled; `param.par` and `parameters.out` are not written
-by it (use `m.transform_rwa(x)` for the physical values `parameters.out` would hold). Special observables (A_y,
-Legendre coefficients as data, phase shifts, composite SUM/RATIO segments, total capture, scattering lengths):
+E_x is the only axis common to all entrance pairs. A capture data set of `multipole E1` gives the E1 part as `model`.
+Special observables (A_y, Legendre data, phase shifts, sums and ratios, total capture, scattering lengths):
 `references/observables.md`.
 
-## Extrapolation (mode 3, `extrap_mode()`)
+## Extrapolation
 
-1. **Deactivate `<targetInt>` for bare cross sections.** `<targetInt>` entries bind by segment number and apply to
-   `<segmentsTest>` lines too: test segment k inherits the convolution of any active entry that lists key k. The
-   folded curve looks plausible. Run mode 3 on a copy of the `.azr` with every `<targetInt>` line inactive (first
-   field `0`); keep mode-1 χ² checks on the original. A mode-3 run that is slow or memory-hungry is convolving (one
-   model: 13k points in 224 s and 65k points at 30 GB with `<targetInt>` active, 1 s with it off). To get the folded
-   shape on a fine grid instead, give a data segment a dummy fine-grid data file and run mode 1.
-2. **Delete `output/intEC.extrap` (and `intEC.dat`) before every extrapolation run**, not only when the grid changes.
-   A session that initialises in data mode and then calls `extrap_mode()` reuses the file on disk, whose amplitudes
-   do not match the new data+test integration set. Only capture reads these integrals, so particle exits stay right
-   while capture S moves (one model: S(p,γ)(10 keV) 0.0912 keV b with fresh caches, 2.4 × 10⁸ keV b reused). Put
-   the deletion in the script:
+An `extrapolation` record (`<extrapolations>`) is a grid with a reaction and a quantity; `scripts/extrapolate.py` adds
+one to a copy of the project and evaluates it. By hand:
 
-   ```python
-   for f in ("intEC.dat", "intEC.extrap"):
-       p = os.path.join(eval_dir, "output", f)
-       if os.path.exists(p):
-           os.remove(p)
-   ```
+```python
+p = pyazr.Project.open("model.azr")
+p.add("extrapolation", "sfac", reaction="12C(p,g)13N", quantity="sigma", unit="b",
+      energies="range 0.001 0.6 MeV cm points 200 log")
+p.save("model_grid.azr")                  # beside the original: relative paths hold
+with pyazr.Session("model_grid.azr", data_mode=False) as s:
+    d = next(d for d in s.evaluate(s.parameters.read("output/param.sav")).data if d.name == "sfac")
+```
 
-3. **Fitted shifts and norms do not reach test grids.** A `param.sav` carries `segment_<k>_energy_shift`/`_norm` of
-   data segment k. Current CLI and `load_sav` skip `segment_*` entries in a run without data.
-   Builds before 2026-10-26 (expires: 2027-02-01) applied data segment k's shift to test segment k, so the printed energies were
-   E + shift; strip the `segment_*` lines when using such a build.
-4. **State the frame of every grid.** An `extrapolation` record's `energies` and `angles` name their frame (`lab` or
-   `cm`); the engine converts a `cm` grid with the masses of `<levels>`:
-
-   ```python
-   p = Project.open("3He_a.azr")
-   p.add_extrapolation("capture", reaction=p.reaction(1, -1), quantity="sigma", unit="b",
-                       energies="range 0.10 8.5 MeV cm step 0.05")
-   p.add_extrapolation("el90", reaction=p.reaction(1, 1), quantity="dsigma_domega", unit="b/sr",
-                       energies="range 0.05 6.0 MeV lab step 0.05", angles="list 90 deg cm")
-   p.save("3He_a_grids.azr")
-   ```
-
-   Quantities: `sigma`, `dsigma_domega`, `analyzing_power`, `legendre` (with `expansion`, `orders`), `phase_shift`,
-   ... (`pyazr.schema()` lists them with their fields); `p.reaction(entrance, -1)` is every capture pair summed.
-5. **Resolve narrow resonances.** A 5 keV grid misdraws keV-wide peaks by up to a factor 11; use 0.25–0.5 keV steps,
-   or an adaptive table (below).
-
-## S factor
-
-AZURE2 outputs S directly; never re-derive the Sommerfeld conversion by hand (it is the usual way to evaluate the
-factor at the wrong energy).
-
-| Want | Use |
-|---|---|
-| model S per data set | `d.model * d.extra["sfactor_conversion"]` (`d = m.evaluate(x).data[i]`) |
-| data S per point | `m.sfactor[i]`, `m.sfactor_err[i]` |
-| from a finished run | S columns of `AZUREOut_*.out` (fit S, data S, data S error) and of `.extrap` |
-
-The model S is σ times a factor that depends only on E, so linear combinations of cross sections you
-built yourself (a decomposition, an E1/E2 component) convert with `conv = S_full / σ_full` (guard zeros). Units:
-MeV b; ×10³ for keV b. S(0) is read from an extrapolation grid that starts near E_c.m. = 0, with its band from
-azure2-uncertainty (`extrapolation_bands(..., quantity="sfactor")`).
+1. **A grid states its frame** (`MeV lab` or `MeV cm`); returned energies are always c.m. Grid grammar:
+   `docs/source/reference/format3.rst` ("extrapolation"); `pyazr.extrapolation_grid(text, masses=...)` shows it.
+2. **Bare or folded**: an extrapolation is folded only by the `target`, `beam` or `detector` it names. For a bare σ
+   or S, name none (`Project.set(name, target=None)` removes one).
+3. **Fitted norms and shifts do not reach extrapolations**: the parameters of data sets are not in a run without
+   data, and a parameter file's data-set entries are skipped there.
+4. **Resolve narrow resonances**: 0.25–0.5 keV steps across a keV-wide level, or an adaptive table (below). A grid
+   too coarse misdraws a peak by up to a factor 10.
+5. **S(0)**: a log grid down to about 1 keV; read S at the lowest points and check that a lower start does not move
+   it. Its band: azure2-uncertainty.
+6. **A secondary γ ray (`secondary_gamma` of a data set) is not an extrapolation of the primary reaction**: to draw
+   such a curve, evaluate a copy of the data set on a pseudo-data file of the grid energies.
 
 ## Decomposing a cross section
 
-At the fitted parameters, without refitting, so every term is that component's contribution:
+At fixed parameters, zero the free widths of chosen levels in `x` (`P.of_level(label)`, `P.put`) and evaluate
+(`scripts/decompose.py` does all four):
 
 ```python
-m.extrap_mode()
-model = lambda v: [d.model for d in m.evaluate(v).data]      # one array per extrapolation
-ex   = [d.excitation_energies for d in m.evaluate(best).data]
-full = model(best)
-off  = model(m.without_level(best, jpi="5/2-", energy=6.588))
-only = model(m.only_level(best,    jpi="5/2-", energy=6.588))
-bare_x = best.copy()                                  # every free width zeroed: hard sphere + external capture
-for p in m.parameters.widths:
-    if p.free_index is not None:
-        bare_x[p.free_index] = 0.0
-bare = model(bare_x)
-interference = (full - off) - (only - bare)
+P = s.parameters
+w = [p for p in P.of_level("1/2+ 2.365").of_kind("width") if not p.fixed]
+off = s.evaluate(P.put(x, w, 0.0)).data[i].model        # the model without the level
 ```
 
-- `full − off` is everything the level does (resonance plus its interference); `only − bare` is the bare resonance on
-  the non-resonant background; their difference is the interference.
-- Interference is block-diagonal in J^π: only levels of the same J^π interfere. A decomposition that violates this
-  is wrong.
-- Pairwise, levels T and L: `only{T,L} − only{T} − only{L} + bare = 2 Re(A_T A_L*)`. Integrate its modulus over E_x
-  to rank a level's interference partners.
-- Capture: zeroing only the γ-channel widths (`p.radiation_type in ("E", "M")`) leaves every particle channel, and
-  thus the scattering solution, unchanged; zeroing all γ widths leaves the external (direct) capture.
-- Script: `pyazr/examples/decompose_cross_section.py`.
+- `full − off` is everything the level does (resonance plus interference); `only − bare` the bare resonance; their
+  difference the interference.
+- Levels of different J^π do not interfere in an angle-integrated σ: the pairwise term
+  `only{T,L} − only{T} − only{L} + bare` is zero there (the self-test checks it). A decomposition that breaks this
+  zeroed the wrong parameters.
+- **Keep the final states' ANCs**: external capture scales with the ANC of the bound final state, which is a width
+  of that level. "bare" with every width zeroed has no direct capture left; `decompose.py` keeps the bound levels
+  unless `--zero-bound`.
+- Fixed widths are not entries of `x`: zero them in a copy of the project (`Project.set_channel(level, pair, l, s,
+  width=0.0)`) and open a new session.
 
 ## Reaction rates
 
-- **Mode 5** integrates σ(E_c.m.) on a grid that follows the evaluated parameters (resonance clusters at the levels
-  of the parameter file) from 0.1 eV, in ln E, and writes `reactionrates.out` (N_A⟨σv⟩ in cm³ mol⁻¹ s⁻¹ versus T9)
-  and `cross_section_grid.dat` (E_c.m., σ, S: plot it when a rate looks odd). The grid has 48 points per decade from
-  0.1 eV to 50 MeV plus a cluster from 1/32 to 64 widths around every level; ln σ is splined against ln E. A 22 eV
-  level is integrated to 10⁻⁴ (`tests/reaction_rate`), so narrow resonances need no hand-added terms.
-  There is no other path: `useAdaptiveGrid` is not a key of format 3 (a file with it is refused, `E_CONFIG_KEY_REMOVED`).
-  Behaviour: `docs/source/user_guide/calculate.rst`, troubleshooting in
-  `docs/source/reference/troubleshooting.rst`. Apply the extrapolation rules above (no `<targetInt>`, fresh caches).
-- **Total radiative capture rate**: give the exit pair `-1` at the "Reaction Rate Exit Pair" prompt. The rate integrates the sum over every capture pair (pType 10) of the entrance pair's
-  compound nucleus; the log lists the pairs. Builds before 2026-11-04 (expires: 2027-02-01) refuse `-1`: run each
-  capture pair and add the rates (the rate is linear in σ).
-- **In Python**, for a rate per posterior sample or per level: `pyazr/examples/reaction_rate.py`. Its grid must
-  resolve the Gamow window at the lowest temperature and every resonance narrower than the spacing.
-- Rates from builds before 2026-10-26 (expires: 2027-02-01) are low by 0.8–1.2 % for non-resonant charged-particle
-  rates at T9 ≤ 0.1, up to 49 % for neutron (1/v) entrances at T9 = 0.01, and can miss a narrow level moved by the
-  parameter file: recompute them.
+- **Menu 5** integrates σ(E_c.m.) on a grid that follows the parameters (48 points per decade from 0.1 eV to 50 MeV,
+  plus a cluster around every level), writes `reactionrates.out` (N_A⟨σv⟩ against T9) and `cross_section_grid.dat`
+  (plot it when a rate looks odd). Exit pair `-1` is the total radiative capture (every capture pair of the
+  entrance's compound nucleus). Narrow resonances need no hand-added terms (a 22 eV level to 1e-4,
+  `tests/reaction_rate`).
+- **In Python** (a rate per posterior sample): `pyazr/examples/reaction_rate.py`; its grid must resolve the Gamow
+  window at the lowest temperature and every resonance.
 
 ## Adaptive cross-section tables
 
-`pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max, rel_tol=5e-3, frame="cm")` builds σ(E) on a
-non-uniform grid by bisection until log-linear interpolation reproduces the engine to `rel_tol`: knots gather at
-resonances (a few hundred to a few thousand points where a uniform grid of equal fidelity needs ~10⁵). Each returned
-`TabulatedCrossSection` interpolates when called; `.save(path)` writes `E_cm E_lab sigma`. Central values only; bands
-come from azure2-uncertainty. Example: `pyazr/examples/tabulate_cross_sections.py`.
+`pyazr.tabulate(azr_file, pairs=[(entrance, exit)], e_min, e_max, rel_tol=5e-3, frame="cm")` refines a grid until
+log-linear interpolation reproduces the engine to `rel_tol`; `.save(path)` writes `E_cm E_lab sigma`. Central values
+only. Example: `pyazr/examples/tabulate_cross_sections.py`.
 
 ## Caches
 
-- `output/intEC.dat` (data segments) and `output/intEC.extrap` (test segments) hold external-capture integrals. Both
-  are safe to delete (they cost time to rebuild); delete both after any change of segments, grids or of a flag that
-  enters the capture operator. Details and signatures: `references/physics-options.md`.
-- The universal Coulomb table (`~/.azure2/coulomb_table.bin`, built once with `AZURE2 --build-coulomb-table`, 88 MB,
-  ~5 min on 4 threads) speeds charged-particle runs about 4× and does not change results at the printed digits.
+- `output/intEC.dat` and `intEC.extrap` hold external-capture integrals; each carries a signature of its grid and
+  options (`.sig`) and is recomputed at session start when it no longer matches. A running session does not re-check:
+  after editing data or grids, open a new session (or `s.recalculate_external_capture()`). Safe to delete.
+- The universal Coulomb table (`pyazr coulomb-table fetch`, or `AZURE2 --build-coulomb-table`;
+  `$AZURE2_COULOMB_TABLE` names the file) speeds charged-particle runs about 4× without changing printed digits.
 
 ## Pitfalls by topic
 
-- **Runtime options**: R-matrix route, ignore-externals, long-wavelength and convection-current capture operator,
-  hybrid potential, Coulomb and EC tables, `--gsl-coul` (do not use): `references/physics-options.md`.
-- **Output columns and normalization**: the norm multiplies the data and error columns, not the fit column; the
-  χ²-optimal norm n* from one output file; `param.fit` semantics: `references/outputs.md`.
-- **Results from older builds**: what each build range computed differently, and what to redo:
-  `references/older-builds.md`.
-- **Figures**: compare every plotted curve with the fit column of `AZUREOut_*.out` (azure2-plot).
+- Runtime options that change the physics (route, capture operator, hybrid potential, Coulomb functions, tables):
+  `references/physics-options.md`.
+- Output columns, the norm in them, the χ²-optimal norm: `references/outputs.md`.
+- Results made by older builds: azure2-check ("Constants and logs").
+- Every figure is checked against the engine's model at the data points (azure2-plot).

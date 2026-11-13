@@ -1,8 +1,9 @@
 # Runtime options that change the physics
 
-Each option is a CLI flag, a keyword of `Session()` and a `<config>` key of the same name as the keyword
-(`use_brune=0`; a flag or keyword wins over the key, the key over the default; `AZURE2 --describe` shows the source). Full list: `docs/source/reference/command_line.rst`. Take the flags of an established project from its job
-scripts; a calculation under different flags is a different model.
+Each option is a CLI flag, a keyword of `Session()` and a `<config>` key of the same name as the keyword (`use_brune=0`;
+a flag or keyword wins over the key, the key over the default; `AZURE2 --describe` shows the source). Full list:
+`docs/source/reference/command_line.rst`. Take the flags of an established project from its job scripts; a calculation
+under different flags is a different model.
 
 ## Route: A-matrix or R-matrix (`<config>` first line)
 
@@ -16,8 +17,8 @@ scripts; a calculation under different flags is a different model.
 
 ## External-capture operator
 
-- `--no-long-wavelength` changes external capture (EC) only; resonant photon channels are untouched. `--ignore-externals`
-  does not switch EC off.
+- `--no-long-wavelength` changes external capture (EC) only; resonant photon channels are untouched.
+  `--ignore-externals` does not switch EC off.
 - The exact operator is the extended-Siegert charge term (Friar and Fallieros, Phys. Rev. C 29 (1984) 1645) plus the
   convection current of the relative motion; `--no-ec-convection-current` (pyazr `ec_convection_current=False`) keeps
   the charge term alone. Derivation: `docs/source/theory/external_capture_operator.rst`; independent check:
@@ -42,7 +43,7 @@ scripts; a calculation under different flags is a different model.
   `docs/source/user_guide/pyazr.rst`.
 - Optional `spin_orbit woods_saxon depth .. radius .. diffuseness .. on light|heavy operator 2l.s` for a pair with
   one spinning particle (FRESCO's convention: a strength quoted for l.s without the 2 is twice V_so); the channel
-  functions then depend on J (`coulomb_functions(..., J=)` needs it).  Pairs with two spins are refused
+  functions then depend on J (`Session.channel_functions(..., J=)` needs it).  Pairs with two spins are refused
   (`E_SO_TWO_SPINS`).  Theory: `docs/source/theory/hybrid_potential.rst`.
 - A pyazr session owns its potential: several sessions with different potentials in one process stay independent
   (`tests/pyazr/potential_sessions_test.py`). Builds before 2026-10-27 (expires: 2027-02-01) shared one potential per

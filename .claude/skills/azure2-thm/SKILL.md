@@ -1,12 +1,12 @@
 ---
 name: azure2-thm
-description: Procedure for a Trojan Horse Method (THM) evaluation with AZURE2, from published THM spectra and direct data to model-averaged results with a stated model dependence. Covers reading the published points (HOES or on-shell-equivalent, carrier, B_xs, KF convention, resolution, background), the <thm> block and THM segments, baseline model choices, staged joint fits, strengths via the anchor formula, model averaging and reporting. Use for any THM fit, HOES data or THM-derived strength, S factor or rate. Project building: azure2-setup; generic fitting: azure2-fit.
+description: Procedure for a Trojan Horse Method (THM) evaluation with AZURE2, from published THM spectra and direct data to model-averaged results with a stated model dependence. Covers reading the published points (HOES or on-shell-equivalent, carrier, B_xs, KF convention, resolution, background), the <thm> block and THM data sets, baseline model choices, staged joint fits, strengths via the anchor formula, model averaging and reporting. Use for any THM fit, HOES data or THM-derived strength, S factor or rate. Project building: azure2-setup; generic fitting: azure2-fit.
 ---
 
 # THM evaluation with AZURE2
 
 The procedure for turning published THM material into an evaluated, model-averaged
-result. Mechanics of THM segments, the `<thm>` block and its pyazr editors:
+result. Mechanics of THM data sets, the `<thm>` block and its pyazr editors:
 `references/thm-block.md`. Equations and option reference:
 `docs/source/theory/thm_implementation.rst` (cited below as *impl*, "Section"). The plan the
 THM code follows: `docs/upgrade/THM.md`. Level schemes, data fetching and new compound
@@ -34,16 +34,26 @@ Rules that hold throughout (`docs/upgrade/THM.md` §2–3):
 - **Resolution is stated in the c.m. frame of x + A.** A lab value is converted, and the
   record says which frame the paper gave (Stage 2, step 5).
 - **For OES points a resolution fold acts on S(E), not σ(E).** Folding σ below the barrier
-  inflates the result (×182 at 50 keV for a 20 keV fold). The present `<targetInt>` fold
-  acts on σ: do not put it on OES segments.
+  inflates the result (×182 at 50 keV for a 20 keV fold). The present resolution fold
+  (a `beam` `spread` or a `detector` `energy_resolution` named by the data set) acts on σ: do not put it on OES
+  data sets.
 - **No energy shifts to move THM data onto direct data.** Do not free an energy shift on a
-  THM segment; a misalignment is a frame, calibration or reading error to be found in Stage 1.
+  THM data set; a misalignment is a frame, calibration or reading error to be found in Stage 1.
 - **No negative backgrounds.** A background term is non-negative by construction; a
   profiled `background=` that goes below zero anywhere in the data window is reduced in
   order or removed, not reported.
 - **DWBA vertices are validated against FRESCO** (form factors and angular distributions
   to 1 % for the system analysed) before a `vertexModel=dw` variant counts as more than a
   check. Without that benchmark, label DW results as checks.
+
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/thm_inspect.py` | per THM experiment: data sets, χ², profiled norm ± σ, background, vertex reach; flags |
+| `scripts/selftest.py` | runs it on `tests/upgrade/T2` (its HOES experiment LC09) |
+
+`python3 .claude/skills/azure2-thm/scripts/thm_inspect.py model.azr --params output/param.sav --distortion`
 
 ## When to use
 - A fit that includes THM points (HOES or penetrability-corrected), alone or with direct data.
@@ -142,39 +152,33 @@ Pitfalls met:
 Start with azure2-setup (pairs, levels, channels) or an existing `.azr`.
 Then:
 
-1. **Enable THM.** Nothing to switch: pyazr and the CLI treat a segment with
-   observable code 10 or more as THM, and the `<thm>` block is optional.
-2. **Segments.**
-   - HOES data become a THM segment: observable code + 10 (10 angle-integrated,
-     11 differential). In a format-3 project, a data set with the field `thm <experiment>` (or `thm global`). Free norm, no norm error: AZURE2
-     profiles it analytically, n* = S_mm/S_md, with no parameter and no penalty.
-   - On-shell-equivalent points become an ordinary segment (σ or dσ/dΩ, converted
-     from S if needed) with a free norm. None of the THM options acts on them.
-3. **Binding energy.** B_xs of the carrier goes in field 32 of **every** channel line
-   of the THM entrance pair (THM Workspace > Channels; pyazr `AzrChannel.binding_energy`).
-   The Channels page flags a B that differs from the experiment's masses by > 1 keV.
-4. **Experiment lines.** Group the segments of one measurement (several exit channels,
-   angular bins, runs) in `<thm>`:
-   `experiment[E1] segments=1-4 beam=14N target=12C spectator=d Ebeam=30`
+1. **Enable THM.** Nothing to switch: a data set with the field `thm <experiment>` (or `thm global`) is a THM data
+   set, and the `<thm>` block holds the experiments and global options.
+2. **Data sets.**
+   - HOES data: `quantity sigma` (or `dsigma_domega`), `unit arbitrary`, `norm profiled`, `thm <experiment>`:
+     AZURE2 profiles the norm analytically, n* = S_mm/S_md, with no parameter and no penalty (T2's `s11_thm_hoes_a`).
+   - On-shell-equivalent points become an ordinary data set (σ, or `quantity sfactor`) with a fitted norm. None of
+     the THM options acts on them.
+3. **Binding energy.** B_xs of the carrier is a column of **every** channel line of the THM entrance pair
+   (`Pair.binding_energy` at run time; T2 carries B(d → p + n) = 2.224566 MeV). Check it against the masses of the
+   experiment line (AME2020: `pyazr.masses`).
+4. **Experiment lines.** One line per measurement in `<thm>`, `experiment[E1] beam=14N target=12C spectator=d
+   Ebeam=30`; its data sets (several exit channels, angular bins, runs) name it with `thm E1`.
    - One shared profiled norm makes the relative channel heights carry exit-width
      ratios. For 12C+12C, four free scales came out within ±5 % of their mean.
    - `beam/target/spectator/Ebeam` (all four or none) are needed by `lineshape`,
      `ps`, `distortion=coulomb|optical` and `vertexModel=dw`.
    - `background=const|linear|quadratic` is a smooth incoherent term, profiled linearly
-     with the norm. Results are in `output/thm_experiments.out` and
-     `session.thm_background(name)`.
+     with the norm. Results are in `output/thm_experiments.out`, `session.thm_background(name)` and
+     `scripts/thm_inspect.py` (norm and its error, background, vertex reach per experiment).
    - pyazr: `Project.set_thm_experiment(name, ...)`; the data sets name the experiment by their `thm` field.
-5. **Resolution.** Record σ_E in the c.m. frame of x + A. The present input is one
-   `<targetInt>` Gaussian per HOES segment, whose σ is a **lab** standard deviation:
-   convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value,
-   start at σ ≈ 30 keV c.m. and fit or scan it. Format 3: a `beam` record with a Gaussian spread, named by the
-   data sets (`pyazr.Project.add_beam`; `pyazr.schema()` lists the fields).
-6. **Direct-data norms.** Give each direct segment a norm error equal to its quoted
-   systematic. Centre the prior on the nominal scale with
-   `segment_N_norm prior_centre 1` in `<parameterSettings>` (old formats; in format 3 the nuisance states its
-   prior's centre: `norm 1.0 fit prior 1.0 5%`). Without a stated centre the
-   norm column is both start value and prior centre. A saved fit then re-centres every
-   later refit on its own result (15N S(0) 70.7 → 74).
+5. **Resolution.** Record σ_E in the c.m. frame of x + A. The present input is a `beam` record with `spread <σ> MeV lab`
+   named by each HOES data set, a **lab** standard deviation: convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ
+   (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value, start at σ ≈ 30 keV c.m. and
+   fit or scan it (`pyazr.Project.add_beam`; azure2-targets).
+6. **Direct-data norms.** Give each direct data set a norm prior equal to its quoted
+   systematic, centred on the nominal scale: `norm 1.0 fit prior 1.0 5%`. A prior centred on the start value
+   re-centres every later refit on its own result (15N S(0) 70.7 → 74).
 7. **Level scheme.** Take it from ENSDF and direct R-matrix analyses, not from the THM
    paper alone. Include every level the THM spectrum shows, narrow ones too, and check
    that no data window cuts a level.
@@ -223,9 +227,9 @@ that its strength will be model-dependent.
 
 ### Stage 4. Fit
 
-AZURE2 computes χ², residuals and Jacobians. pyazr does not fit: the fit loop is
-yours (scipy `least_squares` on `m.objective().residuals` / `.jacobian`), or the CLI
-minimizers. THM Jacobian rows are central differences (the adjoint does not cover
+AZURE2 computes χ², residuals and Jacobians; fit with scipy's `least_squares` on `s.objective().residuals` /
+`.jacobian`, or with the program's fitters (`s.fit_with_engine("migrad-gradient")`, the program's plain run of a
+project with THM data; azure2-fit). THM Jacobian rows are central differences (the adjoint does not cover
 HOES), with the profiled scale included exactly.
 
 1. **Stage the fit.**
@@ -233,7 +237,7 @@ HOES), with the profiled scale included exactly.
    2. Fit THM only, to see what shape it wants (absolute widths will be wrong).
    3. Fit jointly, freeing the few parameters both constrain.
    4. Free the rest step by step. Carry the parameter vector between steps.
-   5. Leave the energy shifts of THM segments fixed at zero.
+   5. Leave the energy shifts of THM data sets fixed at zero.
 2. **Joint fit rules.**
    - The THM scale is profiled; the absolute scale comes only from the direct data
      (norm priors) or from penalty rows of measured strengths.
@@ -248,14 +252,14 @@ HOES), with the profiled scale included exactly.
    - Restart from perturbed points; the same χ² should come back to < 0.01.
    - With penalty rows whose column norms differ by orders of magnitude, use
      `x_scale=1` (driver `--x-scale 1`). `jac` rejected every step on the 19F model.
-   - Converge the resolution fold: raise the `<targetInt>` sub-point tokens (for
-     example `0.04 5 50` against `0.04 10 200`) until χ² stops moving. Dense grids
+   - Converge the resolution fold: raise the data set's `quadrature points N width_multiplier W per_width P` (for
+     example 5/50 against 10/200) until χ² stops moving. Dense grids
      cost memory (a 30-level model: 2.2 GB against 360 MB).
 4. **Assess the fit.**
    - Check χ²/N per dataset, not only the total.
    - Direct norms should sit near 1. Norms of 1.25–1.5 signal a wrong THM observable
      or a wrong vertex (18O 597 keV with pw: 1.33).
-   - Check θ² against the Wigner limit (`pyazr.widths`), parameters at bounds,
+   - Check θ² against the Wigner limit (azure2-check, `widths_check.py`), parameters at bounds,
      super-Wigner high-l entrance amplitudes used as HOES shape knobs, and the residual
      pattern near threshold.
 5. **Error model.**
@@ -412,8 +416,10 @@ the cross-checks are in `references/calibration.md`.
 
 - [ ] Penetrability-corrected points fitted as HOES (7Li/6Li: S(0) halved through direct norms 0.4–0.6).
 - [ ] Wrong carrier or B in field 32 (³He 5.4935, not d 2.2246 or 6Li 1.4735).
-- [ ] Wrong `kinematics=`: the KF convention changes relative peak heights, and for several exit channels their α/p weight (×5 for 12C+12C).
-- [ ] Lab vs c.m. energy column (17O lab; 12C+12C E_lab = 2E_cm); `<targetInt>` σ is lab and a standard deviation, not FWHM.
+- [ ] Wrong `kinematics=`: the KF convention changes relative peak heights, and for several exit channels their α/p
+  weight (×5 for 12C+12C).
+- [ ] Lab vs c.m. energy column (17O lab; 12C+12C E_lab = 2E_cm); a beam `spread` is lab and a standard deviation, not
+  FWHM.
 - [ ] Digitised bars not checked against visible ones; hidden bars invented rather than capped.
 - [ ] Published bars smaller than the scatter, taken at face value (19F χ²/ν ≈ 9).
 - [ ] A subtracted background tuned to one model, reused for all variants.
@@ -422,21 +428,26 @@ the cross-checks are in `references/calibration.md`.
 - [ ] Fixed Brune amplitudes treated as fixed widths.
 - [ ] Fits stopped at the evaluation cap and reported as converged.
 - [ ] Resolution fold not converged on eV–keV levels.
-- [ ] Strength from a peak area against an anchor of other l, or near a vertex node, quoted without a radius and vertex scan.
+- [ ] Strength from a peak area against an anchor of other l, or near a vertex node, quoted without a radius and vertex
+  scan.
 - [ ] `vertex=perlevel` used for new work (representation-dependent).
 - [ ] `coherent` used as a fixed-angle observable (use `theta=`).
 - [ ] Prior or penalty rows counted in N for ν; AIC weights without `--rescale best` at χ²/ν ≫ 1.
-- [ ] Several radius variants fitted in one process (`--in-process`). Keep one variant per process; the B_c memo between sessions is tested by `tests/pyazr/thm_vertex_memo_sessions_test.py`.
-- [ ] HOES and OES points mixed in one segment or one reading; a σ fold applied to OES points.
-- [ ] An energy shift freed on a THM segment; a profiled background below zero.
+- [ ] Several radius variants fitted in one process (`--in-process`). Keep one variant per process; the B_c memo between
+  sessions is tested by `tests/pyazr/thm_vertex_memo_sessions_test.py`.
+- [ ] HOES and OES points mixed in one data set or one reading; a σ fold applied to OES points.
+- [ ] An energy shift freed on a THM data set; a profiled background below zero.
 - [ ] A DW-vertex result reported as final without a FRESCO benchmark of the vertex.
 - [ ] An rwa-declared (`gammaIsRWA`) width converted by hand (`references/thm-block.md`).
-- [ ] Stale `_azure2` after an engine change; stale `output/intEC.dat`/`intEC.extrap` before an extrapolation with external capture (delete them).
+- [ ] Stale `_azure2` after an engine change; stale `output/intEC.dat`/`intEC.extrap` before an extrapolation with
+  external capture (delete them).
 - [ ] Old snapshot files run without checking that the "file alone" χ² reproduces the fit.
 - [ ] `thm_vertex` read at an energy the window cannot reach (use `strict=True`).
-- [ ] Identical exit pair without ×½ in data that count both particles; odd-J levels of an identical-boson entrance pair.
+- [ ] Identical exit pair without ×½ in data that count both particles; odd-J levels of an identical-boson entrance
+  pair.
 - [ ] Interfering background (`cbackground=`) read as evidence of a mechanism.
-- [ ] Rates for heavy systems quoted without the normalisation window, R(E) choice and ≥ 2 radii (12C+12C: plain fit ×14 above the N_C×R fit at 0.5 GK).
+- [ ] Rates for heavy systems quoted without the normalisation window, R(E) choice and ≥ 2 radii (12C+12C: plain fit ×14
+  above the N_C×R fit at 0.5 GK).
 
 ## Pointers
 
@@ -463,7 +474,7 @@ the cross-checks are in `references/calibration.md`.
 | worked examples | `examples/o18_lacognata2008` (narrow, anchor), `examples/o18_lacognata2010` (doublet, DW, authors' background), `examples/o17_guardo2017_fit` (n entrance, p spectator), `examples/f19_pag_thm` (HOES + direct, linear background, direct strengths), `examples/c12c12_tumino2018` (four channels, one experiment, identical nuclei), `examples/li7_tumino2006`, `examples/li6_pizzone2011`, `examples/n15_lacognata2007` (on-shell-equivalent) |
 | classic-project differences of the branch | `MERGE_NOTES.md` |
 | detailed checklists | `references/provenance-checklist.md`, `references/model-choices.md`, `references/calibration.md`, `references/reproduction.md` |
-| THM segments, `<thm>` keys, `Project` editors, reference test χ² | `references/thm-block.md` |
+| THM data sets, `<thm>` keys, `Project` editors, reference test χ² | `references/thm-block.md` |
 | THM in the upgrade (observable, kernel, DWBA validation) | `docs/upgrade/THM.md` |
 
 ## Memory and process discipline (small machines)
@@ -478,6 +489,6 @@ the cross-checks are in `references/calibration.md`.
   a time. The driver holds no session itself.
 - Close sessions before opening another (`save_fit(..., close_session=True)`); closed
   memory is reused, not returned to the OS.
-- Keep `<targetInt>` sub-point density and `ps` node counts as low as convergence
+- Keep the `quadrature` of folded data sets and the `ps` node counts as low as convergence
   allows; check one evaluation's memory before a long fit. Run long fits with `nohup`
   and checkpoint the parameter vector so a capped or killed fit can resume.

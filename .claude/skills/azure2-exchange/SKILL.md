@@ -13,6 +13,13 @@ round trip by numbers. The behaviour of the bases is in `docs/source/reference/c
 parametrizations"); the Brune transformation and its failure modes in `docs/source/reference/troubleshooting.rst`
 and `docs/source/user_guide/levels_channels.rst`.
 
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/basis_compare.py` | the project in the Brune, Park and standard bases: χ², model differences, Park J |
+| `scripts/selftest.py` | runs it on `tests/upgrade/T1` (the three agree to 2e-12; 4 s) |
+
 ## When to use, and when a sibling skill is the owner
 
 - Use this skill to choose or change the basis, to export to or import from GNDS/ENDF and other codes, and to
@@ -40,29 +47,27 @@ correlated (one p + p test: parabolic errors 0.4 % against 1.3 % in Brune).
 
 **Rules for Park fits.**
 - **J_λ must stay positive.** A Park set with J_λ ≤ 0 has no R-matrix meaning (one channel: Γ < 2P/(dS/dE)). The
-  objective adds Σ(J_λ/10⁻³)² over J_λ < 0 (`Total-Park-Chi-Squared` in `chiSquared.out`), MCMC rejects such points,
-  and a run ending there prints `**WARNING: Park norm J = ... is not positive`. pyazr: `m.park_norms(x)` (one J
-  per level, `physical_levels()` order), `m.evaluate(x).terms["Park J > 0"]`. Levels that saturate in Brune (amplitudes of
-  10²–10³ MeV^½) appear in Park as J_λ → 0.
+  objective adds Σ(J_λ/10⁻³)² over J_λ < 0 (`Total-Park-Chi-Squared` in `chiSquared.out`), MCMC rejects such points, and
+  a run ending there prints `**WARNING: Park norm J = ... is not positive`. pyazr: `m.park_norms(x)` (one J per level,
+  `physical_levels()` order), `m.evaluate(x).terms["Park J > 0"]`. Levels that saturate in Brune (amplitudes of 10²–10³
+  MeV^½) appear in Park as J_λ → 0.
 - **Do not expect a different minimum.** The p + p test reaches χ² 99.6121 (Park) and 99.6123 (Brune), widths equal
   to 2 × 10⁻⁵. Near J_λ → 0 the Park form loses precision by cancellation (8 × 10⁻⁷ at the worst point of one
   ¹⁷O model).
 - **Gradient checks resolve about 10⁻⁵ in Park, 10⁻⁷ in Brune**: dS/dE in the level matrix is differentiated
   numerically. This is expected, not a defect.
-- Park (`--use-park`, pyazr `use_park=True`) implies Brune and excludes RMC. Physical widths of a Park
-  vector: `pyazr.transform.transform_out(..., park=True)`. Park-mode MCMC and covariance bands share Brune's code
-  paths and are not separately tested.
+- Park (`--use-park`, pyazr `use_park=True`) implies Brune and excludes RMC. Physical widths of a Park vector:
+  `Session(file, use_park=True).transform_rwa(x)`. Park-mode MCMC and covariance bands share Brune's code paths and
+  are not separately tested.
+- **Check a change of basis by numbers**: `scripts/basis_compare.py model.azr` evaluates the project's values in the
+  three bases; the models agree to rounding (T1: 1.5e-13 Park, 1.9e-12 standard) or the engine refuses the standard
+  basis by name. A larger difference is a defect to report.
 
 **Rules for the standard basis.**
 - **A Brune fit with very broad background poles may have no standard equivalent**: the observed → formal
   transformation N a = E M a needs M = 1 − Σ γγ′ dS/dE positive definite. The run stops with "No standard R-matrix
   ... corresponds to the levels of J^π = ..." (pyazr `AZURE2Error`); the preceding "Denominator less than zero while
   transforming" warnings name the levels (`tests/7Li_p_ay` is an example). Stay in Brune for such files.
-  builds before 2026-11-01 (expires: 2027-02-01) crashed instead ("z is not finite in log_Gamma").
-- builds before 2026-10-27 (expires: 2027-02-01): with `--no-brune` the formal eigenvalues went to a J^π group's
-  levels in file order, so a group listed out of energy order had energies, widths and fix flags permuted (cross
-  sections unaffected). Suspect any old non-Brune fit whose `param.par` `energy_N` values are out of step with the
-  file's levels.
 
 ## 2. Parameter files carry their basis
 
@@ -72,13 +77,7 @@ read (log: `Converted the parameter file from Brune to Park (observed) amplitude
 be converted level by level: the run stops. An untagged file is read as the running basis's own (Brune for a Park
 run).
 
-- **Read `.sav` files by parameter name** (first column), never by row position.
-- builds before 2026-11-04 (expires: 2027-02-01) wrote `param.fit` and `param.mcmc` without the tag. Before resuming
-  a Park fit from such a file, prepend
-  `    #parametrization       2.0000000e+00       0.0000000e+00`; otherwise every amplitude, fixed ones included, is
-  multiplied by √J_λ again. Brune and standard runs are unaffected.
-- builds before 2026-10-08 (expires: 2027-02-01): a few builds wrote the tag as a plain `parametrization` row, which
-  shifts any positional reader by one line; strip it or prefix it with `#`.
+- **Read `.sav` files by parameter name** (first column), never by row position: `Session.parameters.read(path)`.
 
 ## 3. GNDS, ENDF and other codes with Ferdinand and FUDGE
 
@@ -96,8 +95,9 @@ python3 $F fit.azr tex -o fit.tex            # RevTeX document with particle and
 
 - The input format comes from the suffix (`.azr` → azure) or `-i <format>`. Without `-o` the output is named
   `<input>+.<format>`, next to the input. Work on a copy of the `.azr`, never in a live fit directory.
-- Ferdinand reads the `<levels>` block only. To export fitted values, write the fit back into `<levels>` first
-  (`m.save_fit`, `azure2-fit`).
+- Ferdinand reads the `<levels>` block only (format 3 keeps that block's columns; Ferdinand was exercised on files of
+  the earlier formats: check that it reads a format-3 file before relying on it). To export fitted values, write the
+  fit back into `<levels>` first (`Session.save_fit`, `azure2-fit`).
 - When writing AZURE2, the log prints "Setting CN zero energy from eSepE = ...": **check that eSepE equals the
   separation energy in the original `.azr`.**
 

@@ -12,6 +12,21 @@ and the grid resolves every structure. This skill covers publication figures fro
 showing a result to a person. This version of AZURE2 has no graphical front end
 (`docs/source/user_guide/graphical_interface.rst`): a result is shown as figures made from fresh output.
 
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/plot_fit.py` | per data set: data × norm, the model, the pulls; the pulls checked against the engine |
+| `scripts/selftest.py` | runs it on `tests/upgrade/T1` with norms other than 1 |
+
+```bash
+python3 .claude/skills/azure2-plot/scripts/plot_fit.py model.azr --params output/param.sav --outdir figures
+python3 .claude/skills/azure2-plot/scripts/plot_fit.py model.azr --params output/param.sav --sfactor --dataset cap_g0
+```
+
+A smooth bare curve on a fine grid: azure2-calculate's `extrapolate.py`; publication style: prc-figures on the same
+arrays.
+
 ## When to use, and when a sibling instead
 
 - Numbers behind the figure (extrapolation, S factor, decomposition, rates): azure2-calculate.
@@ -21,11 +36,11 @@ showing a result to a person. This version of AZURE2 has no graphical front end
 
 ## Rules for every figure
 
-- **Check every curve against the fit column of `AZUREOut_*.out`.** Interpolate the plotted curve to the data
-  energies and compare with column 4 of the output file for the same segment. This catches three failures:
-  - observables an extrapolation cannot compute: a `<segmentsTest>` segment is never UPOS, so an extrapolated curve
-    at a γ detector's angle is the primary particle's angular distribution, not the secondary-γ one the fit uses (up
-    to a factor 2 off on one (α,n₂γ) case). Compute UPOS curves in data mode on a pseudo-data grid;
+- **Check every curve against the model at the data points** (`Evaluation.data[i].model`, or column 4 of
+  `AZUREOut_*.out`): interpolate the plotted curve to the data energies and compare. This catches three failures:
+  - observables an extrapolation does not compute: an extrapolation of the primary reaction at a γ detector's angle
+    is the primary particle's angular distribution, not the secondary-γ one a `secondary_gamma` data set fits (up
+    to a factor 2 off on one (α,n₂γ) case). Evaluate a copy of the data set on a pseudo-data grid instead;
   - grids too coarse for narrow resonances: a 5 keV grid misdrew peaks by up to a factor 11; keV-wide levels need
     0.25–0.5 keV steps (or `pyazr.tabulate`, azure2-calculate);
   - single-point spikes at channel thresholds: a grid point on a threshold can return nonsense (10²⁸ b). Drop a point
@@ -33,15 +48,16 @@ showing a result to a person. This version of AZURE2 has no graphical front end
     a partial cross section's own opening is steep but genuine. The same failure in data points is an azure2-check
     matter.
 - **Draw the data as AZURE2 compares them**: multiplied by the fitted norm n and at the fitted energy shift. A fixed
-  non-unity norm lives only in the `.azr`, a fitted one only in the `.sav`; pyazr's `m.evaluate(x).data[i].norm` is the
-  norm each segment carries at `x`.
+  non-unity norm lives only in the `.azr`, a fitted one only in the `.sav`; `s.evaluate(x).data[i].norm` is the
+  norm each data set carries at `x`, and `plot_fit.py` fails when its pulls differ from the engine's residuals.
 - **State the frame and unit on every axis**: E_c.m. or E_lab (MeV or keV), E_x for plots across entrance channels
   (the only common axis), θ_c.m. or θ_lab (deg), σ (b), dσ/dΩ_c.m. (b/sr), S (keV b or MeV b), N_A⟨σv⟩
   (cm³ mol⁻¹ s⁻¹).
-- **Take S from AZURE2** (`d.model * d.extra["sfactor_conversion"]` of `m.evaluate(x).data`, `m.sfactor`, the S columns); never re-derive the Sommerfeld factor.
-- **Bare or folded, say which.** A test-segment curve is folded by any active `<targetInt>` line listing its key; a
-  bare curve needs those lines inactive (azure2-calculate, Extrapolation).
-- **Evaluate at the fit's parameters** (`m.load_sav("output/param.sav")` or `pyazr.best_fit_params`), not at the
+- **Take S from AZURE2** (`d.model * d.extra["sfactor_conversion"]` of `s.evaluate(x).data`, the S columns of the
+  output files); never re-derive the Sommerfeld factor.
+- **Bare or folded, say which.** An extrapolation is folded by the target, beam or detector it names, and only by
+  those; the model at the data points is folded as the data set is (azure2-calculate, "Extrapolation").
+- **Evaluate at the fit's parameters** (`s.parameters.read("output/param.sav")`), not at the
   `.azr`'s `<levels>`, unless the figure is about the `.azr` itself.
 
 ## Recipes
@@ -50,10 +66,10 @@ Code for each figure type is in `references/recipes.md`:
 
 | Figure | pyazr calls |
 |---|---|
-| excitation function with pulls | `m.evaluate(x).data[i]` (`model`, `energies`, `norm`, `residuals`), `m.cross`, `m.cross_err` |
-| angular distribution | `m.evaluate(x).data[i].angles`; `pyazr.angular_distribution` for Legendre coefficients |
-| S factor with band and decomposition | `extrapolation_bands(..., quantity="sfactor")`, `m.sfactor`, `without_level`/`only_level` |
-| rate ratio | `reactionrates.out` or `pyazr/examples/reaction_rate.py`, divided by a reference rate on the same T9 grid |
+| excitation function with pulls | `plot_fit.py`; `s.evaluate(x).data[i]` (`model`, `values`, `norm`, `residuals`) |
+| angular distribution | `.angles` (θ_c.m.) of the same; `pyazr.angular_distribution` for Legendre coefficients |
+| S factor, band, decomposition | `extrapolate.py`, `decompose.py` (azure2-calculate); `pyazr.extrapolation_bands` |
+| rate ratio | `reactionrates.out` or `pyazr/examples/reaction_rate.py`, over a reference on the same T9 grid |
 
 ## Showing a result to a person
 
@@ -83,8 +99,8 @@ ls -la output/AZUREOut_*.out | head            # timestamps from just now
 - **The project's own options.** A project may state them as `<config>` keys (`use_brune=0`, ...); otherwise take
   `--use-brune`, `--ignore-externals`, `--no-long-wavelength` and the rest from the project's job script
   (`AZURE2 --describe` shows each option and its source); a calculate under other options draws different physics.
-- **The right parameter file.** A blank parameter file uses `<levels>` with the nominal `dataNorm`/`energyShift`
-  fields of `<segmentsData>` (not n = 1); `output/param.sav` uses the fitted values, including norms and shifts. The
+- **The right parameter file.** A blank parameter file uses `<levels>` with the values the data sets' `norm`
+  and `shift` fields write (not n = 1); `output/param.sav` uses the fitted values, including norms and shifts. The
   two can differ by a large factor in χ² (127,588 against 96,811 on one model). Blank is right only to verify what
   `<levels>` contains. Never write fitted norms into the nominal fields (azure2-fit).
 - **Back up `output/` first** when its contents are a cited record (a published baseline, numbers in a manuscript):
@@ -94,7 +110,7 @@ ls -la output/AZUREOut_*.out | head            # timestamps from just now
 ### Budget the time
 
 A mode-1 calculate on a large multichannel model with target integrations is slow. On one model (107 segments,
-~4,800 points, `<targetInt>` entries up to 1,000 integration points): ~33 min in a fresh directory with empty
+~4,800 points, folded data sets with up to 1,000 sub-points): ~33 min in a fresh directory with empty
 `output/`, ~5 min in a live directory. Tell the person the calculate is running, and send it to the batch system
 rather than a login node: such runs use several GB and effectively one core regardless of `OMP_NUM_THREADS`.
 
@@ -107,9 +123,9 @@ Say what the person is looking at:
 - the total χ² of the calculate just run;
 - which segments are worth checking for this change.
 
-If `<segmentsData>` changed, name the segment keys touched and the data file each holds. A key is the 1-based position
-among all `<segmentsData>` lines, inactive ones included: the key `<targetInt>` binds to and `chiSquared.out` and
-`normalizations.out` print. Quote those files, not a count by eye.
+If data sets changed, name them and the data file each holds; `chiSquared.out` and `normalizations.out` number them
+by their position among the `dataset` records (the `key` of `AZURE2 --describe`). Quote those files, not a count by
+eye.
 
 ## Pointers
 
