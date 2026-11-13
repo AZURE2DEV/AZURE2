@@ -45,7 +45,7 @@ def main():
         return 0
     with Session(AZR, cwd=PROJECT, use_brune=True) as s:
         x = np.asarray(s.params_rwa, float)
-        xa = np.asarray(s.sess.params_all_rwa(), float)
+        xa = np.asarray(s._engine.params_all_rwa(), float)
         print(f"{os.path.basename(AZR)}: {x.size} free of {xa.size} parameters")
         forms = {"list": list, "int-ish list": lambda v: [float(f"{t:.6g}") for t in v],
                  "float32 array": lambda v: np.asarray(v, np.float32),
@@ -58,16 +58,16 @@ def main():
             check(f"evaluate().chi2 from a {name}", abs(c - ref) <= tol, f"{c} vs {ref}")
         # the other GIL-releasing array calls, from a list
         xl = list(x)
-        check("update_segments_rwa from a list", s.sess.update_segments_rwa(xl) >= 0)
-        s.sess.set_params_all_rwa(list(xa))
+        check("update_segments_rwa from a list", s._engine.update_segments_rwa(xl) >= 0)
+        s._engine.set_params_all_rwa(list(xa))
         check("set_params_all_rwa from a list", True)
-        check("update_segments_all_rwa from a list", s.sess.update_segments_all_rwa(list(xa)) >= 0)
+        check("update_segments_all_rwa from a list", s._engine.update_segments_all_rwa(list(xa)) >= 0)
         phys = np.asarray(s.transform_rwa(x), float)
         check("transform_rwa from a list",
               np.allclose(np.asarray(s.transform_rwa(xl), float), phys))
-        cp = float(s.sess.calculate_chi2_physical(list(phys)))
+        cp = float(s._engine.calculate_chi2_physical(list(phys)))
         check("calculate_chi2_physical from a list", abs(cp - ref) <= 1e-6 * abs(ref), f"{cp} vs {ref}")
-        g = np.asarray(s.sess.calculate_chi2_grad_rwa(xl), float)
+        g = np.asarray(s._engine.calculate_chi2_grad_rwa(xl), float)
         check("calculate_chi2_grad_rwa from a list", g.size == x.size + 1 and np.all(np.isfinite(g)),
               f"size {g.size} vs {x.size + 1}")       # [chi2, grad...]
         r, J = s.objective().residuals_and_jacobian(xl)

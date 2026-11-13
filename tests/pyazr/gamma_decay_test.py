@@ -196,27 +196,27 @@ with tempfile.TemporaryDirectory() as tmp:
         with Session(twin_f, cwd=d) as t, Session(rec_f, cwd=d) as s, Session(scaled, cwd=d) as f:
             names = [p.name for p in s.parameters if not p.fixed]
             i = names.index("level5.total_width")
-            phys = np.asarray(s.sess.params_values(), float)
+            phys = np.asarray(s._engine.params_values(), float)
             check(f"{label}: the physical vector holds Gamma_gamma (eV)", phys[i] == 0.0385027, phys[i])
             x = phys.copy()
             x[i] *= 1.2
             # the engine's physical-vector path (the binding: pyazr's API takes the fit vector only)
-            c_vec, c_file = float(s.sess.calculate_chi2_physical(x)), float(f.sess.calculate_chi2_rwa(f.params_rwa))
+            c_vec, c_file = float(s._engine.calculate_chi2_physical(x)), float(f._engine.calculate_chi2_rwa(f.params_rwa))
             # the twin: level 5's radiative widths x 1.2 in its physical vector
             tn = [p.name for p in t.parameters if not p.fixed]
-            xt = np.asarray(t.sess.params_values(), float).copy()
+            xt = np.asarray(t._engine.params_values(), float).copy()
             k5 = [k for k, n in enumerate(tn) if n.startswith("width_5_") and abs(xt[k]) < 1.0]
             xt[k5] *= 1.2
-            c_twin = float(t.sess.calculate_chi2_physical(xt))
+            c_twin = float(t._engine.calculate_chi2_physical(xt))
             check(f"{label}: the engine's chi2 with Gamma_gamma x 1.2 is the chi^2 of the project written with it",
-                  abs(c_vec - c_file) <= 1e-12 * c_file and abs(c_vec - float(s.sess.calculate_chi2_physical(phys))) > 1.0,
+                  abs(c_vec - c_file) <= 1e-12 * c_file and abs(c_vec - float(s._engine.calculate_chi2_physical(phys))) > 1.0,
                   f"{c_vec} {c_file}")
             check(f"{label}: ... and the twin's with its {len(k5)} radiative widths x 1.2",
                   len(k5) == 5 and abs(c_vec - c_twin) <= 1e-12 * c_twin, f"{c_vec} {c_twin}")
-            n = int(s.sess.update_segments(list(x)))
-            y = np.concatenate([np.asarray(s.sess.calculated_segments(k), float).ravel() for k in range(n)])
-            nf = int(f.sess.update_segments(list(np.asarray(f.sess.params_values(), float))))
-            yf = np.concatenate([np.asarray(f.sess.calculated_segments(k), float).ravel() for k in range(nf)])
+            n = int(s._engine.update_segments(list(x)))
+            y = np.concatenate([np.asarray(s._engine.calculated_segments(k), float).ravel() for k in range(n)])
+            nf = int(f._engine.update_segments(list(np.asarray(f._engine.params_values(), float))))
+            yf = np.concatenate([np.asarray(f._engine.calculated_segments(k), float).ravel() for k in range(nf)])
             check(f"{label}: update_segments with Gamma_gamma x 1.2 gives the written project's cross sections",
                   n == nf and np.array_equal(y, yf), np.max(np.abs(y - yf) / np.abs(yf)) if n == nf else (n, nf))
 

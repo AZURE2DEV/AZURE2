@@ -38,7 +38,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
 MODELS = [("13N", "13N.azr"), ("natural_neon", "natural_neon.azr")]
-# The engine's entry points, called through the binding (Session.sess): the chi-squared of the fit vector and of
+# The engine's entry points, called through the binding (Session._engine): the chi-squared of the fit vector and of
 # the physical vector, the forward pass of the fit vector, of the physical vector and of every parameter; and
 # pyazr's evaluation (Session.evaluate).
 CALLS = ["calculate_chi2_rwa", "calculate_chi2_physical", "update_segments_rwa", "update_segments",
@@ -47,7 +47,7 @@ CALLS = ["calculate_chi2_rwa", "calculate_chi2_physical", "update_segments_rwa",
 
 def call_engine(a, call, arg):
     """The result arrays of one entry point at arg."""
-    e = a.sess
+    e = a._engine
     if call.startswith("calculate_chi2"):
         return [[getattr(e, call)(arg)]]
     if call == "evaluate":
@@ -65,7 +65,7 @@ def worker(model_dir, azr, out):
     res = {}
     x0 = np.array(a.params_rwa, float)
     p0 = np.array(a.params, float)
-    full0 = np.array(a.sess.params_all_rwa(), float)
+    full0 = np.array(a._engine.params_all_rwa(), float)
     for tag, s in [("x0", 1.0), ("moved", 1.03)]:
         x, p, full = x0 * s, p0 * s, full0 * s
         for call in CALLS:

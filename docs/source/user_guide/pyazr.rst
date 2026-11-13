@@ -1207,6 +1207,8 @@ no input of any call.
    * - ``chi2_and_grad(x)``
      - ``s.objective().value_and_grad(x)`` (the objective's); the data part alone: ``2 * J[:n].T @ r[:n]`` from
        ``r, J = s.objective().residuals_and_jacobian(x)``, ``n = ev.data[-1].rows.stop``
+   * - ``s.sess`` (the binding's session object)
+     - none: ``s._engine`` is private (no lock, no promise of stability); every number has a public call
    * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
      - ``s.objective().residuals(x)``, ``.residuals_and_jacobian(x, skip=...)``: the data rows first, then one
        row per prior and constraint

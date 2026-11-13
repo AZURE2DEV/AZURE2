@@ -1,6 +1,6 @@
 """The Trojan-horse experiments of one session (the ``<thm>`` ``experiment[...]`` lines): their profiled norms and
 backgrounds, line shapes, vertex functions and distortion factors as the engine evaluates them.  Mixed into
-:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``sess``, ``mode`` and ``params_rwa``."""
+:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``_engine``, ``mode`` and ``params_rwa``."""
 
 import numpy as np
 
@@ -24,9 +24,9 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
+            self._engine.calculate_chi2_rwa(x)
         out = {}
-        for r in self.sess.thm_experiments():
+        for r in self._engine.thm_experiments():
             q = 1 + _THM_BACKGROUND_TERMS[r["background"]]
             cov = np.asarray(r["covariance"], float).reshape(4, 4)[:q, :q]
             value = np.asarray(r["value"], float)
@@ -115,8 +115,8 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
+            self._engine.calculate_chi2_rwa(x)
+        r = self._engine.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
         return r
 
     @engine_call
@@ -194,8 +194,8 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+            self._engine.calculate_chi2_rwa(x)
+        r = self._engine.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
         reached = np.asarray(r.get("reached", []), bool)
         if reached.size and not reached.all():
             far = np.asarray(r["E"], float)[~reached]
@@ -254,4 +254,4 @@ class SessionTHM:
         Raises the engine error if the experiment is unknown, has no
         distortion, or an energy leaves the spectator no energy.
         """
-        return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
+        return self._engine.thm_distortion(str(experiment), np.asarray(energies, float).ravel())

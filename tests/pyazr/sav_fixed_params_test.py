@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(azr, cwd=work) as m:
         names = [p.name for p in m.parameters]
         fixed = np.asarray(m.fixed_params, bool)
-        full0 = np.asarray(m.sess.params_all_rwa(), float)
+        full0 = np.asarray(m._engine.params_all_rwa(), float)
         x0 = np.asarray(m.params_rwa, float)
         chi2_azr = m.evaluate(x0).chi2
 
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
         x = m.load_sav(sav)
         check("returns the free vector", np.array_equal(x, x_old))
         check("params_rwa set to it", np.array_equal(np.asarray(m.params_rwa), x))
-        live = np.asarray(m.sess.params_all_rwa(), float)
+        live = np.asarray(m._engine.params_all_rwa(), float)
         want = m.read_sav(sav)[names[k]]
         check("engine holds the file's fixed value", live[k] == want,
               f"{live[k]} vs {want}")

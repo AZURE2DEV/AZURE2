@@ -55,7 +55,7 @@ except Exception as err:                                   # engine not built
 
 
 def counts(m, table=True):
-    s = m.sess
+    s = m._engine
     rows = len(s.parameter_records())
     return rows, len(s.params_fixed()), len(m.fixed_params), (len(m.parameters) if table else rows)
 

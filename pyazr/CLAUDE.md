@@ -69,6 +69,10 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   attribute in `evaluate.py` and its line in the class's `FIELDS` (`kinds()["objects"]`).
 - Calls of both objects take the session's lock (`pyazr.locking.session_lock`), as every method of the session that
   enters the engine does.
+- `Session._engine` is the binding's session object (`_azure2.Session`): private, no lock, no promise of stability.
+  A module of `pyazr/` reads it only inside an `engine_call` method or a `with session_lock(s):` block
+  (`tests/pyazr/session_lock_test.py` checks every module by its syntax tree); a test may use it only to test the
+  binding itself.
 
 ## How it is built
 

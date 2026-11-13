@@ -61,7 +61,7 @@ for project, azr in MODELS:
         tag = f"{project}/{azr}"
         check(f"{tag}: objective() = objective().value_and_grad[0] ({f:.12g})", abs(f - f2) <= 1e-12 * max(1.0, abs(f)),
               f"{f} vs {f2}")
-        t = s.sess.objective_terms_rwa(x)
+        t = s._engine.objective_terms_rwa(x)
         total = float(np.sum(t["values"]))
         check(f"{tag}: objective = sum of its {len(t['names'])} terms", abs(total - f) <= 1e-9 * max(1.0, abs(f)),
               f"{total} vs {f}")

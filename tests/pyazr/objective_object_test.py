@@ -6,7 +6,7 @@
     tests/rectangular_resolution fit.azr) and the 15O gamma_decay record with priors (tests/gamma_decay
     record.azr, the variant of tests/reference/sampler_objective_test.cpp), at the start and at a displaced point:
     f(x) and f.value_and_grad(x) equal the binding's calculate_objective_rwa(x) and calculate_objective_grad_rwa(x)
-    bit for bit (the engine's calls, through Session.sess: a test of the binding); the first rows of f.residuals(x)
+    bit for bit (the engine's calls, through Session._engine: a test of the binding); the first rows of f.residuals(x)
     are the binding's calculate_residuals_rwa(x) bit for bit, and the first rows and columns of
     f.residuals_and_jacobian(x) those of its calculate_residual_jacobian_rwa(x); the sum of the squares of the rows is
     f(x) (1e-10), from the forward rows and from
@@ -90,7 +90,7 @@ def displaced(x):
 
 def engine_rows_and_jacobian(s, x):
     """The binding's residual rows and Jacobian (data, model data, prior covariance), or None where it refuses."""
-    resp = np.asarray(s.sess.calculate_residual_jacobian_rwa(np.asarray(x, float)), float)
+    resp = np.asarray(s._engine.calculate_residual_jacobian_rwa(np.asarray(x, float)), float)
     if resp.size == 1 and resp[0] == -1.0:
         return None, None
     n, cols = int(round(resp[0])), int(round(resp[1]))
@@ -104,14 +104,14 @@ def against_engine(label, s):
           and f.bounds == [tuple(b) for b in free.bounds], f"{f.names[:3]} {free.names[:3]}")
     for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
         v = f(x)
-        v0 = float(s.sess.calculate_objective_rwa(x))
+        v0 = float(s._engine.calculate_objective_rwa(x))
         check(f"{label} {name}: f(x) = the engine's objective bit for bit ({v:.10g})", v == v0, v0)
         val, g = f.value_and_grad(x)
-        resp = np.asarray(s.sess.calculate_objective_grad_rwa(x), float)
+        resp = np.asarray(s._engine.calculate_objective_grad_rwa(x), float)
         val0, g0 = float(resp[0]), resp[1:]
         check(f"{label} {name}: value_and_grad = the engine's bit for bit", val == val0 and same(g, g0))
         rows = f.residuals(x)
-        old = np.asarray(s.sess.calculate_residuals_rwa(x), float)
+        old = np.asarray(s._engine.calculate_residuals_rwa(x), float)
         check(f"{label} {name}: the first {len(old)} rows are the engine's residuals bit for bit, {len(rows)} rows",
               same(rows[:len(old)], old) and len(rows) >= len(old))
         rel = abs(float(np.sum(rows ** 2)) - v) / max(1.0, abs(v))
@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmp:
         r_all, J_all = f.residuals_and_jacobian(x)
         r_s, J_s = f.residuals_and_jacobian(x, skip=skip)
         nd = s.evaluate(x).data[-1].rows.stop  # skip concerns the finite differences of the data rows
-        resp = np.asarray(s.sess.calculate_residual_jacobian_rwa(x, skip=skip), float)
+        resp = np.asarray(s._engine.calculate_residual_jacobian_rwa(x, skip=skip), float)
         n = int(round(resp[0]))
         J_e = resp[2 + n:].reshape(n, -1)
         keep = [c for c in range(len(x)) if c not in skip]
@@ -205,7 +205,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("T2: a norm outside any bound keeps a finite log_prob (no sampler_support for norms)",
               np.isfinite(f.log_prob(x)) and not any(f.sampler_support))
         for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
-            lp, constant = s.sess.sampler_log_probability(f.x0, x)
+            lp, constant = s._engine.sampler_log_probability(f.x0, x)
             got = f.log_prob(x)
             check(f"T2 {name}: log_prob = the engine sampler's ln P - its constant ({got:.10g}, C {constant:.6g})",
                   abs(got - (lp - constant)) <= 1e-10 * max(1.0, abs(got)), f"{lp - constant}")
@@ -244,7 +244,7 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"record: entry {k} = {value} (outside its limits): log_prob = -inf", lp == -np.inf, lp)
             check(f"record: entry {k} = {value}: the evaluation says excluded", s.evaluate(x).excluded)
         for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
-            lp, constant = s.sess.sampler_log_probability(f.x0, x)
+            lp, constant = s._engine.sampler_log_probability(f.x0, x)
             got = f.log_prob(x)
             check(f"record {name}: log_prob = the engine sampler's ln P - its constant ({got:.10g})",
                   abs(got - (lp - constant)) <= 1e-10 * max(1.0, abs(got)), f"{lp} {constant}")

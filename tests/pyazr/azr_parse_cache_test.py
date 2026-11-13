@@ -112,14 +112,14 @@ def main():
 
             print("\n2. values unchanged")
             vals = [d.model for d in m.evaluate(x).data]
-            m.sess.update_segments_rwa(x)  # the engine's forward pass, read below through the binding
+            m._engine.update_segments_rwa(x)  # the engine's forward pass, read below through the binding
             ok = True
             for i in range(n):
-                ref = (m.sess.calculated_segments_e1(i) if i == k_e1 else m.sess.calculated_segments(i))
+                ref = (m._engine.calculated_segments_e1(i) if i == k_e1 else m._engine.calculated_segments(i))
                 ok &= np.array_equal(np.asarray(vals[i]), np.asarray(ref))
             check("each segment = the engine's total, the E1 segment its E1 component", ok)
-            tot = np.asarray(m.sess.calculated_segments(k_e1))
-            e1 = np.asarray(m.sess.calculated_segments_e1(k_e1))
+            tot = np.asarray(m._engine.calculated_segments(k_e1))
+            e1 = np.asarray(m._engine.calculated_segments_e1(k_e1))
             print(f"     (E1 segment: max |total - E1| / total = {np.max(np.abs(tot - e1) / np.abs(tot)):.3g})")
             pen = m.evaluate(x)
             obj = m.objective()(x)

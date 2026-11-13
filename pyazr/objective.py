@@ -89,10 +89,11 @@ class Objective:
         """A copy of the start of the free vector (the session's ``params_rwa`` when the object was made)."""
         return self._x0.copy()
 
-    def _engine(self):
-        if not self._session.is_alive():  # the error names the session's call that made this object
+    def _open(self):
+        """The session, or :class:`pyazr.SessionClosed` naming the session's call that made this object."""
+        if not self._session.is_alive():
             raise session_checks.session_closed(self._session.file, "objective")
-        return self._session.sess
+        return self._session
 
     @staticmethod
     def _vector(x):
@@ -101,12 +102,12 @@ class Objective:
     def __call__(self, x):
         """The objective at x (a float): chi-squared of the data plus every prior and constraint."""
         with self._lock:
-            return float(self._engine().calculate_objective_rwa(self._vector(x)))
+            return float(self._open()._engine.calculate_objective_rwa(self._vector(x)))
 
     def value_and_grad(self, x):
         """``(f(x), gradient)`` from one engine call (for ``scipy.optimize.minimize(..., jac=True)``)."""
         with self._lock:
-            resp = np.asarray(self._engine().calculate_objective_grad_rwa(self._vector(x)), float)
+            resp = np.asarray(self._open()._engine.calculate_objective_grad_rwa(self._vector(x)), float)
         return float(resp[0]), resp[1:].copy()
 
     def grad(self, x):
@@ -116,7 +117,7 @@ class Objective:
     def residuals(self, x):
         """The objective's least-squares rows at x from a forward pass (``sum(r**2) == f(x)``)."""
         with self._lock:
-            out = self._engine().objective_rows_rwa(self._vector(x), False)
+            out = self._open()._engine.objective_rows_rwa(self._vector(x), False)
         return np.asarray(out["rows"], float)
 
     def residuals_and_jacobian(self, x, skip=None):
@@ -125,7 +126,7 @@ class Objective:
         data rows (the rows after them keep their analytic derivatives)."""
         skip = [] if skip is None else [int(c) for c in skip]
         with self._lock:
-            out = self._engine().objective_rows_rwa(self._vector(x), True, skip)
+            out = self._open()._engine.objective_rows_rwa(self._vector(x), True, skip)
         if not out["ok"]:
             raise EngineError("the engine has no analytic Jacobian for a data set of this project; use "
                               "Objective.residuals(x) with a finite-difference Jacobian instead.")
@@ -139,13 +140,15 @@ class Objective:
     def log_prob(self, x):
         """ln P = -0.5 * f(x), or ``-inf`` outside the engine's sampler's support (see the class docstring)."""
         with self._lock:
-            return float(self._engine().log_prob_rwa(self._vector(x)))
+            return float(self._open()._engine.log_prob_rwa(self._vector(x)))
 
     def describe(self):
         """Plain data: the free parameters (name, bounds, start, sampler_support), errordef, the terms' names."""
         rows = [{"name": n, "bounds": list(b), "start": float(v), "sampler_support": s}
                 for n, b, v, s in zip(self.names, self.bounds, self._x0, self.sampler_support)]
-        return {"parameters": rows, "errordef": self.errordef, "terms": list(self._engine().objective_term_names())}
+        with self._lock:
+            terms = list(self._open()._engine.objective_term_names())
+        return {"parameters": rows, "errordef": self.errordef, "terms": terms}
 
     def __repr__(self):
         return f"Objective({len(self._x0)} free parameters of {self._session.file!r})"

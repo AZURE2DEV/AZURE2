@@ -59,7 +59,7 @@ s = Session(sys.argv[2])
 if sys.argv[4] == "extrap":
     s.extrap_mode()
 if sys.argv[3] == "control":
-    s.sess.update_segments(np.asarray(s.params_rwa, float))
+    s._engine.update_segments(np.asarray(s.params_rwa, float))
 else:
     same = True
     a, c = s.evaluate(s.params_rwa).data, s.evaluate().data

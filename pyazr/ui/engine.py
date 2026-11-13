@@ -129,11 +129,11 @@ class Engine:
         then one evaluation."""
         s = self.s
         with session_lock(s):
-            chi2 = float(s.sess.calculate_chi2_rwa(x))
+            chi2 = float(s._engine.calculate_chi2_rwa(x))
             os.makedirs(s.output_dir, exist_ok=True)
-            if not s.sess.write_output_files():
+            if not s._engine.write_output_files():
                 raise RuntimeError("the engine wrote no output files (no data object)")
-            session_checks.warn_engine_notices(s.sess, stacklevel=2)  # the engine's notices as warnings
+            session_checks.warn_engine_notices(s._engine, stacklevel=2)  # the engine's notices as warnings
         ev = s.evaluate(x)
         rows, totals = _read_chi_squared(os.path.join(s.output_dir, "chiSquared.out"))
         if len(rows) != len(self.names):

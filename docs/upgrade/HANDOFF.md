@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the raw handle is `Session._engine`
+
+**Done.**  The session's raw handle (the binding's `_azure2.Session`) is the private property `Session._engine`; the
+public `sess` is gone (no alias).  Its docstring and `pyazr/CLAUDE.md` say it takes no lock and promises nothing.
+pyazr's own modules read it under the session's lock: the session's classes through `engine_call` (as before),
+`bands.py` (`_evaluate`, the forward pass and the arrays read after it, the central pass of the bands,
+`live_parameters`), `model_data.py`, `evaluate.py`, `ui/engine.py` in `with session_lock(s):`, `Objective` in
+its `with self._lock:` (its `describe()` took no lock before).  `tests/pyazr/session_lock_test.py` gained check
+(a'): every `<x>._engine` in the 73 modules of `pyazr/` outside the session's classes is inside an `engine_call`
+function or a `with session_lock(...)` / `with self._lock` block, by the syntax tree (shown to fail with the lock
+of `model_data.py` removed: it names `pyazr/model_data.py:56`); and a check that no public `sess` is left.  The
+tests that used `.sess` use `._engine` (a rename, 23 files): they test the binding itself (`physical_norm`,
+`parallel_points`, `objective_object`, `gamma_decay` part 5, `list_args`, `api_model_value`, `azr_parse_cache`,
+`evaluation`, `parameter_kinds`, `parameter_records`, `sav_readers`, `sav_fixed_params`, `beta_sign`,
+`fixed_width_roundtrip`, `extrap_layout`, `objective_terms`, `objective`, `inactive_lines`, `thm_profiled`,
+`geometry_no_transform`, `ui/api`, `upgrade/poison_results`); their docstrings do not all say so yet.  The skill
+`azure2-targets/references/target-integration-check.md` reads the bare curve from `evaluate` now, not the handle.
+
+**Verified** (build `work/b-pysess`, unchanged since the evaluation commit: no `api/` change here): the consistency
+test; `ctest -R pyazr_ -LE slow -j 2` (OMP 1, OpenBLAS 1): 130 of 130.  Not run: as the evaluation commit.
+**Open**: slices 3 (the parameter vector and table), 4 (no physics in Python, the mode switch and the session's edits)
+and 5 (the libraries, unused bindings) of the rename, not started.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: one evaluation (`evaluate`, `objective()`)
 
 **Done.**  The session has two ways to evaluate, `Session.evaluate(x)` (an `Evaluation`) and `Session.objective()`

@@ -63,7 +63,7 @@ def test_evaluate_equals_direct_session(t1):
     s = direct_session(t1)
     x = np.array(s.params_rwa)
     assert e["objective"] == s.objective()(x)
-    assert e["chi2"] == float(s.sess.calculate_chi2_rwa(x))
+    assert e["chi2"] == float(s._engine.calculate_chi2_rwa(x))
     models = [d.model for d in s.evaluate(x).data]
     data = t1.get("/api/evaluation").json()["datasets"]
     assert [d["name"] for d in data] == [d.name for d in s.active_datasets]

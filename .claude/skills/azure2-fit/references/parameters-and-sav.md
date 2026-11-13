@@ -44,12 +44,10 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths were never updated). In one case
   10 fixed widths off by up to 1.6 % gave χ² = 9925.03 against the CLI's 9868.04; with `load_sav` every `AZUREOut_*`
   line and `chiSquared.out` matched the CLI exactly.
-- `load_sav` pushes the whole file into the engine (`sess.set_params_all_rwa`), sets `m.params_rwa` and returns the
+- `load_sav` pushes the whole file into the engine (the binding's `set_params_all_rwa`), sets `m.params_rwa` and returns the
   free vector; `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the free/fixed
   split (the CLI frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with another basis.
 - `extrap_mode()` and `data_mode()` re-initialise the engine from the `.azr`: call `load_sav` again after switching.
-- builds before 2026-10-12 (expires: 2027-02-01) have no `load_sav`; there, `m.sess.update_segments_all_rwa(full)`
-  (one forward pass) has the same effect.
 
 ## Which physical level is `energy_<N>`?
 

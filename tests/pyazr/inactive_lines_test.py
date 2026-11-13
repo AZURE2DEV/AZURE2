@@ -212,7 +212,7 @@ with tempfile.TemporaryDirectory() as tmp:
         chi2_moved = m.evaluate(moved).chi2
         check("objective = chi-squared + penalty",
               np.isclose(m.objective()(moved), chi2_moved + 4.0, rtol=1e-12))
-        allrwa = list(np.asarray(m.sess.params_all_rwa(), float))
+        allrwa = list(np.asarray(m._engine.params_all_rwa(), float))
         it = iter(range(len(moved)))
         sav = os.path.join(work, "moved.sav")
         with open(sav, "w") as fh:

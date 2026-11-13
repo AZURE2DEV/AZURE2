@@ -120,7 +120,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("evaluate().chi2 == CLI (rel 1e-6)", rel(chi2, cli_chi2) < 1e-6,
               f"{chi2} vs {cli_chi2}")
 
-        n_info = len(m.sess.parameter_records())
+        n_info = len(m._engine.parameter_records())
         check("parameter_records has one record per parameter",
               n_info == len(m.fixed_params), f"{n_info} vs {len(m.fixed_params)}")
         try:

@@ -224,10 +224,10 @@ def evaluate(session, x=None):
     with session_lock(session):
         x = np.asarray(session.params_rwa if x is None else x, float).ravel()
         if has_data:
-            raw = session.sess.evaluation_rwa(x)
+            raw = session._engine.evaluation_rwa(x)
         else:
             x = np.asarray(session._mode_free_vector(x), float).ravel()
-            raw = _forward_pass(session.sess, x)
+            raw = _forward_pass(session._engine, x)
         try:
             if has_data:
                 described = session._parsed("active")

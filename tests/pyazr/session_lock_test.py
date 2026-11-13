@@ -2,14 +2,19 @@
 """The lock of a pyazr.Session: every call that enters the engine holds it (pyazr/locking.py).
 
 (a) Every public method and property of pyazr.Session (its own and its mixins') that reaches the engine
-    (its source names ``self.sess`` or ``self._sess``, or it calls another member that does) is wrapped by
+    (its source names ``self._engine`` or ``self._sess``, or it calls another member that does) is wrapped by
     ``engine_call`` (``takes_lock``); the members that do not reach the engine are listed here by name.
+(a') Every use of the raw handle ``Session._engine`` in the other modules of ``pyazr/`` is inside a function wrapped
+    by ``engine_call`` or a ``with session_lock(...)`` (or an ``Objective``'s ``with self._lock``) block (by their
+    syntax trees).
 (b) Two threads on one session of T1 at once -- one calling ``evaluate(x)`` twice, the other ``objective()``'s
     value and gradient, rows, and rows with their Jacobian -- each at its own point, get what each gets alone, bit
     for bit.  (Without the lock two threads on one engine crash the process or mix their points.)
 
 Run: python3 tests/pyazr/session_lock_test.py
 """
+import ast
+import glob
 import inspect
 import os
 import re
@@ -42,7 +47,7 @@ except Exception as err:  # engine not built
     sys.exit(77)
 
 # Public members that never reach the engine: the raw handle itself, values read from the options or the file.
-NO_ENGINE = {"sess", "output_dir", "is_alive", "basis", "read_sav", "read_sav_basis"}
+NO_ENGINE = {"output_dir", "is_alive", "basis", "read_sav", "read_sav_basis"}
 
 
 def members():
@@ -67,13 +72,54 @@ def source(fn):
 
 print("(a) every public member that reaches the engine takes the lock")
 found = members()
-reaches = {n for n, fn in found.items() if re.search(r"self\.(_?sess)\b", source(fn))}
+reaches = {n for n, fn in found.items() if re.search(r"self\.(_sess|_engine)\b", source(fn))}
 for _ in range(5):  # a member that calls one that reaches the engine reaches it too
     reaches |= {n for n, fn in found.items() if any(re.search(rf"self\.{m}\b", source(fn)) for m in reaches)}
 unlocked = sorted(n for n in reaches - NO_ENGINE if not getattr(found[n], "takes_lock", False))
 check("every public member that reaches the engine is an engine_call", not unlocked, unlocked)
 check("the members listed as not reaching the engine exist", NO_ENGINE <= set(found), sorted(NO_ENGINE - set(found)))
 check("close() takes the lock (it frees the engine a running call uses)", getattr(found["close"], "takes_lock", False))
+check("the raw handle is private (Session._engine; no public sess)", "sess" not in found and "_engine" in dir(Session))
+
+print("(a') every use of the raw handle in pyazr's other modules holds the lock")
+SESSION_CLASSES = {"Session", "_HybridPotentials", "SessionPhysics", "SessionTHM"}  # check (a) covers them
+
+
+def unlocked_uses(path):
+    """The lines of `path` that read `<x>._engine` outside a class of the session, outside a function wrapped by
+    engine_call and outside a `with session_lock(...)` / `with self._lock` block."""
+    tree = ast.parse(open(path).read())
+    bad = []
+
+    def locked_with(node):
+        for item in node.items:
+            e = item.context_expr
+            if isinstance(e, ast.Call) and getattr(e.func, "id", getattr(e.func, "attr", "")) == "session_lock":
+                return True
+            if isinstance(e, ast.Attribute) and e.attr == "_lock":
+                return True
+        return False
+
+    def visit(node, inside):
+        if isinstance(node, ast.ClassDef) and node.name in SESSION_CLASSES:
+            return
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if any(getattr(d, "id", getattr(d, "attr", "")) == "engine_call" for d in node.decorator_list):
+                inside = True
+        if isinstance(node, (ast.With, ast.AsyncWith)) and locked_with(node):
+            inside = True
+        if isinstance(node, ast.Attribute) and node.attr == "_engine" and not inside:
+            bad.append(f"{os.path.relpath(path, ROOT)}:{node.lineno}")
+        for child in ast.iter_child_nodes(node):
+            visit(child, inside)
+
+    visit(tree, False)
+    return bad
+
+
+modules = sorted(glob.glob(os.path.join(ROOT, "pyazr", "**", "*.py"), recursive=True))
+bad = [u for path in modules for u in unlocked_uses(path)]
+check(f"no use of Session._engine outside the lock in {len(modules)} modules of pyazr/", not bad, bad)
 
 print("(b) two threads on one session")
 tmp = tempfile.mkdtemp(prefix="session_lock_")

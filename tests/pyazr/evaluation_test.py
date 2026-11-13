@@ -170,7 +170,7 @@ with tempfile.TemporaryDirectory() as tmp:
         total = sum(ev.terms.values())
         check(f"{name}: the terms add up to the objective", abs(total - ev.objective) <= 1e-12 * max(1, ev.objective))
         model_terms = ev.terms["Park J > 0"] + ev.terms["abundances"] + ev.terms["model data"]
-        old = float(s.sess.calculate_chi2_rwa(x))  # the binding's data chi-squared with the model terms
+        old = float(s._engine.calculate_chi2_rwa(x))  # the binding's data chi-squared with the model terms
         check(f"{name}: chi2 + the model terms = the binding's calculate_chi2_rwa(x) ({old:.10g})",
               abs(ev.chi2 + model_terms - old) <= 1e-12 * max(1, old))
         if name == "T2":
@@ -217,11 +217,11 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(os.path.join(work, "T1.azr"), data_mode=False) as s:
         x = np.asarray(s.params_rwa, float)
         ev = s.evaluate(x)
-        n = int(s.sess.update_segments_rwa(x))  # the engine's forward pass, through the binding
+        n = int(s._engine.update_segments_rwa(x))  # the engine's forward pass, through the binding
         same = n == len(ev.data) and all(
-            np.array_equal(d.model, s.sess.calculated_segments(i))
-            and np.array_equal(d.energies, s.sess.calculated_energies(i))
-            and np.array_equal(d.extra["sfactor_conversion"], s.sess.calculated_conv(i)) for i, d in enumerate(ev.data))
+            np.array_equal(d.model, s._engine.calculated_segments(i))
+            and np.array_equal(d.energies, s._engine.calculated_energies(i))
+            and np.array_equal(d.extra["sfactor_conversion"], s._engine.calculated_conv(i)) for i, d in enumerate(ev.data))
         check(f"the {n} grids: model, energies, S-factor conversion are the forward pass's bit for bit", same)
         check("no chi-squared: chi2, objective, terms, data[i].chi2, .norm, .rows are None or empty",
               ev.chi2 is None and ev.objective is None and ev.terms == {} and not ev.has_data

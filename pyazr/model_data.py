@@ -17,6 +17,8 @@ from typing import List, Optional
 
 import numpy as np
 
+from .locking import session_lock
+
 
 @dataclass(frozen=True)
 class ModelDatum:
@@ -50,6 +52,7 @@ def model_data(model, params=None) -> List[ModelDatum]:
     free RWA vector (default ``model.params_rwa``), one :class:`ModelDatum`
     per datum in file order; empty without the section."""
     x = np.asarray(model.params_rwa if params is None else params, float)
-    terms = model.sess.objective_terms_rwa(x)
+    with session_lock(model):
+        terms = model._engine.objective_terms_rwa(x)
     return [ModelDatum(**{k: (float(v) if isinstance(v, float) else v) for k, v in r.items()})
             for r in terms.get("model_data", [])]

@@ -142,12 +142,12 @@ try:
         check("its energy is free", len(e_idx) == 1)
         x[e_idx[0]] += 0.020                      # +20 keV
         chi2 = m.evaluate(x).chi2
-        all_before = np.asarray(m.sess.params_all_rwa(), float).copy()
+        all_before = np.asarray(m._engine.params_all_rwa(), float).copy()
         m.save_fit(snap, x=x, param_sav=False, verify=True)
     with Session(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
         xb = np.asarray(back.params_rwa, float)
         chi2_back = back.evaluate(xb).chi2
-        all_after = np.asarray(back.sess.params_all_rwa(), float)
+        all_after = np.asarray(back._engine.params_all_rwa(), float)
         fixed_i = [i for i, p in enumerate(back.parameters) if p.fixed and p.kind == "width"]
     check("the fixed amplitude re-reads unchanged",
           np.allclose(all_after[fixed_i], all_before[fixed_i], rtol=1e-6),

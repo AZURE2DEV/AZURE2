@@ -198,8 +198,8 @@ class Session(
     # -- lifecycle ------------------------------------------------------------
 
     @property
-    def sess(self):
-        """The underlying engine, or :class:`pyazr.SessionClosed` (a ``RuntimeError``) once it has been released."""
+    def _engine(self):
+        """The binding's _azure2.Session, private: no lock, no promise of stability (used under the session's lock)."""
         if self._sess is None:
             raise session_checks.session_closed(self.file, sys._getframe(1).f_code.co_name)
         return self._sess
@@ -243,7 +243,7 @@ class Session(
     @engine_call
     def configure(self):
         """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
-        s = self.sess
+        s = self._engine
         self.nsegments = int(s.update_data())
         rng = range(self.nsegments)
         self.energies = [s.data_energies(i) for i in rng]
@@ -410,7 +410,7 @@ class Session(
             raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
                                  f"in fm, got {radius}; Session.pairs.by_number({pair}).channel_radius is the "
                                  f"current one.")
-        if not self.sess.set_radius(pair, float(radius)):
+        if not self._engine.set_radius(pair, float(radius)):
             raise RuntimeError(
                 f"AZURE2 could not rebuild with pair {pair} at "
                 f"{radius} fm; the session is no longer usable.")
@@ -423,7 +423,7 @@ class Session(
         return got
 
     def _build_pairs(self):
-        return PairSet(Pair(r) for r in self.sess.pair_records())
+        return PairSet(Pair(r) for r in self._engine.pair_records())
 
     @property
     @engine_call
@@ -467,7 +467,7 @@ class Session(
     def _build_parameters(self):
         """The table of the engine's parameter records (built once per layout; :meth:`configure` and a mode switch
         drop it)."""
-        rows = [Parameter(r) for r in self.sess.parameter_records()]
+        rows = [Parameter(r) for r in self._engine.parameter_records()]
         return ParameterSet(rows, x0=[p.start for p in rows if not p.fixed], basis=self.basis)
 
     # -- physical levels (turn a resonance on/off) ----------------------------
@@ -562,12 +562,12 @@ class Session(
     @engine_call
     def norm_indices(self):
         """Free-vector positions of the normalization parameters."""
-        return self.sess.normalization_indices()
+        return self._engine.normalization_indices()
 
     @engine_call
     def shift_indices(self):
         """Free-vector positions of the energy-shift parameters."""
-        return self.sess.energy_shift_indices()
+        return self._engine.energy_shift_indices()
 
     @engine_call
     def energy_indices(self):
@@ -609,7 +609,7 @@ class Session(
         as the CLI does, use :meth:`load_sav`.
         """
         vals = self.read_sav(path)
-        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        full = np.asarray(self._engine.params_all_rwa(), float).copy()
         hit = 0
         for p in self.parameters:
             if p.name in vals and 0 <= p.index < full.size:
@@ -674,7 +674,7 @@ class Session(
         # The engine's LIVE bookkeeping, matched by name as the CLI does: the
         # cached `parameters` describe the mode the session was first built
         # in, and extrapolation mode has a shorter vector.
-        s = self.sess
+        s = self._engine
         fixed = np.asarray(s.params_fixed(), bool)
         full = np.asarray(s.params_all_rwa(), float).copy()
         vals = self.read_sav(path)
@@ -708,7 +708,7 @@ class Session(
         else:
             # Modules built before set_params_all_rwa: the same effect, at the
             # cost of one forward pass.
-            self.sess.update_segments_all_rwa(full)
+            self._engine.update_segments_all_rwa(full)
         self.fixed_params = [bool(f) for f in fixed]
         self.params_rwa = [float(v) for v in full[~fixed]]
         self.params = s.params_values()
@@ -723,7 +723,7 @@ class Session(
         extrapolation's in a data run) are neither applied nor unknown."""
         import json
         import warnings
-        s = self.sess
+        s = self._engine
         of_run = [s.params_names(i) for i in range(len(records))]
         optional = [of_run[i] for i, r in enumerate(records) if segment_field[r["kind"]] and fixed[i]]
         with open(self.file, "rb") as f:
@@ -908,7 +908,7 @@ class Session(
                 copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
                 copy.save(probe)
                 with Session(probe, cwd=self.cwd, **check_options) as check:
-                    back_full = np.asarray(check.sess.params_all_rwa(), float)
+                    back_full = np.asarray(check._engine.params_all_rwa(), float)
                     got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
                     back = {p.name: float(back_full[i])
                             for i, p in enumerate(check.parameters)}
@@ -1027,7 +1027,7 @@ class Session(
     @engine_call
     def transform_rwa(self, params):
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
-        return self.sess.transform_rwa(params)
+        return self._engine.transform_rwa(params)
 
     @engine_call
     def transform_all_rwa(self, params, include_fixed=False, free_only=None):
@@ -1046,11 +1046,11 @@ class Session(
         """
         if free_only is not None:
             include_fixed = not free_only
-        return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
+        return self._engine.transform_all_rwa(params, include_fixed=bool(include_fixed))
 
     def _all_rwa(self, x):
         """The full RWA vector with the free vector ``x`` in its free slots."""
-        allx = np.asarray(self.sess.params_all_rwa(), float).copy()
+        allx = np.asarray(self._engine.params_all_rwa(), float).copy()
         free = [i for i in range(allx.size) if not self.fixed_params[i]]
         x = np.asarray(x, float).ravel()
         for k, i in enumerate(free[:x.size]):
@@ -1226,13 +1226,13 @@ class Session(
             # a bare forward pass leaves it at zero and the file comes out
             # full of zeros.  This populates both that and the point cross
             # sections AZUREOut_* is written from.
-            self.sess.calculate_chi2_rwa(x)
+            self._engine.calculate_chi2_rwa(x)
         else:
             # No data to compare against; chiSquared.out is meaningless in
             # extrapolation mode, and the forward pass is all AZUREOut_*
             # needs.
-            self.sess.update_segments_rwa(x)
-        if not self.sess.write_output_files():
+            self._engine.update_segments_rwa(x)
+        if not self._engine.write_output_files():
             raise RuntimeError("AZURE2 has no data object to write from.")
         session_checks.warn_engine_notices(self._sess, stacklevel=3)
         return self.output_dir
@@ -1261,18 +1261,18 @@ class Session(
         the key (or in extrapolation mode).  ``sum(r**2)`` is ``evaluate(x).terms["prior covariance"]``, and
         ``objective().residuals(x)`` holds these rows (Jacobian L^-1 on the prior's columns)."""
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
-        if not hasattr(self.sess, "prior_covariance_residuals"):    # an engine older than 2026-11-05
+        if not hasattr(self._engine, "prior_covariance_residuals"):    # an engine older than 2026-11-05
             return np.zeros(0)
-        return np.asarray(self.sess.prior_covariance_residuals(x), float)
+        return np.asarray(self._engine.prior_covariance_residuals(x), float)
 
     @property
     @engine_call
     def prior_covariance_names(self):
         """The prior parameter covariance's parameter names, in its row order, after the engine marginalized the
         listed parameters that are fixed in this model; empty without the ``priorCovariance`` key."""
-        if not hasattr(self.sess, "prior_covariance_names"):
+        if not hasattr(self._engine, "prior_covariance_names"):
             return []
-        return list(self.sess.prior_covariance_names())
+        return list(self._engine.prior_covariance_names())
 
     @property
     @engine_call
@@ -1308,7 +1308,7 @@ class Session(
         the ``scattering_length`` data of ``<modelData>`` are already part of
         the objective (``evaluate(x).terms["model data"]``)."""
         x = np.asarray(self.params_rwa if params is None else params, float)
-        flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
+        flat = np.asarray(self._engine.scattering_lengths_rwa(x), float).reshape(-1, 6)
         return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
 
     @engine_call
@@ -1324,7 +1324,7 @@ class Session(
         engine penalizes it (``evaluate(x).terms["Park J > 0"]``).  All ones in Brune mode.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        return np.asarray(self.sess.park_norms(x), float)
+        return np.asarray(self._engine.park_norms(x), float)
 
     @engine_call
     def refreeze_covariance(self):
@@ -1336,7 +1336,7 @@ class Session(
         iterative scheme is fit, ``refreeze_covariance()``, evaluate at the best fit,
         fit again.  Returns the number of covariance groups with relvector terms.
         """
-        return int(self.sess.refreeze_covariance())
+        return int(self._engine.refreeze_covariance())
 
     @engine_call
     def objective(self):
@@ -1382,7 +1382,7 @@ class Session(
         supported analytic path.
         """
         resp = np.asarray(
-            self.sess.calculate_model_gradients_rwa(
+            self._engine.calculate_model_gradients_rwa(
                 np.asarray(params, float).ravel()), dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("model_gradients: an analytically-unsupported "
@@ -1438,7 +1438,7 @@ class Session(
         pair, L = session_checks.channel_request(self.pairs, pair, L)
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, L, -1 if J is None else round(2 * J), radius, e.size], e])
-        resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
+        resp = np.asarray(self._engine.coulomb_functions(req), dtype=float)
         n = int(round(resp[0]))
         block = resp[1:].reshape(n, 7)
         keys = ("F", "dF", "G", "dG", "P", "S", "delta_hs")
@@ -1462,7 +1462,7 @@ class Session(
         """
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, e.size], e])
-        resp = np.asarray(self.sess.ec_integrals(req), dtype=float)
+        resp = np.asarray(self._engine.ec_integrals(req), dtype=float)
         npath = int(round(resp[0]))
         nE = int(round(resp[1]))
         stride = 6 + 2 * nE
@@ -1503,7 +1503,7 @@ class Session(
         (or :meth:`pyazr.Project.set_config` ``output_dir=`` a fresh directory) is the
         equivalent and usually simpler.
         """
-        if not self.sess.calculate_external_capture():
+        if not self._engine.calculate_external_capture():
             raise RuntimeError(
                 "AZURE2 could not recompute the external-capture integrals; "
                 "check that output/ exists and is writable.")
@@ -1527,7 +1527,7 @@ class Session(
         its data files once and again only when a file changes on disk, so a
         rebuild normally reads nothing.
         """
-        resp = np.asarray(self.sess.cache_stats(), dtype=float)
+        resp = np.asarray(self._engine.cache_stats(), dtype=float)
         q, h = float(resp[0]), float(resp[1])
         out = {
             "queries": int(q),
@@ -1557,7 +1557,7 @@ class Session(
         cur = np.asarray(self.params_rwa, float).ravel()
         if self.mode != "extrap" or x.size <= cur.size:
             return params
-        head = sum(1 for r in self.sess.parameter_records()
+        head = sum(1 for r in self._engine.parameter_records()
                    if not r["fixed"] and r["kind"] in ("energy", "width", "abundance"))
         y = cur.copy()
         y[:head] = x[:head]
@@ -1568,10 +1568,10 @@ class Session(
     def _set_mode(self, extrap):
         """Switch the engine to data or extrapolation mode and re-initialize."""
         if extrap:
-            self.sess.set_extrap()
+            self._engine.set_extrap()
         else:
-            self.sess.set_data()
-        self.sess.initialize()
+            self._engine.set_data()
+        self._engine.initialize()
         self.mode = "extrap" if extrap else "data"
         self._sync_layout()
         session_checks.warn_engine_notices(self._sess, stacklevel=3)
@@ -1592,7 +1592,7 @@ class Session(
         both modes, so a vector the caller set (``update_rwa_params_from_sav``)
         is kept; the norm/shift tail is the engine's for the new segment set.
         """
-        s = self.sess
+        s = self._engine
         fixed = list(s.params_fixed())
         if fixed == list(self.fixed_params):
             return

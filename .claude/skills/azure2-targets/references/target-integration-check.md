@@ -11,8 +11,7 @@ engine error, by computing the same integral outside the engine.
    effect switched off, and read the calculated values:
    ```python
    from pyazr.bands import active_indices
-   m.sess.update_segments_rwa(m.params_rwa)
-   bare = m.sess.calculated_segments(active_indices(m.datasets)[key])
+   bare = m.evaluate(m.params_rwa).data[active_indices(m.datasets)[key]].model
    ```
 3. Reference integral: Y(E_0) = (1/N) ∫_{E_0−Δ}^{E_0} σ(E′)/ε(E′) dE′ with numpy on the bare grid, Δ from
    ∫ dE′/ε = N, ε from the line's stopping-power formula.

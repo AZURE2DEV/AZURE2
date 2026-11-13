@@ -62,7 +62,7 @@ def main():
 
         E1, E2 = "angle-integrated cross section, E1 part", "angle-integrated cross section, E2 part"
         with Session(azr, cwd=work) as m:
-            s = m.sess
+            s = m._engine
             obs = [d.observable for d in m.active_datasets]
             check("the model has a total, an E1-only and an E2-only capture segment",
                   E1 in obs and E2 in obs, f"{obs}")
