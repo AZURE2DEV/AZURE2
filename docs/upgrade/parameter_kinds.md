@@ -93,3 +93,32 @@ the record), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTrans
    `Parameter.from_record`); the owner fields in the binding's `parameter_records()`.
 4. Docs: the table of `docs/source/reference/output_files.rst` and §1 here [check 23]; in
    `tests/pyazr/parameter_kinds_test.py` a project with the kind, whose names are rebuilt from the records.
+
+## 4. The prior of a nuisance parameter: one rule for every kind
+
+Format 3 writes a nuisance as `<value> [<unit>] fit|fixed [prior <centre> <width>[%]]` (`Values.h`, `Nuisance`). The
+rule, the same for every kind that can carry a prior (norm, the three shift terms, abundance, `isotope_sum`,
+screening, areal density, Doppler temperature, sample thickness, stopping scale, a kernel's parameter):
+
+- the penalty is ((p − centre) / width)², with the **centre as written** and the width as written (a percentage is
+  per cent of the centre); it is paid only while the parameter is free (`objective.md` D5);
+- the **start** of the fit is the value written; the start does not move the prior;
+- a prior without a centre (only an old line read by the old-line reader) is centred as before: on the start value,
+  on 0 for the three shift terms, on 1 for the sum of a sample's abundances;
+- the sub-point grids and the limits of a fitted density, temperature, stopping scale or kernel parameter are laid out
+  from the start value, as before (with `grid_max` from that); the centre does not move them.
+
+Why it matters: a fit continued from its fitted values (the program's `param.sav` reloaded, or the project `pyazr`'s
+`save_fit` writes: the fitted value with the original prior) must pay the same prior as the fit it continues.
+
+**One carrier.** `PriorCentre` (`SetupSpecs.h`: written, value, source; `Or(default)`) is the centre of every kind in
+the specs, the one the norms and energy shifts had (`DatasetSpec::normCentre`, `shiftCentre`) made general. The build
+fills it from the nuisance (`Build.cpp`, `BuildEffects.cpp`), the engine object of the kind keeps it beside its width
+and uses it in its penalty, and the one enumeration of diagonal priors (`ForEachDiagonalPrior`, `Objective.h`)
+hands it to the gradient, the least-squares rows and the MCMC priors. The API listing reports it
+(`Parameter.prior_nominal`).
+
+Before (measured by calculations, value ≠ centre against value = centre, at 441a0907): the norm and the constant shift
+used the centre; the sqrt(E) shift, the shift function's parameters, the abundance, `isotope_sum`, screening, Doppler
+temperature and sample thickness dropped it without a word (the penalty measured from the start, or from 0 / 1); the
+areal density, the stopping scale and a kernel parameter refused a centre away from the value.
