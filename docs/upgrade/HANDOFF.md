@@ -48,8 +48,13 @@ Update this file at the end of every work session: what changed, what is next, w
 
 The 17 Python formulas and their rows: `pyazr3.md` section 1.3 (the largest difference per formula).
 
-**Verified**: build 0 warnings; all projects × 3 bases identical to `tab-t45-1` (887 / 851 / 887, tag
-`tab-physics-1`); the rest in the branch report.
+**Verified** (after merging the data branch at 3298f372): build 0 warnings; all projects × 3 bases identical to
+`tab-t50-1` (887 / 851 / 887, tag `tab-physics-2`); the eight fits identical to `trial50`; `ctest -LE slow` 236 of
+237 (the failure: `pyazr_ui_routes_consistency`, below); slow 11 of 11; `tests/run_tests.sh` 166 passed, 0 failed.
+- `pyazr_ui_routes_consistency` fails by its own design now that the calls exist: `/api/physics/{fn}` is marked as
+  missing (`pyazr.physics.functions` now resolves: "when it appears, this fails: serve the route"), and
+  `azure2.channel_functions` is neither called by the UI's adapter nor listed in `engine.AZURE2_NOT_SERVED`.  Both
+  edits are in `pyazr/ui` (the UI's owner): serve the route, and serve or list `channel_functions`.
 
 **Open.**
 - Not bound: `level_matrix` (the engine hands out no R or U matrix without new code in `AZUREAPI`), the transfer
