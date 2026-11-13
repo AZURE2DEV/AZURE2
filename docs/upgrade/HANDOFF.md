@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-4-prior-centre`) — the centre of every nuisance prior is the number written
+
+**Done.** One rule for every nuisance kind with a prior (`parameter_kinds.md` section 4): the penalty is
+((p − centre)/width)² with the centre written, the start is the value written, a percentage width is per cent of the
+centre; grids and limits stay laid out from the start. Before (calculations, value ≠ centre, base build): norm and
+constant shift used the centre; sqrt shift, shift function, abundance, `isotope_sum`, screening, Doppler and thickness
+dropped it; areal density, stopping scale and a kernel's parameter refused it. One carrier `PriorCentre`
+(`SetupSpecs.h`, the norm/shift centre made general), `build::PriorCentreOf`; the engine objects keep the centre beside
+the width; `ForEachDiagonalPrior` hands it to gradient, least-squares rows and MCMC; the API reports it
+(`prior_nominal`, now also abundance and apparatus). Write-back: areal density, Doppler, screening and thickness had no
+`ParameterSource` (save_fit kept their old values); now they have one, with `engineUnit`. API: a rebuild or mode
+switch kept the nuisance priors' manager of the old model (freed objects, old radius): `AZUREAPI::ReplaceModel`.
+Tests: `tests/nuisance_prior_centre/check.sh`, `save_fit_format3_test.py` (abundance and density moved),
+`tests/pyazr/rebuild_nuisance_test.py`; all fail on the base build.
+
+**Verified.** Build 0 warnings; all projects × 3 bases identical to `tab-gecm-1` (887/851/887, tag `tab-prior-1`);
+converted-tree gate 679/643/679 identical; the eight fits identical to `b-gecm`; T1/T2/T3/13N 1 vs 3 threads identical;
+`ctest -LE slow` 223/223, slow 9/9 and the two four-thread tests (capped at 3) 2/2; `tests/run_tests.sh` 165 passed,
+1 failed (rectangular_resolution expected the lifted refusal; check updated, passes).
+
+**Open.** Grids/limits of a fitted density, temperature, stopping scale or kernel parameter follow the start value: a
+fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too).
+
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 
 `docs/upgrade/web_ui.md` is a proposal with eleven decisions for the PI (its section 13), none taken; its twelve
