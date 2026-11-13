@@ -17,6 +17,24 @@ import check_skills  # noqa: E402
 
 TODAY = dt.date(2026, 11, 6)
 GOOD_DESC = "Do one thing with AZURE2. Use for X and Y; for Z use other-skill instead."
+PYAZR_PAGE = """Earlier names
+-------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - earlier name
+     - pyazr 3.0
+   * - ``pyazr.azure2(file, **options)``
+     - ``pyazr.Session(file)``
+   * - ``segment_chi2(x)``, ``chi2_and_grad(x)``
+     - ``ev.data[i].chi2``
+   * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
+     - ``s.objective().residuals(x)``, ``.residuals_and_jacobian(x)``
+
+Examples
+--------
+"""
 
 
 class SkillTree:
@@ -26,6 +44,9 @@ class SkillTree:
         os.makedirs(os.path.join(self.root, "docs", "source"))
         with open(os.path.join(self.root, "docs", "source", "page.rst"), "w") as f:
             f.write("Page\n====\n")
+        os.makedirs(os.path.join(self.root, "docs", "source", "user_guide"))
+        with open(os.path.join(self.root, "docs", "source", "user_guide", "pyazr.rst"), "w") as f:
+            f.write(PYAZR_PAGE)
 
     def write(self, rel, text):
         path = os.path.join(self.root, ".claude", "skills", rel)
@@ -136,6 +157,34 @@ class CheckSkillsTest(unittest.TestCase):
         open(os.path.join(self.t.root, "scripts", "tool.py"), "w").close()
         self.t.skill("s", "Run scripts/tool.py.\n")
         self.assertEqual(self.t.run(), [])
+
+    def test_r10_removed_pyazr_names(self):
+        for line in ("m = pyazr.azure2('model.azr')", "c = m.segment_chi2(x)", "v, g = chi2_and_grad(x)",
+                     "J = s.residual_jacobian(x)", "`s.residual_jacobian`"):
+            with self.subTest(line=line):
+                self.t.skill("s", line + "\n")
+                self.assertEqual(self.rules(self.t.run()), ["R10"])
+        self.t.skill("s", "s = pyazr.Session('m.azr'); r = s.objective().residuals(x); ~/.azure2/ holds a table.\n"
+                          "Builds before v3.0 (expires: 2027-01-01) had `segment_chi2(x)`.\n"
+                          "See pyazr/examples/per_dataset_chi2.py for segment_chi2 values.\n")
+        self.assertEqual(self.t.run(), [])
+        self.t.skill("s")
+        self.t.write("s/scripts/selftest.py", "run('tool.py')\n")
+        self.t.write("s/scripts/tool.py", "x = s.segment_chi2(x)\n")
+        self.assertEqual(self.rules(self.t.run()), ["R10"])
+
+    def test_r10_page_without_table(self):
+        with open(os.path.join(self.t.root, "docs", "source", "user_guide", "pyazr.rst"), "w") as f:
+            f.write("pyazr\n=====\n")
+        self.t.skill("s")
+        self.assertEqual(self.rules(self.t.run()), ["R10"])
+
+    def test_r10_parses_the_repository_page(self):
+        with open(os.path.join(ROOT, "docs", "source", "user_guide", "pyazr.rst"), encoding="utf-8") as f:
+            names = check_skills.removed_pyazr_names(f.read())
+        self.assertIsNotNone(names)
+        self.assertIn("chi2_and_grad", names)
+        self.assertNotIn("residuals", names)   # also a 3.0 name (Objective.residuals)
 
     def test_main_exit_status(self):
         self.t.skill("s")

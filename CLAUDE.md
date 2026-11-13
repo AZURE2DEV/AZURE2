@@ -635,7 +635,7 @@ Commit generated outputs only under `tests/*/expected/`. Never commit `build*/`,
 
 ## Skills
 
-The rules are `docs/upgrade/RULES.md` §3; `tools/check_skills.py` enforces items 4, 5, 6 and 8 and checks that
+The rules are `docs/upgrade/RULES.md` §3; `tools/check_skills.py` enforces items 4, 5, 6, 8 and 10 and checks that
 every docs link resolves (pre-commit and CI).
 
 - **Three places, three jobs.** `.claude/skills/` teaches how to **use** AZURE2; the Sphinx docs (`docs/source/`)

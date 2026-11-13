@@ -16,6 +16,10 @@ Rules enforced (numbers as in RULES.md §3):
   R8  no personal absolute paths (/groups/, /Users/, /users/, /home/, /afs/, ~/...; ~/.azure2 and ~/.claude are allowed).
   Links: every docs/... path and every relative Markdown link in a skill resolves, and so
       does every references/... or scripts/... file a skill names (in the skill or the repository).
+  R10 no skill (Markdown or script) uses a removed pyazr name: the names of the column "earlier name" of the
+      migration table in docs/source/user_guide/pyazr.rst, read from the page, as a call (`name(`) or an
+      attribute (`obj.name`); a name that also appears in the column "pyazr 3.0" is not checked, and a line of a
+      version note ("builds before ...") may name it.
 
 A line can opt out of one rule with an HTML comment `<!-- check_skills: allow R5 -->`;
 use it only for a quoted example of what the rule forbids.
@@ -62,6 +66,45 @@ LOCAL_FILE_RE = re.compile(r"(?<![\w./-])((?:references|scripts)/[\w.-]+\.\w+)")
 MD_LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 SKILL_NAME_RE = re.compile(r"`(azure2-[a-z][a-z0-9-]*|rmfit-[a-z][a-z0-9-]*)`")
 ALLOW_RE = re.compile(r"<!--\s*check_skills:\s*allow\s+([R0-9a-z, ]+)-->")
+PYAZR_PAGE = os.path.join("docs", "source", "user_guide", "pyazr.rst")
+TABLE_HEADER_RE = re.compile(r"^\s*\* - earlier name\s*$")
+LITERAL_RE = re.compile(r"``([^`]+)``")
+IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def removed_pyazr_names(page_text):
+    """{name: compiled pattern} of the removed names in the migration table of the pyazr page, or None if the page
+    has no such table.  A row is "   * - <earlier>" then "     - <3.0>", each cell possibly continued on more
+    indented lines.  A literal's name is its last dotted component before a "(" (``pyazr.azure2(file)`` gives
+    azure2, ``s.sess`` gives sess); a name used anywhere in the 3.0 column is not a removed name."""
+    lines = page_text.splitlines()
+    start = next((i for i, l in enumerate(lines) if TABLE_HEADER_RE.match(l)), None)
+    if start is None:
+        return None
+    earlier, current, cell = [], [], None
+    for line in lines[start + 2:]:
+        if line.strip() and not line.startswith("   "):
+            break
+        if re.match(r"^   \* - ", line):
+            cell = earlier
+            line = line[6:]
+        elif re.match(r"^     - ", line):
+            cell = current
+            line = line[6:]
+        if cell is not None:
+            cell.append(line)
+    current_names = {n for lit in LITERAL_RE.findall(" ".join(current)) for n in IDENT_RE.findall(lit)}
+    patterns = {}
+    for lit in LITERAL_RE.findall(" ".join(earlier)):
+        head = lit.split("(", 1)[0].strip()
+        if not head:
+            continue
+        name = head.split(".")[-1]
+        if not IDENT_RE.fullmatch(name) or name in current_names:
+            continue
+        call_or_attr = (r"(?<![\w.])" + name + r"\s*\(") + "|" + (r"(?<=\w)\." + name + r"\b")
+        patterns[name] = re.compile(call_or_attr)
+    return patterns
 
 
 class Finding:
@@ -111,6 +154,7 @@ class Checker:
         self.strict = strict
         self.user_skills_dir = user_skills_dir
         self.findings = []
+        self.removed_names = {}
 
     def add(self, path, line, rule, message, warning=False):
         self.findings.append(Finding(os.path.relpath(path, self.root), line, rule, message, warning))
@@ -121,6 +165,11 @@ class Checker:
             text = f.read()
         horizon = self.today + _dt.timedelta(days=EXPIRY_HORIZON_DAYS)
         for n, line in enumerate(text.splitlines(), start=1):
+            if not allowed(line, "R10") and not VERSION_NOTE_RE.search(line):
+                for name, rx in self.removed_names.items():
+                    if rx.search(line):
+                        self.add(path, n, "R10", f"removed pyazr name {name!r} (see the migration table of "
+                                                 f"{PYAZR_PAGE})")
             if not allowed(line, "R8"):
                 m = PERSONAL_PATH_RE.search(line)
                 if m:
@@ -185,6 +234,7 @@ class Checker:
             self.add(self.skills_dir, 0, "R6", "no .claude/skills directory")
             return self.findings
         skill_dirs = sorted(d for d in os.listdir(self.skills_dir) if os.path.isdir(os.path.join(self.skills_dir, d)))
+        self.load_removed_names()
         skill_names = set(skill_dirs)
         names, descriptions = {}, {}
         for d in skill_dirs:
@@ -233,6 +283,18 @@ class Checker:
                         self.check_text(p, sdir, skill_names, markdown=False)
         self.check_user_level(names, descriptions)
         return self.findings
+
+    def load_removed_names(self):
+        page = os.path.join(self.root, PYAZR_PAGE)
+        if not os.path.isfile(page):
+            self.add(page, 0, "R10", "no pyazr page: removed names not checked", warning=True)
+            return
+        with open(page, encoding="utf-8") as f:
+            names = removed_pyazr_names(f.read())
+        if names is None:
+            self.add(page, 0, "R10", "the page has no migration table (a row '* - earlier name')")
+            return
+        self.removed_names = names
 
     def check_user_level(self, names, descriptions):
         udir = self.user_skills_dir
