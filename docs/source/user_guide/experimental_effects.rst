@@ -47,6 +47,29 @@ The spreading function is a Gaussian:
    g(E - E_0) = \frac{1}{\sqrt{2\pi}\,\sigma_b}
    \exp\left(-\frac{(E - E_0)^2}{2\sigma_b^2}\right)
 
+The prior of a fitted number
+----------------------------
+
+Every number of a format-3 record that a fit may vary (a norm, an energy shift's offset, sqrt and function terms, an
+isotope's abundance and ``isotope_sum``, the screening potential, the areal density, the Doppler temperature, a
+sample's thickness, the stopping scale, a kernel's parameter) is written ``<value> [<unit>] fixed|fit [prior <centre>
+<width>[%]]``.  One rule holds for all of them: the fit **starts** at ``<value>``, and the prior adds
+:math:`((p - c)/w)^2` to :math:`\chi^2` with :math:`c` the ``<centre>`` **as written** and :math:`w` the width (a
+width with ``%`` is per cent of the centre).  The start does not move the prior: a fit continued from its fitted
+values (the project ``pyazr``'s ``save_fit`` writes, with the fitted value and the original prior) pays the prior of
+the fit it continues.  Example, an abundance started at 0.0036 under a prior 0.0037 ± 0.0002:
+
+.. code-block:: text
+
+   target natN
+       kind           none
+       isotope        15N 0.0036 fit prior 0.0037 0.0002
+
+gives ``Total-Abundance-Chi-Squared: 0.25`` in ``chiSquared.out`` before the first step.  The grids and the limits of
+a fitted density, temperature, stopping scale or kernel parameter are laid out from the value (``grid_max`` sets
+them).  (Until 2026-11-13 several kinds took the start as the centre, or refused a centre away from the value; see
+``docs/upgrade/parameter_kinds.md`` section 4.)
+
 Managing Experimental Effects
 -----------------------------
 
@@ -546,8 +569,8 @@ A detector record of a format-3 project may give its energy resolution as a wind
 
 The point's value is then the average of the cross section over :math:`[E_0 - fw/2, E_0 + fw/2]` (c.m.; :math:`f` the
 pair's c.m./lab energy factor).  The width is written as every fitted number of a record is (the areal density, the
-Doppler temperature, the stopping scale): ``fixed``, or ``fit`` with an optional Gaussian prior centred on the value
-and an optional ``grid_max``, the largest width the sub-point grid must span (default: :math:`w_0 + 3\sigma`, at
+Doppler temperature, the stopping scale): ``fixed``, or ``fit`` with an optional Gaussian prior (centred on the number
+written after ``prior``) and an optional ``grid_max``, the largest width the sub-point grid must span (default: :math:`w_0 + 3\sigma`, at
 least :math:`1.1\,w_0`, with a prior; :math:`1.5\,w_0` without):
 
 .. code-block:: text

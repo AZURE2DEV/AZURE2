@@ -35,13 +35,8 @@ constexpr int kChunks = 64;
 // The row passes hold at most this many doubles of task contributions at once (32 MB) before adding them to the rows.
 constexpr long long kRowBlockDoubles = 4 << 20;
 
-bool DenseAdjointRequested() {
-  static const bool dense = [] {
-    const char *e = std::getenv("AZURE_GRAD_DENSE");
-    return e && *e && std::string(e) != "0";
-  }();
-  return dense;
-}
+/// AZURE_GRAD_DENSE (the run's Config::environment): the dense level-matrix adjoint.
+bool DenseAdjointRequested(const Config &config) { return config.environment.denseAdjoint; }
 
 void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
   if (dst.t.empty() && dst.ec.empty()) {
@@ -85,7 +80,7 @@ struct Pass {
 // them, their models.
 void Forward(CNuc *compound, WorkingCopy &data, Results &results, const Config &config, Pass &pass,
              const ThmAdjointContext *hoes) {
-  AZUREProfile::Timer timer(AZUREProfile::kGradForward);
+  AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradForward);
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
     const Segment *seg = data.Data().GetSegment(s);
     if (!seg || (seg->IsTHM() && !hoes)) continue;
@@ -213,7 +208,7 @@ void MergeSharedReads(WorkingCopy &data, const Pass &pass, const std::vector<std
 // The solver of a task on this thread, filled and factored at the task's first unit.
 AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Results &results, Site *first) {
   AMatrixFunc &amf = results.scratch.ForThisThread().GradientSolver(compound, config);
-  AZUREProfile::Timer timer(AZUREProfile::kGradForward);
+  AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradForward);
   amf.ClearMatrices();
   amf.FillMatrices(first);
   amf.InvertMatrices();
@@ -255,7 +250,7 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
     if (any) {
       Site *provider = &data.SiteAt(u[provide]);
       {
-        AZUREProfile::Timer timer(AZUREProfile::kGradForward);
+        AZUREProfile::Timer timer(amf.configure().profile, AZUREProfile::kGradForward);
         if (!built)
           amf.CalculateTMatrix(provider);
         else
@@ -282,14 +277,14 @@ bool HoesTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &
     for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) sum += pass.cot[c].value;
     Site *site = &data.SiteAt(u);
     if (!filled) {
-      AZUREProfile::Timer timer(AZUREProfile::kGradForward);
+      AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradForward);
       thm.Reset(compound, config);
       thm.ClearMatrices();
       thm.FillMatrices(site);
       thm.InvertMatrices();
       filled = true;
     }
-    AZUREProfile::Timer timer(AZUREProfile::kGradBackprop);
+    AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradBackprop);
     if (!thm.THMPointAdjoint(site, sum, acc, context)) return false;
   }
   return true;
@@ -311,7 +306,7 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
   AMatrixFunc &amf = SolveTask(compound, config, results, first);
   std::vector<std::vector<BilinearTerm>> merged(compound->NumJGroups()), terms;
   TMatrixCotangent bar;
-  const bool dense = DenseAdjointRequested();
+  const bool dense = DenseAdjointRequested(config);
   std::vector<std::pair<int, UnitRef>> order;
   std::vector<SharedRead> reads;
   auto group = [&](int begin, int end, Site *provider) {
@@ -333,7 +328,7 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
     return true;
   };
   if (!ForEachGroup(amf, data, pass, list, task, group)) return false;
-  AZUREProfile::Timer timer(AZUREProfile::kGradBackprop);
+  AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradBackprop);
   for (int j = 1; j <= (int)merged.size(); j++)
     if (!merged[j - 1].empty()) amf.BilinearAdjoint(first, j, merged[j - 1], acc, shiftDeriv);
   return true;
@@ -352,7 +347,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
   if (!HasCotangents(pass, list, task)) return true;
   Site *first = &data.SiteAt(list.units[task.begin]);
   AMatrixFunc &amf = SolveTask(compound, config, results, first);
-  const bool dense = DenseAdjointRequested();
+  const bool dense = DenseAdjointRequested(config);
   std::vector<std::vector<std::vector<BilinearTerm>>> rowTerms;
   std::vector<TMatrixCotangent> sums;
   std::vector<int> groupSlots;
@@ -435,7 +430,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
         costBasis += 2.0 * jg->NumLevels() * (1.0 + jg->NumChannels());
       }
     }
-  AZUREProfile::Timer timer(AZUREProfile::kGradBackprop);
+  AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradBackprop);
   if (!(costBasis < costMembers)) {
     for (int q = 0; q < g; q++)
       for (int j = 1; j <= (int)rowTerms[q].size(); j++)
@@ -465,7 +460,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
       }
     }
   }
-  AZUREProfile::Timer rowsTimer(AZUREProfile::kGradRows);
+  AZUREProfile::Timer rowsTimer(config.profile, AZUREProfile::kGradRows);
   for (int q = 0; q < g; q++) {
     GradAccum &acc = rowAcc[q];
     size_t t = 0;

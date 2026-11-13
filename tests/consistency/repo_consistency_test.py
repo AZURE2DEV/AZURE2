@@ -312,7 +312,8 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 
 
 # 32. stopping/ is a leaf on physics/ (docs/upgrade/stopping.md section 1): its headers ("azure2/stopping/..."),
-#     physics/'s ("azure2/physics/..."), the C++ standard library, and the bare names of its own files where they live
+#     physics/'s ("azure2/physics/..."), the environment record of support/ ("azure2/support/Environment.h", where
+#     AZURE2_SRIM_DATA_DIR is read), the C++ standard library, and the bare names of its own files where they live
 #     (src/'s generated-table header, the tests' check.h).
 STOPPING_OWN = {"src": {"TableText.h"}, "tests": {"check.h"}}
 for dirpath, _, files in os.walk(os.path.join(ROOT, "stopping")):
@@ -322,14 +323,16 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "stopping")):
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
         part = rel.split(os.sep)[1] if len(rel.split(os.sep)) > 2 else ""
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
-            if inc.startswith('"') and inc[1:-1].startswith(("azure2/stopping/", "azure2/physics/")):
+            if inc.startswith('"') and (inc[1:-1].startswith(("azure2/stopping/", "azure2/physics/")) or
+                                        inc[1:-1] == "azure2/support/Environment.h"):
                 continue
             if inc.startswith('"') and inc[1:-1] in STOPPING_OWN.get(part, set()):
                 continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
             problems.append(f"{rel}: includes {inc}; stopping/ may include only azure2/stopping/ and azure2/physics/ "
-                            "headers, its own files and the C++ standard library (check 32)")
+                            "headers, azure2/support/Environment.h, its own files and the C++ standard library "
+                            "(check 32)")
 
 
 
@@ -966,12 +969,78 @@ for (_f, _sym, _kind), _reason in sorted(_allowed.items()):
         problems.append(f"tests/consistency/allowed_state.tsv: {_f} {_sym} ({_kind}) no longer exists; remove the row "
                         "(check 38)")
 _planted = "namespace {\nint g_planted = 0;\n}\nvoid F() {\n  static double memo = 0.0;\n  thread_local int t;\n}\n" \
-           "struct S {\n  mutable int m_;\n  static const char *const kOk;\n};\n"
-if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "namespace", "static", "thread_local"]:
-    problems.append("check 38: a planted namespace variable, static, thread_local or mutable member is not caught; "
-                    "update tests/consistency/state_scan.py")
+           "struct S {\n  mutable int m_;\n  static const char *const kOk;\n  std::once_flag once;\n};\n"
+if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "namespace", "once", "static", "thread_local"]:
+    problems.append("check 38: a planted namespace variable, static, thread_local, mutable member or once-written "
+                    "member is not caught; update tests/consistency/state_scan.py")
 
-# 39. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
+# 39. One reader of the environment (docs/upgrade/evaluation.md section 8; support/include/azure2/support/Environment.h):
+#     no getenv in the engine, its libraries or the binding outside support/src/Environment.cpp.  Test programs (any
+#     tests/ directory) are not the engine.  A switch is a row of that file's table, read through the record.
+ENV_READER = os.path.join("support", "src", "Environment.cpp")
+GETENV_DIRS = ("src", "include", "api", "physics", "experiment", "stopping", "io", "convert", "support", "inference")
+
+
+def getenv_problems(rel, text):
+    found = []
+    code = re.sub(r"//[^\n]*|/\*.*?\*/", "", text, flags=re.S)
+    code = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', code)
+    if re.search(r"\b(?:std::)?(?:getenv|secure_getenv|_dupenv_s|GetEnvironmentVariable[AW]?)\s*\(", code):
+        found.append(f"{rel}: reads the environment (getenv); read the switch from the record "
+                     "(azure2/support/Environment.h) or the run's Config::environment (check 41)")
+    return found
+
+
+_getenv_files = 0
+for _d in GETENV_DIRS:
+    for dirpath, dirnames, files in os.walk(os.path.join(ROOT, _d)):
+        dirnames[:] = [x for x in dirnames if x != "tests"]
+        for name in sorted(files):
+            if not name.endswith((".h", ".hpp", ".cpp", ".cc", ".c")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+            if rel == ENV_READER:
+                continue
+            _getenv_files += 1
+            problems += getenv_problems(rel, read(rel))
+if not getenv_problems("probe.cpp", 'int f() { return std::getenv("AZURE_X") != nullptr; }'):
+    problems.append("check 39: a getenv call is not caught; update this check")
+if getenv_problems("probe.cpp", '// getenv("AZURE_X") in a comment\nconst char *t = "getenv(";'):
+    problems.append("check 39: a getenv in a comment or a string is reported; update this check")
+if "getenv" not in read(ENV_READER):
+    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 41)")
+
+# 40. The table of switches and the manual's list are one list (docs/source/reference/command_line.rst, "Environment
+#     switches"): every row of support/src/Environment.cpp's table is a row there with its kind, and every row there is
+#     in the table.
+
+
+def switch_table(text):
+    return re.findall(r'\{Switch::k\w+, "([A-Z0-9_]+)", T::k\w+, "[^"]*", K::k(\w+),', text)
+
+
+def manual_switches(text):
+    part = text.split("Environment switches\n--------------------\n", 1)
+    if len(part) < 2:
+        return None
+    return re.findall(r"^   \* - ``([A-Z0-9_]+)``\n     - (\w+)$", part[1].split("\nExamples\n", 1)[0], re.M)
+
+
+_table = [(n, k.lower()) for n, k in switch_table(read(ENV_READER))]
+_manual = manual_switches(read("docs/source/reference/command_line.rst"))
+if len(_table) < 30:
+    problems.append(f"{ENV_READER}: {len(_table)} switch rows read; the pattern of check 40 no longer matches the table")
+elif _manual is None:
+    problems.append("docs/source/reference/command_line.rst: no section 'Environment switches' (check 40)")
+else:
+    for _n, _k in sorted(set(_table) - set(_manual)):
+        problems.append(f"docs/source/reference/command_line.rst: the switch {_n} ({_k}) of the table is not listed "
+                        "with that kind under 'Environment switches' (check 40)")
+    for _n, _k in sorted(set(_manual) - set(_table)):
+        problems.append(f"docs/source/reference/command_line.rst: {_n} ({_k}) is listed but is no row of {ENV_READER} "
+                        "(check 40)")
+
+# 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
 #     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
 #     under tests/; a row without one, or a row_test of a name the table does not have, fails.
 _rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/src/pybind_physics.cpp"), re.M)
@@ -982,13 +1051,13 @@ for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
             with open(os.path.join(_dir, _name), errors="replace") as _fh:
                 _row_tests |= set(re.findall(r'\brow_test\("(\w+)"', _fh.read()))
 if not _rows:
-    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 39: the pattern changed?)")
+    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 41: the pattern changed?)")
 for _r in _rows:
     if _r not in _row_tests:
-        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 39): add "
+        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 41): add "
                         f"row_test(\"{_r}\", ...) to tests/pyazr/physics_table_test.py")
 for _r in sorted(_row_tests - set(_rows)):
-    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 39)")
+    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 41)")
 
 if problems:
     for p in problems:
@@ -998,4 +1067,5 @@ if problems:
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
-      f"the sharing key's term settings, {len(_allowed)} allowed state rows, {len(_rows)} physics rows tested")
+      f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested")

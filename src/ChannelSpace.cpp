@@ -1,4 +1,5 @@
 #include "ChannelSpace.h"
+#include "azure2/support/Environment.h"
 #include "AChannel.h"
 #include "ALevel.h"
 #include "Config.h"
@@ -21,13 +22,7 @@ const double kDeflateRatio = 1.0e2;
 const int kMaxDeflated = 8;
 const double kEnergyUlps = 2.0;
 
-bool Enabled() {
-  static const bool on = [] {
-    const char *e = std::getenv("AZURE_LEVEL_SPACE");
-    return !(e && *e && std::string(e) != "0");
-  }();
-  return on;
-}
+bool Enabled(const Config &configure) { return !configure.environment.levelSpaceOnly; }
 
 std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg) {
   // Keyed by address only: Update() checks the levels themselves.  Bounded, for callers that see many compound
@@ -366,7 +361,7 @@ namespace {
 const double kMinOverlapPivot = 1.0e-4;
 
 bool Debug() {
-  static const bool on = std::getenv("AZURE_CHANNEL_DEBUG") != nullptr;
+  static const bool on = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kChannelDebug);
   return on;
 }
 

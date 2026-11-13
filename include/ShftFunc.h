@@ -68,7 +68,7 @@ class ShftFunc {
    */
   static double NeutralBoundShift(int l, double rho);
   /// Is the closed form in use (off with AZURE_NO_NEUTRAL_CLOSED_FORM, for comparisons)?
-  static bool UseNeutralClosedForm();
+  bool UseNeutralClosedForm() const;
 
  private:
   /// Separation plus excitation energy of the pair, the threshold this is measured from.
@@ -104,7 +104,7 @@ class ShftFunc {
   bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(const PPair *pair, bool neutral);
   /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
-  static bool UseURatio();
+  bool UseURatio() const;
 };
 
 #endif

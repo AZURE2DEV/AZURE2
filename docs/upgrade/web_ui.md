@@ -788,10 +788,11 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    `workers.py` (session worker, budget, death with the server), `jobs.py` (the table; recipe fits with progress,
    stop, kill, checkpoints), `routes.py` (the table, generic handlers), `errors.py`, `engine.py`; the routes of
    Project, records, levels, config, THM, evaluate, data. About 1500 lines; tests about 600 (the assertions of section
-   9 on T1, T2). **Today.** Needs no plotly.
+   9 on T1, T2). **Today.** Needs no plotly. **Done 2026-11-13** (section 11.1).
 2. **The page shell, Project, Data, Nucleus.** `index.html`, `app.js`, `api.js`, `forms.js`, `tables.js`,
    `tabs/project.js`, `data.js`, `nucleus.js`, `style.css`. About 2200 lines; the widget consistency check; first
    smoke tests written (run where Playwright exists). **Today** (pair add/remove and channel generation wait).
+   **Done 2026-11-13** with plotly.js vendored and a preview plot, smoke tests in headless Chrome (section 11.2).
 3. **Results.** `plots.js`, `tabs/results.js`, the Results payload, grids, CSV/SVG/PNG export. About 900 lines; tests
    of the payload against the program's output files. **Today**, with plotly vendored (decision 11); `Evaluation`
    (pyazr step 3) replaces the adapter's calls.
@@ -814,6 +815,138 @@ progress and Stop; the χ² per data set and one plot per data set. About 2500 l
 if plotly.js may be vendored by then (otherwise tables and CSV). Not in it: pairs added or removed, engine fits,
 the sampler, Physics, THM.
 
+### 11.1 Step 1 as built (2026-11-13)
+
+`pyazr/ui/` (about 2000 lines in nine files) on today's pyazr: `python -m pyazr.ui project.azr [--port] [--threads]
+[--token] [--root]`. Tests in `tests/pyazr/ui/` (four files, 33 tests; the rule each guards and the error injected
+to show it fails are in its `README.md`); the user guide's page `docs/source/user_guide/web_ui_api.rst`.
+
+**Served** (55 routes of 70; `GET /api/describe` lists them all with their status): describe (with
+`pyazr.describe()` and the session options), server (PIDs and memory), schema, kinds, the physics functions' list;
+the project's state, open, new, save, restore, text (get, replace), validate, describe, records
+(list, get, add, edit, remove, rename), levels (list, get, add, edit, remove), channels, pairs (list, edit), the
+reaction label, config, THM (get, options, experiments set and removed), undo, redo, history, apply; the session,
+parameters, x (get, set), evaluate, the whole evaluation, one data set's arrays, transform; jobs (kinds, list, start,
+get, stop, kill, accept). **501, a pyazr call missing**: adding and removing pairs (`Project.add_pair`,
+`remove_pair`, finding 10), the model on a grid (`Session.evaluate`), a data set's grid and kernel (`DataSet.grid`,
+`kernel`), the level matrix, a physics function on arrays (the physics table of pyazr3.md 2.7); jobs: the
+engine's MIGRAD and LM and MINOS (`fit_with_engine`), the sampler (`Objective.log_prob`), bands, the rate
+(`Session.reaction_rate`). **501, a later step** (pyazr has the call): system, channel functions, outputs,
+stopping, EXFOR, ENSDF, files, events.
+
+**Measured on the product** (a server process over HTTP at one thread, `work/uiserver/measure.py`): opening T2 takes
+1.2–1.5 s to the first answer and 1.2–1.8 s more for the first evaluation (worker start, import, session build
+0.9–1.3 s); 13N 0.9–1.4 s and then 13.3 s the first time (the external-capture integrals into the UI's own output
+directory), 1.9 s once they are cached. An evaluation through the API: 229 ms on T2 against 218 ms for the same
+engine calls in one process, 140 ms against 124 ms on 13N; the numbers are equal bit for bit. Memory (resident):
+server 78–80 MB, session worker 149–166 MB, job worker 187–204 MB (peak 192–211 MB). A stop request to "stopped":
+0.07 s on T1, 0.3 s on 13N, 2.7–3.4 s on T2 (one objective with gradient); a kill 0.07 s. The workers of a server
+killed with SIGKILL during a fit end within 0.05 s (`PR_SET_PDEATHSIG`).
+
+**Where the product departs from this note**, each in one named place:
+
+1. *The sessions' files lie beside the project* (`.<name>.ui-session.azr`, `.<name>.ui-job-<id>.azr`), not in the
+   UI's directory: the engine resolves the prior covariance file against the directory of the file it reads, not
+   against the session's base directory (`azure2(file, cwd=...)`), so a session file elsewhere does not open T2
+   (`pyazr/ui/state.py`, `State.session_file`; a defect of the engine, reported).
+2. *The sessions write into the UI's own output directory* `.<name>.ui/engine/`: the session's text is the project's
+   with `<config>`'s output directory pointed there (`State.session_text`), so neither an evaluation nor a job
+   writes into the user's `output/`. The χ² per data set is read from the `chiSquared.out` the session writes there
+   (`pyazr/ui/engine.py`): the program's split, at the file's six significant digits; no pyazr call gives it at full
+   precision (finding 5 stands). The data χ² and the objective are full doubles.
+3. *Writing x into the text* (apply, accept) goes through `save_fit` (a snapshot file in the UI's directory, read
+   back and checked by pyazr, then merged by lines into the project text: the lines where the session's text differs
+   from the project's stay the project's; `State.merge_snapshot`), not an in-memory call (finding 8 stands).
+4. *Checkpoints, logs and the URL file* are in `.<name>.ui/` (`jobs/<id>.json`, `logs/`, `url`), not under
+   `output/`. The engine's notes go to the workers' log files there (finding 4 stands).
+5. *A second job while the budget is full is refused* (409 with the running job's id), not queued; no `queued`
+   state (`pyazr/ui/workers.py`, `Budget`). With N ≥ 2 threads each job gets one thread and the session worker one;
+   that case was not run (budget 1).
+6. *Routes added*: `GET /api/server`, `POST /api/project/restore` (the crash copy), `GET /api/jobs/kinds`,
+   `POST /api/jobs/{id}/kill`, `GET /api/project/levels/{label}`, `GET /api/project/reaction`. A level is addressed
+   by its label in the path (`{label:path}`, it may hold "/"); a channel spin as a decimal (0.5).
+7. *Revisions*: every change (edit, undo, redo, restore) gives a new number; an edit without one answers 428.
+8. *Errors*: a status is the first row of `errors.STATUS` that names the exception's class or any base (a failed
+   lookup 404 though also a `ValueError`, a closed session 409, a missing file 404, any `pyazr.Error` 422); a worker
+   sends the names of the class and its bases. `what` is the whole message; `allowed` and `fix` come from the first
+   error diagnostic of a FormatError and are empty otherwise: pyazr's messages hold the three parts as one text, not
+   as attributes (finding 9 stands).
+9. *Session options*: the engine's table (`pyazr.kinds()["options"]`: keyword, type, default, flag, doc) with the
+   value in use, in `GET /api/describe` and `GET /api/session`; the server uses the defaults. `SESSION_OPTIONS` in
+   `state.py` is the provisional place of other values (decision 7 not taken); not editable through the API.
+10. *Workers* are `python -m pyazr.ui.workers` processes speaking JSON lines (not `multiprocessing`: no resource
+    tracker process, a thread count per worker through its environment); every worker is started from one
+    long-lived thread, since `PR_SET_PDEATHSIG` follows the thread that started the process.
+11. *Engine notices*: the warnings of a request in the session worker (`pyazr.EngineWarning`, the engine's notices,
+    among them) come back in the answer's `warnings` list (category, message); a job's go to its log.
+12. *Origin*: a request with an `Origin` header other than the server's own (scheme, host and port) is refused (403):
+    every port of localhost is one site for the browser, so the cookie alone would let a page of another local server
+    send edits. A Host header `[::1]` with or without a port is a loopback name.
+13. *Not built*: the event stream (polling serves the tests), the file browser, the interrupted job's evaluation
+    beside "accept" (accept works on it).
+
+### 11.2 Step 2 as built (2026-11-13)
+
+`python -m pyazr.ui project.azr` prints the URL; the page is `pyazr/ui/static/` (about 2400 lines in 16 files and
+the vendored plotly.js): `index.html`, `app.js` (header, the tab table, hash routes `#/data/<name>`,
+`#/nucleus/level/<label>`, keys and the `?` overlay, themes), `api.js`, `tables.js`, `forms.js` (the widget table),
+`formview.js` (drawing a form), `layout.js` (layout hints), `plots.js` (the plot table, palette, CSV), `ui.js`,
+`tabs/project.js`, `tabs/nucleus.js`, `tabs/data.js`, `tabs/records.js` (a record's panel, shared by Data and
+Nucleus), `selftest.js`, `style.css`, `vendor/plotly-cartesian-4.1.2.min.js` (1.5 MB, MIT, with its licence).
+Tests: `tests/pyazr/ui/static_test.py`, `node_test.py` (node's own runner on `js/*.test.mjs`), `smoke_test.py`
+(label `browser`; headless Chrome).
+
+**What a user can do.** Project: the file, the validator's problems with links to the record, `<config>` edited as
+text through the config route, the session options read-only (from `/api/describe`), the history with Undo and Redo,
+the text with "replace text", the engine's line. Nucleus: pairs (edited through `set_pair`), levels with their
+channels (energy, fixed, active; a channel's width and fixed flag; each edit one history entry; the status line
+gives the χ² before and after), the `gamma_decay` and `potential` records through the generated forms. Data: every
+section of the schema except those of the Nucleus tab as a group, the program's χ² per data set, one generated form
+per record with the engine's description beside it and the validator's messages under their fields, add,
+duplicate, rename, delete, the first rows of a data file, the preview plot (data with errors and the model at the
+working x against c.m. energy or angle; plotly.js or, without it, a table; CSV export). Fit, Results, Physics and THM
+are tabs that say which step brings them.
+
+**Measured** (a server process over HTTP at one thread, `work/uipage/measure.py` and `walk.py`, outside the
+repository): the requests of the first paint of the Data list (page, modules, plotly.js, describe, schema, project,
+records, validate) 0.21 s on T2 and 0.63 s on the largest project of `tests/` (`reaction_rate/models/
+moved_azr_truth.azr`, 900 kB); the first evaluation (worker start and session build) 0.96 s on T2 after it; a width
+edit with the evaluation that follows 0.43–0.54 s on T2, its undo 0.49 s. The χ² after the width edit on T2
+(7465.8873676603125) equals a direct pyazr session's on the edited text bit for bit, and Undo gives back
+10905.2313020616 exactly. Headless Chrome, its start included, dumps the finished Data list in 2.0 s.
+
+**Where the built page departs from this note**:
+
+1. *Static files* are served by `STATIC_ROUTES` and one generic handler in `routes.py`, apart from `ROUTES` (whose
+   rows are pyazr calls or server methods, and whose tests count them); the page revalidates every file on each load.
+2. *The token*: `/?token=` answers with a redirect to `/` that sets the cookie, so the token leaves the address bar.
+   *Content-Security-Policy* on every answer: scripts from the server only (no inline script, no eval); inline styles
+   are allowed because plotly.js sets style attributes and adds style elements; images also from `data:` and
+   `blob:` (plotly's image export).
+3. *A route added*: `GET /api/files/{path}` (the first rows of a file inside the root, `Server.file_head`); the
+   listing and file browser (`GET /api/files`) stay a later step.
+4. *No event stream*: the page polls `GET /api/project` every 3 s while visible; a newer revision redraws.
+5. *Self-test and smoke test in headless Chrome*, not Playwright: `#selftest` visits every view and writes its result
+   into the document; `#selftest?edit=1` also types a width and presses Undo. Screenshots use Chrome's old headless
+   mode, whose viewport is the window size.
+6. *Forms*: a widget splits a field's text into boxes and joins it again; a text it cannot split is one text box. The
+   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`fold`,
+   `single_reaction`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
+   table of its keys: finding 13).
+7. *Plots*: the model is drawn at the data points (the engine's values there), not on a dense grid (step 3); a data
+   set is drawn against energy, or against angle when its energy is one value; points of a few distinct angles are
+   one trace each. Legendre orders are not separated (finding 14).
+8. *Pairs* are shown with their spins as 2J; the channel width is shown "as written" (finding 15).
+
+**Extensibility as built** (section 10): a new value type: one row of `WIDGETS` in `forms.js` (the static test and
+the node test fail until it exists); a new record kind: nothing (its form is generic; a line in `layout.js` only to
+put fields on one line; `gamma_decay`, `beam`, `normalization` have no hints and get full forms); a new section:
+nothing (a new group of the Data tab), unless the Nucleus tab should show it (`NUCLEUS_SECTIONS` in
+`tabs/records.js`); a new data kind: nothing for the list, the form and the preview plot when it is a value against
+energy or angle (axis rule from the quantity row's `angle_axis`, units from the dimensions); another kind of plot: a
+row of `PLOTS` in `plots.js` and its node test; a new tab: a module `tabs/<name>.js` with `render()` and a row of
+`TABS` in `app.js` (the self-test visits it; add it to `VIEWS` of `smoke_test.py` for a screenshot).
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -830,7 +963,9 @@ None of these changes the decided objects; each is a call or a field to add:
 3. **A record of the engine's progress lines** (`Iteration: N Chi-Squared: X`) as data, not text on standard output.
 4. **The engine's notes as a per-session log**, not standard output (2.5): `pyazr3.md` 2.5 turns notices into
    `EngineWarning`; the many informational notes (covariance read, groups, THM kinematics, mesh re-planning) need a
-   log the session hands to its caller.
+   log the session hands to its caller. *Partly delivered (pyazr's errors and self-description)*: the notices a
+   session holds back are `EngineWarning`s, and the server passes them to the client; the informational notes still
+   go to standard output (the workers' logs).
 5. **χ² per data set defined as the program's**: `Evaluation.data[i].chi2` should equal the row of `chiSquared.out`
    (s02/s03 of T2 differ under today's `segment_chi2`, 2.2).
 6. **The reaction rate**: no pyazr call is designed (menu 5 of the program only; `pyazr3.md` deletes the Python rate
@@ -840,11 +975,31 @@ None of these changes the decided objects; each is a call or a field to add:
 8. **A parameter vector written into the project text in memory**: `save_fit(path, x)` writes files; the UI needs
    the text with the values of `x` (accept a fit, release a slider) as an edit of `Project`, giving a history entry.
 9. **The three parts of an error as fields** (`what`, `allowed`, `fix`) of the exception, not only its text.
+   *Partly delivered*: pyazr's error classes (`pyazr.errors`, each also the builtin it was) and messages that say the
+   three parts; the parts are not attributes, so the server keeps the whole text in `what`.
 10. **Pairs added and removed, with channel generation**: `add_pair`, `remove_pair`, and the channels a J^π allows from
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
 11. **THM binding energy B and the width-is-amplitude flag** per channel: `set_pair` and `set_channel` have neither.
 12. **Outputs of a physics function described in its row** (names, units, which argument is the natural axis), so
     the Physics tab can draw it without a per-function plot.
+
+Delivered by pyazr's errors and self-description besides: `pyazr.kinds()` (served at `/api/kinds`; its rows of
+session options are the server's options table, its physics rows the list at `/api/physics`), `pyazr.describe()`
+(in `/api/describe`), `azure2.describe()` (the adapter's parameter rows, with units). Still missing for the server:
+findings 1–3, 5–8, 10–12 as written, the three parts as attributes (9), the informational notes as a log (4).
+
+Found while building the page (step 2):
+
+13. **A schema of `<config>`**: its keys with type, allowed values, default and doc (as the record kinds have), so the
+    Project tab can draw a generated form instead of key and text.
+14. **The order of each point** of a Legendre data set in the data arrays (`Evaluation.data[i]`), so the plot draws
+    one trace per order as the quantity row says (`columns.order`).
+15. **The convention of each channel's width** in `Project.levels()` (partial width in eV, ANC in fm^-1/2, amplitude
+    in MeV^1/2), so the Nucleus tab can put the unit beside each width; and the channel's Wigner limit and physical
+    value next to it without a session (today only `/api/parameters` after a build).
+16. **`Project.describe(name)` for every record kind**: it refuses the kinds that compute nothing (`gamma_decay`:
+    "the engine describes the records that compute something"); the page shows that sentence where a description
+    would be.
 
 Smaller, in the parity list: an empty format-3 project (`Project.new` needs a source); the screening potential's
 adiabatic limit from electron binding energies; Gaussian priors on level parameters for the sampler (records carry

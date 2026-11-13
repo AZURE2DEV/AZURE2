@@ -68,13 +68,13 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     beamPhotodissociation_ = line.beamDetailedBalance;
     isBeamProfile_ = line.beamProfile;
     sigmaLab_ = line.sigmaLab;
-    screeningNominal_ = line.screeningUe;
+    screeningNominal_ = line.screeningCentre.Or(line.screeningUe);  // the prior's centre (parameter_kinds.md section 4)
     screeningSigma_ = line.screeningSigma;
     screeningError_ = line.screeningMalformed;
     if (line.screening) {
       hasScreening_ = true;
       screeningVary_ = line.screeningVary;
-      screeningUe_ = screeningNominal_;
+      screeningUe_ = line.screeningUe;
     }
     const std::string &densitySigmaToken = line.densitySigmaText;
     const bool densityFitRead = line.densityFit;
@@ -132,7 +132,8 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       } else {
         hasDensityFit_ = true;
         densityNominal_ = density_;
-        densitySigma_ = percent ? s / 100.0 * density_ : s;
+        densityCentre_ = line.densityCentre.Or(density_);
+        densitySigma_ = percent ? s / 100.0 * densityCentre_ : s;
         // the grids span the largest density the fit is expected to reach (see HasDensityFit)
         layoutDensity_ = (densitySigma_ > 0.0) ? std::max(density_ + 3.0 * densitySigma_, 1.1 * density_) : 1.5 * density_;
         if (densityMaxRead > 0.0) {
@@ -165,6 +166,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
         dopplerFit_ = true;
         dopplerVary_ = (vary == 1.0);
         dopplerNominal_ = dopplerTemperature_;
+        dopplerCentre_ = line.dopplerCentre.Or(dopplerTemperature_);
         dopplerSigma_ = sigma;
         // the grids span the largest temperature the fit is expected to reach (see HasDopplerFit)
         dopplerLayout_ = (sigma > 0.0) ? std::max(dopplerNominal_ + 3.0 * sigma, 1.21 * dopplerNominal_)
@@ -181,6 +183,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       stoppingScaleNominal_ = st.scale;
       stoppingScaleVary_ = st.scaleVary;
       stoppingScaleSigma_ = st.scalePriorWidth;
+      stoppingScaleCentre_ = st.scaleCentre.Or(st.scale);
       // a fitted evaluation's scale without a written prior: the library's stated uncertainty (energy_grid.md 6.2)
       if (st.scaleVary && !st.scaleHasPrior && stopping_.GetSource() == TargetStopping::Source::Evaluation) {
         stoppingScaleSigma_ = stopping_.StatedRelUncertainty() * st.scale;
@@ -681,6 +684,7 @@ void TargetEffect::JoinDensityGroup(const TargetEffect &leader) {
   densityVary_ = leader.densityVary_;
   density_ = leader.density_;
   densityNominal_ = leader.densityNominal_;
+  densityCentre_ = leader.densityCentre_;
   densitySigma_ = leader.densitySigma_;
   layoutDensity_ = leader.layoutDensity_;
 }

@@ -221,6 +221,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
       Status 2026-11-12 (`evaluation.md` §7): milestone 1 done (no `thread_local`, no warn-once static, no `mutable`
       solver buffer); milestone 2 done but the input-file bytes (a decision: `cache_stats()`); milestones 3 (the pooled
       working copies), 4 (`CNuc` pools, fitter and sampler state, MCMC globals) and 5 (diagnostics) pending: 88 rows.
+      Status 2026-11-13: milestone 5 done (one table of 39 environment switches, one reader in `support/`, read once;
+      the switches that move numbers in `Config::environment`; the counters in `RunDiagnostics`); milestone 3 partly
+      (copies when needed); 53 pending rows (milestones 3 and 4), 15 permanent.
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 - [x] A level's radiative decay as Γ_γ, branchings and mixing ratios (`gamma_parametrisation.md`; record
@@ -259,7 +262,7 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
 
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
 - [x] The physics table (`pyazr3.md` section 4, step 4): `api/src/pybind_physics.cpp`, 24 rows, `pyazr.physics`
-      generated from them, a status per element, `Session.channel_functions`; a test per row (consistency check 39).
+      generated from them, a status per element, `Session.channel_functions`; a test per row (consistency check 41).
       Left: the transfer functions on potentials, `level_matrix`, the Weisskopf width (section 4, step 4).
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
 - [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
@@ -271,6 +274,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 
 - [ ] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
+- [x] The server (`pyazr/ui`: route table, state and history, workers, jobs; 2026-11-13).
+- [x] The page: header, tabs Project, Nucleus, Data with generated forms, the engine's descriptions and a preview plot;
+      plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Fit, Results, Physics, THM
+      tabs to come.
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against a reference.
 
-Each row is tested by a ``row_test("<name>", ...)`` (tests/consistency check 39 requires one per row):
+Each row is tested by a ``row_test("<name>", ...)`` (tests/consistency check 41 requires one per row):
 
 - against mpmath (30 digits) where the function is a special function or a closed form of the engine's constants
   (Coulomb functions, phase, Whittaker function, channel functions, kinematics, widths, Coulomb cross sections,
@@ -449,7 +449,7 @@ def main():
     check("the rows are strict JSON (no NaN or infinity: the web UI's /api/physics)",
           json.loads(json.dumps(rows, allow_nan=False)) == rows)
     missing = sorted(set(rows) - tested)
-    check("every row has a row_test here (check 39 asks for one in some test)", not missing, missing)
+    check("every row has a row_test here (check 41 asks for one in some test)", not missing, missing)
 
     print("\nlargest relative difference of each Python formula from the row that replaces it:")
     for name, by, d, where in formula_table:

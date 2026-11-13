@@ -73,6 +73,15 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * finite differences of the chi-squared.
    */
   std::vector<double> Gradient(const std::vector<double> &) const override;
+  /// How GradientBy takes the gradient: Gradient() takes the defaults.
+  struct GradientRoute {
+    /// The adjoint gradient even when G2 is on (AZURE_GRAD_CHECK's comparison with the Jacobian path).
+    bool adjointOnly = false;
+    /// AZURE_GRAD_CHECK on the Jacobian path: that gradient, compared with the same finite differences as the adjoint
+    /// one; the check's exit is then the caller's, after its own comparison.
+    const std::vector<double> *jacobianPathGradient = nullptr;
+  };
+  std::vector<double> GradientBy(const std::vector<double> &p, const GradientRoute &route) const;
   /*!
    * Skip Minuit's start-up numerical check of the analytic gradient (trusted,
    * separately validated).
@@ -101,10 +110,14 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * already inside a parallel region (Minuit's parallel numerical gradient) or
    * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
    */
-  bool PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, bool thmOnly = false) const;
+  bool PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
+                          bool thmOnly = false) const;
   /// chi^2 of `p` evaluated on the given working copies, writing `results` (optionally per segment).
   double Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
                 bool thmOnly = false) const;
+  /// The same under another Config than the run's (the pool check's serial reference).
+  double Chi2OnWith(const Config &config, CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p,
+                    std::vector<double> *segChis, bool thmOnly) const;
   /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().

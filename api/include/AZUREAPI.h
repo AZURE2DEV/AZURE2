@@ -117,7 +117,7 @@ class AZUREAPI {
    *                    6=isotopic abundance of a compound nucleus (only in a
    *                      project with an <abundances> block): its Z in field 1
    *                      and A in field 4, the 1-based sample in field 6, the
-   *                      prior sigma in field 14
+   *                      prior centre in field 5, the prior sigma in field 14
    *                    7=electron-screening potential U_e (eV) of a target
    *                      with a screening field: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
@@ -133,7 +133,7 @@ class AZUREAPI {
    *                   10=fitted sample thickness (atoms/barn) of a data
    *                      segment with 'transmission n vary sigma' or
    *                      'yield n vary sigma': the segment key in field 13,
-   *                      n (prior centre) in field 5, sigma in field 14
+   *                      the prior centre in field 5, sigma in field 14
    *                      (0 = none, and for a thicknessgroup follower),
    *                      0 transmission / 1 yield in field 6, the group
    *                      leader's key in field 7 for a follower (else -1)
@@ -539,6 +539,9 @@ class AZUREAPI {
   mutable std::unique_ptr<AZUREParams> nuisanceParams_;
   mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
   mutable bool nuisanceRead_ = false;
+  /// Deletes compound_ and data_, makes empty new ones and drops what was derived from the old ones (the nuisance
+  /// manager): the one place a model is replaced (Initialize, RebuildImpl).
+  void ReplaceModel();
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
   /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data

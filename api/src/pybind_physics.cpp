@@ -4,7 +4,7 @@
 // element-wise to equal-length arrays and returns the values and a status per element; pyazr/physics.py builds one
 // Python function per row from physics_functions() (signature, docstring, broadcasting, DomainError).
 //
-// A new function is one row here and a test naming it (tests/consistency check 39).  No physics in this file: an
+// A new function is one row here and a test naming it (tests/consistency check 41).  No physics in this file: an
 // adapter converts arguments (doubles to integers, masses to a ChannelKinematics) and calls the library.
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
