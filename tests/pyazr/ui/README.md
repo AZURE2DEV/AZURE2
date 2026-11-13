@@ -70,3 +70,21 @@ Added after the merge of pyazr's errors and self-description (each shown failing
   `api_test.py::test_host_header_must_be_loopback`.
 - an evaluation carries the engine's notices to the client: the worker drops its warnings; fails
   `api_test.py::test_evaluation_carries_the_engines_notices`.
+
+Added with the page (each shown failing on 2026-11-13 with `work/uipage/inject.sh`, outside the repository; the
+file restored from git after each):
+
+- forms.js has a widget for every value type: the `grid` row renamed; fails `static_test.py::
+  test_widget_table_has_every_value_type_of_the_schema` and `node_test.py` (forms.test.mjs).
+- every file the page loads exists: `tabs/data.js` imports `../uix.js`; fails
+  `static_test.py::test_every_file_the_page_loads_exists_and_is_tracked`.
+- a Content-Security-Policy on every answer: the header line removed from the guard; the token leaves the address
+  bar: the redirect of the page's row disabled; each fails `static_test.py::test_page_served_with_token_cookie_and_csp`.
+- no engine kind named in the page: `tabs/data.js` spells `"dataset"`; fails
+  `static_test.py::test_no_engine_kind_is_spelled_in_the_page`.
+- the vendored plotly.js is the checked bundle: one word of its banner changed; fails
+  `static_test.py::test_vendored_plotly_is_the_checked_bundle_with_its_licence`.
+- an edit carries the revision: `api.js` does not add `rev`; empty cells sort last both ways: the guard removed from
+  `sortRows`; the y unit of a plot is the data set's: the x unit used; each fails `node_test.py`.
+- a script error in a tab is caught: `tabs/project.js` dereferences null; the Undo button takes the edit back: it
+  sends redo; each fails `smoke_test.py` on T1 and T2.
