@@ -26,6 +26,13 @@ double wigner_3j(int two_j1, int two_j2, int two_j3, int two_m1, int two_m2, int
 /// Clebsch-Gordan coefficient (j1 m1 j2 m2 | J M) = (-1)^(j1 - j2 + M) sqrt(2J + 1) (j1 j2 J; m1 m2 -M).
 double clebsch_gordan(int two_j1, int two_m1, int two_j2, int two_m2, int two_J, int two_M);
 
+/*!
+ * Clebsch-Gordan coefficient (j1 m1 j2 m2 | J M) for integer angular momenta passed as they are (not doubled) and of
+ * any size: Racah's sum (Edmonds 3.7.3) with the factorials as exp(lgamma) in long double, so without the table limit
+ * of clebsch_gordan (the source projection of physics/transfer needs l up to 200).  0 where clebsch_gordan is 0.
+ */
+double clebsch_gordan_integer(int j1, int m1, int j2, int m2, int J, int M);
+
 /// Wigner 6j symbol {j1 j2 j3; j4 j5 j6}.
 double wigner_6j(int two_j1, int two_j2, int two_j3, int two_j4, int two_j5, int two_j6);
 

@@ -53,10 +53,12 @@ Frescox, has the numerics of FRESCO there (`transfer.md` §23).
 
 The engine's THM distortions are now this library's. The distortion factor R(E) (`distortion=coulomb|optical`) no
 longer has a solver of its own: the waves, the Trojan-horse tail, the sum over partial waves and its plane-wave limit
-come from `physics/transfer`, and the distorted-wave vertex (`vertexModel=dw`) takes its waves from there too (its
-own integral over the source stays in the engine for now: the library has no function for that source yet,
-`transfer.md` §24.2). The numbers moved by less than one part in 10⁸ (|M|² at most 2.9 × 10⁻⁹, the vertex tables
-6.7 × 10⁻¹⁰); no project of the test suite uses a distortion, so no output file changed. Refining the old numerics
+come from `physics/transfer`, and so does the distorted-wave vertex (`vertexModel=dw`): the projection of its
+source on the channel's harmonics is one library function (`SourceProjection.h`, `transfer.md` §25) with its own
+tests (a closed form with plane waves, the library's `EntranceVertex` built from it, the engine's former numbers);
+the engine keeps only the energy grid, the directions and the 2 × 2 Gram matrix, and the vertex moved by less than
+3 × 10⁻¹¹ when the quadrature moved (the speed of its check +7 %). When the waves moved, the numbers moved by less
+than one part in 10⁸ (|M|² at most 2.9 × 10⁻⁹, the vertex tables 6.7 × 10⁻¹⁰); no project of the test suite uses a distortion, so no output file changed. Refining the old numerics
 shows that they were converged to about 5 × 10⁻⁷ for an optical potential (step and matching radius each 3 × 10⁻⁶,
 partly cancelling), which the new code shares. The seven global optical sets (`opticalAA=ancai06`, ...) are one table
 of the library: adding a set is one row in `physics/src/transfer/GlobalOptical.cpp` and its test points (recipe

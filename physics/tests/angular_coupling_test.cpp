@@ -9,7 +9,9 @@
 //  4. every recoupling coefficient of the Convention record (LS heavy-first and l-first, jj light and heavy with
 //     either orbital order) against the overlap of the two states built in the m-scheme from Clebsch-Gordan
 //     products, for 2j1, 2j2 <= 4 and l <= 3: a wrong phase or a wrong 6j argument order fails it;
-//  5. the iˡ sign (-1)^floor(l/2) and the orthogonality of each (alpha, l) block of the recoupling.
+//  5. the iˡ sign (-1)^floor(l/2) and the orthogonality of each (alpha, l) block of the recoupling;
+//  6. clebsch_gordan_integer (integer j, no table limit) against clebsch_gordan for every integer argument with
+//     j1, j2 <= 12 (1e-13), and the orthogonality sum_M <60 M 63 -M|J 0><60 M 63 -M|J' 0> = delta_JJ' (J <= 11, 1e-12).
 // A wrong factorial, a wrong sign in a Racah sum, a transposed 6j argument or a wrong phase of the recoupling fails
 // at least one of these by more than 1e-3.
 #include <cmath>
@@ -265,6 +267,22 @@ int main() {
     c.orbital_phase = OrbitalPhase::IPowMinusL;
     for (int l = 0; l < 6; l++) close("i^-l sign l=" + std::to_string(l), recoupling_coefficient(0, 0, l, 0, 2 * l, c, 0), want[l]);
   }
+
+  std::printf("clebsch_gordan_integer\n");
+  for (int j1 = 0; j1 <= 12; j1++)
+    for (int j2 = 0; j2 <= 12; j2++)
+      for (int J = 0; J <= 26; J++)
+        for (int m1 = -j1; m1 <= j1; m1++)
+          for (int m2 = -j2; m2 <= j2; m2++)
+            close("integer CG", clebsch_gordan_integer(j1, m1, j2, m2, J, m1 + m2),
+                  clebsch_gordan(2 * j1, 2 * m1, 2 * j2, 2 * m2, 2 * J, 2 * (m1 + m2)), 1e-13);
+  for (int J = 3; J <= 11; J += 2)
+    for (int Jp = J; Jp <= 11; Jp += 2) {
+      double sum = 0.0;
+      for (int M = -60; M <= 60; M++)
+        sum += clebsch_gordan_integer(60, M, 63, -M, J, 0) * clebsch_gordan_integer(60, M, 63, -M, Jp, 0);
+      close("sum_M <60 M 63 -M|J 0><..|J' 0>", sum, J == Jp ? 1.0 : 0.0, 1e-12);
+    }
 
   std::printf("  exact values:            %ld checks, largest difference %.2g\n", exactChecks, exactWorst);
   std::printf("  orthogonality:           %ld checks, largest difference %.2g\n", orthChecks, orthWorst);

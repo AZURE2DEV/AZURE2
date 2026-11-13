@@ -30,6 +30,7 @@ Satchler's *Direct Nuclear Reactions* or of Thompson, Comput. Phys. Rep. 7 (1988
 | `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1), per pair of partial waves (l, j) |
 | `.../TransferAmplitudes.h`, `src/transfer/TransferAmplitudes.cpp` | Eqs. (19.5)–(19.8): the angular and spin sums, with or without spin-orbit, cross section and iT11 |
 | `.../ThmVertex.h`, `src/transfer/ThmVertex.cpp` | Eqs. (8.1)–(8.3) |
+| `.../SourceProjection.h`, `src/transfer/SourceProjection.cpp` | Eqs. (25.1)–(25.2): the projection of the distorted-wave vertex's source (§25) |
 | `.../ZeroRangeWeight.h`, `src/transfer/ZeroRangeWeight.cpp` | Eq. (24.2): the engine's zero-range THM weight with its bound |
 | `.../GlobalOptical.h`, `src/transfer/GlobalOptical.cpp` | the global optical sets, one table (§24.4) |
 | `physics/tests/transfer_*_test.cpp`, `transfer_fresco_common.h`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9, §18 |
@@ -189,8 +190,8 @@ post-form ZR: c_i = 1, c_f = α; the engine's M(E) (`src/ThmDistortion.h`): c_i 
   |r_f − αr_i| ≤ (1 − αβ)ρ_max, the x integral by Gauss–Legendre on the part of [−1, 1] where ρ ≤ ρ_max, the bound
   states by six-point Lagrange interpolation, the radial double integral by the trapezoid rule (the integrand vanishes
   at r = 0 and at r_max). Defaults h_K = 0.1 fm, 48 x nodes, ρ_max = 10 fm; 0.7 s for each FRESCO case below.
-- Angular momenta: `physics/AngularCoupling.h` stops at j = 40, so l ≤ 40 (spinless) and l ≤ 39 (spin 1) in (4.3) and
-  in (6.3). Enough for the cases here (FRESCO's |S − 1| beyond is < 1e-6); a heavier system needs the limit raised.
+- Angular momenta: `physics/AngularCoupling.h`'s `clebsch_gordan` stops at j = 40, so l ≤ 40 (spinless) and l ≤ 39
+  (spin 1) in (4.3) and in (6.3); the source projection of §25 uses `clebsch_gordan_integer` (integer j, no limit). Enough for the cases here (FRESCO's |S − 1| beyond is < 1e-6); a heavier system needs the limit raised.
 
 ## 8. The THM vertex in the plane-wave limit
 
@@ -838,11 +839,10 @@ factor i^l are exact. The couplings are in the same order (exit wave first: ⟨L
   overlap over r (Eq. (6.4)); the source at fixed r = a is a different reduction (the engine's 2D quadrature in
   (u, cos θ_u) of h^l_{L_s L_a}(a), §"Numerics" of `src/ThmDwVertex.cpp`).
 
-So the vertex stays with the engine's quadrature on this branch; what moves is its waves (24.1's table: the same
-`TabulateChannel`/`SolvePartialWave` and `PlaneWaves`, at the vertex's own steps and ranges). The next step is a
-public `SurfaceSourceProjection(φ, entrance, exit, α, β, a, l)` in the library returning S_lm(a) and a S′_lm(a)
-(the quadrature moved, with a test against `EntranceVertex`'s surface term in the plane-wave limit); the Gram matrix,
-its factorisation and the energy grid stay with the engine (they serve the HOES model's B).
+So the vertex stayed with the engine's quadrature on that branch; what moved then was its waves (24.1's table: the
+same `TabulateChannel`/`SolvePartialWave` and `PlaneWaves`, at the vertex's own steps and ranges). §25 moved the
+quadrature into the library (`SourceProjection.h`); the Gram matrix, its factorisation and the energy grid stay with
+the engine (they serve the HOES model's B).
 
 ### 24.3 Grid and accuracy
 
@@ -909,3 +909,145 @@ base and this branch): the set-up of R(E) −10 to −30 % (the ³He case −83 
 (`perf stat` of `tests/<dir>/check.sh` with every child, base → this branch): `thm_distortion` 1.306e12 → 2.588e11
 (−80 %), `thm_fit` 9.870e11 → 2.874e11 (−71 %), `thm_dw_vertex` 3.474e11 → 3.231e11 (−7 %); `18O_p_a_thm` (no
 distortion) +0.004 to +0.009 % in the three bases.
+
+## 25. The source projection of the distorted-wave vertex
+
+§24.2 left the engine's distorted-wave vertex with its own quadrature. This section moves it into the library as one
+public function, `SourceProjection.h`, from which both the engine's vertex and the library's `EntranceVertex` surface
+term are built.
+
+### 25.1 What it returns
+
+The source of the prior-form vertex (§24.2), with r = r_xA, u = r_sx, R_s = αr + u, R_a = r + βu (α = m_A/m_F,
+β = m_s/m_a), an l = 0 overlap φ(u) (fm^-3/2 times its unit) and the waves of §4 (spin 0):
+
+```
+S(r) = ∫ d³u φ(u) χ⁽⁻⁾*_f(R_s) χ⁽⁺⁾_i(R_a),                                                              (25.1)
+χ⁽⁺⁾_i(R) = (4π/(k_i R)) Σ_LM i^L e^{iσ_L} u_L(k_i R) Y*_LM(k̂_i) Y_LM(R̂),
+```
+
+(χ⁽⁻⁾*_f the same with (−i)^L e^{iσ_L} and Y_LM(k̂_f) Y*_LM(R̂)). Its projection on the channel's harmonics
+S_lm(r) = ∫ dΩ_r Y*_lm(r̂) S(r) is, with r along z (the integrand does not depend on the azimuth of u once the
+directions of k_i and k_f are taken out by the addition theorem),
+
+```
+S_lm(r) = Σ_{L_s L_a} (4π)²/(k_f k_i) (−i)^{L_s} i^{L_a} e^{i(σ^f_{L_s} + σ^i_{L_a})} √(4π/(2l+1)) h^l_{L_s L_a}(r)
+          × ⟨L_s m L_a 0|l m⟩ √((2L_a+1)/4π) Y_{L_s m}(θ_fi, 0),                                                (25.2)
+h^l_{L_s L_a}(r) = 2π ∫ u² du φ(u) ∫ d cos θ_u f_{L_s}(R_s) f_{L_a}(R_a) K^l_{L_s L_a}(θ_s, θ_a),   f_L(R) = u_L(kR)/R,
+K = Σ_M ⟨L_s M L_a −M|l 0⟩ Y_{L_s M}(θ_s, 0) Y_{L_a −M}(θ_a, 0),
+```
+
+in the frame k̂_i = ẑ, k̂_f at the angle θ_fi in the xz plane, u in the xz plane (θ_s, θ_a the polar angles of R_s,
+R_a). h is the *reduced amplitude*: it depends on r and on the waves, not on the directions of k_i and k_f, so it is
+computed once per energy and the directions (one, or the nodes of a window) cost a sum over the triples (l; L_s, L_a)
+only. K is the zero component of the bipolar harmonic; rotating R̂_s onto z leaves M_s = 0,
+K = √((2L_s+1)/(2l+1)) Σ_ν (−1)^ν ⟨L_s 0 L_a ν|l ν⟩ Y_{lν}(θ_s, 0) Y_{L_a ν}(θ_a − θ_s, 0),
+O(l) per triple. dh/dr at fixed u follows from dR_s/dr = α cos θ_s, dθ_s/dr = −α sin θ_s/R_s, dR_a/dr = cos θ_a,
+dθ_a/dr = −sin θ_a/R_a.
+
+The library function returns, for one radius a, the triples, the reduced amplitudes and their r derivatives at a per
+exit energy, and from them S_lm(a) and S′_lm(a) for m = 0 … l at any direction θ_fi (S_l,−m = (−1)^m S_lm in this frame,
+which the caller's sums over m use). It also returns the plane-wave source φ̃(q) = 4π ∫ u² φ(u) j_0(qu) du on the same
+u nodes (the engine's normalisation, so that the plane-wave limit V_lm/4πφ̃ = i^l Y*_lm(p̂) M_l(p) holds to the
+rounding of the nodes, not to the quadrature of φ̃).
+
+### 25.2 `EntranceVertex` and this function
+
+With w(r) = r S_lm(r), w(a)/a = S_lm(a) and w′(a) = S_lm(a) + a S′_lm(a), so the surface term of `EntranceVertex`
+
+```
+(ħ²/2μ) u(a) [B w(a)/a − w′(a)] = (ħ²/2μ) u(a) [(B − 1) S_lm(a) − a S′_lm(a)] = (ħ²/2μ) u(a) V_lm(B)          (25.3)
+```
+
+is this function's value at a, and its volume and interior terms are those of the wave r S_lm(r) on the level's grid
+(the function at the grid's radii). The composition is that way round: `EntranceVertex` takes any wave w and its
+derivative, so it does not call the projection; a caller with a source projects it and hands r S_lm and
+S + aS′ to `EntranceVertex`. Making `EntranceVertex` call the projection would replace its exact plane wave
+r j_l(pr) of `PlaneWaveEntranceVertex` by the projection's quadrature of plane waves, which moves its numbers by the
+quadrature error (10⁻¹⁰ to 10⁻⁹, §25.4), beyond the last digits; so it stays as it is, and a test of the library
+builds `EntranceVertex` from the projection in the plane-wave limit and compares all three of its terms with
+`PlaneWaveEntranceVertex` times 4πφ̃(q) i^l Y*_lm(p̂).
+
+### 25.3 What moves and what stays
+
+Moves into `physics/transfer` (`SourceProjection.h/.cpp`): the quadrature in (u, cos θ_u) (Gauss–Legendre panels in
+u, nodes in cos θ_u), the partial-wave bounds, the geometry R_s, R_a, θ_s, θ_a and their r derivatives, the kernel K
+and its triples, the six-point Lagrange interpolation of the waves with its derivative (`RadialNumerics.h`, which
+`InterpolateOnGrid` now uses too), Y_lm(θ, 0) with its θ derivative for negative θ (`RadialNumerics.h`, the same
+recurrence as `SphericalHarmonicsAtPhiZero`), the Clebsch–Gordan coefficients for integer l ≤ 200
+(`AngularCoupling.h`, `clebsch_gordan_integer`: `clebsch_gordan` stops at j = 40), the phases and factors of (25.2), the
+assembly of S_lm and S′_lm at a direction, and φ̃(q) on the u nodes (the Trojan-horse factor). The order of the sum over
+the points is fixed by the plan: the points are cut into blocks of consecutive points, each summed in order, the blocks
+added in order; a caller that runs the blocks on several threads gets the numbers of one thread. The library has no
+OpenMP (its rule); the engine runs the exit waves of a pass and the blocks in parallel, as before.
+
+Stays in the engine (THM-specific): the three-body kinematics and the directions (one, or the nodes of a window, with
+their weights), the energy grid and its passes of energies, the radial steps of the wave tables (the engine's rule:
+0.02 fm or 0.1 over the local wave number with the potential's depth, which for a global set is its largest over the
+energies), the normalisation of S_lm by 4πφ̃(q), the 2 × 2 Gram matrix, its split into two incoherent components, its
+interpolation in energy, the reports and the messages. The phases and factors (4π)²/(k_f k_i) (−i)^{L_s} i^{L_a}
+e^{iσ} √(4π/(2l+1)) move with the reduced amplitudes because they are the partial-wave expansion of the waves in (25.1),
+not a convention of the THM observable.
+
+### 25.4 Interface and numerical settings
+
+`SourceProjectionRequest` (the values reproduce the engine's numbers before the move):
+
+| Field | Value | Meaning |
+|---|---|---|
+| `tail_per_kappa` | 26 | u from r_min to r_min + 26/κ |
+| `nodes_per_panel` | 16 | Gauss–Legendre nodes per u panel |
+| `panel_phase_rad`, `panel_max_fm` | 4, 5 | a panel spans at most 4 rad of (k_f,max + β k_i) u and 5 fm |
+| `partial_wave_margin` | 14 | L ≤ k R_max + 14 in each channel (R_max = a + β u_max, α a + u_max) |
+| `angle_nodes_per_l`, `angle_nodes_extra` | 1.2, 20 | cos θ_u nodes: 1.2 max(L_a,max, L_s,max) + 20 |
+| `l_cap` | 200 | refused beyond (κ too small) |
+| `matching` | 2 quarter wavelengths, 1 fm | the waves' matching beyond the turning point (§24.3) |
+| `energies_per_pass` | 8 | exit energies held at once; the entrance side is evaluated once per point and pass |
+| `sum_blocks`, `sum_megabytes` | 64, 32 | the blocks of the sum over the points and the size of their buffers |
+
+Calls: `PrepareSourceProjection(setup, request)` → a `SourceProjectionPlan` (the nodes, φ at them, the triples, the
+entrance waves), owned by the caller and kept across energies; `SolveSourceExit(plan, exit channel)` → the exit waves
+of one energy; `SumSourceBlock(plan, exits, block, blocks, sums)` adds one block of points;
+`CombineSourceBlocks(plan, exits, sums)` → the reduced amplitudes per energy; `SourceMultipoles(plan, amplitudes,
+cos θ_fi)` → S_lm(a), S′_lm(a); `SourceMomentumAmplitude(plan, q)` → φ̃(q). `ProjectSource(plan, exits)` does the
+passes and blocks on one thread (the same numbers). The radial steps of the wave tables and the largest exit wave
+number are part of the setup, chosen by the caller. No state: every function takes what it reads and returns values.
+
+Tests (`physics/tests/transfer_source_projection_test.cpp`): (i) the closed form: plane waves in both channels and a
+Yukawa source φ = e^{−κu}/u, φ̃(q) = 4π/(q² + κ²), S(r) = φ̃(q) e^{ip·r} with p = k_i − α k_f, q = k_f − β k_i, so
+S_lm(a) = 4π i^l j_l(pa) Y*_lm(p̂) φ̃(q) and S′_lm(a) = 4π i^l p j_l′(pa) Y*_lm(p̂) φ̃(q); (ii) `EntranceVertex` built
+from the projection against `PlaneWaveEntranceVertex` (§25.2); (iii) the engine's numbers before the move (a scratch
+driver, numbers in the test); (iv) refinement: nodes × 2 and partial waves + 20 change the reduced amplitudes by less
+than the tolerance stated there.
+
+### 25.5 Extensibility
+
+A source with another overlap (a finite-range Trojan-horse wave function from a Woods–Saxon well): `SourceOverlap`
+takes φ as a function of u with its r_min and decay constant κ, so the library does not change; the engine's
+`ThmDistortion::Phi` (and the bound state it builds in `Setup`) is the one place. A distortion with spin-orbit:
+waves per (L, j) and the projectile spins in the triples and in K (`SourceProjection.cpp`), spin projections in the
+plan's triples, and an incoherent sum over the spin projections in the engine's Gram matrix (`src/ThmDwVertex.cpp`);
+the waves already exist per j (`SolvePartialWave`).
+
+### 25.6 Record: what moved, convergence, speed
+
+Every quantity of `tests/reference/thm_dw_vertex_test -v` (Gram entries, the vertex, interpolated values; the base
+build of the merged head against this branch, one thread): 644 quantities, 171 moved, largest 2.7 × 10⁻¹¹ relative
+(G22 at 0.29 MeV, interpolated), rms 1.0 × 10⁻¹¹; `thm_distortion_test` (82) and `thm_optical_test` (14): none moved
+at their printed 13 digits. The output files of the checks `thm_dw_vertex` and `thm_fit` (every run of the checks,
+compared number by number): largest 2.0 × 10⁻¹⁰ (a Gram entry of `thm_experiments.out`), the fitted parameter of
+`thm_fit` the same to its 8 printed digits except one uncertainty in the last digit (1.5 × 10⁻⁸), Minuit's EDM
+2.76878 × 10⁻⁸ → 2.77108 × 10⁻⁸ (a convergence diagnostic of size 10⁻⁸, which follows the rounding). All below 10⁻⁷:
+the rule for a moved number is met without a refined calculation. The cause: the Gauss–Legendre nodes are the
+library's (`GaussLegendre`) instead of GSL's, in another order, and k_i, k_f come from the library's constants.
+
+Convergence (the test's point-Coulomb ¹⁹F(d,n) cases): u and cos θ_u nodes × 2, partial waves + 20 and the wave
+tables' steps halved change the Gram entries by 1.2 × 10⁻⁸ (l = 0), 3.7 × 10⁻⁸ (l = 1) and 1.2 × 10⁻⁸ (l = 3) of the
+largest entry.
+
+Speed (instructions in user space, one thread, OpenMP waiting passively, the base build of the merged head against
+this branch): `thm_dw_vertex_test` 9.194 × 10¹¹ → 8.671 × 10¹¹ (−5.7 %), the check `thm_dw_vertex` with every child
+3.258 × 10¹¹ → 3.500 × 10¹¹ (+7.4 %). The check's runs have l = 0 alone (few triples per point), where the per-point
+cost of the library's pieces (the harmonics with their derivative written to the caller's vectors, the stencil
+returned by value) shows; a first version was +18 % there, and reading the waves per component (the same operations
+in the same order, the same bits) brought it down.

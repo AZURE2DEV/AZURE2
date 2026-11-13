@@ -23,17 +23,11 @@ double WoodsSaxonForm(double radius_fm, double diffuseness_fm, double r_fm) {
   return -NuclearTerm(unit, r_fm);
 }
 
-/// V_C of a uniformly charged sphere of radius R_C (0: point charge) for the charge product z1 z2, by
-/// physics/HybridPotential.h's RadialPotential with no nuclear term and l = 0.
+/// V_C of a uniformly charged sphere of radius R_C (0: point charge) for the charge product z1 z2:
+/// physics/HybridPotential.h's CoulombSphereTerm, finite at r = 0 for R_C > 0.
 double CoulombSphere(int z1z2, double rc_fm, double r_fm) {
   if (z1z2 == 0) return 0.0;
-  HybridPotential coulomb_only;
-  coulomb_only.coulomb_radius_fm = rc_fm;
-  coulomb_only.central_depth_MeV = 0.0;
-  coulomb_only.central.shape = FormShape::WoodsSaxon;
-  coulomb_only.central.radius_fm = 1.0;
-  coulomb_only.central.diffuseness_fm = 1.0;
-  return RadialPotential(coulomb_only, z1z2, 1, 1.0, 0, 0.0, r_fm);
+  return CoulombSphereTerm(z1z2, 1, rc_fm, r_fm);
 }
 
 void CheckGeometry(const WoodsSaxonTerm &t, double R, const char *name) {

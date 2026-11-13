@@ -10,6 +10,8 @@
 //  3. A real potential (Woods-Saxon, spin-orbit, Coulomb sphere; spin 1/2 and 1): |S_lj| = 1 to 1e-10.
 //  4. The reaction cross section of a pure absorber equals (pi/k^2) sum (2j+1)/(2s+1) (1 - |S|^2) written out here,
 //     and sigma/sigma_R -> 1 for a potential that does not reach the matching radius at forward angles (5 deg).
+//  5. The Coulomb sphere at the origin: TermsAt's V_C is 3 Z1 Z2 e^2/(2 R_C) at r = 0 and at r = 1e-300 fm (finite),
+//     continuous at r = 1e-8 fm, and Z1 Z2 e^2/r outside (1e-14 relative).
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -154,7 +156,23 @@ void TestObservables() {
 
 }  // namespace
 
+void TestCoulombSphereAtOrigin() {
+  OpticalPotential p;
+  p.coulomb_r0_fm = 3.0;
+  const int z1z2 = 6;
+  const double e2 = kFineStructure * kHbarC_MeV_fm, centre = 1.5 * z1z2 * e2 / 3.0;
+  double worst = 0.0;
+  for (double r : {0.0, 1e-300, 1e-8}) {
+    const double v = TermsAt(p, z1z2, r).coulomb_MeV;
+    worst = std::max(worst, std::isfinite(v) ? std::fabs(v / centre - 1.0) : 1.0);
+  }
+  worst = std::max(worst, std::fabs(TermsAt(p, z1z2, 4.5).coulomb_MeV / (z1z2 * e2 / 4.5) - 1.0));
+  Check(worst < 1e-14, "Coulomb sphere at r = 0, 1e-300, 1e-8 fm and outside: " + std::to_string(worst));
+  std::printf("Coulomb sphere at the origin: largest relative difference %.2e\n", worst);
+}
+
 int main() {
+  TestCoulombSphereAtOrigin();
   TestFreeWaves();
   TestSquareWell();
   TestUnitarity();

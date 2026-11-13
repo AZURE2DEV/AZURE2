@@ -182,6 +182,39 @@ outside the scope (not fixed): `CNuc::GetTransformParams` returns the record's n
 observed widths, so a record level's photon "widths" there are Γ_γ, b_f, δ_f (read for grid placement; not checked
 by a run); note section 2.5 says the energy step is 10⁻⁶ MeV, the code uses 10⁻⁴.
 
+## 2026-11-13 (agent, branch `feature/upgrade-7-thm-dw-vertex`) — the DW vertex's source projection is the library's
+
+**Done.** (1) Design in `transfer.md` §25 (what the projection returns, how `EntranceVertex`'s surface term is built
+from it, what moves and what stays, the named settings, tests, extension points), committed before code.
+(2) `physics/transfer/SourceProjection.h/.cpp`: `PrepareSourceProjection` (the plan: u and cos θ_u quadratures, φ at
+the nodes, the triples (l; L_s, L_a) with their coefficients, the entrance waves), `SolveSourceExit`, the sum over
+the points in blocks whose order the plan fixes (`SourceSumBlocks`, `SourceBlockSize`, `SumSourceBlock`,
+`CombineSourceBlocks`; `ProjectSource` does it on one thread), `SourceMultipolesAt` (S_lm(a), S′_lm(a) at a
+direction), `SourceMomentumAmplitude` (φ̃(q) on the same nodes). Pieces added to the library and used by it:
+`SixPointLagrange` (value and derivative; `InterpolateOnGrid` now uses it), `SphericalHarmonicsWithDerivative`
+(any sign of θ; the recurrence shared with `SphericalHarmonicsAtPhiZero`), `clebsch_gordan_integer`
+(`AngularCoupling.h`, integer j without the j ≤ 40 table). (3) `src/ThmDwVertex.cpp` calls it: the engine keeps the
+energy grid and its passes (OpenMP over the exit waves and over the blocks), the directions, the normalisation by
+4πφ̃(q), the Gram matrix, its factorisation and interpolation; its quadrature, `Lagrange6`, `YTable`, `WaveTable` and
+`ThmCG` are gone (src/ and include/: −355, +68 lines). `EntranceVertex` is unchanged (§25.2: it takes any wave; making
+it call the projection would replace the exact plane wave of `PlaneWaveEntranceVertex` by a quadrature); a test builds
+it from the projection instead. (4) The two zero-range implementations are tied by a direct test (3e-15).
+(5) `CoulombSphere` is finite at r = 0 (one function `CoulombSphereTerm` in `HybridPotential.h` for the sphere,
+`RadialPotential` unchanged bit for bit; `TabulateChannel`'s value at the origin from `TermsAt` at r = 0 instead of its
+own formula beside a call at 1e-300). Not done: the optional spin-orbit terms of `kd03`.
+
+**Verified** on the last code commit (build `work/b-dwvertex`, 0 warnings), against `tab-gecm-1` and `work/b-gecm`:
+the whole tree in three bases 887 / 851 / 887 files identical (tag `tab-dwv1`); the converted-tree gate 679 / 643 /
+679 identical; `ctest -LE slow` 224 of 224; the slow tests 11 of 11; `tests/run_tests.sh` 165 passed, 0 failed; the
+eight fits identical to the base build file by file; T1, T2, 13N, 18O_p_a_thm at 3 threads identical to the tree run at
+1; the checks thm_dw_vertex and thm_fit pass and their outputs differ from the base build's by at most 2.0e-10 relative
+(the fit's EDM, a diagnostic of size 1e-8, by 8e-4); `thm_dw_vertex_test -v` 644 quantities, largest change 2.7e-11;
+`thm_distortion_test`, `thm_optical_test` unchanged at their printed digits. Each new test failed once with an
+injected error (named in the report). Speed: `transfer.md` §25.6.
+
+**Open.** The +7 % instructions of the vertex check (per-point overhead of the library's pieces, largest for l = 0);
+`kd03` spin-orbit; a spin-orbit distortion in the vertex (waves per j, spins in the triples, §25.5).
+
 ## 2026-11-13 (director, 07:10) — merged: Phase 6, third branch (a fit's copies made when needed; the Coulomb table named by content; relative paths are the project's)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation-3` (the
