@@ -40,14 +40,13 @@ AMatrixFunc::AMatrixFunc(CNuc *compound, const Config &configure) :
  * usable factorization.
  */
 
-const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
+const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) {
   static const matrix_c emptyMatrix;
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return emptyMatrix;
   if (route_[jGroupNum - 1] == kRouteChannel) {
-    // A = V A_f V^T, one column per unit vector.  The cache is part of the
-    // object's per-energy state, like the factorization's own inverse.
-    AMatrixFunc *self = const_cast<AMatrixFunc *>(this);
-    ChannelState &st = self->chan_[jGroupNum - 1];
+    // A = V A_f V^T, one column per unit vector, kept with the object's per-energy state, like the factorization's
+    // own inverse.
+    ChannelState &st = chan_[jGroupNum - 1];
     if (!st.inverseValid) {
       const int n = (*formal_[jGroupNum - 1]).n;
       st.inverse.assign(n, vector_c(n, complex(0.0, 0.0)));
@@ -55,7 +54,7 @@ const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
       for (int c = 0; c < n; c++) {
         std::fill(unit.begin(), unit.end(), complex(0.0, 0.0));
         unit[c] = 1.0;
-        self->ApplyA(jGroupNum, unit.data(), col.data());
+        this->ApplyA(jGroupNum, unit.data(), col.data());
         for (int r = 0; r < n; r++) st.inverse[r][c] = col[r];
       }
       st.inverseValid = true;
@@ -72,7 +71,7 @@ const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
  * indices of the levels actually included in the R-Matrix.
  */
 
-complex AMatrixFunc::GetAMatrixElement(int jGroupNum, int lambdaNum, int muNum) const {
+complex AMatrixFunc::GetAMatrixElement(int jGroupNum, int lambdaNum, int muNum) {
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return complex(0.0, 0.0);
   const bool channel = (route_[jGroupNum - 1] == kRouteChannel);
   if (!channel && !solver_valid_[jGroupNum - 1]) return complex(0.0, 0.0);

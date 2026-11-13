@@ -582,7 +582,8 @@ data li7pn_ang: dsdo_cm(1->2)
 == tests/relativistic/models/li7pn_edge.azr
 data li7pn_edge: dsdo_cm(1->2)
 == tests/relativistic/models/li7pn_edge_rel.azr
-data li7pn_edge: dsdo_cm(1->2)
+data: set-up failed
+exit 1
 == tests/relativistic/models/na_hs.azr
 extrapolation x1: sigma(1->1)
 == tests/relativistic/models/na_hs_rel.azr

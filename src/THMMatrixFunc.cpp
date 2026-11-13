@@ -133,7 +133,7 @@ const double kNegligibleExitWidth = 1.0e-12;
  * j: sum_{la,lap} gamma_{la,ch} [N_C(la)] A_{la,lap} v[lap] (act: the level's
  * index among the R-matrix levels; nc: the line-shape factors, or null).
  */
-complex ThmExitAmplitude(const AMatrixFunc &func, JGroup *jg, int j, int ch, const std::vector<int> &act,
+complex ThmExitAmplitude(AMatrixFunc &func, JGroup *jg, int j, int ch, const std::vector<int> &act,
                          const std::vector<complex> &vertex, const std::vector<complex> *nc) {
   const int numLevels = jg->NumLevels();
   complex amp(0.0, 0.0);
@@ -203,7 +203,7 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
  * level matrix A (shared interior). Uses the entrance transfer form factors
  * M_l and exit penetrabilities stored on the point by CalcEDependentValues.
  */
-void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &results) {
+void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results) {
   CNuc *const compound = levels.compound();
   const Config &configure = levels.configure();
   int aa = compound->GetPairNumFromKey(point->GetEntranceKey());

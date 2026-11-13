@@ -1,12 +1,11 @@
 #include "ECAmplitudeCache.h"
+#include "Config.h"
+#include "RunScratch.h"
 #include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
 #include <cmath>
-
-// Global cache instance
-ECAmplitudeCache *g_ecAmplitudeCache = nullptr;
 
 void ECAmplitudeCache::AddAmplitude(const AmplitudeKey &key, double energy, complex amplitude) {
   std::lock_guard<std::mutex> lock(cache_mutex_);
@@ -29,7 +28,7 @@ void ECAmplitudeCache::AddAmplitude(const AmplitudeKey &key, double energy, comp
   data.amplitudes.insert(data.amplitudes.begin() + idx, amplitude);
 }
 
-complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey &key, double energy) const {
+complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey &key, double energy) {
   std::lock_guard<std::mutex> lock(cache_mutex_);
   auto it = cache_.find(key);
   if (it == cache_.end()) {
@@ -116,24 +115,9 @@ complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey &key, doub
   return result;
 }
 
-bool ECAmplitudeCache::HasData(const AmplitudeKey &key) const {
-  std::lock_guard<std::mutex> lock(cache_mutex_);
-  auto it = cache_.find(key);
-  return it != cache_.end() && !it->second.energies.empty();
-}
-
 void ECAmplitudeCache::Clear() {
   std::lock_guard<std::mutex> lock(cache_mutex_);
   cache_.clear();
-}
-
-void ECAmplitudeCache::PrintStats() const {
-  std::lock_guard<std::mutex> lock(cache_mutex_);
-
-  int totalPoints = 0;
-  for (const auto &pair : cache_) {
-    totalPoints += static_cast<int>(pair.second.energies.size());
-  }
 }
 
 complex ECAmplitudeCache::Interpolate(double energy, double e1, double e2, complex amp1, complex amp2) const {
@@ -147,20 +131,8 @@ complex ECAmplitudeCache::Interpolate(double energy, double e1, double e2, compl
 }
 
 
-// Global functions
-void InitializeECAmplitudeCache() {
-  if (g_ecAmplitudeCache) {
-    delete g_ecAmplitudeCache;
-  }
-  g_ecAmplitudeCache = new ECAmplitudeCache();
+void InitializeECAmplitudeCache(const Config &configure) { configure.scratch->ecAmplitudes.reset(new ECAmplitudeCache()); }
 
-  // Clear any existing cache files to ensure clean start (optional)
-  // std::cout << "ECAmplitudeCache: Initialized fresh cache (no file reading)" << std::endl;
-}
+void CleanupECAmplitudeCache(const Config &configure) { configure.scratch->ecAmplitudes.reset(); }
 
-void CleanupECAmplitudeCache() {
-  if (g_ecAmplitudeCache) {
-    delete g_ecAmplitudeCache;
-    g_ecAmplitudeCache = nullptr;
-  }
-}
+ECAmplitudeCache *RunECAmplitudes(const Config &configure) { return configure.scratch->ecAmplitudes.get(); }

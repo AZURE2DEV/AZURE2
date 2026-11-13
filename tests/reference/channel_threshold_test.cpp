@@ -45,8 +45,6 @@
 #include "PPair.h"
 #include "ShftFunc.h"
 
-Config *g_config = nullptr;
-
 namespace {
 
 // The pairs of these tests have no potential: every channel key is kNoSpinOrbit (PPair::SpinOrbitTwoJ).
@@ -72,7 +70,7 @@ PPair makePair(const PairSpec &s) {
        << s.z2 << " " << s.sepE << " " << s.sepE << " 0 1 0 0 " << s.a << " 0 0 0";
   std::istringstream in(line.str());
   azure2::io::LevelRow nl(in);
-  return PPair(nl);
+  return PPair(nl, PairFunctionSettings{});
 }
 
 int failures = 0;

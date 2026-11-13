@@ -15,8 +15,6 @@
 #include "AZUREParams.h"
 #include "Config.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 static int failures = 0;
 static void check(bool ok, const char *what) {
   if (!ok) {

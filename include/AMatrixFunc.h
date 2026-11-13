@@ -138,8 +138,8 @@ class AMatrixFunc : public GenMatrixFunc {
   static double InEnergy(CNuc *compound, Site *point);
 
   /// Level-matrix element at (J-group, level, level'), all 1-based.
-  complex GetAMatrixElement(int, int, int) const;
-  const matrix_c &GetAMatrix(int) const;
+  complex GetAMatrixElement(int, int, int);
+  const matrix_c &GetAMatrix(int);
   matrix_c *GetJSpecAInvMatrix(int);
 
   /*!
@@ -375,15 +375,15 @@ class AMatrixFunc : public GenMatrixFunc {
   vector_c chan_cap_exit_;
 
   // Pre-allocated buffers to prevent memory fragmentation
-  mutable std::vector<std::vector<double>> levelGammas_;
-  mutable std::vector<double> levelEnergies_;
+  std::vector<std::vector<double>> levelGammas_;
+  std::vector<double> levelEnergies_;
   /// 1 for a level whose widths are all below the fill's cutoff (FillLevelMatrix).
-  mutable std::vector<char> levelDecoupled_;
+  std::vector<char> levelDecoupled_;
   /// Total energy of the last FillMatrices (for the singular-matrix warning).
   double lastInEnergy_ = 0.0;
-  mutable std::vector<std::vector<double>> shiftFunctions_;
-  mutable int cached_max_levels_;
-  mutable int cached_max_channels_;
+  std::vector<std::vector<double>> shiftFunctions_;
+  int cached_max_levels_;
+  int cached_max_channels_;
   /// Compound nucleus (1-based) of the point being evaluated: groups of the
   /// others are skipped by FillMatrices and InvertMatrices.
   int activeNucleus_ = 0;

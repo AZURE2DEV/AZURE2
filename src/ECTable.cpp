@@ -18,25 +18,8 @@
 
 namespace {
 
-/// The tabulated (reduced) integral at one node; ok = false when the node could
-/// not be computed (non-finite value or a GSL error), which sends every
-/// energy that needs it to the direct integral.
-struct NodeValue {
-  complex value;
-  bool ok;
-};
-
-struct Term {
-  std::mutex m;
-  std::map<long, std::shared_future<NodeValue>> nodes;
-  // AZURE2_EC_TABLE_CHECK: the worst relative difference and where, the
-  // largest direct value and the largest absolute difference.
-  double maxDev = -1.0, eAtMax = 0.0, absAtMax = 0.0, maxAbs = 0.0, maxAbsDiff = 0.0;
-  double eMin = 1e300, eMax = -1e300;
-};
-
-std::mutex g_termsMutex;
-std::map<std::vector<double>, std::unique_ptr<Term>> g_terms;
+using NodeValue = ECTermNodes::Value;
+using Term = ECTermNodes;
 
 std::atomic<long long> g_nodes(0), g_lookups(0), g_direct(0);
 std::atomic<long long> g_nodesReport(0);
@@ -81,8 +64,7 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
           (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX)) ? 1.0 : 0.0,
           configure.useCoulombTable ? 1.0 : 0.0,
           (double)nodesPerDecade,
-          // relativistic kinematics change eta, rho and the flux factor of every node; the table lives for the
-          // whole process, so a pyazr session alternating the switch must not share nodes (checklist t3-25)
+          // relativistic kinematics change eta, rho and the flux factor of every node (checklist t3-25)
           configure.relativistic ? 1.0 : 0.0};
   // the nuclear potential of a hybrid pair, by value
   const std::vector<double> potential = azure2::physics::PotentialKey(coul.HybridPotential());
@@ -161,8 +143,9 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   {
     std::vector<double> key = TermKey(finalPair, configure, coul, li, lf, si, sf, ji, jf, multL, radType,
                                       levelEnergy, isChannelCapture, perDecade);
-    std::lock_guard<std::mutex> lock(g_termsMutex);
-    std::unique_ptr<Term> &slot = g_terms[key];
+    ECTermStore &store = configure.scratch->ecTerms;
+    std::lock_guard<std::mutex> lock(store.mutex);
+    std::unique_ptr<Term> &slot = store.terms[key];
     if (!slot) slot.reset(new Term);
     term = slot.get();
   }
@@ -263,11 +246,12 @@ double ECTable::MaxCheckDeviation() {
   return g_maxDeviation;
 }
 
-std::string ECTable::Report() {
+std::string ECTable::Report(const Config &configure) {
+  ECTermStore &store = configure.scratch->ecTerms;
   size_t terms;
   {
-    std::lock_guard<std::mutex> lock(g_termsMutex);
-    terms = g_terms.size();
+    std::lock_guard<std::mutex> lock(store.mutex);
+    terms = store.terms.size();
   }
   std::ostringstream s;
   s << "External capture table: " << (g_lookups + g_direct) << " integrals, " << (g_nodes - g_nodesReport)
@@ -280,8 +264,8 @@ std::string ECTable::Report() {
     }
     // One line per term: li lf L type, E_out range, the worst point, and the
     // largest difference relative to the term's largest value.
-    std::lock_guard<std::mutex> lock(g_termsMutex);
-    for (auto &kv : g_terms) {
+    std::lock_guard<std::mutex> lock(store.mutex);
+    for (auto &kv : store.terms) {
       const std::vector<double> &k = kv.first;
       Term &t = *kv.second;
       std::lock_guard<std::mutex> tl(t.m);
@@ -303,7 +287,8 @@ void ECTable::ResetCounters() {
   g_maxDeviation = -1.0;
 }
 
-void ECTable::Clear() {
-  std::lock_guard<std::mutex> lock(g_termsMutex);
-  g_terms.clear();
+void ECTable::Clear(const Config &configure) {
+  ECTermStore &store = configure.scratch->ecTerms;
+  std::lock_guard<std::mutex> lock(store.mutex);
+  store.terms.clear();
 }

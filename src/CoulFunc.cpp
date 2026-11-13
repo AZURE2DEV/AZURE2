@@ -35,8 +35,8 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
 
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
-  if (g_config && g_config->useCoulombTable && z1_ * z2_ != 0 && !potential_)
-    table_ = CoulombTable::Shared(g_config->coulombTablePath);
+  const PairFunctionSettings &settings = pPair->FunctionSettings();
+  if (settings.useCoulombTable && z1_ * z2_ != 0 && !potential_) table_ = CoulombTable::Shared(settings.coulombTablePath);
 }
 
 bool CoulFunc::TableLookup(int l, double radius, double energy) {

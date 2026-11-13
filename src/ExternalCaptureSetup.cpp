@@ -512,12 +512,12 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                       } else {
                         complex ecAmplitude(0.0, 0.0);
                         in >> ecAmplitude;
-                        point->AddECAmplitude(k, ecm, ecAmplitude);
+                        point->AddECAmplitude(k, ecm, ecAmplitude, configure);
                         // Every slot of the point is in the file; the slot's writer holds it (SlotGroup.h).
                         for (int j = 1; j <= point->NumSubPoints(); j++) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
-                          if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude);
+                          if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude, configure);
                         }
                       }
                     }
@@ -540,7 +540,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   }
   if (!usePrevious && configure.useECTable && !(configure.paramMask & Config::USE_API) &&
       ECTable::Lookups() + ECTable::DirectCalls() > 0)
-    configure.outStream << "\t" << ECTable::Report() << std::endl;
+    configure.outStream << "\t" << ECTable::Report(configure) << std::endl;
   // Remember where the regular-segment integrals end so the component-segment
   // integrals (appended to the same file) can be resumed from here on read.
   if (in.is_open()) {
@@ -621,11 +621,11 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
                     } else {
                       complex ecAmplitude(0.0, 0.0);
                       in >> ecAmplitude;
-                      point->AddECAmplitude(k, ecm, ecAmplitude);
+                      point->AddECAmplitude(k, ecm, ecAmplitude, configure);
                       for (int j = 1; j <= point->NumSubPoints(); j++) {
                         ecAmplitude = complex(0.0, 0.0);
                         in >> ecAmplitude;
-                        if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude);
+                        if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude, configure);
                       }
                     }
                   }

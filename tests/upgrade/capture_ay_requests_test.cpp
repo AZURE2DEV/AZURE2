@@ -29,8 +29,6 @@
 #include "PathwayTable.h"
 #include "Results.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;
@@ -56,7 +54,6 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.sink.reset(new std::ostringstream);
   l.cfg.reset(new Config(*l.sink));
   l.cfg->configfile = file;
-  g_config = l.cfg.get();
   l.compound.reset(new CNuc);
   l.data.reset(new WorkingCopy);
   if (l.cfg->ReadConfigFile() < 0) return l;
@@ -66,7 +63,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
     l.cfg->paramMask &= ~Config::CALCULATE_WITH_DATA;
   l.cfg->fileCheckMask = l.cfg->screenCheckMask = 0;
   l.cfg->ResolveMatrixRoute();
-  InitializeECAmplitudeCache();
+  InitializeECAmplitudeCache(*l.cfg);
   if (l.compound->Fill(*l.cfg) == -1) return l;
   const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get())
                                                                        : l.data->MakePoints(*l.cfg, l.compound.get());

@@ -45,11 +45,6 @@
 #include "TargetEffect.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 
-// Each consumer of the engine defines this itself -- src/AZURE2.cpp for the CLI,
-// api/src/pybind_api.cpp for the Python API -- so a program that links
-// AZURE2Core has to as well.  CoulFunc reads it at construction.
-Config *g_config = nullptr;
-
 namespace {
 
 // Tolerance for anything compared against a closed form evaluated with the
@@ -209,7 +204,6 @@ double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sig
 int main() {
   std::ostringstream sink;
   Config configure(sink);
-  g_config = &configure;
   // the beam profile at a lab energy, as the kernel evaluates it
   auto Weight = [&configure](const TargetEffect &t, double e) {
     return azure2::experiment::BeamProfileWeight(t.KernelParametersFor(configure), e);

@@ -30,7 +30,7 @@ class ShftFunc {
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();
     kin_ = Kinematics::Channel(pPair);
-    table_ = SharedTable(neutral_);
+    table_ = SharedTable(pPair, neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     potential_ = pPair->GetHybridPotential();
     pair_ = pPair;
@@ -102,7 +102,7 @@ class ShftFunc {
   const PPair *pair_;
   /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
   bool BoundTableOk(int l, double energy) const;
-  static const CoulombTable *SharedTable(bool neutral);
+  static const CoulombTable *SharedTable(const PPair *pair, bool neutral);
   /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
   static bool UseURatio();
 };

@@ -38,8 +38,6 @@
 #include "ThmExperiment.h"
 #include "ThmOptical.h"
 
-Config *g_config = nullptr;
-
 namespace {
 
 bool verbose = false;

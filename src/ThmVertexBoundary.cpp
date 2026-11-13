@@ -46,7 +46,7 @@ double ThmVertexBoundary::Level(const ALevel *level) const {
   return rule_ == LEVEL_SHIFT ? level->GetShiftFunction(channel_) : fixed_;
 }
 
-complex ThmVertexBoundary::OnShellAt(double e) const {
+complex ThmVertexBoundary::OnShellAt(double e) {
   return complex(channelFunc_.Shift(l_, two_j_, e), channelFunc_.Penetrability(l_, two_j_, e));
 }
 

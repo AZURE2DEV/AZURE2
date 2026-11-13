@@ -81,8 +81,8 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theC
     return memo.amplitude;
   }
 
-  // Use ECAmplitudeCache for interpolation at any energy
-  if (g_ecAmplitudeCache) {
+  // The run's ECAmplitudeCache for interpolation at any energy
+  if (ECAmplitudeCache *cache = RunECAmplitudes(configure)) {
     ECAmplitudeCache::AmplitudeKey key;
     key.kGroupNum = kGroupNum;
     key.ecMGroupNum = ecMGroupNum;
@@ -92,11 +92,11 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theC
     key.segmentKey = segment_key_;
 
     // Simple interpolation from cache
-    complex interpolatedAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, currentEnergy);
+    complex interpolatedAmplitude = cache->GetInterpolatedAmplitude(key, currentEnergy);
     return interpolatedAmplitude;
   }
 
-  // Fallback to original cached amplitude if no global cache available
+  // The point's own amplitude when the run has no cache
   return GetECAmplitude(kGroupNum, ecMGroupNum);
 }
 
@@ -199,7 +199,7 @@ void Site::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
               for (int ecm = 1; ecm <= group.num_external; ecm++) {
                 complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, aa, P, group, P.External(group, ecm),
                                                          ecLevel->GetECEnergy(), this->GetCMEnergy(), table);
-                this->AddECAmplitude(k, ecm, ecAmplitude);
+                this->AddECAmplitude(k, ecm, ecAmplitude, configure);
               }
             }
           }
@@ -213,7 +213,7 @@ void Site::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
  * Adds an external capture amplitude with reference to a specified reaction pathway.
  */
 
-void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
+void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy, const Config &configure) {
   vector_c d_amp;
   vector_r d_energy;
   while (kGroupNum > ec_amplitudes_.size()) {
@@ -228,14 +228,14 @@ void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, d
   // Add to shared cache for interpolation across different units.  The energy
   // tables evaluate shifted points directly (GetECAmplitudeWithShift), so the
   // cache is only filled without them.
-  if (g_ecAmplitudeCache && !(g_config && g_config->useECTable)) {
+  if (ECAmplitudeCache *cache = configure.useECTable ? nullptr : RunECAmplitudes(configure)) {
     ECAmplitudeCache::AmplitudeKey key;
     key.kGroupNum = kGroupNum;
     key.ecMGroupNum = ecMGroupNum;
     key.entranceKey = this->GetEntranceKey();
     key.exitKey = this->GetExitKey();
     key.segmentKey = segment_key_;
-    g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
+    cache->AddAmplitude(key, energy, ecAmplitude);
 
     // A non-finite amplitude (never cached, see ECAmplitudeCache::AddAmplitude) is replaced by the value
     // interpolated from the neighbouring cached energies.
@@ -243,7 +243,7 @@ void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, d
       std::cout << "WARNING: Replacing EC Amplitude with interpolated value from cache for kGroup "
                 << kGroupNum << ", ecMGroup " << ecMGroupNum
                 << " at energy " << energy << " MeV." << std::endl;
-      complex interpAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, energy);
+      complex interpAmplitude = cache->GetInterpolatedAmplitude(key, energy);
       std::cout << "         Original Amplitude: " << ecAmplitude
                 << ", Interpolated Amplitude: " << interpAmplitude << std::endl;
       ec_amplitudes_[kGroupNum - 1].back() = interpAmplitude;
@@ -251,10 +251,10 @@ void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, d
   }
 }
 
-void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
+void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, const Config &configure) {
   // Default behavior - use current CM energy
   double currentEnergy = this->GetCMEnergy();
-  AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy);
+  AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy, configure);
 }
 
 /*!

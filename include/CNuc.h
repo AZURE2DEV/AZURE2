@@ -167,7 +167,7 @@ class CNuc {
   void CalcShiftFunctions(const Config &, bool secondDerivatives = true);
   /// Forget every level's cached shift functions (after a change of the
   /// nuclear potential, which moves them at fixed energy).
-  void InvalidateShiftFunctions();
+  void InvalidateShiftFunctions(const Config &configure);
   /// Rescale the level amplitudes of a Minuit parameter set between Brune's
   /// and Park's normalizations (gamma_Park = gamma_Brune sqrt J), in place.
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is

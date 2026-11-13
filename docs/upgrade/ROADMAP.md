@@ -218,6 +218,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
 - [ ] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
       `NuclearPotentialManager` singleton and the `thread_local` caches of `ECIntegral.cpp` become caller-owned tables
       or go; a consistency check refuses new ones.
+      Status 2026-11-12 (`evaluation.md` §7): milestone 1 done (no `thread_local`, no warn-once static, no `mutable`
+      solver buffer); milestone 2 done but the input-file bytes (a decision: `cache_stats()`); milestones 3 (the pooled
+      working copies), 4 (`CNuc` pools, fitter and sampler state, MCMC globals) and 5 (diagnostics) pending: 88 rows.
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 ## Phase 7 — DWBA for THM vertices (leaf module; may start in parallel with Phases 4–6)

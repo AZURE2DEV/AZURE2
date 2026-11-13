@@ -35,8 +35,6 @@
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace phys = azure2::physics;
 
 namespace {
@@ -147,10 +145,9 @@ bool Load(Loaded &m, const std::string &azr, Basis basis, bool initialize) {
   if (basis == Basis::Park) m.cfg.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
   if (basis == Basis::Formal) m.cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
   m.cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  g_config = &m.cfg;
   if (m.cfg.ReadConfigFile() < 0) return false;
   m.cfg.ResolveMatrixRoute();
-  InitializeECAmplitudeCache();
+  InitializeECAmplitudeCache(m.cfg);
   if (m.compound.Fill(m.cfg) == -1) return false;
   if (initialize) m.compound.Initialize(m.cfg);
   return true;

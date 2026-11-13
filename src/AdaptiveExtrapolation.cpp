@@ -146,7 +146,7 @@ std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi,
         if (k != 0.0 && !(width > 0.0)) continue;
         const double c = eCM + k * width;
         if (!(c > 0.0)) continue;
-        const double lab = azure2::experiment::BeamLabFromCM(partition, c, Kinematics::Relativistic());
+        const double lab = azure2::experiment::BeamLabFromCM(partition, c, pair->FunctionSettings().relativistic);
         if (lab >= lo && lab <= hi) seeds.push_back(lab);
       }
     }

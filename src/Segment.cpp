@@ -521,7 +521,7 @@ azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, PPair *entra
   }
   r.elastic = segment.TermEntranceKey(t) == segment.TermExitKey(t);
   r.betaDelayed = entrancePair->GetPType() == 20 && exitPair;
-  r.relativistic = Kinematics::Relativistic();
+  r.relativistic = entrancePair->FunctionSettings().relativistic;
   // Lab-frame differential data only: not c.m. data (isDiff 4 / 5), phase shifts, angular distributions.
   r.labDifferential = segment.IsDifferential() && !segment.IsPhase() && !segment.IsAngularDist() &&
                       !segment.IsCMDifferential();

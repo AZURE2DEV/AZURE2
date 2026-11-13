@@ -26,8 +26,6 @@
 #include "Segment.h"
 #include "WorkingCopy.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;
@@ -114,7 +112,6 @@ int main(int argc, char **argv) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = argv[1];
-  g_config = &cfg;
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;
