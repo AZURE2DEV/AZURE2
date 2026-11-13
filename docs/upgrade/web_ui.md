@@ -402,8 +402,15 @@ Route → pyazr call: request → response.
 *Physics, libraries, files*
 
 - `GET /api/physics`, `POST /api/physics/{fn}` → `kinds()["physics"]`, `pyazr.physics.<fn>`: arguments → arrays and
-  a status per element.
+  a status per element.  **Served**: the body `{"arguments": {name: number or list}}` (broadcast), always with
+  `errors="mask"`; the answer `returns` (fields as lists), `units`, `status` per element and `status_words`, `shape`,
+  `axis`; refusals (unknown function 404; unknown or missing argument, wrong type, shapes that do not broadcast,
+  more than 20000 elements 422) carry what / allowed / fix built from the row.  It runs in the server's process
+  (`pyazr/ui/physics.py`): the functions need no session, and the C++ loop releases the GIL; the bound keeps one
+  request near 1 s (coulsm, 45 µs per element; `shift_derivative` about five times that).
 - `POST /api/session/channel_functions`, `/level_matrix` → `Session.channel_functions`, `level_matrix`.
+  `channel_functions` is **served** in the session worker (adapter `Engine.channel_functions`, the budget as the
+  other session routes), with the same bound of 20000 energies; `level_matrix` stays 501 (no engine call).
 - `POST /api/stopping/{fn}` → `pyazr.stopping.*`: material, ion, energies → arrays.
 - `GET /api/sources/exfor`, `/exfor/{id}`, `/ensdf/{nuclide}`, `/masses/{nuclide}` → `pyazr.sources.*` (network
   for EXFOR and ENSDF).
@@ -829,10 +836,10 @@ reaction label, config, THM (get, options, experiments set and removed), undo, r
 parameters, x (get, set), evaluate, the whole evaluation, one data set's arrays, transform; jobs (kinds, list, start,
 get, stop, kill, accept). **501, a pyazr call missing**: adding and removing pairs (`Project.add_pair`,
 `remove_pair`, finding 10), the model on a grid (`Session.evaluate`), a data set's grid and kernel (`DataSet.grid`,
-`kernel`), the level matrix, a physics function on arrays (the physics table of pyazr3.md 2.7); jobs: the
+`kernel`), the level matrix; jobs: the
 engine's MIGRAD and LM and MINOS (`fit_with_engine`), the sampler (`Objective.log_prob`), bands, the rate
 (`Session.reaction_rate`). **501, a later step** (pyazr has the call): system, channel functions, outputs,
-stopping, EXFOR, ENSDF, files, events.
+stopping, EXFOR, ENSDF, files, events.  (Served since: a physics function on arrays, the channel functions.)
 
 **Measured on the product** (a server process over HTTP at one thread, `work/uiserver/measure.py`): opening T2 takes
 1.2–1.5 s to the first answer and 1.2–1.8 s more for the first evaluation (worker start, import, session build
@@ -1046,7 +1053,11 @@ None of these changes the decided objects; each is a call or a field to add:
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
 11. **THM binding energy B and the width-is-amplitude flag** per channel: `set_pair` and `set_channel` have neither.
 12. **Outputs of a physics function described in its row** (names, units, which argument is the natural axis), so
-    the Physics tab can draw it without a per-function plot.
+    the Physics tab can draw it without a per-function plot.  **Closed**: every row of `/api/physics` has its
+    arguments (unit, kind, domain, bounds, default, choices), its returned fields with units and `axis`; the two
+    routes are served.  The Physics tab still lacks: the level matrix (no engine call), the transfer functions on
+    potentials, structured rows for stopping (`kinds()["stopping"]` gives signature and doc only), the reaction rate,
+    and the page code itself (a later step).
 
 Delivered by pyazr's errors and self-description besides: `pyazr.kinds()` (served at `/api/kinds`; its rows of
 session options are the server's options table, its physics rows the list at `/api/physics`), `pyazr.describe()`

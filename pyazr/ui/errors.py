@@ -21,6 +21,7 @@ STATUS = (
     ("FormatError", 422), ("ParameterError", 422), ("DomainError", 422), ("AZURE2Error", 422),
     ("ValueError", 422), ("TypeError", 422), ("ZeroDivisionError", 422),
     ("Error", 422),
+    ("Refused", 422),  # the server's own refusal raised in a worker (the adapter's bound): its class name travels
 )
 
 

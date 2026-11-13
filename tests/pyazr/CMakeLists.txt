@@ -906,6 +906,13 @@ add_test(NAME pyazr_rebuild_nuisance
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
 set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The web UI's physics routes (GET /api/physics, POST /api/physics/{fn}, POST /api/session/channel_functions): the
+# numbers of a direct pyazr call bit for bit, the refusals with their three parts, the bound per request.  Registered
+# here, above the block that must stay last, so that it gets PYAZR_ENGINE_DIR and the skip code.
+add_test(NAME pyazr_ui_physics_routes
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_routes_test.py)
+set_tests_properties(pyazr_ui_physics_routes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

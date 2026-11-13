@@ -30,6 +30,7 @@ import warnings
 from dataclasses import dataclass, field
 
 from .errors import Missing, to_http
+from .physics import MAX_ELEMENTS
 
 
 @dataclass(frozen=True)
@@ -163,13 +164,18 @@ ROUTES = (
     Route("POST", "/api/session/level_matrix", M, "pyazr.Session.level_matrix",
           "R and U matrix elements, eigenphases, poles at energies."),
     Route("GET", "/api/physics", V, "server.Server.physics",
-          "The physics functions the engine binds: signature and doc (the rows of pyazr.kinds()).",
-          serves=("pyazr.kinds",)),
-    Route("POST", "/api/physics/{fn}", M, "pyazr.physics.functions", "A physics function on arrays."),
+          "The physics functions, one row each (pyazr.kinds()['physics']): arguments with unit, kind and domain, "
+          "returned fields with units, the plot axis.", serves=("pyazr.kinds",)),
+    Route("POST", "/api/physics/{fn}", V, "server.Server.physics_call",
+          "pyazr.physics.<fn> on {\"arguments\": {name: number or list}} (broadcast), errors='mask': the returned "
+          f"fields as lists, the status per element and its words; at most {MAX_ELEMENTS} elements per request; runs "
+          "in the server's process (no session).", args=("fn",), spread="arguments", serves=("pyazr.physics.functions",)),
     Route("GET", "/api/system", L, "step 2 (Nucleus tab); today the session's pairs and physical_levels",
           "The built system: pairs, levels, channels, Wigner limits."),
-    Route("POST", "/api/session/channel_functions", L, "step 5 (Physics tab); today the session's coulomb_functions",
-          "Channel functions of a pair at energies."),
+    Route("POST", "/api/session/channel_functions", S, "engine.Engine.channel_functions",
+          "The session's channel functions of a pair (key) at c.m. energies e_cm (MeV): F, Fp, G, Gp, P, S, delta_hs, "
+          f"open; l, radius (fm, 0: the channel radius), J; at most {MAX_ELEMENTS} energies per request.",
+          args=("pair:int", "e_cm"), kwargs=("l:int", "radius:float", "J:float")),
     Route("POST", "/api/outputs", L, "step 3 (Results tab); today the session's write_output_files",
           "Write the program's output files into the project's output directory."),
     Route("POST", "/api/stopping/{fn}", L, "step 5 (Physics tab); today pyazr.stopping", "Stopping powers."),

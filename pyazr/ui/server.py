@@ -127,6 +127,11 @@ class Server:
         import pyazr
         return pyazr.kinds()["physics"]
 
+    @staticmethod
+    def physics_call(fn, **arguments):
+        from .physics import call  # in the server's process: no session needed (pyazr/ui/physics.py)
+        return call(fn, arguments)
+
     # -- the session and the working vector x ---------------------------------------------------------------------
 
     def session_request(self, op, **args):
