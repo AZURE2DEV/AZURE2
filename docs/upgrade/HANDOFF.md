@@ -20,8 +20,11 @@ Update this file at the end of every work session: what changed, what is next, w
 - 293.94 against 297.86 on the fitted T2: the data χ² (`Total-Chi-Squared`, `Evaluation.chi2`) against the
   objective (the program's printed `Total Chi-Squared`, `Evaluation.objective`); the difference is the priors.
 
-**Verified**: see the branch's last commit message and the report (tests `pyazr_objective_object`,
-`pyazr_evaluation`, `pyazr_fit_recipes` (slow), each check shown to fail with an injected error).
+**Verified** (build `work/b-pyobj`, 0 warnings): all projects x 3 bases against `tab-t50-1` 887 / 851 / 887
+identical (tag `tab-pyobj-1`); `ctest -LE slow` 244 of 245 (the failure: `pyazr_ui_routes_consistency`, below); the
+slow tests 12 of 12; the consistency test; the new tests `pyazr_objective_object`, `pyazr_evaluation`,
+`pyazr_fit_recipes`, each shown to fail with an injected error (list in the report).  Not run: `tests/run_tests.sh`
+and the converted-tree gate (no engine code outside the API library changed), Sphinx (not installed).
 
 **Open.**
 - `pyazr_ui_routes_consistency` fails: `fit_objective` is a new public name of the session and `pyazr/ui` (not this
