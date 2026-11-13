@@ -183,9 +183,13 @@ selects another route):
 1. A value of ``azure2::support::Switch``
    (``support/include/azure2/support/Environment.h``) and its row, in the
    same order, in the table of ``support/src/Environment.cpp`` (name, type,
-   value when unset, kind, what it does, its page).
-2. Its row in "Environment switches" of ``reference/command_line.rst``
-   (check 40 keeps the two the same).
+   value when unset, kind, what it does, its page). A switch that can move
+   a number also names its option of the program in the row (``--name`` for
+   a flag, ``--name=VALUE`` with its range for a value): the parser, ``--help``
+   and ``--describe`` take the option from the row (check 43 fails for a
+   row of that kind without one).
+2. Its row in "Environment switches" of ``reference/command_line.rst``,
+   with the option (checks 40 and 43 keep the page and the table the same).
 3. Its reader: ``azure2::support::ProcessEnvironment()`` where it is used;
    a switch that can move a number is a field of
    ``Config::EnvironmentSettings``, filled in ``SettingsOf``
