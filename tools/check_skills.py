@@ -20,6 +20,8 @@ Rules enforced (numbers as in RULES.md §3):
       migration table in docs/source/user_guide/pyazr.rst, read from the page, as a call (`name(`) or an
       attribute (`obj.name`); a name that also appears in the column "pyazr 3.0" is not checked, and a line of a
       version note ("builds before ...") may name it.
+  R11 every scripts/*.py of a skill is run by its self-test: a skill with scripts has scripts/selftest.py, and each
+      script is named (file name, or imported as a module) in selftest.py or selftest_slow.py.
 
 A line can opt out of one rule with an HTML comment `<!-- check_skills: allow R5 -->`;
 use it only for a quoted example of what the rule forbids.
@@ -70,6 +72,7 @@ PYAZR_PAGE = os.path.join("docs", "source", "user_guide", "pyazr.rst")
 TABLE_HEADER_RE = re.compile(r"^\s*\* - earlier name\s*$")
 LITERAL_RE = re.compile(r"``([^`]+)``")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+SELFTESTS = ("selftest.py", "selftest_slow.py")
 
 
 def removed_pyazr_names(page_text):
@@ -281,6 +284,7 @@ class Checker:
                         self.check_text(p, sdir, skill_names, markdown=True)
                     elif fn.endswith((".py", ".sh", ".txt", ".json", ".yaml", ".yml")):
                         self.check_text(p, sdir, skill_names, markdown=False)
+            self.check_selftest(sdir)
         self.check_user_level(names, descriptions)
         return self.findings
 
@@ -295,6 +299,30 @@ class Checker:
             self.add(page, 0, "R10", "the page has no migration table (a row '* - earlier name')")
             return
         self.removed_names = names
+
+    def check_selftest(self, sdir):
+        """R11: every scripts/*.py is named in scripts/selftest.py or selftest_slow.py."""
+        scripts = os.path.join(sdir, "scripts")
+        if not os.path.isdir(scripts):
+            return
+        pys = sorted(f for f in os.listdir(scripts) if f.endswith(".py") and f not in SELFTESTS)
+        if not pys:
+            return
+        texts = []
+        for name in SELFTESTS:
+            p = os.path.join(scripts, name)
+            if os.path.isfile(p):
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    texts.append(f.read())
+        if not texts:
+            self.add(scripts, 0, "R11", "a skill with scripts has no scripts/selftest.py")
+            return
+        text = "\n".join(texts)
+        for py in pys:
+            stem = py[:-3]
+            if py in text or re.search(r"\b(?:import|from)\s+" + re.escape(stem) + r"\b", text):
+                continue
+            self.add(os.path.join(scripts, py), 0, "R11", f"{py} is not run by the skill's selftest.py")
 
     def check_user_level(self, names, descriptions):
         udir = self.user_skills_dir

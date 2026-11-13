@@ -1,43 +1,71 @@
 #!/usr/bin/env python3
-"""Point-by-point residuals of a merged-fit export (single session, parameters from its .sav BY NAME).
-usage: dump_residuals.py <fit.azr> <fit.sav> <workdir> <out.npz>
-Saves, per data row: segment key, dataset name, E_cm, Ex, c.m. angle, data, data error, fit, normalized residual
-(the residual AZURE2/rmfit put into chi^2, i.e. with the fitted norm), so the ranking needs no re-evaluation."""
-import sys, os, json
+"""Point-by-point residuals of a fit, for the locators of the resonance search (rank_map.py, blur_map.py,
+peakfind.py, blur_compare.py, blur_figure.py), from one evaluation of the project.
+
+Reads:  the project (format 3); the fit from --sav (loaded by name) or --x-json ("x"), else the project's own values
+        (a fitted project written by Session.save_fit carries them).
+Writes: OUT (.npz), one entry per data point, in the engine's order: key (the data set's segment key), name, ecm
+        (MeV, c.m., after the energy shift), ex (excitation energy, MeV), ang (c.m. angle, deg), dat and err (the
+        datum and its error as the engine compares them), fit (n dat + res n err: the model in the same frame), res
+        (the residual (f/J - n y)/(n dy) that enters chi-squared, not whitened; "model low" is res < 0).
+        Prints the objective, the data chi-squared and sum(res^2); they agree unless a data covariance joins points
+        (then sum(res^2) is the uncorrelated chi-squared, and the ranking ignores the correlations).
+
+    python3 dump_residuals.py fit.azr resid.npz [--sav fit.sav]
+
+Exit status: 0 written, 3 engine error.
+"""
+import argparse
+import json
+import sys
+
 import numpy as np
-from rmfit.engine import SingleSession
-from rmfit.model import single_variant
-from rmfit.diagnose import dataset_name
-FLAGS = dict(use_long_wavelength=False, ignore_externals=True, use_brune=True)
-def main():
-    azr, sav, wd, out = sys.argv[1:5]
-    os.makedirs(wd, exist_ok=True)
-    if not os.path.exists(os.path.join(wd, "data")):
-        os.symlink(os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(azr)), "data")), os.path.join(wd, "data"))
-    vals = {}
-    for line in open(sav):
-        t = line.split()
-        if len(t) >= 2:
-            try: vals[t[0]] = float(t[1])
-            except ValueError: pass
-    with SingleSession(single_variant(azr, "res", wd), cwd=wd, flags=FLAGS, name="res") as ev:
-        x = np.array(ev.x0, float)
-        for p in ev.worker.call("snapshot", None)["parameters"]:
-            if not p.fixed and p.free_index is not None and p.name in vals: x[p.free_index] = vals[p.name]
-        s = ev.score(x); print(f"objective {s.objective:.3f} chi2 {s.chi2:.3f} N {s.npts}", flush=True)
-        r, _ = ev.residuals(x, jac=False); res = ev._plain_data_rows(r)
-        d = ev.data(); fit = ev.cross(x)
-        cols = dict(key=[], name=[], ecm=[], ex=[], ang=[], dat=[], err=[], fit=[], res=[])
-        for i, (key, (a, b)) in enumerate(ev.row_ranges):
-            n = b - a; seg = ev.segments.by_key(key)
-            ang = d["angles"][i] if i < len(d["angles"]) and len(d["angles"][i]) == n else np.full(n, np.nan)
-            assert len(d["excitation"][i]) == n and len(fit[i]) == n, (key, n, len(d["excitation"][i]), len(fit[i]))
-            cols["key"] += [key] * n; cols["name"] += [dataset_name(seg)] * n
-            cols["ecm"] += list(d["energies"][i]); cols["ex"] += list(d["excitation"][i]); cols["ang"] += list(ang)
-            cols["dat"] += list(d["cross"][i]); cols["err"] += list(d["cross_err"][i]); cols["fit"] += list(fit[i])
-            cols["res"] += list(res[a:b])
-        np.savez(out, **{k: np.asarray(v) for k, v in cols.items()})
-        print(f"rows {len(cols['res'])}, sum res^2 {np.sum(np.square(cols['res'])):.3f}", flush=True)
+
+
+def dump(s, x):
+    """The columns (dict of arrays) of every data point at x."""
+    ev = s.evaluate(x)
+    cols = {k: [] for k in ("key", "name", "ecm", "ex", "ang", "dat", "err", "fit", "res")}
+    for d in ev.data:
+        n = d.n
+        cols["key"] += [d.segment_key] * n
+        cols["name"] += [d.name] * n
+        cols["ecm"] += list(d.energies)
+        cols["ex"] += list(d.excitation_energies)
+        cols["ang"] += list(d.angles if len(d.angles) == n else np.full(n, np.nan))
+        cols["dat"] += list(d.values)
+        cols["err"] += list(d.errors)
+        cols["fit"] += list(d.norm * (d.values + d.residuals * d.errors))
+        cols["res"] += list(d.residuals)
+    return ev, {k: np.asarray(v) for k, v in cols.items()}
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
+    ap.add_argument("project")
+    ap.add_argument("out")
+    ap.add_argument("--sav")
+    ap.add_argument("--x-json")
+    a = ap.parse_args(argv)
+    import pyazr
+    try:
+        with pyazr.Session(a.project) as s:
+            if a.sav:
+                s.load_sav(a.sav)
+            x = s.objective().x0
+            if a.x_json:
+                with open(a.x_json) as fh:
+                    x = np.asarray(json.load(fh)["x"], float)
+            ev, cols = dump(s, x)
+    except pyazr.Error as e:
+        print(f"dump_residuals: {e}", file=sys.stderr)
+        return 3
+    np.savez(a.out, **cols)
+    print(f"objective {ev.objective:.6f}  data chi2 {ev.chi2:.6f}  rows {len(cols['res'])}  "
+          f"sum res^2 {np.sum(cols['res'] ** 2):.6f}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

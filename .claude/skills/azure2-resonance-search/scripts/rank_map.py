@@ -4,6 +4,7 @@ one curve; maximal same-sign runs, n >= 3, coherent chi2 (sum r)^2/n >= 25).  Ea
 extent (min 10 keV) on a 2 keV grid; runs wider than MAX_SPAN are trends (listed, not mapped).  The map is smoothed (sigma 6 keV) and
 cut into regions at its local minima; a region = one basin, ranked by integral.  Residual convention r = (fit - data)/sigma:
 "model low" = runs with r < 0.  usage: rank_map.py resid.npz out.txt [parameters.out fit.azr]   (the last two list the model's levels in each region)"""
+import argparse
 import sys
 import numpy as np
 from collections import defaultdict
@@ -23,6 +24,12 @@ def detector_labels(ang, gap=2.0):
     return lab
 
 MIN_RUN, MIN_SCORE, MAX_SPAN, MINW, DE, SIG = 3, 25.0, 0.6, 0.010, 0.002, 0.006
+_ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+_ap.add_argument("resid", help="the table of dump_residuals.py (.npz)")
+_ap.add_argument("out", nargs="?", help="the ranked regions (text; default standard output)")
+_ap.add_argument("parameters", nargs="?", help="parameters.out of the fit (lists the model's levels per region)")
+_ap.add_argument("azr", nargs="?", help="the fitted project (with parameters: which levels are fixed)")
+_ap.parse_args()
 z = np.load(sys.argv[1]); out = open(sys.argv[2], "w") if len(sys.argv) > 2 else sys.stdout
 key, name, ex, ang, res = z["key"], z["name"], z["ex"], z["ang"], z["res"]
 curves = {}

@@ -42,7 +42,7 @@ branch). §3 replaces the "Skills" section of `CLAUDE.md` when Phase 0 rewrites 
 6. One owner skill per task; others link to it. Repo and user-level skills never share a name or description.
 7. A description is at most 600 characters, names its triggers, and says when to use a sibling skill instead.
 8. No personal absolute paths (`/groups/...`, `/Users/...`); use environment variables.
-9. `tools/check_skills.py` enforces 4, 5, 6, 8, 10 and that docs links resolve, in pre-commit and CI.
+9. `tools/check_skills.py` enforces 4, 5, 6, 8, 10, 11 and that docs links resolve, in pre-commit and CI.
 10. No skill names a removed pyazr name (the column "earlier name" of the migration table of
     `docs/source/user_guide/pyazr.rst`), except in a "builds before" version note.
 11. A script of a skill is a tool: argument parser, `--help`, a docstring saying what it reads and writes, exit codes,

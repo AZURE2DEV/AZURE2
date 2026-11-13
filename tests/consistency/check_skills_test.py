@@ -144,6 +144,7 @@ class CheckSkillsTest(unittest.TestCase):
     def test_r8_scripts(self):
         self.t.skill("s")
         self.t.write("s/scripts/run.py", "DATA = '/groups/x/y'\n")
+        self.t.write("s/scripts/selftest.py", "run('run.py')\n")
         self.assertEqual(self.rules(self.t.run()), ["R8"])
 
     def test_links(self):
@@ -185,6 +186,18 @@ class CheckSkillsTest(unittest.TestCase):
         self.assertIsNotNone(names)
         self.assertIn("chi2_and_grad", names)
         self.assertNotIn("residuals", names)   # also a 3.0 name (Objective.residuals)
+
+    def test_r11_selftest_names_every_script(self):
+        self.t.skill("s")
+        self.t.write("s/scripts/tool.py", "print(1)\n")
+        self.assertEqual(self.rules(self.t.run()), ["R11"])          # no selftest.py
+        self.t.write("s/scripts/selftest.py", "print('nothing')\n")
+        self.assertEqual(self.rules(self.t.run()), ["R11"])          # tool.py not named
+        self.t.write("s/scripts/selftest.py", "run(HERE / 'tool.py')\n")
+        self.assertEqual(self.t.run(), [])
+        self.t.write("s/scripts/helper.py", "X = 1\n")
+        self.t.write("s/scripts/selftest_slow.py", "from helper import X\n")
+        self.assertEqual(self.t.run(), [])
 
     def test_main_exit_status(self):
         self.t.skill("s")
