@@ -13,11 +13,15 @@
 #include <string>
 #include <vector>
 
+#include "Config.h"
 #include "Predictions.h"
+#include "ProjectOptions.h"
 #include "TargetStopping.h"
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ProjectReader.h"
+#include "azure2/io/ConfigSection.h"
+#include "azure2/io/Document.h"
 #include "azure2/io/ProjectFormat.h"
 #include "azure2/experiment/Schema.h"
 
@@ -219,7 +223,17 @@ int printPredictions(const std::string &file) {
  * datum or potential NAME.  A project with an error, or no such record: exit 2; a file that is not a format-3 project: exit 3; a
  * file that cannot be read: exit 1.
  */
-int describeProject(const std::string &file, bool json, const std::string &record) {
+/// The options of the calculation for `file` as a run with these command-line flags would have them: each flag of an
+/// option row in `args`, then the project's keys (include/ProjectOptions.h).  False (ERROR lines printed) when a flag and
+/// a key contradict each other.
+bool OptionsOfRun(const std::string &bytes, const std::vector<std::string> &args, Config &config) {
+  for (const std::string &arg : args) ApplyOptionFlag(config, arg);
+  const azure2::io::Document doc = azure2::io::Document::Parse(bytes);
+  std::size_t open = 0;
+  return ApplyProjectOptions(config, azure2::io::ReadConfigSection(azure2::io::ConfigLinesOf(doc, open)), (int)open + 1);
+}
+
+int describeProject(const std::string &file, bool json, const std::string &record, const std::vector<std::string> &args) {
   std::string bytes;
   if (!ReadFileBytes(file, bytes)) {
     std::cout << "ERROR: --describe: cannot read " << file << std::endl;
@@ -251,7 +265,17 @@ int describeProject(const std::string &file, bool json, const std::string &recor
       return 2;
     }
   }
-  std::cout << (json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record)) << std::flush;
+  // the options of the calculation: value and source (default, project, command line), after the records
+  Config options(std::cout);
+  options.configfile = file;
+  if (!OptionsOfRun(bytes, args, options)) return 2;
+  std::string described = json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record);
+  const std::size_t close = described.rfind('}');
+  if (json && close != std::string::npos)
+    described.insert(close, ",\n \"options\": " + OptionsJson(options) + "\n");
+  else if (!json)
+    described += "options of the calculation (value, source):\n" + OptionsText(options);
+  std::cout << described << std::flush;
   if (json) std::cout << std::endl;
   // the stopping of each target from the library: its source (text form only), or the refusal
   const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c), read.projectDir);
@@ -350,7 +374,7 @@ bool RunProjectCommand(int argc, char **argv, int &exitCode) {
           record = argv[++k];
         }
       }
-      return Exit(exitCode, describeProject(argv[i + 1], json, record));
+      return Exit(exitCode, describeProject(argv[i + 1], json, record, std::vector<std::string>(argv + 1, argv + argc)));
     }
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);

@@ -3,12 +3,14 @@
 
 #include <string>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 
 #include "azure2/experiment/HybridPotentialSettings.h"
 #include "ThmOptions.h"
+#include "ProjectOptions.h"
 
 namespace AZUREProfile {
 class Account;
@@ -158,6 +160,11 @@ class Config {
   /// rows and the specs the set-up consumes (src/ProjectSetup.cpp).  Set by every successful ReadConfigFile (a file
   /// that is not format 3 is refused before it); null only before it.
   std::shared_ptr<const azure2::experiment::Format3Project> project;
+  /// Where the value of each option of the calculation came from (include/ProjectOptions.h): an option absent here has
+  /// its default.  Set by the program's flags (parseOptions), a session's keywords and ReadConfigFile's keys.
+  std::map<std::string, OptionSource> optionSources;
+  /// The contradictions of options ApplyProjectOptions refused (their diagnostics, one line each); empty otherwise.
+  std::string refusedOptions;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
   /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
   /// off).  Without a table file the run warns once and uses the exact routines.

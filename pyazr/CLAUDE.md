@@ -11,7 +11,9 @@ public names are a contract.
 - `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
   options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
   (`described.py`); never add a hand-typed list of kinds in Python.
-- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect.
+- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect
+  and their sources.  The options of the calculation are `<config>` keys too (`session_options.py`: a keyword given
+  wins over the key, the key over the default; the signature's defaults are unchanged, a keyword left out is not given).
 - Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
   `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
   which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are

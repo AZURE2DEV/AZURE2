@@ -88,6 +88,8 @@ void Config::Reset() {
   relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
   relativisticReferencePair = 0;
   priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
+  optionSources.clear();     // every option at its default until a flag, keyword or key sets it
+  refusedOptions.clear();
   environment = SettingsOf(azure2::support::ProcessEnvironment());
 }
 
@@ -260,6 +262,11 @@ int Config::ReadConfigFile() {
     // "format" is the file format (docs/upgrade/project.md section 4), read by io::FormatOf
   }
   if (!config.closed) return kConfigUnreadable;
+  // The options of the calculation the project states and no flag or keyword gave (include/ProjectOptions.h)
+  if (!ApplyProjectOptions(*this, config, (int)doc.Find("config")->open + 1)) {
+    ReportFormat3Refused();
+    return kConfigRefused;
+  }
   ReadPotentials();
   // A malformed <thm> section has already been reported: kConfigBlockMalformed, so the caller does not add a
   // misleading "could not open" on top.

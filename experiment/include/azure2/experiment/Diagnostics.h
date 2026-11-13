@@ -166,6 +166,10 @@ constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
 // A <config> key that format 3 no longer has (ReadFormat3Project)
 constexpr const char *kRemovedConfigKey = "E_CONFIG_KEY_REMOVED";
+// An option of the calculation in <config> (project_format3.md section 3.12): a value other than 0, 1, true, false; two
+// options that cannot hold together (ReadFormat3Project, and the run once the flags or keywords are applied)
+constexpr const char *kConfigOptionValue = "E_CONFIG_OPTION_VALUE";
+constexpr const char *kConfigOptionsContradict = "E_CONFIG_OPTIONS_CONTRADICT";
 // The names of a parameter file given as a run's start (ParameterFileNames.h)
 constexpr const char *kParameterFileNoMatch = "E_PARAMETER_FILE_NO_MATCH";
 constexpr const char *kParameterFileNames = "W_PARAMETER_FILE_NAMES";

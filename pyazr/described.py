@@ -289,12 +289,11 @@ def _build_kinds():
                                "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
                                "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
                   for row in engine.parameter_kinds()}
-    defaults = engine.RuntimeOptions()
     options = {}
     for row in engine.session_options():
-        value = getattr(defaults, row["name"])
-        options[row["keyword"]] = {"engine_name": row["name"], "type": type(value).__name__, "default": value,
-                                   "flag": row["flag"], "negation": row["negation"], "doc": row["doc"]}
+        options[row["keyword"]] = {"engine_name": row["name"], "type": row["type"], "default": row["default"],
+                                   "key": row["key"], "flag": row["flag"], "negation": row["negation"],
+                                   "effect": row["effect"], "reason": row["reason"], "doc": row["doc"]}
     physics = {}
     for name in engine.physics_functions:
         obj = getattr(engine, name)
@@ -329,8 +328,9 @@ def kinds():
       (None: the engine's table does not declare them);
     - ``parameters``: the kinds of fit parameter (``Parameter.kind``): code, unit (of the value in the fit vector),
       ``owner`` (the fields that say what it belongs to), own_prior, segment_field, vary_from_project, doc;
-    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
-      ``flag`` and ``negation``, doc;
+    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, ``key`` (the
+      ``<config>`` key of an option of the calculation, the same word; "" for one that is not project state, with its
+      ``reason``), the program's ``flag`` and ``negation``, ``effect`` (physics, convention, numerics), doc;
     - ``physics``: the physics functions the compiled module binds (``_azure2.<name>``; ``stopping.<name>`` in
       ``_azure2.stopping``): signature and doc, as the binding states them;
     - ``errors``: pyazr's error classes with their bases;
@@ -395,6 +395,7 @@ def describe_session(session):
     options["cwd"] = s.cwd
     return json.loads(json.dumps({
         "project": s.file, "cwd": s.cwd, "output_dir": s.output_dir, "mode": s.mode, "options": options,
+        "option_sources": dict(s.option_sources),
         "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
         "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
         "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if p["free"])),

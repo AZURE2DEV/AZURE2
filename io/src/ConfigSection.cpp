@@ -120,16 +120,95 @@ const std::vector<std::string> &ConfigPositionalNames() {
   return names;
 }
 
+namespace {
+
+ConfigKey Key(const char *name, ConfigKey::Kind kind, int minimum, const char *doc) {
+  ConfigKey k;
+  k.name = name;
+  k.kind = kind;
+  k.minimum = minimum;
+  k.doc = doc;
+  return k;
+}
+
+// An option of the calculation: its key (= the pyazr keyword), the program's flags, its default and what it changes.
+ConfigKey Option(const char *name, const char *flag, const char *negation, bool defaultOn, const char *effect,
+                 const char *doc) {
+  ConfigKey k = Key(name, ConfigKey::Bool, 0, doc);
+  k.option = true;
+  k.flag = flag;
+  k.negation = negation;
+  k.defaultOn = defaultOn;
+  k.effect = effect;
+  return k;
+}
+
+}  // namespace
+
 const std::vector<ConfigKey> &ConfigKeys() {
   static const std::vector<ConfigKey> keys = {
-      {"includeAllJPi", ConfigKey::Bool, 0, "every J^pi up to maxOrbitalMomentum gets a hard-sphere channel"},
-      {"maxOrbitalMomentum", ConfigKey::Int, 0, "the largest l of the hard-sphere channels"},
-      {"abundanceSumSigma", ConfigKey::Number, 0, "the width of the penalty on the sum of the abundances (0: none)"},
-      {"relativistic", ConfigKey::Bool, 0, "relativistic two-body kinematics"},
-      {"relativisticReferencePair", ConfigKey::Int, 1, "the pair whose masses define the relativistic frames"},
-      {"priorCovariance", ConfigKey::Path, 0, "the prior parameter covariance file, relative to the project"},
-      {"format", ConfigKey::Version, 0, "the project format (3)"}};
+      Key("includeAllJPi", ConfigKey::Bool, 0, "every J^pi up to maxOrbitalMomentum gets a hard-sphere channel"),
+      Key("maxOrbitalMomentum", ConfigKey::Int, 0, "the largest l of the hard-sphere channels"),
+      Key("abundanceSumSigma", ConfigKey::Number, 0, "the width of the penalty on the sum of the abundances (0: none)"),
+      Key("relativistic", ConfigKey::Bool, 0, "relativistic two-body kinematics"),
+      Key("relativisticReferencePair", ConfigKey::Int, 1, "the pair whose masses define the relativistic frames"),
+      Key("priorCovariance", ConfigKey::Path, 0, "the prior parameter covariance file, relative to the project"),
+      Key("format", ConfigKey::Version, 0, "the project format (3)"),
+      // The options of the calculation (project_format3.md section 3.12); src/ProjectOptions.cpp says where the engine
+      // keeps each one.
+      Option("use_brune", "--use-brune", "--no-brune", true, "convention",
+             "Brune's alternative level matrix (on-shell boundary conditions); off: Lane-Thomas constant boundary "
+             "conditions"),
+      Option("use_park", "--use-park", "", false, "convention",
+             "the fit's amplitudes are the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); needs "
+             "use_brune"),
+      Option("transform", "", "--no-transform", true, "convention",
+             "the input parameters are transformed to the run's basis at start"),
+      Option("ignore_externals", "--ignore-externals", "--no-ignore-externals", true, "physics",
+             "the external capture of a photon channel whose input width is exactly zero is ignored"),
+      Option("use_long_wavelength", "", "--no-long-wavelength", true, "physics",
+             "the long-wavelength approximation for EL capture"),
+      Option("ec_convection_current", "--ec-convection-current", "--no-ec-convection-current", true, "physics",
+             "with use_long_wavelength off: external capture with the convection-current part of the EL operator too"),
+      Option("use_rmc", "--use-rmc", "", false, "physics",
+             "the Reich-Moore approximation for capture (neutron capture only); needs use_brune off"),
+      Option("use_gsl_coul", "--gsl-coul", "", false, "numerics", "GSL's Coulomb functions instead of AZURE2's own"),
+      Option("use_coulomb_table", "--coulomb-table", "--no-coulomb-table", true, "numerics",
+             "P, S and the hard-sphere phase of charged channels from the universal Coulomb table, exact outside it"),
+      Option("use_ec_table", "--ec-table", "--no-ec-table", true, "numerics",
+             "external-capture integrals from per-term energy tables, interpolated"),
+      Option("replace_grids", "--grid-replacement", "--no-grid-replacement", true, "numerics",
+             "the adaptive sub-point grids are laid out again as levels and energy shifts move")};
   return keys;
+}
+
+const ConfigKey *ConfigOptionNamed(const std::string &name) {
+  const ConfigKey *k = KeyNamed(name);
+  return k && k->option ? k : nullptr;
+}
+
+bool ConfigOptionValue(const std::string &text, bool &on) {
+  if (text == "1" || text == "true") return on = true, true;
+  if (text == "0" || text == "false") return on = false, true;
+  return false;
+}
+
+const std::vector<ConfigOptionImplication> &ConfigOptionImplications() {
+  static const std::vector<ConfigOptionImplication> rows = {{"use_park", true, "use_brune", true},
+                                                            {"use_brune", false, "use_park", false}};
+  return rows;
+}
+
+const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions() {
+  static const std::vector<ConfigOptionContradiction> rows = {
+      {"use_park", true, "use_brune", false, "Park's observed amplitudes are defined with Brune's shift functions"},
+      {"use_rmc", true, "use_brune", true,
+       "the Reich-Moore capture is computed with constant boundary conditions only (the program drops Brune with a "
+       "warning, a session keeps it: state use_brune=0)"},
+      {"ec_convection_current", false, "use_long_wavelength", true,
+       "the convection current is a part of the exact EL operator only; with the long-wavelength approximation the "
+       "key changes nothing"}};
+  return rows;
 }
 
 const ConfigEntry *ConfigSection::Find(const std::string &name) const {

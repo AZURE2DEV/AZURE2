@@ -1,7 +1,7 @@
 # Runtime options that change the physics
 
-Each option is a CLI flag (the CLI does not read the Runtime Options stored in the `.azr`) and a keyword of
-`azure2()`. Full list: `docs/source/reference/command_line.rst`. Take the flags of an established project from its job
+Each option is a CLI flag, a keyword of `azure2()` and a `<config>` key of the same name as the keyword
+(`use_brune=0`; a flag or keyword wins over the key, the key over the default; `AZURE2 --describe` shows the source). Full list: `docs/source/reference/command_line.rst`. Take the flags of an established project from its job
 scripts; a calculation under different flags is a different model.
 
 ## Route: A-matrix or R-matrix (`<config>` first line)

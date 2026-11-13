@@ -898,6 +898,14 @@ add_test(NAME pyazr_rebuild_nuisance
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
 set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The options of the calculation as <config> keys (docs/upgrade/project_format3.md section 3.12): key = keyword for every
+# option and both values on tests/upgrade/T1, keyword > key > default with their sources, the refusals, set_config's
+# round trip, what Project.new and save_fit write, the one table.
+add_test(NAME pyazr_config_options
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/config_options_test.py)
+set_tests_properties(pyazr_config_options PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

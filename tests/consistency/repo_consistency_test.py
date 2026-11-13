@@ -152,6 +152,13 @@ help_text = function_body(main_cpp, "void printHelp(")
 cli_doc = read("docs/source/reference/command_line.rst")
 
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
+# The flags of the options of the calculation: their rows of io::ConfigKeys() (Option(name, flag, negation, ...)),
+# parsed from the table (ApplyOptionFlag) and printed from it (printOptionFlags).
+option_flags = {f for row in re.findall(r'Option\("[a-z_]+", "(--[a-z0-9-]*)?", "(--[a-z0-9-]*)?"',
+                                        read("io/src/ConfigSection.cpp")) for f in row if f}
+if not option_flags or "printOptionFlags();" not in help_text:
+    problems.append("io/src/ConfigSection.cpp: no option flags found, or printHelp() does not call printOptionFlags()")
+flags |= option_flags
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
 handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
@@ -169,7 +176,7 @@ removed = {"--use-api"}
 for flag in sorted(flags):
     if flag not in cli_doc:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from docs/source/reference/command_line.rst")
-    if flag not in removed and flag not in help_text:
+    if flag not in removed and flag not in option_flags and flag not in help_text:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from printHelp()")
 
 for flag in sorted(set(re.findall(r"\\t(--[a-z0-9-]+)", help_text))):

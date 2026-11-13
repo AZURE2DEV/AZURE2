@@ -6,8 +6,9 @@
    engine's description of a project.
 2. ``pyazr.kinds()``: every table non-empty and JSON-clean, and equal to the engine's: the record kinds and the data
    kinds are those of ``AZURE2 --schema``; the parameter kinds those of the engine's table and they cover every kind
-   ``AZURE2 --describe --json`` names on tests/upgrade/T1, T2, T3; the options are every field of the binding's
-   ``RuntimeOptions`` (a field without a row fails here), each a keyword of ``pyazr.azure2`` and each flag one of
+   ``AZURE2 --describe --json`` names on tests/upgrade/T1, T2, T3; the options are the option keys of ``<config>`` and
+   every other field of the binding's ``RuntimeOptions`` (a field without a row fails here, a row without a reason
+   too), each a keyword of ``pyazr.azure2`` and each flag one of
    ``AZURE2 --help``; the physics functions are the names the binding registers.  A kind added to the engine thus
    appears in ``kinds()`` with no edit of Python.
 3. ``azure2.describe()`` on tests/upgrade/T1: plain data, its parameters, pairs, levels and data sets those of the
@@ -132,10 +133,17 @@ for name in ("T1", "T2", "T3"):
     check(f"{name}: every kind of the session's parameters is a kind of kinds()",
           set(kind_of.values()) <= set(k["parameters"]), set(kind_of.values()) - set(k["parameters"]))
 
-fields = sorted(f for f in dir(_azure2.RuntimeOptions()) if not f.startswith("_"))
-check("options: one per field of the binding's RuntimeOptions",
-      sorted(o["engine_name"] for o in k["options"].values()) == fields,
-      (fields, sorted(o["engine_name"] for o in k["options"].values())))
+# The one table (docs/upgrade/project_format3.md section 3.12): the options of the calculation are the option keys of
+# <config> (given to RuntimeOptions.options by name); every other field of RuntimeOptions is a row with its reason.
+fields = sorted(f for f in dir(_azure2.RuntimeOptions()) if not f.startswith("_") and f != "options")
+check("options: one per field of the binding's RuntimeOptions that is not project state, each with its reason",
+      sorted(o["engine_name"] for o in k["options"].values() if not o["key"]) == fields
+      and all(o["reason"] for o in k["options"].values() if not o["key"]),
+      (fields, sorted(o["engine_name"] for o in k["options"].values() if not o["key"])))
+_, config_keys = _azure2.config_keys()
+check("options: the others are bool keys of <config>, under their keyword",
+      all(o["key"] == kw and (kw, "bool") in [(n, t) for n, t, _ in config_keys]
+          for kw, o in k["options"].items() if o["key"]) and sum(1 for o in k["options"].values() if o["key"]) == 11)
 init = inspect.signature(pyazr.azure2.__init__).parameters
 check("options: each is a keyword of pyazr.azure2", all(kw in init for kw in k["options"]),
       [kw for kw in k["options"] if kw not in init])

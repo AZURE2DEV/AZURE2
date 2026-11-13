@@ -65,17 +65,18 @@ function configSection(ctx, config, msg) {
     h("div.form-actions", {}, button("Apply", "set_config with the changed entries (Enter)", apply, "primary")));
 }
 
-/** The session's options as GET /api/describe reports them: keyword, value in use, default, flag, the engine's doc. */
+/** The session's options as GET /api/describe reports them: keyword, value in use, its source, default, flag, doc. */
 function optionsSection(ctx) {
   const opts = ctx.describe?.session_options || {};
-  const rows = Object.entries(opts).map(([k, o]) => ({ name: k, value: o.value, default: o.default,
+  const rows = Object.entries(opts).map(([k, o]) => ({ name: k, value: o.value, source: o.source, default: o.default,
     flag: [o.flag, o.negation].filter(Boolean).join(" / "), doc: o.doc, type: o.type }));
   const table = renderTable(document, { rows, withFilter: false, label: "session options",
-    columns: [{ key: "name", title: "option" }, { key: "value", title: "in use" }, { key: "default", title: "default" },
-      { key: "flag", title: "program flag" }, { key: "doc", title: "what it does", wrap: true }] });
-  return section("Session options", h("p.hint", {}, "Read-only here: the engine's defaults are in use. These options "
-    + "become <config> keys of the project (decided 2026-11-13); then they are edited with the other entries."),
-  table.element);
+    columns: [{ key: "name", title: "option" }, { key: "value", title: "in use" }, { key: "source", title: "from" },
+      { key: "default", title: "default" }, { key: "flag", title: "program flag" },
+      { key: "doc", title: "what it does", wrap: true }] });
+  return section("Session options", h("p.hint", {}, "The options of the calculation are <config> keys of the "
+    + "project under the same name (value 0 or 1): set one in the <config> table above; an empty value returns it to "
+    + "the default."), table.element);
 }
 
 /** The problems of Project.validate(), each with a link to the record or level it names. */

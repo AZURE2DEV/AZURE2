@@ -9,50 +9,35 @@
 #include <omp.h>
 #endif
 #include "CoulombTable.h"
+#include "azure2/io/ConfigSection.h"
 
 namespace py = pybind11;
 
 namespace {
 
-// One row per field of RuntimeOptions (pybind_api.cpp): what pyazr.kinds()["options"] says of it (its type and
-// default come from a default RuntimeOptions).  `keyword` is the argument of pyazr.azure2; `flag` and
-// `negation` are the program's command-line flags that set it on and off ("" where the program has none).  A new
-// field takes a row here; tests/pyazr/describe_test.py fails until it has one.
-struct SessionOptionRow {
+// The options a session takes that are not a property of the project, each with the reason (the fields of
+// RuntimeOptions in pybind_api.cpp besides `options`).  The options of the calculation are not listed here: they are the
+// option rows of io::ConfigKeys() (<config> keys, docs/upgrade/project_format3.md section 3.12), and
+// session_options() below lists both.  tests/pyazr/describe_test.py fails for a field of RuntimeOptions in neither.
+struct NotProjectOptionRow {
   const char *name;
   const char *keyword;
   const char *flag;
-  const char *negation;
+  const char *type;  ///< "bool" (default true) or "str" (default "")
   const char *doc;
+  const char *reason;
 };
-const std::vector<SessionOptionRow> &SessionOptionRows() {
-  static const std::vector<SessionOptionRow> rows = {
-      {"data_mode", "data_mode", "", "",
-       "evaluate the data sets (True) or the extrapolations (False); the program's menu choice 1 or 3"},
-      {"use_brune", "use_brune", "--use-brune", "--no-brune",
-       "Brune's alternative level matrix (on-shell boundary conditions); off: Lane-Thomas constant boundary "
-       "conditions"},
-      {"ignore_externals", "ignore_externals", "--ignore-externals", "--no-ignore-externals",
-       "ignore the external capture of a photon channel whose input width is exactly zero"},
-      {"transform", "transform", "", "--no-transform", "transform the input parameters to the run's basis at start"},
-      {"use_long_wavelength", "use_long_wavelength", "", "--no-long-wavelength",
-       "the long-wavelength approximation for EL capture"},
-      {"use_gsl_coul", "use_gsl_coul", "--gsl-coul", "", "GSL's Coulomb functions instead of AZURE2's own"},
-      {"use_rmc", "use_rmc", "--use-rmc", "", "the Reich-Moore approximation for capture (neutron capture only)"},
-      {"use_park", "use_park", "--use-park", "",
-       "fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies use_brune"},
-      {"use_coulomb_table", "use_coulomb_table", "--coulomb-table", "--no-coulomb-table",
-       "P, S and the hard-sphere phase of charged channels from the universal Coulomb table, exact outside it"},
-      {"coulomb_table", "coulomb_table", "--coulomb-table=FILE", "",
-       "the Coulomb table file (\"\": $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin)"},
-      {"replace_grids", "replace_grids", "--grid-replacement", "--no-grid-replacement",
-       "lay the adaptive sub-point grids out again as levels and energy shifts move"},
-      {"use_ec_table", "use_ec_table", "--ec-table", "--no-ec-table",
-       "external-capture integrals from per-term energy tables, interpolated"},
-      {"ec_convection_current", "ec_convection_current", "--ec-convection-current", "--no-ec-convection-current",
-       "with use_long_wavelength off: external capture with the convection-current part of the EL operator too"},
-      {"base_directory", "cwd", "", "",
-       "the directory the project's relative paths are resolved in (\"\": the project file's directory)"},
+const std::vector<NotProjectOptionRow> &NotProjectOptionRows() {
+  static const std::vector<NotProjectOptionRow> rows = {
+      {"data_mode", "data_mode", "", "bool",
+       "evaluate the data sets (True) or the extrapolations (False); the program's menu choice 1 or 3",
+       "what a run evaluates, chosen per run (the menu, pyazr's set_data / set_extrap)"},
+      {"coulomb_table", "coulomb_table", "--coulomb-table=FILE", "str",
+       "the Coulomb table file (\"\": $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin)",
+       "a file of this machine; whether the table is used is the key use_coulomb_table"},
+      {"base_directory", "cwd", "", "str",
+       "the directory the project's relative paths are resolved in (\"\": the project file's directory)",
+       "a directory of this machine"},
   };
   return rows;
 }
@@ -125,17 +110,41 @@ void BindDescription(py::module_ &m) {
       "session_options",
       []() {
         py::list out;
-        for (const SessionOptionRow &row : SessionOptionRows()) {
+        for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys()) {
+          if (!k.option) continue;
+          py::dict d;
+          d["name"] = k.name;
+          d["keyword"] = k.name;
+          d["key"] = k.name;
+          d["flag"] = k.flag;
+          d["negation"] = k.negation;
+          d["type"] = "bool";
+          d["default"] = k.defaultOn;
+          d["effect"] = k.effect;
+          d["reason"] = "";
+          d["doc"] = k.doc;
+          out.append(d);
+        }
+        for (const NotProjectOptionRow &row : NotProjectOptionRows()) {
           py::dict d;
           d["name"] = row.name;
           d["keyword"] = row.keyword;
+          d["key"] = "";
           d["flag"] = row.flag;
-          d["negation"] = row.negation;
+          d["negation"] = "";
+          d["type"] = row.type;
+          if (std::string(row.type) == "bool")
+            d["default"] = true;
+          else
+            d["default"] = "";
+          d["effect"] = "";
+          d["reason"] = row.reason;
           d["doc"] = row.doc;
           out.append(d);
         }
         return out;
       },
-      "The session options (fields of RuntimeOptions), one dict each: name, keyword (of pyazr.azure2), flag and "
-      "negation (the program's command-line flags, \"\" where it has none), doc.");
+      "The session options, one dict each: name (in the engine), keyword (of pyazr.azure2), key (of <config>; \"\" "
+      "for an option that is not project state, with its reason), flag and negation (the program's, \"\" where it "
+      "has none), type, default, effect (physics, convention, numerics), doc.");
 }
