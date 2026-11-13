@@ -190,8 +190,8 @@ post-form ZR: c_i = 1, c_f = α; the engine's M(E) (`src/ThmDistortion.h`): c_i 
   |r_f − αr_i| ≤ (1 − αβ)ρ_max, the x integral by Gauss–Legendre on the part of [−1, 1] where ρ ≤ ρ_max, the bound
   states by six-point Lagrange interpolation, the radial double integral by the trapezoid rule (the integrand vanishes
   at r = 0 and at r_max). Defaults h_K = 0.1 fm, 48 x nodes, ρ_max = 10 fm; 0.7 s for each FRESCO case below.
-- Angular momenta: `physics/AngularCoupling.h` stops at j = 40, so l ≤ 40 (spinless) and l ≤ 39 (spin 1) in (4.3) and
-  in (6.3). Enough for the cases here (FRESCO's |S − 1| beyond is < 1e-6); a heavier system needs the limit raised.
+- Angular momenta: `physics/AngularCoupling.h`'s `clebsch_gordan` stops at j = 40, so l ≤ 40 (spinless) and l ≤ 39
+  (spin 1) in (4.3) and in (6.3); the source projection of §25 uses `clebsch_gordan_integer` (integer j, no limit). Enough for the cases here (FRESCO's |S − 1| beyond is < 1e-6); a heavier system needs the limit raised.
 
 ## 8. The THM vertex in the plane-wave limit
 
@@ -839,11 +839,10 @@ factor i^l are exact. The couplings are in the same order (exit wave first: ⟨L
   overlap over r (Eq. (6.4)); the source at fixed r = a is a different reduction (the engine's 2D quadrature in
   (u, cos θ_u) of h^l_{L_s L_a}(a), §"Numerics" of `src/ThmDwVertex.cpp`).
 
-So the vertex stays with the engine's quadrature on this branch; what moves is its waves (24.1's table: the same
-`TabulateChannel`/`SolvePartialWave` and `PlaneWaves`, at the vertex's own steps and ranges). The next step is a
-public `SurfaceSourceProjection(φ, entrance, exit, α, β, a, l)` in the library returning S_lm(a) and a S′_lm(a)
-(the quadrature moved, with a test against `EntranceVertex`'s surface term in the plane-wave limit); the Gram matrix,
-its factorisation and the energy grid stay with the engine (they serve the HOES model's B).
+So the vertex stayed with the engine's quadrature on that branch; what moved then was its waves (24.1's table: the
+same `TabulateChannel`/`SolvePartialWave` and `PlaneWaves`, at the vertex's own steps and ranges). §25 moved the
+quadrature into the library (`SourceProjection.h`); the Gram matrix, its factorisation and the energy grid stay with
+the engine (they serve the HOES model's B).
 
 ### 24.3 Grid and accuracy
 
@@ -1029,3 +1028,26 @@ takes φ as a function of u with its r_min and decay constant κ, so the library
 waves per (L, j) and the projectile spins in the triples and in K (`SourceProjection.cpp`), spin projections in the
 plan's triples, and an incoherent sum over the spin projections in the engine's Gram matrix (`src/ThmDwVertex.cpp`);
 the waves already exist per j (`SolvePartialWave`).
+
+### 25.6 Record: what moved, convergence, speed
+
+Every quantity of `tests/reference/thm_dw_vertex_test -v` (Gram entries, the vertex, interpolated values; the base
+build of the merged head against this branch, one thread): 644 quantities, 171 moved, largest 2.7 × 10⁻¹¹ relative
+(G22 at 0.29 MeV, interpolated), rms 1.0 × 10⁻¹¹; `thm_distortion_test` (82) and `thm_optical_test` (14): none moved
+at their printed 13 digits. The output files of the checks `thm_dw_vertex` and `thm_fit` (every run of the checks,
+compared number by number): largest 2.0 × 10⁻¹⁰ (a Gram entry of `thm_experiments.out`), the fitted parameter of
+`thm_fit` the same to its 8 printed digits except one uncertainty in the last digit (1.5 × 10⁻⁸), Minuit's EDM
+2.76878 × 10⁻⁸ → 2.77108 × 10⁻⁸ (a convergence diagnostic of size 10⁻⁸, which follows the rounding). All below 10⁻⁷:
+the rule for a moved number is met without a refined calculation. The cause: the Gauss–Legendre nodes are the
+library's (`GaussLegendre`) instead of GSL's, in another order, and k_i, k_f come from the library's constants.
+
+Convergence (the test's point-Coulomb ¹⁹F(d,n) cases): u and cos θ_u nodes × 2, partial waves + 20 and the wave
+tables' steps halved change the Gram entries by 1.2 × 10⁻⁸ (l = 0), 3.7 × 10⁻⁸ (l = 1) and 1.2 × 10⁻⁸ (l = 3) of the
+largest entry.
+
+Speed (instructions in user space, one thread, OpenMP waiting passively, the base build of the merged head against
+this branch): `thm_dw_vertex_test` 9.194 × 10¹¹ → 8.671 × 10¹¹ (−5.7 %), the check `thm_dw_vertex` with every child
+3.258 × 10¹¹ → 3.500 × 10¹¹ (+7.4 %). The check's runs have l = 0 alone (few triples per point), where the per-point
+cost of the library's pieces (the harmonics with their derivative written to the caller's vectors, the stencil
+returned by value) shows; a first version was +18 % there, and reading the waves per component (the same operations
+in the same order, the same bits) brought it down.
