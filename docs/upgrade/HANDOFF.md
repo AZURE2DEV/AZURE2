@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-server`) — the web UI's server and process model (no page)
+
+**Done.** `pyazr/ui/` (new subpackage, not imported by `import pyazr`): `server.py` (the app factory, `Server`,
+`main`; `python -m pyazr.ui project.azr`), `routes.py` (the route table, 70 rows: 53 served, 9 answering 501 with the
+missing pyazr call, 8 with the later step), `state.py` (the text, history, revisions, working file and crash copy,
+the root, the session's text), `workers.py` (session and job workers as processes, the budget, death with the
+server), `jobs.py` (the job table: scipy and iminuit fits as rows, progress, stop, kill, checkpoints), `errors.py`,
+`engine.py` (the adapter, the only file naming `azure2`). Tests `tests/pyazr/ui/` (29, registered in
+`tests/pyazr/CMakeLists.txt`); `web_ui.md` section 11.1 (what was built, the measured numbers, eleven departures);
+the user guide page `web_ui_api.rst`; `pyproject.toml` extra `web` and the package `pyazr.ui`. No existing pyazr
+file, test or engine file changed; no number of the engine.
+
+**How.** The four test files at one thread on the base build's binding (all pass; each rule's test shown failing with
+an injected error, `tests/pyazr/ui/README.md`); evaluate equals a direct session bit for bit and the program's
+`chiSquared.out` row for row on T1 and T2; a real server process over HTTP, killed during a fit: its workers end in
+0.05 s; measured opening T2 and 13N, evaluation overhead, memory, stop times (`web_ui.md` 11.1).
+
+**Open.** (1) The engine resolves `priorCovariance` against the directory of the file it reads, not the session's
+base directory: the UI's session files must lie beside the project (departure 1). (2) The χ² per data set has the
+six digits of `chiSquared.out` until pyazr gives the program's split (finding 5). (3) The event stream, the file
+browser, a job queue and budgets of two or more threads (written, not run). (4) The decisions of `web_ui.md` section
+13 stay the PI's; each choice made here is in one named place (section 11.1).
+
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 
 `docs/upgrade/web_ui.md` is a proposal with eleven decisions for the PI (its section 13), none taken; its twelve

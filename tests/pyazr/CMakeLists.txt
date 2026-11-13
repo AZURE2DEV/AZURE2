@@ -894,3 +894,16 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
+
+# The web UI's server (pyazr/ui, docs/upgrade/web_ui.md): pytest files in tests/pyazr/ui, each run as a script that
+# exits 77 (skipped) with its reason when fastapi, httpx, uvicorn, pytest or the engine module is missing.  The
+# injected errors that showed each rule's test failing are listed in tests/pyazr/ui/README.md.
+foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py)
+    string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
+    add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
+    set_tests_properties(${_name} PROPERTIES SKIP_RETURN_CODE 77
+                         ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+    if(PYAZR_OUTPUT_DIR)
+        set_property(TEST ${_name} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+    endif()
+endforeach()

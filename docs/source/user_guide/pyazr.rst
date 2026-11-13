@@ -1301,3 +1301,9 @@ back* are c.m. Convert with ``E_lab = E_cm · (m_beam + m_target) / m_target``.
 Plot different reaction channels against **excitation energy**
 (``calculate_excitation_energy``); it is the only axis shared by all entrance
 channels.
+
+The web UI's server
+-------------------
+
+``python -m pyazr.ui project.azr`` serves a project to the web UI's API (JSON over HTTP on 127.0.0.1, with a
+token); it needs the optional packages of ``pip install pyazr[web]``.  See :doc:`web_ui_api`.
