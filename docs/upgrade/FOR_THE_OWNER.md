@@ -53,10 +53,12 @@ Frescox, has the numerics of FRESCO there (`transfer.md` §23).
 
 The engine's THM distortions are now this library's. The distortion factor R(E) (`distortion=coulomb|optical`) no
 longer has a solver of its own: the waves, the Trojan-horse tail, the sum over partial waves and its plane-wave limit
-come from `physics/transfer`, and the distorted-wave vertex (`vertexModel=dw`) takes its waves from there too (its
-own integral over the source stays in the engine for now: the library has no function for that source yet,
-`transfer.md` §24.2). The numbers moved by less than one part in 10⁸ (|M|² at most 2.9 × 10⁻⁹, the vertex tables
-6.7 × 10⁻¹⁰); no project of the test suite uses a distortion, so no output file changed. Refining the old numerics
+come from `physics/transfer`, and so does the distorted-wave vertex (`vertexModel=dw`): the projection of its
+source on the channel's harmonics is one library function (`SourceProjection.h`, `transfer.md` §25) with its own
+tests (a closed form with plane waves, the library's `EntranceVertex` built from it, the engine's former numbers);
+the engine keeps only the energy grid, the directions and the 2 × 2 Gram matrix, and the vertex moved by less than
+3 × 10⁻¹¹ when the quadrature moved (the speed of its check +7 %). When the waves moved, the numbers moved by less
+than one part in 10⁸ (|M|² at most 2.9 × 10⁻⁹, the vertex tables 6.7 × 10⁻¹⁰); no project of the test suite uses a distortion, so no output file changed. Refining the old numerics
 shows that they were converged to about 5 × 10⁻⁷ for an optical potential (step and matching radius each 3 × 10⁻⁶,
 partly cancelling), which the new code shares. The seven global optical sets (`opticalAA=ancai06`, ...) are one table
 of the library: adding a set is one row in `physics/src/transfer/GlobalOptical.cpp` and its test points (recipe
@@ -377,10 +379,13 @@ the user guide says what that means for a resonance-strength datum (a difference
 transitions have external capture (¹⁴N(p,γ)¹⁵O into the ground state and 6.79 MeV, ¹²C(p,γ), ¹⁷O(p,γ)) can be written
 so too: the record's widths are the observed ones, external part included, and the engine recomputes the external
 part at every evaluation, so they stay what the record says while a fit moves a proton width, the level energy or an
-ANC. Not covered: the formal basis (`--no-brune`), refused with a message. Known defect, in work: where the
-engine places its integration grid at the resonances (reaction rates, targets) and where it converts limits or
-samples in observed parameters, a record level's branchings and mixing ratios are read as widths in eV; this
-matters for a narrow resonance (total width of an eV or less) written as a record.
+ANC. Not covered: the formal basis (`--no-brune`), refused with a message. From the record's merge until the fix of
+the same day, the paths that take parameters in observed form ignored the record's numbers: pyazr's
+`calculate_chi2` and `update_segments` given a new Γ_γ or branching computed the project as written, and the MCMC in
+observed parameters (`Use Reduced Width Amplitudes: no`) had a likelihood that did not move with them; the grid
+placement at narrow resonances read the branchings as widths in eV, but only into a sum no output used. Fixed and
+tested (`tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`); fits in the CLI and the MCMC in amplitudes
+were never affected.
 
 ## What is in work and what comes next
 

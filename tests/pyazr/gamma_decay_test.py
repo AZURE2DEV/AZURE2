@@ -12,7 +12,9 @@ docs/upgrade/gamma_parametrisation.md), on the projects of tests/gamma_decay/mod
   4. external capture into the ground state and 6.1763 MeV (E1) and 6.7931 MeV (M1) on the record's channels
      (the projects of tests/gamma_decay/check.sh (h)): the record's parameters read through Session.parameters, the
      same chi^2 as the twin with partial widths, and a branching set in the free vector gives the chi^2 of the
-     project written with that branching.
+     project written with that branching;
+  5. the record's numbers set in the physical vector (calculate_chi2, update_segments) reach the engine: the chi^2 of
+     the project written with them, and of the twin with its radiative widths scaled alike.
 
 Needs the compiled engine and scipy; skips cleanly without them.  Run from anywhere:
 python3 tests/pyazr/gamma_decay_test.py
@@ -181,6 +183,41 @@ with tempfile.TemporaryDirectory() as tmp:
         c_file = s.objective()
     check("its chi^2 is that of the project written with it (gamma^ext at the set point)",
           abs(c_set - c_file) <= 1e-10 * abs(c_file) and abs(c_set - cr) > 1.0, f"{c_set} {c_file} {cr}")
+
+    print("5. the record's numbers set in the physical vector (calculate_chi2, update_segments)")
+    # docs/upgrade/gamma_parametrisation.md section 2.8: the physical vector carries the record's numbers; set there,
+    # they must reach the engine (before, FillMnParams took the file's numbers and the vector's were ignored)
+    for twin_f, rec_f in ((os.path.join(d, "partial.azr"), record), (twin, rec)):
+        label = "with external capture" if rec_f == rec else "without external capture"
+        scaled = os.path.join(d, "x12_" + os.path.basename(rec_f))
+        proj = Project.open(rec_f)
+        proj.set("level5", total_width=Nuisance(0.0385027 * 1.2, "fit", unit="eV"))
+        proj.save(scaled)
+        with azure2(twin_f, cwd=d) as t, azure2(rec_f, cwd=d) as s, azure2(scaled, cwd=d) as f:
+            names = [p.name for p in s.parameters if not p.fixed]
+            i = names.index("level5.total_width")
+            phys = np.asarray(s.sess.params_values(), float)
+            check(f"{label}: the physical vector holds Gamma_gamma (eV)", phys[i] == 0.0385027, phys[i])
+            x = phys.copy()
+            x[i] *= 1.2
+            c_vec, c_file = s.calculate_chi2(x)[0], f.calculate_chi2_rwa(f.params_rwa)[0]
+            # the twin: level 5's radiative widths x 1.2 in its physical vector
+            tn = [p.name for p in t.parameters if not p.fixed]
+            xt = np.asarray(t.sess.params_values(), float).copy()
+            k5 = [k for k, n in enumerate(tn) if n.startswith("width_5_") and abs(xt[k]) < 1.0]
+            xt[k5] *= 1.2
+            c_twin = t.calculate_chi2(xt)[0]
+            check(f"{label}: calculate_chi2 with Gamma_gamma x 1.2 is the chi^2 of the project written with it",
+                  abs(c_vec - c_file) <= 1e-12 * c_file and abs(c_vec - s.calculate_chi2(phys)[0]) > 1.0,
+                  f"{c_vec} {c_file}")
+            check(f"{label}: ... and the twin's with its {len(k5)} radiative widths x 1.2",
+                  len(k5) == 5 and abs(c_vec - c_twin) <= 1e-12 * c_twin, f"{c_vec} {c_twin}")
+            n = int(s.sess.update_segments(list(x)))
+            y = np.concatenate([np.asarray(s.sess.calculated_segments(k), float).ravel() for k in range(n)])
+            nf = int(f.sess.update_segments(list(np.asarray(f.sess.params_values(), float))))
+            yf = np.concatenate([np.asarray(f.sess.calculated_segments(k), float).ravel() for k in range(nf)])
+            check(f"{label}: update_segments with Gamma_gamma x 1.2 gives the written project's cross sections",
+                  n == nf and np.array_equal(y, yf), np.max(np.abs(y - yf) / np.abs(yf)) if n == nf else (n, nf))
 
 if failures:
     print(f"FAILED: {len(failures)} check(s)")

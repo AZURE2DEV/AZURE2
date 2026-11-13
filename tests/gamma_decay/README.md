@@ -28,6 +28,21 @@ with partial widths. `check.sh` says what each part checks; run it as `./check.s
   3.85e-12 eV, below the floor 2P (Im g_ext)^2 / n = 6.4e-10 eV, handled as `TransformIn` handles it.
   `tests/pyazr/gamma_decay_test.py` part 4 reads and sets the record's parameters of this project in a session.
 
+* The vector of observed parameters (`check.sh` (i), note section 2.8): a narrow resonance, the ¹⁴N(p,γ) model of
+  `tests/thick_target_resonance` with Γ_p = 0.01 eV and a layer yield added, as twin and record: the copy of the
+  compound that places the rate's breakpoints (mode 5) and the meshes' anchors (a fit with free norms) has the
+  twin's widths (the grid's resonance line of `AZR_DEBUG_GRID`; before the fix the record's gave 0.870 eV of photon
+  width for Γ_γ = 0.0385 eV), the rate is the twin's; a limit (900, 950) eV on level 5's proton width ends at 950 eV
+  as the twin's, a limit on Γ_γ at its bound; the observed-parameter MCMC (mode 6, `no`) with only the record's
+  numbers free: ln L moves with them (it was constant), `param.mcmc` holds the best walker's Γ_γ, and its
+  −2 ln L is the χ² of a calculation at its parameters. `tests/pyazr/gamma_decay_test.py` part 5: Γ_γ × 1.2 set in
+  the physical vector gives the χ² and the `update_segments` cross sections of the project written with it, and the
+  twin's with its radiative widths × 1.2 (before: the χ² of the unchanged project).
+* A final state's free energy (`check.sh` (j), note section 2.7): the external-capture record with a second particle
+  pair (α + ¹¹C, threshold put at 5.0 MeV, in a 9/2⁺ group of its own with width 0), so that the 6.1763 MeV final
+  state lies above a threshold and its energy is free; the gradient in every free parameter against central
+  differences, that energy included.
+
 Errors this check was shown to catch (each injected once into `src/GammaDecayMap.cpp`, then removed): the sign of the
 L+1 width in the map (the sign case and its a2/a0 fail), a wrong remainder (identity, parameters.out and the
 gradient fail), no pull-back to the level energy or to a particle amplitude (the gradient rows fail), no wall on the
@@ -39,3 +54,11 @@ gradient rows fail); d gamma_int / d g taken as 1 (the third gradient point fail
 final state's set-up amplitudes instead of the current ones (gradient rows and both fits fail); gamma^ext not
 subtracted (every comparison fails, and pyazr part 4's chi^2 against the twin); the energy's central difference
 without gamma^ext (the energy rows fail, 8e-3).
+For the observed-parameter paths and the final state's energy (each injected once, then removed): the record's
+numbers not turned into partial widths by `WithPartialWidths` ((i): the rate's and the fit's grid widths fail);
+`FillMnParams` taking the file's numbers instead of the compound's input numbers ((i): the MCMC's ln L spread and
+`param.mcmc` fail; pyazr part 5: all six checks fail); a limit converted at 1.1 times its value in
+`ConvertPhysicalLimitToReduced` ((i): the proton-width limit fails, both end at 990 eV); a limit on a record's number
+not applied ((i): Γ_γ ends at 0.0385 eV); no term in the final state's energy ((j): rel. 0.12). A limit on a record's
+number converted as if it were a width passes: the conversion's round trip gives back the record's number (section
+2.8), which is the rule.

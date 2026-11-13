@@ -96,6 +96,9 @@ HybridPotential GaussianPotential(double depth_MeV, double width_fm);
 /// Throws std::invalid_argument unless V_so, R_so, a_so > 0.
 SpinOrbitTerm WoodsSaxonSpinOrbit(double depth_MeV, double radius_fm, double diffuseness_fm, SpinOrbitParticle on);
 
+/// V_C(r) (MeV) of a uniformly charged sphere of radius R_C (fm) for the charges z1, z2: z1 z2 e^2 (3 - r^2/R_C^2)/(2 R_C)
+/// inside R_C (3 z1 z2 e^2/(2 R_C) at r = 0), z1 z2 e^2/r outside; R_C = 0 is a point charge.
+double CoulombSphereTerm(int z1, int z2, double rc_fm, double r_fm);
 /// The nuclear term V_N(r) (MeV) at r (fm).
 double NuclearTerm(const HybridPotential &p, double r_fm);
 /// v_so(r) = V_so (hbar/m_pi c)^2 (1/r) df/dr (MeV) of the term at r > 0 (fm); the factor <2 l.i> is the caller's.

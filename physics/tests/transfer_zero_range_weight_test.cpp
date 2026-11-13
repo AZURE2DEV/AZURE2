@@ -12,7 +12,9 @@
 //     directions; ZeroRangeMomentumAmplitude the same; and with r_min = 1.5 fm both against the closed form
 //     (4 pi/q) Im[e^{-(kappa - iq) r_min}/(kappa - iq)]; 1e-6 relative.
 //  4. The sum's bound: twenty more partial waves after the stop change O_0 by less than 1e-12 relative.
-//  5. FRESCO, through the zero-range 12C(6Li,d)16O benchmark (tests/data/fresco/li6d_zero_range): the sum with
+//  5. The two implementations of Eq. (6.7) for an l = 0 overlap (ZeroRangeOrbitalIntegral, ZeroRangeWeightSum) with the
+//     same waves, point Coulomb and optical, three directions: 1e-10 relative.
+//  6. FRESCO, through the zero-range 12C(6Li,d)16O benchmark (tests/data/fresco/li6d_zero_range): the sum with
 //     c_i = 1, c_f = alpha = m_A/m_F and the alpha-12C bound state as the l = 0 overlap gives
 //     dsigma/dOmega = 10 mu_i mu_f/(2 pi hbar^2)^2 (k_f/k_i) |D0 O_0|^2 (all spins couple trivially for
 //     l_a = l_F = 0), against FRESCO's reference to 1 % (the test of ZeroRangeCrossSection asks the same).
@@ -25,6 +27,7 @@
 #include "transfer_fresco_common.h"
 #include "azure2/physics/Constants.h"
 #include "azure2/physics/transfer/RadialNumerics.h"
+#include "azure2/physics/transfer/Transfer.h"
 #include "azure2/physics/transfer/ZeroRangeWeight.h"
 
 using namespace azure2::physics;
@@ -175,6 +178,48 @@ void TestBound() {
   std::printf("%s\n", buf);
 }
 
+/// The two implementations of Eq. (6.7) for an l = 0 overlap: ZeroRangeOrbitalIntegral (Clebsch-Gordan coefficients,
+/// l <= 40, waves read by interpolation) and ZeroRangeWeightSum (Legendre recurrence, the sum stopped by its bound), at
+/// c_i = 2/14, c_f = 1 with the same waves (SolveStoredWaves on the overlap's grid, c_i h for the entrance), point
+/// Coulomb only and optical, three directions.
+void TestTwoImplementations() {
+  double worst = 0.0;
+  for (bool optical : {false, true}) {
+    WaveChannel in, out;
+    in.pair.z1 = 7, in.pair.z2 = 6, in.pair.mu_u = 14.0 * 12.0 / 26.0, in.energy_MeV = 2.0;
+    out.pair.z1 = 1, out.pair.z2 = 12, out.pair.mu_u = 2.0 * 24.0 / 26.0, out.energy_MeV = 1.0;
+    if (optical) {
+      in.potential.real_volume = {50.0, 5.5, 0.6};
+      in.potential.imaginary_volume = {20.0, 5.6, 0.6};
+      in.potential.coulomb_r0_fm = 5.5;
+      out.potential.real_volume = {90.0, 3.4, 0.75};
+      out.potential.imaginary_surface = {10.0, 3.8, 0.65};
+      out.potential.coulomb_r0_fm = 3.8;
+    }
+    double kappa = 0.0;
+    const RadialOverlap o = Yukawa(0.0, kappa);
+    ZeroRangeWeightRequest q;
+    q.c_i = 2.0 / 14.0;
+    const int n = static_cast<int>(o.u.size());
+    const DistortedWaves wi = SolveStoredWaves(in, q.c_i * o.step_fm, n, 40, q.matching);
+    const DistortedWaves wf = SolveStoredWaves(out, o.step_fm, n, 40, q.matching);
+    const ZeroRangeEntrance e = PrepareZeroRangeEntrance(o, in, q);
+    const std::vector<double> theta = {0.0, 70.0, 180.0};
+    std::vector<double> x;
+    for (double th : theta) x.push_back(std::cos(th * kPi / 180.0));
+    const ZeroRangeWeight w = ZeroRangeWeightSum(o, e, out, x, q);
+    for (std::size_t d = 0; d < x.size(); ++d) {
+      const cplx O = ZeroRangeOrbitalIntegral(o, wi, wf, q.c_i, 1.0, theta[d])[0];
+      worst = std::max(worst, std::abs(O - w.O[d]) / std::abs(w.O[d]));
+    }
+  }
+  char buf[140];
+  std::snprintf(buf, sizeof buf,
+                "ZeroRangeOrbitalIntegral = ZeroRangeWeightSum (Coulomb only and optical, 3 directions): %.2e", worst);
+  Check(worst < 1e-10, buf);
+  std::printf("%s\n", buf);
+}
+
 void TestFresco() {
   const auto runs = ReadCase("li6d_zero_range");
   if (runs.empty()) return;
@@ -213,6 +258,7 @@ int main(int argc, char **argv) {
   TestMatching();
   TestPlaneWaveWeight();
   TestBound();
+  TestTwoImplementations();
   TestFresco();
   if (failures) {
     std::printf("transfer_zero_range_weight: %d check(s) failed\n", failures);
