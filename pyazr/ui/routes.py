@@ -177,7 +177,8 @@ ROUTES = (
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),
     Route("GET", "/api/files", L, "step 2 (the file browser); no pyazr call", "Files inside the root."),
     Route("GET", "/api/files/{path:path}", V, "server.Server.file_head",
-          "The first rows (query: rows, default 20) of a text file inside the root, as written.", args=("path",),
+          "The first rows (query: rows, 1 to 200, default 20) of a text file inside the root, as written; a line is "
+          "read to 4096 bytes (cut lines listed in cut).", args=("path",),
           kwargs=("rows:int",)),
     Route("GET", "/api/events", L, "step 2 (the page); no pyazr call",
           "Server-sent events: revisions, job progress, build state."),

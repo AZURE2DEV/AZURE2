@@ -94,9 +94,23 @@ export function descriptionList(d) {
   const dl = h("dl.description");
   for (const [k, v] of Object.entries(d || {})) {
     if (v === "" || v === null || (Array.isArray(v) && !v.length)) continue;
-    dl.append(h("dt", {}, k.replace(/_/g, " ")), h("dd", {}, compact(v)));
+    const path = typeof v === "string" && isPath(v);
+    dl.append(h("dt", {}, k.replace(/_/g, " ")), h(path ? "dd.path" : "dd", {}, path ? pathElement(v) : compact(v)));
   }
   return dl;
+}
+
+/** A text that is a path: one word with a "/" in it. */
+export const isPath = (v) => /\//.test(v) && !/\s/.test(v);
+
+/** A path that breaks across lines after a "/" only (never inside a file name or its extension). */
+export function pathElement(text) {
+  const span = h("span.path");
+  text.split("/").forEach((part, i, all) => {
+    span.append(part + (i < all.length - 1 ? "/" : ""));
+    if (i < all.length - 1) span.appendChild(document.createElement("wbr"));
+  });
+  return span;
 }
 
 function compact(v) {

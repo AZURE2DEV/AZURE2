@@ -80,7 +80,7 @@ ctx.edit = async (what, run, where) => {
     const warnings = answer?.warnings || [];
     await ctx.refresh();
     if (warnings.length) ctx.status(`${what}: done; ${warnings.join("; ")}`, "warn");
-    else ctx.status(`${what}: done`, "ok");
+    else ctx.status(`${what}: done${chi2Text()}`, "ok");
     return answer;
   } catch (e) {
     ctx.editing = false;
@@ -109,6 +109,7 @@ async function evaluate() {
     ctx.evalError = null;
     const w = ctx.evaluation.warnings || [];
     if (w.length) ctx.status(`engine: ${w.map((x) => x.message || x).join("; ")}`, "warn");
+    else if (!ctx.editing) ctx.status(`evaluated${chi2Text()}`, "ok");
   } catch (e) {
     ctx.evaluation = null;
     ctx.evalError = e.view || { what: String(e) };
@@ -116,6 +117,10 @@ async function evaluate() {
   }
   drawChi2();
 }
+
+/** The full χ² of the last evaluation for the status line (the header shows it to 8 digits). */
+const chi2Text = () => (ctx.evaluation ? ` · χ² ${ctx.evaluation.chi2} (data), objective ${ctx.evaluation.objective}`
+  : "");
 
 function drawChi2() {
   const e = ctx.evaluation;

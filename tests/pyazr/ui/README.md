@@ -88,3 +88,9 @@ file restored from git after each):
   `sortRows`; the y unit of a plot is the data set's: the x unit used; each fails `node_test.py`.
 - a script error in a tab is caught: `tabs/project.js` dereferences null; the Undo button takes the edit back: it
   sends redo; each fails `smoke_test.py` on T1 and T2.
+
+Added with the Results tab (each shown failing once, the file restored from git after each):
+
+- the first rows of a file are bounded (1 to 200 rows, refused outside with the range; a line read to 4096 bytes and
+  marked cut): the line read whole (`readline()` without its bound); the rows check removed; each fails
+  `static_test.py::test_file_head_is_bounded`.

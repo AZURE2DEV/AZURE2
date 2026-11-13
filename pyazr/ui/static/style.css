@@ -96,7 +96,7 @@ table.grid th { position: sticky; top: 0; background: var(--panel); font-weight:
   border-bottom: 1px solid var(--line); }
 table.grid th[aria-sort="ascending"]::after { content: " ▲"; font-size: 9px; }
 table.grid th[aria-sort="descending"]::after { content: " ▼"; font-size: 9px; }
-table.grid td.wrap { white-space: normal; min-width: 36ch; }
+table.grid td.wrap { white-space: normal; min-width: 20ch; overflow-wrap: break-word; }
 table.grid .num { text-align: right; font-family: var(--font-mono); font-size: 12px; }
 table.grid th.num { font-family: var(--font-ui); font-size: 13px; }
 table.grid tbody tr:hover { background: var(--row-hover); }
@@ -122,6 +122,7 @@ dl.description { display: grid; grid-template-columns: max-content minmax(0, 1fr
 dl.description dt { color: var(--muted); }
 dl.description dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 11.5px; }
 dl.description ul { margin: 0; padding-left: 14px; }
+dl.description dd.path { overflow-wrap: normal; word-break: normal; }
 .record-extras { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
 pre.file-head { margin: 0; max-height: 220px; overflow: auto; background: var(--bg); padding: 6px; }
 .plot-area { width: 100%; height: 380px; }
@@ -135,6 +136,11 @@ form.record-form { min-width: 0; }
 .field-title { font-size: 11.5px; color: var(--muted); }
 .req { color: var(--error); }
 .occurrence { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 1px 0; }
+table.repeat { border-collapse: collapse; }
+table.repeat tr.occurrence { display: table-row; }
+table.repeat td { padding: 1px 6px 1px 0; vertical-align: middle; white-space: nowrap; }
+table.repeat th { padding: 0 6px 0 0; text-align: left; font-weight: normal; font-size: 11.5px; color: var(--muted); }
+table.repeat .ctl { flex-wrap: nowrap; }
 .ctl { display: inline-flex; gap: 3px; align-items: center; flex-wrap: wrap; }
 .ctl .hint { flex-basis: 100%; font-size: 11px; }
 .ctl-label { color: var(--muted); font-size: 11.5px; }

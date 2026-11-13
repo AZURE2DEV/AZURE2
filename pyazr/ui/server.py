@@ -23,6 +23,9 @@ from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 TOKEN_COOKIE = "azure2_ui_token"
+# The bounds of the first rows of a file (GET /api/files/{path}): rows per request, bytes read of one line.
+FILE_HEAD_ROWS = 200
+FILE_HEAD_LINE_BYTES = 4096
 
 
 class Server:
@@ -78,18 +81,33 @@ class Server:
         return {"rev": self.state.restore(rev)}
 
     def file_head(self, path, rows=20):
-        """The first ``rows`` lines of a text file inside the root (relative paths from the project's directory), as
-        written: the page shows the head of a data file beside its record."""
+        """The first ``rows`` lines (1 to :data:`FILE_HEAD_ROWS`) of a text file inside the root (relative paths from
+        the project's directory), as written: the page shows the head of a data file beside its record.  At most
+        :data:`FILE_HEAD_LINE_BYTES` bytes of a line are read (a binary file without line ends is not read whole);
+        ``cut`` lists the numbers (from 1) of the lines cut there."""
+        rows = int(rows)
+        if not 1 <= rows <= FILE_HEAD_ROWS:
+            raise Refused(f"rows={rows}: the first rows of a file are 1 to {FILE_HEAD_ROWS}",
+                          allowed=f"rows from 1 to {FILE_HEAD_ROWS}", fix=f"GET /api/files/{path}?rows=20")
         full = self.state.inside_root(path)
         if not os.path.isfile(full):
             raise NotFound(f"no file {path!r} (relative to {self.state.directory})")
-        lines = []
+        lines, cut = [], []
         with open(full, "rb") as f:
-            for raw in f:
-                if len(lines) == int(rows):
-                    return {"path": path, "lines": lines, "more": True}
+            while len(lines) < rows:
+                raw = f.readline(FILE_HEAD_LINE_BYTES + 1)
+                if not raw:
+                    return {"path": path, "lines": lines, "more": False, "cut": cut}
+                if len(raw) > FILE_HEAD_LINE_BYTES and not raw.endswith(b"\n"):
+                    raw = raw[:FILE_HEAD_LINE_BYTES]
+                    cut.append(len(lines) + 1)
+                    while True:  # skip the rest of the line, a block at a time
+                        rest = f.readline(65536)
+                        if not rest or rest.endswith(b"\n"):
+                            break
                 lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
-        return {"path": path, "lines": lines, "more": False}
+            more = bool(f.read(1))
+        return {"path": path, "lines": lines, "more": more, "cut": cut}
 
     def open(self, path):
         """Open another project inside the root (no job may run)."""

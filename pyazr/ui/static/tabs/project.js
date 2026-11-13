@@ -72,7 +72,7 @@ function optionsSection(ctx) {
     flag: [o.flag, o.negation].filter(Boolean).join(" / "), doc: o.doc, type: o.type }));
   const table = renderTable(document, { rows, withFilter: false, label: "session options",
     columns: [{ key: "name", title: "option" }, { key: "value", title: "in use" }, { key: "default", title: "default" },
-      { key: "flag", title: "program flag" }, { key: "doc", title: "what it does", wrap: true }] });
+      { key: "flag", title: "program flag", wrap: true }, { key: "doc", title: "what it does", wrap: true }] });
   return section("Session options", h("p.hint", {}, "Read-only here: the engine's defaults are in use. These options "
     + "become <config> keys of the project (decided 2026-11-13); then they are edited with the other entries."),
   table.element);
