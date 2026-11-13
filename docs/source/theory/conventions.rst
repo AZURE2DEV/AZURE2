@@ -196,8 +196,8 @@ standard parametrization,
 
 as in LT (``AMatrixFunc.cpp:270-322``). The Brune form replaces
 :math:`B_c` by the level-dependent shift terms :math:`S_c(\lambda,\mu)` of
-:doc:`../developer/level_matrix` (lines 302-311), and the Park form uses
-Park's overlap :math:`J` (lines 294-301 and 313-317).
+:doc:`../developer/level_matrix` (section "Matrix Construction"), and the
+Park form uses Park's overlap :math:`J` (same page, "Channel-Space Solution").
 
 Which basis the numbers in ``<levels>`` belong to is set on the command line
 (:doc:`../reference/command_line`). The conversion at start-up is
