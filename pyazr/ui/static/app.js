@@ -12,6 +12,7 @@ import * as projectTab from "./tabs/project.js";
 import * as nucleusTab from "./tabs/nucleus.js";
 import * as dataTab from "./tabs/data.js";
 import * as fitTab from "./tabs/fit.js";
+import * as resultsTab from "./tabs/results.js";
 
 /** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it. */
 export const TABS = [
@@ -19,8 +20,7 @@ export const TABS = [
   { id: "nucleus", title: "Nucleus", module: nucleusTab },
   { id: "data", title: "Data", module: dataTab },
   { id: "fit", title: "Fit", module: fitTab },
-  { id: "results", title: "Results", later: "the results step: plots of every data set and extrapolation, residuals, "
-    + "the χ² table, the program's output files. The Data tab shows one data set's preview plot today." },
+  { id: "results", title: "Results", module: resultsTab },
   { id: "physics", title: "Physics", later: "the physics step: one generated form and plot per physics function of "
     + "the engine (Coulomb functions, penetrabilities, stopping, the transfer library)." },
   { id: "thm", title: "THM", later: "the physics and THM step: THM model options, experiments, channels and "
@@ -80,7 +80,7 @@ ctx.edit = async (what, run, where) => {
     const warnings = answer?.warnings || [];
     await ctx.refresh();
     if (warnings.length) ctx.status(`${what}: done; ${warnings.join("; ")}`, "warn");
-    else ctx.status(`${what}: done`, "ok");
+    else ctx.status(`${what}: done${chi2Text()}`, "ok");
     return answer;
   } catch (e) {
     ctx.editing = false;
@@ -109,6 +109,7 @@ async function evaluate() {
     ctx.evalError = null;
     const w = ctx.evaluation.warnings || [];
     if (w.length) ctx.status(`engine: ${w.map((x) => x.message || x).join("; ")}`, "warn");
+    else if (!ctx.editing) ctx.status(`evaluated${chi2Text()}`, "ok");
   } catch (e) {
     ctx.evaluation = null;
     ctx.evalError = e.view || { what: String(e) };
@@ -116,6 +117,10 @@ async function evaluate() {
   }
   drawChi2();
 }
+
+/** The full χ² of the last evaluation for the status line (the header shows it to 8 digits). */
+const chi2Text = () => (ctx.evaluation ? ` · χ² ${ctx.evaluation.chi2} (data), objective ${ctx.evaluation.objective}`
+  : "");
 
 function drawChi2() {
   const e = ctx.evaluation;

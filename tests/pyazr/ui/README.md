@@ -19,6 +19,11 @@ program whose `chiSquared.out` the API's numbers are compared with.
 - `node_test.py`: runs `js/*.test.mjs` with node's own test runner (`node --test`; node from PATH or `NODE`; skipped
   without it) on the page's modules `forms.js`, `tables.js`, `api.js`, `plots.js`, `fitting.js` and the setting
   widgets of `tabs/fitjob.js`, with the engine's schema and the server's job table.
+- `results_test.py`: the Results payload (`GET /api/evaluation`) against the program's own files: every data set's
+  points, model, normalized datum and error and S factor against `AZUREOut_*` (menu 1) and every extrapolation
+  against `AZUREOut_*.extrap` (menu 3) to eleven digits on T1 and T2; the χ² table against `chiSquared.out`; the
+  residuals' squares against each data set's χ² (and the covariance group's sum on T2); model data on T3; the output
+  files written into the project's output directory (`POST`/`GET /api/outputs`).
 - `smoke_test.py` (label `browser`): a real server on T1 and T2, headless Chrome runs the page's `#selftest?edit=1`
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
   record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
@@ -112,3 +117,25 @@ file restored from git after each):
   (`js/fitting.test.mjs`).
 - the Stop button of the job panel is found and pressed: its `data-action` removed; fails `smoke_test.py` on T1 and
   T2.
+
+Added with the Results tab (each shown failing once, the file restored from git after each):
+
+- the first rows of a file are bounded (1 to 200 rows, refused outside with the range; a line read to 4096 bytes and
+  marked cut): the line read whole (`readline()` without its bound); the rows check removed; each fails
+  `static_test.py::test_file_head_is_bounded`.
+- the Results payload is the program's: the datum not multiplied by the norm (fails `results_test.py::
+  test_payload_is_the_programs_output[T2]`, s11 with its THM norm); the S factor offered without the charge rule
+  (fails `test_model_data_and_neutral_entrance`); the residuals scaled by 1.001 (fails `...[T1]`).
+- the CSV keeps 17 significant digits (`toPrecision(15)` fails `js/plots.test.mjs`); residuals on the second y axis
+  (drawn on the first fails `js/results.test.mjs`); level markers only against excitation energy (drawn on every x
+  fails `js/results.test.mjs`).
+
+The smoke test's "Failed to fetch" (2026-11-13): requests of the page cancelled in Chrome's renderer
+(`Network.loadingFailed`, net::ERR_ABORTED, canceled; absent from Chrome's network log and from the server's request
+log, which saw every other request answered), on T2 in 1 of 10 runs of this branch and 4 of 10 of the page's merge
+commit, in real time as with the virtual-time budget. Not caused by the page's navigation (hash or history API: none
+of about 2200 fetches in flight cancelled in a direct test), duplicate requests, keep-alive or the server. Caused by
+Chrome's work in each run's fresh profile: 0 of 25 runs with `--disable-extensions`, 0 of 25 with
+`--disable-component-update --disable-background-networking`, 6 of 25 with Safe Browsing off. The test's Chrome now
+runs with those three flags (`QUIET_PROFILE` of `smoke_test.py`); a test artefact (a browser in use has loaded its
+extensions before the page opens), not hidden by a retry. Scripts: `work/uiresults/diag/` (outside the repository).

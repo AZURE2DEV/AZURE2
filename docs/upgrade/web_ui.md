@@ -795,7 +795,7 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    **Done 2026-11-13** with plotly.js vendored and a preview plot, smoke tests in headless Chrome (section 11.2).
 3. **Results.** `plots.js`, `tabs/results.js`, the Results payload, grids, CSV/SVG/PNG export. About 900 lines; tests
    of the payload against the program's output files. **Today**, with plotly vendored (decision 11); `Evaluation`
-   (pyazr step 3) replaces the adapter's calls.
+   (pyazr step 3) replaces the adapter's calls. **Done 2026-11-13** (section 11.4).
 4. **Fit.** `tabs/fit.js`, job kinds: recipe fits and MINOS (iminuit), the emcee sampler, bands; then the engine's
    fitters once pyazr has `fit_with_engine` with progress and stop (decision 8 and finding 2). About 1000 lines.
    Recipes need `Objective` (pyazr step 3; today `objective_and_grad` serves); engine fits need pyazr's call.
@@ -1012,6 +1012,58 @@ page knows (`errors`, `covariance`, `correlation`, `minos`), other keys need a l
 new option of a job: a `Setting` of its row; a new type of option: a row of `SETTING_TYPES` (`jobs.py`) and of
 `SETTING_WIDGETS` (`tabs/fitjob.js`).
 
+### 11.4 Step 3 as built (2026-11-13)
+
+The Results tab (`pyazr/ui/static/tabs/results.js`), its plot rows in `plots.js` (`results_against_x`,
+`angular_distribution`, with `X_CHOICES` and `Y_CHOICES`), the Results payload in the adapter
+(`Engine.evaluation`), the output-file routes. Tests: `tests/pyazr/ui/results_test.py`, `js/results.test.mjs`; the
+self-test visits `#/results`, its table view and `x=e_x&levels=1&logy=1`. The director's corrections to step 2
+(bounded file preview, tables that wrap, repeated groups as small tables, the full χ² in the status line, paths
+broken at `/`, the tests registered above the last block of `tests/pyazr/CMakeLists.txt`) came first.
+
+**The payload** (`GET /api/evaluation`, at the working x; 69 kB on T2, 92 kB on T1, 101 kB on 13N): the program's
+χ² split (the rows and the Total- line of the `chiSquared.out` the session writes), the objective and its terms;
+per data set from one forward pass the c.m. energy, excitation energy and c.m. angle of each point after energy
+shifts, the datum and error as read and times the norm in use (`segment_norms`), the model at the point, the
+engine's standardized residual (m − n·d)/(n·σ) (`residuals`) and the sum of their squares (`segment_chi2`), the S
+factor (model, normalized datum and error times `calculated_conv`) where the engine unit is a cross section and the
+entrance pair charged; per active extrapolation the same on its grid (`extrap_mode`, `data_mode`); the model data
+(`pyazr.model_data`); the residual's definition. Every column equals the program's `AZUREOut_*` (menu 1) and
+`.extrap` (menu 3) to their eleven digits on T1 and T2, and the χ² table equals `chiSquared.out` (`results_test`).
+The squares of the residuals add up to each data set's χ² of `chiSquared.out` (to its six digits), except for the
+two data sets of T2's data covariance, whose residuals are whitened rows: their squares add up to the group's χ²
+(513.896) but split it 100.881 / 413.015 against the program's 99.1682 / 414.728 (finding 5); the table shows both
+and the page names the covariance file. Load (a fresh server, the session's build included; then again): T2 1.15 s
+/ 0.54 s, T1 7.0 s / 0.07 s (the extrapolations' external capture the first time), 13N 10.1 s / 0.18 s.
+
+**Where it departs from section 6.5**:
+
+1. *The model line of a data set* joins the engine's values at the data points; a resonance narrower than their
+   spacing is not drawn, and the page says so. Extrapolations are drawn on their grids, an `adaptive` grid refined
+   by the engine. A dense grid between data points waits for `Session.evaluate` (finding 21).
+2. *x*: c.m. energy, excitation energy, c.m. angle. The lab energy is absent (finding 22). *y*: as measured (the
+   datum times the norm, which the model is compared with) or the S factor; "cross section" of a data set measured
+   as an S factor is absent (finding 23).
+3. *One plot per series* by default; **together** draws one plot per y unit. Every trace is in the legend.
+4. *Level markers* on the excitation-energy axis only (the project text's levels: E_x needs no conversion).
+5. *"At"* is the working x; the job / x0 selector of the Fit tab is not on this tab yet (a sentence in its place,
+   no control).
+6. *More than 5000 points*: drawn as they are (SVG, no decimation), and the plot says so; no project of `tests/`
+   comes near (13N: 593 points).
+7. *Routes*: `POST /api/outputs` (was a later step) writes the program's output files at the working x into the
+   session's directory and copies them into the project's `<config>` output directory, the one session request
+   that writes into the user's directory; `GET /api/outputs` lists that directory (added). `GET /api/evaluation`
+   and `/api/evaluation/data/{name}` carry the payload above (energies now after the energy shifts).
+8. *Legendre orders* are one series (finding 14 stands, said on the page). The reaction rate and the bands are a
+   panel saying what they wait for.
+
+**Extensibility as built**: a new data kind: nothing (series, axes from the dimensions, the S factor from the
+engine unit's dimension and the pair's charges, χ² and model data from the engine); a new kind of plot: one row of
+`PLOTS` (or a builder like `resultsPlots`) and its node test; a new x or y choice: one row of `X_CHOICES` /
+`Y_CHOICES` in `plots.js` and, if it needs arrays the payload lacks, their lines in `Engine._dataset_arrays`; a new
+section whose records are evaluated: a group of the selector by itself; its arrays need one method of the adapter
+beside `_extrapolation_arrays` and a key of the payload read by `seriesOf` in `tabs/results.js`.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1077,6 +1129,16 @@ Found while building the Fit tab:
     `prior_nominal` and `prior_sigma` only in their records).
 20. **Progress, stop and the result's covariance of the engine's fitters** (finding 2 again): the Fit tab's rows for
     the engine's MIGRAD, LM and MINOS wait for `fit_with_engine`; the sampler and bands for `Objective`.
+
+Found while building the Results tab (step 3):
+
+21. **The model on given energies and angles** (`Session.evaluate` on a grid, `POST /api/evaluate/grid`), or a data
+    set's sub-point grid (`DataSet.grid`), so the model line passes between the data points.
+22. **The lab energy (and lab angle) of each point** in the data arrays: the program writes them (`kinflag.dat`),
+    pyazr gives c.m. values only.
+23. **The program's σ and S columns** (`SigmaAndS` of `DataOutputFiles.cpp`: a data set of the S factor, the
+    modified S factor's shape) and the normalized datum as arrays of the evaluation: the adapter forms datum × norm
+    and × conversion itself for cross sections only, as the program does.
 
 Smaller, in the parity list: an empty format-3 project (`Project.new` needs a source); the screening potential's
 adiabatic limit from electron binding energies; Gaussian priors on level parameters for the sampler (records carry

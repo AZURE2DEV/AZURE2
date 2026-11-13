@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 16:49) — merged: the web UI's Results tab
+
+**Merged** `feature/upgrade-9-webui-results` (the entry below; it carries the Fit tab). No C++ changed, so the
+reference tag and the base build stay `tab-t50-1` and `work/b-trial50`.
+
+**Checked by the director** on the branch's last commit with the verified build's engine, one thread: the
+consistency test; the UI tests api, jobs, server, routes_consistency, static, node, results and the browser smoke
+test, all ok; five further smoke runs, no failure.
+
+**The smoke test's failed fetches** (the first open item of the entry of 16:16) are closed as a property of the
+test's Chrome, not of the page: in each run's fresh profile Chrome loads its component extensions a few seconds
+after start and cancels requests of the page that have not left the renderer (the server never saw them; 4 runs
+in 10 on the page before either tab). The test's Chrome now starts without extensions, component updates and
+background requests; no retry, no longer time budget. Not shown: which extension, and that a browser in daily use
+never meets it.
+
+**Open.**
+- Nobody has used the page in a real browser by hand (the export buttons, the output-file buttons, the keyboard).
+- The model line of a data set joins the engine's values at the data points; a dense line needs pyazr's
+  `Session.evaluate` on a grid (finding 21 of `web_ui.md`); the lab energy of each point and the program's σ and S
+  columns are findings 22 and 23.
+- T3's extrapolation at small angles reaches 1e63 on a log axis (the engine's number, not looked into).
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-results`) — the web UI's Results tab
+
+**Done.** The director's corrections to the page (bounded file preview, wrapping tables, repeated groups as small
+tables with number boxes as wide as their text, the full χ² in the status line, paths broken at `/`, the UI tests
+registered above the last block of `tests/pyazr/CMakeLists.txt`). The Results tab: the payload
+`GET /api/evaluation` (the program's χ² split, every data set's and extrapolation's arrays, residuals, S factor,
+model data), `POST`/`GET /api/outputs`, `tabs/results.js`, plot rows in `plots.js` (residual axis, level markers,
+log axes, CSV with 17 digits, SVG/PNG). `web_ui.md` 11.4 and findings 21–23; user guide; `pyazr/CLAUDE.md`.
+
+**How.** `ctest -R pyazr_ui` equivalents run as scripts at one thread (api, jobs, server, routes, static, node,
+results, smoke: all ok); the smoke test's "Failed to fetch" (1 in 10 runs on T2, 4 in 10 on the page's merge commit)
+came from Chrome loading component extensions into each run's fresh profile, which cancels requests not yet sent;
+the test's Chrome now runs without extensions, component updates and background requests: 0 failures in 20 runs
+(`tests/pyazr/ui/README.md`);
+`results_test.py` compares the payload with the program's `AZUREOut_*`, `.extrap` and `chiSquared.out` on T1 and
+T2; each new check shown failing with an injected error (`tests/pyazr/ui/README.md`); screenshots in both themes
+and sizes looked at (`work/uiresults/shots/`). No C++ changed.
+
+**Open.** The model of a data set is drawn at its points only; lab energy, Legendre orders, the program's σ of an
+S-factor data set, rate and bands wait for pyazr (findings 6, 14, 21–23). Nobody has used the page in a real browser
+by hand.
+
 ## 2026-11-13 (director, 16:16) — merged: the web UI's Fit tab
 
 **Merged** `feature/upgrade-9-webui-fit` (the entry below). No C++ changed (the diff against the data branch in

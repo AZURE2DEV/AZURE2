@@ -40,13 +40,16 @@ test("excitation functions at a few angles: one trace pair per angle; angles tha
   assert.equal(p.plotOf(spread, { schema }).traces.length, 2);
 });
 
-test("CSV: a header with units, one line per point and trace, the numbers as sent", () => {
+test("CSV: a header with units, one line per point and trace, every number with 17 significant digits", () => {
   const plot = p.plotOf({ ...base, quantity: "q_e", e_cm: [0.1, 0.2, 0.3], value: [1e-7, 2, 3] }, { schema });
   const lines = p.csvOf(plot).trim().split("\n");
   assert.equal(lines[0], "E_cm (MeV),data (b),data error (b),model at the data points (b)");
-  assert.equal(lines[1], "0.1,1e-7,0.3,");
+  assert.equal(lines[1], "0.10000000000000001,9.9999999999999995e-8,0.29999999999999999,");
   assert.equal(lines.length, 1 + 3 + 3);
-  assert.equal(lines[4], "0.1,,,2.9");
+  assert.equal(lines[4], "0.10000000000000001,,,2.8999999999999999");
+  // the digits give back the double drawn, bit for bit; a value the server sent as text passes as it is
+  for (const v of [0.1, 1 / 3, 1e-300, 6.02214076e23, -2.5e-17]) assert.equal(Number(p.csvNumber(v)), v);
+  assert.equal(p.csvNumber("nan"), "nan");
 });
 
 test("palette: eight colour-blind-safe colours, then the marker changes", () => {

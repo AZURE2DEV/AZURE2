@@ -75,25 +75,31 @@ export function download(name, text, type = "text/csv") {
 export function themeColours() {
   const s = getComputedStyle(document.documentElement);
   const v = (n) => s.getPropertyValue(n).trim();
-  return { fg: v("--fg"), bg: v("--panel"), grid: v("--grid"), font: v("--font-ui") };
+  return { fg: v("--fg"), bg: v("--panel"), grid: v("--grid"), muted: v("--muted"), font: v("--font-ui") };
 }
 
 /**
  * Draw a plot description into `el`: with plotly.js where the page loaded it, as a table of its numbers otherwise
  * (section 7); "Export data (CSV)" in both cases.  Returns "plotly" or "table".
  */
-export function drawPlot(el, plot, fileName, { usePlotly = true } = {}) {
+export function drawPlot(el, plot, fileName, { usePlotly = true, height = null } = {}) {
   el.textContent = "";
   const bar = h("div.plot-bar", {}, button("Export data (CSV)", "The numbers drawn, with their units, as a CSV file",
     () => download(`${fileName}.csv`, csvOf(plot))));
   if (plot.note) bar.appendChild(h("span.hint", {}, plot.note));
   const Plotly = globalThis.Plotly;
   if (usePlotly && Plotly && typeof Plotly.newPlot === "function") {
-    const area = h("div.plot-area", { role: "img",
+    const area = h("div.plot-area", { role: "img", style: height ? `height: ${height}px` : null,
       "aria-label": `${plot.title}; ${plot.y.title} against ${plot.x.title}` });
     el.append(area, bar);
     const fig = plotlyFigure(plot, themeColours());
     Plotly.newPlot(area, fig.data, fig.layout, fig.config);
+    // the figure as drawn, through plotly's own export (vector or bitmap)
+    for (const format of ["svg", "png"]) {
+      bar.insertBefore(button(format.toUpperCase(), `The figure as ${format.toUpperCase()} (plotly's export)`,
+        () => Plotly.downloadImage(area, { format, filename: fileName, width: area.clientWidth || 900,
+          height: area.clientHeight || 500 })), bar.children[1] || null);
+    }
     return "plotly";
   }
   const { columns, rows } = tableOf(plot);

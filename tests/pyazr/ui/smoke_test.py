@@ -33,6 +33,8 @@ from uitest import TOKEN, copy_project, gone
 
 CHROME = os.environ.get("CHROME") or next((shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser")
                                            if shutil.which(n)), None)
+# Chrome's own work in a fresh profile kept out of the test: extensions, component updates, background requests.
+QUIET_PROFILE = ("--disable-extensions", "--disable-component-update", "--disable-background-networking")
 VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
          "physics", "thm")
 
@@ -93,8 +95,14 @@ def chrome(tmp_path, url, *args, mode="new", timeout=150):
     """Run the browser once on ``url`` with a fresh profile; its standard output."""
     profile = tmp_path / f"chrome-{time.monotonic_ns()}"
     profile.mkdir()
+    # Each run has a fresh profile, in which Chrome installs and loads its component extensions a few seconds after
+    # start, while the self-test runs; some of the page's requests not yet sent were then cancelled in the renderer
+    # (net::ERR_ABORTED, "Failed to fetch"; neither Chrome's network log nor the server saw them): 1 in 10 runs on
+    # T2, 4 in 10 before the Results tab; 0 in 25 with --disable-extensions, 0 in 25 without component updates and
+    # background requests, 6 in 25 with Safe Browsing off (tests/pyazr/ui/README.md).  A browser in use has loaded
+    # its extensions before the page opens, so the test's Chrome loads none.
     cmd = [CHROME, f"--headless={mode}", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-           "--hide-scrollbars", f"--user-data-dir={profile}", *args, url]
+           "--hide-scrollbars", *QUIET_PROFILE, f"--user-data-dir={profile}", *args, url]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     return proc.stdout
 
