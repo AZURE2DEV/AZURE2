@@ -5,7 +5,8 @@
   "targets": ["target", "beam", "detector"],
   "extrapolations": ["extrapolation"],
   "modelData": ["datum"],
-  "potentials": ["potential"]
+  "potentials": ["potential"],
+  "gammaDecays": ["gamma_decay"]
  },
  "value_types": {
   "number": {
@@ -1990,6 +1991,185 @@
      "doc": "the step of the inward integration, adjusted so that the channel radius is a node"
     }
    }
+  },
+  "gamma_decay": {
+   "title": "Radiative decay of a level",
+   "doc": "A level's radiative partial widths written as its total radiative width, branchings and mixing ratios (docs/upgrade/gamma_parametrisation.md).  Gamma_gamma is the sum of the level's radiative widths; like them it stays out of the resonance's total width, which is the sum of the particle widths.  The level's photon lines of <levels> carry 0.",
+   "sections": ["gammaDecays"],
+   "fields": {
+    "level": {
+     "title": "Level",
+     "type": "integer",
+     "grammar": "<integer >= 0>",
+     "required": true,
+     "min": 0,
+     "doc": "the level ID of <levels> (column 9)"
+    },
+    "J": {
+     "title": "J^pi",
+     "type": "spin_parity",
+     "grammar": "<J><parity>",
+     "required": true,
+     "doc": "must equal the level's J^pi (F13)"
+    },
+    "total_width": {
+     "title": "Total radiative width",
+     "type": "nuisance",
+     "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": true,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "doc": "Gamma_gamma, the sum of the radiative widths"
+    },
+    "branching": {
+     "title": "Branching",
+     "type": "structured",
+     "grammar": "<particle>+<nucleus>[<E_x>] <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "final",
+         "keyword": false,
+         "type": "pair",
+         "grammar": "<particle>+<nucleus>[<E_x>]",
+         "optional": false,
+         "doc": "the photon pair of the final state, g+<nucleus>[<E_x>]"
+        },
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "doc": "b_f = Gamma_f / Gamma_gamma"
+        }
+       ],
+       "doc": "the branching of the level's gamma decay to one final state"
+      }
+     ],
+     "doc": "b_f of one final state"
+    },
+    "remainder": {
+     "title": "Remainder",
+     "type": "structured",
+     "grammar": "<particle>+<nucleus>[<E_x>] [prior <number> ...]",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "final",
+         "keyword": false,
+         "type": "pair",
+         "grammar": "<particle>+<nucleus>[<E_x>]",
+         "optional": false,
+         "doc": "the photon pair of the final state"
+        },
+        {
+         "name": "prior",
+         "keyword": true,
+         "type": "number_list",
+         "grammar": "<number> ...",
+         "optional": true,
+         "doc": "a Gaussian prior '<centre> <width>' on 1 - sum b_f"
+        }
+       ],
+       "doc": "the final state whose branching is 1 - the sum of the others (not a parameter)"
+      }
+     ],
+     "doc": "the final state that takes 1 - sum of the others"
+    },
+    "mixing": {
+     "title": "Mixing ratio",
+     "type": "structured",
+     "grammar": "<particle>+<nucleus>[<E_x>] <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "final",
+         "keyword": false,
+         "type": "pair",
+         "grammar": "<particle>+<nucleus>[<E_x>]",
+         "optional": false,
+         "doc": "the photon pair of the final state"
+        },
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "doc": "delta_f, Krane-Steffen sign: delta^2 = Gamma_{L+1} / Gamma_L"
+        }
+       ],
+       "doc": "the mixing ratio of a final state with two multipolarities"
+      }
+     ],
+     "doc": "delta_f of a final state with L and L+1 (Krane-Steffen)"
+    },
+    "sign": {
+     "title": "Interference sign",
+     "type": "structured",
+     "grammar": "<particle>+<nucleus>[<E_x>] +|-",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "final",
+         "keyword": false,
+         "type": "pair",
+         "grammar": "<particle>+<nucleus>[<E_x>]",
+         "optional": false,
+         "doc": "the photon pair of the final state"
+        },
+        {
+         "name": "sign",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "+|-",
+         "optional": false,
+         "values": ["+", "-"]
+        }
+       ],
+       "doc": "the interference sign of the final state's L amplitude (default +)"
+      }
+     ],
+     "doc": "the sign of a final state's L amplitude"
+    },
+    "source": {
+     "title": "Source",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "where the numbers come from; never read by the physics"
+    },
+    "exfor": {
+     "title": "EXFOR",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the EXFOR entry and subentry"
+    },
+    "doi": {
+     "title": "DOI",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the DOI of the publication"
+    }
+   }
   }
  },
  "quantities": {
@@ -3816,7 +3996,27 @@
   },
   "E_NOT_A_CHANNEL": {
    "severity": "error",
-   "meaning": "a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair"
+   "meaning": "a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair; a gamma_decay's final state that is no photon channel of its level"
+  },
+  "E_GAMMA_MIXTURE": {
+   "severity": "error",
+   "meaning": "a gamma_decay level that also has a non-zero photon width in <levels> (write 0 there or delete the record)"
+  },
+  "E_BRANCHING_SUM": {
+   "severity": "error",
+   "meaning": "gamma_decay branchings that are all fixed and do not sum to 1, or a fitted one without a remainder"
+  },
+  "E_BRANCHING_REMAINDER": {
+   "severity": "error",
+   "meaning": "gamma_decay branchings whose sum exceeds 1, leaving a negative remainder"
+  },
+  "E_MIXING_ONE_MULTIPOLE": {
+   "severity": "error",
+   "meaning": "a gamma_decay mixing ratio for a final state with one multipolarity in the level's channels"
+  },
+  "E_GAMMA_RECORD": {
+   "severity": "error",
+   "meaning": "a gamma_decay record that names a level twice, a final state twice, a level without photon channels, or a malformed remainder prior"
   },
   "E_PAIR_KEY": {
    "severity": "error",

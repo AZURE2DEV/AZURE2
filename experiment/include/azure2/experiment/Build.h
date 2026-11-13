@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "azure2/experiment/Diagnostics.h"
+#include "azure2/experiment/GammaDecay.h"
 #include "azure2/experiment/HybridPotentialSettings.h"
 #include "azure2/experiment/LevelTables.h"
 #include "azure2/experiment/SetupSpecs.h"
@@ -68,6 +69,7 @@ struct BuiltProject {
   AbundanceSpecs abundances;
   ThmMembershipSpec thm;
   std::vector<ModelDatum> modelData;  ///< the `datum` records of <modelData>, in record order (BuildModelData)
+  std::vector<GammaDecaySpec> gammaDecays;  ///< the `gamma_decay` records of <gammaDecays> (BuildGammaDecays)
   /// The `potential` records of <potentials>: one setting per pair key, no default (a pair without a record has no
   /// potential).
   HybridPotentialSettings potentials;

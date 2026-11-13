@@ -24,6 +24,7 @@ Abbreviations: `AC` = `src/AZURECalc.cpp`, `ED` = `src/EData.cpp`, `MC` = `src/A
 | T8 | screening, density, Doppler, thickness priors | ((x − x₀)/σ)² on the stored (clamped) value, fixed ones too | `TargetEffect.h`, `ESegment.h` 372 |
 | T9 | measured scattering lengths | Σ_{Re, Im} ((a − a_m)/σ)² | `ScatteringLength.cpp` 209 |
 | T10 | prior covariance | (p − μ)ᵀC⁻¹(p − μ) | `PriorCovariance.cpp` 273 |
+| T11 | gamma_decay priors and the remainder's wall | Σ ((q − c)/w)² over the record numbers with a prior and the remainder 1 − Σb; ((Σb − 1)/10⁻³)² for Σb > 1 | `GammaDecayMap.cpp` (`gamma_parametrisation.md` §2.6); rows in `AppendModelRows`, gradient direct (`GradAccum::direct`) |
 
 The paths that evaluate them, and which they include:
 1. the Minuit FCN `operator()` (`AC` 561–742);

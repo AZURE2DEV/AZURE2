@@ -150,6 +150,12 @@ class Parameter:
     thm_exit_key: Optional[int] = None
     thm_channels: Optional[str] = None
     thm_term: Optional[int] = None
+    # A number of a level's gamma_decay record (kind "radiative", docs/upgrade/gamma_parametrisation.md): the record's
+    # name, which number ("total_width" in eV, "branching" or "mixing", dimensionless) and the final state's photon
+    # pair as the record writes it (None for the total width).
+    decay_record: Optional[str] = None
+    decay_part: Optional[str] = None
+    final_state: Optional[str] = None
 
     # 1-based level count over all J groups (energy / width parameters): the numbering of param files and the GUI.
     level_number: Optional[int] = None
@@ -272,7 +278,7 @@ class Parameter:
             J=_opt(J),
             parity=_opt(parity, integer=True, sentinel=0.0),
             level=_opt(level, integer=True),
-            level_energy=_opt(level_energy, sentinel=0.0) if type_code in (0, 1) else None,
+            level_energy=_opt(level_energy, sentinel=0.0) if type_code in (0, 1, 13) else None,
             channel=_opt(channel, integer=True),
             L=_opt(L, integer=True),
             S=_opt(S),
@@ -283,6 +289,9 @@ class Parameter:
                           if input_is_rwa != -1 else None),
             segment_key=_opt(segment_key, integer=True),
             level_number=owner.get("level_number"),
+            decay_record=owner.get("decay_record"),
+            decay_part=owner.get("decay_part"),
+            final_state=owner.get("final_state") or None,
         )
 
     def __repr__(self):

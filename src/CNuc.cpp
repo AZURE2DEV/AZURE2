@@ -404,6 +404,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 
   if (this->ReadAbundances(configure) == -1) return -1;
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
+  if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 
@@ -955,24 +956,18 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         varname = "width_" + std::to_string(energyIndex) + "_" + std::to_string(widthIndex);
         widthIndex++;
+        if (gammaDecays_->AddParameter(params, j, la, ch, energyIndex)) continue;  // a gamma_decay record's number
         params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, energyIndex));
         // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
         // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
         // transformation the input is the parameter.
         if (this->IsTransformedIn() ? level->ZeroInputWidth(ch) : level->GetGamma(ch) == 0.0) p.Fix(varname);
         if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
-        // Apply Wigner Limit bounds if flag is enabled.  GetWignerLimit()
-        // returns gamma_W^2 (MeV); the fit parameter at this point is the
-        // reduced-width AMPLITUDE gamma (MeV^1/2), so the bound must be
-        // sqrt(gamma_W^2), not gamma_W^2 itself.
+        // Wigner-limit bounds: GetWignerLimit is gamma^2_W = 3 hbar^2/(2 mu a^2) (MeV), the limit on the reduced width
+        // squared; the fit parameter is the amplitude (MeV^1/2), so the bound is its square root (gamma^2_W itself
+        // would let theta^2 = gamma^2/gamma^2_W run past 1 by a factor gamma^2_W).
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
-          // GetWignerLimit returns gamma^2_W = 3 hbar^2/(2 mu a^2) in MeV -- the
-          // limit on the reduced width *squared*.  The fit parameter is the
-          // reduced width *amplitude* in MeV^(1/2), so the bound is its square
-          // root; using gamma^2_W directly bounds a MeV^(1/2) quantity by a MeV
-          // number and lets theta^2 = gamma^2/gamma^2_W run past 1 by a factor
-          // of gamma^2_W itself.
           double wignerLimit = channel->GetWignerLimit();
           if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
             double gammaLimit = sqrt(wignerLimit);
@@ -1006,7 +1001,8 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
  * Fills the CNuc object from the Minuit parameter array.
  */
 
-void CNuc::FillCompoundFromParams(const vector_r &p) {
+void CNuc::FillCompoundFromParams(const vector_r &params) {
+  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, params);  // GammaDecayMap.h
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
@@ -1187,7 +1183,7 @@ vector_r CNuc::GetTransformParams(const Config &) {
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
       ALevel *theLevel = theJGroup->GetLevel(la);
       params.push_back(theLevel->GetTransformE());
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) params.push_back(theLevel->GetObservedValue(ch));
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) params.push_back(gammaDecays_->ValueOr(*this, j, la, ch, theLevel->GetObservedValue(ch)));
     }
   }
   // Abundances are the same in both bases; they follow the level block as in FillMnParams.

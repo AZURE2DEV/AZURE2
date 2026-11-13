@@ -319,6 +319,24 @@ sub-points' stopping) is a new *row* of `ApparatusRows()`: one function file wit
 functions (`src/StoppingScale.cpp`, `StoppingScaleRow`) and its line in the table; nothing else in the engine.
 Derivative: central differences of the whole chi^2 (`AZURECalc.cpp`, as a density); an analytic one is not wired.
 
+**A derived parametrisation of a level** (numbers a user writes and fits in place of some of a level's partial widths:
+Γ_γ and branchings, `gamma_decay`, `docs/upgrade/gamma_parametrisation.md`; a spectroscopic factor or an ANC in place
+of a particle width would be the next). The engine's physics is not edited: the numbers sit in the vector at the
+positions of the amplitudes they replace, one number per amplitude, and a map turns them into amplitudes at every fill.
+1. The record: a kind in `experiment/src/Schema.cpp` (its section in `Schema::Sections()`), its build against the
+   `<levels>` tables in a file of its own (`experiment/src/GammaDecay.cpp`), its refusals as codes (recipe "A format-3
+   diagnostic code"); `Schema::Build` calls the build for `--validate` and pyazr.
+2. The map in one engine file (`src/GammaDecayMap.cpp`): reading the section (as `ModelData::Read`), the input values
+   at set-up (so that TransformIn converts them as any width), `AddParameter` (called in `CNuc::FillMnParams` for the
+   slots it owns), `ToEngine` (the first line of `CNuc::FillCompoundFromParams`) through the engine's own conversion
+   (`physics/` `amplitudes_from_observed`), `PullBack` (called by `GradAccum::Scatter`: the chain rule onto the numbers
+   and onto the level's other parameters), the priors as rows of an objective term, the report in `parameters.out`.
+   A second map is a second member of `CNuc` beside `gammaDecays_` and one more line in each of those four places.
+3. A parameter kind (recipe "A new kind of fit parameter"; `IsLevelSlot` covers a number in a level's slot).
+4. Tests: the same project written both ways gives identical calculations (`tests/gamma_decay/check.sh` is the
+   pattern), fits in both parametrisations with equal minima and propagated errors (`tests/pyazr/gamma_decay_test.py`),
+   `AZURE_GRAD_CHECK` on the new numbers and on the level's energy and amplitudes, each check shown to fail once.
+
 **A new kind of fit parameter** (a nuisance that is not a number of an apparatus record: of a segment, of the level
 scheme, of a THM experiment; `docs/upgrade/parameter_kinds.md`). An apparatus record's number is the recipe above,
 not a kind. What a parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a
