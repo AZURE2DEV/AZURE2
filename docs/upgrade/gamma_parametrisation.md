@@ -227,7 +227,9 @@ values, the GSL workspace; keyed by content), the same evaluation as in `Transfo
 tables of `ECTable` are not used (choice): their interpolation would make the record's observed widths differ from
 `TransformOut`'s and from the twin's by the table's error. No static or process-wide memo is added (check 38). Cost
 per fill: one integral per coupled pair (c, c_f) of each record channel with an external part; two more maps per
-gradient when E_λ is free. Threads: each fill runs in its thread with its own scratch, whose values are keyed by
+gradient when E_λ is free. Measured (user-space instructions, one thread, the ¹⁵O project of the test with capture
+into three final states, 90 data points): a calculation +0.25 % against the twin, a MIGRAD fit with the gradient
+from displaced starts +14 % (89 objective calls against 85). Threads: each fill runs in its thread with its own scratch, whose values are keyed by
 everything they depend on, so the numbers do not depend on the thread count.
 
 **`--ignore-externals`.** A record channel whose set-up width is 0 has no external part, as `TransformIn` decides on

@@ -64,8 +64,26 @@ The engine refuses, with a code: a photon width of the level written in ``<level
 (``E_GAMMA_MIXTURE``: write 0 there or delete the record); fixed branchings that do not sum to 1, or a fitted one
 without a ``remainder`` (``E_BRANCHING_SUM``); branchings that leave a negative remainder (``E_BRANCHING_REMAINDER``); a
 mixing ratio for a final state with one multipolarity (``E_MIXING_ONE_MULTIPOLE``). At set-up it refuses the formal
-basis (``--no-brune``) and a level with external capture on one of the record's channels (write such a level with
-partial widths).
+basis (``--no-brune``).
+
+External capture
+----------------
+
+A channel of the record whose final state has external capture in the run (column 31 of its photon pair covers the
+multipolarity) is allowed in the Brune and Park bases. Its partial width :math:`\Gamma_\gamma b_f` is the
+**observed** width, internal and external parts together, as a width written in ``<levels>`` is: a branching
+measured as the fraction of the γ decay that goes to :math:`f` is written as it was measured. The external part
+:math:`\gamma^{\rm ext}` depends on the level's energy and particle widths and on the final state's ANCs; the engine
+evaluates it at the current parameters at every evaluation and gives the internal amplitude the rest, so the record's
+observed widths stay what the record says while a fit moves a proton width, the level energy or an ANC. Example:
+:math:`^{14}{\rm N}(p,\gamma)^{15}{\rm O}`, with capture into the ground state, 6.18 and 6.79 MeV switched on,
+and the 259.7 keV resonance written as a record with its branchings to the ground state, 6.79, 6.18, 5.18 and
+6.86 MeV (``tests/gamma_decay/check.sh``, part (h), uses this project). A width cannot be smaller than
+:math:`2P\,({\rm Im}\,\gamma^{\rm ext})^2/n` (no internal amplitude cancels the imaginary part); a record that asks
+for less gets that floor, as a width written in ``<levels>`` does, with a warning and a note in ``parameters.out``.
+Each evaluation computes the external integrals of the record's channels once more: in the test project (90 data
+points) a calculation costs 0.3 % more and a fit with the gradient 14 % more than with partial widths; the share is
+smaller for a larger project (``docs/upgrade/gamma_parametrisation.md``, section 2.7).
 
 Fitting and reading
 -------------------

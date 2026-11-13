@@ -356,8 +356,11 @@ partial widths and then into the amplitudes the engine has always used, by the e
 written with the record and the same project with the partial widths give the same numbers. The mixing ratio is
 Krane and Steffen's (ENSDF's); its sign was fixed by comparing the engine's γ angular distributions with their
 formula. The total radiative width stays out of the resonance's total width, as the radiative widths always have;
-the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). Not covered: the
-formal basis (`--no-brune`) and a level whose final state has external capture; both are refused with a message.
+the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). A level whose
+transitions have external capture (¹⁴N(p,γ)¹⁵O into the ground state and 6.79 MeV, ¹²C(p,γ), ¹⁷O(p,γ)) can be written
+so too: the record's widths are the observed ones, external part included, and the engine recomputes the external
+part at every evaluation, so they stay what the record says while a fit moves a proton width, the level energy or an
+ANC. Not covered: the formal basis (`--no-brune`), refused with a message.
 
 ## What is in work and what comes next
 
