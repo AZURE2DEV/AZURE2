@@ -1,26 +1,21 @@
-# THM segments and the `<thm>` block: mechanics
+# THM data sets and the `<thm>` block: mechanics
 
 How a THM measurement enters an AZURE2 project and how to edit it. Physics, equations and pinned values:
 `docs/source/theory/thm_implementation.rst`. The THM path is the modified R-matrix, half-off-shell (HOES) one: the
 reaction is induced on a nucleon or cluster x bound in a carrier a = (x s), so it proceeds below the Coulomb barrier
 without penetrability suppression; the entrance channel is off the energy shell, the exit channel on it.
 
-## THM segments
+## THM data sets
 
-- **A THM segment adds 10 to its observable code** (`isDiff`). `isDiff ≥ 10` means THM and `isDiff − 10` is the
-  ordinary code: 10 = THM angle-integrated, 11 = THM differential. `Segment` strips the offset before anything else
-  reads it, so THM composes with every observable, including the analyzing power.
-
-  ```python
-  for s in m.datasets:
-      print(s.observable, s.thm)      # e.g. 'angle-integrated' True
-  print(m.datasets.table())           # marks such segments "[THM]"
-  ```
+- **A data set is THM when it names an experiment** (`thm <experiment>` or `thm global`); its quantity is the ordinary
+  one (`sigma`, `dsigma_domega`, also `analyzing_power`), so THM composes with every observable.
+  `AZURE2 --print-predictions` prints such a term with `thm_` before it; `Session.thm_experiments()` lists the
+  experiments with their data sets.
 
 - **The analytic gradient does not cover THM.** The adjoint differentiates the on-shell T-matrix observable, not the
-  HOES one. THM segments are left out of the analytic accumulation; their contribution to the energy, width and
+  HOES one. THM data sets are left out of the analytic accumulation; their contribution to the energy, width and
   normalization derivatives comes from central differences (`AZURECalc::Gradient`, guarded by `haveTHM`). All other
-  segments stay analytic.
+  data sets stay analytic.
 
 ## Widths given as reduced-width amplitudes
 
@@ -34,10 +29,11 @@ w.input_is_rwa             # Parameter: the same, from the live API
 p.binding_energy           # pair: THM binding energy B_xs (MeV), 0 if not THM
 ```
 
-- **Never convert an rwa-declared width by hand.** `apply_fit(..., transform=...)` respects the flag; hand-written
+- **Never convert an rwa-declared width by hand.** `Session.save_fit` respects the flag; hand-written
   amplitude-to-width arithmetic corrupts the file by orders of magnitude.
 - **`Parameter.wigner_limit` is γ²_W in MeV**, the limit on the reduced width squared. It matches neither convention
-  `value` can be in. Form θ² with `pyazr.widths`, not by dividing by it.
+  `value` can be in. Form θ² with `Session.dimensionless_widths(x)` (azure2-check, `widths_check.py`), not by dividing
+  by it.
 
 ## The `<thm>` block
 
@@ -51,8 +47,7 @@ AZURE2 exit with `ERROR: <thm> ...` before computing anything.
 | `kinematics=` | `lacognata` (default), `triple`, `kf3body`, `lambda32` | factor K(E) left in the data |
 | `coulombIntegral=` | `0`, `1` | x–A Coulomb term outside a |
 | `spectatorEnergy=`, `spectatorEnergy[<pair>]=` | MeV | mean spectator energy T_s |
-| `weight[<k>]=`, `weightTest[<k>]=` | file | w(E) multiplying the THM model of segment k |
-| `experiment[<name>]` | `segments=1,2 background=linear ...` | shared profiled norm and background |
+| `experiment[<name>]` | `beam= target= spectator= Ebeam= background=linear ...` | shared profiled norm, background |
 
 - `kinematics=`: choose from what the data paper divided by. Full three-body KF → `kf3body`; λ₃/λ₂ → `lambda32`; only
   |φ|² → `triple`; La Cognata's formula or unknown → `lacognata`. The wrong one distorts relative resonance heights.
@@ -61,9 +56,10 @@ AZURE2 exit with `ERROR: <thm> ...` before computing anything.
   depends on the representation once levels of one J^π interfere; use it only to reproduce numbers made with it.
   `tests/18O_p_a_thm` reproduces La Cognata et al., ApJ 723 (2010) 1512 with `constant` (5 % rms at the peaks) and not
   with `perlevel` (23 %). Regression of all keys: `tests/thm_options`.
-- `experiment[<name>]`: the listed segments share one profiled norm plus a profiled background; results in
-  `output/thm_experiments.out` and `session.thm_background(name)`; test `tests/thm_experiment`. Per-experiment keys:
-  `references/model-choices.md`.
+- A weight w(E) multiplying the THM model of one data set is that data set's `thm_weight <file>` field.
+- `experiment[<name>]`: the data sets that name it (`thm <name>`) share one profiled norm plus a profiled background;
+  results in `output/thm_experiments.out` and `session.thm_background(name)`; test `tests/thm_experiment`.
+  Per-experiment keys: `references/model-choices.md`.
 
 ### Editing it from Python
 
@@ -79,14 +75,14 @@ p.set("o17_guardo", thm="E")               # a data set joins an experiment by i
 p.remove_thm_experiment("E")
 ```
 
-A refusal raises `pyazr.FormatError` with the engine's message. By hand, append `"\n<thm>\n...\n</thm>\n"`: an `.azr` may lack a final newline, and
-`<thm>` must start its own line.
+A refusal raises `pyazr.FormatError` with the engine's message. By hand, append `"\n<thm>\n...\n</thm>\n"`: an `.azr`
+may lack a final newline, and `<thm>` must start its own line.
 
 ## Reference projects
 
 | test | system | what it pins |
 |---|---|---|
-| `tests/17O` | ¹⁷O(n,α)¹⁴C, Guardo/Sergi et al., 23 points, one THM segment | χ² = 96.69; neutron entrance, rwa widths |
+| `tests/17O` | ¹⁷O(n,α)¹⁴C, Guardo/Sergi et al., 23 points, one THM data set | χ² = 96.69; neutron entrance, rwa widths |
 | `tests/7Li_p_a` | ⁷Li(p,α) | χ² = 2138.51; charged entrance, two entrance l |
 | `tests/6Li_d` | ⁶Li(d,α) | χ² = 682.133 |
 | `tests/18O_p_a_thm` | ¹⁸O(p,α) | χ² = 2191.98 and `check.sh` against the published band; two interfering levels of one J^π |
