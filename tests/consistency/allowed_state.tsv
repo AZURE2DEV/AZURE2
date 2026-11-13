@@ -38,29 +38,15 @@ include/AZURECalcMCMC.h	priorStds_	mutable	pending (milestone 4, CNuc split; the
 include/AZURECalcMCMC.h	rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	usePriors_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	useRWA_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/CoulombTable.h	hits_	static	pending (milestone 5, the diagnostics record): lookup counters printed at exit
-include/CoulombTable.h	misses_	static	pending (milestone 5, the diagnostics record): lookup counters printed at exit
 include/GSLException.h	h	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	m	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): per site, the EC amplitude at the last shifted energy (EC unit amplitudes per mesh energy later)
 src/ALevel.cpp	counter	static	table: the stamp generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
-src/AMatrixFunc.cpp	worst	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZURE2.cpp	g_last_printed_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURE2.cpp	g_start_time	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalc.cpp	evals	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZURECalc.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
-src/AZURECalc.cpp	g2Calls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	g_deferCheckExit	namespace	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	g_jacGradForCheck	namespace	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	gradCalls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	gradChecked	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	jChecked	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	jc	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	nDump	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURECalc.cpp	pc	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZURECalc.cpp	progressMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
-src/AZURECalc.cpp	rjCalls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZURECalc.cpp	traceMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalcMCMC.cpp	g_current_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURECalcMCMC.cpp	g_last_likelihood	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
@@ -77,25 +63,10 @@ src/AZURECalcMCMC.cpp	g_samples_written_to_file	namespace	pending (milestone 4, 
 src/AZURECalcMCMC.cpp	g_step_offset	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURECalcMCMC.cpp	g_stop_requested	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURECalcMCMC.cpp	g_using_rwa_parameters	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZUREGrad.cpp	calls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZUREGrad.cpp	g_teCombinerNs	namespace	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZUREGrad.cpp	nChecked	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/CoulombTable.cpp	f	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	m	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
-src/CoulombTable.cpp	report	static	pending (milestone 5, the diagnostics record): prints the table's lookup counts at exit
 src/CoulombTable.cpp	t	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
-src/ECTable.cpp	g_checkMutex	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_direct	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_lookups	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_maxDeviation	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_nodes	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_nodesReport	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/InputFiles.cpp	g_bytes	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
 src/InputFiles.cpp	g_files	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
 src/InputFiles.cpp	g_mutex	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
 src/InputFiles.cpp	g_stats	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
-src/Profile.cpp	g_calls	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
-src/Profile.cpp	g_count	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
-src/Profile.cpp	g_depth	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
-src/Profile.cpp	g_ns	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
-src/TargetSetup.cpp	calls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)

@@ -1,4 +1,5 @@
 #include "azure2/stopping/Tables.h"
+#include "azure2/support/Environment.h"
 
 #include <algorithm>
 #include <cctype>
@@ -180,10 +181,11 @@ SrimData ReadSrimData(const std::string &directory) {
                        directory);
 }
 
-const SrimData &SrimTables() {
+namespace {
+
+/// The copy compiled into the library, parsed once.
+const SrimData &CompiledSrimTables() {
   static const SrimData data = [] {
-    const char *directory = std::getenv(kSrimDataDirVariable);
-    if (directory != nullptr && directory[0] != '\0') return ReadSrimData(directory);
     const std::string scoef = EmbeddedScoefText();
     if (scoef.empty()) {
       throw std::runtime_error(std::string("stopping: SRIM-2013's data files are not compiled into this build; set ") +
@@ -193,6 +195,24 @@ const SrimData &SrimTables() {
     return ParseSrimData(scoef, EmbeddedSnucText(), "stopping/data/srim (compiled in)");
   }();
   return data;
+}
+
+}  // namespace
+
+const SrimData &SrimTables() {
+  // The record is the process's and never changes, so the directory's table is parsed once as well.
+  const std::string &directory = azure2::support::ProcessEnvironment().Text(azure2::support::Switch::kSrimDataDir);
+  if (directory.empty()) return CompiledSrimTables();
+  static const SrimData fromDirectory = ReadSrimData(directory);
+  return fromDirectory;
+}
+
+std::shared_ptr<const SrimData> SrimTablesIn(const std::string &directory) {
+  // The process's tables when the directory is the environment's: parsed once, not on every call.
+  if (directory == azure2::support::ProcessEnvironment().Text(azure2::support::Switch::kSrimDataDir))
+    return std::shared_ptr<const SrimData>(&SrimTables(), [](const SrimData *) {});
+  if (directory.empty()) return std::shared_ptr<const SrimData>(&CompiledSrimTables(), [](const SrimData *) {});
+  return std::make_shared<const SrimData>(ReadSrimData(directory));
 }
 
 const SrimElement &ElementData(const SrimData &data, int z) {

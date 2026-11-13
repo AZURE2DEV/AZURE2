@@ -58,8 +58,11 @@ int main() {
   check("the set switches in the table's order",
         e.SetSwitches() == std::vector<Switch>{Switch::kEcTableNodes, Switch::kLevelSpace, Switch::kGradCheck,
                                                Switch::kGradCheckStep, Switch::kProfile, Switch::kDumpNonFinite});
+  check("the text of the set switches for --describe",
+        SetSwitchesText(e).rfind("Environment switches set:\n  AZURE2_EC_TABLE_NODES=80 (numbers)\n", 0) == 0);
   const Environment none = Environment::Read([](const char *) -> const char * { return nullptr; });
-  check("nothing set: no switch, home '.'", none.SetSwitches().empty() && none.Home() == ".");
+  check("nothing set: no switch, home '.', no text", none.SetSwitches().empty() && none.Home() == "." &&
+                                                         SetSwitchesText(none).empty());
 
   // The process's record: read once, so a variable set afterwards changes nothing.
   const Environment &p = ProcessEnvironment();

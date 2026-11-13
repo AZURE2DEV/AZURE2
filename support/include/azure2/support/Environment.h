@@ -139,6 +139,10 @@ class Environment {
   std::string home_;
 };
 
+/// The switches set in `environment`, for AZURE2 --describe: "Environment switches set:" and one line
+/// "  NAME=value (kind)" per switch in the table's order; "" when none is set.
+std::string SetSwitchesText(const Environment &environment);
+
 /// The process's environment, read on the first call (the CLI's main calls it first; a pyazr session's first Config
 /// reads it) and never again: a variable set later in the same process changes nothing.
 const Environment &ProcessEnvironment();

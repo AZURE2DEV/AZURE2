@@ -37,7 +37,11 @@ const UserStopping *FindUserStopping(const Material &material, const Projectile 
   return nullptr;
 }
 
-StoppingValue Stopping(const Material &material, const Projectile &projectile, double energy_MeV) {
+namespace {
+
+/// Stopping() with SRIM's tables `tables`, or SrimTables() when null (taken only when the material needs them).
+StoppingValue StoppingIn(const SrimData *tables, const Material &material, const Projectile &projectile,
+                         double energy_MeV) {
   if (!(energy_MeV > 0.0)) throw std::domain_error("stopping: energy must be > 0");
   StoppingValue v;
   if (const UserStopping *user = FindUserStopping(material, projectile)) {
@@ -56,7 +60,7 @@ StoppingValue Stopping(const Material &material, const Projectile &projectile, d
   if (!(material.compound_correction > 0.0)) {
     throw std::invalid_argument("stopping: material '" + material.name + "': the compound correction must be > 0");
   }
-  const SrimData &data = SrimTables();
+  const SrimData &data = tables ? *tables : SrimTables();
   double electronic_unc = 0.0;
   for (const auto &c : material.constituents) {
     const StoppingWithUncertainty e =
@@ -69,6 +73,16 @@ StoppingValue Stopping(const Material &material, const Projectile &projectile, d
   v.total = v.electronic + v.nuclear;
   v.rel_uncertainty = std::hypot(electronic_unc, kNuclearRelUncertainty * v.nuclear) / v.total;
   return v;
+}
+
+}  // namespace
+
+StoppingValue Stopping(const Material &material, const Projectile &projectile, double energy_MeV) {
+  return StoppingIn(nullptr, material, projectile, energy_MeV);
+}
+
+StoppingValue Stopping(const SrimData &data, const Material &material, const Projectile &projectile, double energy_MeV) {
+  return StoppingIn(&data, material, projectile, energy_MeV);
 }
 
 std::vector<double> StoppingBreakpoints(const Material &material, const Projectile &projectile) {
@@ -94,7 +108,10 @@ std::vector<double> StoppingBreakpoints(const Material &material, const Projecti
   return breaks;
 }
 
-std::string StoppingProvenance(const Material &material, const Projectile &projectile) {
+namespace {
+
+/// StoppingProvenance() with SRIM's tables `tables`, or SrimTables() when null.
+std::string StoppingProvenanceIn(const SrimData *tables, const Material &material, const Projectile &projectile) {
   std::ostringstream o;
   o << "stopping of " << projectile.label << " (Z1 = " << projectile.z << ", " << projectile.mass_u << " u) in "
     << material.name << " (phase " << PhaseName(material.phase) << ", compound correction "
@@ -104,7 +121,7 @@ std::string StoppingProvenance(const Material &material, const Projectile &proje
       << ", relative uncertainty " << user->rel_uncertainty << "\n";
     return o.str();
   }
-  const SrimData &data = SrimTables();
+  const SrimData &data = tables ? *tables : SrimTables();
   o << "  " << kSrimImplementation << "\n  cite SRIM: " << kSrimCitation << "\n  data: " << data.source
     << " (SCOEF03.DAT, SNUC03.dat of SRIM-2013)\n";
   o << "  Bragg's rule; ";
@@ -131,6 +148,16 @@ std::string StoppingProvenance(const Material &material, const Projectile &proje
   }
   o << "  nuclear uncertainty " << kNuclearRelUncertainty << " (provisional, stopping.md section 7)\n";
   return o.str();
+}
+
+}  // namespace
+
+std::string StoppingProvenance(const Material &material, const Projectile &projectile) {
+  return StoppingProvenanceIn(nullptr, material, projectile);
+}
+
+std::string StoppingProvenance(const SrimData &data, const Material &material, const Projectile &projectile) {
+  return StoppingProvenanceIn(&data, material, projectile);
 }
 
 }  // namespace stopping

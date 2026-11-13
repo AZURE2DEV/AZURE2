@@ -14,6 +14,7 @@
 #include "Unit.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "azure2/support/Environment.h"
 
 namespace Polarization {
 namespace {
@@ -30,13 +31,12 @@ inline bool Same(double a, double b) { return std::fabs(a - b) < 1.e-6; }
  * to test convention invariance: the swap alone must move A_y on a target with
  * spin, and the swap together with a sign flip of every reduced-width amplitude
  * whose channel spin has (-1)^(j1+j2-s) = -1 must reproduce the original A_y to
- * round-off.  It is read once per process and is not a physics option.
+ * round-off.  It is read once per process (azure2/support/Environment.h) and is not a physics option.
  */
 inline double ParticleCG(double j1, double j2, double s, double m1, double m2, double nu) {
-  static const bool swapOrder = [] {
-    const char *value = std::getenv("AZURE2_SWAP_COUPLING_ORDER");
-    return value != nullptr && *value != '\0' && std::strcmp(value, "0") != 0;
-  }();
+  // Read from the process's record: the amplitude matrix of a stored A_y record is evaluated without a run object.
+  static const bool swapOrder =
+      azure2::support::ProcessEnvironment().On(azure2::support::Switch::kSwapCouplingOrder);
   return swapOrder ? AngCoeff::ClebGord(j2, j1, s, m2, m1, nu)
                    : AngCoeff::ClebGord(j1, j2, s, m1, m2, nu);
 }

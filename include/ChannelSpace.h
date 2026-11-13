@@ -45,8 +45,9 @@ class Config;
  */
 namespace ChannelSpace {
 
-/// False when AZURE_LEVEL_SPACE is set (to anything but "0"): every J-group then takes the level-space route.
-bool Enabled();
+/// False when the run's AZURE_LEVEL_SPACE is set (Config::environment.levelSpaceOnly): every J-group then takes the
+/// level-space route.
+bool Enabled(const Config &configure);
 
 /// Largest \f$\kappa_\lambda = |e_\lambda - E|^{-1} \sum_c \Gamma_{\lambda c}^2 |\Lambda_c|\f$ the channel route accepts.
 extern const double kMaxPoleRatio;

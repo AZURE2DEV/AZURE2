@@ -149,6 +149,13 @@ std::vector<Switch> Environment::SetSwitches() const {
   return out;
 }
 
+std::string SetSwitchesText(const Environment &environment) {
+  std::string text;
+  for (Switch id : environment.SetSwitches())
+    text += std::string("  ") + RowOf(id).name + "=" + environment.Text(id) + " (" + KindName(RowOf(id).kind) + ")\n";
+  return text.empty() ? text : "Environment switches set:\n" + text;
+}
+
 const Environment &ProcessEnvironment() {
   // The one reading of the process's environment (repo_consistency check 39), on the first call.
   static const Environment record = Environment::Read([](const char *name) { return std::getenv(name); });

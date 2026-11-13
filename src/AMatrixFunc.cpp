@@ -1,4 +1,7 @@
 #include "AMatrixFunc.h"
+#include "RunDiagnostics.h"
+#include <mutex>
+#include "azure2/support/Environment.h"
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "PolarizationFunc.h"
@@ -176,13 +179,13 @@ void AMatrixFunc::ClearMatrices() {
  */
 
 void AMatrixFunc::FillMatrices(Site *point) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kFill);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kFill);
   const double inEnergy = this->InEnergy(point);
   lastInEnergy_ = inEnergy;
   // Groups of another compound nucleus are not part of this point's matrices
   // (Unit::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
-  const bool channelSpace = !level_only_ && ChannelSpace::Enabled();
+  const bool channelSpace = !level_only_ && ChannelSpace::Enabled(configure());
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     JGroup *jGroup = compound()->GetJGroup(j);
     if (!jGroup->IsInRMatrix() || jGroup->GetNucleus() != activeNucleus_) continue;
@@ -197,16 +200,16 @@ void AMatrixFunc::FillMatrices(Site *point) {
       if (f.usable) {
         if (this->SolveChannelSpace(j, point, inEnergy)) {
           route_[j - 1] = kRouteChannel;
-          AZUREProfile::Count(AZUREProfile::kChannelRoute);
-          static const bool verify = std::getenv("AZURE_CHANNEL_VERIFY") != nullptr;
+          AZUREProfile::Count(configure().profile, AZUREProfile::kChannelRoute);
+          static const bool verify = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kChannelVerify);
           if (verify) this->VerifyChannelSpace(j, point, inEnergy);
           continue;
         }
       } else {
-        AZUREProfile::Count(f.status == 1 ? AZUREProfile::kLevelRouteSize : AZUREProfile::kLevelRouteSetup);
+        AZUREProfile::Count(configure().profile, f.status == 1 ? AZUREProfile::kLevelRouteSize : AZUREProfile::kLevelRouteSetup);
       }
     } else {
-      AZUREProfile::Count(AZUREProfile::kLevelRouteForced);
+      AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRouteForced);
     }
     this->FillLevelMatrix(j, point, inEnergy);
   }
@@ -338,7 +341,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
  */
 
 void AMatrixFunc::InvertMatrices() {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kFactor);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kFactor);
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       // Anything derived from the previous solve is now stale.
@@ -401,7 +404,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
 const vector_c &AMatrixFunc::GetChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = channel_solves_[jGroupNum - 1][chNum - 1];
   if (!channel_solve_valid_[jGroupNum - 1][chNum - 1]) {
-    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
+    AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
     const vector_r &gammas = this->GetGammaVector(jGroupNum, chNum);
     const int n = (int)gammas.size();
     solve.resize(n);
@@ -504,7 +507,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
  */
 
 void AMatrixFunc::CalculateTMatrix(Site *point) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kTMatrix);
   tbar_decay_ = nullptr;
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
@@ -650,7 +653,7 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  */
 bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradTBar);
   const complex I(0.0, 1.0);
   const Site *angles = &rows;  // the angular row (Legendre rows, coefficient order) is the reader's; the rest the site's
 
@@ -1106,7 +1109,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
  */
 void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                               const vector_matrix_r *shiftDeriv) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradBackprop);
   const complex I(0.0, 1.0);
   for (const auto &s : bar.screen) accum.AddScreening(s.first, s.second);
   Site *point = energyPoint;
@@ -1138,12 +1141,8 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
   // Without external capture the level matrix enters only through bilinear
   // forms, whose adjoint is formed from rank-one terms (BilinearAdjoint).
-  // AZURE_GRAD_DENSE=1 keeps the dense A^H Abar A^H products below.
-  static const bool dense = [] {
-    const char *e = std::getenv("AZURE_GRAD_DENSE");
-    return e && *e && std::string(e) != "0";
-  }();
-  if (!hasEC && !dense) {
+  // AZURE_GRAD_DENSE=1 (the run's Config::environment) keeps the dense A^H Abar A^H products below.
+  if (!hasEC && !configure().environment.denseAdjoint) {
     std::vector<std::vector<BilinearTerm>> terms;
     this->CollectBilinearTerms(point, bar, terms);
     for (int j = 1; j <= (int)terms.size(); j++)
@@ -1386,7 +1385,7 @@ double AMatrixFunc::InEnergy(CNuc *compound, Site *point) {
 void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
                                      GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda,
                                      const std::vector<int> *levelOf) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradLevelMatrix);
+  AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradLevelMatrix);
   Site *point = energyPoint;
   // Active level r (1-based) -> its level number (THM blocks, levelOf), else r.
   auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
@@ -1699,7 +1698,7 @@ void AMatrixFunc::LevelMatrixABarAdjoint(Site *point, int jNum, const matrix_c &
 const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = raw_solves_[jGroupNum - 1][chNum - 1];
   if (!raw_solve_valid_[jGroupNum - 1][chNum - 1]) {
-    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
+    AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
     JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
     const int n = (int)active_levels_[jGroupNum - 1].size();
@@ -2018,7 +2017,7 @@ bool AMatrixFunc::SolveChannelSpace(int j, Site *point, double inEnergy) {
           (a == b ? complex(1.0, 0.0) : complex(0.0, 0.0)) - st.lamAct[a] * st.R[(size_t)a * m + b];
   st.piv.resize(ns);
   if (ns > 0 && !(ChannelSpace::LUFactor(st.lu.data(), st.piv.data(), ns) >= ChannelSpace::kMinPivotRatio)) {
-    AZUREProfile::Count(AZUREProfile::kLevelRoutePivot);
+    AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRoutePivot);
     return false;
   }
   st.F.resize((size_t)m * m);
@@ -2052,7 +2051,7 @@ bool AMatrixFunc::SolvePencil(int j, double inEnergy) {
   st.hswap.resize(n);
   const double ratio = ChannelSpace::HessenbergLU(st.P.data(), st.hswap.data(), n);
   if (!(ratio > 0.0)) {
-    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRoutePole);
     return false;
   }
   // X = (H - E T)^-1 Qt G;  R = (Z^T G)^T X  (= G^T (K - E N)^-1 G).
@@ -2081,7 +2080,7 @@ bool AMatrixFunc::SolvePencil(int j, double inEnergy) {
   // of eta on the formal route (P^-1 G = Z X).
   const double err = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * pmax * x2max;
   if (!(rl <= ChannelSpace::kMaxPoleRatio) || !(err <= ChannelSpace::kMaxPoleError)) {
-    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRoutePole);
     return false;
   }
   return true;
@@ -2124,7 +2123,7 @@ bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
       const double ad = std::abs(d);
       if (!(ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * w / (ad * ad + w * w) <=
             ChannelSpace::kMaxPoleError)) {
-        AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+        AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRoutePole);
         return false;
       }
       st.isDefl[k] = 1;
@@ -2132,10 +2131,10 @@ bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
     }
   }
   if ((int)st.defl.size() > ChannelSpace::kMaxDeflated) {
-    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    AZUREProfile::Count(configure().profile, AZUREProfile::kLevelRoutePole);
     return false;
   }
-  if (!st.defl.empty()) AZUREProfile::Count(AZUREProfile::kDeflated);
+  if (!st.defl.empty()) AZUREProfile::Count(configure().profile, AZUREProfile::kDeflated);
   // R = Gamma^T D^-1 Gamma, symmetric; real unless the formal energies are complex.
   st.R.assign((size_t)m * m, complex(0.0, 0.0));
   if (!f.complexE) {
@@ -2353,7 +2352,7 @@ const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
   ChannelState &st = chan_[j - 1];
   vector_c &u = st.usolve[ch0];
   if (!st.uvalid[ch0]) {
-    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
+    AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
     const int n = f.n, m = (int)f.act.size();
     u.assign(n, complex(0.0, 0.0));
     const int b = f.pos[ch0];
@@ -2554,7 +2553,6 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
  */
 void AMatrixFunc::VerifyChannelSpace(int j, Site *point, double inEnergy) {
   typedef std::complex<long double> cld;
-  static double worst = 0.0;
   this->FillLevelMatrix(j, point, inEnergy);
   LevelMatrixSolver lu;
   if (!lu.Decompose(a_inv_matrices_[j - 1])) return;
@@ -2613,9 +2611,10 @@ void AMatrixFunc::VerifyChannelSpace(int j, Site *point, double inEnergy) {
     }
   if (!(fmax > 0.0)) return;
   const double rel = dRoutes / fmax;
-#pragma omp critical(channel_verify)
-  if (rel > worst) {
-    worst = rel;
+  azure2::RunDiagnostics &diagnostics = *configure().diagnostics;
+  std::lock_guard<std::mutex> lock(diagnostics.channelVerifyMutex);
+  if (rel > diagnostics.channelVerifyWorst) {
+    diagnostics.channelVerifyWorst = rel;
     std::cerr << "[channel-verify] J-group " << j << " (" << n << " levels, " << m << " channels, "
               << (f.pencil ? "pencil" : f.identity ? "standard" : "formal") << ") at " << inEnergy
               << " MeV: channel vs level route " << rel << " of the largest form; against an extended-precision LU: channel "

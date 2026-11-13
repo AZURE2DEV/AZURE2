@@ -22,7 +22,7 @@ import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 # The engine's sources (not external/, not the tests).
-SCANNED = ("src", "include", "api", "physics", "experiment", "stopping", "convert", "io")
+SCANNED = ("src", "include", "api", "physics", "experiment", "stopping", "convert", "io", "support")
 SKIPPED = ("/tests/", "/build", "/_deps/")
 SUFFIXES = (".cpp", ".cc", ".h", ".hpp")
 

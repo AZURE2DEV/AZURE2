@@ -5,6 +5,7 @@ The engine holds the one table of record kinds, fields, quantities, units and di
 and agents read field names, allowed values and units from it rather than spelling them.
 """
 
+import os
 import warnings
 
 __all__ = ["schema", "validate", "describe", "predictions"]
@@ -23,6 +24,12 @@ def schema():
     return _engine_module().schema()
 
 
+def _project_dir(path):
+    """The directory a project's relative paths are read from: the project file's, made absolute (the run's rule,
+    experiment::ProjectDirectoryOf)."""
+    return os.path.dirname(os.path.abspath(str(path)))
+
+
 def validate(path):
     """Check the format-3 project ``path`` against the table: every problem, as ``AZURE2 --validate --json`` reports it.
 
@@ -30,7 +37,7 @@ def validate(path):
     ("error", "warning"), ``code``, ``file``, ``line``, ``column``, ``section``, ``record_kind``, ``record``,
     ``field``, ``found``, ``allowed``, ``message`` and a syntax-only ``fix``.  An empty list: the file is valid.
     The checks that need ``<levels>`` or the data files are made too (the engine's build of the project, model data
-    included; data files are read relative to the working directory, as the engine opens them); when they cannot be
+    included; data files are read relative to the project file's directory, as a run reads them); when they cannot be
     made (an error of the validation, no readable ``<levels>``) their number is given as a warning.  A format-1 or
     format-2 file raises ``ValueError`` with the conversion command (section 8.4; ``AZURE2 --convert``).
     Needs the compiled engine module.
@@ -39,7 +46,7 @@ def validate(path):
     from .described import _engine as _engine_module
     with open(path, "rb") as f:
         text = f.read()  # bytes, as the engine reads a file
-    refusal, diagnostics, skipped = _engine_module().validate_format3_text(text, str(path))
+    refusal, diagnostics, skipped = _engine_module().validate_format3_text(text, str(path), _project_dir(path))
     if refusal:
         raise ValueError(refusal)
     if skipped:
@@ -69,7 +76,7 @@ def describe(path, as_json=False, record=None):
 
     For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
     pair keys each term resolved to, the windows, the data file as the engine opens it (the resolved path: relative to
-    the working directory), the rows of the data file read and kept inside the windows with the lab-energy range of the
+    the project file's directory, as a run reads it), the rows of the data file read and kept inside the windows with the lab-energy range of the
     kept rows (JSON: ``rows_read``, ``rows_kept``, ``kept_E_lab_MeV``, ``rows_error``), the target, beam and detector
     effects linked to it and its fit parameters with their names and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
     ``as_json`` a dict (``datasets``, ``extrapolations``, ``model_data``).  A project with an error raises
@@ -81,7 +88,7 @@ def describe(path, as_json=False, record=None):
     from .described import _engine as _engine_module
     with open(path, "rb") as f:
         text = f.read()
-    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json), "",
+    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json), _project_dir(path),
                                                                                 record or "")
     if refusal:
         raise ValueError(refusal)

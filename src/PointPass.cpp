@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include "azure2/support/Environment.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -34,8 +35,8 @@ bool Site::InjectedFailure() const {
   // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
   // data or test point at that energy fail, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
   // handling of a failed point (azure2::EvaluateModelPoint, WorkingCopy::CalculatePointsInParallel) can be exercised.
-  static const double testFailE = [] { const char *v = std::getenv("AZURE_TEST_FAIL_E"); return v ? std::atof(v) : -1.0; }();
-  static const int testFailExit = [] { const char *v = std::getenv("AZURE_TEST_FAIL_EXIT"); return v ? std::atoi(v) : 0; }();
+  static const double testFailE = azure2::support::ProcessEnvironment().Number(azure2::support::Switch::kTestFailEnergy, -1.0);
+  static const int testFailExit = static_cast<int>(azure2::support::ProcessEnvironment().Integer(azure2::support::Switch::kTestFailExit, 0));
   return testFailE >= 0.0 && std::fabs(this->GetLabEnergy() - testFailE) <= 1e-9 * std::max(1.0, testFailE) &&
          (testFailExit == 0 || this->GetExitKey() == testFailExit);
 }

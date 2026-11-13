@@ -2,6 +2,7 @@
 #define AZURE2_STOPPING_TABLES_H
 
 #include <array>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,9 +17,11 @@ namespace stopping {
  * reader (lunasrim/data_files.py) documents the column layout this parser follows.
  *
  * SrimTables() is the constant table of docs/upgrade/ARCHITECTURE.md section 9, parsed once: from the directory named
- * by the environment variable AZURE2_SRIM_DATA_DIR if it is set, otherwise from the copy compiled into the library
- * (when the build found stopping/data/srim/; otherwise it refuses and says how to get the files).  ReadSrimData()
- * reads a directory the caller names into a table the caller owns.
+ * by the environment variable AZURE2_SRIM_DATA_DIR if it is set (in the process's environment record,
+ * azure2/support/Environment.h), otherwise from the copy compiled into the library (when the build found
+ * stopping/data/srim/; otherwise it refuses and says how to get the files).  ReadSrimData() reads a directory the
+ * caller names into a table the caller owns; SrimTablesIn() is the table of a directory the caller names (the engine
+ * names the run's, Config::environment.srimDataDirectory).
  */
 
 /// The state of a material: SRIM distinguishes solid and gas targets (mean excitation energy, shell correction,
@@ -73,6 +76,9 @@ constexpr const char *kSrimDataDirVariable = "AZURE2_SRIM_DATA_DIR";
 /// The data every function without an explicit SrimData uses (see above).  Throws std::runtime_error if neither the
 /// variable nor a compiled-in copy gives the files.
 const SrimData &SrimTables();
+/// The tables of \p directory, read now and owned by the caller, or the compiled-in copy (the process's, parsed once)
+/// when \p directory is empty.  Throws as ReadSrimData, or as SrimTables() when the copy is missing.
+std::shared_ptr<const SrimData> SrimTablesIn(const std::string &directory);
 
 /// The row of element \p z of \p data; throws std::out_of_range outside 1..92.
 const SrimElement &ElementData(const SrimData &data, int z);

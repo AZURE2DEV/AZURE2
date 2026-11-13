@@ -24,6 +24,7 @@ DataParameters.cpp
 HandOver.cpp
 TaskScratch.cpp
 RunScratch.cpp
+RunDiagnostics.cpp
 WorkingCopyUnits.cpp NodeTable.cpp DataSet.cpp
 PointPass.cpp
 PointFold.cpp

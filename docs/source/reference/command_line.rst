@@ -586,6 +586,146 @@ its record).  The counts go to standard error (``AZURE_PLAN_CHECK: ... units in
 ... energy tasks ...: 0 differ``); a unit that differs stops the run.
 A test of the engine, slow, single-threaded; the output files do not change.
 
+Environment switches
+--------------------
+
+Every environment variable AZURE2 reads, from one table in the code
+(``support/src/Environment.cpp``; ``tests/consistency/repo_consistency_test.py``
+keeps this list and that table the same).  The engine reads the environment
+once, when the process starts (the command line) or when the first pyazr session
+is made: a variable set later in the same process changes nothing.  The kind
+says what setting it does: *numbers* (an output number can move -- other
+physics, another input, or another route equal to rounding), *cost* (the same
+bits in another time), *prints* (prints, dumps or checks; may exit), *test*
+(injects a failure for a test).  The switches of kind *numbers* are copied into
+the run's settings when the run starts.  ``AZURE2 --describe`` ends with the
+switches that are set, their values and kinds.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 10 60
+
+   * - Variable
+     - Kind
+     - What setting it does
+   * - ``AZURE2_COULOMB_TABLE``
+     - numbers
+     - the Coulomb table file when ``--coulomb-table`` names none (default ``~/.azure2/coulomb_table.bin``)
+   * - ``AZURE2_SRIM_DATA_DIR``
+     - numbers
+     - the directory of SRIM-2013's ``SCOEF03.DAT`` and ``SNUC03.dat`` (default: the copy compiled in)
+   * - ``AZURE_OPTIONS_FILE``
+     - numbers
+     - a file of command-line options, one per line, applied after those on the command line
+   * - ``AZURE_REFINE_QUADRATURE``
+     - numbers
+     - ``K``: every sub-point grid gets K times its points (1..64; a bad value exits 2)
+   * - ``AZURE2_EC_TABLE_NODES``
+     - numbers
+     - nodes per decade of the external-capture tables, over ``ecTableNodesPerDecade``
+   * - ``AZURE2_SWAP_COUPLING_ORDER``
+     - numbers
+     - couples the two particle spins of a channel spin the other way round (a convention test, :doc:`../theory/conventions`)
+   * - ``AZURE_BOUND_SHIFT_NUMERICAL``
+     - numbers
+     - the bound-state shift function from the numerical Whittaker derivative, not the U ratio
+   * - ``AZURE_NO_NEUTRAL_CLOSED_FORM``
+     - numbers
+     - the neutral bound-state shift without its closed form
+   * - ``AZURE_SHIFT_DE_1EV``
+     - numbers
+     - dS/dE by a 1 eV central difference of the exact S (the route before 2026-10-19)
+   * - ``AZURE_LEVEL_SPACE``
+     - numbers
+     - every J group solved in level space; equal to rounding
+   * - ``AZURE2_THM_FD``
+     - numbers
+     - the THM rows of the gradient and Jacobian by finite differences
+   * - ``AZURE_GRAD_ADJOINT``
+     - numbers
+     - the adjoint gradient instead of the Jacobian path; equal to rounding
+   * - ``AZURE_GRAD_DENSE``
+     - numbers
+     - the dense level-matrix adjoint instead of the rank-one terms; equal to rounding
+   * - ``AZURE_TE_WEIGHTS_FD``
+     - numbers
+     - the target-effect combiner weights by finite differences
+   * - ``AZURE_SERIAL_CHI2``
+     - cost
+     - the points of an evaluation one by one (the same bits)
+   * - ``AZURE_GRAD_CHECK``
+     - prints
+     - analytic derivatives against finite differences; ``exit`` stops after the check
+   * - ``AZURE_GRAD_CHECK_H``
+     - prints
+     - the relative step of the gradient check (default 1e-6)
+   * - ``AZURE_GRAD_CHECK_IDX``
+     - prints
+     - the parameters the gradient check differentiates (``i,j,a-b``)
+   * - ``AZURE_GRAD_CHECK_N``
+     - prints
+     - how many parameters the gradient check samples (default 16)
+   * - ``AZURE_GRAD_CHECK_ROWS``
+     - prints
+     - how many rows of the gradient check are printed (default 60)
+   * - ``AZURE_GRAD_CHECK_SEGS``
+     - prints
+     - the segments whose norms and shifts the gradient check differentiates
+   * - ``AZURE_SHIFT_GRAD_CHECK``
+     - prints
+     - the energy-shift Jacobian columns against full differences
+   * - ``AZURE_TE_WEIGHTS_CHECK``
+     - prints
+     - ``N``: the combiner weights of N points against finite differences
+   * - ``AZURE_PROFILE``
+     - prints
+     - per-stage times and counters on standard error
+   * - ``AZURE_GRAD_TIMING``
+     - prints
+     - the time of every gradient call
+   * - ``AZURE_GRID_TIMING``
+     - prints
+     - the time and the moves of every re-placement of the sub-point grids
+   * - ``AZURE_PLAN_CHECK``
+     - prints
+     - checks the calculation plan and the node tables (stops on a difference)
+   * - ``AZURE_NODE_CHECK``
+     - prints
+     - checks every unit's nodes and channel rows after each hand-over (stops on a difference)
+   * - ``AZURE_POOL_CHECK``
+     - prints
+     - the pooled, parallel chi-squared against a fresh serial one (first five calls)
+   * - ``AZURE_CHANNEL_VERIFY``
+     - prints
+     - every channel-space solve against the level-space solve (slow)
+   * - ``AZURE2_EC_TABLE_CHECK``
+     - prints
+     - every external-capture integral also directly, with the largest difference
+   * - ``AZURE_TRACE_FCN``
+     - prints
+     - every chi-squared evaluation of a fit; ``fresh`` also on a fresh copy
+   * - ``AZURE_DUMP_NONFINITE``
+     - prints
+     - dumps an evaluation whose chi-squared is not finite or above the threshold
+   * - ``AZURE_GRAD_DEBUG``
+     - prints
+     - why the gradient falls back to differences
+   * - ``AZURE_CHANNEL_DEBUG``
+     - prints
+     - the formal representation of each J group
+   * - ``AZR_DEBUG_GRID``
+     - prints
+     - the adaptive integration grids as they are built
+   * - ``AZURE_POISON_RESULTS``
+     - prints
+     - reused result storage filled with NaN at the start of every evaluation
+   * - ``AZURE_TEST_FAIL_E``
+     - test
+     - the calculation of a point at this lab energy (MeV) fails (``tests/pyazr/failed_point_test.py``)
+   * - ``AZURE_TEST_FAIL_EXIT``
+     - test
+     - ... only for this exit pair key
+
 Examples
 --------
 

@@ -14,6 +14,7 @@
 #include "AZUREMain.h"
 #include "MeshPlanner.h"
 #include "Profile.h"
+#include "azure2/support/Environment.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CaptureAyRequests.h"
@@ -213,9 +214,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
     else
       configure.configfile = arg;
   }
-  char *optionsFile = getenv("AZURE_OPTIONS_FILE");
-  if (optionsFile) {
-    std::ifstream in(optionsFile);
+  // AZURE_OPTIONS_FILE: more options from a file (the process's environment record, read once at start)
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  if (environment.Set(azure2::support::Switch::kOptionsFile)) {
+    std::ifstream in(environment.Text(azure2::support::Switch::kOptionsFile));
     if (in) {
       while (!in.eof()) {
         std::string newOption;
@@ -1139,7 +1141,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     }
 
     const int initialized = data->Initialize(compound, configure);  // AZURE_PROFILE: the set-up's stages on their own
-    AZUREProfile::Report(std::cerr, "set-up");
+    AZUREProfile::Report(configure.profile, std::cerr, "set-up");
     if (initialized == -1) {
       configure.outStream << "Calculation was aborted." << std::endl;
       delete compound;
@@ -1461,6 +1463,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
  */
 
 int main(int argc, char *argv[]) {
+  // The process's environment switches, read once, before anything else (azure2/support/Environment.h).
+  azure2::support::ProcessEnvironment();
   // Check for --help option first.  If set, print help and exit.
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--help") == 0) {

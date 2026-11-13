@@ -78,7 +78,7 @@ double ShftFunc::operator()(int l, int two_j, double energy) {
     const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding)
                                  : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
     double s;
-    if (table_->LookupBound(l, etaB, rhoB, s)) return s;
+    if (table_->LookupBound(l, etaB, rhoB, s, pair_->FunctionSettings().tableUse)) return s;
   }
   // AZURE_BOUND_SHIFT_NUMERICAL=1: the route used before 2026-10-19, a numerical
   // radial derivative of W, whose noise makes a 1 eV central difference dS/dE
@@ -126,7 +126,7 @@ bool ShftFunc::BoundTableOk(int l, double energy) const {
   const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
   const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding) : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
   double s;
-  return table_->LookupBound(l, etaB, rhoB, s);
+  return table_->LookupBound(l, etaB, rhoB, s, pair_->FunctionSettings().tableUse);
 }
 
 double ShftFunc::EnergyDerivative(int l, int two_j, double energy, double step) {
@@ -166,18 +166,12 @@ double ShftFunc::EnergySecondDerivative(int l, int two_j, double energy) {
 const CoulombTable *ShftFunc::SharedTable(const PPair *pair, bool neutral) {
   const PairFunctionSettings &settings = pair->FunctionSettings();
   if (neutral || !settings.useCoulombTable) return nullptr;
-  return CoulombTable::Shared(settings.coulombTablePath);
+  return CoulombTable::Shared(settings.coulombTablePath, settings.coulombTableDefault);
 }
 
-bool ShftFunc::UseURatio() {
-  static const bool use = (std::getenv("AZURE_BOUND_SHIFT_NUMERICAL") == nullptr);
-  return use;
-}
+bool ShftFunc::UseURatio() const { return !pair_->FunctionSettings().boundShiftNumerical; }
 
-bool ShftFunc::UseNeutralClosedForm() {
-  static const bool use = (std::getenv("AZURE_NO_NEUTRAL_CLOSED_FORM") == nullptr);
-  return use;
-}
+bool ShftFunc::UseNeutralClosedForm() const { return !pair_->FunctionSettings().noNeutralClosedForm; }
 
 double ShftFunc::NeutralBoundShift(int l, double rho) {
   return azure2::physics::neutral_bound_shift(l, rho);

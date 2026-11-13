@@ -332,7 +332,7 @@ Open from the drill: the three non-default Legendre definitions follow `docs/upg
 checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
 `calculate_sfactor` knows only the plain S factor.
 
-## No hidden state (three steps, 2026-11-12 and 13; not finished)
+## No hidden state (four steps, 2026-11-12 and 13; not finished)
 
 The aim: every number the engine prints depends only on the project, the command line and a short list of
 environment switches (`docs/upgrade/evaluation.md` section 2), not on what ran before in the same process or on how
@@ -354,9 +354,16 @@ run side by side, and the command-line program started from anywhere reads and w
 write started in the project's directory (`tests/run_from_elsewhere`).  This is a change of behaviour of the
 command-line program: before, relative paths were the working directory's.  A fit and the MCMC make a copy of the
 working data only when no idle one exists (one copy less in memory), and the signature of `intEC.dat` names the
-Coulomb table by its content, so a file written with another table is recomputed, not reused.  What is not done: the
-diagnostic switches and counters (44 switches read in many places; they become one record read once), the fitter's
-and the sampler's own members, the MCMC's progress globals.  Every one is a row of
+Coulomb table by its content, so a file written with another table is recomputed, not reused.  The fourth step: every
+environment variable the engine reads is one row of one table (`support/src/Environment.cpp`, 39 switches, each with
+its kind: changes numbers, changes cost, prints, test hook), read once when the process starts, and the manual's list
+(`command_line.rst`, "Environment switches") is checked against it; no other code reads the environment.  The
+switches that can move a number are copied into the run's settings (`Config::environment`), so making one of them an
+option is one line; `AZURE2 --describe` ends with the switches that are set.  The counters of the diagnostics
+(profiling, the Coulomb table's lookups, the gradient checks) belong to the run.  A variable set inside a running
+process (pyazr's `os.environ`) is no longer seen: set it before the process, or the first session, starts.  To add a
+switch: the recipe "Add a diagnostic switch" in `CLAUDE.md`.  What is not done: the fitter's and the sampler's own
+members, the MCMC's progress globals.  Every one is a row of
 `tests/consistency/allowed_state.tsv` with the step that removes it (82 rows; 14 more are permanent: constant
 tables, locks of output streams, and the bytes of input files, kept per process under a key of path, size and
 modification time, which `cache_stats()` counts: say if you want them per session).  What you

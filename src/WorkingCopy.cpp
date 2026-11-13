@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "WorkingCopy.h"
+#include "azure2/support/Environment.h"
 #include "ModelPass.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"
@@ -882,7 +883,7 @@ std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(CNuc *theCNuc
     keys.insert(keys.end(), own.begin(), own.end());
   }
   std::shared_ptr<const ChannelTable> table = ChannelTable::Build(theCNuc, configure, std::move(keys), channelTable_.get());
-  if (std::getenv("AZURE_PROFILE"))
+  if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kProfile))
     configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
                         << table->Computed() << " computed" << std::endl;
   return table;
