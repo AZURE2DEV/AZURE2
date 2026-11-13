@@ -131,8 +131,9 @@ with tempfile.TemporaryDirectory() as work:
 
     print("4. the binding's Coulomb cross sections")
     e, th = np.array([1.5, 2.25, 3.75]), np.array([20.0, 90.0, 160.0])
-    ru = _azure2.rutherford_cross_section(2, 6, 4.00260325, 12.0, e, th)
-    mo = _azure2.mott_cross_section(2, 4.00260325, 0, e, th)
+    import pyazr.physics
+    ru = pyazr.physics.rutherford_cross_section(2, 6, 4.00260325, 12.0, e, th)
+    mo = pyazr.physics.mott_cross_section(2, 4.00260325, 0, e, th)
     check("rutherford_cross_section = |f_C|^2 (alpha + 12C) to 1e-13",
           all(rel(ru["value"][i], float(truth.coulomb("aC", e[i], th[i]))) <= 1e-13 for i in range(3)), str(ru["value"]))
     check("mott_cross_section = |f_C(theta) + f_C(pi - theta)|^2 (alpha + alpha) to 1e-13",

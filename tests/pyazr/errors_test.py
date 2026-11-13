@@ -108,7 +108,9 @@ try:
     expect("whittaker below its domain", lambda: transform.whittaker(0, 1, 6, 0.93, 4.0, 0.0),
            pyazr.DomainZeroDivision, ZeroDivisionError, ["binding_energy = 0.0", "> 0", "pyazr.whittaker"])
     expect("whittaker_wave with rho <= 0", lambda: pyazr.whittaker_wave(0, 1.0, [1.0, -1.0]),
-           pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.whittaker_wave)"])
+           pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.physics.whittaker_wave)"])
+    expect("penetrability below threshold", lambda: pyazr.physics.penetrability(0, 1, 6, 1.00728, 12.0, 5.0, -0.1),
+           pyazr.DomainError, ValueError, ["e_cm = -0.1 MeV", "e_cm finite > 0", "help(pyazr.physics.penetrability)"])
 
     # -- a session whose output directory does not exist: the engine's notice is a warning ---------------------
     out_dir = os.path.join(proj_dir, "output")

@@ -9,7 +9,7 @@
 2. quantity sfactor: the chi^2 of S data (keV*b) equals the chi^2 of the same data converted to sigma by this script
    (mpmath, sigma = S exp(-2 pi eta)/E with the <levels> masses and charges) to 1e-12; with a fixed 5 keV shift the
    two differ by what the script computes from the engine's sigma at the shifted energies; the analytic gradient
-   against central differences; _azure2.sfactor_conversion against the script;
+   against central differences; pyazr.physics.sfactor_conversion against the script;
 3. quantity yield on an infinite target: a file per uC with charge state 2 equals the file per particle times
    1e-6 / (2 e) (chi^2 to 1e-12); counts per uC with a fixed efficiency likewise;
 4. pyazr.sfactor_to_cross_section (atomic masses through the engine's function) against the script, and against the
@@ -209,8 +209,9 @@ with tempfile.TemporaryDirectory() as work:
     check("  and the sigma form differs from it (the data converted at the unshifted energy) by %.4g" %
           (csig5.sum() - cs5.sum()), rel(csig5.sum(), cs5.sum()) > 1e-4)
     e_test = np.array([0.1, 0.4, 1.2])
-    conv = _azure2.sfactor_conversion(1, 6, 1.00728, 12.0, e_test)
-    check("_azure2.sfactor_conversion = the script to 1e-13", all(rel(conv[i], float(conversion(e_test[i]))) <= 1e-13 for i in range(3)),
+    import pyazr.physics
+    conv = pyazr.physics.sfactor_conversion(1, 6, 1.00728, 12.0, e_test)
+    check("pyazr.physics.sfactor_conversion = the script to 1e-13", all(rel(conv[i], float(conversion(e_test[i]))) <= 1e-13 for i in range(3)),
           str(conv))
     # the gradient of the S-factor chi^2 (norm and the level parameters) against central differences
     in_sg = write_project(work, "sg", project_text(dataset("s.dat", "sfactor", "keV*b").replace(

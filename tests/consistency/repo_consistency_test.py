@@ -987,7 +987,7 @@ def getenv_problems(rel, text):
     code = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', code)
     if re.search(r"\b(?:std::)?(?:getenv|secure_getenv|_dupenv_s|GetEnvironmentVariable[AW]?)\s*\(", code):
         found.append(f"{rel}: reads the environment (getenv); read the switch from the record "
-                     "(azure2/support/Environment.h) or the run's Config::environment (check 39)")
+                     "(azure2/support/Environment.h) or the run's Config::environment (check 41)")
     return found
 
 
@@ -1008,7 +1008,7 @@ if not getenv_problems("probe.cpp", 'int f() { return std::getenv("AZURE_X") != 
 if getenv_problems("probe.cpp", '// getenv("AZURE_X") in a comment\nconst char *t = "getenv(";'):
     problems.append("check 39: a getenv in a comment or a string is reported; update this check")
 if "getenv" not in read(ENV_READER):
-    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 39)")
+    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 41)")
 
 # 40. The table of switches and the manual's list are one list (docs/source/reference/command_line.rst, "Environment
 #     switches"): every row of support/src/Environment.cpp's table is a row there with its kind, and every row there is
@@ -1040,6 +1040,25 @@ else:
         problems.append(f"docs/source/reference/command_line.rst: {_n} ({_k}) is listed but is no row of {ENV_READER} "
                         "(check 40)")
 
+# 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
+#     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
+#     under tests/; a row without one, or a row_test of a name the table does not have, fails.
+_rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/src/pybind_physics.cpp"), re.M)
+_row_tests = set()
+for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
+    for _name in _files:
+        if _name.endswith(".py"):
+            with open(os.path.join(_dir, _name), errors="replace") as _fh:
+                _row_tests |= set(re.findall(r'\brow_test\("(\w+)"', _fh.read()))
+if not _rows:
+    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 41: the pattern changed?)")
+for _r in _rows:
+    if _r not in _row_tests:
+        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 41): add "
+                        f"row_test(\"{_r}\", ...) to tests/pyazr/physics_table_test.py")
+for _r in sorted(_row_tests - set(_rows)):
+    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 41)")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1049,4 +1068,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
-      f"({_getenv_files} files), {len(_table)} environment switches in the manual")
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested")

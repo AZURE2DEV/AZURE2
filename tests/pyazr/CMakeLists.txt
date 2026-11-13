@@ -687,6 +687,14 @@ add_test(NAME pyazr_whittaker_wave
                  ${CMAKE_CURRENT_SOURCE_DIR}/whittaker_wave_test.py)
 set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
+# own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,
+# errors="mask", DomainError (docs/upgrade/pyazr3.md section 2.7).  tests/consistency check 41 asks for a row_test per row.
+add_test(NAME pyazr_physics_table
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/physics_table_test.py)
+set_tests_properties(pyazr_physics_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The formal -> Brune iteration inside an evaluation (docs/upgrade/level_parameters.md section 9): chi2 of
 # beam_profile_kernel in the formal basis is smooth in width_9_2 (it jumped 40.44 -> 42.93 when a level missed a 1e-12
 # MeV tolerance by rounding and kept its formal values).  ~3 min.
@@ -932,6 +940,13 @@ set_tests_properties(pyazr_ui_smoke PROPERTIES LABELS browser
 add_test(NAME pyazr_continued_fit
          COMMAND bash ${CMAKE_SOURCE_DIR}/tests/nuisance_prior_centre/continued.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" PROCESSORS 2)
+
+# The web UI's physics routes (GET /api/physics, POST /api/physics/{fn}, POST /api/session/channel_functions): the
+# numbers of a direct pyazr call bit for bit, the refusals with their three parts, the bound per request.  Registered
+# here, above the block that must stay last, so that it gets PYAZR_ENGINE_DIR and the skip code.
+add_test(NAME pyazr_ui_physics_routes
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_routes_test.py)
+set_tests_properties(pyazr_ui_physics_routes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),

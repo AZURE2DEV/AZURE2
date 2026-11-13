@@ -8,7 +8,7 @@
    kinds are those of ``AZURE2 --schema``; the parameter kinds those of the engine's table and they cover every kind
    ``AZURE2 --describe --json`` names on tests/upgrade/T1, T2, T3; the options are every field of the binding's
    ``RuntimeOptions`` (a field without a row fails here), each a keyword of ``pyazr.azure2`` and each flag one of
-   ``AZURE2 --help``; the physics functions are the names the binding registers.  A kind added to the engine thus
+   ``AZURE2 --help``; the physics functions are the rows of the binding's table.  A kind added to the engine thus
    appears in ``kinds()`` with no edit of Python.
 3. ``azure2.describe()`` on tests/upgrade/T1: plain data, its parameters, pairs, levels and data sets those of the
    session and of ``AZURE2 --describe --json``.
@@ -94,7 +94,7 @@ check("describe(): the mass table", d["masses"]["version"].startswith("AME") and
 # -- 2. the kinds -----------------------------------------------------------------------------------------------------
 k = pyazr.kinds()
 json_clean("kinds()", k)
-for key in ("records", "data", "parameters", "options", "physics", "errors", "units", "dimensions"):
+for key in ("records", "data", "parameters", "options", "physics", "stopping", "errors", "units", "dimensions"):
     check(f"kinds()[{key!r}] is not empty", bool(k.get(key)), type(k.get(key)))
 check("kinds() returns a fresh copy", pyazr.kinds() is not k and pyazr.kinds() == k)
 
@@ -151,10 +151,15 @@ check("options: every flag is one of AZURE2 --help", flags and all(re.search(r"\
       [f for f in flags if not re.search(r"\t" + re.escape(f) + r"[\[:=]", helptext)])
 check("options: every one has a type and a doc", all(o["type"] and o["doc"] for o in k["options"].values()))
 
-check("physics: the names the binding registers, each bound",
-      all(hasattr(_azure2, n) for n in _azure2.physics_functions) and "whittaker" in k["physics"],
+check("physics: the rows of the binding's physics table, each a function of pyazr.physics",
+      list(k["physics"]) == [r["name"] for r in _azure2.physics_functions()]
+      and set(k["physics"]) == set(pyazr.physics.functions) and "penetrability" in k["physics"],
       list(k["physics"])[:10])
-check("physics: the stopping functions are listed", any(n.startswith("stopping.") for n in k["physics"]))
+check("physics: every row has units, a domain per argument and an axis among its arguments",
+      all(r["axis"] in [a["name"] for a in r["arguments"]] and all(a["domain"] for a in r["arguments"])
+          and r["returns"] for r in k["physics"].values()))
+check("stopping: the stopping functions are listed", "stopping_power" in k["stopping"] or len(k["stopping"]) > 5,
+      list(k["stopping"])[:10])
 check("errors: the classes of pyazr.errors", {"Error", "FormatError", "ParameterError", "AZURE2Error",
                                               "EngineError", "DomainError", "SessionClosed"} <= set(k["errors"]),
       list(k["errors"]))

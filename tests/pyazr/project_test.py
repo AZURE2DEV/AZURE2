@@ -283,7 +283,7 @@ def sections(tmp):
     os.makedirs(os.path.join(d, "data"))
     rows = [l.split() for l in open(os.path.join(os.path.dirname(capture), "data", "skowronski_luna_hpge.dat"))
             if l.strip() and not l.startswith("#")]
-    conv = pyazr._azure2.sfactor_conversion(1, 6, 1.00728, 12.0, [float(r[0]) * 12 / 13.00728 for r in rows])
+    conv = pyazr.physics.sfactor_conversion(1, 6, 1.00728, 12.0, [float(r[0]) * 12 / 13.00728 for r in rows])
     with open(os.path.join(d, "data", "s.dat"), "w") as f:
         for r, c in zip(rows, conv):
             f.write(f"{r[0]} 0 {float(r[2]) * float(c) * 1e3!r} {float(r[3]) * float(c) * 1e3!r}\n")

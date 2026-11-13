@@ -910,6 +910,15 @@ integrate.
    azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
                        # Coulomb-memo counters of earlier builds, now always 0)
 
+The engine's physics functions need no session: ``pyazr.physics`` has one function per row of the binding's physics
+table (kinematics, Coulomb functions and phase, penetrability, shift function and its energy derivative, hard-sphere
+phase, Wigner limit, single-particle width, photon penetrability, resonance quantities, Coulomb cross sections, S-factor
+conversions), each on broadcast numpy arrays with its arguments, units and domain in its ``help()``; an element outside
+the domain raises ``pyazr.DomainError``, or with ``errors="mask"`` gives NaN and a status per element.  The page
+:doc:`physics_functions` lists them; ``pyazr.kinds()["physics"]`` gives the same rows as data.  Where the session's
+own setting matters (its Coulomb table, GSL, a nuclear potential), ``azr.channel_functions(pair, e_cm, l)`` gives F,
+G, their derivatives, P, S and the hard-sphere phase shift of one of its pairs.
+
 The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
 :math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the
 dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math:`\rho = \kappa r`, as
