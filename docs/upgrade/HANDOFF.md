@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 11:40) — merged: the DW vertex on the transfer library; the `gamma_decay` record in the observed-parameter paths
+
+Two branches, rehearsed together (`rehearsal/trial45`), read by the director (no objection) and verified once on the
+rehearsal; the merged code is the rehearsal's (the difference is this file and one line of `web_ui.md`).
+
+**Verified by the director** (build `work/b-trial45`, 0 warnings): all projects in the three bases against the
+reference run `tab-gecm-1`: 887 / 851 / 887 files identical, none new; the eight fits identical to the base build
+(`work/b-gecm`); `tests/gamma_decay/check.sh` three times at 3 threads (63 ok lines, 0 failures each);
+`tests/pyazr/gamma_decay_test.py`; `ctest -LE slow` 224 of 224; the slow tests 11 of 11; `tests/run_tests.sh`
+165 passed, 0 failed; spec equivalence 181 of 181 converted equal; the converted-tree gate 679 / 643 / 679 identical;
+T1, T2, T3, 13N in the three bases at 1 against 3 threads identical. New reference run: `tab-t45-1`; base build
+`work/b-trial45`.
+
+**Accepted choices.** The THM check is 7.4 % slower (inside the 10 % the task allowed); the expansion phases live in
+the library; `CNuc::GammaDecayInputs` is a member filled where the level parameters are filled.
+
+**Open, from the two agents (not fixed here).** The engine's sampler has neither a record's priors and wall nor its
+limits, in both parameter bases, and keeps its run in process-wide variables (a task is written: the sampler samples
+the fit's objective and owns its state). `param.fit` is not reproducible run to run with the numerical gradient at
+3 threads. A record and its twin differ by about 1e-10 in a fit. The THM tests print 13 digits.
+
+**Next.** The pyazr errors and self-description branch (rehearsed on top, all projects identical, in verification);
+the web UI's server (adapted to that branch, its 33 tests pass on the rehearsal); the prior-centre fix and the
+diagnostics record (agents still at work); then pyazr's parameter records and the sampler.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-physical-paths`) — the `gamma_decay` record in the observed-parameter paths; E_f in the pull-back
 
 **Done.** Reproduced first (scratch `work/gammapp/`, build of the branch's start): every caller that hands
