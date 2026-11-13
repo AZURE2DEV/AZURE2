@@ -2,6 +2,75 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 11:40) — merged: the DW vertex on the transfer library; the `gamma_decay` record in the observed-parameter paths
+
+Two branches, rehearsed together (`rehearsal/trial45`), read by the director (no objection) and verified once on the
+rehearsal; the merged code is the rehearsal's (the difference is this file and one line of `web_ui.md`).
+
+**Verified by the director** (build `work/b-trial45`, 0 warnings): all projects in the three bases against the
+reference run `tab-gecm-1`: 887 / 851 / 887 files identical, none new; the eight fits identical to the base build
+(`work/b-gecm`); `tests/gamma_decay/check.sh` three times at 3 threads (63 ok lines, 0 failures each);
+`tests/pyazr/gamma_decay_test.py`; `ctest -LE slow` 224 of 224; the slow tests 11 of 11; `tests/run_tests.sh`
+165 passed, 0 failed; spec equivalence 181 of 181 converted equal; the converted-tree gate 679 / 643 / 679 identical;
+T1, T2, T3, 13N in the three bases at 1 against 3 threads identical. New reference run: `tab-t45-1`; base build
+`work/b-trial45`.
+
+**Accepted choices.** The THM check is 7.4 % slower (inside the 10 % the task allowed); the expansion phases live in
+the library; `CNuc::GammaDecayInputs` is a member filled where the level parameters are filled.
+
+**Open, from the two agents (not fixed here).** The engine's sampler has neither a record's priors and wall nor its
+limits, in both parameter bases, and keeps its run in process-wide variables (a task is written: the sampler samples
+the fit's objective and owns its state). `param.fit` is not reproducible run to run with the numerical gradient at
+3 threads. A record and its twin differ by about 1e-10 in a fit. The THM tests print 13 digits.
+
+**Next.** The pyazr errors and self-description branch (rehearsed on top, all projects identical, in verification);
+the web UI's server (adapted to that branch, its 33 tests pass on the rehearsal); the prior-centre fix and the
+diagnostics record (agents still at work); then pyazr's parameter records and the sampler.
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-physical-paths`) — the `gamma_decay` record in the observed-parameter paths; E_f in the pull-back
+
+**Done.** Reproduced first (scratch `work/gammapp/`, build of the branch's start): every caller that hands
+`GetTransformParams`' vector (the record's numbers at the record's slots) to `FillCompoundFromParamsPhysical`. Wrong:
+the paths that set a vector in observed form, pyazr's `calculate_chi2` / `update_segments` and the observed-parameter
+MCMC (`CalculateLogLikelihoodPhysical`, its snapshot, `ParkNonPositiveLevels`): `FillMnParams` took the file's
+numbers, so the vector's were ignored (χ² 44.79 instead of 3889.3 for Γ_γ × 1.2; the MCMC's likelihood constant).
+Read wrongly but in no output: the grid copies in `ReactionRate.cpp` and `TargetSetup.cpp` (0.870 eV of photon
+width for Γ_γ = 0.0385 eV; the anchors and the tabulated rate use the particle width; the sum is used only by RMC,
+refused for a record, and the rate's quadrature fallback). Harmless: `ConvertPhysicalLimitToReduced` (the converted
+prior was the twin's bit for bit), and everything that returns the vector. Rule (note section 2.8, committed
+first): the observed vector carries the record's numbers in both directions; `GammaDecaySet::WithPartialWidths` is
+the one place that turns them into the levels' widths; `FillCompoundFromParamsPhysical` keeps them as the
+compound's input numbers (`CNuc::GammaDecayInputs`), which `FillMnParams` reads. No call site changed. The pull-back
+has the term in a free final-state energy E_f (central difference, step of E_λ), `InputIndices` names it; note 2.5's
+step corrected to 10⁻⁴ MeV (gradient check at 10⁻⁴ and 10⁻⁶ MeV: both meet the claim), 2.7's sentence on E_f.
+
+**Verified how** (build `work/b-gammapp`, 0 warnings, on c9ee6dd5): the whole tree × 3 bases against `tab-gecm-1`
+(tag `tab-gpp-final1`): 887 / 851 / 887 identical, none added; `ctest -LE slow` 223/223; the slow tests 11/11;
+`tests/run_tests.sh` 165 passed, 0 failed; the eight fits of `fits_vs_base2.sh` identical to `b-gecm`; T1-T3 and
+13N calculations at 1 against 3 threads identical (12 of 12); the converted-tree gate 679 / 643 / 679 identical;
+`tests/gamma_decay/check.sh` three times at 3 threads (63 checks, all passed each time, the new (i) and (j)
+included); `tests/pyazr/gamma_decay_test.py` all passed (part 5 new). Five injected errors fail the new checks
+(README). Not run: Sphinx, TSan/ASan.
+
+**Open**: the MCMC (both bases) has neither the record's priors and wall (term T11 is not in its likelihood) nor its
+limits b ∈ [0, 1], Γ_γ ≥ 0 (by reading; samples of the start build reached Γ_γ = −6.6×10¹³); `param.fit`'s
+snapshot depends on thread scheduling in a fit with the numerical gradient (two runs at 3 threads differed); the
+check (i) reads the grid's line of `AZR_DEBUG_GRID`.
+
+## 2026-11-13 (director, 11:10) — the PI's decision on plots: plotly.js; the bundle fetched (outside the repository)
+
+The PI ("use plotly", after asking whether something else would be better; the alternatives uPlot, Chart.js, ECharts
+and D3 were laid out with what each would leave us to write) took decision 11 of `web_ui.md` section 13 as
+recommended: the cartesian partial bundle of plotly.js (MIT). Fetched from the npm registry and checked against the
+registry's sha512: `plotly.js-cartesian-dist-min` 4.1.2 (published 2026-10-05; 4.3.0 of 2026-11-10 was the newest and
+is deliberately not taken), `plotly-cartesian.min.js` 1 507 990 bytes, sha256
+`aaf12ff1d4671f7e93f6df4291651ab4ca6b76c0ea5f1576ec1030e3c2819a20`, with its `LICENSE`, under
+`work/vendor/plotly/unpacked-4.1.2/package/` (outside the repository). The page step that draws the first plot
+copies the file and the licence into `pyazr/ui/static/vendor/` and records version and hash beside them; every plot
+goes through one module of the page, so that the library is named in one place. Decisions 5 (drop 20 parity items)
+and 7 (session options as `<config>` keys) of that section are still open; the others are built on the note's
+recommendations, each in one named place.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-4-prior-centre`) — the centre of every nuisance prior is the number written
 
 **Done.** One rule for every nuisance kind with a prior (`parameter_kinds.md` section 4): the penalty is
@@ -190,6 +259,39 @@ outside the scope (not fixed): `CNuc::GetTransformParams` returns the record's n
 `ReactionRate.cpp` (rate grid) and `TargetSetup.cpp` (grid copy) feed it to `FillCompoundFromParamsPhysical` as
 observed widths, so a record level's photon "widths" there are Γ_γ, b_f, δ_f (read for grid placement; not checked
 by a run); note section 2.5 says the energy step is 10⁻⁶ MeV, the code uses 10⁻⁴.
+
+## 2026-11-13 (agent, branch `feature/upgrade-7-thm-dw-vertex`) — the DW vertex's source projection is the library's
+
+**Done.** (1) Design in `transfer.md` §25 (what the projection returns, how `EntranceVertex`'s surface term is built
+from it, what moves and what stays, the named settings, tests, extension points), committed before code.
+(2) `physics/transfer/SourceProjection.h/.cpp`: `PrepareSourceProjection` (the plan: u and cos θ_u quadratures, φ at
+the nodes, the triples (l; L_s, L_a) with their coefficients, the entrance waves), `SolveSourceExit`, the sum over
+the points in blocks whose order the plan fixes (`SourceSumBlocks`, `SourceBlockSize`, `SumSourceBlock`,
+`CombineSourceBlocks`; `ProjectSource` does it on one thread), `SourceMultipolesAt` (S_lm(a), S′_lm(a) at a
+direction), `SourceMomentumAmplitude` (φ̃(q) on the same nodes). Pieces added to the library and used by it:
+`SixPointLagrange` (value and derivative; `InterpolateOnGrid` now uses it), `SphericalHarmonicsWithDerivative`
+(any sign of θ; the recurrence shared with `SphericalHarmonicsAtPhiZero`), `clebsch_gordan_integer`
+(`AngularCoupling.h`, integer j without the j ≤ 40 table). (3) `src/ThmDwVertex.cpp` calls it: the engine keeps the
+energy grid and its passes (OpenMP over the exit waves and over the blocks), the directions, the normalisation by
+4πφ̃(q), the Gram matrix, its factorisation and interpolation; its quadrature, `Lagrange6`, `YTable`, `WaveTable` and
+`ThmCG` are gone (src/ and include/: −355, +68 lines). `EntranceVertex` is unchanged (§25.2: it takes any wave; making
+it call the projection would replace the exact plane wave of `PlaneWaveEntranceVertex` by a quadrature); a test builds
+it from the projection instead. (4) The two zero-range implementations are tied by a direct test (3e-15).
+(5) `CoulombSphere` is finite at r = 0 (one function `CoulombSphereTerm` in `HybridPotential.h` for the sphere,
+`RadialPotential` unchanged bit for bit; `TabulateChannel`'s value at the origin from `TermsAt` at r = 0 instead of its
+own formula beside a call at 1e-300). Not done: the optional spin-orbit terms of `kd03`.
+
+**Verified** on the last code commit (build `work/b-dwvertex`, 0 warnings), against `tab-gecm-1` and `work/b-gecm`:
+the whole tree in three bases 887 / 851 / 887 files identical (tag `tab-dwv1`); the converted-tree gate 679 / 643 /
+679 identical; `ctest -LE slow` 224 of 224; the slow tests 11 of 11; `tests/run_tests.sh` 165 passed, 0 failed; the
+eight fits identical to the base build file by file; T1, T2, 13N, 18O_p_a_thm at 3 threads identical to the tree run at
+1; the checks thm_dw_vertex and thm_fit pass and their outputs differ from the base build's by at most 2.0e-10 relative
+(the fit's EDM, a diagnostic of size 1e-8, by 8e-4); `thm_dw_vertex_test -v` 644 quantities, largest change 2.7e-11;
+`thm_distortion_test`, `thm_optical_test` unchanged at their printed digits. Each new test failed once with an
+injected error (named in the report). Speed: `transfer.md` §25.6.
+
+**Open.** The +7 % instructions of the vertex check (per-point overhead of the library's pieces, largest for l = 0);
+`kd03` spin-orbit; a spin-orbit distortion in the vertex (waves per j, spins in the triples, §25.5).
 
 ## 2026-11-13 (director, 07:10) — merged: Phase 6, third branch (a fit's copies made when needed; the Coulomb table named by content; relative paths are the project's)
 

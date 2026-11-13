@@ -39,12 +39,11 @@ struct ThmExperiment;
  * outside a, whose plane-wave limit is C_l of coulombIntegral=1) is not
  * computed, so vertexModel=dw is the counterpart of coulombIntegral=0.
  *
- * Numerics: reduced amplitudes h^l_{Ls La}(a) (independent of the directions
- * of k_aA and k_sF) by a 2D quadrature in (u, cos theta_u), the waves of the
- * library (physics/transfer SolveStoredWaves: Numerov matched beyond the
- * turning point; plane waves as Riccati-Bessel functions) read by six-point
- * Lagrange interpolation; G at every node on a 20 keV grid, interpolated by
- * cubic Lagrange.
+ * Numerics: the projection S_lm(a), S_lm'(a) of the source is the library's
+ * (physics/transfer SourceProjection.h: reduced amplitudes h^l_{Ls La}(a),
+ * independent of the directions of k_aA and k_sF, by a 2D quadrature in
+ * (u, cos theta_u) over the library's waves); G at every node on a 20 keV
+ * grid, interpolated by cubic Lagrange.
  */
 class ThmDwVertex {
  public:
@@ -125,8 +124,5 @@ class ThmDwVertex {
   /// interpolation of a rank-one G can produce at the 1e-9 level).
   static double Vertex2Factored(const double g[4], complex B);
 };
-
-/// Clebsch-Gordan <j1 m1 j2 m2|J M> for integer arguments (long double Racah sum).
-double ThmCG(int j1, int m1, int j2, int m2, int J, int M);
 
 #endif

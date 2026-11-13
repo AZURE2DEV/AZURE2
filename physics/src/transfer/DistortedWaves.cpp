@@ -195,10 +195,9 @@ RadialChannel TabulateChannel(const OpticalPotential &potential, const Scatterin
         return t.coulomb_MeV + t.volume_MeV + t.surface_MeV;
       },
       [&](double r) { return TermsAt(potential, z1z2, r).spin_orbit_form_MeV; });
-  // At the origin: the nuclear terms at r -> 0 and the sphere's 3/2 Z1 Z2 e^2/R_C (a point charge is C/r).
-  const PotentialTerms t0 = TermsAt(potential, 0, 1e-300);
-  const double sphere = rc > 0.0 ? 1.5 * z1z2 * kFineStructure * kHbarC_MeV_fm / rc : 0.0;
-  c.central_at_origin_MeV = sphere + t0.volume_MeV + t0.surface_MeV;
+  // At the origin: the terms at r = 0, with the sphere's 3/2 Z1 Z2 e^2/R_C (a point charge is C/r, not in it).
+  const PotentialTerms t0 = TermsAt(potential, rc > 0.0 ? z1z2 : 0, 0.0);
+  c.central_at_origin_MeV = t0.coulomb_MeV + t0.volume_MeV + t0.surface_MeV;
   return c;
 }
 

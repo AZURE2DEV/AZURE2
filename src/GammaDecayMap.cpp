@@ -62,6 +62,19 @@ int LevelEnergyIndex(CNuc &compound, int j, int la) {
   return index + (la - 1) * (1 + compound.GetJGroup(j)->NumChannels());
 }
 
+/// The numbers of record level L as the file gives them, slot order (Gamma_gamma in eV).
+std::vector<double> SpecNumbers(const GammaDecayLevel &L) {
+  std::vector<double> q;
+  for (const GammaDecayLevel::Slot &slot : L.slots) {
+    switch (slot.part) {
+      case GammaDecayLevel::Part::TotalWidth: q.push_back(L.spec.totalWidth.value * kEVPerMeV); break;
+      case GammaDecayLevel::Part::Branching: q.push_back(L.spec.finals[slot.final].branching.value); break;
+      case GammaDecayLevel::Part::Mixing: q.push_back(L.spec.finals[slot.final].mixing.value); break;
+    }
+  }
+  return q;
+}
+
 std::string Fmt(double x) {
   char buf[32];
   std::snprintf(buf, sizeof buf, "%.6g", x);
@@ -153,15 +166,7 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
       return refuse(s, "internal error: " + std::to_string(L.slots.size()) + " numbers for " +
                            std::to_string(L.photonChannels.size()) + " photon channels (report it)");
     // The partial widths of the record as the level's input widths (eV): TransformIn converts them.
-    std::vector<double> q;
-    for (const GammaDecayLevel::Slot &slot : L.slots) {
-      switch (slot.part) {
-        case GammaDecayLevel::Part::TotalWidth: q.push_back(s.totalWidth.value * kEVPerMeV); break;
-        case GammaDecayLevel::Part::Branching: q.push_back(s.finals[slot.final].branching.value); break;
-        case GammaDecayLevel::Part::Mixing: q.push_back(s.finals[slot.final].mixing.value); break;
-      }
-    }
-    const std::vector<double> widths = PartialWidths(L, q);
+    const std::vector<double> widths = PartialWidths(L, SpecNumbers(L));
     for (std::size_t k = 0; k < L.photonChannels.size(); k++) level->SetGamma(L.photonChannels[k], widths[k]);
     // The external part of each slot (section 2.7): the final state whose capture covers the channel's multipolarity,
     // none under --ignore-externals for a width given as 0 (TransformIn's rule on the input).
@@ -194,7 +199,8 @@ int GammaDecaySet::SlotOf(int record, int ch) const {
 
 bool GammaDecaySet::OwnsSlot(int j, int la, int ch) const { return SlotOf(RecordOf(j, la), ch) >= 0; }
 
-bool GammaDecaySet::AddParameter(AZUREParams &params, int j, int la, int ch, int levelNumber) const {
+bool GammaDecaySet::AddParameter(AZUREParams &params, const std::vector<std::vector<double>> &inputs, int j, int la,
+                                 int ch, int levelNumber) const {
   const int r = RecordOf(j, la);
   if (SlotOf(r, ch) < 0) return false;
   const GammaDecayLevel &L = levels_[r];
@@ -203,12 +209,10 @@ bool GammaDecaySet::AddParameter(AZUREParams &params, int j, int la, int ch, int
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   std::string name = s.name, part, final;
   ex::GammaNumber number;
-  double scale = 1.0;
   switch (slot.part) {
     case GammaDecayLevel::Part::TotalWidth:
       part = "total_width";
       number = s.totalWidth;
-      scale = kEVPerMeV;
       break;
     case GammaDecayLevel::Part::Branching:
       part = "branching";
@@ -222,7 +226,7 @@ bool GammaDecaySet::AddParameter(AZUREParams &params, int j, int la, int ch, int
       break;
   }
   name += "." + part + (final.empty() ? "" : "." + final);
-  const double value = number.value * scale;
+  const double value = inputs.at(r).at(SlotOf(r, ch));
   const double step = slot.part == GammaDecayLevel::Part::TotalWidth ? (value != 0.0 ? 0.1 * value : 1e-3)
                       : slot.part == GammaDecayLevel::Part::Branching ? 0.05
                                                                       : 0.05 * std::fabs(value) + 0.01;
@@ -234,6 +238,32 @@ bool GammaDecaySet::AddParameter(AZUREParams &params, int j, int la, int ch, int
                       s.finals[slot.final].role == ex::GammaFinalState::Role::Listed;
   if (!(number.fit && mixingLine && listed)) p.Fix(name);
   return true;
+}
+
+std::vector<std::vector<double>> GammaDecaySet::FileNumbers() const {
+  std::vector<std::vector<double>> numbers;
+  for (const GammaDecayLevel &L : levels_) numbers.push_back(SpecNumbers(L));
+  return numbers;
+}
+
+std::vector<std::vector<double>> GammaDecaySet::NumbersAt(const vector_r &p) const {
+  std::vector<std::vector<double>> numbers;
+  for (const GammaDecayLevel &L : levels_) {
+    numbers.emplace_back();
+    for (const int ch : L.photonChannels) numbers.back().push_back(p[L.energyIndex + ch]);
+  }
+  return numbers;
+}
+
+vector_r GammaDecaySet::WithPartialWidths(const vector_r &observed) const {
+  vector_r p = observed;
+  const std::vector<std::vector<double>> numbers = NumbersAt(observed);
+  for (std::size_t r = 0; r < levels_.size(); r++) {
+    const GammaDecayLevel &L = levels_[r];
+    const std::vector<double> widths = PartialWidths(L, numbers[r]);
+    for (std::size_t k = 0; k < L.photonChannels.size(); k++) p[L.energyIndex + L.photonChannels[k]] = widths[k];
+  }
+  return p;
 }
 
 double GammaDecaySet::ValueOr(const CNuc &compound, int j, int la, int ch, double otherwise) const {
@@ -455,11 +485,12 @@ GammaDecaySet::Point GammaDecaySet::Map(CNuc &compound, const GammaDecayLevel &L
 
 vector_r GammaDecaySet::ToEngine(CNuc &compound, const vector_r &values) const {
   vector_r p = values;
+  const std::vector<std::vector<double>> numbers = NumbersAt(values);
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const int nc = compound.GetJGroup(L.spec.group)->NumChannels();
-    std::vector<double> q, particle(nc);
-    for (const int ch : L.photonChannels) q.push_back(p[L.energyIndex + ch]);
+    std::vector<double> particle(nc);
+    const std::vector<double> &q = numbers[r];
     for (int ch = 1; ch <= nc; ch++) particle[ch - 1] = p[L.energyIndex + ch];
     // The final states of the external parts, as the vector has them (their particle amplitudes are no record slot).
     std::vector<std::pair<double, std::vector<double>>> finals(L.photonChannels.size());
@@ -575,9 +606,10 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
           add(map.GammaIndexFlat(e.group, e.level, (int)c + 1), gbar[k] * (-d.real() + B[k] * d.imag()));
       }
     }
-    // The level energy, by a central difference of the whole map (Eq. 2.5, gamma^ext included), when it is free.
-    const int ei = map.EIndexFlat(j, la);
-    if (ei < 0 || ei >= map.NumFull() || map.FullToPacked(ei) < 0) continue;
+    // The energies, by central differences of the whole map (Eq. 2.5, gamma^ext included), each when it is free: the
+    // level's, and that of each final state of an external part (it is free when the state lies above a particle
+    // threshold of its nucleus, CNuc::FillMnParams; section 2.7).
+    auto isFree = [&](int index) { return index >= 0 && index < map.NumFull() && map.FullToPacked(index) >= 0; };
     std::vector<std::pair<double, std::vector<double>>> finals(m);
     for (std::size_t s = 0; s < m; s++) {
       const GammaDecayLevel::External &e = L.external[s];
@@ -586,11 +618,31 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
       finals[s].first = f->GetFitE();
       for (int ch = 1; ch <= compound.GetJGroup(e.group)->NumChannels(); ch++) finals[s].second.push_back(f->GetFitGamma(ch));
     }
-    const std::vector<double> up = Map(compound, L, E + kEnergyStep, q, particle, finals, false).internal;
-    const std::vector<double> down = Map(compound, L, E - kEnergyStep, q, particle, finals, false).internal;
-    double dE = 0.0;
-    for (std::size_t k = 0; k < m; k++) dE += gbar[k] * (up[k] - down[k]) / (2.0 * kEnergyStep);
-    add(ei, dE);
+    auto difference = [&](double upE, double downE, const std::vector<std::pair<double, std::vector<double>>> &upF,
+                          const std::vector<std::pair<double, std::vector<double>>> &downF) {
+      const std::vector<double> up = Map(compound, L, upE, q, particle, upF, false).internal;
+      const std::vector<double> down = Map(compound, L, downE, q, particle, downF, false).internal;
+      double d = 0.0;
+      for (std::size_t k = 0; k < m; k++) d += gbar[k] * (up[k] - down[k]) / (2.0 * kEnergyStep);
+      return d;
+    };
+    const int ei = map.EIndexFlat(j, la);
+    if (isFree(ei)) add(ei, difference(E + kEnergyStep, E - kEnergyStep, finals, finals));
+    std::vector<int> done;
+    for (std::size_t s = 0; s < m; s++) {
+      const GammaDecayLevel::External &e = L.external[s];
+      if (!e.group) continue;
+      const int fi = map.EIndexFlat(e.group, e.level);
+      if (!isFree(fi) || std::find(done.begin(), done.end(), fi) != done.end()) continue;
+      done.push_back(fi);
+      std::vector<std::pair<double, std::vector<double>>> upF = finals, downF = finals;
+      for (std::size_t t = 0; t < m; t++)
+        if (L.external[t].group == e.group && L.external[t].level == e.level) {
+          upF[t].first += kEnergyStep;
+          downF[t].first -= kEnergyStep;
+        }
+      add(fi, difference(E, E, upF, downF));
+    }
   }
 }
 
@@ -601,7 +653,9 @@ std::vector<int> GammaDecaySet::InputIndices(const ParamIndexMap &map, int r) co
   for (int ch = 1; ch <= nc; ch++) indices.push_back(map.GammaIndexFlat(L.spec.group, L.spec.level, ch));
   for (const GammaDecayLevel::External &e : L.external) {
     if (!e.group) continue;
-    // its particle channels: the amplitudes N_f and s_fc read (the energy of a bound state is never free)
+    // its energy (free when the state lies above a particle threshold of its nucleus) and its channels: the
+    // amplitudes N_f and s_fc read
+    indices.push_back(map.EIndexFlat(e.group, e.level));
     for (int ch = 1; ch <= e.channels; ch++) indices.push_back(map.GammaIndexFlat(e.group, e.level, ch));
   }
   return indices;

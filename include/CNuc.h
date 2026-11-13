@@ -93,6 +93,9 @@ class CNuc {
     if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
     gammaDecayFills_[r] = std::move(fill);
   }
+  /// The input numbers of the records (per record, slot order; Gamma_gamma in eV), which FillMnParams puts into the
+  /// parameter vector as it puts a level's input widths: the file's, or the last FillCompoundFromParamsPhysical's.
+  const std::vector<std::vector<double>> &GammaDecayInputs() const { return gammaDecayInputs_; }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -249,7 +252,9 @@ class CNuc {
   void FillMnParams(AZUREParams &, const Config *config = nullptr);
   /// Write a Minuit parameter vector back into the levels.
   void FillCompoundFromParams(const vector_r &);
-  /// As above, for a vector already in physical rather than formal parameters.
+  /// The vector of observed parameters (GetTransformParams' form: a gamma_decay record's numbers at its slots) as the
+  /// levels' input values; a record's numbers become its input numbers and its partial widths the level's input
+  /// widths (GammaDecaySet::WithPartialWidths; gamma_parametrisation.md section 2.8).
   void FillCompoundFromParamsPhysical(const vector_r &);
 
   /// The reaction pathways of the run (PathwayTable.h), built by Initialize and shared by every copy (Clone).
@@ -312,6 +317,7 @@ class CNuc {
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
   std::vector<GammaDecayFill> gammaDecayFills_;
+  std::vector<std::vector<double>> gammaDecayInputs_;  ///< GammaDecayInputs
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

@@ -405,6 +405,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   if (this->ReadAbundances(configure) == -1) return -1;
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
+  gammaDecayInputs_ = gammaDecays_->FileNumbers();
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 
@@ -738,7 +739,9 @@ void CNuc::AddJGroup(JGroup jGroup) {
  * Fills the CNuc object from the parameter array.
  */
 
-void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
+void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
+  const vector_r &p = gammaDecays_->Empty() ? observed : gammaDecays_->WithPartialWidths(observed);
+  if (!gammaDecays_->Empty()) gammaDecayInputs_ = gammaDecays_->NumbersAt(observed);
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
@@ -958,7 +961,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         varname = "width_" + std::to_string(energyIndex) + "_" + std::to_string(widthIndex);
         widthIndex++;
-        if (gammaDecays_->AddParameter(params, j, la, ch, energyIndex)) continue;  // a gamma_decay record's number
+        if (gammaDecays_->AddParameter(params, gammaDecayInputs_, j, la, ch, energyIndex)) continue;  // a gamma_decay record's number
         params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, energyIndex));
         // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
         // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a

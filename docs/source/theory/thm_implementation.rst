@@ -1838,7 +1838,12 @@ angle :math:`\theta_{sa}` between :math:`\mathbf k_{sF}` and
 :math:`\mathbf k_{aA}`) costs only this sum. The geometry and
 :math:`f_{L_a}` do not depend on :math:`E`; per energy only
 :math:`f_{L_s}` changes, and batches of energies share one pass over the
-quadrature points. The waves are the radial waves of the distortion factor
+quadrature points. The projection -- the quadrature, the waves' interpolation,
+the geometry, the kernel and :math:`\tilde\phi(q)` on the same nodes -- is
+the library's (``physics/transfer`` ``SourceProjection.h``,
+``docs/upgrade/transfer.md`` section 25); the engine keeps the energy grid,
+the directions, the normalization by :math:`4\pi\tilde\phi(q)` and the Gram
+matrix. The waves are the radial waves of the distortion factor
 (the library's ``SolveStoredWaves``: Numerov from the origin, matched beyond
 the turning point; a plane wave is the Riccati-Bessel function), tabulated at 0.02 fm (less where a local wave
 number exceeds 5 fm\ :sup:`-1`) and read by six-point Lagrange
@@ -1850,8 +1855,9 @@ most 4 radians of :math:`(k_{sF} + \beta k_{aA})u` and 5 fm;
 :math:`L \le kR_\mathrm{max} + 14` in each channel, :math:`R_\mathrm{max} =
 a + \beta u_\mathrm{max}` and :math:`\alpha a + u_\mathrm{max}`. The
 Clebsch-Gordan coefficients come from the Racah sum in long double
-(checked against GSL, and to :math:`10^{-12}` in orthonormality at
-:math:`L = 60`). :math:`G` is tabulated per :math:`l` and node at 20 keV
+(``clebsch_gordan_integer`` of ``physics/AngularCoupling.h``, checked against
+GSL and the table-based coefficients, and to :math:`10^{-12}` in orthonormality
+at :math:`L = 60`). :math:`G` is tabulated per :math:`l` and node at 20 keV
 steps from 0.3 MeV below the lowest point to 0.3 MeV above the highest (short
 of the spectator threshold) and interpolated by cubic Lagrange (the node
 weights of a window likewise, renormalized); points beyond take the end value
@@ -1861,8 +1867,8 @@ with one ``WARNING``. Cost at startup, two threads: 6 s for 19F + d
 evaluation the tables cost nothing measurable (a window averages the Gram
 matrix of the directions, one node: the same time per evaluation as without
 it). The quadrature is summed in a fixed order (up to 64 blocks of
-consecutive points, added in block order), so :math:`G` is the same to the
-last bit whatever the number of threads. Memory: the 19F session peaks at about 400 MB with or without the
+consecutive points, fixed by the library's plan, added in block order), so
+:math:`G` is the same to the last bit whatever the number of threads. Memory: the 19F session peaks at about 400 MB with or without the
 window.
 
 *Syntax, output, pyazr.* ``vertexModel=pw|dw`` on the experiment line.
