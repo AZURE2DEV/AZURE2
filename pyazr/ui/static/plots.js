@@ -283,7 +283,8 @@ export function plotlyFigure(plot, theme = {}) {
     }
     return { ...common, mode: "lines", line: { color: t.color || fg, width: 2, dash: t.dash || "solid" } };
   };
-  const axis = (a) => ({ title: { text: head(a.title, a.unit), font: { size: 11 } }, color: fg, gridcolor: grid, zeroline: false,
+  const axis = (a) => ({ title: { text: head(a.title, a.unit), font: { size: 11 } },
+    color: fg, gridcolor: grid, zeroline: false,
     ticks: "outside", mirror: true, showline: true, linecolor: fg, exponentformat: "power",
     type: a.log ? "log" : "linear", automargin: true });
   const many = plot.traces.length > 4;
