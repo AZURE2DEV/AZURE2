@@ -423,6 +423,47 @@ MIGRAD minimum (iminuit to 1e-6; the scipy recipes go 3e-6 below it, where the p
 MIGRAD stops early).  For walls at every bound in a sampler, wrap ``log_prob`` in one line:
 ``lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -np.inf``.
 
+The engine's own fitters
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``s.fit_with_engine(method="migrad", minos=False, x0=None, max_calls=None, progress=None, stop=None)`` runs the
+program's fit on the session: the same table of fitters and the same functions as ``AZURE2`` (``migrad``,
+``migrad-gradient``, ``lm``, ``gsl-lm``, ``nlopt`` where built; ``pyazr.kinds()["fitters"]``, :doc:`fitting`, "The
+Engine's Fitters"), from the session's values or ``x0``, with ``<parameterSettings>`` applied as the program applies
+it, and HESSE after a MIGRAD row.  The method is the one named: the program's plain run of a project with THM data is
+``migrad-gradient``.  It returns an ``EngineFitResult``: ``x`` (the free vector at the end), ``objective``
+(the number the program prints as ``Total Chi-Squared``), ``status``, ``converged``, ``edm``, ``calls``,
+``covariance`` (or None), ``errors``, ``minos`` (name to ``(lower, upper)`` with ``minos=True``), ``names``, ``log``
+(the fitter's lines).  It writes no file and leaves the session's parameter values as they were; ``save_fit(path,
+x=r.x)`` and ``write_output_files`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
+called with a record per evaluation (MIGRAD, NLopt) or iteration (LM, GSL-LM): ``calls``, ``objective``, ``best``,
+``x`` and the rest (the docstring lists them); ``stop`` is a ``pyazr.session_fit.StopRequest`` or a
+``threading.Event``: set from another thread, the fit ends at the best point it has seen, status ``"stopped"``.
+
+.. code-block:: python
+
+   import threading
+   from pyazr.session_fit import StopRequest
+
+   s = pyazr.Session("T2.azr")
+   r = s.fit_with_engine("lm")                           # the program's --use-lm
+   print(r.status, r.objective, dict(zip(r.names, r.errors)))
+
+   stop = StopRequest()                                  # MIGRAD for a minute at most, reporting every 100 calls
+   timer = threading.Timer(60.0, stop.set)
+   timer.start()
+   r = s.fit_with_engine("migrad", progress=lambda p: p["calls"] % 100 or print(p["calls"], p["best"]), stop=stop)
+   timer.cancel()
+   s.save_fit("T2_fitted.azr", x=r.x)
+
+On T2 every fitter ends where the program ends, to the digits of ``param.sav`` and of the printed total, with the
+program's covariance and MINOS intervals (``minos=True``; ``tests/pyazr/fit_with_engine_test.py``, which also runs
+this example).  Which to use: ``fit_with_engine``
+for the program's result and its MINOS intervals without a subprocess, and to compare with a published AZURE2 fit;
+the recipes above for a minimiser of your choice, for bounds as walls, for the sampler, or for a fit that is part of a
+larger Python computation.  The program's MIGRAD stops at its EDM goal (on T2 9e-4 above the minimum that scipy's
+least squares finds); ``lm`` or the scipy recipes go further.
+
 Editing the model
 -----------------
 
