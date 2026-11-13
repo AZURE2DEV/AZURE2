@@ -48,7 +48,8 @@ total() { awk '/Total-Chi-Squared:/ { print $2 }' "$1" | tail -1; }
 
 # ---- 1. the worked example: --describe and --print-predictions
 setup story "$HERE/models/yield_story.azr"
-(cd "$WORK/story" && "$AZURE2_BIN" --describe m.azr 2> describe.err | sed "s|$WORK/story|<project>|g" > describe.txt)
+(cd "$WORK/story" && "$AZURE2_BIN" --describe m.azr 2> describe.err | sed "s|$WORK/story|<project>|g" |
+  sed '/^Environment switches set:$/,$d' > describe.txt)  # the description; the switches set are this shell's
 if diff -u "$HERE/expected/story_describe.txt" "$WORK/story/describe.txt" > "$WORK/describe.diff"; then
   ok "story: --describe as committed"
 else
@@ -128,8 +129,8 @@ fi
 
 # ---- 5. refusals
 sed -e 's|    kind           infinite|    kind           layer\n    areal_density  1e18 atoms/cm2 fixed|' \
-  "$HERE/models/yield_story.azr" > "$WORK/layer.azr"
-msg="$(cd "$WORK/story" && "$AZURE2_BIN" --describe "$WORK/layer.azr" 2>&1)"
+  "$HERE/models/yield_story.azr" > "$WORK/story/layer.azr"  # beside its data: --describe reads them from there
+msg="$("$AZURE2_BIN" --describe "$WORK/story/layer.azr" 2>&1)"
 if echo "$msg" | grep -q "yield per incident particle on the layer"; then
   ok "a yield on a target layer is built (the layer kernel; its limits: tests/layer_yield)"
 else

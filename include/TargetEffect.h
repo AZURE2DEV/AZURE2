@@ -68,7 +68,7 @@ class TargetEffect {
   bool HasScreeningError() const { return screeningError_; }
   /// U_e in eV as the line gives it, the start of a fit (the present value is a working copy's, TargetEffectValues).
   double GetScreeningUe() const { return screeningUe_; }
-  /// U_e as read from the line, the centre of the prior, eV.
+  /// The centre of the U_e prior, eV: as written, else the value read (docs/upgrade/parameter_kinds.md section 4).
   double GetScreeningNominal() const { return screeningNominal_; }
   bool IsScreeningVaried() const { return screeningVary_; }
   /// The prior covariance replaces the screening, density or Doppler prior (docs/upgrade/objective.md D3).
@@ -105,8 +105,10 @@ class TargetEffect {
   bool HasDensityFitError() const { return densityFitError_; }
   const std::string &GetDensityFitErrorText() const { return densityFitErrorText_; }
   bool IsDensityVaried() const { return densityVary_; }
-  /// The line's density, the centre of the prior (atoms/cm^2).
+  /// The line's density, the start of a fit and the base of its lower limit (atoms/cm^2).
   double GetDensityNominal() const { return densityNominal_; }
+  /// The centre of the density prior (atoms/cm^2): as written, else the line's density (parameter_kinds.md section 4).
+  double GetDensityCentre() const { return densityCentre_; }
   /// The name of the target record, which names the effect's parameters ("" for an effect without a target).
   const std::string &GetTargetName() const { return targetName_; }
   /// Prior width in atoms/cm^2 (a percentage already converted), 0 = no prior.
@@ -116,7 +118,7 @@ class TargetEffect {
   /// ((N - N0)/sigma)^2 at the present density N (atoms/cm^2), or 0 without a prior or when N is fixed (objective.md D5).
   double DensityPenalty(double density) const {
     if (!hasDensityFit_ || !densityVary_ || densityPriorReplaced_ || densitySigma_ <= 0.0) return 0.0;
-    const double r = (density - densityNominal_) / densitySigma_;
+    const double r = (density - densityCentre_) / densitySigma_;
     return r * r;
   }
   /// The density the sub-point grids span (the line's density when it is not fitted).
@@ -212,6 +214,8 @@ class TargetEffect {
   bool IsStoppingScaleVaried() const { return stoppingScaleVary_; }
   /// Prior width (absolute; s is dimensionless), 0 = none.
   double GetStoppingScaleSigma() const { return stoppingScaleSigma_; }
+  /// The centre of the stopping scale's prior: as written, else the start scale (parameter_kinds.md section 4).
+  double GetStoppingScaleCentre() const { return stoppingScaleCentre_; }
   /// True when the width is the library's default, not written (it is printed at set-up).
   bool IsStoppingScaleSigmaDefault() const { return stoppingScaleSigmaDefault_; }
   const std::string &GetStoppingScaleKey() const { return stoppingScaleKey_; }
@@ -293,12 +297,14 @@ class TargetEffect {
    */
   bool HasDopplerFit() const { return dopplerFit_; }
   bool IsDopplerVaried() const { return dopplerVary_; }
-  /// The line's temperature, the centre of the prior and the temperature the pieces are laid out for (K).
+  /// The line's temperature, the temperature the pieces are laid out for (K).
   double GetDopplerNominal() const { return dopplerFit_ ? dopplerNominal_ : dopplerTemperature_; }
   /// Prior width in K, 0 = no prior.
   /// The Tmax field of "doppler T vary sigma Tmax" as written (K), 0 without one.
   double GetDopplerTmax() const { return dopplerTmax_; }
   double GetDopplerSigma() const { return dopplerSigma_; }
+  /// The centre of the temperature prior (K): as written, else the line's temperature (parameter_kinds.md section 4).
+  double GetDopplerCentre() const { return dopplerCentre_; }
   /// The temperature the sub-point grids and the integration windows span (the line's T when not fitted).
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
   /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
@@ -306,7 +312,7 @@ class TargetEffect {
   /// ((T - T0)/sigma)^2 at the present temperature T (K), or 0 without a prior or when T is fixed (objective.md D5).
   double DopplerPenalty(double temperature) const {
     if (!dopplerFit_ || !dopplerVary_ || dopplerPriorReplaced_ || dopplerSigma_ <= 0.0) return 0.0;
-    const double r = (temperature - dopplerNominal_) / dopplerSigma_;
+    const double r = (temperature - dopplerCentre_) / dopplerSigma_;
     return r * r;
   }
   /// Does the line also carry a kernel applied after the Doppler step (Gaussian, UDR, target integration,
@@ -371,6 +377,7 @@ class TargetEffect {
   bool dopplerFit_ = false;          ///< `doppler T vary sigma [Tmax]`
   bool dopplerVary_ = false;
   double dopplerNominal_ = 0.0;      ///< K, as read
+  double dopplerCentre_ = 0.0;       ///< K, the prior's centre: as written, else the value read
   double dopplerSigma_ = 0.0;        ///< K, prior width (0 = none)
   double dopplerTmax_ = 0.0;         ///< K, the Tmax field of the fit form as written; 0 = none
   double dopplerLayout_ = 0.0;       ///< K, the temperature the grids span; 0 = the current temperature
@@ -398,6 +405,7 @@ class TargetEffect {
   double stoppingScaleNominal_ = 1.0;
   bool stoppingScaleVary_ = false;
   double stoppingScaleSigma_ = 0.0;
+  double stoppingScaleCentre_ = 1.0;  ///< the prior's centre: as written, else the start scale
   bool stoppingScaleSigmaDefault_ = false;
   std::string stoppingScaleKey_, stoppingScaleName_, stoppingScaleMaterial_, stoppingScaleProjectile_;
   std::vector<int> datasetKeys_;  ///< the data sets it applies to (DatasetSpec::key)
@@ -409,7 +417,7 @@ class TargetEffect {
   bool screeningError_ = false;   ///< malformed `screening` block
   int lineNumber_ = 0;
   double screeningUe_ = 0.0;      ///< eV
-  double screeningNominal_ = 0.0; ///< eV, as read
+  double screeningNominal_ = 0.0; ///< eV, the prior's centre: as written, else the value read
   bool screeningVary_ = false;
   bool screeningPriorReplaced_ = false, densityPriorReplaced_ = false, dopplerPriorReplaced_ = false;
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
@@ -418,6 +426,7 @@ class TargetEffect {
   std::string densityFitErrorText_;
   bool densityVary_ = false;
   double densityNominal_ = 0.0;   ///< atoms/cm^2, as read
+  double densityCentre_ = 0.0;    ///< atoms/cm^2, the prior's centre: as written, else the value read
   double densitySigma_ = 0.0;     ///< atoms/cm^2, prior width (0 = none)
   std::string densityGroup_;
   double layoutDensity_ = 0.0;    ///< density the sub-point grids span; 0 = the current density

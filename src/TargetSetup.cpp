@@ -24,6 +24,8 @@
 #include "Config.h"
 #include "TargetLayer.h"
 #include "WorkingCopy.h"
+#include "RunDiagnostics.h"
+#include "azure2/support/Environment.h"
 #include "azure2/experiment/Kernels.h"
 
 /*!
@@ -377,9 +379,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     throw std::logic_error("AZURE_PLAN_CHECK: " + std::to_string(outsideRegionMoved.load()) +
                            " points on the shared mesh outside the changed region would get other nodes");
 
-  if (std::getenv("AZURE_GRID_TIMING")) {
-    static std::atomic<int> calls{0};
-    const int c = ++calls;
+  if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGridTiming)) {
+    const int c = ++configure.diagnostics->gridPlacements;
     if (c <= 20 || c % 50 == 0) {
       auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
       int resized = 0;

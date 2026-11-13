@@ -188,7 +188,7 @@ void Site::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTabl
 }
 
 void Site::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
-  AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
+  AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 

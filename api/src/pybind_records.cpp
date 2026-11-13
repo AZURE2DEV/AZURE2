@@ -70,8 +70,8 @@ struct ParameterView {
 };
 
 // The declared prior of a parameter, (centre, width) in its unit, the width 0 when it has none: the numbers the
-// objective's diagonal priors are made of (include/Objective.h, ForEachDiagonalPrior), here whether or not the
-// parameter is free.
+// objective's diagonal priors are made of, read where they read them (include/Objective.h, ForEachDiagonalPrior;
+// docs/upgrade/parameter_kinds.md section 4), here whether or not the parameter is free.
 std::pair<double, double> PriorOf(const ParameterView &v) {
   const ParameterRecord &r = *v.record;
   switch (r.kind) {
@@ -80,18 +80,20 @@ std::pair<double, double> PriorOf(const ParameterView &v) {
       return {n0, n0 / 100.0 * v.segment->GetNormError()};
     }
     case ParamKind::EnergyShift: return {v.segment->GetNominalEnergyShift(), v.segment->GetEnergyShiftError()};
-    case ParamKind::EnergyShiftSqrt: return {0.0, v.segment->GetEnergyShiftSqrtError()};
-    case ParamKind::EnergyShiftFn: return {0.0, v.segment->GetShiftFnErrors()[r.fnTerm]};
+    case ParamKind::EnergyShiftSqrt:
+      return {v.segment->GetEnergyShiftSqrtCentre(), v.segment->GetEnergyShiftSqrtError()};
+    case ParamKind::EnergyShiftFn:
+      return {v.segment->GetShiftFnCentres()[r.fnTerm], v.segment->GetShiftFnErrors()[r.fnTerm]};
     case ParamKind::Abundance: return {v.abundance->nominal, v.abundance->sigma};
     case ParamKind::Screening: return {v.effect->GetScreeningNominal(), v.effect->GetScreeningSigma()};
-    case ParamKind::Density: return {v.effect->GetDensityNominal(), v.effect->GetDensitySigma()};
-    case ParamKind::Doppler: return {v.effect->GetDopplerNominal(), v.effect->GetDopplerSigma()};
+    case ParamKind::Density: return {v.effect->GetDensityCentre(), v.effect->GetDensitySigma()};
+    case ParamKind::Doppler: return {v.effect->GetDopplerCentre(), v.effect->GetDopplerSigma()};
     case ParamKind::Thickness:
-      return {v.segment->GetNominalThickness(),
+      return {v.segment->GetThicknessCentre(),
               v.segment->IsThicknessGroupFollower() ? 0.0 : v.segment->GetThicknessSigma()};
     case ParamKind::Apparatus: {
       const ApparatusDeclaration &d = v.apparatus->declaration;
-      return {d.nominal, d.vary ? d.sigma : 0.0};
+      return {d.centre, d.vary ? d.sigma : 0.0};
     }
     default: return {0.0, 0.0};
   }
@@ -170,7 +172,8 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object { return py::int_(v.record->levelNumber); }},
       {"level_energy", "MeV", kLevel, false, "the level's energy E_lambda as the session holds it (excitation energy)",
        [](const ParameterView &v) -> py::object { return py::float_(v.level->GetE()); }},
-      {"level_label", "", kLevel, true, "the level's label in the project, '<J^pi> <E_x as written>' (Project.levels())",
+      {"level_label", "", kLevel, true,
+       "the level's label in the project, '<J^pi> <E_x as written>' (Project.levels())",
        [](const ParameterView &v) -> py::object {
          auto it = v.levelLabels->find({v.record->jGroup, v.record->level});
          return it == v.levelLabels->end() ? py::object(py::none()) : py::object(py::str(it->second));
@@ -352,14 +355,16 @@ const std::vector<PairField> &PairFields() {
        }},
       {"parity1", "", "its parity, +1 or -1",
        [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(1)); }},
-      {"Z1", "", "its charge number", [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(1)); }},
+      {"Z1", "", "its charge number",
+       [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(1)); }},
       {"M1", "u", "its mass", [](const CNuc &, const PPair &q, int) -> py::object { return py::float_(q.GetM(1)); }},
       {"J2", "", "the heavy particle's spin", [](const CNuc &, const PPair &q, int) -> py::object {
          return py::float_(q.GetJ(2));
        }},
       {"parity2", "", "its parity, +1 or -1",
        [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(2)); }},
-      {"Z2", "", "its charge number", [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(2)); }},
+      {"Z2", "", "its charge number",
+       [](const CNuc &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(2)); }},
       {"M2", "u", "its mass", [](const CNuc &, const PPair &q, int) -> py::object { return py::float_(q.GetM(2)); }},
       {"sep_energy", "MeV", "the separation energy: the threshold is sep_energy + excitation",
        [](const CNuc &, const PPair &q, int) -> py::object { return py::float_(q.GetSepE()); }},

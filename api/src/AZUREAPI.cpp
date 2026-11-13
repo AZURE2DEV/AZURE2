@@ -111,21 +111,8 @@ int AZUREAPI::Initialize() {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // Initialize() is called again on every mode switch, so the previous model
-  // has to go or it is leaked.  (This used to crash: the constructor left
-  // data_/compound_ uninitialized, so the first call deleted a garbage
-  // pointer.  They are null-initialized now.)  Same order as SetRadius.
-  if (compound_ != nullptr) {
-    delete compound_;
-    compound_ = nullptr;
-  }
-  if (data_ != nullptr) {
-    delete data_;
-    data_ = nullptr;
-  }
-
-  data_ = new WorkingCopy();
-  compound_ = new CNuc();
+  // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes.
+  ReplaceModel();
 
   // With the session's radius overrides: Initialize runs again on every mode switch.
   if (compound()->Fill(configure(), radiusOverrides_) == -1) {
@@ -182,7 +169,7 @@ int AZUREAPI::Initialize() {
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
   if (data()->Initialize(compound(), configure()) == -1) return -1;
-  AZUREProfile::Report(std::cerr, "api set-up");
+  AZUREProfile::Report(configure().profile, std::cerr, "api set-up");
   // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
   // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
   results_ = azure2::Results();
@@ -332,7 +319,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
   calculatedSegmentsE2_.clear();
   calculatedExcitationEnergies_.clear();
   if (!localData) return 0;
-  AZUREProfile::ScopedReport profileReport("api segments");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api segments");
   const std::vector<const Segment *> segments = ReportedSegments(localData->Data().GetSegments());
   const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
   for (const Segment *segment : segments) {
@@ -706,12 +693,20 @@ bool AZUREAPI::Rebuild() {
 // Shared body of SetRadius and Rebuild.  Every radius override of the session
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
-bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
-  if (compound_ != nullptr) delete compound_;
-  if (data_ != nullptr) delete data_;
+// The one place compound_ and data_ are replaced (Initialize, RebuildImpl): with them goes everything derived from
+// them and built lazily (the nuisance priors' manager and its parameter list), so it is built again for the new model.
+void AZUREAPI::ReplaceModel() {
+  delete compound_;
+  delete data_;
+  data_ = new WorkingCopy();
+  compound_ = new CNuc();
+  nuisance_.reset();
+  nuisanceParams_.reset();
+  nuisanceRead_ = false;
+}
 
-  compound_ = new CNuc;
-  data_ = new WorkingCopy;
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+  ReplaceModel();
 
   if (compound()->Fill(configure(), radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
@@ -799,7 +794,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   // Rows of the segments of a THM experiment, filled once it is profiled.
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->Data().NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
-  AZUREProfile::ScopedReport profileReport("api chi2");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
   const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, configure(), results());
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
     const Segment *segment = ld->Data().GetSegment(i);
@@ -1203,7 +1198,7 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
 }
 
 vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) const {
-  AZUREProfile::ScopedReport profileReport("api jacobian");
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api jacobian");
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // One request at a time: operate on the canonical compound/data in place

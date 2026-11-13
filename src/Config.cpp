@@ -1,6 +1,10 @@
 #include "RunScratch.h"
 #include "Config.h"
 
+#include "azure2/support/Environment.h"
+#include "CoulombTable.h"
+#include "RunDiagnostics.h"
+
 #include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
@@ -16,13 +20,39 @@
 #include <sstream>
 #include <stdexcept>
 
+namespace {
+
+/// The run's copy of the switches that can move a number, each read as its reader read the variable before
+/// (set at all, or set and on).
+Config::EnvironmentSettings SettingsOf(const azure2::support::Environment &e) {
+  using azure2::support::Switch;
+  Config::EnvironmentSettings s;
+  s.coulombTableDefault = CoulombTable::DefaultPathIn(e);
+  s.srimDataDirectory = e.Text(Switch::kSrimDataDir);
+  s.ecTableNodes = static_cast<int>(e.Integer(Switch::kEcTableNodes, 0));
+  s.boundShiftNumerical = e.Set(Switch::kBoundShiftNumerical);
+  s.noNeutralClosedForm = e.Set(Switch::kNoNeutralClosedForm);
+  s.shiftDerivative1eV = e.Set(Switch::kShiftDerivative1eV);
+  s.levelSpaceOnly = e.On(Switch::kLevelSpace);
+  s.thmByDifferences = e.On(Switch::kThmByDifferences);
+  s.gradientByAdjoint = e.Set(Switch::kGradAdjoint);
+  s.denseAdjoint = e.On(Switch::kGradDense);
+  s.foldWeightsByDifferences = e.Set(Switch::kFoldWeightsByDifferences);
+  s.serialPointPass = e.Set(Switch::kSerialChi2);
+  return s;
+}
+
+}  // namespace
+
 /*!
  * The constructor of the Config class sets defaults and the
  * stream reference for output.
  */
 
 Config::Config(std::ostream &stream) :
-  outStream(stream), scratch(std::make_shared<azure2::RunScratch>()) {
+  outStream(stream), scratch(std::make_shared<azure2::RunScratch>()),
+  diagnostics(std::make_shared<azure2::RunDiagnostics>()) {
+  if (AZUREProfile::Enabled()) profile = &diagnostics->profile;
   Reset();
 }
 
@@ -51,13 +81,14 @@ void Config::Reset() {
   coulombTablePath.clear();
   useECTable = true;            // external-capture energy tables (--no-ec-table)
   ecConvectionCurrent = true;   // convection current in exact-form EC (--no-ec-convection-current)
-  ecTableNodesPerDecade = 50;   // ECTable node density; $AZURE2_EC_TABLE_NODES overrides
+  ecTableNodesPerDecade = 50;   // ECTable node density; environment.ecTableNodes overrides
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;
   abundanceSumSigma = 0.0;
   relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
   relativisticReferencePair = 0;
   priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
+  environment = SettingsOf(azure2::support::ProcessEnvironment());
 }
 
 bool Config::FirstTimeIn(const std::shared_ptr<NoteLog> &log, const std::string &key) {
@@ -154,11 +185,7 @@ int Config::ReadConfigFile() {
   // The project's relative paths are the project file's directory's unless the caller named another (pyazr: the
   // session's directory).  The file's own name is the caller's (a command-line argument, relative to where the
   // command was given), so it alone is made absolute against the working directory, once, here.
-  if (baseDirectory.empty()) {
-    std::error_code ec;
-    const std::filesystem::path file = std::filesystem::absolute(configfile, ec);
-    if (!ec) baseDirectory = file.parent_path().lexically_normal().string();
-  }
+  if (baseDirectory.empty()) baseDirectory = azure2::experiment::ProjectDirectoryOf(configfile);
   std::string bytes;
   {
     std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);

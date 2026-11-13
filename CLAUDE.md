@@ -516,6 +516,23 @@ input misses.  Never a `static`, `thread_local`, namespace-scope variable or `mu
 outside `tests/consistency/allowed_state.tsv`, and a row is never added for new code.  A warning printed once is
 `if (configure.FirstTime("key"))`.
 
+**Add a diagnostic switch** (an environment variable that prints, checks or selects another route).  Four places:
+(1) a value of `azure2::support::Switch` in `support/include/azure2/support/Environment.h` and its row in the table
+of `support/src/Environment.cpp` (same order; name, type, value when unset, kind -- numbers, cost, prints, test --,
+what it does, its page); (2) its row in the list "Environment switches" of `docs/source/reference/command_line.rst`
+(check 40 keeps the two the same); (3) its reader: a switch that prints or checks reads the record where it is used,
+`azure2::support::ProcessEnvironment().Set(Switch::kX)` / `.On(...)` / `.Text(...)` / `.Number(...)` (a hot path
+keeps the value in a `static const` local); a switch of kind *numbers* is a field of `Config::EnvironmentSettings`
+filled in `SettingsOf` (`src/Config.cpp`) and read from the run's `Config` (deep code without a `Config`: from the
+pair's `PairFunctionSettings`, set in `CNuc::Fill`); (4) a counter it prints is a member of `azure2::RunDiagnostics`
+(`include/RunDiagnostics.h`), reached through `configure.diagnostics`, never a `static`.  Never `getenv` (check 39
+refuses it outside `support/src/Environment.cpp`); never `setenv` to change a switch inside a process (pass the
+choice as an argument or on a copy of the `Config`).  Its test sets the variable before the process starts (a
+ctest `ENVIRONMENT`, `env=` of a subprocess): the environment is read once.  Making a *numbers* switch a
+command-line option is one assignment in `parseOptions` after the `Config` is made (and `--help`, the manual), a
+pyazr option one field of `RuntimeOptions` and one line of `apply_options` (`api/src/pybind_api.cpp`) -- both are
+the PI's decisions.
+
 **Comparing the outputs of two engines** (a change that must not move any number; the full text is
 `docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:
 ```bash

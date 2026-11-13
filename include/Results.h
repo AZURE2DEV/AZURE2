@@ -10,6 +10,7 @@
 
 #include "TaskScratch.h"
 #include "ThmProfile.h"
+#include "azure2/support/Environment.h"
 
 namespace azure2 {
 
@@ -112,10 +113,7 @@ struct Results {
 
   /// AZURE_POISON_RESULTS=1: reused result storage is poisoned on entry to every evaluation.
   static bool PoisonRequested() {
-    static const bool on = [] {
-      const char *v = std::getenv("AZURE_POISON_RESULTS");
-      return v && *v && std::strcmp(v, "0") != 0;
-    }();
+    static const bool on = azure2::support::ProcessEnvironment().On(azure2::support::Switch::kPoisonResults);
     return on;
   }
 };

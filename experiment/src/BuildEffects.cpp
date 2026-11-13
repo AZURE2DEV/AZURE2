@@ -121,11 +121,9 @@ void StoppingInto(Context &c, const ValidatedRecord &t, const Value &stopping, S
   if (!(s.scale > 0.0)) c.Error(codes::kOutOfRange, t, "stopping", "the stopping scale must be > 0, not " + n.value.text);
   s.scaleVary = n.mode == NuisanceMode::Fit;
   s.scaleHasPrior = n.hasPrior;
-  if (n.hasPrior) {
-    if (n.priorCentre.value != n.value.value)
-      c.Error(codes::kNotBuilt, t, "stopping", "a stopping-scale prior centred away from the value: this engine centres it on the value");
+  if (n.hasPrior)
     s.scalePriorWidth = n.priorPercent ? n.priorWidth.value / 100.0 * n.priorCentre.value : n.priorWidth.value;
-  }
+  s.scaleCentre = PriorCentreOf(n, n.priorCentre.value, "stopping scale");
 }
 
 void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &user, TargetEffectSpec &e) {
@@ -140,8 +138,8 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
         e.densityVary = n.mode == NuisanceMode::Fit;
         e.densitySigmaText = n.hasPrior ? WidthText(n) : "0";
         if (n.hasGridMax) e.densityMax = ToBase(n.gridMax.value, n.unit);
-        if (n.hasPrior && n.priorCentre.value != n.value.value)
-          c.Error(codes::kNotBuilt, t, "areal_density", "a prior centred away from the value: this engine centres it on the value");
+        e.densityCentre = PriorCentreOf(n, ToBase(n.priorCentre.value, n.unit), "areal_density");
+        c.out_.parameterSources[t.name + ".areal_density"] = {t.name, "areal_density", 0, "", ""};  // its write-back
       }
     }
     if (const Value *s = t.Get("stopping")) {
@@ -181,6 +179,8 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
         e.dopplerVaryText = n.mode == NuisanceMode::Fit ? "1" : "0";
         e.dopplerSigmaText = n.hasPrior ? n.priorWidth.text : "0";
         e.dopplerMaxText = n.hasGridMax ? n.gridMax.text : "";
+        e.dopplerCentre = PriorCentreOf(n, n.priorCentre.value, "doppler");
+        c.out_.parameterSources[t.name + ".doppler"] = {t.name, "doppler", 0, "temperature", ""};
       }
     }
   }
@@ -190,7 +190,11 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
     e.screening = true;
     e.screeningUe = ToUnit(n.value.value, n.unit, "eV");
     e.screeningVary = n.mode == NuisanceMode::Fit;
-    e.screeningSigma = n.hasPrior ? (n.priorPercent ? n.priorWidth.value / 100.0 * e.screeningUe : ToUnit(n.priorWidth.value, n.unit, "eV")) : 0.0;
+    e.screeningCentre = PriorCentreOf(n, ToUnit(n.priorCentre.value, n.unit, "eV"), "screening");
+    c.out_.parameterSources[t.name + ".screening"] = {t.name, "screening", 0, "", "eV"};
+    e.screeningSigma = !n.hasPrior     ? 0.0
+                       : n.priorPercent ? n.priorWidth.value / 100.0 * e.screeningCentre.value
+                                        : ToUnit(n.priorWidth.value, n.unit, "eV");
   }
   (void)user;
 }
@@ -240,17 +244,15 @@ void ApparatusParameterInto(Context &c, const ValidatedRecord &record, const std
   a.value = ToBase(n.value.value, n.unit);
   a.vary = n.mode == NuisanceMode::Fit;
   if (!(a.value > 0.0)) c.Error(codes::kOutOfRange, record, field, "the " + p.name + " must be > 0, not " + n.value.text);
-  if (n.hasPrior) {
-    if (n.priorCentre.value != n.value.value)
-      c.Error(codes::kNotBuilt, record, field, "a prior centred away from the value: this engine centres it on the value");
-    a.priorWidth = n.priorPercent ? n.priorWidth.value / 100.0 * a.value : ToBase(n.priorWidth.value, n.unit);
-  }
+  a.centre = PriorCentreOf(n, ToBase(n.priorCentre.value, n.unit), field);
+  if (n.hasPrior)
+    a.priorWidth = n.priorPercent ? n.priorWidth.value / 100.0 * a.centre.value : ToBase(n.priorWidth.value, n.unit);
   if (n.hasGridMax) {
     a.gridMax = ToBase(n.gridMax.value, n.unit);
     if (!(a.gridMax >= a.value))
       c.Error(codes::kOutOfRange, record, field, "grid_max " + n.gridMax.text + " is below the value " + n.value.text);
   }
-  c.out_.parameterSources[a.owner[0].second + "." + field + "." + p.name] = {record.name, field, 0, p.name};
+  c.out_.parameterSources[a.owner[0].second + "." + field + "." + p.name] = {record.name, field, 0, p.name, ""};
   e.apparatusParameters.push_back(a);
 }
 
@@ -421,12 +423,12 @@ void SharedScales(Context &c, const std::vector<Combination> &combos, SpecList<T
     if (!s.hasScale || s.scaleKey.empty()) continue;
     auto it = first.emplace(s.scaleKey, i).first;
     if (it->second == i) {
-      c.out_.parameterSources[s.scaleName] = {combos[i].target->name, "stopping", 0, "scale"};
+      c.out_.parameterSources[s.scaleName] = {combos[i].target->name, "stopping", 0, "scale", ""};
       continue;
     }
     const StoppingSpec &a = out.items[it->second].spec.stopping;
     if (a.scale != s.scale || a.scaleVary != s.scaleVary || a.scaleHasPrior != s.scaleHasPrior ||
-        a.scalePriorWidth != s.scalePriorWidth)
+        a.scalePriorWidth != s.scalePriorWidth || a.scaleCentre.Or(a.scale) != s.scaleCentre.Or(s.scale))
       c.Error(codes::kStoppingScaleConflict, *combos[i].target, "stopping",
               "its stopping scale is " + s.scaleName + ", shared with target " + combos[it->second].target->name +
                   " (one scale per material and projectile, decision D6), and the two write it differently: write the "
@@ -537,11 +539,13 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     DatasetSpec &ds = c.out_.data.datasets.items[i].spec;
     ds.thicknessFit = n.mode == NuisanceMode::Fit || n.hasPrior;
     ds.thicknessVary = n.mode == NuisanceMode::Fit;
+    ds.thicknessCentre = PriorCentreOf(n, ToUnit(n.priorCentre.value, n.unit, "atoms/b"), "areal_density");
     ds.thicknessSigma = !n.hasPrior ? 0.0
-                        : n.priorPercent ? n.priorWidth.value / 100.0 * (q == "transmission" ? r.transmission : r.yieldThickness)
+                        : n.priorPercent ? n.priorWidth.value / 100.0 * ds.thicknessCentre.value
                                          : ToUnit(n.priorWidth.value, n.unit, "atoms/b");
     if (ds.thicknessFit && users[target->name] > 1) ds.thicknessGroup = target->name;
     if (ds.thicknessFit) ds.names.thickness = target->name + ".areal_density";  // a follower's: Build's NameParameters
+    if (ds.thicknessFit) c.out_.parameterSources[ds.names.thickness] = {target->name, "areal_density", 0, "", "atoms/b"};
   }
 }
 
@@ -569,7 +573,7 @@ void Abundances(Context &c) {
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
       // where the abundance is written, under the parameter's name (the engine's, CNuc::AbundanceParamName)
-      c.out_.parameterSources[AbundanceParameterName(t->name, nucleus->nucleus.text, 0, 0)] = {t->name, "isotope", (int)k, "abundance"};
+      c.out_.parameterSources[AbundanceParameterName(t->name, nucleus->nucleus.text, 0, 0)] = {t->name, "isotope", (int)k, "abundance", ""};
       std::set<std::pair<int, int>> compounds;
       std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)
@@ -595,6 +599,7 @@ void Abundances(Context &c) {
         row.value = n.value.value;
         row.vary = n.mode == NuisanceMode::Fit;
         row.sigma = n.hasPrior ? n.priorWidth.value : 0.0;
+        row.centre = PriorCentreOf(n, n.priorCentre.value, "isotope " + row.isotope);
         a.rows.push_back(row);
       }
     }
@@ -604,6 +609,11 @@ void Abundances(Context &c) {
       row.isSum = true;
       const Value *w = s->Get("width");
       row.sumSigma = s->word == "prior" && w ? w->number.value : 0.0;
+      if (const Value *centre = s->word == "prior" ? s->Get("centre") : nullptr) {
+        row.sumCentre.written = true;
+        row.sumCentre.value = centre->number.value;
+        row.sumCentre.source = "isotope_sum prior " + centre->number.text;
+      }
       a.rows.push_back(row);
     }
   }

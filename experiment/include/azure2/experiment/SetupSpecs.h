@@ -127,6 +127,16 @@ struct ParameterNames {
 };
 
 /// A data set: points read from a file and compared with the model.
+/// The centre of a nuisance parameter's prior as written (`prior <centre> <width>`), in the engine's unit of the
+/// parameter: the penalty is ((p - centre)/width)^2 (docs/upgrade/parameter_kinds.md section 4).  Not written (an old
+/// line without one): the kind's default, Or(default) -- the start value, 0 for a shift term, 1 for a sum.
+struct PriorCentre {
+  bool written = false;
+  double value = 0.0;
+  std::string source;  ///< the text that set it, for messages ("" when none)
+  double Or(double fallback) const { return written ? value : fallback; }
+};
+
 struct DatasetSpec {
   int key = 0;              ///< the data set's number, 1, 2, ... in file order (inactive ones counted)
   bool active = true;
@@ -141,30 +151,29 @@ struct DatasetSpec {
   double norm = 1.0;
   double normError = 0.0;          ///< prior width (%), 0 = no prior
   bool varyNorm = false;
-  bool hasNormCentre = false;      ///< the prior is centred on normCentre, not on `norm`
-  double normCentre = 0.0;
-  std::string normCentreSource;    ///< the text that set it, for messages ("" when none)
+  PriorCentre normCentre;          ///< written: the prior is centred on it, not on `norm`
   std::string normGroup;           ///< shared normalization: data sets with one label share the first's norm
   // Energy shift E' = E + shift + b sqrt(E) + f(E) (MeV; E the lab energy in MeV).
   double energyShift = 0.0;
   double energyShiftError = 0.0;   ///< prior width (MeV), 0 = no prior
   bool varyEnergyShift = false;
-  bool hasShiftCentre = false;     ///< the prior is centred on shiftCentre, not on 0
-  double shiftCentre = 0.0;
-  std::string shiftCentreSource;
+  PriorCentre shiftCentre;         ///< written: the prior is centred on it, not on 0
   bool hasSqrtShift = false;       ///< a sqrt(E) term is declared
   double energyShiftSqrt = 0.0;    ///< b (MeV^1/2)
   double energyShiftSqrtError = 0.0;
   bool varyEnergyShiftSqrt = false;
+  PriorCentre shiftSqrtCentre;     ///< not written: 0
   std::string shiftFunction;       ///< f(x) with x the lab energy (MeV), "" = none; parameters a0, a1, ...
   std::vector<double> shiftFunctionValues, shiftFunctionErrors;
   std::vector<bool> shiftFunctionVary;
+  std::vector<PriorCentre> shiftFunctionCentres;  ///< one per parameter (none, or not written: 0)
   std::string shiftGroup;          ///< data sets with one label share the first's constant shift
   std::string shiftFunctionGroup;  ///< data sets with one label share the first's shift function
   std::string covarianceFile;      ///< "" = none; data sets naming one file share its correlations
   bool thicknessFit = false;       ///< the sample thickness is a fit parameter
   bool thicknessVary = false;
   double thicknessSigma = 0.0;     ///< prior width (atoms/b), 0 = none
+  PriorCentre thicknessCentre;     ///< atoms/b; not written: the start
   std::string thicknessGroup;      ///< data sets with one label share the first's thickness
   // Unobserved primary, observed secondary transition (UPOS).
   bool upos = false;
@@ -221,10 +230,11 @@ struct StoppingSpec {
   /// The stopping scale s, multiplying epsilon wherever this material is crossed by this projectile: one parameter
   /// per scaleKey; a formula has none unless its record gives `scale`.
   bool hasScale = false;
-  double scale = 1.0;            ///< start value and prior centre
+  double scale = 1.0;            ///< start value
   bool scaleVary = false;
   bool scaleHasPrior = false;    ///< a written prior; a fitted scale without one takes stopping/'s uncertainty
   double scalePriorWidth = 0.0;  ///< absolute width (s is dimensionless; a percentage already converted)
+  PriorCentre scaleCentre;       ///< not written: the start `scale`
   std::string scaleKey;          ///< what shares one scale: source, material, phase, C, projectile
   std::string scaleMaterial, scaleProjectile;  ///< the two labels of the name: "TiN" (or the target's name), "1H"
   std::string scaleName;         ///< its fit parameter's name, stopping_scale.<material>.<projectile>
@@ -243,9 +253,10 @@ struct ApparatusParameterSpec {
   /// ("record", "det1"), ("field", "energy_resolution"), ("parameter", "width") for det1.energy_resolution.width.
   std::vector<std::pair<std::string, std::string>> owner;
   std::string unit;         ///< the engine unit of the value ("MeV")
-  double value = 0.0;       ///< start value and prior centre, engine unit
+  double value = 0.0;       ///< start value, engine unit
   bool vary = false;
   double priorWidth = 0.0;  ///< absolute, engine unit; 0 = no prior
+  PriorCentre centre;       ///< engine unit; not written: the start `value`
   double gridMax = 0.0;     ///< the largest value the sub-point grids must span, engine unit; 0 = the default
 };
 
@@ -296,9 +307,11 @@ struct TargetEffectSpec {
   double screeningUe = 0.0;         ///< electron-screening potential (eV)
   bool screeningVary = false;
   double screeningSigma = 0.0;      ///< prior width (eV)
+  PriorCentre screeningCentre;      ///< eV; not written: the start screeningUe
   bool densityFit = false;          ///< density fit block present
   bool densityVary = false;
   std::string densitySigmaText;     ///< prior width as written: a number (same unit as density) or a percentage
+  PriorCentre densityCentre;        ///< atoms/cm^2 (a percentage width is per cent of it); not written: the start
   double densityMax = 0.0;          ///< largest density the grids span (atoms/cm^2), 0 = automatic
   std::string densityReadError;     ///< old-line reader: why the density block could not be read ("" = it could)
   std::string densityGroup;
@@ -307,6 +320,7 @@ struct TargetEffectSpec {
   bool dopplerFit = false;
   std::string dopplerVaryText, dopplerSigmaText, dopplerMaxText;  ///< as written: 0|1, K, K ("" = none)
   std::string dopplerReadError;     ///< old-line reader: why the Doppler block could not be read
+  PriorCentre dopplerCentre;        ///< K; not written: the start dopplerTemperature
   bool udr = false;
   std::string udrFile;
   double udrFlightPath = 0.0;    ///< m
@@ -331,10 +345,12 @@ struct AbundanceRowSpec {
   std::string isotope;
   bool isSum = false;   ///< true: the width of the sample's sum-to-one prior; false: one nucleus's abundance
   double sumSigma = 0.0;
+  PriorCentre sumCentre;  ///< the centre of the sum-to-one prior; not written: 1
   int z = 0, a = 0;     ///< the compound nucleus
   double value = 0.0;   ///< abundance (fraction)
   bool vary = false;
   double sigma = 0.0;   ///< prior width (fraction)
+  PriorCentre centre;   ///< not written: the start `value`
 };
 
 /// The name of an abundance's fit parameter, made here only (CNuc::AbundanceParamName and the build's parameter sources

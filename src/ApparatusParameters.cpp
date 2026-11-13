@@ -26,7 +26,7 @@ const std::vector<ApparatusRow> &ApparatusRows() {
 
 double ApparatusParam::Penalty(double value) const {
   if (!declaration.vary || priorReplaced || !(declaration.sigma > 0.0)) return 0.0;
-  const double r = (value - declaration.nominal) / declaration.sigma;
+  const double r = (value - declaration.centre) / declaration.sigma;
   return r * r;
 }
 
@@ -41,6 +41,7 @@ void DeclareKernelParameters(const TargetEffect &te, std::vector<ApparatusDeclar
     d.owner = a.owner;
     d.unit = a.unit;
     d.nominal = a.value;
+    d.centre = a.centre.Or(a.value);
     d.vary = a.vary;
     d.sigma = a.priorWidth;
     d.layout = a.gridMax > 0.0 ? a.gridMax : ApparatusLayout(a.value, a.vary, a.priorWidth);

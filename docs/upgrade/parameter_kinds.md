@@ -94,3 +94,44 @@ Still a second walk of the layout (positions, not names; each must follow the cr
    (`tests/pyazr/parameter_records_test.py` fails for a kind no owner field describes).
 4. Docs: the table of `docs/source/reference/output_files.rst` and §1 here [check 23]; in
    `tests/pyazr/parameter_kinds_test.py` a project with the kind, whose names are rebuilt from the records.
+
+## 4. The prior of a nuisance parameter: one rule for every kind
+
+Format 3 writes a nuisance as `<value> [<unit>] fit|fixed [prior <centre> <width>[%]]` (`Values.h`, `Nuisance`). The
+rule, the same for every kind that can carry a prior (norm, the three shift terms, abundance, `isotope_sum`,
+screening, areal density, Doppler temperature, sample thickness, stopping scale, a kernel's parameter):
+
+- the penalty is ((p − centre) / width)², with the **centre as written** and the width as written (a percentage is
+  per cent of the centre); it is paid only while the parameter is free (`objective.md` D5);
+- the **start** of the fit is the value written; the start does not move the prior;
+- a prior without a centre (only an old line read by the old-line reader) is centred as before: on the start value,
+  on 0 for the three shift terms, on 1 for the sum of a sample's abundances;
+- the sub-point grids and the limits of a fitted density, temperature, stopping scale or kernel parameter are laid out
+  from the start value, as before (with `grid_max` from that); the centre does not move them.
+
+Why it matters: a fit continued from its fitted values (the program's `param.sav` reloaded, or the project `pyazr`'s
+`save_fit` writes: the fitted value with the original prior) must pay the same prior as the fit it continues.
+
+**One carrier.** `PriorCentre` (`SetupSpecs.h`: written, value, source; `Or(default)`) is the centre of every kind in
+the specs, the one the norms and energy shifts had (`DatasetSpec::normCentre`, `shiftCentre`) made general. The build
+fills it from the nuisance (`Build.cpp`, `BuildEffects.cpp`), the engine object of the kind keeps it beside its width
+and uses it in its penalty, and the one enumeration of diagonal priors (`ForEachDiagonalPrior`, `Objective.h`)
+hands it to the gradient, the least-squares rows and the MCMC priors. The API listing reports it
+(`Parameter.prior_nominal`, now also for an abundance and an apparatus parameter).
+
+**Writing back.** The program writes fitted values only to `param.sav` (no prior); reading it back keeps the
+project's centres. pyazr's `save_fit` and `Project` write a fitted value into its record through the build's
+`ParameterSource` (`experiment::ParameterValueEdit`), which changes the value token only, so the centre and width stay
+as written. Every kind with a prior has a source now (the areal density, the Doppler temperature, the screening
+potential and the sample thickness had none, so their fitted values were not written back); a source names the
+engine's unit where it is not the base unit (`engineUnit`: eV for screening, atoms/b for a thickness).
+
+**A new nuisance kind with a prior** needs: its width and `PriorCentre` in its spec, filled by `PriorCentreOf` where
+the build reads the nuisance; the centre kept beside the width by its engine object and used in its penalty; one
+line in `ForEachDiagonalPrior` (`Objective.h`, from which the gradient, the least-squares rows and the MCMC take it);
+a `ParameterSource` for its write-back; its field in the API listing.
+
+Before (measured by calculations, value ≠ centre against value = centre, at 441a0907): the norm and the constant shift
+used the centre; the sqrt(E) shift, the shift function's parameters, the abundance, `isotope_sum`, screening, Doppler
+temperature and sample thickness dropped it without a word (the penalty measured from the start, or from 0 / 1); the
+areal density, the stopping scale and a kernel parameter refused a centre away from the value.

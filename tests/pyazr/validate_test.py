@@ -85,6 +85,8 @@ with tempfile.TemporaryDirectory() as tmp:
     old = os.path.join(shutil.copytree(os.path.join(ROOT, "tests", "upgrade", "T2"), os.path.join(tmp, "T2old")),
                        "T2.azr")
     shutil.copy(os.path.join(ORIGINALS, "upgrade", "T2", "T2.azr"), old)
+    # the conversion below writes its prior-covariance copy beside the project: not the tree's own copy
+    os.remove(os.path.join(os.path.dirname(old), "prior_cov.f3.txt"))
 
     # 1. the fixtures
     for name in fixtures:
@@ -135,19 +137,20 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # 4. pyazr.convert_azr(..., to=3)
     if pyazr:
-        new = os.path.join(tmp, "T2.f3.azr")
+        # the converted project beside its data, as a run reads it: relative paths are the project file's directory's
+        new = os.path.join(os.path.dirname(old), "T2.f3.azr")
         rep = pyazr.convert_azr(old, new, to=3, report=os.path.join(tmp, "T2.report.json"))
         with open(new, "rb") as f, open(os.path.join(FIXTURES, "T2.f3.azr"), "rb") as g:
             check("convert_azr(to=3): the committed conversion, byte for byte", f.read() == g.read())
-        with open(os.path.join(tmp, "prior_cov.f3.txt"), "rb") as f, open(os.path.join(FIXTURES, "T2.prior_cov.f3.txt"), "rb") as g:
+        with open(os.path.join(os.path.dirname(old), "prior_cov.f3.txt"), "rb") as f, open(os.path.join(FIXTURES, "T2.prior_cov.f3.txt"), "rb") as g:
             check("convert_azr(to=3): the prior-covariance copy", f.read() == g.read())
         check("convert_azr(to=3): the report", rep["ok"] and rep["parameters"].get("segment_7_norm") == "s07_profile.norm",
               str(rep.get("parameters")))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # data files are read relative to the working directory, as the engine opens them: the project's folder
+            # data files are read relative to the project file's directory, wherever this runs (the run's rule)
             here = os.getcwd()
-            os.chdir(os.path.dirname(old))
+            os.chdir(tmp)
             try:
                 check("convert_azr(to=3): the result validates and builds", pyazr.validate(new) == [])
                 # 5. pyazr.describe: what the engine makes of it, as AZURE2 --describe
@@ -161,7 +164,14 @@ with tempfile.TemporaryDirectory() as tmp:
                       any(p["name"] == "s01_int_thin.norm" for p in d["datasets"][0]["parameters"]), str(d)[:300])
                 if BIN:
                     code, out, _ = cli("--describe", new)
-                    check("--describe and pyazr.describe: the same text", code == 0 and out == text, out[:300])
+                    check("--describe and pyazr.describe: the same text, then the switches set",
+                          code == 0 and out.startswith(text), out[:300])
+                    rest = out[len(text):]
+                    table = os.environ.get("AZURE2_COULOMB_TABLE")
+                    check("--describe ends with the environment switches that are set",
+                          (rest == "") if not table else
+                          rest.startswith("Environment switches set:\n") and
+                          f"  AZURE2_COULOMB_TABLE={table} (numbers)\n" in rest, rest[:300])
             finally:
                 os.chdir(here)
         try:

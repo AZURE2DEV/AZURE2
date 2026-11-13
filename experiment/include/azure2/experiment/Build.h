@@ -60,6 +60,9 @@ struct ParameterSource {
   std::string field;
   int occurrence = 0;
   std::string part;
+  /// The engine's unit of the value where it is not the base unit of the nuisance's dimension ("eV" for a screening
+  /// potential, "atoms/b" for a sample thickness); "" = the base unit (ToBase), or the number as written without one.
+  std::string engineUnit;
 };
 
 /// The specs of a format-3 project.  When diagnostics hold an error, the specs are incomplete and not set up.

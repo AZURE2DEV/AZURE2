@@ -1,4 +1,6 @@
 #include "CoulombTable.h"
+
+#include "azure2/support/Environment.h"
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "GSLException.h"
 
@@ -87,7 +89,6 @@ inline double H11(double t) { return (t - 1) * t * t; }
 
 }  // namespace
 
-std::atomic<long> CoulombTable::hits_{0}, CoulombTable::misses_{0};
 
 namespace {
 // The tables Shared() has loaded (immutable once loaded) and the files it could not read, for the whole process;
@@ -106,33 +107,19 @@ std::set<std::string> &SharedFailed() {
 }
 }  // namespace
 
-namespace {
-// Prints how much the table was used when the process ends, if it was used at all.
-struct UsageReport {
-  std::atomic<long> *hits, *misses;
-  ~UsageReport() {
-    const long h = hits->load(), m = misses->load();
-    if (h + m > 0)
-      std::cerr << "Coulomb table: " << h << " lookups, " << m
-                << " outside the table (exact routine used)" << std::endl;
-  }
-};
-}  // namespace
-
-std::string CoulombTable::DefaultPath() {
-  if (const char *e = std::getenv("AZURE2_COULOMB_TABLE"))
-    if (*e) return e;
-  const char *home = std::getenv("HOME");
-  if (!home || !*home) home = std::getenv("USERPROFILE");
-  return std::string(home ? home : ".") + "/.azure2/coulomb_table.bin";
+std::string CoulombTable::DefaultPathIn(const azure2::support::Environment &environment) {
+  const std::string &named = environment.Text(azure2::support::Switch::kCoulombTable);
+  if (!named.empty()) return named;
+  return environment.Home() + "/.azure2/coulomb_table.bin";
 }
 
-const CoulombTable *CoulombTable::Shared(const std::string &path) {
+std::string CoulombTable::DefaultPath() { return DefaultPathIn(azure2::support::ProcessEnvironment()); }
+
+const CoulombTable *CoulombTable::Shared(const std::string &path, const std::string &defaultPath) {
   std::lock_guard<std::mutex> lock(SharedMutex());
   auto &tables = SharedTables();
   auto &failed = SharedFailed();
-  static UsageReport report{&hits_, &misses_};
-  const std::string file = path.empty() ? DefaultPath() : path;
+  const std::string file = path.empty() ? defaultPath : path;
   const CoulombTable *result = nullptr;
   {
     auto it = tables.find(file);
@@ -379,12 +366,12 @@ double CoulombTable::Eval(const Sheet &s, double x, double y) const {
       s.fxy[k00] * c0 * d0 + s.fxy[k10] * c1 * d0 + s.fxy[k01] * c0 * d1 + s.fxy[k11] * c1 * d1;
 }
 
-bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out) const {
+bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out, CoulombTableUse *use) const {
   if (l < 0 || l > lMax_ || !Inside(eta, rho)) {
-    misses_.fetch_add(1, std::memory_order_relaxed);
+    if (use) use->outside.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
-  hits_.fetch_add(1, std::memory_order_relaxed);
+  if (use) use->lookups.fetch_add(1, std::memory_order_relaxed);
   const double x = std::log10(eta), y = std::log10(rho);
   double lp, sv, ph;
   if (order_ == 4) {
@@ -403,12 +390,12 @@ bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out) const {
   return true;
 }
 
-bool CoulombTable::LookupBound(int l, double etaB, double rhoB, double &S) const {
+bool CoulombTable::LookupBound(int l, double etaB, double rhoB, double &S, CoulombTableUse *use) const {
   if (l < 0 || l > lMax_ || !Inside(etaB, rhoB)) {
-    misses_.fetch_add(1, std::memory_order_relaxed);
+    if (use) use->outside.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
-  hits_.fetch_add(1, std::memory_order_relaxed);
+  if (use) use->lookups.fetch_add(1, std::memory_order_relaxed);
   const double x = std::log10(etaB), y = std::log10(rhoB);
   S = Eval(At(l, BOUND), x, y) - rhoB;
   return std::isfinite(S);

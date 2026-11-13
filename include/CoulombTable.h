@@ -36,6 +36,18 @@
  * before.  That is the defect that removed interpolation from CoulFuncCache
  * (history-dependent values broke adaptive quadrature; CoulFuncCache.cpp).
  */
+namespace azure2 {
+namespace support {
+class Environment;
+}
+}  // namespace azure2
+
+/// How often a run's channel functions found their values in the table and how often outside it (the exact routine
+/// then answered): the caller's counters (RunDiagnostics::coulombTable), given to each lookup.
+struct CoulombTableUse {
+  std::atomic<long> lookups{0}, outside{0};
+};
+
 class CoulombTable {
  public:
   /// A uniform axis in log10 of the variable.
@@ -88,19 +100,23 @@ class CoulombTable {
   /// Read a table; returns false (with a reason in error) on any mismatch.
   bool Load(const std::string &path, std::string &error);
 
-  /// Table lookup of an open channel; false outside the table.
-  bool LookupOpen(int l, double eta, double rho, Open &out) const;
-  /// Table lookup of a closed channel's shift function; false outside the table.
-  bool LookupBound(int l, double etaB, double rhoB, double &S) const;
+  /// Table lookup of an open channel; false outside the table.  Counted in `use` (the run's; null: not counted).
+  bool LookupOpen(int l, double eta, double rho, Open &out, CoulombTableUse *use) const;
+  /// Table lookup of a closed channel's shift function; false outside the table.  Counted in `use` as above.
+  bool LookupBound(int l, double etaB, double rhoB, double &S, CoulombTableUse *use) const;
 
-  /// The table at path (empty: DefaultPath()), loaded once per process and shared by all
-  /// threads; nullptr, after one warning, when it cannot be read.
-  static const CoulombTable *Shared(const std::string &path);
+  /// The table at path (empty: defaultPath, the run's Config::environment.coulombTableDefault), loaded once per
+  /// process and shared by all threads; nullptr, after one warning, when it cannot be read.
+  static const CoulombTable *Shared(const std::string &path, const std::string &defaultPath);
+  /// The same with DefaultPath().
+  static const CoulombTable *Shared(const std::string &path) { return Shared(path, DefaultPath()); }
   /// Forget which files Shared() could not read, so the next lookup tries them again
   /// (after a table was built while the process runs, e.g. from the GUI).
   static void ForgetMissing();
-  /// $AZURE2_COULOMB_TABLE if set, else ~/.azure2/coulomb_table.bin.
+  /// $AZURE2_COULOMB_TABLE if set, else ~/.azure2/coulomb_table.bin, in the process's environment record.
   static std::string DefaultPath();
+  /// The same in a given record (azure2/support/Environment.h).
+  static std::string DefaultPathIn(const azure2::support::Environment &environment);
 
   /// The exact open-channel values (Michel's routine, AZURE2's default); phi in (-pi, pi].
   static Open ExactOpen(int l, double eta, double rho);
@@ -146,9 +162,6 @@ class CoulombTable {
   bool Cell(double x, double y, int &i, int &j, double &u, double &v) const;
   const Sheet &At(int l, Kind k) const { return sheets_[l * NKIND + k]; }
   Sheet &At(int l, Kind k) { return sheets_[l * NKIND + k]; }
-
-  // Lookups served and refused (outside the table), for the summary printed at exit.
-  static std::atomic<long> hits_, misses_;
 
   int lMax_ = -1;
   int order_ = 8;

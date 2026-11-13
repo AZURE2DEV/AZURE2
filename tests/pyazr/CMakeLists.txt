@@ -900,6 +900,13 @@ add_test(NAME pyazr_describe
                  ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
 set_tests_properties(pyazr_describe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
+# objective, gradient and nuisance term equal a fresh session's at the same radius.
+add_test(NAME pyazr_rebuild_nuisance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
+set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
@@ -918,4 +925,29 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 # so these tests run the module this build made instead of skipping.
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+endif()
+
+# The web UI's server (pyazr/ui, docs/upgrade/web_ui.md): pytest files in tests/pyazr/ui, each run as a script that
+# exits 77 (skipped) with its reason when fastapi, httpx, uvicorn, pytest or the engine module is missing.  The
+# injected errors that showed each rule's test failing are listed in tests/pyazr/ui/README.md.
+# static_test: the page's files as served (token cookie, CSP, every loaded file tracked, plotly's hash, a widget per
+# value type); node_test: the page's modules under node's own test runner (skipped where node is absent).
+foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
+        ui/node_test.py)
+    string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
+    add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
+    set_tests_properties(${_name} PROPERTIES SKIP_RETURN_CODE 77
+                         ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+    if(PYAZR_OUTPUT_DIR)
+        set_property(TEST ${_name} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+    endif()
+endforeach()
+# The browser smoke test of the page: a server on T1 and T2, headless Chrome runs the page's self-test and takes one
+# screenshot per tab (tests/pyazr/ui/smoke_test.py; about 30 s; skipped where no Chrome or Chromium is found).
+# Its own label: ctest -L browser.
+add_test(NAME pyazr_ui_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/smoke_test.py)
+set_tests_properties(pyazr_ui_smoke PROPERTIES SKIP_RETURN_CODE 77 LABELS browser
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+if(PYAZR_OUTPUT_DIR)
+    set_property(TEST pyazr_ui_smoke APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
