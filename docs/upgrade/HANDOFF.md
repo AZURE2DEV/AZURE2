@@ -16,8 +16,13 @@ in `experiment/tests/diagnostics_test.cpp`, `parameter_kinds_test.py`.
 
 **Verified how.** Per commit: build without warnings, repo_consistency, the experiment and pyazr tests concerned, T1,
 T2, T3, 13N, 13N_capture_ay, thick_target_resonance, model_data x 3 bases identical to `tab-gridm-1`. The new checks
-pass and each was shown to fail with one injected error (listed in `tests/gamma_decay/README.md`). The end-of-branch
-verification is the next entry's (or the report's) business.
+pass and each was shown to fail with one injected error (listed in `tests/gamma_decay/README.md`). End of branch
+(2026-11-13, b-gamma, 3 threads): build 0 warnings; all projects x 3 bases against `tab-gridm-1` (tag
+`tab-gammab-final`): 827 / 800 / 827 of the reference identical, the other files are the three new projects
+(only-new); `ctest -LE slow` 221/221; `tests/run_tests.sh` 161 passed, 0 failed; the converted-tree gate (`ggammab1`)
+628 / 601 / 628 identical; the eight fits of `fits_vs_base2.sh` identical to `b-head3`; the record's fit at 1 and 3
+threads: every output identical but `fitStatus.out`'s MIGRAD call count (66 against 65; with partial widths 66 and 66),
+cause not found.
 
 **Open.** The formal basis and external capture on a record channel are refused (decisions 2 and 3 of the note);
 Sphinx was not built here (no sphinx in the environment).
