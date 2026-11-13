@@ -209,6 +209,18 @@ Output files
    probability mass, so do not deduplicate it. ``logprob`` is exactly
    ``loglikelihood + logprior``.
 
+   ``logprob`` is :math:`-\tfrac12\chi^2` of the fit's objective, term for
+   term, plus the normalisation of the Gaussian priors, and the sampler
+   rejects a point outside the support (Park's :math:`J \le 0`; the limits of
+   a ``gamma_decay`` record's numbers, :math:`\Gamma_\gamma \ge 0` and
+   :math:`0 \le b_f \le 1`).  ``logprior`` is the normalised Gaussian priors:
+   the automatic ones, the nuisance priors, the prior covariance and those of
+   this table.  ``loglikelihood`` is the rest of the objective: the data, the
+   abundances' sum-to-one term, the model data, and the priors and the
+   remainder's wall of a ``gamma_decay`` record (:doc:`gamma_decay`).  The
+   limits of other parameters (an abundance, a fitted density) are not applied
+   by the sampler.
+
    ``loglikelihood`` includes the measured scattering lengths of a
    ``<scatteringLengths>`` block (:doc:`../theory/scattering_length`).  For the
    posterior of a scattering length itself, evaluate

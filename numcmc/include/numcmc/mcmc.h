@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include <cstdint>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -72,28 +73,34 @@ class Mcmc {
      *  where a caller should record the chain: it fires exactly once per step
      *  per walker and reports accepted states, including the repeats that a
      *  rejection must contribute. */
-    typedef void (*SampleCallback)(
-        int current_step, const std::vector<std::vector<double>> &positions,
-        const std::vector<double> &logps);
+    typedef std::function<void(int current_step, const std::vector<std::vector<double>> &positions,
+                               const std::vector<double> &logps)>
+        SampleCallback;
+    /*! The log-probability of a position, and the caller's progress, stop and
+     *  iteration hooks.  std::function, so that a caller passes an object that
+     *  carries its own context (a lambda capturing its run) rather than reaching
+     *  it through a global; a plain function pointer converts to each. */
+    typedef std::function<double(std::vector<double> &)> LogProbability;
+    typedef std::function<void(int current_step, int total_steps, double log_prob)> ProgressCallback;
+    typedef std::function<bool()> StopCallback;
+    typedef std::function<void(int current_step, int total_steps)> IterationCallback;
 
-    int run(double (*func)(std::vector<double> &), int steps);
-    int run_parallel(double (*func)(std::vector<double> &), int steps,
-                     int threads);
+    int run(const LogProbability &func, int steps);
+    int run_parallel(const LogProbability &func, int steps, int threads);
 
     // Enhanced run method with progress callback and stop functionality
-    int run_with_callback(double (*func)(std::vector<double> &), int steps,
-                         void (*progress_callback)(int current_step, int total_steps, double log_prob) = nullptr,
-                         bool (*should_stop_callback)() = nullptr,
-                         void (*iteration_callback)(int current_step, int total_steps) = nullptr,
-                         SampleCallback sample_callback = nullptr);
+    int run_with_callback(const LogProbability &func, int steps,
+                          const ProgressCallback &progress_callback = nullptr,
+                          const StopCallback &should_stop_callback = nullptr,
+                          const IterationCallback &iteration_callback = nullptr,
+                          const SampleCallback &sample_callback = nullptr);
 
     // Enhanced parallel run method with progress callback and stop functionality
-    int run_parallel_with_callback(double (*func)(std::vector<double> &), int steps,
-                                   int threads,
-                                   void (*progress_callback)(int current_step, int total_steps, double log_prob) = nullptr,
-                                   bool (*should_stop_callback)() = nullptr,
-                                   void (*iteration_callback)(int current_step, int total_steps) = nullptr,
-                                   SampleCallback sample_callback = nullptr);
+    int run_parallel_with_callback(const LogProbability &func, int steps, int threads,
+                                   const ProgressCallback &progress_callback = nullptr,
+                                   const StopCallback &should_stop_callback = nullptr,
+                                   const IterationCallback &iteration_callback = nullptr,
+                                   const SampleCallback &sample_callback = nullptr);
 
     int reset();
     int save_state(char *file_name);
@@ -132,11 +139,11 @@ class Mcmc {
     ~Mcmc(){};
 
    private:
-    int run_impl(double (*func)(std::vector<double> &), int steps, int threads,
-                 void (*progress_callback)(int, int, double),
-                 bool (*should_stop_callback)(),
-                 void (*iteration_callback)(int, int),
-                 SampleCallback sample_callback);
+    int run_impl(const LogProbability &func, int steps, int threads,
+                 const ProgressCallback &progress_callback,
+                 const StopCallback &should_stop_callback,
+                 const IterationCallback &iteration_callback,
+                 const SampleCallback &sample_callback);
 };
 
 }  // namespace nu

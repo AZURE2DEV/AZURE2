@@ -185,3 +185,89 @@ Minuit adjoint path and the API). The six hand-written scattering-length sites o
 Totals: the writer gets the `<scatteringLengths>` part (`Total-Scattering-Length-Chi-Squared`) and the `<modelData>`
 part (`Total-Model-Data-Chi-Squared`, written only with the section); pyazr's `penalties()["scattering_length"]` is
 the whole term ("model data"); `pyazr.model_data` gives the rows of the section as records.
+
+## 6. The ensemble sampler samples this objective (2026-11-13)
+
+**Measured before the change** (branch start ac2488a0; a scratch program built on the engine, `work/sampler/measure/`,
+outside the repository; −½ χ² of `AZURECalc::operator()` with the fit's limits manager against the sampler's
+`CalculateLogPrior` + `LogLikelihood` / `LogLikelihoodPhysical` after `UpdateParameterVectors`, `BuildAutoPriors` and
+the prior covariance's set-up, at the start, at a displaced point and at a point outside a limit). Line numbers are
+those of `src/AZURECalcMCMC.cpp` (`MC`) and `src/Objective.cpp` (`OB`) at that commit.
+
+| term or limit | fit (`OB`) | sampler, fit basis (RWA) | sampler, observed basis | lines (`MC`) |
+|---|---|---|---|---|
+| T1 data χ² (THM profiled) | 23–80 | yes, `DataChi2` | yes, the same | 97, 172 |
+| T2 data covariance | 84–90 | yes, `DataChi2` | yes | 97, 172 |
+| T3 norm prior | 59–68 | yes, Gaussian from `ForEachDiagonalPrior`, normalised | yes, the same | 345–357, 552–579 |
+| T4 shift priors | 71 | yes, as T3 | yes | 345–357 |
+| T5 nuisance priors | 92–101 | yes, on the amplitude, normalised | yes, on the width as written | 431–472 |
+| T6 Park wall | 104–114, quadratic | −∞ for J < 0 (D2) | −∞ for J < 0 | 72, 160 |
+| T7 abundances | 141–151 | per-nucleus priors normalised; sum-to-one in the likelihood | the same | 100, 175, 345–357 |
+| T8 screening, density, Doppler, thickness, apparatus priors | 117–138 | yes, as T3 | yes | 345–357 |
+| T9 model data | 155–169 | yes, `ModelDataChi2` | yes | 101, 176 |
+| T10 prior covariance | 184–194 | yes, normalised, replaces diagonal priors | refused on a level parameter | 510–558 |
+| T11 `gamma_decay` priors and wall | 173–181 | **no** | **no** | — |
+| MINUIT limits of any parameter | MIGRAD stays inside | **no** (never read) | **no** | — |
+
+At the three points, sampler − (−½ χ²) (a constant where every term agrees: the Gaussian priors' normalisation):
+
+| project (basis) | start | displaced | outside a limit |
+|---|---|---|---|
+| `gamma_decay` record, no prior (Brune, Park) | 0 | 0 | b(6.7931) = −0.1: 0, finite (−41554.0) |
+| the record, Σ b > 1 (b(6.7931) = 0.6) | | | 20161.77: the wall missing |
+| the record, priors on Γ_γ, b(6.1763), remainder | 3.0617 | 0.8956 | Γ_γ = −0.01: 81.117, finite |
+| T2 (Brune; many priors, prior covariance) | 0.881047 | 0.881047 | abundance −0.001: 0.881047, finite |
+| T2, density 10¹⁵ (its lower limit 2×10¹⁵) | | | 0.384797, finite |
+| 13N (Brune, Park, formal) | 0 | 0 | (no limited parameter free) |
+| `mcmc_physical_norm` 13N_fast (Brune) | 2.076794 | 2.076794 | |
+| `energy_shift_sqrt`, `thm_coherent_background/toy`, `identical_pp_res` (Park) | 0 | 0 | |
+| `nuisance_prior`'s model (b) (Brune) | 3.686232 | 3.686232 | |
+
+The same numbers in both bases. So: every term of the fit is in the sampler, with the same value up to the Gaussian
+normalisation, except T11 (the record's priors and wall, a difference that moves with the record's numbers) and the
+limits, which the sampler never applied to any parameter. Outside a limit the fit and the sampler also differ where a
+term reads a clamped value: the density prior is evaluated by the fit on the value held inside its limits, by the
+sampler on the sampled value (T2 above, 0.496 of −½ χ²).
+
+**The rule.** The sampler's log-probability is −½ × the fit's objective, taken from the same object and the same
+enumeration of terms, plus a documented constant, and −∞ outside the support:
+
+    ln P(x) = −½ Σ_terms χ²_t(p(x)) + C,          C = Σ_priors −ln(σ √(2π)) − ½ ln det(2π C_prior)
+
+Each term of `Objective::Terms()` says how the sampler takes it (`ObjectiveTerm::AddForSampler`,
+`ObjectiveTerm::ExcludesForSampler`):
+- by value, in the evaluation (the default of the interface, so that a new term reaches the sampler with no edit of
+  `AZURECalcMCMC.cpp`): T1 and T2 (the data, THM norms profiled), the abundances' sum-to-one, T9, T11;
+- as normalised Gaussian priors from their enumeration, in the log-prior (`ForEachDiagonalPrior`, the nuisance
+  priors, the prior covariance), because the posterior should be a normalised density in those parameters and the
+  log-prior is analytic (evaluated before the model): T3, T4, T5, T7's per-nucleus priors, T8, T10;
+- as a support: T6, Park's J > 0 (D2: −∞ in the sampler, a quadratic wall in the fit).
+
+The limits: the sampler gives −∞ to a point outside the MINUIT limits of a parameter whose kind's row says so
+(`ParamKindRow::samplerSupport`, `include/ParameterKind.h`). Today that is the `gamma_decay` record's numbers (Γ_γ ≥ 0,
+b_f ∈ [0, 1]; δ has none): there the limits define the parametrisation (gamma_parametrisation.md section 2.6). For the
+other kinds the flag is off, so the posterior of a project without a record does not change (below).
+
+The columns of `samples.mcmc`: `logprior` is the normalised Gaussian priors (the enumerated ones and the user's);
+`loglikelihood` is `logprob − logprior`, −½ × every term taken by value, so it holds T11 for a project with a record.
+
+**What remains the sampler's own**, and why none is a term of the fit:
+- the user's priors of the `<mcmc>` block (`SetPriors`): a configuration of the sampler, which the fit does not read;
+- the normalisation constants: they do not depend on the parameters (the fit minimises, the sampler needs a density
+  only up to a constant, but the `logprior` column is a normalised log density, as documented in the user guide);
+- the profiled norms: not parameters in either (T1a/b; the same function);
+- the observed-parameter basis: the sampler samples the observed widths (or the record's numbers) and evaluates the
+  objective at the amplitudes they give; there is no Jacobian. The prior is flat in the observed widths, which is the
+  choice of that basis, not a transformation of the fit's flat prior in the amplitudes;
+- a nuisance prior on a width in the observed basis is a Gaussian on the width as written, in the fit a Gaussian on the
+  converted amplitude (on purpose: each basis puts the prior on its own coordinate);
+- the walkers' initial spread and the level-energy spread.
+
+**Differences left for the director** (the posterior of a project without a record would change; not done here):
+1. The limits of every other kind (abundances ≥ 0, thickness ≥ 0, densities and Doppler temperatures inside their
+   layout range, apparatus parameters, a reduced width's limit, `<parameterSettings>` limits): the sampler accepts
+   points outside them (abundance −0.001 in T2: finite). Proposal: `samplerSupport = true` on those rows (a one-column
+   change), after a decision on the observed basis, where a level parameter's limit is set on the amplitude and the
+   sampler moves the width.
+2. Outside a limit, the fit's terms that read a clamped value (the density prior, T8) and the sampler's prior on the
+   sampled value differ (0.496 in the example); this disappears with item 1.

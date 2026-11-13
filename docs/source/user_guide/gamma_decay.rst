@@ -102,6 +102,8 @@ Wherever parameters are given or returned in observed form (pyazr's physical vec
 or nuisance prior in ``<parameterSettings>``), the record's numbers stand at its parameters' places, not partial
 widths: a value set there is the record's :math:`\Gamma_\gamma` (eV), :math:`b_f` or :math:`\delta_f`. A limit on a
 record's number is applied as written; one on a particle width of the record's level is converted as for any level.
+The MCMC (both bases) samples the record's numbers inside their limits and includes the record's priors and the
+remainder's wall, as the fit's objective does (:doc:`mcmc`, ``samples.mcmc``).
 
 From Python, an agent reads the record, changes one branching and refits:
 

@@ -162,16 +162,17 @@ the scale and the Hessian is singular; (iii) a reader sees the numbers that were
 the experiment did not measure (often the weak or unobserved branch).
 
 **Boundary.** Each free b_f has MINUIT limits [0, 1], Γ_γ ≥ 0, δ is free. MINUIT reaches a limit through its sine
-transformation without leaving it; MINOS reports the limit as the bound of an interval that hits it; the ensemble
-MCMC samples in the external coordinates and rejects a proposal outside the limits. The remainder has no box: when
-Σ_{f≠r} b_f > 1 the map uses b_r = 0 and the others divided by their sum (no negative width, no NaN), and the objective
-adds the wall ((Σ_{f≠r} b_f − 1)/10⁻³)² so that the minimum stays on Σ ≤ 1 (to 10⁻³ of the wall's width); a fit that
-ends
-with a branching or the remainder at 0 says so in the run log and in `parameters.out`. At b_f = 0 the amplitude is 0
-and ∂p/∂b is infinite (p ∝ b^½); the Jacobian is set to 0 there, as for a width written 0. δ = 0 is regular: the L+1
-amplitude is linear in δ, and its derivative is taken in that form, not through p/(2Γ) (0/0 at δ = 0), so δ = 0 is an
-allowed start; with angle-integrated data alone, which depend on δ², the sign of δ is not determined and δ = 0 is a
-stationary point by symmetry: start away from 0 or give an angular distribution.
+transformation without leaving it; MINOS reports the limit as the bound of an interval that hits it; the ensemble MCMC
+samples in the external coordinates and rejects a proposal outside the limits (the kind's row says so,
+`ParamKindRow::samplerSupport`), and its posterior has the record's priors and the remainder's wall, taken from the
+objective's table as every term (objective.md section 6; `tests/reference/sampler_objective_test.cpp`). The remainder
+has no box: when Σ_{f≠r} b_f > 1 the map uses b_r = 0 and the others divided by their sum (no negative width, no NaN),
+and the objective adds the wall ((Σ_{f≠r} b_f − 1)/10⁻³)² so that the minimum stays on Σ ≤ 1 (to 10⁻³ of the wall's
+width); a fit that ends with a branching or the remainder at 0 says so in the run log and in `parameters.out`. At b_f =
+0 the amplitude is 0 and ∂p/∂b is infinite (p ∝ b^½); the Jacobian is set to 0 there, as for a width written 0. δ = 0 is
+regular: the L+1 amplitude is linear in δ, and its derivative is taken in that form, not through p/(2Γ) (0/0 at δ = 0),
+so δ = 0 is an allowed start; with angle-integrated data alone, which depend on δ², the sign of δ is not determined and
+δ = 0 is a stationary point by symmetry: start away from 0 or give an angular distribution.
 
 ### 2.7 A channel with external capture
 
@@ -299,7 +300,9 @@ What each place needs, and what it got before (measured on the build of this bra
   **Wrong before**: `FillMnParams` took the record's numbers from the file, so those of the vector were ignored.
   pyazr's `calculate_chi2` with Γ_γ × 1.2 gave the χ² of the unchanged project (44.79 instead of 3889.3) and
   `update_segments` cross sections 17 % off; the observed-parameter MCMC on the record's numbers had a constant
-  likelihood. Present since the record was merged (2026-11-13).
+  likelihood. Present since the record was merged (2026-11-13). The sampler (both bases) now evaluates, at that
+  vector, the record's priors and wall with the rest of the objective and gives −∞ outside the record's limits
+  (section 2.6).
 
 ## 3. The file and the API
 
