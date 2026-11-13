@@ -11,6 +11,7 @@ import hmac
 import inspect
 import os
 import secrets
+import shutil
 import socket
 import sys
 import time
@@ -23,6 +24,9 @@ from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 TOKEN_COOKIE = "azure2_ui_token"
+# The bounds of the first rows of a file (GET /api/files/{path}): rows per request, bytes read of one line.
+FILE_HEAD_ROWS = 200
+FILE_HEAD_LINE_BYTES = 4096
 
 
 class Server:
@@ -78,18 +82,71 @@ class Server:
         return {"rev": self.state.restore(rev)}
 
     def file_head(self, path, rows=20):
-        """The first ``rows`` lines of a text file inside the root (relative paths from the project's directory), as
-        written: the page shows the head of a data file beside its record."""
+        """The first ``rows`` lines (1 to :data:`FILE_HEAD_ROWS`) of a text file inside the root (relative paths from
+        the project's directory), as written: the page shows the head of a data file beside its record.  At most
+        :data:`FILE_HEAD_LINE_BYTES` bytes of a line are read (a binary file without line ends is not read whole);
+        ``cut`` lists the numbers (from 1) of the lines cut there."""
+        rows = int(rows)
+        if not 1 <= rows <= FILE_HEAD_ROWS:
+            raise Refused(f"rows={rows}: the first rows of a file are 1 to {FILE_HEAD_ROWS}",
+                          allowed=f"rows from 1 to {FILE_HEAD_ROWS}", fix=f"GET /api/files/{path}?rows=20")
         full = self.state.inside_root(path)
         if not os.path.isfile(full):
             raise NotFound(f"no file {path!r} (relative to {self.state.directory})")
-        lines = []
+        lines, cut = [], []
         with open(full, "rb") as f:
-            for raw in f:
-                if len(lines) == int(rows):
-                    return {"path": path, "lines": lines, "more": True}
+            while len(lines) < rows:
+                raw = f.readline(FILE_HEAD_LINE_BYTES + 1)
+                if not raw:
+                    return {"path": path, "lines": lines, "more": False, "cut": cut}
+                if len(raw) > FILE_HEAD_LINE_BYTES and not raw.endswith(b"\n"):
+                    raw = raw[:FILE_HEAD_LINE_BYTES]
+                    cut.append(len(lines) + 1)
+                    while True:  # skip the rest of the line, a block at a time
+                        rest = f.readline(65536)
+                        if not rest or rest.endswith(b"\n"):
+                            break
                 lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
-        return {"path": path, "lines": lines, "more": False}
+            more = bool(f.read(1))
+        return {"path": path, "lines": lines, "more": more, "cut": cut}
+
+    def outputs(self, rev=None):
+        """Write the program's output files at the working x and copy them into the project's output directory
+        (``<config>`` output_dir, inside the root): the user asked for them, so this is the one session request that
+        writes into the user's directory.  Returns the directory (relative to the project's) and the files."""
+        if rev is not None:
+            self.state.check_rev(rev)
+        target = self._output_directory()
+        with self.worker.lock:
+            self.budget.require_session()
+            rev = self._ensure_built()
+            written = self.worker.call("outputs", x=self._vector())
+        os.makedirs(target, exist_ok=True)
+        for name in written["files"]:
+            if not name or os.path.basename(name) != name or name in (".", ".."):
+                raise Refused(f"the worker named {name!r} among the output files: not a plain file name")
+            shutil.copy2(os.path.join(written["directory"], name), os.path.join(target, name))
+        return {"rev": rev, "directory": os.path.relpath(target, self.state.directory), "files": written["files"],
+                "listing": self.outputs_list()["files"]}
+
+    def outputs_list(self):
+        """The files of the project's output directory: name, size (bytes), time written (s since the epoch)."""
+        target = self._output_directory()
+        files = []
+        if os.path.isdir(target):
+            for name in sorted(os.listdir(target)):
+                full = os.path.join(target, name)
+                if os.path.isfile(full):
+                    st = os.stat(full)
+                    files.append({"name": name, "size": st.st_size, "mtime": st.st_mtime})
+        return {"directory": os.path.relpath(target, self.state.directory), "files": files}
+
+    def _output_directory(self):
+        """The project's output directory (``<config>`` output_dir, default output/), resolved inside the root."""
+        with self.state.lock:
+            entries = self.state.project.config()
+        value = entries.get("output_dir") if isinstance(entries, dict) else None
+        return self.state.inside_root(str(value or "output/").strip().strip('"'))
 
     def open(self, path):
         """Open another project inside the root (no job may run)."""

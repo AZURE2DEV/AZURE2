@@ -44,8 +44,10 @@ function controlElement(doc, c, onChange, ctx) {
       wrap.appendChild(dl);
       el.setAttribute("list", id);
     }
+    // a number box as wide as its text up to 24 characters (a number is never cut short of that)
     const chars = String(c.value || c.placeholder || "").length;
-    el.style.width = `${Math.max(c.numeric ? 7 : 9, Math.min(c.wide ? 64 : 22, chars + 3))}ch`;
+    el.style.width = c.numeric ? `${Math.max(7, Math.min(24, chars) + 2)}ch`
+      : `${Math.max(9, Math.min(c.wide ? 64 : 22, chars + 3))}ch`;
   }
   if (c.disabled) el.disabled = true;
   if (c.title) el.title = c.title;
@@ -164,20 +166,38 @@ function fieldElement(doc, entry, ctx, state) {
     title.appendChild(r);
   }
   box.appendChild(title);
-  const occurrences = doc.createElement("div");
-  occurrences.className = "occurrences";
+  // a repeated field is a small table: one row per entry, its controls in cells, the remove button in the row
+  const occurrences = doc.createElement(entry.repeatable ? "table" : "div");
+  occurrences.className = entry.repeatable ? "occurrences repeat" : "occurrences";
+  const head = entry.repeatable ? occurrences.appendChild(doc.createElement("thead")) : null;
+  const rows = entry.repeatable ? occurrences.appendChild(doc.createElement("tbody")) : occurrences;
+  let headLabels = null;  // the column titles: the control labels of the first entry
   box.appendChild(occurrences);
   state[entry.key] = [];
   const add = (widget) => {
     const slot = { widget, values: valuesOf(widget) };
     state[entry.key].push(slot);
-    const line = doc.createElement("div");
+    const line = doc.createElement(entry.repeatable ? "tr" : "div");
     line.className = "occurrence";
-    occurrences.appendChild(line);
+    rows.appendChild(line);
+    const cell = (child) => {
+      if (!entry.repeatable) return line.appendChild(child);
+      return line.appendChild(doc.createElement("td")).appendChild(child);
+    };
     const draw = () => {
       line.textContent = "";
-      for (const c of slot.widget.controls) {
-        line.appendChild(controlElement(doc, c, (ctl, value) => {
+      if (entry.repeatable && !headLabels) {
+        headLabels = slot.widget.controls.map((c) => c.label || "");
+        const tr = head.appendChild(doc.createElement("tr"));
+        for (const label of [...headLabels, ""]) tr.appendChild(doc.createElement("th")).textContent = label;
+      }
+      slot.widget.controls.forEach((control, i) => {
+        // in a table the label is the column's title (kept in the row where this entry's control differs)
+        const c = entry.repeatable && headLabels[i] === (control.label || "")
+          ? { ...control, label: "",
+            ariaLabel: control.ariaLabel || control.label || control.placeholder || control.name }
+          : control;
+        cell(controlElement(doc, c, (ctl, value) => {
           slot.values[ctl.name] = value;
           if (ctl.rerender) {
             slot.widget = widgetOf(entry.field, slot.widget.compose(slot.values), ctx);
@@ -185,9 +205,9 @@ function fieldElement(doc, entry, ctx, state) {
             draw();
           }
         }, ctx));
-      }
+      });
       if (entry.repeatable) {
-        line.appendChild(button(doc, "−", `remove this ${entry.title}`, () => {
+        cell(button(doc, "−", `remove this ${entry.title}`, () => {
           state[entry.key] = state[entry.key].filter((s) => s !== slot);
           line.remove();
         }));

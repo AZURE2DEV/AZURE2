@@ -659,6 +659,12 @@ objective, its plot against the call, Stop, Kill), writes an accepted fit into t
 shows the χ² of the project as written beside the fit's; the table of every parameter edits the working x of the free
 ones. The engine's own fitters and the sampler are listed with the pyazr call they wait for.
 
+The Results tab (2026-11-13): for every data set and extrapolation, the data times the normalization in use, the
+model and the engine's residuals under it, against c.m. energy, excitation energy or angle, as measured or as S
+factor; the χ² table equal to the program's `chiSquared.out`, model data, angular distributions at one energy, and
+the program's output files written on request. The numbers equal the program's `AZUREOut_*` files (tested on T1,
+T2); the model of a data set is drawn at its points, a dense grid waits for pyazr.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

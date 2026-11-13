@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-results`) — the web UI's Results tab
+
+**Done.** The director's corrections to the page (bounded file preview, wrapping tables, repeated groups as small
+tables with number boxes as wide as their text, the full χ² in the status line, paths broken at `/`, the UI tests
+registered above the last block of `tests/pyazr/CMakeLists.txt`). The Results tab: the payload
+`GET /api/evaluation` (the program's χ² split, every data set's and extrapolation's arrays, residuals, S factor,
+model data), `POST`/`GET /api/outputs`, `tabs/results.js`, plot rows in `plots.js` (residual axis, level markers,
+log axes, CSV with 17 digits, SVG/PNG). `web_ui.md` 11.4 and findings 21–23; user guide; `pyazr/CLAUDE.md`.
+
+**How.** `ctest -R pyazr_ui` equivalents run as scripts at one thread (api, jobs, server, routes, static, node,
+results, smoke: all ok); the smoke test's "Failed to fetch" (1 in 10 runs on T2, 4 in 10 on the page's merge commit)
+came from Chrome loading component extensions into each run's fresh profile, which cancels requests not yet sent;
+the test's Chrome now runs without extensions, component updates and background requests: 0 failures in 20 runs
+(`tests/pyazr/ui/README.md`);
+`results_test.py` compares the payload with the program's `AZUREOut_*`, `.extrap` and `chiSquared.out` on T1 and
+T2; each new check shown failing with an injected error (`tests/pyazr/ui/README.md`); screenshots in both themes
+and sizes looked at (`work/uiresults/shots/`). No C++ changed.
+
+**Open.** The model of a data set is drawn at its points only; lab energy, Legendre orders, the program's σ of an
+S-factor data set, rate and bands wait for pyazr (findings 6, 14, 21–23). Nobody has used the page in a real browser
+by hand.
+
 ## 2026-11-13 (director, 16:16) — merged: the web UI's Fit tab
 
 **Merged** `feature/upgrade-9-webui-fit` (the entry below). No C++ changed (the diff against the data branch in

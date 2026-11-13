@@ -155,5 +155,28 @@ def test_file_head_route_stays_inside_the_root(tmp_path):
         assert client.get("/api/files/no_such_file.dat").status_code == 404
 
 
+
+def test_file_head_is_bounded(tmp_path):
+    """The rows asked are 1 to 200 (refused outside with the range); a line is read to 4096 bytes and marked cut, so
+    a binary file without line ends is not read into memory whole."""
+    from pyazr.ui.server import FILE_HEAD_LINE_BYTES, FILE_HEAD_ROWS
+    project = copy_project("T1", tmp_path)
+    directory = os.path.dirname(project)
+    with open(os.path.join(directory, "one_line.bin"), "wb") as f:
+        f.write(b"x" * (10 * FILE_HEAD_LINE_BYTES))
+    with open(os.path.join(directory, "lines.txt"), "wb") as f:
+        f.write(b"short\n" + b"y" * (FILE_HEAD_LINE_BYTES + 5) + b"\nlast\n")
+    with make_client(project) as client:
+        for rows in (0, -1, FILE_HEAD_ROWS + 1):
+            r = client.get("/api/files/T1.azr", params={"rows": rows})
+            assert r.status_code == 422 and str(FILE_HEAD_ROWS) in r.json()["allowed"], (rows, r.json())
+        assert len(client.get("/api/files/T1.azr", params={"rows": FILE_HEAD_ROWS}).json()["lines"]) > 20
+        head = client.get("/api/files/one_line.bin").json()
+        assert len(head["lines"]) == 1 and len(head["lines"][0]) == FILE_HEAD_LINE_BYTES and head["cut"] == [1]
+        assert head["more"] is False
+        head = client.get("/api/files/lines.txt", params={"rows": 3}).json()
+        assert head["lines"][0] == "short" and len(head["lines"][1]) == FILE_HEAD_LINE_BYTES
+        assert head["lines"][2] == "last" and head["cut"] == [2] and head["more"] is False
+
 if __name__ == "__main__":
     uitest.run(__file__)
