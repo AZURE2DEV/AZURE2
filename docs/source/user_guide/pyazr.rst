@@ -420,9 +420,9 @@ and every prior and constraint) as one callable on the free vector ``x``, in the
 ``f(x)`` is ``s.objective(x)`` bit for bit; ``f.grad(x)`` and ``f.value_and_grad(x)`` its gradient;
 ``f.residuals(x)`` and ``f.jacobian(x)`` the objective as least-squares rows, ``sum(f.residuals(x)**2) == f(x)``
 (the data rows, then one row per prior and constraint); ``f.log_prob(x)`` is ``-0.5 * f(x)``, ``-inf`` where the
-program's sampler puts zero probability (outside the bounds of a parameter whose record has ``sampler_support``,
-today a ``gamma_decay`` record's numbers, and where Park's overlap J of a level is negative); ``f.x0``, ``f.names``,
-``f.bounds`` and ``f.errordef`` (1) for the minimiser.  Calls from several threads on one session run one after the
+program's sampler puts zero probability (outside ``f.bounds``, the fit's limits of a parameter of any kind, a
+``<parameterSettings>`` block's among them, and where Park's overlap J of a level is negative); ``f.x0``,
+``f.names``, ``f.bounds`` and ``f.errordef`` (1) for the minimiser.  Calls from several threads on one session run one after the
 other.
 
 ``s.evaluate(x)`` returns a :class:`pyazr.Evaluation` from one engine evaluation: ``objective``; ``chi2``, the data

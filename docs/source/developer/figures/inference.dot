@@ -18,6 +18,7 @@ digraph inference {
   n_GradAccum [label=<<b>GradAccum</b><br/><font point-size="12">the gradient in<br/>physics coordinates</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_ParameterLimitsManager [label=<<b>ParameterLimitsManager</b><br/><font point-size="12">nuisance limits and<br/>priors</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZURECalcMCMC [label=<<b>AZURECalcMCMC</b><br/><font point-size="12">the log-probability of<br/>the sampler</font>>, shape=box, style="filled", fillcolor="white"];
+  n_PosteriorSupport [label=<<b>PosteriorSupport</b><br/><font point-size="12">the fit&#x27;s limits as<br/>the posterior&#x27;s<br/>support</font>>, shape=box, style="filled", fillcolor="white"];
   n_nu__Mcmc [label=<<b>nu::Mcmc</b><br/><font point-size="12">the sampler&#x27;s run</font>>, shape=box, style="filled", fillcolor="white"];
   n_nu__Ensemble [label=<<b>nu::Ensemble</b><br/><font point-size="12">the walkers of the<br/>sampler</font>>, shape=box, style="filled", fillcolor="white"];
   n_nu__Walker [label=<<b>nu::Walker</b><br/><font point-size="12">one walker: position<br/>and log-probability</font>>, shape=box, style="filled", fillcolor="white"];
@@ -39,6 +40,8 @@ digraph inference {
   n_AZURECalc -> n_GradAccum [style=dotted, penwidth=1.6, arrowhead=empty];
   n_AZURECalcMCMC -> n_WorkingData [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZURECalcMCMC -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZURECalcMCMC -> n_PosteriorSupport [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_PosteriorSupport -> n_ParameterLimitsManager [style=dotted, penwidth=1.6, arrowhead=empty];
   n_nu__Mcmc -> n_nu__Ensemble [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_nu__Ensemble -> n_nu__Walker [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZURECalc -> n_Objective [style=dashed, arrowhead=vee];

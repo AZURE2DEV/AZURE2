@@ -115,6 +115,33 @@ Brune's and Park's bases is converted).
    run log names them. It is defined on the reduced-width amplitudes, so with
    **Use Reduced Widths** off a prior on a level energy or width is refused.
 
+Limits
+------
+
+The sampler never leaves the fit's limits: the posterior is zero at a point
+where any free parameter lies outside the limits a fit would give it. These
+are the limits each kind of parameter carries (a normalization, an abundance,
+a screening potential and a sample thickness are not negative; a fitted areal
+density, Doppler temperature, stopping scale or kernel parameter stays inside
+the range its grids are laid out for; a ``gamma_decay`` record's
+:math:`\Gamma_\gamma \ge 0` and :math:`0 \le b_f \le 1`) and those written in
+``<parameterSettings>`` (:doc:`chi_squared`). A parameter without a limit in
+the fit has none in the sampler. A proposal outside is rejected without being
+evaluated, and a walker of the starting ensemble drawn outside is drawn again
+(the run log says how many).
+
+With **Use Reduced Widths** off the sampler moves the observed widths and
+energies, and the limits act on the reduced-width amplitudes and level
+energies they are converted to: a ``<parameterSettings>`` limit on a width,
+written in eV, is converted to an amplitude once at the start, as for a fit,
+so at the start's level energy the sampler stops at the width written, and
+where the level energy moves the edge in the width moves with the conversion.
+
+A Gaussian prior of this table that is wider than a limit is cut by it: the
+posterior is the prior times the likelihood inside the limits, zero outside,
+so a prior centred near a limit does not describe the sampled distribution
+there.
+
 Sampling settings
 -----------------
 
@@ -142,7 +169,8 @@ Sampling settings
       bounded.
 
    Normalizations and energy shifts are started inside their own prior width,
-   since beginning outside it only wastes steps walking back in.
+   since beginning outside it only wastes steps walking back in. A walker
+   drawn outside the fit's limits is drawn again ("Limits").
 
 **Number of Threads**
    Walkers within a half-ensemble are evaluated in parallel. Results do not
@@ -211,15 +239,13 @@ Output files
 
    ``logprob`` is :math:`-\tfrac12\chi^2` of the fit's objective, term for
    term, plus the normalisation of the Gaussian priors, and the sampler
-   rejects a point outside the support (Park's :math:`J \le 0`; the limits of
-   a ``gamma_decay`` record's numbers, :math:`\Gamma_\gamma \ge 0` and
-   :math:`0 \le b_f \le 1`).  ``logprior`` is the normalised Gaussian priors:
+   rejects a point outside the support (Park's :math:`J \le 0`; the fit's
+   limits of every parameter, "Limits" above).  ``logprior`` is the normalised Gaussian priors:
    the automatic ones, the nuisance priors, the prior covariance and those of
    this table.  ``loglikelihood`` is the rest of the objective: the data, the
    abundances' sum-to-one term, the model data, and the priors and the
-   remainder's wall of a ``gamma_decay`` record (:doc:`gamma_decay`).  The
-   limits of other parameters (an abundance, a fitted density) are not applied
-   by the sampler.
+   remainder's wall of a ``gamma_decay`` record (:doc:`gamma_decay`).  A
+   point outside the support is never written.
 
    ``loglikelihood`` includes the measured scattering lengths of a
    ``<scatteringLengths>`` block (:doc:`../theory/scattering_length`).  For the

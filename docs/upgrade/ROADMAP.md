@@ -123,6 +123,8 @@ for the FCN, the LM/FD cost, the MCMC likelihood and the API; one enumeration of
 G2, least-squares rows and the MCMC; pyazr computes no prior (2.11.0). χ² bit-identical where no decision applies;
 PI decisions D1–D7 and "the MCMC shares the fit's configuration" applied, each change classified. Open: the writer
 from the terms rather than stored totals; `inference/` as a separate library (after Phase 4).*
+- [x] The sampler's posterior is −½ × the objective, zero outside the fit's limits of every kind, in both sampling
+      bases (`PosteriorSupport`; objective.md section 6). Open: the API's log-probability on the same rule (pyazr).
 
 ## Phase 3 — One project model; library readers
 

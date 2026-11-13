@@ -78,6 +78,7 @@ ParamIndexMap	include/AZUREGrad.h	where each parameter sits, for the gradient	in
 GradAccum	include/AZUREGrad.h	the gradient in physics coordinates	inference	class	evaluation
 ParameterLimitsManager	include/ParameterLimitsManager.h	nuisance limits and priors	inference	class	run
 AZURECalcMCMC	include/AZURECalcMCMC.h	the log-probability of the sampler	inference	class	run
+PosteriorSupport	include/PosteriorSupport.h	the fit's limits as the posterior's support	inference	class	run
 nu::Mcmc	numcmc/include/numcmc/mcmc.h	the sampler's run	inference	class	run
 nu::Ensemble	numcmc/include/numcmc/ensemble.h	the walkers of the sampler	inference	class	run
 nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probability	inference	class	run

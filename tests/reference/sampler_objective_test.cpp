@@ -18,9 +18,20 @@
  *     two threads, write the chains (samples.mcmc) of the same runs made one after the other, byte for byte.
  * And T2 of tests/upgrade (normalisation, shift, density, abundance priors and a prior covariance), fit basis: the
  * identity of (a) at three points (the constant is the Gaussian priors' normalisation).
+ * (d) The support is the fit's limits, of every kind (objective.md section 6, "The support"): for every free
+ *     parameter with a limit of the fit (the kinds' own and <parameterSettings>, as the limits manager sets them
+ *     before a fit), in both bases, the point with that component 0.1 % inside the limit has ln P = -chi2/2 + C and
+ *     the point 0.1 % outside has ln P = -infinity (in the observed basis: the observed vector whose conversion is
+ *     that fit vector).  Projects: the record (Brune, Park); T2 (norms, abundance, density) and T2 with its gas
+ *     target's Doppler temperature fitted; 13N_fast with <parameterSettings> limits on a level energy and two widths,
+ *     and with the Wigner limits; tests/screening_6li fit.azr (screening); tests/stopping_yield fit.azr (densities,
+ *     stopping scale); tests/rectangular_resolution fit.azr (a kernel's width).  Every kind with a limit is met.
+ * (e) A chain whose walkers start next to a limit (screening_6li's three screening potentials at 0.5 eV with a 300 %
+ *     spread, under priors centred at -300 eV that pull them below 0) is drawn inside the limits and stays inside.
  *
- * Run from the directory CMake prepares (data/ with both projects' data, output/, checks/):
- *   sampler_objective_test <record.azr> <T2.azr>   (ctest: sampler_objective)
+ * Run from the directory CMake prepares (data/ with every project's data, output/, checks/):
+ *   sampler_objective_test <record.azr> <T2.azr> <13N_fast.azr> <screening fit.azr> <stopping fit.azr>
+ *                          <rectangular fit.azr>   (ctest: sampler_objective)
  */
 #include <cmath>
 #include <cstdio>
@@ -28,6 +39,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -41,6 +53,7 @@
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "Objective.h"
+#include "ParameterKind.h"
 #include "ParameterLimitsManager.h"
 #include "PriorCovariance.h"
 #include "WorkingCopy.h"
@@ -86,11 +99,11 @@ struct Model {
   AZUREParams params;
   std::unique_ptr<ParameterLimitsManager> limits;
   std::shared_ptr<const PriorCovariance> priorCov;
-  Model(const std::string &azr, bool park, const std::string &outdir) : cfg(log) {
+  Model(const std::string &azr, bool park, const std::string &outdir, unsigned int extraMask = 0) : cfg(log) {
     cfg.configfile = azr;
     ok = cfg.ReadConfigFile() >= 0;
     cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-    cfg.paramMask |= Config::USE_BRUNE_FORMALISM;
+    cfg.paramMask |= Config::USE_BRUNE_FORMALISM | extraMask;
     if (park) cfg.paramMask |= Config::USE_PARK_FORMALISM;
     mkdir(outdir.c_str(), 0755);
     cfg.outputdir = outdir + "/";
@@ -116,10 +129,12 @@ struct Model {
   bool ok = true;
   int N() const { return (int)params.GetMinuitParams().Params().size(); }
   bool Fixed(int i) const { return params.GetMinuitParams().Parameter(i).IsFixed(); }
-  // The sampler's start, as AZURE2.cpp makes it: the varying parameters, amplitudes or observed values.
-  std::vector<double> Start(bool useRWA) const {
+  // The sampler's start, as AZURE2.cpp makes it: the varying parameters, amplitudes or observed values; with `at`,
+  // the same at the fit vector *at instead of the project's.
+  std::vector<double> Start(bool useRWA, const vector_r *at = nullptr) const {
     vector_r all;
     for (int i = 0; i < N(); i++) all.push_back(params.GetMinuitParams().Value(i));
+    if (at) all = *at;
     if (!useRWA) {
       CNuc *c = compound->Clone();
       c->FillCompoundFromParams(all);
@@ -250,11 +265,62 @@ std::vector<std::vector<double>> Chain(Model &m, bool useRWA, int steps, double 
   return samples;
 }
 
+// (d) For every free parameter of m with a limit of the fit, in both bases: 0.1 % inside the limit ln P = -chi2/2 + C,
+// 0.1 % outside -infinity.  The kinds met are added to `kinds`.
+void LimitsOfEveryKind(const std::string &label, Model &m, std::set<std::string> &kinds) {
+  Fit fit(m);  // the limits manager applied to m.params, as before a fit
+  const ROOT::Minuit2::MnUserParameters &mp = m.params.GetMinuitParams();
+  // The base point: the start, with a component outside its limits moved 0.1 % inside them (13N_fast's start has
+  // amplitudes beyond the Wigner limits; MINUIT, too, starts at the limit).
+  vector_r start;
+  for (int i = 0; i < m.N(); i++) {
+    const ROOT::Minuit2::MinuitParameter &par = mp.Parameter(i);
+    double v = mp.Value(i);
+    if (!par.IsFixed() && par.HasLowerLimit() && v < par.LowerLimit()) v = par.LowerLimit() + 1e-3 * std::fabs(par.LowerLimit());
+    if (!par.IsFixed() && par.HasUpperLimit() && v > par.UpperLimit()) v = par.UpperLimit() - 1e-3 * std::fabs(par.UpperLimit());
+    start.push_back(v);
+  }
+  for (int useRWA = 1; useRWA >= 0; useRWA--) {
+    const std::string basis = useRWA ? ", fit basis" : ", observed basis";
+    std::unique_ptr<AZURECalcMCMC> mc = Sampler(m, useRWA);
+    const double C = mc->LogPriorNormalisation();
+    int limits = 0;
+    for (int i = 0; i < m.N(); i++) {
+      const ROOT::Minuit2::MinuitParameter &par = mp.Parameter(i);
+      if (par.IsFixed()) continue;
+      for (int side = 0; side < 2; side++) {
+        if (!(side == 0 ? par.HasLowerLimit() : par.HasUpperLimit())) continue;
+        const double limit = side == 0 ? par.LowerLimit() : par.UpperLimit();
+        const double eps = 1e-3 * std::max(std::fabs(limit), std::max(std::fabs(start[i]), 1e-30));
+        kinds.insert(KindRow(m.params.Kind(i)).key);
+        limits++;
+        for (int outside = 0; outside < 2; outside++) {
+          vector_r at = start;
+          at[i] = limit + ((side == 0) == (outside == 1) ? -eps : eps);
+          const std::vector<double> x = m.Start(useRWA, &at);
+          const double lp = mc->LogProbability(x, useRWA);
+          const std::string what = label + basis + ": " + par.GetName() + " (" + KindRow(m.params.Kind(i)).key + ") " +
+                                   (outside ? "outside" : "inside") + " its " + (side ? "upper" : "lower") +
+                                   " limit " + num(limit);
+          if (outside) {
+            check(what + ": ln P = -infinity", std::isinf(lp) && lp < 0, num(lp));
+          } else {
+            const double expect = -0.5 * fit.Chi2At(*mc, x, useRWA) + C;
+            check(what + ": ln P = -chi2/2 + C", Close(lp, expect, 1e-9), "ln P " + num(lp) + ", -chi2/2 + C " + num(expect));
+          }
+        }
+      }
+    }
+    check(label + basis + ": " + std::to_string(limits) + " limits tested", limits > 0);
+  }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-  if (argc < 3) {
-    std::fprintf(stderr, "usage: sampler_objective_test <record.azr> <T2.azr>\n");
+  if (argc < 7) {
+    std::fprintf(stderr, "usage: sampler_objective_test <record.azr> <T2.azr> <13N_fast.azr> <screening fit.azr> "
+                         "<stopping fit.azr> <rectangular fit.azr>\n");
     return 2;
   }
   // Copies in the working directory: a project's relative paths (data, output) are its file's directory's.
@@ -350,6 +416,77 @@ int main(int argc, char **argv) {
     check("the project without the priors: its chain in a thread beside another sampler = its chain alone (" +
               std::to_string(soloB.size()) + " bytes)",
           !soloB.empty() && pairB == soloB);
+  }
+
+  std::printf("== (d) the support is the fit's limits, of every kind, in both bases\n");
+  {
+    const std::string n13 = "13N_fast.azr", screening = "screening.azr", stopping = "stopping.azr",
+                      rectangular = "rectangular.azr";
+    std::ofstream(n13.c_str()) << readFile(argv[3]);
+    std::ofstream(screening.c_str()) << readFile(argv[4]);
+    std::ofstream(stopping.c_str()) << readFile(argv[5]);
+    std::ofstream(rectangular.c_str()) << readFile(argv[6]);
+    std::string text = readFile(t2);
+    bool ok = replaceAll(text, "doppler        free_gas 300 K fixed", "doppler        free_gas 300 K fit prior 300 20 grid_max 600");
+    std::ofstream("T2_doppler.azr") << text;
+    text = readFile(n13);
+    ok = ok && replaceAll(text, "\nLevel 1 Channel 1 Width (eV) 1.62 0 0 ", "\nLevel 1 Channel 1 Width (eV) 1.62 1.0 2.5 ");
+    ok = ok && replaceAll(text, "\nLevel 3 Energy (MeV) 2.3682 0 0 ", "\nLevel 3 Energy (MeV) 2.3682 2.36 2.38 ");
+    ok = ok && replaceAll(text, "\nLevel 3 Channel 6 Width (eV) -0.48 0 0 ", "\nLevel 3 Channel 6 Width (eV) -0.48 -0.8 -0.2 ");
+    std::ofstream("13N_limits.azr") << text;
+    check("the variants with limits are made (every edit found)", ok);
+    std::set<std::string> kinds;
+    struct Case {
+      std::string label, azr;
+      bool park;
+      unsigned int mask;
+    };
+    for (const Case &c : std::vector<Case>{{"record, Brune", record, false, 0},
+                                           {"record, Park", record, true, 0},
+                                           {"T2", t2, false, 0},
+                                           {"T2 with a fitted Doppler temperature", "T2_doppler.azr", false, 0},
+                                           {"13N_fast with <parameterSettings> limits", "13N_limits.azr", false, 0},
+                                           {"13N_fast with the Wigner limits", n13, false, Config::USE_WIGNER_LIMITS},
+                                           {"screening_6li", screening, false, 0},
+                                           {"stopping_yield", stopping, false, 0},
+                                           {"rectangular_resolution", rectangular, false, 0}}) {
+      Model m(c.azr, c.park, "output_limits", c.mask);
+      check(c.label + ": the project loads", m.ok);
+      if (m.ok) LimitsOfEveryKind(c.label, m, kinds);
+    }
+    std::string met;
+    for (const std::string &k : kinds) met += " " + k;
+    const std::set<std::string> expected = {"abundance", "apparatus", "density", "doppler", "energy",
+                                            "norm",      "radiative", "screening", "width"};
+    check("every kind with a limit in these projects is met:" + met, kinds == expected);
+
+    std::printf("== (e) a chain started next to a limit is drawn and stays inside\n");
+    text = readFile(screening);
+    ok = replaceAll(text, "screening      500.0000 eV fit", "screening      0.5 eV fit prior -300 20") &&
+         replaceAll(text, "norm           1.000000 fit", "norm           1.000000 fixed");
+    std::ofstream("screening_near_zero.azr") << text;
+    check("the screening variant is made", ok);
+    for (int useRWA = 1; useRWA >= 0; useRWA--) {
+      Model z("screening_near_zero.azr", false, "output_limits");
+      if (!z.ok) {
+        check("the screening variant loads", false);
+        continue;
+      }
+      const std::vector<std::vector<double>> chain = Chain(z, useRWA, 40, 300.0);
+      int outside = 0;
+      double smallest = 1e300;
+      for (const std::vector<double> &row : chain)
+        for (double u : row) {
+          if (!(u >= 0.0)) outside++;
+          smallest = std::min(smallest, u);
+        }
+      const std::string label = useRWA ? "fit basis" : "observed basis";
+      check(label + ": a chain of " + std::to_string(chain.size()) + " rows (three U_e, 0.5 eV +- 300 %, priors at -300 eV)"
+                " stays at U_e >= 0 (smallest " + num(smallest) + ")",
+            chain.size() >= 8 * 40 && outside == 0, std::to_string(outside) + " values below 0");
+      check(label + ": the walkers drawn outside were drawn again (the run's log says so)",
+            z.log.str().find("drawn again inside the fit's limits") != std::string::npos);
+    }
   }
 
   std::printf("%s\n", failures ? "FAILED" : "all passed");

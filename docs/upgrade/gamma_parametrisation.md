@@ -163,8 +163,8 @@ the experiment did not measure (often the weak or unobserved branch).
 
 **Boundary.** Each free b_f has MINUIT limits [0, 1], Γ_γ ≥ 0, δ is free. MINUIT reaches a limit through its sine
 transformation without leaving it; MINOS reports the limit as the bound of an interval that hits it; the ensemble MCMC
-samples in the external coordinates and rejects a proposal outside the limits (the kind's row says so,
-`ParamKindRow::samplerSupport`), and its posterior has the record's priors and the remainder's wall, taken from the
+samples in the external coordinates and rejects a proposal outside the limits (as for every kind:
+`PosteriorSupport`), and its posterior has the record's priors and the remainder's wall, taken from the
 objective's table as every term (objective.md section 6; `tests/reference/sampler_objective_test.cpp`). The remainder
 has no box: when Σ_{f≠r} b_f > 1 the map uses b_r = 0 and the others divided by their sum (no negative width, no NaN),
 and the objective adds the wall ((Σ_{f≠r} b_f − 1)/10⁻³)² so that the minimum stays on Σ ≤ 1 (to 10⁻³ of the wall's

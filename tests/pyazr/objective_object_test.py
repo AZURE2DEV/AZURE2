@@ -12,8 +12,8 @@
 (b) The gradient against a central difference of f, on T1 and 13N_fast (analytic there), and the Jacobian against a
     central difference of the rows on T1.
 (c) log_prob is -inf at the three excluded points of the record (a branching below 0 and above 1, Gamma_gamma below
-    0: the kinds with sampler_support) and where Park's J < 0 (T2 under Park, widths scaled up); a T2 norm far
-    outside its bounds stays finite (its kind's limits are not walls); and it equals the engine's sampler's ln P
+    0), where Park's J < 0 (T2 under Park, widths scaled up) and at a T2 norm below its lower limit (the fit's
+    limits of every kind are walls: PosteriorSupport); and it equals the engine's sampler's ln P
     minus its constant (Session.sampler_log_probability) on the record with priors and on T2.
 (d) Two threads calling one Objective at once get what each gets alone, bit for bit.
 
@@ -168,12 +168,13 @@ with tempfile.TemporaryDirectory() as tmp:
         central_jacobian("T1", f, displaced(f.x0), 1e-5)
     with session("T2", os.path.join(upgrade, "T2"), "T2.azr") as s:
         f = against_today("T2", s)
-        # (c) a norm's bounds are not walls of the posterior (the kind has no sampler_support)
+        # (c) the fit's limits of every kind are walls of the posterior: a norm below its lower limit
         x = f.x0
         k = next(i for i, p in enumerate(s.parameters.free) if p.kind == "norm")
-        x[k] = 1e3
-        check("T2: a norm outside any bound keeps a finite log_prob (no sampler_support for norms)",
-              np.isfinite(f.log_prob(x)) and not any(f.sampler_support))
+        lower = f.bounds[k][0]
+        x[k] = lower - 1e-3
+        check(f"T2: a norm below its lower limit ({lower:g}) has log_prob -inf, at the limit a finite one",
+              np.isfinite(lower) and f.log_prob(x) == -np.inf and np.isfinite(f.log_prob(f.x0)), f.log_prob(x))
         for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
             lp, constant = s.sess.sampler_log_probability(f.x0, x)
             got = f.log_prob(x)
@@ -205,8 +206,8 @@ with tempfile.TemporaryDirectory() as tmp:
     record_dir = os.path.join(TESTS, "gamma_decay", "models")
     with session("record", record_dir, "record.azr", RECORD_PRIORS) as s:
         f = against_today("gamma_decay record with priors", s)
-        check("record: the five free numbers' bounds are walls (sampler_support)", f.sampler_support == [True] * 5,
-              f.sampler_support)
+        check("record: the five free numbers have finite bounds, the walls of log_prob",
+              all(np.isfinite(lo) and np.isfinite(hi) for lo, hi in f.bounds[:5]), f.bounds[:5])
         for k, value in ((1, -0.01), (2, 1.01), (0, -1e-4)):
             x = f.x0
             x[k] = value

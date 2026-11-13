@@ -153,16 +153,12 @@ const std::vector<ParameterField> &ParameterFields() {
       {"free_index", "", kEveryKind, false, "position in the fit vector x, None when fixed",
        [](const ParameterView &v) -> py::object { return OrNone(v.freeIndex); }},
       {"bounds", "unit", kEveryKind, false,
-       "(lower, upper) limits the parameter is created with, -inf / inf where it has none (a <parameterSettings> "
-       "block's limits are the program's fit's only)",
+       "(lower, upper) limits of the fit, -inf / inf where it has none: those the parameter is created with, then "
+       "those of a <parameterSettings> block; outside them Objective.log_prob is -inf, as the program's sampler has it",
        [](const ParameterView &v) -> py::object {
-         const std::pair<double, double> &b = v.api->GetParameterBounds()[v.index];
+         const std::pair<double, double> b = v.api->GetParameterBounds(v.index);
          return py::make_tuple(b.first, b.second);
        }},
-      {"sampler_support", "", kEveryKind, false,
-       "the ensemble sampler's posterior is zero outside bounds (the kind's samplerSupport; objective.md section 6): "
-       "Objective.log_prob is -inf there; the bounds of the other kinds are not walls of the posterior",
-       [](const ParameterView &v) -> py::object { return py::bool_(v.record->Row().samplerSupport); }},
       // -- a level's parameters
       {"jgroup", "", kLevel | Kinds({ParamKind::ThmCoherent}), false, "the J group, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->jGroup); }},
