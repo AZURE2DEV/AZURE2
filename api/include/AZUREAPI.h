@@ -539,6 +539,9 @@ class AZUREAPI {
   mutable std::unique_ptr<AZUREParams> nuisanceParams_;
   mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
   mutable bool nuisanceRead_ = false;
+  /// Deletes compound_ and data_, makes empty new ones and drops what was derived from the old ones (the nuisance
+  /// manager): the one place a model is replaced (Initialize, RebuildImpl).
+  void ReplaceModel();
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
   /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data

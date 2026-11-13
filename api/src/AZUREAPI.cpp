@@ -111,21 +111,8 @@ int AZUREAPI::Initialize() {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // Initialize() is called again on every mode switch, so the previous model
-  // has to go or it is leaked.  (This used to crash: the constructor left
-  // data_/compound_ uninitialized, so the first call deleted a garbage
-  // pointer.  They are null-initialized now.)  Same order as SetRadius.
-  if (compound_ != nullptr) {
-    delete compound_;
-    compound_ = nullptr;
-  }
-  if (data_ != nullptr) {
-    delete data_;
-    data_ = nullptr;
-  }
-
-  data_ = new WorkingCopy();
-  compound_ = new CNuc();
+  // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes.
+  ReplaceModel();
 
   // With the session's radius overrides: Initialize runs again on every mode switch.
   if (compound()->Fill(configure(), radiusOverrides_) == -1) {
@@ -702,12 +689,20 @@ bool AZUREAPI::Rebuild() {
 // Shared body of SetRadius and Rebuild.  Every radius override of the session
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
-bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
-  if (compound_ != nullptr) delete compound_;
-  if (data_ != nullptr) delete data_;
+// The one place compound_ and data_ are replaced (Initialize, RebuildImpl): with them goes everything derived from
+// them and built lazily (the nuisance priors' manager and its parameter list), so it is built again for the new model.
+void AZUREAPI::ReplaceModel() {
+  delete compound_;
+  delete data_;
+  data_ = new WorkingCopy();
+  compound_ = new CNuc();
+  nuisance_.reset();
+  nuisanceParams_.reset();
+  nuisanceRead_ = false;
+}
 
-  compound_ = new CNuc;
-  data_ = new WorkingCopy;
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+  ReplaceModel();
 
   if (compound()->Fill(configure(), radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
