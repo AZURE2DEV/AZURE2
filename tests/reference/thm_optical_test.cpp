@@ -6,8 +6,8 @@
  *  The ten numbers of every set against RIPL-3 / FRONT21 are the library's test
  *  (physics/tests/transfer_global_optical_test.cpp); here their use in the engine:
  *  (b) Elastic scattering d + 40Ca at 56 MeV with daehnick80 (no spin-orbit):
- *      sigma/sigma_R from the engine's S matrix (ThmDistortion::Wave,
- *      Numerov + COUL) against scipy's DOP853 + mpmath, and against the
+ *      sigma/sigma_R from the S matrix of the waves the distortion factor
+ *      solves (the library's SolveStoredWaves) against scipy's DOP853 + mpmath, and against the
  *      measured ratio (Hatanaka et al. 1980, EXFOR E0682-022): within 0.2 dex
  *      at every angle (15-78 deg), 0.08 dex rms.
  *  (c) In the distortion factor: a global s + F potential is re-evaluated at
@@ -132,18 +132,21 @@ int main(int argc, char **argv) {
     c.kind = ThmDistortion::Channel::WOODS_SAXON;
     Evaluate("daehnick80", 1, 2, 20, 40, elab, c.p);
     c.Z1 = 1, c.Z2 = 20;
-    c.mu = kD * mCa / (kD + mCa) * uconv;
+    c.muU = kD * mCa / (kD + mCa);
+    c.mu = c.muU * uconv;
     const double ecm = elab * mCa / (kD + mCa);
     c.k = std::sqrt(2.0 * c.mu * ecm) / hbarc;
     c.eta = 20.0 * fstruc * c.mu / (hbarc * c.k);
     const int lmax = 45;
     std::vector<complex> S(lmax + 1);
-    std::vector<complex> u;
     bool ok = true;
-    for (int l = 0; l <= lmax && ok; l++) {
-      complex T;
-      ok = d.Wave(c, l, 0.02, 2, u, &T);
-      S[l] = 1.0 + 2.0 * complex(0.0, 1.0) * T;
+    try {
+      // The waves as the distortion factor solves them (matched beyond the turning point).
+      const transfer::DistortedWaves w =
+          transfer::SolveStoredWaves(d.LibraryChannel(c, ecm), 0.02, 2, lmax, d.numerics.matching);
+      for (int l = 0; l <= lmax; l++) S[l] = w.waves[l].S;
+    } catch (const std::exception &) {
+      ok = false;
     }
     Expect("waves normalized", ok);
     gsl_sf_result lnr, arg;
