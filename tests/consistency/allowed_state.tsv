@@ -20,7 +20,6 @@ include/AZURECalc.h	output_data_	mutable	pending (milestone 3, an evaluation wri
 include/AZURECalc.h	output_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	output_results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
-include/AZURECalc.h	pools_initialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
 include/AZURECalcMCMC.h	all_indexes	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
@@ -33,7 +32,6 @@ include/AZURECalcMCMC.h	paramNames_	mutable	pending (milestone 4, CNuc split; th
 include/AZURECalcMCMC.h	parametersInitialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	pools_initialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorCov_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorMeans_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorStds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods

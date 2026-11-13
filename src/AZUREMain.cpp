@@ -220,7 +220,6 @@ int AZUREMain::operator()() {
                          " of its own (normalization error, shift error or sigma); a nuisance prior on a listed "
                          "parameter is not applied either.");
     }
-    // theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
     // The fixed flags the minimizers and the band honour: the .azr's, then an
     // external param.par's, then the <parameterSettings> (MIGRAD reads them off

@@ -21,7 +21,6 @@
 #include <sstream>
 #include <string>
 #include <map>
-#include <thread>
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
@@ -56,12 +55,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   WorkingData *working = nullptr;
 
   try {
-    // Initialize pools on first use
-    if (!pools_initialized_) {
-      InitializePools();
-    }
-
-    // Get objects from pool
+    // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
     localCompound = GetPooledCNuc();
     working = GetPooledData();
     localData = working->data.get();
@@ -121,12 +115,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   AZUREParams params;
 
   try {
-    // Initialize pools on first use
-    if (!pools_initialized_) {
-      InitializePools();
-    }
-
-    // Get objects from pool
+    // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
     localCompound = GetPooledCNuc();
     working = GetPooledData();
     localData = working->data.get();
@@ -929,7 +918,6 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
   std::vector<std::string> labels;
   filled = false;
   if (!parametersInitialized_) return labels;
-  if (!pools_initialized_) InitializePools();
   CNuc *lc = GetPooledCNuc();
   try {
     if (useRWA) {
@@ -1355,29 +1343,6 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
   }
 
   configure().outStream << "Loaded " << samples.size() << " existing samples from " << filename << "\n";
-}
-
-/*!
- * Initialize object pools with pre-allocated CNuc and WorkingCopy objects
- */
-void AZURECalcMCMC::InitializePools() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  if (pools_initialized_) return;
-
-  // Calculate pool size based on available hardware threads
-  const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
-
-  // Pre-allocate CNuc objects by cloning once
-  for (int i = 0; i < pool_size; ++i) {
-    cnuc_pool_.push(std::unique_ptr<CNuc>(compound_->Clone()));
-  }
-
-  // Pre-allocate WorkingCopy objects by cloning once
-  for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}}));
-  }
-
-  pools_initialized_ = true;
 }
 
 /*!

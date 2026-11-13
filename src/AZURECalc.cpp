@@ -30,7 +30,6 @@
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
-#include <thread>
 
 #include <cmath>
 #include <cstdlib>
@@ -426,12 +425,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
   if (isFit) {
-    // New multithreading with object pools
-    if (!pools_initialized_) {
-      InitializePools();
-    }
-
-    // Get objects from pool
+    // An evaluation of its own (made when no idle one is left), so evaluations running at once never share one.
     localCompound = GetPooledCNuc();
     working = GetPooledData();
     localData = working->data.get();
@@ -1894,34 +1888,6 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
 }
 
 /*!
- * Initialize object pools with pre-allocated CNuc and WorkingCopy objects
- */
-void AZURECalc::InitializePools() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  if (pools_initialized_) return;
-
-  // Calculate pool size based on OpenMP threads (fixes interaction with OpenMP)
-  int pool_size = 4;  // default minimum
-#ifdef _OPENMP
-  pool_size = std::max(4, omp_get_max_threads());
-#else
-  pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency()));
-#endif
-
-  // Pre-allocate CNuc objects by cloning once
-  for (int i = 0; i < pool_size; ++i) {
-    cnuc_pool_.push(std::unique_ptr<CNuc>(compound()->Clone()));
-  }
-
-  // Pre-allocate WorkingCopy objects by cloning once, each with an empty buffer (sized by its first evaluation)
-  for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data()->Clone()), {}}));
-  }
-
-  pools_initialized_ = true;
-}
-
-/*!
  * Get a CNuc object from the pool, creating new if pool is empty
  */
 CNuc *AZURECalc::GetPooledCNuc() const {
@@ -1933,7 +1899,7 @@ CNuc *AZURECalc::GetPooledCNuc() const {
     return obj.release();
   }
 
-  // Fallback: create new if pool is empty (shouldn't happen often)
+  // None idle: one more evaluation runs at the same time as the others (a thread of a parallel gradient).
   return compound_->Clone();
 }
 
@@ -1949,7 +1915,7 @@ WorkingData *AZURECalc::GetPooledData() const {
     return obj.release();
   }
 
-  // Fallback: create new if pool is empty (shouldn't happen often)
+  // None idle: as GetPooledCNuc.
   return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
 }
 
