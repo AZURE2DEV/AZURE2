@@ -889,6 +889,9 @@ Each with the options, the recommendation and what changing it later costs.
 11. **plotly.js: which bundle and when to fetch it.** It needs a download (not allowed so far): (a) the cartesian
     partial bundle (MIT, about 1–1.5 MB), fetched once with the PI's yes before step 3; (b) the full bundle; (c) no
     plotly: SVG drawn by our own code. *(a)*. Later: small (a file).
+    **Taken by the PI on 2026-11-13: (a).** Version 4.1.2 of `plotly.js-cartesian-dist-min`, fetched and checked
+    against the registry's hash (`HANDOFF.md`, entry of that day); vendored with its licence by the step that
+    draws the first plot.
 
 ## 14. Not looked at
 

@@ -2,6 +2,20 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 11:10) — the PI's decision on plots: plotly.js; the bundle fetched (outside the repository)
+
+The PI ("use plotly", after asking whether something else would be better; the alternatives uPlot, Chart.js, ECharts
+and D3 were laid out with what each would leave us to write) took decision 11 of `web_ui.md` section 13 as
+recommended: the cartesian partial bundle of plotly.js (MIT). Fetched from the npm registry and checked against the
+registry's sha512: `plotly.js-cartesian-dist-min` 4.1.2 (published 2026-10-05; 4.3.0 of 2026-11-10 was the newest and
+is deliberately not taken), `plotly-cartesian.min.js` 1 507 990 bytes, sha256
+`aaf12ff1d4671f7e93f6df4291651ab4ca6b76c0ea5f1576ec1030e3c2819a20`, with its `LICENSE`, under
+`work/vendor/plotly/unpacked-4.1.2/package/` (outside the repository). The page step that draws the first plot
+copies the file and the licence into `pyazr/ui/static/vendor/` and records version and hash beside them; every plot
+goes through one module of the page, so that the library is named in one place. Decisions 5 (drop 20 parity items)
+and 7 (session options as `<config>` keys) of that section are still open; the others are built on the note's
+recommendations, each in one named place.
+
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 
 `docs/upgrade/web_ui.md` is a proposal with eleven decisions for the PI (its section 13), none taken; its twelve
