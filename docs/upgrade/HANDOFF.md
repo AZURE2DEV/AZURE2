@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-skills-model`) — the model and calculation skills on format 3 and pyazr 3.0
+
+**Done.** The seven skills azure2-setup, -calculate, -check, -targets, -thm, -plot, -exchange read against the code and
+rewritten where they taught the earlier formats or removed pyazr names; each has scripts with a self-test on a test
+project (`scripts/selftest.py`, PASS/FAIL lines, exit 77 without the engine). Scripts: audit_project.py (setup),
+extrapolate.py and decompose.py (calculate), chi2_report.py, widths_check.py and radius_scan.py (check), layer.py and
+target_check.py (targets), thm_inspect.py (thm), plot_fit.py (plot), basis_compare.py (exchange). The notes on
+results of older builds are one reference, azure2-check `references/older-results.md`.
+
+Coverage (aspect, owner, state at the start, tool, what was done):
+the aspect (self-tested), or the pyazr example / program option the skill teaches.
+
+| Aspect | Owner (skill, file) | State at start | Tool | Done |
+|---|---|---|---|---|
+| Data kinds of format 3 (quantity, frame, units, keys; totals, natural targets, ratios, A_y, phase shifts, Legendre, yields, model data) | azure2-setup references/data-kinds.md; azure2-calculate references/observables.md | stale: segment lines, isDiff codes, tail keywords, `<segmentsData>`, abundances block; no chooser | `AZURE2 --describe/--print-predictions`; audit_project.py | rewritten: record, column roles with frames, chooser of every quantity, sums/ratios, natural targets, provenance; observables on format 3 |
+| Levels and channels (ENSDF, J^π, l, s, signs) | azure2-setup SKILL, azr-levels.md, nds-exfor.md | mostly right; old verification steps (`<segmentsData>` needed) | `Project.add_level`, audit_project.py | verification on --validate/audit; old-build notes moved |
+| Bases (Brune, formal, Park) and conversion | azure2-exchange | `pyazr.transform.transform_out` (goes) | basis_compare.py | Park transform by session; three-basis check script |
+| Wigner limit, θ², W.u., level norm J | azure2-check SKILL, widths.md | `pyazr.widths.teichmann_wigner/lane_thomas_wigner` (go); no J; no tool | widths_check.py | J (Brune) per level, Γ_W of fixed channels from the engine's physics; PI's saturation guidance ported |
+| External capture (ANCs, which transitions, operator, table, hybrid potential) | azure2-setup azr-levels.md §7; azure2-calculate physics-options.md | options covered; "how to decide" missing | decompose.py (bare = direct capture) | decision paragraph added; `coulomb_functions` → `channel_functions` |
+| Target effects (SRIM stopping, straggling, layers, implanted, gas, beam spread, resolution, Doppler, screening) | azure2-targets | stopping library not taught; `<targetInt>`, sigmalab, burstFWHM wording; hand recipe for the fold check | layer.py, target_check.py | stopping section (evaluation/table/formula/scale, epochs, quadrature); fold checked outside the engine (1e-4) |
+| THM (block, HOES/OES, vertex, DWBA, normalisation, model dependence) | azure2-thm | isDiff+10, `segments=`, `weight[k]`, targetInt, `pyazr.widths`, "pyazr does not fit" | thm_inspect.py | data sets with `thm`, experiment lines, thm_weight, fit_with_engine; inspection script |
+| Observables anywhere (S factor, S(0), rates, decomposition, extrapolation) | azure2-calculate | extrap_mode/data_mode, without_level/only_level, m.sfactor, test segments, "engine not thread-safe" | extrapolate.py, decompose.py; menu 5; examples/reaction_rate.py | extrapolation records, session per mode, decomposition on the fit vector, pairwise J^π check |
+| Channel-radius search (scan as Project edits, refit per radius, what to report) | azure2-check | `set_channel_radius` (goes), no refit, no tool | radius_scan.py | copies per radius with own output dirs, refit walked outward, report rules |
+| Checks: χ² reproduction, pulls, structure, χ²/ν | azure2-check | names right, no tool | chi2_report.py | agreement with chiSquared.out, same-sign runs, largest point |
+| Checks: grid convergence, thread independence | azure2-check | text; thread claim 1e-5 | — (text) | text kept; thread claim to pyazr.rst's "rounding" |
+| Checks: --validate, --describe, --print-predictions, diagnostics codes | azure2-check, azure2-setup | missing | audit_project.py | first item of the checklist |
+| Figures | azure2-plot | m.cross, m.sfactor, load_sav, test segments, targetInt | plot_fit.py | evaluation fields; pulls checked against the engine |
+| Exchange (GNDS/ENDF, SAMMY, rmfit parameters) | azure2-exchange | right except transform_out; Ferdinand on format 3 untested | basis_compare.py | doubt stated |
+| Results of older builds | spread over all bodies | many dated notes in bodies | — | one reference: azure2-check references/older-results.md |
+
+**Verified how.** Every self-test run against the build of the start commit (`work/b-trial60`) at
+OMP_NUM_THREADS=1, all PASS: setup 0.8 s, calculate 11.6 s, check 11.9 s, targets 8.9 s, thm 1.1 s, plot 8.1 s,
+exchange 4.0 s; one assertion per self-test shown to fail with an injected error. `tools/check_skills.py` and
+`tests/consistency/repo_consistency_test.py` pass on every commit.
+
+**Open.** The self-tests are not yet registered in ctest (shared file, the other part's). The names the one-vector
+pyazr branch removes are listed with file and line in the report (`pyazr.masses`, `pyazr.nds`, `transform_rwa`,
+`data_mode=`, `write_output_files`, `dimensionless_widths` if it moves). Ferdinand has not been run on a format-3
+file. Table rows longer than 120 columns remain in older references (Markdown tables cannot wrap).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-fit-function`) — the engine's fit as a function
 
 **Done** (design and as built: `docs/upgrade/fit.md`).
