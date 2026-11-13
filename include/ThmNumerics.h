@@ -12,20 +12,8 @@
  * copy of what both units computed in the same way.
  */
 
-/// e^{i sigma_l}, sigma_l = arg Gamma(l + 1 + i eta), l = 0..lmax (eta = 0: 1).
-std::vector<complex> ThmCoulombPhases(double eta, int lmax);
-
 /// A number as the THM messages print it (6 significant digits).
 std::string ThmNumberText(double x);
-
-/*!
- * The s-x bound state phi(r) without its normalization: exp(-kappa r)/r for a
- * Yukawa tail (or eta_B = 0), else the Whittaker tail
- * 2 kappa e^{-kappa r} U(1 + eta_B, 2, 2 kappa r) = W(2 kappa r)/r up to a
- * constant; 0 if GSL fails (other than by underflow).  Call it inside a
- * GslQuiet scope (GSLException.h).
- */
-double ThmBoundStateTail(double r, double kappa, double etaB, bool yukawa);
 
 /*!
  * The cubic Lagrange weights through the nodes s = -1, 0, 1, 2 at s:

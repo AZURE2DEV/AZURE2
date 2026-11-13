@@ -34,7 +34,7 @@ UnitExternalCapture.cpp
 SegmentParameters.cpp
 ShiftFrames.cpp
 ShiftedFold.cpp
-THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
 CNucTransformMessages.cpp ProjectSetup.cpp)
@@ -113,12 +113,14 @@ endif (BUILD_LIBRARY)
 # unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
 # hides the mistake, which is why the hand-written order looked fine.
 # azure2_physics (physics/) is below the engine: the engine may use it, never the reverse.  Only the
-# CNuc -> System adapter (CNucSystem.cpp) uses it so far.
+# CNuc -> System adapter (CNucSystem.cpp) uses it so far.  azure2_physics_transfer (physics/transfer: distorted waves,
+# bound states, the zero-range THM weight, the global optical sets) is what the THM distortions call.
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
+    azure2_physics_transfer
     azure2_stopping
     azure2_io
     azure2_experiment

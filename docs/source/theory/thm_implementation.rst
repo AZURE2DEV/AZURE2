@@ -1396,17 +1396,21 @@ reduced radii), :math:`V_C` a uniform sphere of radius ``RC`` or, for
 potential is evaluated at the channel's energy: fixed for :math:`a + A`, at
 :math:`E_{sF}(E)` of every tabulated energy for :math:`s + F`.
 
-*Numerics* (``src/ThmDistortion.cpp``; the Coulomb phases, the s-x bound
-state and the cubic Lagrange interpolation of the grid are shared with the DW
-vertex, ``src/ThmNumerics.cpp``). The radial equations are integrated
+*Numerics* (``src/ThmDistortion.cpp`` keeps the kinematics, the grid of
+:math:`\ln R` and the choice of the step; the waves, the bound state and the
+sum over :math:`l` are the library's, ``physics/transfer``,
+``docs/upgrade/transfer.md`` section 24: ``SolvePartialWave``,
+``AnalyticTail``, ``PrepareZeroRangeEntrance``, ``ZeroRangeWeightSum``,
+``ZeroRangeMomentumAmplitude``). The radial equations are integrated
 outward from the origin by Numerov's method (complex for an optical
 potential), started from the power series, with step :math:`h = 0.02` fm for
 :math:`r` (smaller if a local wave number exceeds :math:`0.1/h`) and
 :math:`\beta h` for :math:`a + A`, so that :math:`u^{aA}` is read at
-:math:`\beta r` on its own grid; beyond the potential and the turning point
-each wave is matched at two points a quarter wavelength apart to
-:math:`c_1F_l + c_2G_l` from AZURE2's Coulomb functions (COUL, as CoulFunc)
-and divided by :math:`c_1 - ic_2`. The radial integrals are Simpson sums from
+:math:`\beta r` on its own grid; beyond the potential (:math:`R + 12a` of its
+largest term) and the turning point each wave is matched at two points a
+quarter wavelength apart to the Coulomb functions (COULFG) and normalised to
+:math:`F_l + T_lH_l^+`; a plane-wave channel is the Riccati-Bessel function
+itself. The radial integrals are Simpson sums from
 :math:`r_\mathrm{min}` to :math:`r_\mathrm{min} + 50/\kappa`: the bound state
 makes them absolutely convergent, so no complex rotation or damping is needed
 (unlike the external Coulomb term :math:`C_l`); the size of the cut is
@@ -1835,8 +1839,8 @@ angle :math:`\theta_{sa}` between :math:`\mathbf k_{sF}` and
 :math:`f_{L_a}` do not depend on :math:`E`; per energy only
 :math:`f_{L_s}` changes, and batches of energies share one pass over the
 quadrature points. The waves are the radial waves of the distortion factor
-(Numerov from the origin, matched to COUL; a plane wave is the
-Riccati-Bessel function), tabulated at 0.02 fm (less where a local wave
+(the library's ``SolveStoredWaves``: Numerov from the origin, matched beyond
+the turning point; a plane wave is the Riccati-Bessel function), tabulated at 0.02 fm (less where a local wave
 number exceeds 5 fm\ :sup:`-1`) and read by six-point Lagrange
 interpolation (value and derivative). The :math:`u` integral runs from
 :math:`r_\mathrm{min}` to :math:`r_\mathrm{min} + 26/\kappa` (the Yukawa tail
@@ -2150,7 +2154,7 @@ hardly depend on the channel radius any more, but they depend on the distorted
 waves (previous section: a factor 1.5-3 between Coulomb and optical waves).
 To scan that dependence with standard choices instead of typing ten numbers
 per channel, ``opticalAA=`` and ``opticalSF=`` also take the name of a
-built-in global parametrisation (``src/ThmOptical.cpp``), for the distortion
+built-in global parametrisation (the table of ``physics/src/transfer/GlobalOptical.cpp``), for the distortion
 factor and the DW vertex alike:
 
 ================ ========= ======================================================= =========== ====================
@@ -2258,8 +2262,8 @@ formulas to 4 digits for 40Ca, 90Zr, 120Sn and 208Pb, the absorptive depths
 to 1 %), to :math:`10^{-9}`; the An & Cai d + 19F numbers reproduce the ten
 numbers used before for ``examples/f19_pag_thm``. (b) Elastic scattering,
 d + 40Ca at 56 MeV with ``daehnick80`` and no spin-orbit term: the ratio to
-Rutherford from the engine's waves (``ThmDistortion::Wave``, Numerov + COUL,
-which now also returns :math:`T_l`) agrees with scipy's DOP853 and mpmath's
+Rutherford from the waves the distortion factor solves (the library's
+``SolveStoredWaves``) agrees with scipy's DOP853 and mpmath's
 Coulomb functions to :math:`1.3\times 10^{-4}` at 12 angles, and with the
 measured ratio (Hatanaka et al. 1980, EXFOR E0682-022) within 0.16 dex at
 15-78° (0.066 dex rms) -- the potential is used as published and the

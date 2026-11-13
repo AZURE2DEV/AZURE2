@@ -1,5 +1,6 @@
 #include "azure2/physics/transfer/Overlap.h"
 
+#include <cmath>
 #include <stdexcept>
 
 namespace azure2 {
@@ -22,7 +23,11 @@ const OverlapKindRow &RowOf(OverlapKind kind) {
 }
 
 RadialOverlap RadialOverlapOf(const BoundState &s) {
-  return {s.l, s.two_j, s.step_fm, s.u, s.potential_MeV, s.coulomb_MeV};
+  return {s.l, s.two_j, s.step_fm, s.u, s.potential_MeV, s.coulomb_MeV, s.r_min_fm};
+}
+
+int FirstNode(const RadialOverlap &o) {
+  return o.r_min_fm > 0.0 ? static_cast<int>(std::ceil(o.r_min_fm / o.step_fm - 1e-9)) : 0;
 }
 
 RadialOverlap RadialOverlapOf(const ContinuumBin &b) {

@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory() as tmp:
     experiment(None, "C", [1, 2], **kin, ps="hulthen:0-30", distortion="coulomb", distortionRatio="dwpw")
     check("ps window with distortionRatio=dwpw accepted", True)
 
-    # Global optical potentials (src/ThmOptical.cpp): 3He + 18O and d + 19F here.
+    # Global optical potentials (physics/transfer/GlobalOptical.h): 3He + 18O and d + 19F here.
     print("1c. Project: global optical potentials")
     mg = Project.open(src)
     experiment(mg, "G", [1, 2], **kin, distortion="optical", opticalAA="liang09", opticalSF="ancai06")

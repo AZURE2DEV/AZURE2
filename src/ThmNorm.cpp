@@ -377,7 +377,7 @@ bool ThmBuildDistortion(WorkingCopy &data, const Config &configure, const ThmExp
       << "  k_aA = " << d->aa.k << " fm^-1, eta_aA = " << d->aa.eta << ", kappa = " << d->kappa
       << " fm^-1, eta_b = " << d->etaB << ", beta = m_s/m_a = " << d->beta << "; E_ref = " << d->eRef
       << " MeV, grid " << d->gridLo << " to " << d->gridLo + (d->lnR.size() - 1) * d->gridStep
-      << " MeV, radial step " << d->h << " fm to " << (d->n - 1) * d->h << " fm, l <= " << d->uAA.size() - 1
+      << " MeV, radial step " << d->h << " fm to " << (d->n - 1) * d->h << " fm, l <= " << d->entrance.u.size() - 1
       << ".\n"
       << "  R = " << d->R(lo) << " at E = " << eLo << " MeV (E_sF = " << lo.esf << ", eta_sF = " << lo.etasf
       << ", theta_cm = " << lo.thetaCm << " deg), " << d->R(hi) << " at E = " << eHi << " MeV (E_sF = "

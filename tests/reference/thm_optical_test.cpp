@@ -1,19 +1,13 @@
 /*!
- * Reference check of the global optical potentials (ThmOptical,
- * src/ThmOptical.cpp) and of their use in the THM distorted waves
+ * Reference check of the global optical potentials of the library
+ * (physics/transfer/GlobalOptical.h) in the THM distorted waves
  * (ThmDistortion: opticalAA=<name>, opticalSF=<name>).
  *
- *  (a) The ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC of every model at 23
- *      (projectile, target, lab energy) points against
- *      thm_optical_reference.py, which evaluates the RIPL-3 library entries
- *      (om-parameter-u.dat: An & Cai 6200, Koning & Delaroche 2405/5405,
- *      Becchetti & Greenlees 7100/8100, McFadden & Satchler 9100, Avrigeanu
- *      9600) by the library's own coefficient formulas, and the FRONT21
- *      (TWOFNR) code for Daehnick and Liang.  Includes the published d + 19F
- *      An & Cai numbers used before for examples/f19_pag_thm.
+ *  The ten numbers of every set against RIPL-3 / FRONT21 are the library's test
+ *  (physics/tests/transfer_global_optical_test.cpp); here their use in the engine:
  *  (b) Elastic scattering d + 40Ca at 56 MeV with daehnick80 (no spin-orbit):
- *      sigma/sigma_R from the engine's S matrix (ThmDistortion::Wave,
- *      Numerov + COUL) against scipy's DOP853 + mpmath, and against the
+ *      sigma/sigma_R from the S matrix of the waves the distortion factor
+ *      solves (the library's SolveStoredWaves) against scipy's DOP853 + mpmath, and against the
  *      measured ratio (Hatanaka et al. 1980, EXFOR E0682-022): within 0.2 dex
  *      at every angle (15-78 deg), 0.08 dex rms.
  *  (c) In the distortion factor: a global s + F potential is re-evaluated at
@@ -36,7 +30,7 @@
 #include "Constants.h"
 #include "ThmDistortion.h"
 #include "ThmExperiment.h"
-#include "ThmOptical.h"
+#include "azure2/physics/transfer/GlobalOptical.h"
 
 namespace {
 
@@ -58,39 +52,6 @@ void Expect(const std::string &what, bool ok, const std::string &detail = "") {
                                   detail.c_str());
 }
 
-struct Params {
-  const char *model;
-  int zp, ap, zt, at;
-  double elab;
-  double p[10];
-};
-// thm_optical_reference.py (RIPL-3 / FRONT21).
-const Params kParams[] = {
-    {"ancai06", 1, 2, 9, 19, 5.83, {92.5676139, 3.066238699, 0.7526218608, 1.466626, 3.581964152, 0.5881598351, 10.651602, 3.711647799, 0.6964409022, 3.476927348}},  // RIPL 6200
-    {"ancai06", 1, 2, 12, 24, 2, {94.02329163, 3.31518301, 0.7553446892, 1.2284, 3.863971379, 0.5665500859, 10.7688, 3.999921854, 0.7098389467, 3.75850238}},  // RIPL 6200
-    {"ancai06", 1, 2, 20, 40, 56, {82.02421478, 3.932024581, 0.7620913939, 4.5872, 4.562737221, 0.5130048107, 9.1164, 4.714215826, 0.7430370174, 4.456197317}},  // RIPL 6200
-    {"ancai06", 1, 2, 82, 208, 100, {76.99507508, 6.817830942, 0.7936549009, 7.324, 7.831814739, 0.2625007863, 7.77, 8.055939511, 0.8983495125, 7.720264754}},  // RIPL 6200
-    {"daehnick80", 1, 2, 20, 40, 56, {79.08627122, 4.001343715, 0.8042, 3.676040966, 4.531436259, 0.729396628, 9.979959034, 4.531436259, 0.729396628, 4.445937461}},  // FRONT21
-    {"daehnick80", 1, 2, 28, 58, 20, {89.66548314, 4.52892567, 0.743, 0.498758334, 5.128911549, 0.7862461872, 12.22124167, 5.128911549, 0.7862461872, 5.032139633}},  // FRONT21
-    {"daehnick80", 1, 2, 82, 208, 80, {79.87891912, 6.9322408, 0.845, 6.750264185, 7.850614581, 0.9047494496, 7.529735815, 7.850614581, 0.9047494496, 7.702489778}},  // FRONT21
-    {"daehnick80", 1, 2, 9, 19, 5.8, {89.96006892, 3.122029929, 0.71886, 0.04147828561, 3.535632185, 0.7020729378, 12.30932171, 3.535632185, 0.7020729378, 3.468922143}},  // FRONT21
-    {"kd03", 0, 1, 10, 20, 2.6, {53.37047263, 3.13392913, 0.674826, 0.3835113907, 3.13392913, 0.674826, 6.86586386, 3.52705041, 0.541288, 0}},  // RIPL 2405
-    {"kd03", 0, 1, 26, 56, 14, {47.45208266, 4.583141938, 0.6694728, 1.118259206, 4.583141938, 0.6694728, 7.168952993, 4.903837657, 0.5353264, 0}},  // RIPL 2405
-    {"kd03", 0, 1, 82, 208, 0.5, {47.7303101, 7.320197247, 0.6468704, 0.07572086866, 7.320197247, 0.6468704, 2.586696471, 7.397286765, 0.5101552, 0}},  // RIPL 2405
-    {"kd03", 0, 1, 82, 208, 150, {13.88561425, 7.320197247, 0.6468704, 11.74180123, 7.320197247, 0.6468704, 0.7592637623, 7.397286765, 0.5101552, 0}},  // RIPL 2405
-    {"kd03", 1, 1, 20, 40, 30, {46.5397075, 4.053875274, 0.671852, 2.946652563, 4.053875274, 0.671852, 6.417163507, 4.405560697, 0.53952, 4.395893121}},  // RIPL 5405
-    {"kd03", 1, 1, 82, 208, 65, {37.50515578, 7.320197247, 0.6468704, 6.33616321, 7.320197247, 0.6468704, 5.302106915, 7.397286765, 0.626964, 7.226321535}},  // RIPL 5405
-    {"kd03", 1, 1, 12, 24, 3, {56.31526791, 3.355698429, 0.6742312, 0.3142593949, 3.355698429, 0.6742312, 6.048115684, 3.740274332, 0.531192, 3.88496505}},  // RIPL 5405
-    {"bg71", 1, 3, 40, 90, 15, {161.7388889, 5.377685696, 0.72, 28.82777778, 6.273966645, 0.84, 0, 0, 0, 5.825826171}},  // RIPL 7100
-    {"bg71", 2, 3, 28, 58, 30, {148.5241379, 4.645051969, 0.72, 33.31724138, 5.419227297, 0.88, 0, 0, 0, 5.032139633}},  // RIPL 8100
-    {"liang09", 2, 3, 8, 16, 10, {118.0948739, 2.977479936, 0.740955184, 0, 0, 0, 21.53873315, 3.032617646, 0.794753626, 3.248076467}},  // FRONT21
-    {"liang09", 2, 3, 50, 120, 100, {108.3687635, 5.78982683, 0.8145389365, 17.4533, 6.958045141, 0.8812200889, 8.919704402, 5.87994698, 0.9532602666, 6.357894728}},  // FRONT21
-    {"mcfadden66", 2, 4, 8, 16, 20, {185, 3.52777894, 0.52, 25, 3.52777894, 0.52, 0, 0, 0, 3.52777894}},  // RIPL 9100
-    {"mcfadden66", 2, 4, 82, 208, 24.7, {185, 8.294988992, 0.52, 25, 8.294988992, 0.52, 0, 0, 0, 8.294988992}},  // RIPL 9100
-    {"avrigeanu94", 2, 4, 20, 40, 20, {131.5323107, 4.257840107, 0.7879304089, 10.80556207, 5.369324473, 0.6236009621, 0, 0, 0, 4.257840107}},  // RIPL 9600
-    {"avrigeanu94", 2, 4, 82, 208, 50, {172.4577483, 7.37661521, 0.7666375668, 12.53196341, 9.302237655, 0.5735001573, 0, 0, 0, 7.37661521}},  // RIPL 9600
-};
-
 // thm_optical_reference.py: theta_cm, sigma/sigma_R (DOP853), measured sigma/sigma_R.
 struct Elastic {
   double theta, model, data;
@@ -103,6 +64,21 @@ const Elastic kElastic[] = {
     {49.69, 2.42726378e+00, 2.47953e+00}, {57.43, 1.71132250e+00, 1.79389e+00},
     {67.69, 1.30000623e+00, 1.50358e+00}, {77.87, 5.17349669e-01, 7.48311e-01},
 };
+
+namespace transfer = azure2::physics::transfer;
+
+// The ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm) of set `name` for (zp, ap) on (zt, at) at elab (MeV).
+void Evaluate(const char *name, int zp, int ap, int zt, int at, double elab, double p[10]) {
+  const transfer::OpticalPotential o =
+      transfer::GlobalOpticalSets()[transfer::GlobalOpticalIndex(name)].at(zp, ap, zt, at, elab);
+  const transfer::WoodsSaxonTerm *terms[3] = {&o.real_volume, &o.imaginary_volume, &o.imaginary_surface};
+  for (int t = 0; t < 3; t++) {
+    p[3 * t] = terms[t]->depth_MeV;
+    p[3 * t + 1] = transfer::RadiusOf(o, terms[t]->r0_fm);
+    p[3 * t + 2] = terms[t]->diffuseness_fm;
+  }
+  p[9] = transfer::RadiusOf(o, o.coulomb_r0_fm);
+}
 
 const double kAmu = 931.49410242;  // WorkingCopy::BuildThmGroups
 const double kD = 2.0135532134, kN = 1.0086649159, kP = 1.0072764675, kF19 = 18.9934689019;
@@ -148,45 +124,29 @@ std::string Ten(const double p[10]) {
 int main(int argc, char **argv) {
   verbose = argc > 1 && std::strcmp(argv[1], "-v") == 0;
 
-  std::printf("(a) parameters against RIPL-3 / FRONT21\n");
-  for (const Params &r : kParams) {
-    int m = ThmGlobalOpticalIndex(r.model);
-    Expect(std::string(r.model) + " known", m >= 0);
-    if (m < 0) continue;
-    Expect(std::string(r.model) + " is for its projectile", ThmGlobalOpticalFor(m, r.zp, r.ap));
-    double p[10];
-    ThmGlobalOpticalEvaluate(m, r.zp, r.ap, r.zt, r.at, r.elab, p);
-    static const char *names[10] = {"V", "R", "a", "W", "RW", "aW", "WD", "RD", "aD", "RC"};
-    for (int t = 0; t < 10; t++) {
-      char label[96];
-      std::snprintf(label, sizeof label, "%s (%d,%d)+(%d,%d) %g MeV %s", r.model, r.zp, r.ap, r.zt, r.at, r.elab,
-                    names[t]);
-      Check(label, p[t], r.p[t], 1.0e-9, 1.0e-12);
-    }
-  }
-  Expect("kd03 is not a deuteron potential", !ThmGlobalOpticalFor(ThmGlobalOpticalIndex("kd03"), 1, 2));
-  Expect("ancai06 is not an alpha potential", !ThmGlobalOpticalFor(ThmGlobalOpticalIndex("ancai06"), 2, 4));
-
   std::printf("(b) elastic d + 40Ca at 56 MeV, daehnick80: S matrix and sigma/sigma_R\n");
   {
     const double mCa = 39.9516979, elab = 56.0;
     ThmDistortion d;
     ThmDistortion::Channel c;
     c.kind = ThmDistortion::Channel::WOODS_SAXON;
-    ThmGlobalOpticalEvaluate(ThmGlobalOpticalIndex("daehnick80"), 1, 2, 20, 40, elab, c.p);
+    Evaluate("daehnick80", 1, 2, 20, 40, elab, c.p);
     c.Z1 = 1, c.Z2 = 20;
-    c.mu = kD * mCa / (kD + mCa) * uconv;
+    c.muU = kD * mCa / (kD + mCa);
+    c.mu = c.muU * uconv;
     const double ecm = elab * mCa / (kD + mCa);
     c.k = std::sqrt(2.0 * c.mu * ecm) / hbarc;
     c.eta = 20.0 * fstruc * c.mu / (hbarc * c.k);
     const int lmax = 45;
     std::vector<complex> S(lmax + 1);
-    std::vector<complex> u;
     bool ok = true;
-    for (int l = 0; l <= lmax && ok; l++) {
-      complex T;
-      ok = d.Wave(c, l, 0.02, 2, u, &T);
-      S[l] = 1.0 + 2.0 * complex(0.0, 1.0) * T;
+    try {
+      // The waves as the distortion factor solves them (matched beyond the turning point).
+      const transfer::DistortedWaves w =
+          transfer::SolveStoredWaves(d.LibraryChannel(c, ecm), 0.02, 2, lmax, d.numerics.matching);
+      for (int l = 0; l <= lmax; l++) S[l] = w.waves[l].S;
+    } catch (const std::exception &) {
+      ok = false;
     }
     Expect("waves normalized", ok);
     gsl_sf_result lnr, arg;
@@ -238,9 +198,9 @@ int main(int argc, char **argv) {
       Expect("one warning (kd03 for 20Ne)", dg.warnings.size() == 1,
              dg.warnings.empty() ? "" : dg.warnings.front());
       double pa[10], ps[10];
-      ThmGlobalOpticalEvaluate(ThmGlobalOpticalIndex("ancai06"), 1, 2, 9, 19, dg.aa.LabEnergy(dg.eAA), pa);
+      Evaluate("ancai06", 1, 2, 9, 19, dg.aa.LabEnergy(dg.eAA), pa);
       const double esf = dg.EsF(e), mF = kP + kF19;
-      ThmGlobalOpticalEvaluate(ThmGlobalOpticalIndex("kd03"), 0, 1, 10, 20, esf * (kN + mF) / mF, ps);
+      Evaluate("kd03", 0, 1, 10, 20, esf * (kN + mF) / mF, ps);
       ThmExperiment w = Optical(Ten(pa), Ten(ps), &why);
       ThmDistortion dw;
       why += Build(dw, w, e, 0.05, 0.85);
@@ -251,7 +211,7 @@ int main(int argc, char **argv) {
       std::snprintf(label, sizeof label, "E=%.2f |M|^2 global = written out", e);
       Check(label, std::norm(pg.m), std::norm(pw.m), 1.0e-6);
       // ... and not the numbers of the other end: the potential does move.
-      ThmGlobalOpticalEvaluate(ThmGlobalOpticalIndex("kd03"), 0, 1, 10, 20, dg.sf.LabEnergy(dg.EsF(0.9 - e)), ps);
+      Evaluate("kd03", 0, 1, 10, 20, dg.sf.LabEnergy(dg.EsF(0.9 - e)), ps);
       Expect("the s + F depths move across the data", std::fabs(ps[6] - dg.SfAt(e).p[6]) > 1.0e-3);
     }
     // Refusals and the range.

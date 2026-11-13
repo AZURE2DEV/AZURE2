@@ -19,9 +19,11 @@ namespace transfer {
 
 /*!
  * Numerov's method for u'' + q(r) u = 0 on r_i = i h (fm), i = 0 ... q.size() - 1, outward from the regular
- * solution u = r^{l+1} (1 + a_1 r + a_2 r^2) at r = h, 2h, u_0 = 0, where near the origin
- * q(r) = -l(l+1)/r^2 + q_m1/r + q_0 + O(r): a_1 = -q_m1/(2l + 2), a_2 = -(q_m1 a_1 + q_0)/(2 (2l + 3)) (the series
- * of the regular solution; q_m1 (fm^-1) is -2 eta k for a point charge, 0 otherwise; q_0 in fm^-2).  q (fm^-2) is k^2 - (2 mu/hbar^2) U(r) - l(l+1)/r^2 on the
+ * solution u = r^{l+1} (1 + a_1 r + a_2 r^2 + a_3 r^3) at r = h, 2h (divided by h^{l+1}, so that it does not
+ * underflow at large l), u_0 = 0, where near the origin q(r) = -l(l+1)/r^2 + q_m1/r + q_0 + O(r):
+ * a_1 = -q_m1/(2l + 2), a_2 = -(q_m1 a_1 + q_0)/(2 (2l + 3)), a_3 = -(q_m1 a_2 + q_0 a_1)/(3 (2l + 4)) (the series
+ * of the regular solution, n (n + 2l + 1) a_n = -q_m1 a_{n-1} - q_0 a_{n-2}; q_m1 (fm^-1) is -2 eta k for a point
+ * charge, 0 otherwise; q_0 in fm^-2).  q (fm^-2) is k^2 - (2 mu/hbar^2) U(r) - l(l+1)/r^2 on the
  * grid (q[0] is not read).  Local error O(h^6), global O(h^4).  A solution that grows past 1e200 is rescaled (every
  * value so far divided by 1e200), so only its shape is meaningful; the caller normalises.  Returns u (q.size()
  * values).

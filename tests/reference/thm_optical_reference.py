@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent reference for the global optical potentials (src/ThmOptical.cpp).
+"""Independent reference for the global optical potentials (physics/src/transfer/GlobalOptical.cpp).
 
 (1) Parameters.  The ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC of each model at
 a few (projectile, target, lab energy) points, evaluated from the RIPL-3

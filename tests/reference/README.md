@@ -159,7 +159,9 @@ c†Gc; the interpolation between grid nodes.
 
 ## thm_optical_test
 
-The global optical potentials of the THM distorted waves (`src/ThmOptical.cpp`,
+The global optical potentials of the THM distorted waves (the library's table,
+`physics/src/transfer/GlobalOptical.cpp`, whose ten numbers per set are checked by
+`physics/tests/transfer_global_optical_test.cpp` with the numbers below;
 docs/source/theory/thm_implementation.rst, "Global optical potentials").
 `thm_optical_reference.py` reads the RIPL-3 optical-model library
 (`om-parameter-u.dat`, www-nds.iaea.org/RIPL-3/optical/om-data/; give its path

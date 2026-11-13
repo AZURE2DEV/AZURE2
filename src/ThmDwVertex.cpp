@@ -8,7 +8,6 @@
 #include <cmath>
 #include <sstream>
 #include <gsl/gsl_integration.h>
-#include <gsl/gsl_sf_bessel.h>
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distorted-wave
@@ -38,10 +37,10 @@
  * 1.2 Lmax + 20 Gauss-Legendre nodes.  Partial waves L <= k R_max + 14 in each
  * channel (R_max = a + beta u_max, alpha a + u_max).  Only f_Ls depends on the
  * energy: the geometry, K and f_La are evaluated once per point for a batch of
- * energies.  Waves: ThmDistortion::Wave (Numerov from the origin, normalized
- * to F + T H^+, matched to COUL), or the Riccati-Bessel functions for a plane
- * wave, on a uniform grid read by six-point Lagrange interpolation (value and
- * derivative).
+ * energies.  Waves: the library's (physics/transfer SolveStoredWaves: Numerov
+ * from the origin, normalized to F + T H^+, matched beyond the turning point;
+ * Riccati-Bessel functions for a plane wave), on a uniform grid read by
+ * six-point Lagrange interpolation (value and derivative).
  */
 
 namespace {
@@ -135,27 +134,25 @@ struct Lagrange6 {
   }
 };
 
-// u_L(kR) for L = 0..lMax on j step, j < n: Riccati-Bessel for a plane wave,
-// else ThmDistortion::Wave.  False (and the L) if a wave cannot be normalized.
-bool WaveTable(const ThmDistortion &d, const ThmDistortion::Channel &c, int lMax, double step, int n,
-               std::vector<std::vector<complex>> &u, int &bad) {
-  u.assign(lMax + 1, std::vector<complex>());
-  if (c.kind == ThmDistortion::Channel::PLANE) {
-    for (int L = 0; L <= lMax; L++) u[L].assign(n, complex(0.0, 0.0));
-    std::vector<double> jl(lMax + 1);
-    for (int i = 1; i < n; i++) {
-      double x = c.k * i * step;
-      gsl_sf_bessel_jl_steed_array(lMax, x, jl.data());
-      for (int L = 0; L <= lMax; L++) u[L][i] = x * jl[L];
-    }
-    return true;
+// u_L(kR) for L = 0..lMax on j step, j < n, and e^{i sigma_L}: the library's
+// waves of the channel at its c.m. energy ecm (matched beyond the turning point;
+// Riccati-Bessel functions for a plane wave).  "" or what is wrong.
+std::string WaveTable(const ThmDistortion &d, const ThmDistortion::Channel &c, double ecm, int lMax, double step,
+                      int n, std::vector<std::vector<complex>> &u, std::vector<complex> &phase) {
+  namespace transfer = azure2::physics::transfer;
+  transfer::DistortedWaves w;
+  try {
+    w = transfer::SolveStoredWaves(d.LibraryChannel(c, ecm), step, n, lMax, d.numerics.matching);
+  } catch (const std::exception &e) {
+    return e.what();
   }
-  for (int L = 0; L <= lMax; L++)
-    if (!d.Wave(c, L, step, n, u[L])) {
-      bad = L;
-      return false;
-    }
-  return true;
+  u.assign(lMax + 1, std::vector<complex>());
+  phase.assign(lMax + 1, complex(1.0, 0.0));
+  for (int L = 0; L <= lMax; L++) {
+    u[L] = std::move(w.waves[L].u);
+    phase[L] = std::polar(1.0, w.sigma[L]);
+  }
+  return "";
 }
 
 }  // namespace
@@ -345,15 +342,15 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   const double stepA = tableStep(dist.aa, dist.eAA);
   const int nA = (int)std::ceil(rA / stepA) + 8;
   std::vector<std::vector<complex>> uA;
-  int bad = -1;
-  if (!WaveTable(dist, dist.aa, laMax, stepA, nA, uA, bad))
-    return "the a + A wave l = " + ThmNumberText(bad) + " could not be normalized";
-  std::vector<complex> sigA = ThmCoulombPhases(dist.aa.eta, laMax);
+  std::vector<complex> sigA;
+  why = WaveTable(dist, dist.aa, dist.eAA, laMax, stepA, nA, uA, sigA);
+  if (!why.empty()) return "the a + A channel: " + why;
   const double stepS = tableStep(dist.sf, *std::max_element(esfE.begin(), esfE.end()));
   const int nS = (int)std::ceil(rS / stepS) + 8;
 
-  // h and dh/dr at r = a: hh[(t nE + e) 2 + {0,1}].
+  // h and dh/dr at r = a: hh[(t nE + e) 2 + {0,1}]; e^{i sigma_Ls} per energy.
   std::vector<complex> hh((size_t)nT * nE * 2, complex(0.0, 0.0));
+  std::vector<std::vector<complex>> sigS(nE);
   const int nPts = uNodes * cNodes;
   for (int e0 = 0; e0 < nE; e0 += kBatch) {
     const int nb = std::min(kBatch, nE - e0);
@@ -361,11 +358,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     std::vector<std::string> errors(nb);
 #pragma omp parallel for schedule(dynamic)
     for (int b = 0; b < nb; b++) {
-      ThmDistortion::Channel c = dist.SfAt(eLo + (e0 + b) * gridStep);
-      int badL = -1;
-      if (!WaveTable(dist, c, lsMax, stepS, nS, uS[b], badL))
-        errors[b] = "the s + F wave l = " + ThmNumberText(badL) + " at E = " + ThmNumberText(eLo + (e0 + b) * gridStep) +
-                    " MeV could not be normalized";
+      const double e = eLo + (e0 + b) * gridStep;
+      const std::string bad = WaveTable(dist, dist.SfAt(e), dist.EsF(e), lsMax, stepS, nS, uS[b], sigS[e0 + b]);
+      if (!bad.empty()) errors[b] = "the s + F channel at E = " + ThmNumberText(e) + " MeV: " + bad;
     }
     for (const std::string &err : errors)
       if (!err.empty()) return err;
@@ -465,15 +460,11 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   std::vector<signed char> phiSign(nE, 0);
   for (int e = 0; e < nE; e++) {
     const double ks = ksE[e];
-    const double etas = dist.sf.kind == ThmDistortion::Channel::PLANE
-                            ? 0.0
-                            : k.Zs * (k.Zx + k.ZA) * fstruc * dist.sf.mu / (hbarc * ks);
-    std::vector<complex> sigS = ThmCoulombPhases(etas, lsMax);
     // Reduced amplitudes (4pi)^2/(ks ka) (-i)^Ls i^La e^{i(sigma+sigma)} sqrt(4pi/(2l+1)) h.
     std::vector<complex> H(nT), dH(nT);
     for (int t = 0; t < nT; t++) {
       const Triple &tr = triples[t];
-      complex ph = sigS[tr.ls] * sigA[tr.la];
+      complex ph = sigS[e][tr.ls] * sigA[tr.la];
       int n = ((tr.la - tr.ls) % 4 + 4) % 4;  // i^(La - Ls)
       static const complex ipow[4] = {complex(1, 0), complex(0, 1), complex(-1, 0), complex(0, -1)};
       ph *= ipow[n] * (16.0 * M_PI * M_PI / (ks * ka)) * std::sqrt(4.0 * M_PI / (2.0 * tr.l + 1.0));

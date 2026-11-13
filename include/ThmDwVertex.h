@@ -40,10 +40,11 @@ struct ThmExperiment;
  * computed, so vertexModel=dw is the counterpart of coulombIntegral=0.
  *
  * Numerics: reduced amplitudes h^l_{Ls La}(a) (independent of the directions
- * of k_aA and k_sF) by a 2D quadrature in (u, cos theta_u), the waves of
- * ThmDistortion (Numerov + COUL; plane waves as Riccati-Bessel functions) read
- * by six-point Lagrange interpolation; G at every node on a 20 keV grid,
- * interpolated by cubic Lagrange.
+ * of k_aA and k_sF) by a 2D quadrature in (u, cos theta_u), the waves of the
+ * library (physics/transfer SolveStoredWaves: Numerov matched beyond the
+ * turning point; plane waves as Riccati-Bessel functions) read by six-point
+ * Lagrange interpolation; G at every node on a 20 keV grid, interpolated by
+ * cubic Lagrange.
  */
 class ThmDwVertex {
  public:

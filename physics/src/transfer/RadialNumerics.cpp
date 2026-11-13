@@ -54,14 +54,16 @@ std::vector<std::complex<double>> NumerovOutward(const std::vector<std::complex<
   std::vector<std::complex<double>> u(n, 0.0);
   const double a1 = -q_m1 / (2.0 * l + 2.0);
   const std::complex<double> a2 = -(q_m1 * a1 + q0) / (2.0 * (2 * l + 3));
+  const std::complex<double> a3 = -(q_m1 * a2 + q0 * a1) / (3.0 * (2 * l + 4));
+  // u / h^{l+1}: (r/h)^{l+1} times the series, which does not underflow for large l.
   for (int i = 1; i <= 2; ++i) {
     const double r = i * h;
-    u[i] = std::pow(r, l + 1) * (1.0 + a1 * r + a2 * r * r);
+    u[i] = std::pow(static_cast<double>(i), l + 1) * (1.0 + r * (a1 + r * (a2 + r * a3)));
   }
   const double h2 = h * h / 12.0;
   for (int i = 2; i < n - 1; ++i) {
     u[i + 1] = (2.0 * (1.0 - 5.0 * h2 * q[i]) * u[i] - (1.0 + h2 * q[i - 1]) * u[i - 1]) / (1.0 + h2 * q[i + 1]);
-    if (std::abs(u[i + 1]) > kRescale)
+    if (std::max(std::fabs(u[i + 1].real()), std::fabs(u[i + 1].imag())) > kRescale)  // cheaper than |u|
       for (int j = 0; j <= i + 1; ++j) u[j] /= kRescale;
   }
   return u;
