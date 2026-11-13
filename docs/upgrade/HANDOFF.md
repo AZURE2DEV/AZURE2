@@ -2,6 +2,53 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 00:26) — merged: the session class, the options, the sampler's limits, the wheel, the fit
+
+**Merged into `feature/upgrade-4-data`** (each as a merge commit with the tree of the rehearsal it was checked on):
+pyazr's class `Session` with its lock; the switches that move numbers as options with `--threads`; the sampler's
+limits of every kind; pyazr as a wheel; pyazr's one evaluation with the private engine handle; the engine's fit as
+a function (`Session.fit_with_engine`). The entries of the six branches are below.
+
+**How it was checked** (the lighter regime: once per rehearsal, the long suite once per batch).
+- Rehearsals 58, 59, 60, each: build with 0 warnings; all projects in three bases (887 / 851 / 887 files) identical
+  to the reference tag `tab-t57-1`; of the 624 `run.log` files none differs in anything but the `Threads:` line and
+  the progress bars; the eight fits (T2 three routes, 13N two, layer, stopping two) identical to the base build;
+  `ctest -LE slow`: 252 of 252 on rehearsal 60. On rehearsals 58 and 59 one test failed, `pyazr_objective_object`,
+  on an assertion of the director's reconciliation that asked too much (finite upper bounds of five numbers where
+  the first has none); corrected on rehearsal 60, so the two intermediate merge commits carry the wrong assertion.
+- The two slow pyazr tests on rehearsal 60: `pyazr_wheel` (the wheel built and installed into an empty
+  environment) and `pyazr_fit_with_engine`: both passed (268 s and 838 s).
+- The long suite on rehearsal 57 (the options, `--threads`, the session class): the tree, the eight fits, the
+  prior-centre check and the 142 tests of the web page and pyazr passed; its last part (the slow tests) was still
+  running when this was written, its result goes into the next director's entry.
+
+**What the director changed at the merges.**
+- `tests/cli_help/check.sh`: the flag lists are searched from here-strings. Under `pipefail` a `printf | grep -q`
+  fails at random on a loaded machine (the reader leaves at its first match, the writer gets SIGPIPE): 7 failures
+  of 25 runs before, 0 of 25 after. About 130 lines of the same pattern remain in other shell tests (queued).
+- `Session.fit_with_engine` is an `engine_call` as every other member that reaches the engine (the lock test asks
+  it); the mixin `pyazr/session_fit.py` ported to the names of the one evaluation (`_engine`, `Session`).
+- The developer pages and the class scheme carry both the evaluation's and the fit's boxes (figures regenerated).
+
+**For the next agent.**
+- Reference tag `tab-t60-1`, base build `work/b-trial60` (the tree of this merge).
+- Every `run.log` now names the thread count (`Threads:`); compare run logs with
+  `work/director/runlog_only_threads.sh` when the reference is older than that line.
+- pyazr: `Objective.bounds` are the fit's limits of every kind, `<parameterSettings>` included; `log_prob` is
+  -inf outside them; `sampler_support` is gone. `USE_READLINE=OFF` is now effective.
+- The options have one rule and three refusals: Reich-Moore capture with Brune; Park without Brune's base; and
+  the convection current switched off without the long-wavelength approximation switched off.
+- Never run: the workflow `wheels.yml`, cibuildwheel, a Windows wheel.
+
+**Open, found at these merges (not fixed).**
+- T2 fitted with `--use-lm` at two threads leaves another `param.fit` than at one thread (`energy_5`
+  1.3269550e+01 against 1.3269544e+01, `D.value`); every other output file is identical. It is on the base build
+  of rehearsal 57 too, so it is older than the fit as a function: the file is a snapshot of an iteration, not of
+  the minimum.
+- Precedence: a switch option on the command line wins over the options file; a calculation option in the options
+  file still wins over the command line. One rule is wanted (the command line wins); the PI's decision.
+- A `<parameterSettings>` row that widens a clamped kind: refused or cut? (the sampler's limits; the PI's).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-fit-function`) — the engine's fit as a function
 
 **Done** (design and as built: `docs/upgrade/fit.md`).
