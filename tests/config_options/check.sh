@@ -9,7 +9,8 @@
 #   3. refusals: use_brune=yes (E_CONFIG_OPTION_VALUE), use_park=1 with use_brune=0 and use_rmc=1 alone
 #      (E_CONFIG_OPTIONS_CONTRADICT, both keys named), each by --validate (exit 2) and by the run (exit 1, no output);
 #      --use-rmc on a project with use_brune=1 (a flag against a key: refused by the run, the sources named).
-#   4. --describe: each option's value and source (default, project, command line).
+#   4. --describe: each option's value and source (default, project, command line) when one is not at its default;
+#      none in the text when all are (the description reads as before), always in --json.
 #
 #   ./tests/config_options/check.sh path/to/AZURE2
 
@@ -145,6 +146,9 @@ if printf '%s' "$d" | grep -qF "  use_brune = 0 (project)" && printf '%s' "$d" |
 else
   bad "--describe: $(printf '%s' "$d" | grep -A12 'options of the calculation')"
 fi
+d0="$(cd "$WORK/base" && "$AZURE2_BIN" --describe T1.azr 2>&1)"
+printf '%s' "$d0" | grep -qF "options of the calculation" && bad "--describe of T1 alone lists the options (all at default)" \
+  || ok "--describe of T1 alone: no options block (every option at its default, the text as before)"
 dj="$(cd "$WORK/k2" && "$AZURE2_BIN" --describe T1.azr --json 2>/dev/null)"
 printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); o=d["options"]; sys.exit(0 if o["use_brune"]=={"value": False, "source": "project"} and len(o)==11 else 1)' \
   && ok "--describe --json: options with value and source" || bad "--describe --json: no options member"

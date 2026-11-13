@@ -743,7 +743,9 @@ the project's key; else the default. Nothing else. "Given" is told from "default
 option when one of its flags is on the command line (`parseOptions`); a session marks the keywords the call names
 (`pyazr.azure2`'s signature and defaults are unchanged: a keyword left out is not given, one written out is, even with
 the default's value). The source of every option (`default`, `project`, `command line`, `keyword`) is kept beside its
-value (`Config::optionSources`) and printed by `--describe` and returned by `azure2.describe()["option_sources"]`.
+value (`Config::optionSources`) and printed by `--describe` (the text: when one option is not at its default, so that
+the description of a project without keys reads as before; `--json`: always) and returned by
+`azure2.describe()["option_sources"]`.
 
 **Implications.** A flag or keyword keeps its present meaning: `--use-park` / `use_park=True` also gives `use_brune`
 on, `--no-brune` / `use_brune=False` also gives `use_park` off, applied in the order the flags are written (the

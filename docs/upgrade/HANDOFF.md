@@ -23,7 +23,15 @@ sources). `--describe` (text and JSON) and `azure2.describe()["option_sources"]`
 signature is unchanged: a decorator records the keywords a call named (`pyazr/session_options.py`). The web UI's
 `SESSION_OPTIONS` is gone: the options shown are the project's with a `source` field; edited through the config route.
 
-**Verified**: see the commit messages and the final report of the branch (tree, fits, gate, ctest, run_tests).
+**Verified** (build `work/b-options`, 2 threads, 0 warnings). On the code commit: all projects × 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical (`tab-options-1`); the eight fits identical to `b-trial50`; the converted-tree
+gate 679 / 643 / 679 identical; `ctest -LE slow` 236 of 237 (`pyazr_validate`: the describe texts, fixed in the next
+commit); the slow tests 11 of 11; `tests/run_tests.sh` 165 passed, 2 failed (`ratio_to_rutherford`,
+`units_scales`: their committed `--describe` text, fixed in the last commit by printing the options only when one is
+not at its default). The later commits change only the description text: the failed tests, `pyazr_describe`,
+`pyazr_config_options`, `pyazr_ui_api`, `format3_engine`, `describe_relativistic`, `cli_help` rerun and pass.
+`tests/config_options/check.sh` (key = flag, 22 cases) and `pyazr_config_options` (key = keyword) pass; each new
+check failed once with an injected error.
 
 **Open.** The two combination rules above (PI). `save_fit` on T1 in the formal basis fails its own verification and
 `use_rmc` on T1 fails a session's set-up but not the program's run (both as before; not of this branch).

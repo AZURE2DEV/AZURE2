@@ -71,7 +71,8 @@ and ``AZURE2 project.azr`` then runs it without ``--no-brune``;
 matrix for this run only.  ``--use-park`` also gives ``use_brune`` on, and
 ``--no-brune`` also gives ``use_park`` off, as before.  ``AZURE2 --describe``
 prints each option's value and where it came from (``default``, ``project``,
-``command line``).  Refused, by ``--validate`` and by the run, each with its
+``command line``) when at least one is not at its default (``--json``:
+always, as the member ``options``).  Refused, by ``--validate`` and by the run, each with its
 code: a value other than 0, 1, true, false (``E_CONFIG_OPTION_VALUE``); and a
 pair that cannot hold together when at least one of the two is a key of the
 project (``E_CONFIG_OPTIONS_CONTRADICT``, naming both): ``use_park=1`` with

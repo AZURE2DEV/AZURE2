@@ -49,7 +49,8 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
 /// lines printed) when a flag and a key contradict each other.
 bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config);
 /// A description of the project (experiment::DescribeText or DescribeJson) with the options of `config` after it: the
-/// lines "options of the calculation (value, source):" and OptionsText, or the JSON member "options" (OptionsJson).
+/// JSON member "options" (OptionsJson) always; in the text the lines "options of the calculation (value, source):" and
+/// OptionsText when a flag, keyword or key set one (a project and a command line without any read as before).
 /// AZURE2 --describe and pyazr.describe give the same text.
 std::string WithOptions(const std::string &described, bool json, const Config &config);
 

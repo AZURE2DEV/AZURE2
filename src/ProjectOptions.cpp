@@ -153,7 +153,7 @@ std::string WithOptions(const std::string &described, bool json, const Config &c
   const std::size_t close = out.rfind('}');
   if (json && close != std::string::npos)
     out.insert(close, ",\n \"options\": " + OptionsJson(config) + "\n");
-  else if (!json)
+  else if (!json && !config.optionSources.empty())  // the text names the options only when one is not at its default
     out += "options of the calculation (value, source):\n" + OptionsText(config);
   return out;
 }
