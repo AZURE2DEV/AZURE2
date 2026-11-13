@@ -2,6 +2,7 @@
 // row of io::ConfigKeys() has its place in Config and the default of Config::Reset; flags, keywords and the project's
 // keys combine as the rule says (given > key > default); a contradiction with a key is refused, naming both options.
 #include <cstdio>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -93,8 +94,11 @@ int main() {
   };
   check("--use-park: Park and Brune", both({"--use-park"}, true, true));
   check("--no-brune: neither", both({"--no-brune"}, false, false));
-  check("--no-brune --use-park: both (the order decides, as before)", both({"--no-brune", "--use-park"}, true, true));
-  check("--use-park --no-brune: neither", both({"--use-park", "--no-brune"}, false, false));
+  // Two stated values stay as stated, whatever their order (an implication fills only what no flag stated): the pair
+  // is refused below, not decided by the order.
+  check("--no-brune --use-park: Park on, Brune off, as stated", both({"--no-brune", "--use-park"}, false, true));
+  check("--use-park --no-brune: the same", both({"--use-park", "--no-brune"}, false, true));
+  check("--no-brune --use-brune: the last stated wins", both({"--no-brune", "--use-brune"}, true, false));
   {
     Config c(sink);
     ApplyOptionFlag(c, "--use-park");
@@ -164,13 +168,44 @@ int main() {
     check("--no-ec-convection-current with the key use_long_wavelength=1: refused",
           !ApplyProjectOptions(c, Section({"use_long_wavelength=1"}), 1));
   }
-  {
+  // Contradictions without a key: refused as well (one rule), the fix in the front end's words.
+  auto refusal = [](const std::vector<std::string> &flags, const std::map<std::string, bool> &keywords) {
     std::ostringstream out;
     Config c(out);
-    ApplyOptionFlag(c, "--use-rmc");
-    check("--use-rmc without a key: no refusal here (the program's rule drops Brune later, as before)",
-          ApplyProjectOptions(c, Section({}), 1) && out.str().empty());
+    for (const auto &k : keywords) GiveOption(c, k.first, k.second, OptionSource::kKeyword);
+    for (const std::string &f : flags) ApplyOptionFlag(c, f);
+    return ApplyProjectOptions(c, Section({}), 1) ? std::string() : out.str();
+  };
+  const char *kRmc = "E_CONFIG_OPTIONS_CONTRADICT: use_rmc=1 (command line) with use_brune=1 (the default) cannot "
+                     "hold together: the Reich-Moore capture is computed with constant boundary conditions only (Brune is "
+                     "on by default); allowed: use_rmc=1 with use_brune=0, or use_rmc=0; fix: add --no-brune (or leave out "
+                     "--use-rmc)\n";
+  const std::string rmc = refusal({"--use-rmc"}, {}), rmcWant = kRmc;
+  check("--use-rmc alone: refused, what, allowed and fix (--no-brune)",
+        rmc.size() > rmcWant.size() && rmc.compare(rmc.size() - rmcWant.size(), std::string::npos, rmcWant) == 0);
+  check("--use-rmc --no-brune: valid", refusal({"--use-rmc", "--no-brune"}, {}).empty());
+  const std::string rmcKeyword = refusal({}, {{"use_rmc", true}});
+  check("use_rmc=True alone (keyword): refused, fix use_brune=False",
+        rmcKeyword.find("use_rmc=1 (keyword) with use_brune=1 (the default)") != std::string::npos &&
+            rmcKeyword.find("; fix: pass use_brune=False (or use_rmc=False in place of use_rmc=True)") != std::string::npos);
+  check("use_rmc=True, use_brune=False: valid", refusal({}, {{"use_rmc", true}, {"use_brune", false}}).empty());
+  for (const std::vector<std::string> &order : {std::vector<std::string>{"--use-park", "--no-brune"},
+                                                std::vector<std::string>{"--no-brune", "--use-park"}}) {
+    const std::string text = refusal(order, {});
+    check(order[0] + " " + order[1] + ": refused, either order",
+          text.find("use_park=1 (command line) with use_brune=0 (command line)") != std::string::npos &&
+              text.find("; fix: --use-brune in place of --no-brune (or leave out --use-park)") != std::string::npos);
   }
+  check("use_park=True, use_brune=False (keywords): refused",
+        refusal({}, {{"use_park", true}, {"use_brune", false}}).find("E_CONFIG_OPTIONS_CONTRADICT") != std::string::npos);
+  check("--use-park alone (Brune implied on): valid", refusal({"--use-park"}, {}).empty());
+  check("--no-brune alone (Park implied off): valid", refusal({"--no-brune"}, {}).empty());
+  check("use_park=True alone, use_brune=False alone (keywords): valid",
+        refusal({}, {{"use_park", true}}).empty() && refusal({}, {{"use_brune", false}}).empty());
+  check("--no-ec-convection-current alone: refused, fix --no-long-wavelength",
+        refusal({"--no-ec-convection-current"}, {}).find("; fix: add --no-long-wavelength") != std::string::npos);
+  check("--no-long-wavelength --no-ec-convection-current: valid",
+        refusal({"--no-long-wavelength", "--no-ec-convection-current"}, {}).empty());
   {
     Config c(sink);
     ApplyOptionFlag(c, "--no-transform");

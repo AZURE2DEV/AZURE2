@@ -76,7 +76,8 @@ struct ConfigOptionImplication {
 const std::vector<ConfigOptionImplication> &ConfigOptionImplications();
 
 /// Two option values that cannot hold together (E_CONFIG_OPTIONS_CONTRADICT): `a` = `aValue` with `b` = `bValue`.  Refused
-/// when at least one of the two comes from the project; `why` says why in words.
+/// whatever the source of the two values (a flag, a keyword, a key or the default); an option one flag or keyword
+/// implies counts as given, so that --use-park alone (Brune implied on) is no contradiction.  `why` says why in words.
 struct ConfigOptionContradiction {
   const char *a;
   bool aValue;
@@ -85,6 +86,17 @@ struct ConfigOptionContradiction {
   const char *why;
 };
 const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions();
+
+/// How the front end that meets a contradiction spells an option's value in the refusal's fix: the program's flag
+/// ("--no-brune"), a session's keyword ("use_brune=False"), the project's key ("use_brune=0").
+enum class OptionSpelling { kFlag, kKeyword, kKey };
+
+/// The refusal's text in three parts, one line: what ("use_rmc=1 (command line) with use_brune=1 (the default) cannot
+/// hold together: <why>"), "allowed: ..." and "fix: ..." (b's other value, else a's, in `spelling`).  `aWords` and
+/// `bWords` are the two values with their sources as the caller names them; `aGiven` and `bGiven` say whether the
+/// front end of `spelling` gave the value (a flag to replace rather than one to add).
+std::string ConfigOptionContradictionText(const ConfigOptionContradiction &c, const std::string &aWords,
+                                          const std::string &bWords, OptionSpelling spelling, bool aGiven, bool bGiven);
 
 /// Reads the section from its lines as Config::SectionStream gives them: the <config> tag line first, then the body,
 /// then the </config> line (absent when the section is not closed).

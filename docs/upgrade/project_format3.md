@@ -716,19 +716,14 @@ Left out as not a property of a project: the fit's and the job's choices (`--use
 environment switches (their own table, `azure2/support/Environment.h`; whether a number-changing switch should also
 become an option is a question the PI has open).
 
-The eleven defaults are the same in the program and in a session. What differs is how they combine:
-
-1. `use_rmc` with Brune on: the program drops Brune and Park with a warning ("--use-brune is incompatible with
-   --use-rmc"); a session keeps both. A project or a call with Reich-Moore capture and no explicit `--no-brune`
-   therefore computes two different things in the two front ends.
-2. Order: the program applies its flags in the order given (`--use-park --no-brune`: both off; `--no-brune
-   --use-park`: both on); a session applies its keywords in a fixed order in which Park wins (`use_brune=False,
-   use_park=True`: both on).
-
-Recommendation for the PI (not done here, it would move the numbers of a call): refuse Reich-Moore capture with Brune
-on in both front ends, with the message to add `--no-brune` / `use_brune=False` (no silent drop, no silent keep);
-and refuse `--use-park` with `--no-brune` given on one command line instead of letting the order decide. Only
-`tests/thm_lineshape/check.sh` passes `--use-rmc`.
+The eleven defaults are the same in the program and in a session, and so is the rule that combines them (decided by
+the PI on 2026-11-13; before, the two front ends differed in two places: `--use-rmc` dropped Brune and Park with a
+warning where a session kept them, and the program applied `--use-park` and `--no-brune` in the order given where a
+session let Park win). **One rule:** a pair of the table of contradictions below is refused, whatever the source of its
+two values, in the program, in a session and in `--validate`; nothing is dropped or decided by the order. So
+`--use-rmc` alone is refused (Brune is on by default; add `--no-brune`), `use_rmc=True` alone likewise (pass
+`use_brune=False`), and `--use-park` with `--no-brune`, in either order, or `use_park=True, use_brune=False`, are
+refused.
 
 **Names.** One spelling for each option, chosen once: the pyazr keyword, which cannot be renamed. The same word is the
 `<config>` key, the row of `pyazr.kinds()["options"]` (its `key`) and the line of `--describe`. The positional entries
@@ -743,24 +738,35 @@ the project's key; else the default. Nothing else. "Given" is told from "default
 option when one of its flags is on the command line (`parseOptions`); a session marks the keywords the call names
 (`pyazr.azure2`'s signature and defaults are unchanged: a keyword left out is not given, one written out is, even with
 the default's value). The source of every option (`default`, `project`, `command line`, `keyword`) is kept beside its
-value (`Config::optionSources`) and printed by `--describe` (the text: when one option is not at its default, so that
-the description of a project without keys reads as before; `--json`: always) and returned by
+value (`Config::optionSources`) and printed by `--describe` (text and `--json`, for every project) and returned by
 `azure2.describe()["option_sources"]`.
 
 **Implications.** A flag or keyword keeps its present meaning: `--use-park` / `use_park=True` also gives `use_brune`
-on, `--no-brune` / `use_brune=False` also gives `use_park` off, applied in the order the flags are written (the
-program) or in the table's order (a session). The implied option counts as given. A project's key implies nothing.
+on, `--no-brune` / `use_brune=False` also gives `use_park` off. The implied option counts as given (it wins over the
+project's key), but it fills only an option that no flag or keyword of the same call stated itself
+(`Config::optionsStated`): `--use-park --no-brune` keeps both stated values and meets the contradiction instead of
+letting the second flag silently clear the first. `--use-park` alone and `--no-brune` alone are no contradiction. A
+project's key implies nothing.
 
-**Contradictions** (`E_CONFIG_OPTIONS_CONTRADICT`, naming both keys): `use_park=1` with `use_brune=0`; `use_rmc=1`
-with `use_brune=1`; `ec_convection_current=0` with `use_long_wavelength=1` (the convection current exists only in the
-exact form). A pair of values is refused when at least one of the two came from the project: `--validate` and the
-reader take the file's keys and the defaults (so `use_rmc=1` alone is refused: Brune is on by default; write
-`use_brune=0` too); the run and a session check again after the flags and keywords are applied (a flag cannot pair
-with a key into a contradiction). Where neither came from the project, the program and a session behave as today
-(mismatch 1 above).
+**Contradictions** (`E_CONFIG_OPTIONS_CONTRADICT`, one table, `io::ConfigOptionContradictions()`): `use_park=1` with
+`use_brune=0`; `use_rmc=1` with `use_brune=1`; `ec_convection_current=0` with `use_long_wavelength=1` (the convection
+current exists only in the exact form). A contradicting pair is refused whatever the source of the two values (a flag,
+a keyword, a key, the default; two defaults never contradict): `--validate` and the reader take the file's keys and the
+defaults; the run and a session check again after the flags and keywords are applied. The refusal is one line in three
+parts, the same in every front end (`io::ConfigOptionContradictionText`): what (both values with their sources), what
+is allowed, and the fix in the words of the front end that gave values, for example from the program
 
-**A project without the keys computes exactly what it computes today**, in the program and in pyazr, the mismatches
-included: no key is read, no contradiction is checked, the flags and keywords set what they set.
+```
+ERROR: E_CONFIG_OPTIONS_CONTRADICT: use_rmc=1 (command line) with use_brune=1 (the default) cannot hold together:
+the Reich-Moore capture is computed with constant boundary conditions only (Brune is on by default); allowed:
+use_rmc=1 with use_brune=0, or use_rmc=0; fix: add --no-brune (or leave out --use-rmc)
+```
+
+(one line; a session says `fix: pass use_brune=False (or use_rmc=False in place of use_rmc=True)`, `--validate`
+`fix: write use_brune=0 in <config> (or use_rmc=0 in place of use_rmc=1)`).
+
+**A project without the keys, run without a contradicting pair of flags or keywords, computes exactly what it computed
+before**, in the program and in pyazr: no key is read and the flags and keywords set what they set.
 
 **One table.** The options are rows of `io::ConfigKeys()` (`io/src/ConfigSection.cpp`), with their flags, default
 and kind; the implications and contradictions are two small tables beside it. The binding's option table

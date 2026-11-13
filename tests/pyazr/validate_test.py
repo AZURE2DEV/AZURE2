@@ -164,14 +164,15 @@ with tempfile.TemporaryDirectory() as tmp:
                       any(p["name"] == "s01_int_thin.norm" for p in d["datasets"][0]["parameters"]), str(d)[:300])
                 if BIN:
                     code, out, _ = cli("--describe", new)
-                    check("--describe and pyazr.describe: the same text, then the switches set",
+                    check("--describe and pyazr.describe: the same text, then the settings of the run and machine",
                           code == 0 and out.startswith(text), out[:300])
                     rest = out[len(text):]
                     table = os.environ.get("AZURE2_COULOMB_TABLE")
-                    check("--describe ends with the environment switches that are set",
-                          (rest == "") if not table else
-                          rest.startswith("Environment switches set:\n") and
-                          f"  AZURE2_COULOMB_TABLE={table} (numbers)\n" in rest, rest[:300])
+                    check("--describe ends with the threads and the switches that can move a number, with sources",
+                          rest.startswith("settings of this run and machine (value, source):\n  threads = ") and
+                          "  --refine-quadrature=K (AZURE_REFINE_QUADRATURE) = 1 (default)\n" in rest and
+                          (not table or f"  --coulomb-table=FILE (AZURE2_COULOMB_TABLE) = {table} (environment)\n"
+                           in rest), rest[:300])
             finally:
                 os.chdir(here)
         try:

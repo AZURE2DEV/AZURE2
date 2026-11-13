@@ -221,7 +221,8 @@ int printPredictions(const std::string &file) {
  * datum or potential NAME.  A project with an error, or no such record: exit 2; a file that is not a format-3 project: exit 3; a
  * file that cannot be read: exit 1.
  */
-int describeProject(const std::string &file, bool json, const std::string &record, const std::vector<std::string> &args) {
+int describeProject(const std::string &file, bool json, const std::string &record, const std::vector<std::string> &args,
+                    const azure2::ThreadsInForce &threads) {
   std::string bytes;
   if (!ReadFileBytes(file, bytes)) {
     std::cout << "ERROR: --describe: cannot read " << file << std::endl;
@@ -257,16 +258,28 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   Config options(std::cout);
   options.configfile = file;
   if (!OptionsOfRun(bytes, args, options)) return 2;
-  std::cout << WithOptions(json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record),
-                           json, options)
-            << std::flush;
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  std::string described =
+      WithOptions(json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record), json,
+                  options);
+  // --json: the threads and the switches that can move a number with their sources, beside the options
+  const std::size_t close = described.rfind('}');
+  if (json && close != std::string::npos)
+    described.insert(close, ",\n \"threads\": " + azure2::ThreadsJson(threads) + ",\n \"switches\": " +
+                                azure2::support::NumberSwitchesJson(environment) + "\n");
+  std::cout << described << std::flush;
   if (json) std::cout << std::endl;
   // the stopping of each target from the library: its source (text form only), or the refusal
   const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c), read.projectDir);
   for (const azure2::experiment::Diagnostic &d : stopping.refusals) std::cout << d.ToText() << std::endl;
   if (!json && record.empty()) std::cout << stopping.text << std::flush;
-  // the environment switches that are set (the table's, azure2/support/Environment.h), text form only
-  if (!json) std::cout << azure2::support::SetSwitchesText(azure2::support::ProcessEnvironment()) << std::flush;
+  // the settings of this run and machine: the threads and every switch that can move a number with its value and
+  // source, then the other switches that are set (the table's, azure2/support/Environment.h); text form only
+  if (!json)
+    std::cout << "settings of this run and machine (value, source):\n  threads = " << threads.count << " ("
+              << threads.source << ")\n"
+              << azure2::support::NumberSwitchesText(environment) << azure2::support::SetSwitchesText(environment)
+              << std::flush;
   return stopping.refusals.empty() ? 0 : 2;
 }
 
@@ -278,7 +291,7 @@ bool Exit(int &exitCode, int value) {
 
 }  // namespace
 
-bool RunProjectCommand(int argc, char **argv, int &exitCode) {
+bool RunProjectCommand(int argc, char **argv, const azure2::ThreadsInForce &threads, int &exitCode) {
   // --convert OLD NEW [--to 3] writes OLD (format 1 or 2) in format 3 to NEW and exits (docs/upgrade/project_format3.md
   // section 8): with --convert-params, the only commands that read an old file
   for (int i = 1; i < argc; i++)
@@ -358,7 +371,8 @@ bool RunProjectCommand(int argc, char **argv, int &exitCode) {
           record = argv[++k];
         }
       }
-      return Exit(exitCode, describeProject(argv[i + 1], json, record, std::vector<std::string>(argv + 1, argv + argc)));
+      return Exit(exitCode,
+                  describeProject(argv[i + 1], json, record, std::vector<std::string>(argv + 1, argv + argc), threads));
     }
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);

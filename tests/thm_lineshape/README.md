@@ -13,7 +13,7 @@ reaction, 2H(18O,α15N)n, has a neutron spectator; a charged one is made up as
 | (b) spectator `n` (2H(18O,α15N)n at 54 MeV), `lineshape=on` | byte-identical to off; ζ = 0 in `thm_experiments.out` |
 | (c) one level, no folding | model(on)/model(off) = exp[2ζ arctan(2(E_λ−E)/Γ_λ)] at all 118 points to 1e-6 (measured 3e-9), ζ computed here from the masses, Γ_λ from `parameters.out`; the same with the second level kept (it interferes through the level matrix) but its α width zero: the factor belongs to the decaying level |
 | (d) one level, 0.5 keV grid | ζ < 0: the peak moves up (0.592 → 0.605 MeV), the model is lowered below E_λ and raised above |
-| (e) refusals | `lineshape=on` without kinematics, `lineshape=1`, E_sF ≤ 0 at a data point (Ebeam = 40 MeV), `--use-rmc` (no Brune) |
+| (e) refusals | `lineshape=on` without kinematics, `lineshape=1`, E_sF ≤ 0 at a data point (Ebeam = 40 MeV), `--use-rmc --no-brune` (no Brune) |
 
 `tests/pyazr/thm_lineshape_test.py` checks the same through pyazr
 (`Project.set_thm_experiment(..., lineshape="on")`, CLI == session,

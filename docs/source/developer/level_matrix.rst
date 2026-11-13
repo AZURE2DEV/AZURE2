@@ -125,7 +125,10 @@ subtracted from the diagonal elements (``AMatrixFunc::FillMatrices``):
 
 The diagonal element then carries :math:`-i\sum_\gamma
 \gamma_{\lambda\gamma}^2`, i.e. :math:`-i` times half the radiative width,
-since :math:`P_\gamma = 1` with ``--use-rmc`` (Reich and Moore).
+since :math:`P_\gamma = 1` with ``--use-rmc`` (Reich and Moore). The
+Reich-Moore capture is computed with constant boundary conditions only:
+``--use-rmc`` is given with ``--no-brune``, and the program refuses it
+otherwise.
 
 **Implementation detail:** Only active levels are stored in the matrix.
 An index map (``level_active_index_``) translates original level indices to

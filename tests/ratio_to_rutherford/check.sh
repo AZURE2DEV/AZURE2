@@ -76,7 +76,7 @@ done
 # ---- 3. the worked example: --describe and --print-predictions
 setup story "$HERE/models/aC_story.azr"
 (cd "$WORK/story" && "$AZURE2_BIN" --describe m.azr 2> describe.err | sed "s|$WORK/story|<project>|g" |
-  sed '/^Environment switches set:$/,$d' > describe.txt)  # the description; the switches set are this shell's
+  sed '/^settings of this run and machine (value, source):$/,$d' > describe.txt)  # the description; the rest is this machine's
 if diff -u "$HERE/expected/story_describe.txt" "$WORK/story/describe.txt" > "$WORK/describe.diff"; then
   ok "story: --describe as committed"
 else

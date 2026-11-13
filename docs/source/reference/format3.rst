@@ -2084,7 +2084,7 @@ Diagnostic codes
      - an option of the calculation in <config> (use_brune, transform, ...) with a value other than 0, 1, true or false
    * - ``E_CONFIG_OPTIONS_CONTRADICT``
      - error
-     - two options of the calculation that cannot hold together, at least one of them a <config> key (use_park=1 with use_brune=0, use_rmc=1 with use_brune=1, ec_convection_current=0 with use_long_wavelength=1)
+     - two options of the calculation that cannot hold together, whatever gave them: a flag, a keyword, a <config> key or the default (use_park=1 with use_brune=0, use_rmc=1 with use_brune=1, ec_convection_current=0 with use_long_wavelength=1)
    * - ``E_PARAMETER_FILE_NO_MATCH``
      - error
      - a parameter file (param.sav as a run's start) none of whose names is a parameter of the run
