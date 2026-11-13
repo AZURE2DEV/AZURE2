@@ -10,6 +10,8 @@ tell a namespace, a class and a block apart, and each declaration is classified 
                 when it is not const (a pointer to const is not const: `static const T *p` is reported)
   namespace     a variable at namespace scope (static or not, in a named or an unnamed namespace) that is not const
   mutable       a member declared mutable
+  once          a std::once_flag member of a class: the member it guards is written once, in a const method, behind
+                a pointer or not (CoulombTable::ContentIdentity), which the kinds above do not see
 
 std::once_flag, std::mutex and std::atomic objects are reported like any other variable: a mutex guards state, a
 flag or counter is state.  Run as a script it prints one line per finding: file, symbol, kind, line.
@@ -224,6 +226,9 @@ def classify(stmt, scope, line):
     tl = bool(re.search(r"\bthread_local\b", s))
     st = bool(re.search(r"\bstatic\b", s))
     mu = bool(re.search(r"(?<!\])\s*\bmutable\b", s)) and scope == "class"
+    once = scope == "class" and not st and not mu and bool(re.match(r"^std::once_flag\s+\w+\s*$", s))
+    if once:
+        return [(s.split()[-1], "once", line)]
     if not (tl or st or mu or scope == "namespace"):
         return []
     d = declaration(s, scope)

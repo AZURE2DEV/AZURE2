@@ -969,10 +969,10 @@ for (_f, _sym, _kind), _reason in sorted(_allowed.items()):
         problems.append(f"tests/consistency/allowed_state.tsv: {_f} {_sym} ({_kind}) no longer exists; remove the row "
                         "(check 38)")
 _planted = "namespace {\nint g_planted = 0;\n}\nvoid F() {\n  static double memo = 0.0;\n  thread_local int t;\n}\n" \
-           "struct S {\n  mutable int m_;\n  static const char *const kOk;\n};\n"
-if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "namespace", "static", "thread_local"]:
-    problems.append("check 38: a planted namespace variable, static, thread_local or mutable member is not caught; "
-                    "update tests/consistency/state_scan.py")
+           "struct S {\n  mutable int m_;\n  static const char *const kOk;\n  std::once_flag once;\n};\n"
+if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "namespace", "once", "static", "thread_local"]:
+    problems.append("check 38: a planted namespace variable, static, thread_local, mutable member or once-written "
+                    "member is not caught; update tests/consistency/state_scan.py")
 
 # 39. One reader of the environment (docs/upgrade/evaluation.md section 8; support/include/azure2/support/Environment.h):
 #     no getenv in the engine, its libraries or the binding outside support/src/Environment.cpp.  Test programs (any
