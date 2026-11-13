@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-design`) — pyazr 3.0: measured state and design (no code)
+
+**Done.** `docs/upgrade/pyazr3.md` (new): the inventory of pyazr on 441a0907 measured by scripts (public names, the
+binding, `AZUREAPI`, Python formulas, what the engine can do that pyazr cannot reach), four use cases run as a user
+and an agent would, the design of 3.0 (objects, arrays, errors, self-description, fit, physics explorer, command
+line, packaging), the extensibility of the binding today and after, eight steps of work with sizes and order, eleven
+decisions for the PI. One line in `ROADMAP.md` Phase 8. No code changed.
+
+**How.** Scripts and logs in `work/pyazr3/` (listed in the note's section 1.7), with the build `work/b-gecm` at two
+threads: 115 of the 120 tests of `tests/pyazr/` under a function-level tracer; the use cases compared with the
+program on the same project (identical files where both write them).
+`python3 tests/consistency/repo_consistency_test.py` after the commit.
+
+**Open.** (1) Engine defect, not fixed: a target `isotope` whose start value differs from its prior centre loses its
+prior (no `Total-Abundance-Chi-Squared`, program and pyazr alike; note section 1.6); through it `save_fit` refuses its
+own snapshot after a fit with a free abundance. (2) `calculate_chi2_rwa` includes the abundance prior although its
+docstring says data only. (3) `parallel_points_test` and `upgrade_thread_independence_test` run the engine at four
+threads whatever the caller's budget. (4) The PI's decisions of the note's section 5 before step 5 of its plan.
+
 ## 2026-11-13 (director, 07:32) — merged: the `gamma_decay` record on a level whose transitions have external capture
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):

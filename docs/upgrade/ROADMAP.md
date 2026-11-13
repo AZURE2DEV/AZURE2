@@ -255,6 +255,8 @@ Gate: benchmarks committed with their FRESCO inputs and outputs.
 
 ## Phase 8 — pyazr 3.0
 
+Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order of work, the PI's decisions).
+
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
 - [ ] `azure2()` session shim with deprecation warnings for one release; docs recipes for iminuit, scipy, emcee.
