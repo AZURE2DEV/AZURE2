@@ -95,9 +95,9 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
 
 ## Targets, beams and detectors
 
-- builds before 2026-10-01 (expires: 2027-02-01) converted
-  a shared σ_b lab → c.m. once per segment named, so a line naming N segments (or a convolved SUM/RATIO) applied
-  σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its own beam. Symptom: A shared line under-smoothed every segment it names
+- builds before 2026-10-01 (expires: 2027-02-01) converted a shared σ_b lab → c.m. once per segment named, so a line
+  naming N segments (or a convolved SUM/RATIO) applied σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its
+  own beam. Symptom: A shared line under-smoothed every segment it names
 - builds before 2026-09-28 (expires: 2027-02-01): the GUI's compound ERYA fetch returned the average-atom ε. An
   equation written by such a GUI is consistent only with all atoms cm⁻²; scale it by (x+y)/x for the active density.
 - builds before 2026-09-11 (expires: 2027-02-01) mis-estimated level widths when building the narrow-resonance
@@ -117,3 +117,18 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
   current build set
 - builds before 2026-10-25 (expires: 2027-02-01) applied Q per c.m. order
 for particle exits, a few per cent off, and changed results even with every Q = 1.
+
+## Bases and parameter files
+
+- builds before 2026-11-01 (expires: 2027-02-01) crashed instead ("z is not finite in log_Gamma"). (a Brune file with no
+  standard equivalent)
+- builds before 2026-10-27 (expires: 2027-02-01): with `--no-brune` the formal eigenvalues went to a J^π group's
+  levels in file order, so a group listed out of energy order had energies, widths and fix flags permuted (cross
+  sections unaffected). Suspect any old non-Brune fit whose `param.par` `energy_N` values are out of step with the
+  file's levels.
+- builds before 2026-11-04 (expires: 2027-02-01) wrote `param.fit` and `param.mcmc` without the tag. Before resuming
+  a Park fit from such a file, prepend
+  `    #parametrization       2.0000000e+00       0.0000000e+00`; otherwise every amplitude, fixed ones included, is
+  multiplied by √J_λ again. Brune and standard runs are unaffected.
+- builds before 2026-10-08 (expires: 2027-02-01): a few builds wrote the tag as a plain `parametrization` row, which
+  shifts any positional reader by one line; strip it or prefix it with `#`.
