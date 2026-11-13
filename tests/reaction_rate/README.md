@@ -29,8 +29,15 @@ and checks every temperature to 1e-3:
 **One path (2026-11-12).** The cases (c) and (h) ran n12C and p12C_2g through the per-temperature
 quadrature, which the `<config>` key `useAdaptiveGrid=0` selected; the key was removed, and the rate
 always takes the tabulated path.  The quadrature stays as the fallback for a grid with fewer than
-three points of sigma > 0 (an exit closed almost everywhere below 50 MeV), which no model here
-reaches: that code is no longer exercised by a test.
+three points of sigma > 0 (an exit closed almost everywhere below 50 MeV).  Case (c) reaches it with
+`p12C_closed`: p12C with a third pair, p + 12C in a fictitious state at 48 MeV (an ANC of 0.5 fm^-1/2
+on the 1/2+ background level at 20 MeV), which opens at E_cm = 48 MeV, between the grid's last two
+backbone nodes, so that only the node at 50 MeV has sigma > 0.  No physical model of this suite
+reaches the fallback: only an exit that opens within the top 2.3 MeV of the rate's range (a residual
+state some 46 MeV above the entrance threshold) does, so the input is contrived.  Its truth
+(`expected/rates_p12C_closed.dat`, T9 = 2 to 10, `temperatures_closed.dat`) is the dense mode-3
+extrapolation of pair 3 that `closed_truth.py` adds to the model, integrated by `truth.py`; the rate
+agrees to the 6 printed digits.
 
 **Total radiative capture (2026-11-04).** The exit key `-1` ("Total capture (all γ pairs)" in the
 GUI's Run tab) makes the rate integrate the sum of the capture cross sections into every capture pair
