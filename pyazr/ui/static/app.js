@@ -11,14 +11,14 @@ import { formatNumber } from "./tables.js";
 import * as projectTab from "./tabs/project.js";
 import * as nucleusTab from "./tabs/nucleus.js";
 import * as dataTab from "./tabs/data.js";
+import * as fitTab from "./tabs/fit.js";
 
 /** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it. */
 export const TABS = [
   { id: "project", title: "Project", module: projectTab },
   { id: "nucleus", title: "Nucleus", module: nucleusTab },
   { id: "data", title: "Data", module: dataTab },
-  { id: "fit", title: "Fit", later: "the fitting step: the parameter table, recipe fits as jobs with progress and "
-    + "Stop, MINOS, the sampler. Until then a fit runs through the API (POST /api/jobs) or pyazr." },
+  { id: "fit", title: "Fit", module: fitTab },
   { id: "results", title: "Results", later: "the results step: plots of every data set and extrapolation, residuals, "
     + "the χ² table, the program's output files. The Data tab shows one data set's preview plot today." },
   { id: "physics", title: "Physics", later: "the physics step: one generated form and plot per physics function of "

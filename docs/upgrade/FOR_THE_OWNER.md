@@ -657,6 +657,12 @@ value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle
 checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
 User guide: "The web interface".
 
+The Fit tab (2026-11-13, second step of the page) runs the recipe fits (iminuit's MIGRAD with HESSE, scipy's
+L-BFGS-B) and iminuit's MINOS as jobs from a form drawn from the server's job table, follows a running job (calls,
+objective, its plot against the call, Stop, Kill), writes an accepted fit into the project as one Undo-able edit and
+shows the χ² of the project as written beside the fit's; the table of every parameter edits the working x of the free
+ones. The engine's own fitters and the sampler are listed with the pyazr call they wait for.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

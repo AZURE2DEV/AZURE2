@@ -64,6 +64,65 @@ The 17 Python formulas and their rows: `pyazr3.md` section 1.3 (the largest diff
 - Found, not changed (library accuracy, `pyazr3.md` 1.6): S good to about 3e-9 absolute; the engine's dS/dE 9.5e-6
   relative at p + 12C, l = 0, 3.42 MeV, against the 1e-8 `ChannelFunctions.h` states.
 
+## 2026-11-13 (director, 16:16) — merged: the web UI's Fit tab
+
+**Merged** `feature/upgrade-9-webui-fit` (the entry below). No C++ changed (the diff against the data branch in
+`src include api physics experiment stopping support` is empty), so the reference tag and the base build stay
+`tab-t50-1` and `work/b-trial50`.
+
+**Checked by the director** on the branch's last commit with the verified build's engine, one thread: the
+consistency test; the UI tests api, jobs, server, routes_consistency, static, node and the browser smoke test, all
+ok; the screenshots of the idle, running, finished, MINOS and accepted states looked at.
+
+**Open.**
+- The browser smoke test fails now and then on T2 with two requests of the Data tab that never reach the server
+  ("Failed to fetch"): one run in two for the director on the Results branch, about one in eight for the Fit
+  agent. It is older than both tabs. The Results agent is finding the cause; no retry may hide it.
+- After Accept the page shows its note about the two χ² also when they differ in the last digit only (T1:
+  462.27351124742853 against 462.2735112474378). The note should appear only above rounding (a relative difference
+  of about 1e-12), and Accept should be disabled once the job's point is the project's. With the second part of the
+  Fit tab.
+- T2 from the page: iminuit's MIGRAD needs 1.7 s per call on one thread and HESSE turns its valid minimum invalid
+  (objective 298.9167 after 416 calls). The engine's own MIGRAD is not offered yet (pyazr's `fit_with_engine` with
+  progress and stop); compare the two on T2 when it is.
+- A fitted areal density is laid out from its start value, so T2's χ² as written differs from the fit's by 2e-7
+  relative: `feature/upgrade-4-layout-centre`.
+- `GET /api/parameters`, `GET /api/x` and `PATCH /api/x` now answer while a job holds the thread budget (the header's
+  χ² then waits for the job's end and says so).
+- Nobody has used the page in a real browser by hand.
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-fit`) — the web UI's Fit tab: parameters and recipe-fit jobs
+
+**Done.** The Fit tab (`pyazr/ui/static/tabs/fit.js`, `tabs/fitjob.js`, `fitting.js`, `selftestfit.js`; a row of
+`PLOTS`): the job form drawn from the server's job table (settings with types and defaults; the rows that wait for
+pyazr greyed with their reason), a running job followed by a long poll (calls, objective, best, time, the objective
+against call on a log scale, the log's last lines, Stop, Kill; found again after a reload), the result (the recipe's
+words, χ² and N at the best point, Accept into project with Undo, the χ² of the project as written beside the fit's,
+MINOS offered after an iminuit fit), the table of every parameter (kind filter from the engine's kinds, free only,
+text; the working x edited in place; the job's best point, errors, MINOS intervals, start point), covariance and
+correlation as tables and CSV. Server (`pyazr/ui` only): settings as typed rows (`Setting`, `SETTING_TYPES`),
+iminuit's MINOS as the job kind `minos/iminuit`, covariance and correlation from HESSE, the job's trace and log tail,
+`GET /api/jobs/{id}?wait=s`, a job's revision named `text_rev`, the accepted revision kept in the job's record, the
+parameter table and x readable while a job holds the budget. Docs: `web_ui.md` 11.3 and findings 17–20, user guide,
+`pyazr/CLAUDE.md`, `FOR_THE_OWNER.md`, `ROADMAP.md`, the tests' README. No C++ changed.
+
+**How.** The seven UI test files at one thread on the base build's binding (`work/b-trial50`), all ok; each new check
+shown failing with an injected error (`tests/pyazr/ui/README.md`); the smoke test (headless Chrome) on T1 and T2 with
+the new walk through the tab (Run, progress, Stop, Accept, Undo: the header's χ² back exactly). A walk over HTTP on T2
+against a server process at one thread (`work/uifit/walk.py`): 62 parameters, 19 free; χ² 10905.2313020616 (N 330) at
+the start; an iminuit fit stopped after 7 calls (the long poll answered 0.88 s after the stop request; best objective
+7087.924126); started again from its best point, it ended after 416 calls (779 s): objective 298.9166933, χ²
+295.0675134652589 at the best point; accepted, the project as written gives χ² 295.06757397066707 (2 × 10⁻⁷ more; likely
+because T2 fits a target density, the known open point; on T1, which does not, the two differ by 3 × 10⁻¹⁵); Undo gives
+10905.2313020616 again. A job GET costs 2.5 ms (2.1 kB). Screenshots in `work/uifit/walk/`. A build of the branch with 0
+warnings and `ctest -R pyazr_ui`: see the report.
+
+**Open.** The engine's fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`); a fixed
+parameter is edited in its record or level, not from the table (finding 17); the physical value's unit is not sent
+(finding 18). No event stream: a job is long-polled, the revision polled. Nobody has used the Fit tab in a real
+browser by hand. A smoke-test run on T2 once saw two Data-tab requests fail in Chrome before reaching the server
+(one run in about eight; not reproduced since).
+
 ## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
 
 **Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged
