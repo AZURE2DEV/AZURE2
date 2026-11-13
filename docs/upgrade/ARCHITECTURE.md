@@ -284,7 +284,10 @@ check (`tests/consistency/repo_consistency_test.py` check 38, scanner `tests/con
 not a row of `tests/consistency/allowed_state.tsv` (file, symbol, kind, reason); a row whose symbol is gone fails too.
 Rows marked `table:` stay (the Coulomb tables read from files, GSL's error handler, locks of process-wide streams);
 rows marked `pending (milestone N)` name the milestone of `evaluation.md` §5 that removes them.  The test that two
-calculations in one process do not see each other: `tests/pyazr/session_isolation_test.py`.
+calculations in one process do not see each other: `tests/pyazr/session_isolation_test.py`.  The ensemble sampler
+keeps no process-wide state: a run's state is a record of `AZURECalcMCMC::RunMCMCSampling`, its callbacks and stop
+request are members, and numcmc takes `std::function` callbacks that carry their context (`sampler_objective`, two
+samplers in two threads).
 
 **Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
 the front ends need (units, fields, documentation) and the function that does the work: the quantity table of

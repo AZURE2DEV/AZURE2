@@ -386,6 +386,11 @@ observed parameters (`Use Reduced Width Amplitudes: no`) had a likelihood that d
 placement at narrow resonances read the branchings as widths in eV, but only into a sum no output used. Fixed and
 tested (`tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`); fits in the CLI and the MCMC in amplitudes
 were never affected.
+The ensemble sampler (MCMC, both bases) did not have the record's priors and the remainder's wall, and let a
+branching leave [0, 1] and Γ_γ go negative (samples reached Γ_γ = −6.6×10¹³); it now samples −½ × the fit's
+objective, every term from the same table, and rejects a point outside the record's limits (tested,
+`tests/reference/sampler_objective_test.cpp`). The sampler's run (its file, step, best walker, callbacks and stop
+request) now belongs to the sampler object and the call that runs it, so two samplers in one process share nothing.
 
 ## What is in work and what comes next
 
