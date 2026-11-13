@@ -16,3 +16,13 @@ untouched. No committed outputs: every number is in `check.sh`.
 
 The older rows of `tests/prior_centre` (the `prior_centre` rows of `<parameterSettings>` read from old lines) are
 another path to the same centres of a norm and a shift.
+
+`continued.sh path/to/AZURE2` (run by `check.sh` as its check (h)): a fit continued from its fitted values computes
+the fit it continues. For a fitted areal density (`tests/target_density/fit_prior.azr`), Doppler temperature
+(`tests/doppler_fgm`'s `fit_prior`), stopping scale (`tests/stopping_yield/models/fit.azr`, densities fixed) and a
+kernel's width (`tests/rectangular_resolution/models/fit.azr` with a prior), it fits, writes the fitted value into
+the record (the value token only), and checks that the written project at the fit's parameters gives the fit's
+`chiSquared.out`, that a second fit stays at the minimum, and that a start outside the range laid out from the centre
+is laid out from the start with one line saying so. With `PYAZR_ENGINE_DIR`, `continued.py` adds `save_fit`'s own
+check and compares the layout values the sessions report (`parameter_kinds.md` section 4, "The layout of a fitted
+value"). On the build before the rule, the Doppler temperature's χ² differed by 6e-6 and every layout moved.

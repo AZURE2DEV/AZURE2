@@ -126,7 +126,7 @@ std::uint64_t DataSetFingerprint(const DataSet &d) {
   for (int n = 1; n <= d.NumTargetEffects(); n++) {
     const TargetEffect &te = *d.GetTargetEffect(n);
     f.Add(te.GetScreeningUe()), f.Add(te.GetDensity()), f.Add(te.GetDopplerTemperature());
-    f.Add(te.GetDensityNominal()), f.Add(te.GetDensitySigma()), f.Add(te.GetScreeningSigma());
+    f.Add(te.GetDensityLayoutBase()), f.Add(te.GetDensitySigma()), f.Add(te.GetScreeningSigma());
     f.Add(te.GetLayoutDensity()), f.Add(te.GetDopplerLayoutTemperature()), f.Add(te.IsScreeningPriorReplaced());
   }
   for (int k = 0; k < d.NumThmCoherentParams(); k++) f.Add(d.GetThmCoherentParam(k).value);

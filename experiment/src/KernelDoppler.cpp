@@ -37,7 +37,7 @@ namespace {
  *   sigma_D(E) = 1/(u sqrt(pi) v^2) int_0^inf [exp(-(v-w)^2/u^2) - exp(-(v+w)^2/u^2)] w^2 sigma(w^2) dw,
  * v = sqrt(E), w = sqrt(E'), E the lab-equivalent energy (E_cm over the point's c.m./lab factor), u^2 = kT m/M, sigma
  * linear in E between nodes: the weights w with sigma_D(eCM) = sum w.second * value(node w.first), 4-point
- * Gauss-Legendre on pieces no wider than u0/4.  The window (layout temperature) and the pieces (nominal temperature)
+ * Gauss-Legendre on pieces no wider than u0/4.  The window (layout temperature) and the pieces (layout base)
  * do not move with T: only the kernel values do, so sigma_D is smooth in a fitted T; dwdT, if given, receives dw/dT
  * (per K) on the same nodes.
  */
@@ -50,7 +50,7 @@ void DopplerWeights(const KernelParameters &p, const KernelPoint &point, const K
   const double T = point.temperature;
   const double u = DopplerU(c, T);
   if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
-  const double u0 = DopplerU(c, p.dopplerNominal);
+  const double u0 = DopplerU(c, p.dopplerLayoutBase);
   double lo, hi;
   DopplerWindow(p, eCM, c, lo, hi);
   const double v = std::sqrt(eCM / c);

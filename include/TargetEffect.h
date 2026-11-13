@@ -97,7 +97,7 @@ class TargetEffect {
    * by several detectors); the group's first line holds the parameter and its densityfit block.
    *
    * The sub-point grids are laid out once for the largest density the fit is expected to reach
-   * (GetLayoutDensity: N0 + 3 sigma, at least 1.1 N0; 1.5 N0 without a prior) and the depth integral is cut at
+   * (GetLayoutDensity: N0 + 3 sigma, at least 1.1 N0; 1.5 N0 without a prior; N0 the layout base) and the depth integral is cut at
    * E0 - dE(N), so the yield moves smoothly with N and the grids stay put (Unit::IntegrateTargetEffect).
    */
   bool HasDensityFit() const { return hasDensityFit_; }
@@ -105,8 +105,9 @@ class TargetEffect {
   bool HasDensityFitError() const { return densityFitError_; }
   const std::string &GetDensityFitErrorText() const { return densityFitErrorText_; }
   bool IsDensityVaried() const { return densityVary_; }
-  /// The line's density, the start of a fit and the base of its lower limit (atoms/cm^2).
-  double GetDensityNominal() const { return densityNominal_; }
+  /// What the layout density and the lower limit N/100 are laid out from (atoms/cm^2): the prior's centre, or the
+  /// line's density (azure2/experiment/LayoutBase.h, parameter_kinds.md section 4).
+  double GetDensityLayoutBase() const { return densityLayoutBase_; }
   /// The centre of the density prior (atoms/cm^2): as written, else the line's density (parameter_kinds.md section 4).
   double GetDensityCentre() const { return densityCentre_; }
   /// The name of the target record, which names the effect's parameters ("" for an effect without a target).
@@ -226,12 +227,19 @@ class TargetEffect {
   /// The largest scale the sub-point grids span (as the layout density): s0 + 3 sigma, at least 1.1 s0, when fitted
   /// with a prior; 1.5 s0 fitted without; s0 when fixed.
   double GetLayoutStoppingScale() const;
-  /// The smallest scale a fit may take: s0 / 10.
-  double GetStoppingScaleMinimum() const { return 0.1 * stoppingScaleNominal_; }
+  /// What the layout scale and the lower limit are laid out from: the prior's centre, or the scale written
+  /// (azure2/experiment/LayoutBase.h, parameter_kinds.md section 4).
+  double GetStoppingScaleLayoutBase() const { return stoppingScaleLayoutBase_; }
+  /// The smallest scale a fit may take: s0 / 10, s0 the layout base.
+  double GetStoppingScaleMinimum() const { return 0.1 * stoppingScaleLayoutBase_; }
   /// A table kernel's parameter values as written (engine units, KernelParameters::values), and those a fit may vary
   /// (ApparatusParameters.h, row `kernel`).
   const std::vector<double> &GetKernelValues() const { return kernelValues_; }
   const std::vector<azure2::experiment::ApparatusParameterSpec> &GetKernelParameterFits() const { return kernelFits_; }
+  /// The value a fitted kernel parameter's grid spans (its upper limit) and what that and its lower limit are laid out
+  /// from (the prior's centre or the value, azure2/experiment/LayoutBase.h), by slot.
+  double GetKernelLayoutValue(int slot) const { return kernelLayoutValues_.at(slot); }
+  double GetKernelLayoutBase(int slot) const { return kernelLayoutBases_.at(slot); }
   Equation *GetConvolutionEq();
 
   // Energy straggling (a parameter of the target kernel: azure2::experiment::StragglingSigma, BohrStragglingSigma)
@@ -297,8 +305,9 @@ class TargetEffect {
    */
   bool HasDopplerFit() const { return dopplerFit_; }
   bool IsDopplerVaried() const { return dopplerVary_; }
-  /// The line's temperature, the temperature the pieces are laid out for (K).
-  double GetDopplerNominal() const { return dopplerFit_ ? dopplerNominal_ : dopplerTemperature_; }
+  /// The temperature the pieces, the layout temperature and the lower limit are laid out for (K): a fitted line's
+  /// prior centre or its temperature (azure2/experiment/LayoutBase.h), else the line's temperature.
+  double GetDopplerLayoutBase() const { return dopplerFit_ ? dopplerLayoutBase_ : dopplerTemperature_; }
   /// Prior width in K, 0 = no prior.
   /// The Tmax field of "doppler T vary sigma Tmax" as written (K), 0 without one.
   double GetDopplerTmax() const { return dopplerTmax_; }
@@ -308,7 +317,7 @@ class TargetEffect {
   /// The temperature the sub-point grids and the integration windows span (the line's T when not fitted).
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
   /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
-  double GetDopplerMinimum() const { return 0.25 * this->GetDopplerNominal(); }
+  double GetDopplerMinimum() const { return 0.25 * this->GetDopplerLayoutBase(); }
   /// ((T - T0)/sigma)^2 at the present temperature T (K), or 0 without a prior or when T is fixed (objective.md D5).
   double DopplerPenalty(double temperature) const {
     if (!dopplerFit_ || !dopplerVary_ || dopplerPriorReplaced_ || dopplerSigma_ <= 0.0) return 0.0;
@@ -356,11 +365,12 @@ class TargetEffect {
   std::shared_ptr<const azure2::experiment::UdrKernel> BuildUdrKernel(double eLab, double mass) const;
 
  private:
-  void SelectKernels(const azure2::experiment::TargetEffectSpec &);
+  void SelectKernels(const azure2::experiment::TargetEffectSpec &, const Config &);
   std::string targetName_;
   azure2::experiment::EffectKernels kernels_;  ///< Kernels
   std::vector<double> kernelValues_;           ///< a table kernel's parameter values (KernelParameters::values)
   std::vector<double> kernelLayoutValues_;     ///< the values its grid is laid out for (KernelParameters::layoutValues)
+  std::vector<double> kernelLayoutBases_;      ///< what those and the lower limits are laid out from (GetKernelLayoutBase)
   std::vector<azure2::experiment::ApparatusParameterSpec> kernelFits_;  ///< GetKernelParameterFits
   std::string kernelErrorText_;                ///< HasKernelError
   struct UdrTable {
@@ -376,7 +386,7 @@ class TargetEffect {
   double dopplerTemperature_ = 0.0;  ///< K, current
   bool dopplerFit_ = false;          ///< `doppler T vary sigma [Tmax]`
   bool dopplerVary_ = false;
-  double dopplerNominal_ = 0.0;      ///< K, as read
+  double dopplerLayoutBase_ = 0.0;   ///< K, GetDopplerLayoutBase
   double dopplerCentre_ = 0.0;       ///< K, the prior's centre: as written, else the value read
   double dopplerSigma_ = 0.0;        ///< K, prior width (0 = none)
   double dopplerTmax_ = 0.0;         ///< K, the Tmax field of the fit form as written; 0 = none
@@ -403,6 +413,7 @@ class TargetEffect {
   TargetStopping stopping_;  ///< formula | evaluation | table (StoppingAt)
   bool hasStoppingScale_ = false;
   double stoppingScaleNominal_ = 1.0;
+  double stoppingScaleLayoutBase_ = 1.0;  ///< GetStoppingScaleLayoutBase
   bool stoppingScaleVary_ = false;
   double stoppingScaleSigma_ = 0.0;
   double stoppingScaleCentre_ = 1.0;  ///< the prior's centre: as written, else the start scale
@@ -425,7 +436,7 @@ class TargetEffect {
   bool densityFitError_ = false;
   std::string densityFitErrorText_;
   bool densityVary_ = false;
-  double densityNominal_ = 0.0;   ///< atoms/cm^2, as read
+  double densityLayoutBase_ = 0.0;  ///< atoms/cm^2, GetDensityLayoutBase
   double densityCentre_ = 0.0;    ///< atoms/cm^2, the prior's centre: as written, else the value read
   double densitySigma_ = 0.0;     ///< atoms/cm^2, prior width (0 = none)
   std::string densityGroup_;

@@ -16,8 +16,12 @@
 #   (g) where pyazr's module loads (PYAZR_ENGINE_DIR): the write-back of a fitted screening potential written in
 #       keV, a Doppler temperature, an areal density and a sample thickness (_azure2.parameter_value_edits): the
 #       value token only, in the unit written, the prior untouched.
+#   (h) continued.sh: for an areal density, a Doppler temperature, a stopping scale and a kernel's parameter, the
+#       project with the fitted value written as the start computes the fit's chi^2 and a second fit stays at the
+#       minimum (the grids and limits are laid out from the prior's centre); a start outside the centre's range is
+#       laid out from the start, with a note.
 #
-# Usage: tests/nuisance_prior_centre/check.sh path/to/AZURE2     (seconds at OMP_NUM_THREADS=1)
+# Usage: tests/nuisance_prior_centre/check.sh path/to/AZURE2     (about a minute; (h) at two threads)
 
 # CRLF-writing Windows build compares like the others.
 export LC_ALL=C
@@ -102,6 +106,14 @@ if [ -n "${PYAZR_ENGINE_DIR:-}" ]; then
   [ $rc -eq 0 ] || bad "(g) write-back: $(echo "$out" | tail -1)"
 else
   echo "  skip  (g) write-back: PYAZR_ENGINE_DIR is not set"
+fi
+
+# (h) a fit continued from its written values computes the fit it continues (continued.sh: the four kinds whose value
+#     lays out a grid; its own header lists the checks)
+if OMP_NUM_THREADS=2 bash "$HERE/continued.sh" "$AZURE2_BIN" > "$WORK/continued.log" 2>&1; then
+  grep -E '^  (ok|skip) ' "$WORK/continued.log"; ok "(h) continued fits"
+else
+  grep -E '^  (ok|FAIL|skip) |^[-<>] ' "$WORK/continued.log"; bad "(h) continued fits"
 fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: the prior centre of every nuisance kind"; else echo "FAIL: $failures check(s)"; exit 1; fi

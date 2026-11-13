@@ -875,6 +875,19 @@ add_test(NAME pyazr_stopping
                  ${CMAKE_CURRENT_SOURCE_DIR}/stopping_test.py)
 set_tests_properties(pyazr_stopping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
+# objective, gradient and nuisance term equal a fresh session's at the same radius.
+add_test(NAME pyazr_rebuild_nuisance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
+set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# A fit continued from its written values computes the fit it continues (docs/upgrade/parameter_kinds.md section 4):
+# tests/nuisance_prior_centre/continued.sh, whose part (5) needs the module (save_fit, the layouts the sessions report).
+add_test(NAME pyazr_continued_fit
+         COMMAND bash ${CMAKE_SOURCE_DIR}/tests/nuisance_prior_centre/continued.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" PROCESSORS 2)
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
@@ -894,10 +907,3 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
-
-# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
-# objective, gradient and nuisance term equal a fresh session's at the same radius.
-add_test(NAME pyazr_rebuild_nuisance
-         COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
-set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
