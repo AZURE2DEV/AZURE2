@@ -215,7 +215,10 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``Results`` (``AZURECalc::GetPooledCNuc``, ``GetPooledData``). *pyazr*:
    ``azure2.objective`` calls ``AZUREAPI::CalculateObjectiveRWA``, which runs
    the same hand-over, point pass, model pass and ``Objective::Engine()`` on
-   the session's own objects.
+   the session's own objects. ``azure2.fit_objective()`` gives that function
+   as an object for a fitter or sampler (``pyazr.Objective``), and
+   ``azure2.evaluate(x)`` one evaluation with its terms and every data set's
+   arrays (``pyazr.Evaluation``, ``AZUREAPI::EvaluateObjectiveRWA``).
 
 7. **Fit or sampler.** *Program*: ``AZUREMain::operator()`` runs Minuit2's
    ``MnMigrad`` (with the analytic gradient ``AZURECalc::Gradient``, the

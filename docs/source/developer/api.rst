@@ -59,6 +59,15 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
    * - ``pybind_records.cpp``
      - One record per fit parameter and per pair (``ParameterFields()``),
        from which ``pyazr.Parameter`` and the parameter table are built.
+   * - ``pybind_evaluation.cpp``
+     - One evaluation as arrays (``AZUREAPI::EvaluateObjectiveRWA``,
+       ``api/src/AZUREAPIObjective.cpp``): the objective, its terms by name,
+       and each data set's points with the outputs of the table
+       ``PointOutputs()``. ``pyazr.Evaluation`` (``pyazr/evaluate.py``) reads
+       it; ``pyazr.Objective`` (``pyazr/objective.py``) is the fit's function
+       with its gradient, its least-squares rows
+       (``AZUREAPI::ObjectiveRowsRWA``) and the sampler's log-probability
+       (``AZUREAPI::LogProbabilityRWA``).
    * - ``pybind_physics.cpp``
      - The table of physics functions (``BuildTable()``), each a row with its
        arguments, units, domain and an adapter to ``physics/``.
