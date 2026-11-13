@@ -483,9 +483,14 @@ printed path stays the string of the project; the experiment library gets the sa
 The input-file byte store keys by absolute path made with the working directory; it would take the opened path.
 
 **Two defects, by a test first.**  (a) The signature of `intEC.dat` held neither whether the Coulomb table is used nor
-which file: it now holds the table's file (absolute path, size, modification time) or "exact Coulomb functions"
+which file: it now holds the table's content identity (below) or "exact Coulomb functions"
 (`tests/ec_table_signature`).  Every signature of a run with a table changes, so an existing `intEC.dat` is computed
-again once.  (b) `--validate` and `--describe` read `relativistic` already (the project reader's `RelativisticFlag`);
+again once.  The table is named by what it holds, not by its file (`CoulombTable::ContentIdentity`: format,
+interpolation order, l range, the two axes, eta*rho maximum, generator text and a 64-bit hash of every tabulated
+value, 8 bytes a step; computed on the first request and fixed after it, behind `std::call_once`): a copy of the table
+at another path, or the same table on another machine, reuses the file; a table with other values does not.  Cost: one
+pass over the 88 MB table, 1.2e8 user-space instructions (T1 2.9467e10 -> 2.9589e10, +0.41 %; 13N 7.4509e10 ->
+7.4631e10, +0.16 %), paid only by a run that sets up external-capture integrals (T2: 1.42829e9 -> 1.42839e9).  (b) `--validate` and `--describe` read `relativistic` already (the project reader's `RelativisticFlag`);
 `tests/describe_relativistic` holds it (a THM data set under `relativistic=1` is refused by both).
 
 **Input-file bytes**: the four rows are permanent (`table:`), with the reason of section 1.2.

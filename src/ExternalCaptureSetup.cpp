@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <set>
@@ -218,21 +217,6 @@ long long WorkingCopy::CountECAmplitudes(CNuc *theCNuc, const Config &configure)
  * calculation in both cases.
  */
 
-namespace {
-// The table file a run with `path` reads (CoulombTable::Shared), as path, size and modification time; "missing" when
-// it cannot be read (the run then uses the exact functions, after the table's warning).
-std::string CoulombTableIdentity(const std::string &path) {
-  const std::string file = path.empty() ? CoulombTable::DefaultPath() : path;
-  std::error_code ec;
-  const std::filesystem::path absolute = std::filesystem::absolute(file, ec);
-  const auto size = std::filesystem::file_size(file, ec);
-  if (ec) return "coulomb table missing " + file;
-  const auto stamp = std::filesystem::last_write_time(file, ec).time_since_epoch().count();
-  return "coulomb table " + absolute.lexically_normal().string() + " " + std::to_string(size) + " " +
-         std::to_string(static_cast<long long>(stamp));
-}
-}  // namespace
-
 std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
@@ -259,10 +243,12 @@ std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
   // Added only when on, so every non-relativistic file keeps its signature and is not recomputed; a relativistic
   // run no longer reads back a file written without the switch (2026-10-27, checklist t3-25).
   if (configure.relativistic) hash.Add("relativistic");
-  // The Coulomb table the integrals' Coulomb waves are read from (CoulFunc), named by its file, size and modification
-  // time, so a run with another table, a rebuilt one or none does not read back this file
-  // (tests/ec_table_signature).
-  hash.Add((configure.useCoulombTable ? CoulombTableIdentity(configure.coulombTablePath) : std::string("exact Coulomb functions")).c_str());
+  // The Coulomb waves of the integrals come from the Coulomb table when one is used and can be read (CoulFunc), else
+  // from the exact functions.  The table is named by what it holds (CoulombTable::ContentIdentity: header and a hash
+  // of its values), not by its file, so a copy of the same table elsewhere reuses this file, and a table with other
+  // values, or none, does not (tests/ec_table_signature).
+  const CoulombTable *table = configure.useCoulombTable ? CoulombTable::Shared(configure.coulombTablePath) : nullptr;
+  hash.Add(table ? ("coulomb table " + table->ContentIdentity()).c_str() : "exact Coulomb functions");
 
   std::set<int> pairs;
   hash.Add("data segments");

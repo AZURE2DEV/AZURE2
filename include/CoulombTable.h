@@ -3,6 +3,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -117,6 +119,15 @@ class CoulombTable {
   bool Inside(double eta, double rho) const;
   bool Empty() const { return sheets_.empty(); }
 
+  /// What the table holds, as text: the format, the interpolation order, l_max, the two axes, eta*rho max, the
+  /// generator and a 64-bit hash of every tabulated value (the sheets' bytes, 8 at a step).  Two tables give the same
+  /// text when they give the same lookups, wherever their files lie and whenever they were written; a table built
+  /// with other settings, or rebuilt with another generator, gives another.  The signature of the external-capture
+  /// integrals holds it (WorkingCopy::ECSignature).  Computed on the first call (the 88 MB default table: a few
+  /// times 1e7 instructions) and fixed after it: the value is a function of the loaded table alone, written once
+  /// under std::call_once.  A table that is modified after the first call (Build, Load, SetOrder) is not supported.
+  const std::string &ContentIdentity() const;
+
  private:
   // One tabulated function on (eta, rho) nodes with its Hermite derivative data.
   struct Sheet {
@@ -145,6 +156,12 @@ class CoulombTable {
   Axis eta_, rho_;  // the bound sheets share the axes (eta_b, rho_b)
   std::string generator_;
   std::vector<Sheet> sheets_;
+  // ContentIdentity(), filled on its first call; held through a pointer so the table stays movable.
+  struct Identity {
+    std::once_flag once;
+    std::string text;
+  };
+  std::unique_ptr<Identity> identity_ = std::make_unique<Identity>();
 };
 
 #endif
