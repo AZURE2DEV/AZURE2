@@ -898,6 +898,11 @@ add_test(NAME pyazr_rebuild_nuisance
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
 set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The command line python -m pyazr (pyazr/cli.py): every command of the table with --json on T1/T2, describe, validate
+# and schema against the program, wrong calls (exit 2 or 3 with what, allowed, fix), --help, the reference page.
+add_test(NAME pyazr_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cli_test.py)
+set_tests_properties(pyazr_cli PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

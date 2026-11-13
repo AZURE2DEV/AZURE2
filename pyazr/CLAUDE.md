@@ -85,6 +85,25 @@ public names are a contract.
 takes more than a minute. Without the engine module, a test prints `skip:` and
 exits 0. Read the output and confirm it says `ok`, not `skip`.
 
+## The command line (`python -m pyazr`, `cli.py`)
+
+`python -m pyazr COMMAND ... [--json]` (`__main__.py` calls `cli.main`): describe, validate, convert, schema, kinds,
+stopping, coulomb-table check, import exfor, import ensdf, ui, commands.  With `--json` one document on standard output
+(`{"command", "ok", "exit", "result"}`, and `"error": {"class", "what", "allowed", "fix"}`); exit 0 done, 1 failed,
+2 a wrong call or a refused input, 3 an old project (the program's project commands).  `cli.py` imports nothing of
+the engine at import time (check 41 of the consistency test reads its table without it).
+
+- **A command of the command line**: one `Command` row of `COMMANDS` in `cli.py` (name, `Arg` rows with a type of
+  `ARG_TYPES`, the pyazr function it `calls`, the help line) and its `run` function, which only calls that function
+  (a `text` printer and a `status` when the result can be a failure, as validate's errors); its case in `JSON_CASES`
+  of `tests/pyazr/cli_test.py` (run with `--json` on T1 or T2, the JSON read); then regenerate the reference page:
+  `python3 -c "from pyazr import cli; cli.write_reference_page()"` (from the repository's root, with the engine module)
+  (the consistency test, check 41, fails for a row without a case or a stale page).  A command that would need more
+  than a call and a printer shows a gap of pyazr: add the function to pyazr first, or give the row `missing=(what,
+  allowed, fix)` (it then exits 2 with them).
+- A new argument type is one row of `ARG_TYPES` (description, converter raising `CallError` with its three parts,
+  the value's name in a usage line).
+
 ## The web UI's server (`pyazr/ui`)
 
 A subpackage `import pyazr` does not load (it needs fastapi and uvicorn: the extra `web`). Design and status:
