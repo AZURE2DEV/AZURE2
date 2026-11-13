@@ -8,7 +8,11 @@ docs/upgrade/gamma_parametrisation.md), on the projects of tests/gamma_decay/mod
      the same chi^2 minimum, and the errors of the branchings from the record's covariance (J^T J)^-1 equal the errors
      propagated from the partial widths' covariance to b_f = Gamma_f / Gamma_gamma, to the linearisation;
   3. an agent's use: read the level's record, change one branching, see the chi^2 rise, refit, and the branching
-     comes back.
+     comes back;
+  4. external capture into the ground state and 6.1763 MeV (E1) and 6.7931 MeV (M1) on the record's channels
+     (the projects of tests/gamma_decay/check.sh (h)): the record's parameters read through Session.parameters, the
+     same chi^2 as the twin with partial widths, and a branching set in the free vector gives the chi^2 of the
+     project written with that branching.
 
 Needs the compiled engine and scipy; skips cleanly without them.  Run from anywhere:
 python3 tests/pyazr/gamma_decay_test.py
@@ -139,6 +143,44 @@ with tempfile.TemporaryDirectory() as tmp:
         ba = xa[names_a.index("level5.branching.g+15O[6.7931]")]
         check("the refit brings it back", abs(ba - b_r["g+15O[6.7931]"]) <= 1e-6, f"{ba} {b_r['g+15O[6.7931]']}")
         check("the refit's chi^2 is the minimum", abs(chi_a - chi_r) <= 1e-8 * chi_r, f"{chi_a} {chi_r}")
+
+    print("4. external capture on the record's channels")
+
+    def with_capture(src, dst):
+        """Column 31 of the photon lines: capture into pairs 2 and 6 by E1, into pair 3 by M1 (check.sh (h))."""
+        out = []
+        for line in open(src).read().split("\n"):
+            t = line.split()
+            if len(t) > 30 and t[26] == "10" and t[5] in ("2", "3", "6"):
+                t[30] = "2" if t[5] == "3" else "1"
+                line = " " + " ".join(t)
+            out.append(line)
+        open(dst, "w").write("\n".join(out))
+
+    import subprocess
+    twin, rec = os.path.join(d, "partial_ec.azr"), os.path.join(d, "record_ec.azr")
+    with_capture(os.path.join(d, "partial.azr"), twin)
+    subprocess.run([sys.executable, os.path.join(MODELS, "make_record.py"), twin, rec, "5", "5.183", "fit"], check=True)
+    with azure2(twin, cwd=d) as t, azure2(rec, cwd=d) as s:
+        radiative = {p.name: p for p in s.parameters if p.kind == "radiative"}
+        check("the record's parameters by name, Gamma_gamma in eV",
+              "level5.branching.g+15O[6.1763]" in radiative
+              and abs(radiative["level5.total_width"].value - 0.0385027) < 1e-15, sorted(radiative))
+        ct, cr = t.objective(), s.objective()
+        check("the same chi^2 as the twin with partial widths", abs(ct - cr) <= 1e-12 * abs(ct), f"{ct} {cr}")
+        p = radiative["level5.branching.g+15O[6.1763]"]
+        x = np.asarray(s.params_rwa, float).copy()
+        x[p.free_index] = 0.55
+        c_set = s.objective(x)
+        check("a branching set in the free vector reads back", abs(s.transform_rwa(x)[p.free_index] - 0.55) < 1e-15)
+    proj = Project.open(rec)
+    lines = [("g+15O[6.1763] 0.55 fit" if l.startswith("g+15O[6.1763]") else l) for l in proj["level5"]["branching"]]
+    proj.set("level5", branching=lines)
+    proj.save(os.path.join(d, "record_ec_055.azr"))
+    with azure2(os.path.join(d, "record_ec_055.azr"), cwd=d) as s:
+        c_file = s.objective()
+    check("its chi^2 is that of the project written with it (gamma^ext at the set point)",
+          abs(c_set - c_file) <= 1e-10 * abs(c_file) and abs(c_set - cr) > 1.0, f"{c_set} {c_file} {cr}")
 
 if failures:
     print(f"FAILED: {len(failures)} check(s)")

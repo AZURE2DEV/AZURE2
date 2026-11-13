@@ -293,12 +293,18 @@ run rec_m 1
 same_outputs pec_m rec_m "moved proton width, level energy and ground-state ANC"
 check "after the move the record's width to g+15O is still TransformOut's" "$(block_w rec_m g+15O)" "$(level_w rec_m 2 7.5569)" 2e-6
 
-echo "   the gradient against central differences, every free parameter, at two points"
+echo "   the gradient against central differences, every free parameter, at three points"
 edited "$WORK/record_ec.azr" "$WORK/record_ec_free.azr" free || bad "free variant"
 edited "$WORK/record_ec_m.azr" "$WORK/record_ec_free2.azr" free || bad "free variant, second point"
 edited "$WORK/record_ec_free2.azr" "$WORK/record_ec_free2.azr" sed -e 's/^\(    total_width  \)[^ ]*/\10.05/' \
   -e 's/^\(    branching    g+15O\[6.1763\] \)[^ ]*/\10.5/' -e 's/^\(    branching    g+15O \)[^ ]*/\10.03/' || bad "second point"
-for pt in "" 2; do
+# point 3: also level 6 (8.7502 MeV, 1/2+, Gamma_p = 35.7 keV) as a record; there Im gamma^ext into the ground state
+# is 1.3 % of the amplitude, so d gamma_int / d g = |g| / (g^2 - Im^2)^1/2 differs from 1 by 8e-5 (not at level 5)
+"$PY" "$M/make_record.py" "$WORK/record_ec_free.azr" "$WORK/record_ec_free3.azr" 6 5.183 fit
+edited "$WORK/record_ec_free3.azr" "$WORK/record_ec_free3.azr" sed -e '/^<\/gammaDecays>$/{N;s/^<\/gammaDecays>\n<gammaDecays>$//;}' \
+  -e 's/^\(    branching    g+15O\[6.7931\] 0.0\) fit$/\1 fixed/' || bad "the second record"
+grep -c '^gamma_decay level[56]$' "$WORK/record_ec_free3.azr" | grep -qx 2 || bad "the second record: not two records in one section"
+for pt in "" 2 3; do
   project "gec$pt" "$WORK/record_ec_free$pt.azr"
   (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
   iE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { print $3; exit }' "$WORK/gec$pt/grad.log")"
