@@ -1,16 +1,30 @@
-"""The data sets and extrapolations of a format-3 project as the engine built them.
+"""What the package, the engine and a session say about themselves, as plain data (docs/upgrade/pyazr3.md section 2.5).
 
-A format-3 project's data sets are records (``dataset``, ``extrapolation``; docs/upgrade/project_format3.md); what the
-engine made of them -- the quantity, the observable it computes, the reaction tree with the ``<levels>`` pair keys,
-the lab-energy window, the data file and its rows read and kept, the effects and the fit parameters -- is the engine's
-description of the built project (``AZURE2 --describe --json``, ``pyazr.describe``).  This module turns that
-description into the objects a calculation session hands out (:attr:`pyazr.azure2.datasets`,
-:attr:`~pyazr.azure2.active_datasets`, :attr:`~pyazr.azure2.extrapolations`); nothing here reads the file.
+- :func:`describe_package` (``pyazr.describe()`` without a path): the version, the engine's build, the Coulomb table,
+  the stopping and mass data in use, the thread count.
+- :func:`kinds` (``pyazr.kinds()``): the record kinds, data kinds (quantities), parameter kinds, session options,
+  bound physics functions and error classes.  Every table is read from the engine's own tables at the first call
+  (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option table and the names it binds); none is
+  written a second time here.
+- :func:`describe_session` (``pyazr.azure2.describe()``): what one session holds.
+- The data sets and extrapolations of a format-3 project as the engine built them (:class:`DescribedDataset`, ...):
+  what the engine made of the records (``AZURE2 --describe --json``) -- the quantity, the observable it computes, the
+  reaction tree with the ``<levels>`` pair keys, the lab-energy window, the data file and its rows read and kept, the
+  effects and the fit parameters; a calculation session hands them out (:attr:`pyazr.azure2.datasets`,
+  :attr:`~pyazr.azure2.active_datasets`, :attr:`~pyazr.azure2.extrapolations`).  Nothing here reads a project file.
+
+Every result is made of dicts, lists, strings, numbers, booleans and None: ``json.dumps`` takes it.
 """
 
+import copy
+import hashlib
 import json
+import os
+import sys
 from dataclasses import dataclass
 from typing import Optional
+
+from .errors import ParameterKeyError, close_names, listed
 
 __all__ = ["DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
 
@@ -146,16 +160,22 @@ class _Described(list):
         return type(self)(x for x in self if x.active)
 
     def by_key(self, key):
+        """The record with this key (1, 2, ... in file order); :class:`pyazr.ParameterKeyError` (a ``KeyError``)
+        when there is none."""
         for x in self:
             if x.key == key:
                 return x
-        raise KeyError(f"no record with key {key}")
+        raise ParameterKeyError(f"no record with key {key!r} (the keys: {[x.key for x in self]}); "
+                                f"azure2.datasets and azure2.extrapolations list them.")
 
     def by_name(self, name):
+        """The record with this name; :class:`pyazr.ParameterKeyError` (a ``KeyError``) when there is none."""
         for x in self:
             if x.name == name:
                 return x
-        raise KeyError(f"no record named {name!r}")
+        names = [x.name for x in self]
+        raise ParameterKeyError(f"no record named {name!r}{close_names(name, names)}; the names: {listed(names)}; "
+                                f"azure2.datasets and azure2.extrapolations list them.")
 
     def by_reaction(self, entrance_key=None, exit_key=None):
         return type(self)(x for x in self if (entrance_key is None or x.entrance_key == entrance_key)
@@ -189,3 +209,193 @@ class DescribedExtrapolations(_Described):
     @classmethod
     def from_description(cls, description):
         return cls(DescribedExtrapolation.from_json(d) for d in description.get("extrapolations", []))
+
+
+# -- the package and its engine --------------------------------------------------------------------------------------
+
+def _first_line(text):
+    return (text or "").strip().splitlines()[0].strip() if (text or "").strip() else ""
+
+
+def coulomb_table(use_coulomb_table=True, coulomb_table=""):
+    """The Coulomb table a session with these options uses: ``{"in_use": "table" or "exact", "path", "loaded",
+    "identity"}``.  ``identity`` is the engine's content hash of the table (``CoulombTable::ContentIdentity``: the
+    same text for two files that give the same lookups); "exact" where the option is off or the file cannot be read
+    (the engine then uses its exact routines).  Loads the table as a session does (once per process)."""
+    if not use_coulomb_table:
+        return {"in_use": "exact", "path": "", "loaded": False, "identity": ""}
+    info = dict(_engine().coulomb_table_info(str(coulomb_table or "")))
+    info["in_use"] = "table" if info["loaded"] else "exact"
+    return info
+
+
+def _file_digest(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def describe_package():
+    """The package and its engine, as plain data (``pyazr.describe()``).
+
+    Keys: ``pyazr`` (version), ``engine`` (version and ``git``, the ``git describe`` of the source at CMake configure
+    time; the compiled module's path), ``build`` (mcmc, nlopt, readline, openmp), ``threads`` (the threads an
+    evaluation uses now, ``omp_get_max_threads()``, and ``OMP_NUM_THREADS``), ``coulomb_table`` (the default
+    session's: :func:`coulomb_table`), ``stopping`` (the stopping library: implementation and citation), ``masses``
+    (the mass table: version, file, sha256), ``python`` (version).
+    """
+    from . import __version__
+    from . import masses, stopping
+    build = dict(_engine().build_info())
+    masses_path = masses._TABLE_PATH
+    return {
+        "pyazr": __version__,
+        "engine": {"version": build.pop("version"), "git": build.pop("git"), "module": _engine().__file__},
+        "build": {k: build[k] for k in ("mcmc", "nlopt", "readline", "openmp")},
+        "threads": {"max_threads": int(build["max_threads"]),
+                    "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS")},
+        "coulomb_table": coulomb_table(),
+        "stopping": {"implementation": stopping.IMPLEMENTATION, "citation": stopping.CITATION},
+        "masses": {"version": masses.AME_VERSION, "file": masses_path,
+                   "sha256": _file_digest(masses_path) if os.path.isfile(masses_path) else None},
+        "python": sys.version.split()[0],
+    }
+
+
+_KINDS = None
+
+
+def _build_kinds():
+    from . import errors
+    engine = _engine()
+    schema = engine.schema()
+    records = {name: {"title": r.get("title", ""), "doc": r.get("doc", ""), "sections": list(r.get("sections", [])),
+                      "fields": r.get("fields", {})}
+               for name, r in schema["records"].items()}
+    data = {}
+    for name, q in schema["quantities"].items():
+        columns = q.get("columns", {})
+        data[name] = {"title": q.get("title", ""), "doc": q.get("doc", ""), "aliases": list(q.get("aliases", [])),
+                      "record_kinds": list(q.get("record_kinds", [])), "engine_unit": q.get("engine_unit", ""),
+                      "units": list(q.get("units", {})), "frames": list(columns.get("energy", [])),
+                      "angle_columns": list(columns.get("angle", [])), "angle_axis": columns.get("angle_axis", ""),
+                      "target_kinds": list(q.get("target_kinds", [])),
+                      # the engine's quantity table does not declare extra outputs (docs/upgrade/pyazr3.md 2.2)
+                      "extra_outputs": None}
+    parameters = {row["key"]: {"code": int(row["code"]), "unit": row["unit"],
+                               "owner": [f.strip() for f in row["owner"].split(",") if f.strip()],
+                               "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
+                               "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
+                  for row in engine.parameter_kinds()}
+    defaults = engine.RuntimeOptions()
+    options = {}
+    for row in engine.session_options():
+        value = getattr(defaults, row["name"])
+        options[row["keyword"]] = {"engine_name": row["name"], "type": type(value).__name__, "default": value,
+                                   "flag": row["flag"], "negation": row["negation"], "doc": row["doc"]}
+    physics = {}
+    for name in engine.physics_functions:
+        obj = getattr(engine, name)
+        members = ([(f"{name}.{n}", getattr(obj, n)) for n in dir(obj)
+                    if not n.startswith("_") and callable(getattr(obj, n))] if type(obj).__name__ == "module"
+                   else [(name, obj)])
+        for full, fn in members:
+            doc = (getattr(fn, "__doc__", "") or "").strip().splitlines()
+            physics[full] = {"signature": doc[0] if doc else full,
+                             "doc": " ".join(line.strip() for line in doc[1:] if line.strip())}
+    error_classes = {}
+    for name in errors.__all__:
+        cls = getattr(errors, name)
+        if isinstance(cls, type) and cls.__name__ == name:
+            error_classes[name] = {"bases": [b.__name__ for b in cls.__mro__[1:] if b not in (BaseException, object)],
+                                   "doc": _first_line(cls.__doc__)}
+    error_classes["EngineError"] = {"same_as": "AZURE2Error", "doc": _first_line(errors.AZURE2Error.__doc__)}
+    return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
+            "parameters": parameters, "options": options, "physics": physics, "units": schema.get("units", {}),
+            "dimensions": schema.get("dimensions", {}), "errors": error_classes}
+
+
+def kinds():
+    """What kinds of thing the engine and pyazr know, as plain data (``pyazr.kinds()``).
+
+    Keys:
+
+    - ``records``: the record kinds of project format 3: title, doc, sections and ``fields`` (each with its type,
+      grammar, whether required, units or dimension, doc; ``Project.add_<kind>`` takes them);
+    - ``data``: the data kinds (quantities of a ``dataset``): title, doc, aliases, record kinds, ``engine_unit``,
+      ``units`` accepted, ``frames`` (energy columns), angle columns and axis, target kinds, ``extra_outputs``
+      (None: the engine's table does not declare them);
+    - ``parameters``: the kinds of fit parameter (``Parameter.kind``): code, unit (of the value in the fit vector),
+      ``owner`` (the fields that say what it belongs to), own_prior, segment_field, vary_from_project, doc;
+    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
+      ``flag`` and ``negation``, doc;
+    - ``physics``: the physics functions the compiled module binds (``_azure2.<name>``; ``stopping.<name>`` in
+      ``_azure2.stopping``): signature and doc, as the binding states them;
+    - ``errors``: pyazr's error classes with their bases;
+    - ``units``, ``dimensions``: the unit table; ``schema_version``.
+
+    Read from the engine's tables at the first call (``AZURE2 --schema``, the parameter-kind table, the binding's
+    option table, the names the binding registers); a new row there appears here without an edit of Python.  Each
+    call returns a fresh copy.
+    """
+    global _KINDS
+    if _KINDS is None:
+        _KINDS = _build_kinds()
+    return copy.deepcopy(_KINDS)
+
+
+def describe_session(session):
+    """What one :class:`pyazr.azure2` session holds, as plain data (``azure2.describe()``); see there."""
+    s = session
+    units = {k: v["unit"] for k, v in kinds()["parameters"].items()}
+    x_all = [float(v) for v in s.sess.params_all_rwa()]
+    parameters = []
+    for p in s.parameters:
+        entry = {"name": p.name, "kind": p.kind, "unit": units.get(p.kind, ""), "x": x_all[p.index],
+                 "physical_value": float(p.value), "free": not p.fixed, "free_index": p.free_index,
+                 "bounds": None}
+        for field in ("jgroup", "J", "parity", "level", "level_energy", "channel", "L", "S", "pair", "segment_key",
+                      "prior_nominal", "prior_sigma", "wigner_limit"):
+            value = getattr(p, field, None)
+            if value is not None:
+                entry[field] = value.item() if hasattr(value, "item") else value
+        parameters.append(entry)
+    pairs = []
+    for q in s.pairs:
+        entry = {"number": q.number, "label": q.label, "photon": bool(q.is_photon)}
+        for field in ("key", "channel_radius", "sep_energy", "excitation", "nucleus_Z", "nucleus_A", "is_entrance"):
+            value = getattr(q, field, None)
+            if value is not None:
+                entry[field] = value.item() if hasattr(value, "item") else value
+        pairs.append(entry)
+    levels = [{"label": str(k), "jgroup": k.jgroup, "J": k.J, "parity": k.parity, "level": k.level,
+               "energy": k.energy} for k in s.physical_levels()]
+    description = describe_project(s.file, s.cwd)
+    from .project import Project
+    records = Project.open(s.file).records()
+    points = {}
+    for i, d in enumerate(s.active_datasets if s.mode == "data" else []):
+        points[d.name] = int(len(s.energies[i])) if i < len(s.energies) else None
+    datasets = []
+    for d in description.get("datasets", []):
+        entry = {k: d.get(k) for k in ("key", "name", "active", "quantity", "observable", "tree", "unit",
+                                         "engine_unit", "data_file", "rows_read", "rows_kept")}
+        record = records.get(d.get("name"))
+        columns = record.get("columns") if record is not None else None
+        entry["columns"] = columns
+        entry["frame"] = columns.split()[0].split("[")[0] if isinstance(columns, str) and columns.split() else None
+        entry["points"] = points.get(d.get("name"))
+        datasets.append(entry)
+    extrapolations = [{k: d.get(k) for k in ("key", "name", "active", "quantity", "observable", "tree", "energies",
+                                             "angles", "grid_file", "adaptive")}
+                      for d in description.get("extrapolations", [])]
+    options = dict(s.options)
+    options["cwd"] = s.cwd
+    return json.loads(json.dumps({
+        "project": s.file, "cwd": s.cwd, "output_dir": s.output_dir, "mode": s.mode, "options": options,
+        "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
+        "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
+        "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if p["free"])),
+    }, default=float))

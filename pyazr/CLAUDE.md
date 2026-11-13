@@ -3,6 +3,25 @@
 Read the root `CLAUDE.md` first. pyazr is how most users script AZURE2, so its
 public names are a contract.
 
+## Using pyazr as an agent: ask the package first
+
+- `help(pyazr)`: the objects of today's API and a ten-line session (tested by `tests/pyazr/describe_test.py`).
+- `pyazr.describe()`: version, engine build, Coulomb table in use (path, content identity or "exact"), stopping and
+  mass data, threads.  `pyazr.describe(path)` is still the engine's description of a project.
+- `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
+  options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
+  (`described.py`); never add a hand-typed list of kinds in Python.
+- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect.
+- Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
+  `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
+  which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are
+  `EngineWarning`.  A new error derives from the class above and from the builtin the call raised before; its
+  message says what was wrong, what is allowed and which call shows or fixes it (`tests/pyazr/errors_test.py`
+  holds the table of wrong calls).
+  The argument checks of the session's calls live in `session_checks.py`, not in `azure2.py`.
+- An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
+  `Config::outStream` passes through that buffer); every other line still goes to standard output.
+
 ## How it is built
 
 - `azure2.py` drives the engine **in-process** through the pybind11 module

@@ -113,9 +113,42 @@ def coulomb_waves(L: int, eta: float, rho: float) -> Tuple[float, float, float, 
     return F, S * F - R * F1, G, S * G - R * G1
 
 
+def _check_open_channel(function, L, red_mass, radius, energy, energy_name="energy"):
+    """DomainError unless L is a whole number >= 0 and the energy is a finite number > 0 (an open channel); a
+    TypeError naming the argument when the energy is not one number.  ``red_mass`` and ``radius`` are not checked
+    (their domain is the caller's channel)."""
+    from .errors import DomainError, DomainZeroDivision
+    hint = ("for a closed channel (E <= 0) the session's azure2.coulomb_functions(pair, E, L) gives its shift "
+            "function, pyazr.whittaker its Whittaker function")
+    try:
+        whole = float(L) == int(L) and int(L) >= 0
+    except (TypeError, ValueError):
+        whole = False
+    if not whole:
+        error = DomainZeroDivision if L == -1 else DomainError
+        raise error(f"{function}: L = {L!r} is not an orbital angular momentum; L must be a whole number >= 0 "
+                    f"(help(pyazr.{function})).")
+    for name, value, unit in ((energy_name, energy, "MeV"),):
+        try:
+            ok = math.isfinite(value) and value > 0
+        except TypeError:
+            ok = None
+        if ok is None:
+            raise TypeError(f"{function}: {name} must be one number ({unit}), got {type(value).__name__}; the "
+                            f"function takes scalars (loop over an array, or use azure2.coulomb_functions).")
+        if not ok:
+            error = DomainZeroDivision if value == 0 else DomainError
+            raise error(f"{function}: {name} = {value!r} {unit} is outside the domain; it must be a finite number > 0"
+                        + (f" (an open channel); {hint}." if name == energy_name else "."))
+
+
 def penetrability(L: int, z1: int, z2: int, red_mass: float, radius: float,
                   energy: float) -> float:
-    """``P_L = rho / (F^2 + G^2)`` -- ``CoulFunc::Penetrability``."""
+    """``P_L = rho / (F^2 + G^2)`` -- ``CoulFunc::Penetrability``.
+
+    ``red_mass`` in u, ``radius`` in fm, ``energy`` (c.m., MeV, > 0: an open channel), scalars.  Raises
+    :class:`pyazr.DomainError` (a ``ValueError``) outside the domain (L < 0, energy <= 0, ...)."""
+    _check_open_channel("penetrability", L, red_mass, radius, energy)
     eta = sommerfeld_eta(z1, z2, red_mass, energy)
     rho = coulomb_rho(red_mass, radius, energy)
     F, _, G, _ = coulomb_waves(L, eta, rho)
@@ -124,7 +157,10 @@ def penetrability(L: int, z1: int, z2: int, red_mass: float, radius: float,
 
 def shift(L: int, z1: int, z2: int, red_mass: float, radius: float,
           energy: float) -> float:
-    """``S_L = rho (F F' + G G') / (F^2 + G^2)`` -- ``CoulFunc::PEShift``."""
+    """``S_L = rho (F F' + G G') / (F^2 + G^2)`` -- ``CoulFunc::PEShift``.
+
+    Units and domain as :func:`penetrability` (an open channel); :class:`pyazr.DomainError` outside it."""
+    _check_open_channel("shift", L, red_mass, radius, energy)
     eta = sommerfeld_eta(z1, z2, red_mass, energy)
     rho = coulomb_rho(red_mass, radius, energy)
     F, dF, G, dG = coulomb_waves(L, eta, rho)
@@ -140,8 +176,11 @@ def whittaker(L: int, z1: int, z2: int, red_mass: float, radius: float,
     ``binding_energy`` is positive (AZURE2 passes ``|E - S - Ex|``).  Evaluated
     as ``exp(-z/2) z^(m+1/2) U(m-k+1/2, 1+2m, z)``, the same expression AZURE2
     builds on GSL's ``hyperg_U``.  Just below a threshold ``U`` underflows a
-    double, so mpmath takes over there.
+    double, so mpmath takes over there.  ``red_mass`` in u, ``radius`` in fm,
+    ``binding_energy`` in MeV (> 0); :class:`pyazr.DomainError` outside the
+    domain.
     """
+    _check_open_channel("whittaker", L, red_mass, radius, binding_energy, "binding_energy")
     k = -math.sqrt(UCONV / 2.0) * FSTRUC * z1 * z2 * math.sqrt(red_mass / binding_energy)
     m = L + 0.5
     z = 2.0 * math.sqrt(2.0 * UCONV) / HBARC * radius * math.sqrt(red_mass * binding_energy)
@@ -167,7 +206,10 @@ def shift_derivative(L: int, z1: int, z2: int, red_mass: float, radius: float,
     """``dS_L/dE`` above threshold -- ``CoulFunc::PEShift_dE``.
 
     See :data:`SHIFT_DERIVATIVE_STEP` for why ``h`` is not AZURE2's 1e-6.
+    Units as :func:`penetrability`; ``energy - 2 h`` must be > 0 (an open
+    channel), else :class:`pyazr.DomainError`.
     """
+    _check_open_channel("shift_derivative", L, red_mass, radius, energy - 2 * h, "energy - 2 h")
     return _central_diff(
         lambda e: shift(L, z1, z2, red_mass, radius, e), energy, h)
 
