@@ -23,7 +23,7 @@
  *      quadrature of S(r) near r = a with mpmath Coulomb functions, projected
  *      on Y_l0 -- nothing shared with the engine's reduced amplitudes,
  *      Numerov/COUL waves or Lagrange tables.
- *  Also: ThmCG against AngCoeff::ClebGord; the Cholesky factor reproduces
+ *  Also: the library's clebsch_gordan_integer against AngCoeff::ClebGord; the Cholesky factor reproduces
  *  c^+ G c; interpolation between grid nodes; G is the same to the last bit
  *  on 1 and 4 threads.
  *
@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "AngCoeff.h"
+#include "azure2/physics/AngularCoupling.h"
 #include "Config.h"
 #include "Constants.h"
 #include "ThmDwVertex.h"
@@ -148,7 +149,8 @@ int main(int argc, char **argv) {
   verbose = argc > 1 && std::strcmp(argv[1], "-v") == 0;
   const bool probe = argc > 1 && std::strcmp(argv[1], "-p") == 0;
 
-  std::printf("ThmCG against AngCoeff::ClebGord\n");
+  std::printf("clebsch_gordan_integer against AngCoeff::ClebGord\n");
+  using azure2::physics::clebsch_gordan_integer;
   for (int j1 = 0; j1 <= 9; j1 += 3)
     for (int j2 = 0; j2 <= 8; j2 += 2)
       for (int J = std::abs(j1 - j2); J <= j1 + j2; J += 3)
@@ -157,8 +159,8 @@ int main(int argc, char **argv) {
           if (std::abs(m1 + m2) > J) continue;
           char label[96];
           std::snprintf(label, sizeof label, "<%d %d %d %d|%d %d>", j1, m1, j2, m2, J, m1 + m2);
-          Check(label, ThmCG(j1, m1, j2, m2, J, m1 + m2), AngCoeff::ClebGord(j1, j2, J, m1, m2, m1 + m2), 1.0e-12,
-                1.0);
+          Check(label, clebsch_gordan_integer(j1, m1, j2, m2, J, m1 + m2), AngCoeff::ClebGord(j1, j2, J, m1, m2, m1 + m2),
+                1.0e-12, 1.0);
         }
   {
     // Large L, small J (the vertex needs J = l <= ~10): orthonormality
@@ -167,7 +169,8 @@ int main(int argc, char **argv) {
     for (int J = 3; J <= 11; J += 2)
       for (int Jp = J; Jp <= 11; Jp += 2) {
         double sum = 0.0;
-        for (int M = -L1; M <= L1; M++) sum += ThmCG(L1, M, L2, -M, J, 0) * ThmCG(L1, M, L2, -M, Jp, 0);
+        for (int M = -L1; M <= L1; M++)
+          sum += clebsch_gordan_integer(L1, M, L2, -M, J, 0) * clebsch_gordan_integer(L1, M, L2, -M, Jp, 0);
         char label[96];
         std::snprintf(label, sizeof label, "sum_M <60 M 63 -M|%d 0><..|%d 0>", J, Jp);
         Check(label, sum, J == Jp ? 1.0 : 0.0, 1.0e-12, 1.0);

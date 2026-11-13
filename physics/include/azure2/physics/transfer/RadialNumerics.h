@@ -40,8 +40,17 @@ std::vector<std::complex<double>> NumerovInward(const std::vector<std::complex<d
                                                 std::complex<double> u_before, std::complex<double> u_last,
                                                 int lowest);
 
-/// f(r) from its values f_i on r_i = i h by six-point Lagrange interpolation (the stencil kept inside the grid);
-/// 0 beyond the last node.  Error O(h^6 f^(6)).
+/// The six-point Lagrange stencil at r on r_i = i h, i = 0 ... n - 1 (n >= 6): the first node (floor(r/h) - 2, kept
+/// inside the grid) and the weights of the value and of d/dr (fm^-1), f(r) = sum_i value[i] f_{first + i}.
+struct SixPointStencil {
+  int first = 0;
+  double value[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  double derivative[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+};
+SixPointStencil SixPointLagrange(double r_fm, double h_fm, int n);
+
+/// f(r) from its values f_i on r_i = i h by six-point Lagrange interpolation (SixPointLagrange); 0 beyond the last
+/// node.  Error O(h^6 f^(6)).
 double InterpolateOnGrid(const std::vector<double> &f, double h_fm, double r_fm);
 std::complex<double> InterpolateOnGrid(const std::vector<std::complex<double>> &f, double h_fm, double r_fm);
 
@@ -68,6 +77,14 @@ void GaussLegendre(int n, std::vector<double> &x, std::vector<double> &w);
  * stored at [l (m_max + 1) + m] (0 where m > l).  Real at phi = 0.
  */
 std::vector<double> SphericalHarmonicsAtPhiZero(int l_max, int m_max, double x);
+
+/*!
+ * The same at the polar angle theta (rad, any sign: a negative theta is the direction at phi = pi) with
+ * dY_lm/dtheta = [sqrt((l-m)(l+m+1)) Y_l,m+1 - sqrt((l+m)(l-m+1)) Y_l,m-1]/2 (Y_l,-1 = -Y_l1), both stored at
+ * [l (m_max + 1) + m] in the caller's vectors (resized; the same recurrence as SphericalHarmonicsAtPhiZero).
+ */
+void SphericalHarmonicsWithDerivative(int l_max, int m_max, double theta, std::vector<double> &y,
+                                      std::vector<double> &dy);
 
 }  // namespace transfer
 }  // namespace physics

@@ -61,7 +61,8 @@ add_library(azure2_physics_transfer STATIC
   src/transfer/Transfer.cpp
   src/transfer/ThmVertex.cpp
   src/transfer/GlobalOptical.cpp
-  src/transfer/ZeroRangeWeight.cpp)
+  src/transfer/ZeroRangeWeight.cpp
+  src/transfer/SourceProjection.cpp)
 add_library(azure2::physics_transfer ALIAS azure2_physics_transfer)
 target_link_libraries(azure2_physics_transfer PUBLIC azure2_physics)
 set_target_properties(azure2_physics_transfer PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
@@ -78,7 +79,7 @@ foreach(_src transfer_bound_state_test.cpp transfer_distorted_waves_test.cpp tra
              transfer_fresco_test.cpp transfer_continuum_test.cpp transfer_continuum_transfer_test.cpp
              transfer_continuum_fresco_test.cpp transfer_spin_orbit_test.cpp
              transfer_he3_fresco_test.cpp transfer_n14_fresco_test.cpp transfer_global_optical_test.cpp
-             transfer_zero_range_weight_test.cpp)
+             transfer_zero_range_weight_test.cpp transfer_source_projection_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics_transfer)

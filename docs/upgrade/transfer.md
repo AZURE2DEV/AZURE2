@@ -942,8 +942,9 @@ in the frame k̂_i = ẑ, k̂_f at the angle θ_fi in the xz plane, u in the xz 
 R_a). h is the *reduced amplitude*: it depends on r and on the waves, not on the directions of k_i and k_f, so it is
 computed once per energy and the directions (one, or the nodes of a window) cost a sum over the triples (l; L_s, L_a)
 only. K is the zero component of the bipolar harmonic; rotating R̂_s onto z leaves M_s = 0,
-K = √((2L_s+1)/(2l+1)) Σ_ν (−1)^ν ⟨L_s 0 L_a ν|l ν⟩ Y_{lν}(θ_s, 0) Y_{L_a ν}(θ_a − θ_s, 0), O(l) per triple. dh/dr at fixed u follows from
-dR_s/dr = α cos θ_s, dθ_s/dr = −α sin θ_s/R_s, dR_a/dr = cos θ_a, dθ_a/dr = −sin θ_a/R_a.
+K = √((2L_s+1)/(2l+1)) Σ_ν (−1)^ν ⟨L_s 0 L_a ν|l ν⟩ Y_{lν}(θ_s, 0) Y_{L_a ν}(θ_a − θ_s, 0),
+O(l) per triple. dh/dr at fixed u follows from dR_s/dr = α cos θ_s, dθ_s/dr = −α sin θ_s/R_s, dR_a/dr = cos θ_a,
+dθ_a/dr = −sin θ_a/R_a.
 
 The library function returns, for one radius a, the triples, the reduced amplitudes and their r derivatives at a per
 exit energy, and from them S_lm(a) and S′_lm(a) for m = 0 … l at any direction θ_fi (S_l,−m = (−1)^m S_lm in this frame,

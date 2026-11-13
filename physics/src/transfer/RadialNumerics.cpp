@@ -12,23 +12,40 @@ namespace transfer {
 namespace {
 
 constexpr double kRescale = 1e200;
+constexpr double kLagrangeDenominator[6] = {-120.0, 24.0, -12.0, 12.0, -24.0, 120.0};  // prod_{m != i} (i - m)
 
 template <class T>
 T Lagrange6(const std::vector<T> &f, double h, double r) {
   const int n = static_cast<int>(f.size());
   if (n == 0 || r > (n - 1) * h) return T(0.0);
   if (n < 6) throw std::invalid_argument("InterpolateOnGrid: fewer than 6 nodes");
-  const double s = r / h;
-  int first = static_cast<int>(std::floor(s)) - 2;  // nodes first ... first + 5 around r
-  first = std::max(0, std::min(first, n - 6));
+  const SixPointStencil st = SixPointLagrange(r, h, n);
   T value(0.0);
-  for (int i = 0; i < 6; ++i) {
-    double w = 1.0;
-    for (int j = 0; j < 6; ++j)
-      if (j != i) w *= (s - (first + j)) / static_cast<double>(i - j);
-    value += w * f[first + i];
-  }
+  for (int i = 0; i < 6; ++i) value += st.value[i] * f[st.first + i];
   return value;
+}
+
+/// The normalised associated Legendre functions times 1/sqrt(4 pi), Y_lm(theta, 0) at x = cos theta, s = sin theta,
+/// for m <= min(m_top, l_max), at y[l stride + m] (y zeroed by the caller).
+void LegendreRows(int l_max, int m_top, double x, double s, int stride, double *y) {
+  const double pi = std::acos(-1.0);
+  double pmm = 1.0 / std::sqrt(4.0 * pi);  // normalised P_m^m, Condon-Shortley phase
+  for (int m = 0; m <= std::min(m_top, l_max); ++m) {
+    if (m > 0) pmm *= -std::sqrt((2.0 * m + 1.0) / (2.0 * m)) * s;
+    y[m * stride + m] = pmm;
+    if (m + 1 > l_max) continue;
+    double p_lm2 = pmm, p_lm1 = x * std::sqrt(2.0 * m + 3.0) * pmm;
+    y[(m + 1) * stride + m] = p_lm1;
+    for (int l = m + 2; l <= l_max; ++l) {
+      const double a = std::sqrt((4.0 * l * l - 1.0) / (static_cast<double>(l) * l - static_cast<double>(m) * m));
+      const double b = std::sqrt((static_cast<double>(l - 1) * (l - 1) - static_cast<double>(m) * m) /
+                                 (4.0 * (l - 1) * (l - 1) - 1.0));
+      const double p = a * (x * p_lm1 - b * p_lm2);
+      y[l * stride + m] = p;
+      p_lm2 = p_lm1;
+      p_lm1 = p;
+    }
+  }
 }
 
 template <class T>
@@ -130,29 +147,54 @@ void GaussLegendre(int n, std::vector<double> &x, std::vector<double> &w) {
   }
 }
 
+SixPointStencil SixPointLagrange(double r, double h, int n) {
+  if (n < 6 || !(h > 0.0)) throw std::invalid_argument("SixPointLagrange: needs 6 nodes and h > 0");
+  SixPointStencil st;
+  const double t = r / h;
+  st.first = std::max(0, std::min(static_cast<int>(std::floor(t)) - 2, n - 6));
+  const double s = t - st.first;
+  double d[6];
+  for (int i = 0; i < 6; ++i) d[i] = s - i;
+  for (int i = 0; i < 6; ++i) {
+    double p = 1.0, dp = 0.0;
+    for (int m = 0; m < 6; ++m) {
+      if (m == i) continue;
+      dp = dp * d[m] + p;  // the derivative of the running product
+      p *= d[m];
+    }
+    st.value[i] = p / kLagrangeDenominator[i];
+    st.derivative[i] = dp / kLagrangeDenominator[i] / h;
+  }
+  return st;
+}
+
 std::vector<double> SphericalHarmonicsAtPhiZero(int l_max, int m_max, double x) {
   const int stride = m_max + 1;
   std::vector<double> y((l_max + 1) * stride, 0.0);
-  const double pi = std::acos(-1.0);
-  const double s = std::sqrt(std::max(0.0, 1.0 - x * x));
-  double pmm = 1.0 / std::sqrt(4.0 * pi);  // normalised P_m^m, Condon-Shortley phase
-  for (int m = 0; m <= std::min(m_max, l_max); ++m) {
-    if (m > 0) pmm *= -std::sqrt((2.0 * m + 1.0) / (2.0 * m)) * s;
-    y[m * stride + m] = pmm;
-    if (m + 1 > l_max) continue;
-    double p_lm2 = pmm, p_lm1 = x * std::sqrt(2.0 * m + 3.0) * pmm;
-    y[(m + 1) * stride + m] = p_lm1;
-    for (int l = m + 2; l <= l_max; ++l) {
-      const double a = std::sqrt((4.0 * l * l - 1.0) / (static_cast<double>(l) * l - static_cast<double>(m) * m));
-      const double b = std::sqrt((static_cast<double>(l - 1) * (l - 1) - static_cast<double>(m) * m) /
-                                 (4.0 * (l - 1) * (l - 1) - 1.0));
-      const double p = a * (x * p_lm1 - b * p_lm2);
-      y[l * stride + m] = p;
-      p_lm2 = p_lm1;
-      p_lm1 = p;
-    }
-  }
+  LegendreRows(l_max, m_max, x, std::sqrt(std::max(0.0, 1.0 - x * x)), stride, y.data());
   return y;
+}
+
+void SphericalHarmonicsWithDerivative(int l_max, int m_max, double theta, std::vector<double> &y,
+                                      std::vector<double> &dy) {
+  // One order more for the derivative, on a wider row, then the rows narrowed in place.
+  const int wide = m_max + 2, stride = m_max + 1;
+  y.assign(static_cast<std::size_t>(l_max + 1) * wide, 0.0);
+  dy.assign(static_cast<std::size_t>(l_max + 1) * stride, 0.0);
+  LegendreRows(l_max, m_max + 1, std::cos(theta), std::sin(theta), wide, y.data());
+  for (int l = 0; l <= l_max; ++l)
+    for (int m = 0; m <= std::min(l, m_max); ++m) {
+      const double up = m + 1 <= l ? std::sqrt(static_cast<double>(l - m) * (l + m + 1)) * y[l * wide + m + 1] : 0.0;
+      double down = 0.0;
+      if (m > 0)
+        down = std::sqrt(static_cast<double>(l + m) * (l - m + 1)) * y[l * wide + m - 1];
+      else if (l > 0)
+        down = -std::sqrt(static_cast<double>(l) * (l + 1)) * y[l * wide + 1];
+      dy[l * stride + m] = 0.5 * (up - down);
+    }
+  for (int l = 0; l <= l_max; ++l)
+    for (int m = 0; m <= m_max; ++m) y[l * stride + m] = y[l * wide + m];
+  y.resize(static_cast<std::size_t>(l_max + 1) * stride);
 }
 
 }  // namespace transfer
