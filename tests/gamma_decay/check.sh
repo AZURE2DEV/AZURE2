@@ -18,7 +18,12 @@
 #       level's proton width, its energy and the ground state's ANC; the record's widths are TransformOut's; the
 #       gradient in every free parameter (the ANCs of the final states included) at two points; fits from displaced
 #       starts (MIGRAD with the gradient, Levenberg-Marquardt) with the twin's minimum and branchings; 1 against 3
-#       threads; a width below the floor 2P (Im gamma^ext)^2 / n as TransformIn handles it.
+#       threads; a width below the floor 2P (Im gamma^ext)^2 / n as TransformIn handles it;
+#   (i) the vector of observed parameters (note section 2.8): the grid copies of a narrow resonance (rate and fit) see
+#       the twin's widths; limits on a particle width and on Gamma_gamma; the observed-parameter MCMC moves with the
+#       record's numbers (pyazr's calls: tests/pyazr/gamma_decay_test.py part 5);
+#   (j) a final state of an external part above a second pair's threshold, its energy free: the gradient against
+#       central differences.
 #
 #   ./tests/gamma_decay/check.sh path/to/AZURE2
 
@@ -375,6 +380,96 @@ grep -q 'Imaginary portion of the external width is greater' "$WORK/pec_floor/ru
   && grep -q 'note: the width 3.85e-12 eV to g+15O is below the floor' "$WORK/rec_floor/output/parameters.out" \
   && ok "the twin's TransformIn warning, the record's warning and its note in parameters.out" \
   || bad "the floor: a warning or the note of parameters.out is missing"
+
+echo "-- (i) the vector of observed parameters (note section 2.8): the record's numbers in, the levels' widths out"
+# The copies of the compound that place the rate's breakpoints and the meshes' anchors read the levels' observed
+# widths: a narrow 14N(p,g) resonance (tests/thick_target_resonance with Gamma_p = 0.01 eV, extrapolations left out,
+# a layer yield added) as twin and record; the grid's resonance line (AZR_DEBUG_GRID) gives the photon widths it sums.
+TTR="$HERE/../thick_target_resonance"
+narrow() { awk '/^<extrapolations>/ { skip = 1; print; next } /^<\/extrapolations>/ { skip = 0 } !skip' "$1" |
+  awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5" && a[27] == "0" && a[12] == "974.937") { $12 = 0.01; print " " $0 } else print }' |
+  awk '/^<\/data>/ { print "dataset layer_yield\n    reaction       14N(p,g)15O[total]\n    quantity       yield\n    unit           1/particle\n    file           data/yield_scan.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 6 MeV\n    norm           1 fixed\n    target         tgt_targetInt1\n    quadrature     points 20 width_multiplier 5 per_width 50" } { print }'; }
+edited "$TTR/thick_target_resonance.azr" "$WORK/nr_partial.azr" narrow || bad "narrow-resonance twin"
+"$PY" "$M/make_record.py" "$WORK/nr_partial.azr" "$WORK/nr_record.azr" 5 5.183 fixed
+edited "$WORK/nr_partial.azr" "$WORK/nr_partial_fit.azr" sed 's/^\(    norm           360000\) fixed$/\1 fit/' || bad "narrow twin, free norms"
+edited "$WORK/nr_record.azr" "$WORK/nr_record_fit.azr" sed 's/^\(    norm           360000\) fixed$/\1 fit/' || bad "narrow record, free norms"
+for v in partial record; do
+  for k in rate fit; do
+    mkdir -p "$WORK/nr_${k}_$v/output" "$WORK/nr_${k}_$v/checks"
+    ln -s "$TTR/data" "$WORK/nr_${k}_$v/data"
+    cp "$HERE/../reaction_rate/temperatures.dat" "$WORK/nr_${k}_$v/"
+  done
+  cp "$WORK/nr_$v.azr" "$WORK/nr_rate_$v/p.azr"
+  cp "$WORK/nr_${v}_fit.azr" "$WORK/nr_fit_$v/p.azr"
+  (cd "$WORK/nr_rate_$v" && printf '5\n\n1\n-1\nyes\ntemperatures.dat\n' | AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+  (cd "$WORK/nr_fit_$v" && printf '2\n\n\n' | AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+done
+for k in rate fit; do
+  gp="$(grep 'level E=7.556700: input widths' "$WORK/nr_${k}_partial/run.log" | sort -u)"
+  gr="$(grep 'level E=7.556700: input widths' "$WORK/nr_${k}_record/run.log" | sort -u)"
+  if [ -n "$gp" ] && [ "$gp" = "$gr" ] && [ -s "$WORK/nr_${k}_record/output/chiSquared.out" -o "$k" = rate ]; then
+    ok "$k: the grid's copy of the compound has the twin's widths ($(echo "$gp" | sed 's/.*\(gamma=[^ ]*\).*/\1/'))"
+  else bad "$k: the grid's widths differ: twin '$(echo "$gp" | sed 's/.*\(gamma=[^ ]*\).*/\1/')', record '$(echo "$gr" | sed 's/.*\(gamma=[^ ]*\).*/\1/')'"; fi
+done
+cmp -s "$WORK/nr_rate_partial/output/reactionrates.out" "$WORK/nr_rate_record/output/reactionrates.out" \
+  && ok "the narrow resonance's rate (total capture) is the twin's" || bad "the narrow resonance's rate differs from the twin's"
+
+# A limit on a particle width of the record's level is converted as the twin's (both end at the 950 eV limit); a limit
+# on a record's number is applied as written (Gamma_gamma ends at 0.035 eV).
+gp_of() { awk '$1 == "J" && $6 == "7.5567" { on = 1; next } on && NF == 0 { on = 0 } on && $3 == 1 && $6 == "0" { print $12 $13; exit }' "$WORK/$1/output/parameters.out"; }
+free_gp() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5" && a[27] == "0" && a[7] == "1") { $11 = 0; print " " $0 } else print }' "$1"; }
+for v in partial record; do
+  edited "$M/$v.azr" "$WORK/lim_$v.azr" free_gp || bad "free proton width ($v)"
+  printf '<parameterSettings>\nLevel 5 Channel 1 Width (eV) 974.937 900 950 0 0 0 level 0\n</parameterSettings>\n' >> "$WORK/lim_$v.azr"
+  project "lim_$v" "$WORK/lim_$v.azr"
+  run "lim_$v" 2
+done
+if [ "$(gp_of lim_partial)" = "950.000000eV" ] && [ "$(gp_of lim_record)" = "950.000000eV" ] && [ "$(chi2 lim_partial)" = "$(chi2 lim_record)" ]; then
+  ok "a limit on level 5's proton width: both end at $(gp_of lim_record), chi^2 $(chi2 lim_record)"
+else bad "a limit on level 5's proton width: twin $(gp_of lim_partial), record $(gp_of lim_record)"; fi
+edited "$WORK/lim_record.azr" "$WORK/limq.azr" sed 's/^Level 5 Channel 1 Width (eV) 974.937 900 950 0 0 0 level 0$/level5.total_width 0.0385027 0.03 0.035 0 0 0 radiative 0/' \
+  || bad "limit on Gamma_gamma"
+project limq "$WORK/limq.azr"
+run limq 2
+check "a limit (0.03, 0.035) eV on Gamma_gamma: the fit ends at it" "$(sav limq level5.total_width)" 0.035 1e-6
+
+# pyazr (tests/pyazr/gamma_decay_test.py part 5) and the MCMC set the vector in observed form: the record's numbers of
+# the vector must reach the engine.  Physical-parameter MCMC with the record's numbers free: the likelihood moves with
+# them, param.mcmc carries the best walker's numbers, and its -2 ln L is the chi^2 of a calculation at them.
+project mcmc "$M/record.azr"
+(cd "$WORK/mcmc" && printf '6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n' | OMP_NUM_THREADS=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+if grep -q "Parameter mode: Physical" "$WORK/mcmc/run.log" && [ -s "$WORK/mcmc/output/samples.mcmc" ]; then
+  spread="$(awk -F, 'NR > 1 { if (a == "" || $4 < a) a = $4; if (b == "" || $4 > b) b = $4 } END { printf "%.6g", b - a }' "$WORK/mcmc/output/samples.mcmc")"
+  awk -v s="$spread" 'BEGIN { exit !(s > 0.1) }' && ok "MCMC (observed parameters): ln L moves with the record's numbers (spread $spread)" \
+    || bad "MCMC (observed parameters): ln L does not move with the record's numbers (spread $spread)"
+  read -r logL g0 < <(awk -F, 'NR > 1 { s = $1 } END { print s }' "$WORK/mcmc/output/samples.mcmc" | {
+    read -r last; awk -F, -v last="$last" 'NR > 1 && $1 == last && ($4 > best || best == "") { best = $4; g = $6 } END { print best, g }' "$WORK/mcmc/output/samples.mcmc"; })
+  check "param.mcmc carries the best walker's Gamma_gamma" "$(awk '$1 == "level5.total_width" { print $2 }' "$WORK/mcmc/output/param.mcmc")" "$g0" 1e-6
+  mkdir -p "$WORK/mcmc_calc/output" "$WORK/mcmc_calc/checks"; ln -s "$M/data" "$WORK/mcmc_calc/data"
+  cp "$M/record.azr" "$WORK/mcmc_calc/p.azr"; cp "$WORK/mcmc/output/param.mcmc" "$WORK/mcmc_calc/best.par"
+  (cd "$WORK/mcmc_calc" && printf '1\nbest.par\n\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+  check "-2 ln L of that walker is the chi^2 of a calculation at its parameters" "$(chi2 mcmc_calc)" \
+    "$(awk -v l="$logL" 'BEGIN { printf "%.10g", -2 * l }')" 1e-4
+else bad "the observed-parameter MCMC did not run"; fi
+
+echo "-- (j) a final state's energy free: the pull-back's term in E_f"
+# The external-capture twin with a second particle pair (alpha + 11C, its threshold put at 5.0 MeV, in a 9/2+ group of
+# its own, width 0): the 6.1763 MeV final state lies above it, so its energy is a free parameter (CNuc::FillMnParams).
+alpha() { awk '/^<\/levels>/ { print " 4.5 1 20 1 1 9 3 6 34 1 1 0 0 1 1.5 -1 0 4.0026 11.0114 2 6 7.297 5.0 0 0 0.0 0 5.5 0 0 0" } { print }' "$1"; }
+efree() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "9") { $4 = 0; if (a[27] == "0" && a[12] != "0") $11 = 0; print " " $0 }
+  else if (n > 30 && a[9] == "5" && a[27] == "0" && a[7] == "1") { $11 = 0; print " " $0 } else print }' "$1"; }
+edited "$WORK/partial_ec.azr" "$WORK/pec_alpha.azr" alpha || bad "the second pair"
+"$PY" "$M/make_record.py" "$WORK/pec_alpha.azr" "$WORK/rec_alpha.azr" 5 5.183 fit
+edited "$WORK/rec_alpha.azr" "$WORK/rec_ef.azr" efree || bad "the free final-state energy"
+project ef "$WORK/rec_ef.azr"
+(cd "$WORK/ef" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+rows="$(grep -c '\[grad-check\] idx' "$WORK/ef/grad.log")"
+ef_line="$(grep '\[grad-check\] idx [0-9]* energy J3 L1 ' "$WORK/ef/grad.log")"
+wEf="$(echo "$ef_line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
+worst="$(awk '/\[grad-check\] idx/ { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/ef/grad.log")"
+if [ -n "$ef_line" ] && [ "$rows" -ge 8 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+  ok "$rows parameters, the 6.1763 MeV state's energy among them (rel. $wEf), largest rel. difference $worst"
+else bad "$rows parameters, the final state's energy row '${ef_line:-missing}', largest rel. difference $worst (limit 1e-6)"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "gamma_decay: all checks passed"; else echo "gamma_decay: $failures check(s) FAILED"; fi

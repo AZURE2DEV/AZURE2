@@ -379,10 +379,13 @@ the user guide says what that means for a resonance-strength datum (a difference
 transitions have external capture (¹⁴N(p,γ)¹⁵O into the ground state and 6.79 MeV, ¹²C(p,γ), ¹⁷O(p,γ)) can be written
 so too: the record's widths are the observed ones, external part included, and the engine recomputes the external
 part at every evaluation, so they stay what the record says while a fit moves a proton width, the level energy or an
-ANC. Not covered: the formal basis (`--no-brune`), refused with a message. Known defect, in work: where the
-engine places its integration grid at the resonances (reaction rates, targets) and where it converts limits or
-samples in observed parameters, a record level's branchings and mixing ratios are read as widths in eV; this
-matters for a narrow resonance (total width of an eV or less) written as a record.
+ANC. Not covered: the formal basis (`--no-brune`), refused with a message. From the record's merge until the fix of
+the same day, the paths that take parameters in observed form ignored the record's numbers: pyazr's
+`calculate_chi2` and `update_segments` given a new Γ_γ or branching computed the project as written, and the MCMC in
+observed parameters (`Use Reduced Width Amplitudes: no`) had a likelihood that did not move with them; the grid
+placement at narrow resonances read the branchings as widths in eV, but only into a sum no output used. Fixed and
+tested (`tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`); fits in the CLI and the MCMC in amplitudes
+were never affected.
 
 ## What is in work and what comes next
 

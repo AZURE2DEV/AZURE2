@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-physical-paths`) — the `gamma_decay` record in the observed-parameter paths; E_f in the pull-back
+
+**Done.** Reproduced first (scratch `work/gammapp/`, build of the branch's start): every caller that hands
+`GetTransformParams`' vector (the record's numbers at the record's slots) to `FillCompoundFromParamsPhysical`. Wrong:
+the paths that set a vector in observed form, pyazr's `calculate_chi2` / `update_segments` and the observed-parameter
+MCMC (`CalculateLogLikelihoodPhysical`, its snapshot, `ParkNonPositiveLevels`): `FillMnParams` took the file's
+numbers, so the vector's were ignored (χ² 44.79 instead of 3889.3 for Γ_γ × 1.2; the MCMC's likelihood constant).
+Read wrongly but in no output: the grid copies in `ReactionRate.cpp` and `TargetSetup.cpp` (0.870 eV of photon
+width for Γ_γ = 0.0385 eV; the anchors and the tabulated rate use the particle width; the sum is used only by RMC,
+refused for a record, and the rate's quadrature fallback). Harmless: `ConvertPhysicalLimitToReduced` (the converted
+prior was the twin's bit for bit), and everything that returns the vector. Rule (note section 2.8, committed
+first): the observed vector carries the record's numbers in both directions; `GammaDecaySet::WithPartialWidths` is
+the one place that turns them into the levels' widths; `FillCompoundFromParamsPhysical` keeps them as the
+compound's input numbers (`CNuc::GammaDecayInputs`), which `FillMnParams` reads. No call site changed. The pull-back
+has the term in a free final-state energy E_f (central difference, step of E_λ), `InputIndices` names it; note 2.5's
+step corrected to 10⁻⁴ MeV (gradient check at 10⁻⁴ and 10⁻⁶ MeV: both meet the claim), 2.7's sentence on E_f.
+
+**Verified how** (build `work/b-gammapp`, 0 warnings, on c9ee6dd5): the whole tree × 3 bases against `tab-gecm-1`
+(tag `tab-gpp-final1`): 887 / 851 / 887 identical, none added; `ctest -LE slow` 223/223; the slow tests 11/11;
+`tests/run_tests.sh` 165 passed, 0 failed; the eight fits of `fits_vs_base2.sh` identical to `b-gecm`; T1-T3 and
+13N calculations at 1 against 3 threads identical (12 of 12); the converted-tree gate 679 / 643 / 679 identical;
+`tests/gamma_decay/check.sh` three times at 3 threads (63 checks, all passed each time, the new (i) and (j)
+included); `tests/pyazr/gamma_decay_test.py` all passed (part 5 new). Five injected errors fail the new checks
+(README). Not run: Sphinx, TSan/ASan.
+
+**Open**: the MCMC (both bases) has neither the record's priors and wall (term T11 is not in its likelihood) nor its
+limits b ∈ [0, 1], Γ_γ ≥ 0 (by reading; samples of the start build reached Γ_γ = −6.6×10¹³); `param.fit`'s
+snapshot depends on thread scheduling in a fit with the numerical gradient (two runs at 3 threads differed); the
+check (i) reads the grid's line of `AZR_DEBUG_GRID`.
+
 ## 2026-11-13 (director, 11:10) — the PI's decision on plots: plotly.js; the bundle fetched (outside the repository)
 
 The PI ("use plotly", after asking whether something else would be better; the alternatives uPlot, Chart.js, ECharts
