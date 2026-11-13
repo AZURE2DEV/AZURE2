@@ -31,7 +31,7 @@ void WriteCheck(const Config &configure, unsigned int bit, const char *file, con
   std::filebuf fbuffer;
   if (configure.fileCheckMask & bit) {
     std::string outfile = configure.checkdir + file;
-    fbuffer.open(outfile.c_str(), std::ios::out);
+    fbuffer.open(configure.OpenPath(outfile).c_str(), std::ios::out);
     sbuffer = &fbuffer;
   } else if (configure.screenCheckMask & bit)
     sbuffer = configure.outStream.rdbuf();
@@ -285,7 +285,7 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
   char filename[256];
   snprintf(filename, sizeof(filename), "%sparameters.out", configure.outputdir.c_str());
   std::ofstream out;
-  out.open(filename);
+  out.open(configure.OpenPath(filename));
   if (out) {
     out << "PHYSICAL LEVEL PARAMETERS (BOUNDARY CONDITION SET TO SHIFT AT E_LEVEL)" << std::endl;
     out << std::endl;
@@ -374,7 +374,7 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
 void WriteRelativisticOut(const CNuc &compound, const Config &configure) {
   char filename[256];
   snprintf(filename, sizeof(filename), "%srelativistic.out", configure.outputdir.c_str());
-  std::ofstream out(filename);
+  std::ofstream out(configure.OpenPath(filename));
   if (!out) {
     configure.outStream << "Could not save relativistic.out file." << std::endl;
     return;

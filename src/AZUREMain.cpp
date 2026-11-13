@@ -312,7 +312,7 @@ int AZUREMain::operator()() {
     // fitStatus.out: how the minimizer ended, for scripts and for anyone who reads only the output files.
     auto writeFitStatus = [&](const std::string &minimizer, const std::string &status, bool valid, double edm,
                               double edmGoal, long calls) {
-      std::ofstream out(fitStatusFile.c_str());
+      std::ofstream out(configure().OpenPath(fitStatusFile).c_str());
       if (!out) return;
       out << "minimizer   " << minimizer << std::endl
           << "status      " << status << std::endl
@@ -356,7 +356,7 @@ int AZUREMain::operator()() {
     };
 
     if (configure().paramMask & Config::PERFORM_FIT) {
-      std::remove(fitStatusFile.c_str());  // a stale file from an earlier fit must not describe this one
+      std::remove(configure().OpenPath(fitStatusFile).c_str());  // a stale file from an earlier fit must not describe this one
       // Call minimizer for function minimization, write minimized parameters to params
       if (configure().paramMask & Config::USE_AMATRIX)
         configure().outStream << "Performing A-Matrix Fit..." << std::endl;
@@ -634,7 +634,7 @@ int AZUREMain::operator()() {
             char filename[256];
             snprintf(filename, sizeof(filename), "%scovariance_matrix.out", configure().outputdir.c_str());
             std::ofstream out;
-            out.open(filename);
+            out.open(configure().OpenPath(filename));
             if (out) {
               // Write header information
               params.GetMinuitParams() = min.UserParameters();
@@ -828,7 +828,7 @@ int AZUREMain::operator()() {
           }
           if ((int)names.size() == bandCov.size()) bandCov.names = names;
         }
-        if (SaveBandCovariance(covPath, bandCov))
+        if (SaveBandCovariance(configure().OpenPath(covPath), bandCov))
           configure().outStream << "Saved parameter covariance for cross-section bands." << std::endl;
       }
       BandCovariance cov;
@@ -846,7 +846,7 @@ int AZUREMain::operator()() {
         else
           configure().outStream << "Uncertainty band skipped: this fit produced no usable covariance."
                                 << std::endl;
-      } else if (!LoadBandCovariance(covPath, cov)) {
+      } else if (!LoadBandCovariance(configure().OpenPath(covPath), cov)) {
         // Extrapolation / no-fit run: the band needs a covariance from a prior fit.
         configure().outStream << "No saved parameter covariance found (" << covPath
                               << "); writing the normal output without an uncertainty band. "
@@ -877,7 +877,7 @@ int AZUREMain::operator()() {
     // scatteringLengths.out only, the run log (GUI execution screen) names the file.
     try {
       std::string report = ScatteringLength::Report(compound(), configure());
-      std::ofstream slOut((configure().outputdir + "scatteringLengths.out").c_str());
+      std::ofstream slOut(configure().OpenPath(configure().outputdir + "scatteringLengths.out").c_str());
       slOut << report;
       configure().outStream << "Scattering lengths written to " << configure().outputdir << "scatteringLengths.out"
                             << std::endl;
@@ -887,7 +887,7 @@ int AZUREMain::operator()() {
     // The <modelData> data at the same parameters (ModelData.h): modelData.out and the run log, only with the section.
     const std::string modelData = ModelData::Report(compound(), configure(), compound()->GetModelData());
     if (!modelData.empty()) {
-      std::ofstream mdOut((configure().outputdir + "modelData.out").c_str());
+      std::ofstream mdOut(configure().OpenPath(configure().outputdir + "modelData.out").c_str());
       mdOut << modelData;
       configure().outStream << modelData;
     }

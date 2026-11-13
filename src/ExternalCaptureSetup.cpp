@@ -366,7 +366,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
   if (usePrevious) {
     long long expected = CountECAmplitudes(theCNuc, configure);
-    std::ifstream check(configure.integralsfile.c_str());
+    std::ifstream check(configure.OpenPath(configure.integralsfile).c_str());
     if (!check) {
       configure.outStream << "Could not open external capture file '"
                           << configure.integralsfile
@@ -390,7 +390,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   }
   if (usePrevious) {
     std::string sigFile = ECSignaturePath(configure.integralsfile);
-    std::ifstream sigIn(sigFile.c_str());
+    std::ifstream sigIn(configure.OpenPath(sigFile).c_str());
     std::string recorded, line;
     while (sigIn && std::getline(sigIn, line)) {
       std::istringstream fields(line);
@@ -426,15 +426,15 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   ECTable::ResetCounters();
 
   if (usePrevious)
-    in.open(configure.integralsfile.c_str());
+    in.open(configure.OpenPath(configure.integralsfile).c_str());
   else {
     // The signature is written only once the file is complete, after the
     // leaves are appended (InitializeLeaves).  Remove
     // the old one first, so that a run interrupted part way leaves a file
     // with no signature -- which is recomputed -- rather than one whose old
     // signature still vouches for it.
-    std::remove(ECSignaturePath(outputfile).c_str());
-    out.open(outputfile.c_str());
+    std::remove(configure.OpenPath(ECSignaturePath(outputfile)).c_str());
+    out.open(configure.OpenPath(outputfile).c_str());
     if (!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
     // Every digit (17 significant): the default 6 left a run that reads the file back ~1e-6 off the run that
     // wrote it (tests/13N chi2 by 0.62, 2026-10-30).

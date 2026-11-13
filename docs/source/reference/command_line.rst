@@ -14,6 +14,13 @@ Command-Line Mode
 
 AZURE2 starts in text mode, with an interactive menu similar to that of the
 original FORTRAN version; every calculation type is reached from it.
+The paths a project names -- its output and checks directories, data,
+reference, grid, covariance and table files -- and the file names typed at the
+menu's prompts (a parameter file, an integrals file, a temperature file) are
+relative to the directory of ``input_file.azr``, wherever AZURE2 is started;
+messages print them as the project writes them.  (``--validate`` and
+``--describe`` read data files relative to the working directory, as
+``pyazr.validate`` and ``pyazr.describe`` do.)
 Builds with the Qt setup utility need ``--no-gui`` for text mode; here it is
 accepted and has no effect, so scripts written for those builds run
 unchanged.
@@ -191,7 +198,7 @@ Available Options
        cannot be read.  ``pyazr.validate(path)`` returns the same diagnostics.
    * - ``--print-predictions``
      - ``--print-predictions FILE``: set the project ``FILE`` up as a calculation would (its
-       data files are read relative to the working directory), print what every data set and
+       data files are read relative to the project file's directory), print what every data set and
        then every extrapolation predicts, one line each as ``data <label>: <tree>`` or
        ``extrapolation <label>: <tree>``, and exit; the label is the data set's or extrapolation's
        name.  The tree is the expression the model pass
@@ -519,7 +526,7 @@ evaluation: slow).
 
 ``AZURE_DUMP_NONFINITE=1`` (or ``=<threshold>``, default :math:`10^{10}`):
 whenever a :math:`\chi^2` evaluation is non-finite or above the threshold,
-append to ``nonfinite_dump.txt`` in the working directory the parameters that
+append to ``nonfinite_dump.txt`` in the project file's directory (pyazr: the session's ``cwd``) the parameters that
 moved most since the last gradient point, the segments with the largest or
 non-finite contributions, and their offending points, including non-finite
 target-effect sub-points (at most 20 dumps per run).  A non-finite

@@ -108,7 +108,7 @@ void StoppingInto(Context &c, const ValidatedRecord &t, const Value &stopping, S
   if (const Value *p = t.Get("phase")) s.phase = p->word;
   if (const Value *cc = t.Get("compound_correction")) s.compoundCorrection = cc->number.value;
   if (s.source == Source::Table) {
-    if (const Value *f = stopping.Get("file")) s.tableFile = c.ProjectPath(f->word);
+    if (const Value *f = stopping.Get("file")) s.tableFile = f->word;  // opened relative to the project (TargetStopping)
     if (const Value *u = stopping.Get("energy_unit")) s.tableEnergyUnit = u->word;
     if (const Value *u = stopping.Get("stopping_unit")) s.tableStoppingUnit = u->word;
   }

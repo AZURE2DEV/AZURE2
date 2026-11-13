@@ -383,7 +383,8 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   return false;
 }
 
-// A data file's path as the engine opens it: relative to the project directory ("" = the working directory).
+// A data file's path as the engine opens it: relative to the project directory ("" = the working directory).  Messages
+// name the file as the project writes it, never this path.
 std::string DataPath(const Context &c, const std::string &file) { return c.ProjectPath(file); }
 
 // The reference table of a ratio_to_reference record (ReferenceTable.h): read once, its energies taken from the data
@@ -400,7 +401,7 @@ bool ReferenceInto(Context &c, const ValidatedRecord &r, double toMeV, bool cm, 
   std::vector<double> energy, value;
   const std::string why = in ? ReadReferenceRows(in, energy, value) : "cannot be read";
   if (!why.empty()) {
-    c.Error(codes::kReferenceTable, r, "reference", "reference table " + path + ": " + why);
+    c.Error(codes::kReferenceTable, r, "reference", "reference table " + file->word + ": " + why);
     return false;
   }
   const PairInfo *p = c.Pair(spec.entranceKey);
@@ -437,7 +438,7 @@ bool InsideReference(Context &c, const ValidatedRecord &r, const ReferenceTable 
 }
 
 // The data file exists and its first row holds every column the roles name (a run that may not read the data).
-bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &path, std::ifstream &in, std::size_t columns) {
+bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &file, std::ifstream &in, std::size_t columns) {
   std::string line;
   while (std::getline(in, line)) {
     std::istringstream row(line);
@@ -448,12 +449,12 @@ bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &
     while (row >> token) n++;
     if (n < columns) {
       c.Error(codes::kDataFile, r, "file",
-              path + ": its first row has " + std::to_string(n) + " columns, the roles name " + std::to_string(columns));
+              file + ": its first row has " + std::to_string(n) + " columns, the roles name " + std::to_string(columns));
       return false;
     }
     return true;
   }
-  c.Error(codes::kDataFile, r, "file", path + " holds no data row");
+  c.Error(codes::kDataFile, r, "file", file + " holds no data row");
   return false;
 }
 
@@ -498,14 +499,15 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
   std::ifstream in(path);
   if (!in) {
     if (c.opt_.dataFiles == DataFiles::NotUsed) {  // an extrapolation run never opens it
-      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + path + "; not read: this run does not use data", path);
+      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + d.dataFile + "; not read: this run does not use data",
+             d.dataFile);
       return true;
     }
-    c.Error(codes::kDataFile, r, "file", "cannot read " + path);
+    c.Error(codes::kDataFile, r, "file", "cannot read " + d.dataFile);
     return false;
   }
   // A ratio to a reference table reads every row in every run: the table must cover each kept energy.
-  if (c.opt_.dataFiles == DataFiles::NotUsed && d.reaction.reference.Empty()) return CheckFirstDataRow(c, r, path, in, columns);
+  if (c.opt_.dataFiles == DataFiles::NotUsed && d.reaction.reference.Empty()) return CheckFirstDataRow(c, r, d.dataFile, in, columns);
   std::vector<double> keptEnergies;
   bool ok = true;
   std::shared_ptr<CovarianceFile> cov;
@@ -546,7 +548,7 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
     ok = false;
   }
   if (check.provenance.rowsRead == 0 && check.problems.empty()) {
-    c.Error(codes::kDataFile, r, "file", path + " holds no data row");
+    c.Error(codes::kDataFile, r, "file", d.dataFile + " holds no data row");
     ok = false;
   }
   if (!d.reaction.reference.Empty()) ok = InsideReference(c, r, d.reaction.reference, keptEnergies, "the row") && ok;

@@ -373,7 +373,7 @@ int Segment::GetExitKey() const {
 
 int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(infile, configure.cacheInputFiles);
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.OpenPath(infile), configure.cacheInputFiles);
   std::istream &in = *inStream;
   if (!in) return -1;
   std::shared_ptr<DataCovariance::File> covFile;
@@ -381,7 +381,7 @@ int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) 
   if (!covarianceFile_.empty()) {
     covFile = theData->CovarianceFileFor(covarianceFile_, configure);
     if (!covFile) return -1;
-    canonicalData = DataCovariance::CanonicalPath(infile);
+    canonicalData = DataCovariance::CanonicalPath(configure.OpenPath(infile));
     if (covFile->FileIndex(canonicalData) < 0) {
       configure.outStream << "ERROR: Data file " << infile << " of segment #" << this->GetSegmentKey()
                           << " is not among the \"file\" lines of its covariance file " << covarianceFile_ << "."

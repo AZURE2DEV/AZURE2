@@ -321,7 +321,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
 /*!
  * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
  * chi-squared evaluation is non-finite or above the threshold, append to nonfinite_dump.txt (in the
- * working directory) the parameters that moved most from the last gradient point, the segments with
+ * project's directory, Config::baseDirectory) the parameters that moved most from the last gradient point, the segments with
  * the largest or non-finite contributions, and their offending points (with any non-finite
  * target-effect sub-points).  At most 20 dumps per run.
  */
@@ -409,7 +409,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
   }
   static std::mutex fileMutex;
   std::lock_guard<std::mutex> lk(fileMutex);
-  std::ofstream f("nonfinite_dump.txt", std::ios::app);
+  std::ofstream f(configure().OpenPath("nonfinite_dump.txt"), std::ios::app);
   f << out.str();
   std::cerr << "[nonfinite] chi2 " << chi << ": dump " << d << " written to nonfinite_dump.txt" << std::endl;
 }
@@ -1946,7 +1946,7 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
   char filename[256];
   snprintf(filename, sizeof(filename), "%sparam.fit", configure.outputdir.c_str());
   std::ofstream out;
-  out.open(filename);
+  out.open(configure.OpenPath(filename));
   if (out) {
     out.precision(7);
     // The same first line as param.par/param.sav: which amplitudes the file

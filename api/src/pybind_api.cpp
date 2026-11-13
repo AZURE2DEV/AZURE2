@@ -101,6 +101,7 @@ struct RuntimeOptions {
   bool use_ec_table = true;         // Config::useECTable
   bool ec_convection_current = true;  // Config::ecConvectionCurrent (exact-form external capture only)
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
+  std::string base_directory;       // Config::baseDirectory: the project's relative paths ("" = the project file's directory)
 };
 
 void apply_options(Config &config, const RuntimeOptions &opt) {
@@ -133,7 +134,9 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
   else
     config.paramMask &= ~Config::USE_RMC_FORMALISM;
   config.useCoulombTable = opt.use_coulomb_table;
-  config.coulombTablePath = opt.coulomb_table;
+  config.baseDirectory = opt.base_directory;
+  // A relative table file is the session's directory's, as it was when pyazr entered that directory per call.
+  config.coulombTablePath = opt.coulomb_table.empty() ? opt.coulomb_table : config.OpenPath(opt.coulomb_table);
   config.replaceSubPointGrids = opt.replace_grids;
   config.useECTable = opt.use_ec_table;
   config.ecConvectionCurrent = opt.ec_convection_current;
@@ -854,6 +857,7 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
       .def_readwrite("use_coulomb_table", &RuntimeOptions::use_coulomb_table)
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
+      .def_readwrite("base_directory", &RuntimeOptions::base_directory)
       .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
       .def_readwrite("use_ec_table", &RuntimeOptions::use_ec_table)
       .def_readwrite("ec_convection_current", &RuntimeOptions::ec_convection_current)

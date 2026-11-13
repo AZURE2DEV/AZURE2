@@ -470,17 +470,37 @@ deleted.  A fit with the analytic gradient holds the master pair, one evaluation
 the snapshot pair at any thread count.  Kept: `WorkingCopy::Clone`, `WorkingData`, the pools' stacks, the snapshot
 copies, `AZURE_POOL_CHECK`, `Site::ec_shifted_` (section 4.1, item 3); `AZUREAPI`'s `mutable` members (not reached).
 
-**Relative paths.**  Not done: the engine still opens a project's relative paths against the process's working
-directory and pyazr still changes it per call.  What the change needs (inventory of 55a7e2c9): about 80 opening sites
-in `src/`, `api/src/`, `experiment/src/` (data, reference and grid files, covariance files, `intEC.dat` and its
-signature, parameter files, the output and checks directories, rate temperature files, THM tables, MCMC sample files,
-`nonfinite_dump.txt`, `kinflag.dat`) take a path from `Config` or a spec; the experiment library already has a
-`projectDir` (`Format3ReadOptions`, `BuildOptions`, `GridSettings`) that the engine leaves empty, but it joins the
-directory into the path it also prints, so setting it would change messages of `run.log`.  The plan: one
-`Config::baseDirectory` (the CLI: the working directory at start; pyazr: the session's `cwd`, given to the `Session`
-constructor) and one function that turns a project path into the path to open, used at every opening site, while every
-printed path stays the string of the project; the experiment library gets the same split (path to open, path to print).
-The input-file byte store keys by absolute path made with the working directory; it would take the opened path.
+**Relative paths (done, branch 3, continued).**  A project's relative paths are resolved against one directory held
+by the run, never against the process's working directory, and pyazr no longer changes the working directory.
+- One rule, one function: `azure2::experiment::PathToOpen(directory, path)` (`experiment/.../ProjectPaths.h`; an
+  absolute path, or no directory, as written; an empty path is the directory itself).  The engine's
+  `Config::OpenPath(path)` applies it with `Config::baseDirectory`, which `Config::ReadConfigFile` sets to the
+  project file's directory (made absolute once, at start, against the working directory: the file name is the
+  caller's) unless the caller named one; pyazr names the session's `cwd` (`RuntimeOptions.base_directory`).
+- Every opening site takes `OpenPath` and every message prints the path as the project writes it: data files
+  (`Segment::Fill`), covariance files and the data files they list (`DataCovariance::Read`, the groups' keys), the
+  user-defined resolution file (`TargetEffect`), a stopping table (`TargetStopping`, the directory passed in), the
+  output and checks files (`DataOutputFiles`, `AZUREOutput`'s prefix, `DataCheckFiles`, `CNucReport`,
+  `AZUREParams`, `AZURECalc`, `AZUREMain`, `ReactionRate`, `ThmReports`, `DataCovarianceGroups`), `intEC.dat` and
+  its signature (`ExternalCaptureSetup`, `WorkingCopy`, `AZUREAPI`), the MCMC files (`AZURECalcMCMC`, the CLI's
+  overwrite), `kinflag.dat`, `nonfinite_dump.txt`, and a file named at a menu prompt (parameter, temperature,
+  integrals file: `AZURE2.cpp`).  The output-directory check refuses an empty name as before.
+- The experiment library's `projectDir` is used for opening only (`BuildContext::ProjectPath`, `Grids.cpp`):
+  messages, `GridValues::file`, `ExtrapolationSpec::gridFile`, `StoppingSpec::tableFile` keep the written name;
+  `--describe` still prints the resolved data file, as before.  The engine passes its `baseDirectory` (so
+  `--print-predictions` and `pyazr.predictions`, which set the project up through `ReadConfigFile` as a run does,
+  read relative to the project file now).
+- pyazr: `_in_dir` and the `_Engine` wrapper are deleted; the `Session` gets the directory; a relative
+  `coulomb_table` is made absolute against it (it was the session's directory's before, through the `chdir`).
+- Unchanged, deliberately: THM tables and the prior covariance were already relative to the project file
+  (`ThmRelativePath`, `PriorCovariance::ResolvePath`); the project file and `--coulomb-table`/`AZURE_OPTIONS_FILE`
+  given on the command line are the caller's, relative to where the command is given; `pyazr.validate` and
+  `pyazr.describe`, with `--validate` and `--describe` (held to the same text by `tests/pyazr/validate_test.py`),
+  keep reading data files relative to the process's working directory: changing them changes what a public pyazr
+  function returns, a decision for the director.
+- Tests: `tests/run_from_elsewhere` (the CLI started from the parent and from an unrelated directory writes the same
+  output and checks files and reads an integrals file named at the prompt as the project's; fails on the base); `tests/pyazr/concurrent_sessions_test.py` pair R S (13N and 18O_p_a_thm
+  with their relative paths, each session also writing its output files, two threads at once).
 
 **Two defects, by a test first.**  (a) The signature of `intEC.dat` held neither whether the Coulomb table is used nor
 which file: it now holds the table's content identity (below) or "exact Coulomb functions"

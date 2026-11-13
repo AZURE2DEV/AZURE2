@@ -336,9 +336,11 @@ with the run's settings of its functions (relativistic or not, which Coulomb tab
 table, Park's shift-derivative memo and the `--no-ec-table` amplitudes belong to the run.  Two sessions may now
 evaluate at the same moment on two Python threads: `tests/pyazr/concurrent_sessions_test.py` (slow, about 11 minutes)
 runs pairs of sessions at once 20 times, and two different Coulomb table files one after another, and each gives the
-bytes of a fresh process; the engine before this step failed it.  One caution for such use: the engine reads a
-project's relative paths against the process's working directory, which pyazr sets per call, so two sessions on two
-threads need projects with absolute paths or one working directory.  What is not done: the bytes of input files kept
+bytes of a fresh process; the engine before this step failed it.  A project's relative paths (data, output,
+checks, tables, intEC.dat, files named at a prompt) are now the project file's directory's, or the directory a pyazr
+session names, never the process's working directory, and pyazr no longer changes it: two sessions in two directories
+run side by side, and the command-line program started from anywhere reads and writes the files it would read and
+write started in the project's directory (`tests/run_from_elsewhere`).  What is not done: the bytes of input files kept
 per process (moving them per session changes what `cache_stats()` counts: your decision), the pooled copies of a fit
 and of the MCMC, diagnostic counters, the MCMC's progress globals.  Every one is a row of
 `tests/consistency/allowed_state.tsv` with the step that removes it (88 rows; 10 more are permanent: constant tables

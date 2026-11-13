@@ -51,8 +51,9 @@ data — rather than waiting for the garbage collector; without it, call
    **One session per** ``azure2()`` **object, and any number of them.** Each
    ``azure2()`` owns an independent engine, so several can coexist in one
    interpreter — useful for sweeping model variants. They do not interfere:
-   each enters its own directory for the duration of a call and leaves again,
-   so your own working directory is never changed.
+   each reads and writes the model's relative paths in its own directory
+   (``cwd``, by default the ``.azr`` file's), and the process's working
+   directory is neither used nor changed.
 
    **But drive them from one thread.** The engine is not reentrant and keeps
    process-wide state. For parallelism give each *process* its own session

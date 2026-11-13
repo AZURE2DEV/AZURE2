@@ -58,8 +58,9 @@ using Block = azure2::experiment::CovarianceBlock;
 using azure2::experiment::CanonicalPath;
 
 /// Read a covariance file.  On failure returns null and writes the reason to \p err.
+/// The file and the data files it lists are relative to baseDirectory (Config::OpenPath; "" = as written).
 /// cached: read the covariance file and the data files it lists through InputFiles (Config::cacheInputFiles).
-std::shared_ptr<File> Read(const std::string &path, std::string &err, bool cached = false);
+std::shared_ptr<File> Read(const std::string &path, const std::string &baseDirectory, std::string &err, bool cached = false);
 
 /// One covariance group: the fitted points of the segments naming one file, in row order,
 /// and the whitening W of M = D^-1 C D^-1 (W^T W = M^-1).  Shared (one object) by every

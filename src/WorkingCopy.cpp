@@ -1109,7 +1109,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
     std::ifstream in;
     std::ofstream out;
     if (usePrevious) {
-      in.open(configure.integralsfile.c_str());
+      in.open(configure.OpenPath(configure.integralsfile).c_str());
       // Resume reading right after the regular-segment integrals recorded earlier.
       if (in.is_open() && ecReadPos_ > std::streampos(0)) in.seekg(ecReadPos_);
     } else {
@@ -1119,7 +1119,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       else
         outputfile = configure.outputdir + "intEC.extrap";
       // Append the component-segment integrals after the regular-segment ones.
-      out.open(outputfile.c_str(), std::ios::app);
+      out.open(configure.OpenPath(outputfile).c_str(), std::ios::app);
       if (!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
       out.precision(17);  // as the data-segment amplitudes (CalculateECAmplitudes)
       if (!(configure.paramMask & Config::USE_API))
@@ -1132,7 +1132,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       // The file is complete: record what it was computed for.  (Only when
       // CalculateECAmplitudes started it, which is what set the signature.)
       std::ofstream sig;
-      if (!ecOutputFile_.empty() && !ecSignature_.empty()) sig.open(ECSignaturePath(ecOutputFile_).c_str());
+      if (!ecOutputFile_.empty() && !ecSignature_.empty()) sig.open(configure.OpenPath(ECSignaturePath(ecOutputFile_)).c_str());
       if (sig.is_open()) {
         sig << "# External-capture integral signature for " << ecOutputFile_ << std::endl
             << "# (FNV-1a 64 of the energies, pairs and options the integrals depend on;"

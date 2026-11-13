@@ -52,7 +52,7 @@ bool AZUREParams::ReadUserParameters(const Config &configure) {
   // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
   const std::vector<std::string> projectNames =
       azure2::experiment::ParameterNamesOf(configure.project->built);
-  return ApplyUserParameterFile(configure.paramfile, configure.outStream,
+  return ApplyUserParameterFile(configure.OpenPath(configure.paramfile), configure.outStream,
                                 (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, projectNames);
 }
 
@@ -180,7 +180,7 @@ void AZUREParams::WriteUserParameters(const Config &configure, bool fitParameter
   else
     snprintf(filename, sizeof(filename), "%sparam.par", configure.outputdir.c_str());
   std::ofstream out;
-  out.open(filename);
+  out.open(configure.OpenPath(filename));
   if (out) {
     out.precision(7);
     // First line: which amplitudes the file holds (standard, Brune or Park
@@ -226,7 +226,7 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
   char filename[256];
   snprintf(filename, sizeof(filename), "%sparam.errors", configure.outputdir.c_str());
   std::ofstream out;
-  out.open(filename);
+  out.open(configure.OpenPath(filename));
   if (out) {
     out.precision(7);
     for (int i = 0; i < GetMinuitParams().Params().size(); i++) {

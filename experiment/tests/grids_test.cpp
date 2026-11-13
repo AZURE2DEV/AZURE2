@@ -122,14 +122,17 @@ int main() {
     g.unit = UnitOf("keV");
     g.frame = "cm";
     const GridValues v = ReadGridValues(g, cm);
-    check("file in keV, c.m.: three values, comments and blank lines skipped, the path as opened",
+    check("file in keV, c.m.: three values, comments and blank lines skipped, the path as written",
           v.ok && v.values.size() == 3 && Near(v.values[0], 0.1 * 13.00728 / 12) && Near(v.values[1], 0.25 * 13.00728 / 12) &&
               Near(v.values[2], 0.4 * 13.00728 / 12) && v.file == "grids_test_grid.txt");
     GridSetting elsewhere = cm;
     elsewhere.projectDir = "no_such_directory";
     const GridValues w = ReadGridValues(g, elsewhere);
-    check("file resolved in the project's directory (absent there): E_DATA_FILE",
-          !w.ok && std::string(w.code) == "E_DATA_FILE" && w.error.find("no_such_directory/grids_test_grid.txt") != std::string::npos);
+    // The file exists in the working directory, so the refusal shows that it was looked for in the project's; the
+    // message names it as the project writes it (ProjectPaths.h).
+    check("file resolved in the project's directory (absent there): E_DATA_FILE, named as written",
+          !w.ok && std::string(w.code) == "E_DATA_FILE" && w.error.find("grid file grids_test_grid.txt") != std::string::npos &&
+              w.error.find("no_such_directory") == std::string::npos);
     std::ofstream("grids_test_bad.txt") << "0.1\n0.2 0.3\n";
     g.path = "grids_test_bad.txt";
     check("file with two numbers on a line: refused", !ReadGridValues(g, cm).ok);

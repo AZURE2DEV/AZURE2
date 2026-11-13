@@ -94,7 +94,7 @@ int AZUREAPI::Initialize() {
   else
     file = configure().outputdir + "intEC.extrap";
 
-  std::ifstream in(file.c_str());
+  std::ifstream in(configure().OpenPath(file).c_str());
   if (!in)
     configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
   else
