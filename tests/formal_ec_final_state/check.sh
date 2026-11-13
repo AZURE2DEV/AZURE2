@@ -131,7 +131,9 @@ for m in A_orig A_swap; do
   gsblock "$WORK/${m}_mom/output/parameters.out" > "$WORK/${m}_mom.gs" 2>/dev/null
 done
 if grep -q "mu = *-0.3222" "$WORK/A_orig_mom.gs"; then ok "static moment, ground state first: reported as mu"; else bad "static moment, ground state first: no 'mu = -0.3222' in parameters.out"; fi
-if [ -s "$WORK/A_swap_mom.gs" ] && cmp -s "$WORK/A_orig_mom.gs" "$WORK/A_swap_mom.gs"; then ok "static moment, ground state second: same ground-state lines in parameters.out"
+# Byte-identical files without cmp (the Windows MSYS2 runner has none); gsblock has already dropped any \r.
+same_file() { [ -f "$2" ] && [ "$(cat "$1")" = "$(cat "$2")" ]; }
+if [ -s "$WORK/A_swap_mom.gs" ] && same_file "$WORK/A_orig_mom.gs" "$WORK/A_swap_mom.gs"; then ok "static moment, ground state second: same ground-state lines in parameters.out"
 else bad "static moment, ground state second: parameters.out differs ($(grep "L = " "$WORK/A_swap_mom.gs" 2>/dev/null | tail -1 | cut -c1-60))"; fi
 
 # The gamma widths REPORTED in parameters.out.  A reported width holds the internal and the external part of
