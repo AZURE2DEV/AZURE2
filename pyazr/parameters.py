@@ -202,14 +202,15 @@ class Parameter:
 
         if int(round(type_code)) == 6:
             # an isotopic abundance: Z rides in the jgroup field, A in the level
-            # field, the 1-based sample in the channel field and the prior sigma
-            # in the Wigner-limit field (AZUREAPI.h); the sample's name in the
-            # record (owner)
+            # field, the 1-based sample in the channel field, the prior centre in
+            # the level-energy field and the prior sigma in the Wigner-limit field
+            # (AZUREAPI.h); the sample's name in the record (owner)
             return cls(
                 index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
-                prior_sigma=float(wigner_limit), sample=owner.get("sample_name"),
+                prior_nominal=float(level_energy), prior_sigma=float(wigner_limit),
+                sample=owner.get("sample_name"),
                 sample_index=int(round(channel)) if channel >= 1 else None,
             )
 
@@ -279,6 +280,8 @@ class Parameter:
             parity=_opt(parity, integer=True, sentinel=0.0),
             level=_opt(level, integer=True),
             level_energy=_opt(level_energy, sentinel=0.0) if type_code in (0, 1, 13) else None,
+            # an apparatus parameter: the prior centre in the level-energy field (its sigma in the Wigner-limit one)
+            prior_nominal=float(level_energy) if code == 12 else None,
             channel=_opt(channel, integer=True),
             L=_opt(L, integer=True),
             S=_opt(S),

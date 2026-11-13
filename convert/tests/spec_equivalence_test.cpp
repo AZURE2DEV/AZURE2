@@ -256,14 +256,14 @@ void CompareDatasets(const std::vector<DatasetSpec> &a, const std::vector<Datase
       if (!(x.reaction.thm && x.varyNorm)) {
         Bits(w + " norm", x.norm, y.norm);
         Bits(w + " norm error (%)", x.normError, y.normError);
-        Bits(w + " norm prior centre", x.hasNormCentre ? x.normCentre : x.norm, y.hasNormCentre ? y.normCentre : y.norm);
+        Bits(w + " norm prior centre", x.normCentre.Or(x.norm), y.normCentre.Or(y.norm));
       }
     }
     if (shiftLeaders.count(x.key)) {
       Bits(w + " shift", x.energyShift, y.energyShift);
       Eq(w + " vary shift", x.varyEnergyShift, y.varyEnergyShift);
       if (x.varyEnergyShift) Bits(w + " shift error", x.energyShiftError, y.energyShiftError);  // a fixed shift pays no prior
-      Bits(w + " shift prior centre", x.hasShiftCentre ? x.shiftCentre : 0.0, y.hasShiftCentre ? y.shiftCentre : 0.0);
+      Bits(w + " shift prior centre", x.shiftCentre.Or(0.0), y.shiftCentre.Or(0.0));
     }
     if (x.thicknessFit && thicknessLeaders.count(x.key)) {
       Eq(w + " thickness vary", x.thicknessVary, y.thicknessVary);

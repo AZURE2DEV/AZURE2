@@ -339,17 +339,17 @@ int main() {
       check("d1: key 1, pairs 1 -> 2, cross section", d1.key == 1 && d1.reaction.entranceKey == 1 && d1.reaction.exitKey == 2 &&
                                                          d1.reaction.observable == Observable::CrossSection);
       check("d1: energy window 0.2 .. 1.4 MeV", d1.minE == 0.2 && d1.maxE == 1.4);
-      check("d1: norm 1 fit, 5 %, centred on the value", d1.norm == 1.0 && d1.varyNorm && d1.normError == 5.0 && !d1.hasNormCentre);
+      check("d1: norm 1 fit, 5 %, centred on the value", d1.norm == 1.0 && d1.varyNorm && d1.normError == 5.0 && !d1.normCentre.written);
       check("d2: [4.439] matches 4.43891 (pair 3); a sum with a scaled term at 90 deg", d2.reaction.exitKey == 3 &&
                 d2.reaction.combination == ReactionSpec::Combination::Sum && d2.reaction.components.size() == 1 &&
                 d2.reaction.components[0].entranceKey == 4 && d2.reaction.components[0].exitKey == 2 &&
                 d2.reaction.components[0].scaling == 2.0 && d2.reaction.components[0].hasAngle &&
                 d2.reaction.components[0].angle == 90.0);
       check("d2, d4: the shared normalization D's values and label", d2.normGroup == "D" && d4.normGroup == "D" && d2.norm == 1.1 &&
-                                                                         d2.normError == 8.0 && d2.hasNormCentre && d2.normCentre == 1.0);
+                                                                         d2.normError == 8.0 && d2.normCentre.written && d2.normCentre.value == 1.0);
       check("d3: theta_cm -> differential c.m.; the shift offset with its prior centre",
             d3.reaction.observable == Observable::DifferentialCM && d3.energyShift == 0.001 && d3.varyEnergyShift &&
-                d3.energyShiftError == 0.003 && d3.hasShiftCentre && d3.shiftCentre == 0.002);
+                d3.energyShiftError == 0.003 && d3.shiftCentre.written && d3.shiftCentre.value == 0.002);
       check("d4: entrance_pair 6 picks the second d+12C pair", d4.reaction.entranceKey == 6 && d4.reaction.exitKey == 6);
       const DatasetSpec &d5 = b.data.datasets.items[4].spec;
       check("d5: THM experiment LC, profiled norm", d5.reaction.thm && d5.varyNorm && b.thm.experiments.size() == 1 &&

@@ -44,7 +44,7 @@ struct CompoundNucleus {
 /// The isotopic abundance of one compound nucleus's target in one sample.
 struct SampleAbundance {
   double abundance = 1.0;   ///< current value (a fit parameter when vary is set)
-  double nominal = 1.0;     ///< value read from the file, centre of the prior
+  double nominal = 1.0;     ///< the centre of the prior as written, else the value read (parameter_kinds.md section 4)
   double sigma = 0.0;       ///< prior width; 0 = no prior
   bool vary = false;
   bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
@@ -61,6 +61,7 @@ struct AbundanceSample {
   std::string name;                      ///< "" for the unnamed sample
   std::vector<SampleAbundance> entries;   ///< index nucleus-1
   double sumSigma = -1.0;                ///< < 0: use the config's abundanceSumSigma
+  double sumCentre = 1.0;                ///< the centre of the sum-to-one prior: as written, else 1
 };
 
 class CNuc {
@@ -117,7 +118,7 @@ class CNuc {
   double SampleSumSigma(int sample, double globalSumSigma) const;
   /// The abundance penalty added to chi-squared, summed over samples: every
   /// entry with a prior contributes ((w - w0)/sigma)^2, and each sample whose
-  /// width s is > 0 contributes ((sum w) - 1)^2 / s^2.
+  /// width s is > 0 contributes ((sum w) - c)^2 / s^2, c its centre (1 unless written).
   double AbundancePenalty(double globalSumSigma) const;
   double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
   /// Does a pair with this key exist? Keys are what the input files write; the

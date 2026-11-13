@@ -93,6 +93,7 @@ Segment::Segment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(
   varyEnergyShift_ = spec.varyEnergyShift;
   startEnergyShiftSqrt_ = spec.energyShiftSqrt;
   energyShiftSqrtError_ = spec.energyShiftSqrtError;
+  energyShiftSqrtCentre_ = spec.shiftSqrtCentre.Or(0.0);
   varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
   shiftGroup_ = spec.shiftGroup;
   shiftLeaderPos_ = -1;
@@ -104,6 +105,9 @@ Segment::Segment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(
   shiftFnDeclared_ = spec.shiftFunction;
   shiftFnNominal_ = spec.shiftFunctionValues;
   shiftFnError_ = spec.shiftFunctionErrors;
+  shiftFnCentre_.assign(spec.shiftFunctionValues.size(), 0.0);
+  for (size_t j = 0; j < spec.shiftFunctionCentres.size() && j < shiftFnCentre_.size(); j++)
+    shiftFnCentre_[j] = spec.shiftFunctionCentres[j].Or(0.0);
   shiftFnVary_ = spec.shiftFunctionVary;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
@@ -113,6 +117,7 @@ Segment::Segment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(
   thicknessFit_ = spec.thicknessFit;
   thicknessVary_ = spec.thicknessVary ? 1 : 0;
   thicknessSigma_ = spec.thicknessSigma;
+  thicknessCentre_ = spec.thicknessCentre.Or(GetNominalThickness());
   thicknessGroup_ = spec.thicknessGroup;
   isUPOS_ = spec.upos;
   secondaryDecayL_ = spec.secondaryDecayL;

@@ -117,7 +117,7 @@ class AZUREAPI {
    *                    6=isotopic abundance of a compound nucleus (only in a
    *                      project with an <abundances> block): its Z in field 1
    *                      and A in field 4, the 1-based sample in field 6, the
-   *                      prior sigma in field 14
+   *                      prior centre in field 5, the prior sigma in field 14
    *                    7=electron-screening potential U_e (eV) of a target
    *                      with a screening field: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
@@ -133,7 +133,7 @@ class AZUREAPI {
    *                   10=fitted sample thickness (atoms/barn) of a data
    *                      segment with 'transmission n vary sigma' or
    *                      'yield n vary sigma': the segment key in field 13,
-   *                      n (prior centre) in field 5, sigma in field 14
+   *                      the prior centre in field 5, sigma in field 14
    *                      (0 = none, and for a thicknessgroup follower),
    *                      0 transmission / 1 yield in field 6, the group
    *                      leader's key in field 7 for a follower (else -1)

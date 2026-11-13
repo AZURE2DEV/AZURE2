@@ -436,13 +436,15 @@ int CNuc::SetAbundances(const Config &configure, const azure2::experiment::Abund
   for (const azure2::experiment::AbundanceRowSpec &row : specs.abundances.rows) {
     if (row.isSum) {
       sampleOf(row.sample).sumSigma = row.sumSigma;
+      sampleOf(row.sample).sumCentre = row.sumCentre.Or(1.0);
       continue;
     }
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
       if (nuclei_[i].Z != row.z || nuclei_[i].A != row.a) continue;
       SampleAbundance &e = sampleOf(row.sample).entries[i];
-      e.abundance = e.nominal = row.value;
+      e.abundance = row.value;
+      e.nominal = row.centre.Or(row.value);  // the prior's centre as written (parameter_kinds.md section 4)
       e.vary = row.vary;
       e.sigma = row.sigma;
       e.isotope = row.isotope;
@@ -509,7 +511,7 @@ double CNuc::AbundancePenalty(double globalSumSigma) const {
       if (e.sigma > 0.0 && !e.priorReplaced) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
     }
     const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
   }
   return penalty;
 }
@@ -525,7 +527,7 @@ double CNuc::AbundanceSumPenalty(double globalSumSigma) const {
   double penalty = 0.0;
   for (unsigned int s = 0; s < samples_.size(); s++) {
     const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
   }
   return penalty;
 }
