@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-objective`) — pyazr: `Objective`, `Evaluation`, three recipes
+
+**Done** (beside today's methods; nothing removed; design and as built: `pyazr3.md` section 7).
+- `azure2.fit_objective()` → `pyazr.Objective`: `f(x)` (= `objective(x)` bit for bit), `grad`, `value_and_grad`,
+  `residuals`/`jacobian` (the objective as rows, `sum(r**2) == f(x)`: today's residual rows, then Park's wall, the
+  `gamma_decay` rows, the abundance sums, the diagonal and nuisance priors; `AZUREAPI::ObjectiveRowsRWA`),
+  `log_prob` (the engine sampler's rule: -f/2, -inf outside the limits of a kind with `samplerSupport` and where Park's
+  J < 0; `AZUREAPI::LogProbabilityRWA`), `x0`, `names`, `bounds`, `sampler_support` (a new record field), `errordef`.
+- `azure2.evaluate(x)` → `pyazr.Evaluation` from one evaluation (`AZUREAPI::EvaluateObjectiveRWA`,
+  `api/src/pybind_evaluation.cpp`): `objective`, `chi2` (`Total-Chi-Squared`), `terms` (the engine's term names),
+  `data[i]` (the row of `chiSquared.out`, norm and shift priors, energies, angles, model, datum, residuals, `extra`
+  from the binding's table of point outputs, `kinds()["data_outputs"]`), `model_data`, `log_prob`, `table()`.
+- Calls of both objects take a per-session lock (without it two threads crash the process: segmentation fault).
+- Examples `fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (rewritten on `log_prob`, a spawned pool, one session per
+  worker).  User guide section "The objective and the evaluation"; `mcmc.rst`; `pyazr/CLAUDE.md` recipe.
+- 293.94 against 297.86 on the fitted T2: the data χ² (`Total-Chi-Squared`, `Evaluation.chi2`) against the
+  objective (the program's printed `Total Chi-Squared`, `Evaluation.objective`); the difference is the priors.
+
+**Verified**: see the branch's last commit message and the report (tests `pyazr_objective_object`,
+`pyazr_evaluation`, `pyazr_fit_recipes` (slow), each check shown to fail with an injected error).
+
+**Open.**
+- `pyazr_ui_routes_consistency` fails: `fit_objective` is a new public name of the session and `pyazr/ui` (not this
+  branch's) neither calls it nor lists it in `AZURE2_NOT_SERVED`; `web_ui.md` section 12 lists the calls to move to.
+- The program's MIGRAD on T2 stops 9.1e-4 above the minimum scipy's least_squares and L-BFGS-B find (297.8594).
+- Today's session methods are not safe from two threads on one session (they take no lock).
+- Not done: the dense model line (finding 21), the σ and S columns as the writer forms them, read-only views.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler on the fit's objective, its state
 
 **Measured first** (`docs/upgrade/objective.md` section 6, with the table term by term and line numbers): at the

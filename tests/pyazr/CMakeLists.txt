@@ -960,6 +960,12 @@ set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
 set_tests_properties(pyazr_evaluation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# The three fit recipes of pyazr/examples (scipy, iminuit, emcee) on pyazr's Objective: T2 to the program's own MIGRAD
+# minimum, a short emcee chain inside the support, the same with a pool of two worker processes (one thread each).
+add_test(NAME pyazr_fit_recipes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_recipes_test.py)
+set_tests_properties(pyazr_fit_recipes PROPERTIES LABELS slow PROCESSORS 2
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

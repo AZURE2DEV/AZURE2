@@ -1,55 +1,91 @@
-"""Sample an AZURE2 R-matrix model with emcee."""
+"""Sample the posterior of a project with emcee on the engine's objective, ``pyazr.Objective.log_prob``.
+
+``log_prob(x) = -0.5 * objective(x)``: the data chi-squared and every prior and constraint of the project, the
+same terms the program's fit minimises and the program's own sampler takes (docs/upgrade/objective.md section 6),
+without its normalisation constant; ``-inf`` where the program's sampler puts zero probability (outside the bounds
+of a parameter whose record has ``sampler_support``, a ``gamma_decay`` record's numbers; Park's J < 0).  Flat in x
+elsewhere.  For walls at every bound, wrap it:
+``lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf``.
+
+A session cannot be pickled and is not shared between processes: with a pool, every worker opens its own session
+(``_open`` as the pool's initializer) and the walkers' points travel as arrays.  One thread per worker
+(``OMP_NUM_THREADS=1``) keeps processes x threads within the machine.
+
+    python fit_emcee.py path/to/project.azr [walkers steps processes]
+"""
 import os
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+import sys
 
-import emcee
 import numpy as np
-from scipy import stats
-from multiprocess import Pool
 
-from pyazr import azure2
+import pyazr
 
-NPROCS, NSTEPS = 8, 5000
-
-# One engine per worker process.  Building it at module scope is what makes
-# that happen either way a Pool starts: under "spawn" each worker re-imports
-# this module and constructs its own, under "fork" each inherits a copy.  The
-# engine is not thread-safe, so process-level parallelism is the only kind.
-azr = azure2("13N.azr")
-best = np.asarray(azr.params_rwa, float)
-ndim = len(best)
-nwalkers = 2 * ndim
-
-# one prior per free parameter, chosen from its kind
-sys_err = azr.datasets.sys_errors(vary_only=True)
-priors, k = [], 0
-for p in azr.parameters:
-    if p.fixed:
-        continue
-    if p.kind == "energy":
-        priors.append(stats.norm(p.value, 0.05))
-    elif p.kind == "norm":
-        se = sys_err[k]; k += 1
-        priors.append(stats.norm(1, se) if se > 0 else stats.uniform(0, 10))
-    elif p.kind == "shift":
-        priors.append(stats.norm(0, 0.01))
-    else:                                          # reduced width
-        priors.append(stats.uniform(-1e6, 2e6))
-
-offset = sum(np.sum(np.log(2 * np.pi * e ** 2)) for e in azr.cross_err)
+_objective = None  # this process's Objective (a pool worker's, or the main process's)
 
 
-def log_prob(theta):
-    lp = np.sum([pr.logpdf(t) for pr, t in zip(priors, theta)])
-    if not np.isfinite(lp):
-        return -np.inf
-    chi2 = np.sum(azr.calculate_chi2_rwa(theta))
-    return -0.5 * (chi2 + offset) + lp
+def _open(path, threads):
+    """A pool worker's initializer: its own session and Objective."""
+    global _objective
+    os.environ["OMP_NUM_THREADS"] = str(threads)
+    _objective = pyazr.azure2(path).fit_objective()
+
+
+def log_prob(x):
+    """ln P of this process's Objective (a module-level function: a pool sends its name, not a session)."""
+    return _objective.log_prob(x)
+
+
+def start(f, nwalkers, spread, rng):
+    """Walkers around x0 (relative spread), each redrawn until log_prob is finite (inside the support)."""
+    x0 = f.x0
+    width = spread * np.where(x0 != 0.0, np.abs(x0), 1.0)
+    p0 = np.empty((nwalkers, len(x0)))
+    for k in range(nwalkers):
+        for _ in range(100):
+            p0[k] = x0 + width * rng.standard_normal(len(x0))
+            if np.isfinite(f.log_prob(p0[k])):
+                break
+        else:
+            raise RuntimeError(f"no start inside the support near x0 for walker {k}; make the spread smaller")
+    return p0
+
+
+def sample(path, nwalkers=None, nsteps=100, spread=1e-3, seed=1, processes=0, threads=1):
+    """A chain of ``nsteps`` steps; ``processes`` > 0 samples in a pool of that many workers (one session each).
+    Returns the emcee sampler (``get_chain()``, ``get_log_prob()``) and the parameters' names."""
+    import emcee
+    global _objective
+    _objective = pyazr.azure2(path).fit_objective()
+    f = _objective
+    ndim = len(f.x0)
+    nwalkers = nwalkers or 2 * ndim + 2
+    rng = np.random.default_rng(seed)
+    p0 = start(f, nwalkers, spread, rng)
+    state = np.random.RandomState(seed).get_state()  # emcee's own draws, fixed by the seed
+    if processes:
+        import multiprocessing
+        context = multiprocessing.get_context("spawn")  # a fresh interpreter per worker, no OpenMP state forked
+        with context.Pool(processes, initializer=_open, initargs=(os.path.abspath(path), threads)) as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob, pool=pool)
+            sampler.random_state = state
+            sampler.run_mcmc(p0, nsteps)
+    else:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, f.log_prob)
+        sampler.random_state = state
+        sampler.run_mcmc(p0, nsteps)
+    return sampler, f.names
+
+
+def main(path, nwalkers=None, nsteps=200, processes=2):
+    sampler, names = sample(path, nwalkers, nsteps, processes=processes)
+    chain = sampler.get_chain(discard=nsteps // 2, flat=True)
+    for name, column in zip(names, chain.T):
+        print(f"  {name:<24} {np.mean(column):14.7g} +- {np.std(column):.3g}")
+    print(f"acceptance {np.mean(sampler.acceptance_fraction):.2f}")
+    np.save("chain.npy", sampler.get_chain())
+    return sampler
 
 
 if __name__ == "__main__":
-    p0 = best + 1e-4 * np.abs(best) * np.random.randn(nwalkers, ndim)
-    with Pool(NPROCS) as pool:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob, pool=pool)
-        sampler.run_mcmc(p0, NSTEPS, progress=True)
-    np.save("chain.npy", sampler.get_chain())
+    args = sys.argv[1:]
+    main(args[0] if args else "T2.azr", *(int(a) for a in args[1:4]))

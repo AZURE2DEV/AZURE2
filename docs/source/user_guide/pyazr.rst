@@ -398,6 +398,56 @@ positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
    reaching a χ² that AZURE2 would never find. Append the penalty rows — see
    :doc:`chi_squared` and ``pyazr/examples/`` for the recipe.
 
+The objective and the evaluation
+--------------------------------
+
+Two objects hold what a fit and a calculation need, every number from the engine.
+
+``s.fit_objective()`` returns a :class:`pyazr.Objective`: the objective the program's fit minimises (the data χ²
+and every prior and constraint) as one callable on the free vector ``x``, in the basis the session fits in.
+``f(x)`` is ``s.objective(x)`` bit for bit; ``f.grad(x)`` and ``f.value_and_grad(x)`` its gradient;
+``f.residuals(x)`` and ``f.jacobian(x)`` the objective as least-squares rows, ``sum(f.residuals(x)**2) == f(x)``
+(the data rows, then one row per prior and constraint); ``f.log_prob(x)`` is ``-0.5 * f(x)``, ``-inf`` where the
+program's sampler puts zero probability (outside the bounds of a parameter whose record has ``sampler_support``,
+today a ``gamma_decay`` record's numbers, and where Park's overlap J of a level is negative); ``f.x0``, ``f.names``,
+``f.bounds`` and ``f.errordef`` (1) for the minimiser.  Calls from several threads on one session run one after the
+other.
+
+``s.evaluate(x)`` returns a :class:`pyazr.Evaluation` from one engine evaluation: ``objective``; ``chi2``, the data
+χ² (``Total-Chi-Squared`` of ``chiSquared.out``); ``terms``, each term of the engine's objective by its name;
+``data[i]`` per data set with ``model``, ``residuals``, ``chi2`` (its row of ``chiSquared.out``), ``norm``,
+``energies``, ``angles``, ``values``, ``errors`` and ``extra`` (the lab energy and angle, the S-factor conversion,
+the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_outputs"]``); ``model_data``;
+``table()``.  ``ev.objective - ev.chi2`` are the priors: on the fitted T2 the objective is 297.86, the data χ² 293.94.
+
+.. code-block:: python
+
+   s = pyazr.azure2("T2.azr")
+   f = s.fit_objective()
+
+   # scipy: the gradient, or the rows and their Jacobian (pyazr/examples/fit_scipy.py)
+   r = scipy.optimize.minimize(f.value_and_grad, f.x0, jac=True, bounds=f.bounds, method="L-BFGS-B")
+   q = scipy.optimize.least_squares(f.residuals, f.x0, jac=f.jacobian, x_scale="jac")
+
+   # iminuit: MIGRAD and HESSE (pyazr/examples/fit_iminuit.py)
+   m = iminuit.Minuit(f, f.x0, grad=f.grad, name=f.names)
+   m.limits = f.bounds
+   m.migrad(); m.hesse()
+
+   # emcee: log_prob; with a pool, one session per worker (pyazr/examples/fit_emcee.py)
+   sampler = emcee.EnsembleSampler(nwalkers, len(f.x0), f.log_prob)
+
+   ev = s.evaluate(np.array(m.values))
+   print(ev.terms)
+   print(ev.table(0))
+
+The parameters of a project differ in scale by many orders (an areal density in atoms/cm² beside a width in
+MeV\ :sup:`1/2`): ``fit_scipy.py`` runs L-BFGS-B on ``x`` divided by ``|x0|``.  The three recipes are tested
+(``tests/pyazr/fit_recipes_test.py``): on T2, iminuit's MIGRAD and both scipy recipes reach the program's own
+MIGRAD minimum (iminuit to 1e-6; the scipy recipes go 3e-6 below it, where the program's
+MIGRAD stops early).  For walls at every bound in a sampler, wrap ``log_prob`` in one line:
+``lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -np.inf``.
+
 Editing the model
 -----------------
 
@@ -1302,8 +1352,12 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``sensitivities.py``
      - Which parameters a dataset constrains, as d ln σ / d ln p; and the
        analytic sensitivities checked against finite differences.
+   * - ``fit_scipy.py``
+     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
+   * - ``fit_iminuit.py``
+     - MIGRAD and HESSE of iminuit on ``Objective``.
    * - ``fit_emcee.py``
-     - MCMC sampling with ``emcee``, one in-process engine per pool worker.
+     - MCMC sampling with ``emcee`` on ``Objective.log_prob``, one session per pool worker.
    * - ``fit_zeus.py``
      - The same with ``zeus``.
    * - ``angular_distribution.py``
@@ -1339,10 +1393,13 @@ evaluates one χ² per walker:
    # worker module
    azr = azure2("13N.azr")
 
-   def log_prob(theta):
-       return -0.5 * np.sum(azr.calculate_chi2_rwa(theta)) + prior(theta)
+   f = azr.fit_objective()
 
-See ``pyazr/examples/fit_emcee.py`` and ``fit_zeus.py`` for the full recipe.
+   def log_prob(theta):
+       return f.log_prob(theta)
+
+See ``pyazr/examples/fit_emcee.py`` for the full recipe (``fit_zeus.py`` is the older pattern with
+``calculate_chi2_rwa`` and priors of its own).
 
 Inside one session the engine uses threads: every evaluation (``calculate_chi2_rwa``,
 ``calculate_chi2``, ``calculate_rwa``, ``calculate``, ``calculate_all_rwa``) spreads

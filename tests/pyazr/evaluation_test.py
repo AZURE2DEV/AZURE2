@@ -8,6 +8,8 @@
   the engine's names) equal to the digits the program prints.
 - AZUREOut_*: every data set's block (c.m. energy, excitation energy, c.m. angle, model, datum x norm, error x norm;
   the Legendre coefficients of an angular distribution) to the eleven digits printed.
+- T2 at a displaced point (norms and shifts off their centres): the rows and totals of the chiSquared.out the
+  session's writer (write_output_files) gives at that point.
 - The objective is azure2.objective(x) bit for bit and the sum of the terms; Evaluation.chi2 plus the model terms
   (Park, abundances, model data) is calculate_chi2_rwa(x); the model data are pyazr.model_data's (T3).
 - One evaluation per Evaluation: an evaluate(x) takes the time of one objective(x) (13N; the engine's
@@ -153,12 +155,13 @@ with tempfile.TemporaryDirectory() as tmp:
         for label, term in TOTAL_TERMS.items():
             if label in totals:
                 digits = 15 if "Prior-Covariance" in label else 6
-                check(f"{name}: {label} {totals[label]} = terms[{term!r}]", printed(ev.terms[term], totals[label], digits),
-                      ev.terms[term])
+                check(f"{name}: {label} {totals[label]} = terms[{term!r}]",
+                      printed(ev.terms[term], totals[label], digits), ev.terms[term])
         found = blocks(program)
         missing = [d.name for d in ev.data if not any(matches(d, b) for _, b in found)]
         check(f"{name}: every data set's arrays are a block of the program's AZUREOut_* files", not missing, missing)
-        check(f"{name}: objective = azure2.objective(x) bit for bit ({ev.objective:.10g})", ev.objective == s.objective(x))
+        check(f"{name}: objective = azure2.objective(x) bit for bit ({ev.objective:.10g})",
+              ev.objective == s.objective(x))
         total = sum(ev.terms.values())
         check(f"{name}: the terms add up to the objective", abs(total - ev.objective) <= 1e-12 * max(1, ev.objective))
         model_terms = ev.terms["Park J > 0"] + ev.terms["abundances"] + ev.terms["model data"]
@@ -166,6 +169,19 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"{name}: chi2 + the model terms = calculate_chi2_rwa(x) ({old:.10g})",
               abs(ev.chi2 + model_terms - old) <= 1e-12 * max(1, old))
         if name == "T2":
+            # away from the start (norms and shifts off their centres): the writer's chiSquared.out at that x
+            xd = np.array([v * (1.0 + 0.02 * (1 if k % 2 else -1)) for k, v in enumerate(x)])
+            evd = s.evaluate(xd)
+            out = s.write_output_files(xd)
+            rows_d, totals_d = chi_squared_file(out)
+            bad = [d.name for d, r in zip(evd.data, rows_d)
+                   if not (printed(d.chi2, r[0]) and printed(d.norm, r[2]) and printed(d.norm_chi2, r[3]))]
+            check("T2 displaced: every row is the writer's chiSquared.out at that x (norm priors non-zero: "
+                  f"{sum(d.norm_chi2 for d in evd.data):.4g})", not bad and sum(d.norm_chi2 for d in evd.data) > 0, bad)
+            check("T2 displaced: Total-Chi-Squared, Total-Norm-, Total-Shift-Chi-Squared",
+                  printed(evd.chi2, totals_d["Total-Chi-Squared:"])
+                  and printed(sum(d.norm_chi2 for d in evd.data), totals_d["Total-Norm-Chi-Squared:"])
+                  and printed(sum(d.shift_chi2 for d in evd.data), totals_d["Total-Shift-Chi-Squared:"]))
             check("T2: data sets have the lab energy, conversion and no Legendre list",
                   all("energy_lab" in d.extra and "sfactor_conversion" in d.extra for d in ev.data))
         if name == "T3":

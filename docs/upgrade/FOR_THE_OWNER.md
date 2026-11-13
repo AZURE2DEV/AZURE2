@@ -133,6 +133,13 @@ The engine's physics functions (penetrability, shift, Coulomb and Whittaker func
 are `pyazr.physics.<name>` on numpy arrays, each a row of one table in the binding (`api/src/pybind_physics.cpp`)
 that states its arguments, units and domain; a new one is a row and a test.
 
+A fit or a sampler in Python starts from `f = s.fit_objective()`: the objective the program's fit minimises as one
+callable, with its gradient, its least-squares rows and Jacobian, its bounds and `log_prob` (the rule of the
+program's own sampler), so scipy, iminuit and emcee each take it in a line (`pyazr/examples/fit_*.py`; on T2
+iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives every number of `chiSquared.out` and
+`AZUREOut_*` at x from one evaluation: the objective, the data χ², each term of the objective by its name in
+`src/Objective.cpp`, and each data set's model, residuals and χ².
+
 **Structure.**
 
 - What an evaluation computes lives in a buffer the caller owns, not in the data points; the model's prediction for

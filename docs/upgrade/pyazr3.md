@@ -869,3 +869,50 @@ a central difference; `log_prob` inside and at the excluded points, and against 
 `tests/pyazr/evaluation_test.py` (against the program's `chiSquared.out` and `AZUREOut_*` on T1, T2, T3; one
 evaluation per `Evaluation`), `tests/pyazr/fit_recipes_test.py` (the three recipes; iminuit and emcee skip without
 the package).
+
+### 7.2 As built
+
+As designed (7.1), with these differences and numbers.
+
+- Files: `api/src/AZUREAPIObjective.cpp` (`EvaluateObjectiveRWA`, `ObjectiveRowsRWA`, `OutsideSamplerSupport`,
+  `LogProbabilityRWA`), `api/src/pybind_evaluation.cpp` (`Session.evaluation_rwa`, `objective_rows_rwa`,
+  `log_prob_rwa`, `objective_term_names`, `sampler_log_probability`; `_azure2.point_output_fields`), the record field
+  `sampler_support` (`pybind_records.cpp`), `pyazr/objective.py`, `pyazr/evaluate.py`, two entry methods of
+  `azure2` (`fit_objective`, `evaluate`), `kinds()["data_outputs"]` and `kinds()["objects"]`, the examples
+  `fit_scipy.py`, `fit_iminuit.py` and `fit_emcee.py` (rewritten on `log_prob`).  pyazr 3.0.0.dev3.
+- `Session.sampler_log_probability(x0, x)` binds the engine's sampler (`AZURECalcMCMC`, set up as the program sets
+  it up at x0) in about 20 lines, so the test ties `log_prob` to it: equal to the sampler's ln P minus its constant
+  on the `gamma_decay` record with priors and on T2, at the start and at a displaced point (1e-10).
+- Without the session's lock, two threads calling one `Objective` crash the process (segmentation fault, shown
+  with the lock removed); with it, each gets its values alone bit for bit.  Today's methods do not take it.
+- One evaluation per `Evaluation`, measured on 13N: 20.4 ms against 20.0 ms for one `objective(x)` (a second
+  evaluation injected: 42.0 ms).  The engine's Coulomb-function counters (`cache_stats`) stay at zero when the
+  Coulomb table serves the functions, so they cannot count evaluations.
+- The recipes on T2 from its start (one thread): iminuit's MIGRAD 297.86032061 in 113 calls and 19 gradients
+  (HESSE brings the calls to 417), the program's MIGRAD 297.860308551; scipy's least_squares on the rows 297.859396915
+  in 8 evaluations; L-BFGS-B 297.859396915 in 35 evaluations, on x divided by the inverse length of each Jacobian
+  column (on x / |x0| it stood at 521 after 250 evaluations).  The program's MIGRAD stops 9.1e-4 (3.1e-6 relative)
+  above the minimum both scipy recipes agree on to 2e-11; its gradient at the program's point is not small (91 in an
+  energy, 65 in a width).  The test asks iminuit for the program's minimum to 1e-6 and scipy for that or lower.
+- emcee: 8 walkers x 60 steps on the record (three free branchings, one under a prior centred at -0.01) stay in
+  [0, 1]; the same seed gives the same chain, and a pool of two worker processes (spawned, one session each) the
+  same chain as one process.
+
+**Extensibility, before and after this step** (the places that must know):
+
+- A new term of the objective.  Before: `src/Objective.cpp` (the class and its place in the list), the key of
+  `azure2.penalties()` (`pyazr/azure2.py`, a hand-written map of names), the writer's `Total-` field
+  (`src/DataOutputFiles.cpp`), its least-squares rows where the drivers need them (`AppendModelRows`), its gradient.
+  After, for pyazr: `src/Objective.cpp` only; it appears in `Evaluation.terms` and in `Objective(x)`.  Its rows, if it
+  is a sum of squares, are one call in `ObjectiveRowsRWA` (`api/src/AZUREAPIObjective.cpp`; the test of
+  `sum(r**2) == f(x)` fails without them), its gradient in the engine's gradient paths as before.
+- A new data kind with two extra output columns.  Before: the quantity row (`experiment/Quantities.cpp`), arrays in
+  `AZUREAPI::ReportSegments`, two bindings (`calculated_*`), a method per shape in `azure2.py`.  After: the quantity
+  row and two rows of `PointOutputs()` (`api/src/pybind_evaluation.cpp`); nothing in `pyazr/`.
+- A new field of `Evaluation`.  Before: a new session method (`azure2.py`) and its binding.  After: one entry of the
+  dict of `EvaluationDict` (`pybind_evaluation.cpp`), its attribute and its `FIELDS` line in `pyazr/evaluate.py`.
+
+Not shown by a build: a term added to `src/Objective.cpp` reaching `Evaluation.terms` (the names come from
+`ObjectiveTermNames`, the engine's list, read at each evaluation; the evaluation test reads every term by its
+engine name).  Not done (left for later): the dense model line of a data set (finding 21), the σ and S columns
+as the writer forms them (`SigmaAndS`), read-only views.

@@ -1151,6 +1151,26 @@ Found while building the Results tab (step 3):
     modified S factor's shape) and the normalized datum as arrays of the evaluation: the adapter forms datum × norm
     and × conversion itself for cross sections only, as the program does.
 
+**Delivered by pyazr's `Objective` and `Evaluation`** (`pyazr3.md` section 7; 2026-11-13).  Closed: finding 5
+(`Evaluation.data[i].chi2` is the row of `chiSquared.out`, data covariance by its per-set partition), finding 22
+(`data[i].extra["energy_lab"]`, `["angle_lab"]`), the sampler's part of 20 (`Objective.log_prob`, the engine
+sampler's rule, and a pool recipe in `pyazr/examples/fit_emcee.py`).  Partly: 23 (`extra["sfactor_conversion"]`
+per point; the σ and S columns as the writer forms them, `SigmaAndS`, are not served yet), 14 (`extra["legendre"]`
+gives each point's coefficients, not the order of a datum).  Open: 21 (the dense model line), bands, the rest.
+The calls the server should make instead of today's (`pyazr/ui/engine.py`, not changed by that step):
+- `Engine.evaluate` (`objective_terms_rwa`, `calculate_chi2_rwa`, `write_output_files` and a parse of
+  `chiSquared.out`) → `ev = s.evaluate(x)`: `ev.objective`, `ev.chi2`, `ev.terms`, per data set `d.chi2`, `d.n`,
+  `d.norm`, `d.norm_chi2` (the files are then needed only for the Outputs route);
+- `Engine._dataset_arrays` (`segment_norms`, `segment_chi2`, `residuals`, `calculate_rwa`, `calculated_*`, `cross`)
+  → the same `ev.data[i]`: `energies`, `excitation_energies`, `angles`, `model`, `values`, `errors`, `norm`,
+  `residuals` (plain pulls, not whitened: the `RESIDUAL` text changes; their squares add up to `d.chi2` except where
+  a data covariance joins sets), `extra`; the S factor from `extra["sfactor_conversion"]` as today;
+- `model_data(self.s, x)` → `ev.model_data`;
+- `open_objective` (`objective_and_grad`, `params_rwa`, `_free_names`) → `f = s.fit_objective()`:
+  `f.value_and_grad`, `f.x0`, `f.names`, `f.bounds`; a sampler job on `f.log_prob`;
+- `AZURE2_NOT_SERVED` (or a call): `fit_objective` is a public name of the session now, so
+  `tests/pyazr/ui/routes_consistency_test.py` fails until the server calls it or lists it (one entry).
+
 Smaller, in the parity list: an empty format-3 project (`Project.new` needs a source); the screening potential's
 adiabatic limit from electron binding energies; Gaussian priors on level parameters for the sampler (records carry
 priors of nuisances only).
