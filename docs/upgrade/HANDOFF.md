@@ -31,6 +31,18 @@ quadrature of the wider planned support; T2_true.azr 0.21 %, chi2 330.425 -> 330
 narrow_const, narrow_sqrt, shiftfn, sqrt (-0.89 to -0.97 %); new files of the new models.  T2 fits: chi2 297.568 ->
 297.860, shifts within 0.1 sigma, fewer evaluations.  Instruction counts within 0.2 % (T2_true -1.4 %).
 
+**Re-baselined** (commit of its own): `tests/upgrade/golden/T2/calc_truth` (AZUREOut R=2, chiSquared) and
+`tests/convert_params/expected/chi2_renamed` 293.675 -> 293.977, both T2 at non-zero shifts.
+
+**Verified by the agent** (build `work/b-truestop`, 0 warnings): all projects x 3 bases against `tab-gridm-1` (tag
+`truestop-full1`, 805 / 778 / 805 identical; the differing files are those of T2 and shift_sqrt_subpoints named above,
+plus the new projects' files); converted-tree gate `gtruestop1` 613 / 586 / 613 identical, 15 per basis differ, all of
+T2 and shift_sqrt_subpoints; `ctest -LE slow` 219/220 on the first commit (`upgrade_predictions`, regenerated in the
+second commit, then passes); `tests/run_tests.sh` 159/161 before the re-baselining (convert_params, upgrade T1-T3's
+calc_truth; both pass after it); 1 against 3 threads identical (T1, T2, T2_true, T3, 13N, narrow_sqrt, shiftfn, the
+identity model; 3 bases); fits (T2 by lm, gradient, migrad 200; 13N, layer and stopping yields: identical);
+`perf stat -e instructions:u` within 0.2 % except T2_true (-1.4 %).
+
 **Open.** The beam profile reads the nominal energy for its window and detailed-balance norm; the Gaussian beam spread
 with an energy-dependent sigma has its support clipped at 5 sigma of the nominal energy; a UDR kernel is built at the
 nominal energy.  None depends on the stopping; each is a candidate for the same rule (the director's call).  A thin
