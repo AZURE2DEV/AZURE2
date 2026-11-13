@@ -260,6 +260,37 @@ particle widths, is the convention of AZURE2 and is not to be changed or made op
 wish: the total radiative width, the gamma branchings and the mixing ratios of a level as fit parameters
 (`feature/upgrade-8-gamma-branchings`).
 
+## 2026-11-13 (agent, Phase 6 branch 3 continued) — the Coulomb table named by content; relative paths without the working directory; the branch's gates
+
+**Done.**  (1) The `intEC.dat` signature names the Coulomb table by what it holds (`CoulombTable::ContentIdentity`:
+header and a 64-bit hash of every value, computed once per loaded table on first request behind `std::call_once`),
+not by its path and time: a copy elsewhere reuses the file, other values refuse it (`tests/ec_table_signature`).
+Cost 1.2e8 instructions per run that sets up external capture (T1 +0.41 %, 13N +0.16 %), none otherwise.
+(2) A project's relative paths are resolved against `Config::baseDirectory` (the project file's directory, or the
+pyazr session's `cwd`) through one function (`azure2::experiment::PathToOpen`, `Config::OpenPath`) at every opening
+site; messages print the project's own string; pyazr's `_in_dir` and `_Engine` are deleted (`evaluation.md` 7.5;
+`tests/run_from_elsewhere`, `concurrent_sessions_test.py` pair R S).  (3) Merged `feature/upgrade-4-data` at
+2ed0dba9 and e4fb58f1.
+
+**Verified** on the merged head (build `work/b-eval3`, 0 warnings, 3 threads): whole tree x 3 bases against
+`tab-gammam-1` (tag `tab-eval3-j`): 887 / 851 / 887 files, every number and every `run.log` equal, the 23
+`intEC.dat.sig` per basis differ (the new signature); before the merge a second whole run with the table copied
+elsewhere (`tab-eval3-g` against `tab-eval3-f`) gave the same bytes but for the `run.log` line naming the table.
+Converted-tree gate `geval3b` (REF `tab-gammam-1`): 679 / 643 / 679, only the signature files differ.  `ctest -LE
+slow` 221 / 221; `run_tests.sh` 164 / 165 at first (`layer_yield`: its refusal cases ran a project written outside
+its data's directory and relied on the working directory; the fixture now copies the project beside the data:
+165 / 165 by rerunning that test on this build and on `b-gammam`); `concurrent_sessions_test.py` PASS (pairs A B,
+N M, A T, R S, 40 evaluations each; the R S pair with the base's pyazr and engine fails: a session cannot set up);
+1 against 3 threads identical (T1, T2, T3, 13N x 3 bases); the eight fits identical to `b-gammam` file by file
+but 13N's `intEC.dat.sig`.  Instructions against `b-gammam` (1 thread): T2 -0.001 %, T1 +0.41 %, 13N +0.16 %,
+18O_p_a_thm +0.06 %, natural_neon +0.001 %, T2 gradient fit +0.36 %, 13N fit +0.02 %.  Memory against `b-eval2`
+before the merges (`work/eval3/mem_t1.txt`, `mem_t3.txt`).
+
+**Not done.**  The diagnostics record (`evaluation.md` section 2); `AZUREAPI`'s `mutable` members.
+**Open for the director.**  `--validate`, `--describe`, `pyazr.validate`, `pyazr.describe` still read data files
+relative to the process's working directory (held to one text by `tests/pyazr/validate_test.py`): moving them changes
+what public pyazr functions return.
+
 ## 2026-11-13 (agent, Phase 6 branch 3, `feature/upgrade-6-evaluation-3`) — copies made when needed; the Coulomb table in the intEC signature
 
 **Done.**  (1) `evaluation.md` 4.1: what an evaluation of a fit writes, member by member.  Finding: for shifted

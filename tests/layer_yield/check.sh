@@ -51,9 +51,11 @@ run() {
 # refused NAME CODE TEXT FILE: --describe of FILE prints CODE and TEXT
 refused() {
   local msg
-  # the validator's and Build's refusals by --describe; the set-up's by a calculation (menu 1) beside the data
+  # the validator's and Build's refusals by --describe (data files relative to the working directory); the set-up's by
+  # a calculation (menu 1) of a copy of FILE beside the data (a run reads them relative to the project file)
+  cp "$WORK/$4" "$WORK/calc/$4"
   msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; printf '1\n\n\n7\n' |
-         $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline "$WORK/$4" 2>&1)"
+         $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline "$4" 2>&1)"
   if echo "$msg" | grep -q "$2" && echo "$msg" | grep -q "$3"; then ok "$1 is refused ($2)"
   else bad "$1: no $2 ($(echo "$msg" | grep -m2 -E 'ERROR|error'))"; fi
 }
