@@ -188,4 +188,9 @@ if(CROSS_COMPILE_WINDOWS)
         COMMENT "Windows executable with DLLs built")
 endif()
 
-install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
+# A wheel build (scikit-build-core) puts the program into the wheel's scripts, so that pip installs it on the PATH.
+if(SKBUILD)
+    install(TARGETS AZURE2 RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)
+else()
+    install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
+endif()

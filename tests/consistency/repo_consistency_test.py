@@ -1136,6 +1136,39 @@ try:
 except (OSError, IndexError, KeyError) as e:
     problems.append(f"check 44: {e}")
 
+# 48. The wheel carries every file pyazr reads at run time (docs/upgrade/pyazr3.md section 2.9; pyazr/datafiles.py): every
+#     tracked file under pyazr/ that is not Python is a data file the wheel carries (DATA_FILES) or a file it leaves
+#     out (NOT_SHIPPED, with the reason), never both; every DATA_FILES entry exists; the patterns of NOT_SHIPPED are
+#     the wheel.exclude list of pyproject.toml, in the same order.  tests/pyazr/wheel_test.py compares a built wheel
+#     with the list these make.
+_wheel_data = 0
+try:
+    _spec = importlib.util.spec_from_file_location("pyazr_datafiles", os.path.join(ROOT, "pyazr", "datafiles.py"))
+    _datafiles = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_datafiles)
+    for _rel in tracked_files():
+        if not _rel.startswith("pyazr/") or _rel.endswith(".py"):
+            continue
+        _rel = _rel[len("pyazr/"):]
+        _in, _out = _datafiles.shipped(_rel), _datafiles.excluded(_rel)
+        if _in and _out:
+            problems.append(f"pyazr/{_rel}: both in DATA_FILES and in NOT_SHIPPED of pyazr/datafiles.py (check 48)")
+        elif not (_in or _out):
+            problems.append(f"pyazr/{_rel}: not Python, and neither a data file of the wheel (DATA_FILES) nor left "
+                            "out with a reason (NOT_SHIPPED) in pyazr/datafiles.py (check 48)")
+        _wheel_data += _in
+    for _name, _ in _datafiles.DATA_FILES:
+        _full = _datafiles.path(_name)
+        if not (os.path.isfile(_full) or (_name.endswith("/") and os.path.isdir(_full) and os.listdir(_full))):
+            problems.append(f"pyazr/datafiles.py: DATA_FILES names pyazr/{_name}, which does not exist (check 48)")
+    _exclude = re.search(r"^wheel\.exclude\s*=\s*\[([^\]]*)\]", read("pyproject.toml"), re.M)
+    _patterns = re.findall(r'"([^"]*)"', _exclude.group(1)) if _exclude else None
+    if _patterns != [_p for _p, _ in _datafiles.NOT_SHIPPED]:
+        problems.append("pyproject.toml: wheel.exclude is not the patterns of NOT_SHIPPED in pyazr/datafiles.py "
+                        f"({_patterns} against {[_p for _p, _ in _datafiles.NOT_SHIPPED]}) (check 48)")
+except (OSError, AttributeError, ImportError) as e:
+    problems.append(f"check 48: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1146,4 +1179,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
-      f"{len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme")
+      f"{len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
+      f"{_wheel_data} data files of the wheel")

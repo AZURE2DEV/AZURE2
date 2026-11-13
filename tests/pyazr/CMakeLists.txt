@@ -983,6 +983,19 @@ add_test(NAME pyazr_fit_recipes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SO
 set_tests_properties(pyazr_fit_recipes PROPERTIES LABELS slow PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# The Coulomb table's build and fetch (pyazr/coulomb_table.py): a small table built, fetched by file:// and from a
+# local HTTP server with its SHA-256, a corrupted copy refused and removed.  Nothing leaves this machine.
+add_test(NAME pyazr_coulomb_table COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_table_test.py)
+set_tests_properties(pyazr_coulomb_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# pyazr as a wheel (pyproject.toml): built with pip from the source (left clean), its files against the expected
+# list, unpacked (not installed) and imported alone: T2 and the stopping bit for bit as the in-tree build, the wheel
+# workflow's test command (wheel_smoke.py), the wheel's AZURE2 on T1 as this build's.  Compiles the engine once more
+# (two jobs: several minutes).
+add_test(NAME pyazr_wheel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/wheel_test.py)
+set_tests_properties(pyazr_wheel PROPERTIES LABELS slow PROCESSORS 2 TIMEOUT 7200
+                     ENVIRONMENT "OMP_NUM_THREADS=1;CMAKE_BUILD_PARALLEL_LEVEL=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
