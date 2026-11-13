@@ -12,7 +12,7 @@ norm, the group D removed):
 two norms gives the same ``objective()`` as their normError priors (1e-10); the last rows of ``residual_jacobian``
 are L^-1 (p - mu) (their squared sum = the prior term, the whole sum = calculate_chi2_rwa + the prior) and their
 columns match central differences of ``prior_covariance_residuals``; a fixed listed parameter is marginalized
-(``prior_covariance_names``); a refused file makes ``azure2()`` raise.
+(``prior_covariance_names``); a refused file makes ``Session()`` raise.
 
 Run from anywhere:  python3 tests/pyazr/prior_covariance_test.py
 """
@@ -124,7 +124,7 @@ try:
 
     print("\n2. with the engine")
     try:
-        from pyazr import azure2
+        from pyazr import Session
         have_engine = True
     except Exception as e:                       # pragma: no cover
         print(f"  skip  engine not built ({e})")
@@ -158,7 +158,7 @@ try:
 
         Cb = np.array([[4e-4, 1.2e-4], [1.2e-4, 9e-4]])
         azr, work = project("corr", S0, f"{N1} width_1_1\n1.02 0.6\n4e-4 1.2e-4\n1.2e-4 9e-4\n")
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
             x[fi[N1]], x[fi["width_1_1"]] = 1.07, 0.63
@@ -192,7 +192,7 @@ try:
 
         azr, work = project("diag", S0, f"{N1} {N2}\n1 1\n0.01 0\n0 0.0025\n")
         azr2, work2 = project("normerr", SE)
-        with azure2(azr, cwd=work) as a, azure2(azr2, cwd=work2) as b:
+        with Session(azr, cwd=work) as a, Session(azr2, cwd=work2) as b:
             x = np.asarray(a.params_rwa, float).copy()
             fa = {q.name: q.free_index for q in a.parameters if not q.fixed}
             fb = {q.name: q.free_index for q in b.parameters if not q.fixed}
@@ -209,7 +209,7 @@ try:
 
         # every level fixed: energy_2 is a fixed parameter -> marginalized
         azr, work = project("fixed", S0, f"{N1} energy_2\n1.02 0.81\n4e-4 1.5e-4\n1.5e-4 1e-4\n", fixed_levels=True)
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
             x[fi[N1]] = 1.07
@@ -220,11 +220,11 @@ try:
 
         azr, work = project("bad", S0, f"{N1} segment_9_norm\n1 1\n0.01 0\n0 0.01\n")
         try:
-            with azure2(azr, cwd=work):
+            with Session(azr, cwd=work):
                 pass
-            check("an unknown name makes azure2() raise", False, "no error")
+            check("an unknown name makes Session() raise", False, "no error")
         except Exception as e:
-            check("an unknown name makes azure2() raise", True)
+            check("an unknown name makes Session() raise", True)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

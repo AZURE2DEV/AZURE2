@@ -8,10 +8,10 @@
    kinds are those of ``AZURE2 --schema``; the parameter kinds those of the engine's table and they cover every kind
    ``AZURE2 --describe --json`` names on tests/upgrade/T1, T2, T3; the options are the option keys of ``<config>`` and
    every other field of the binding's ``RuntimeOptions`` (a field without a row fails here, a row without a reason
-   too), each a keyword of ``pyazr.azure2`` and each flag one of
+   too), each a keyword of ``pyazr.Session`` and each flag one of
    ``AZURE2 --help``; the physics functions are the rows of the binding's table.  A kind added to the engine thus
    appears in ``kinds()`` with no edit of Python.
-3. ``azure2.describe()`` on tests/upgrade/T1: plain data, its parameters, pairs, levels and data sets those of the
+3. ``Session.describe()`` on tests/upgrade/T1: plain data, its parameters, pairs, levels and data sets those of the
    session and of ``AZURE2 --describe --json``.
 4. The session of the package docstring (``help(pyazr)``) runs, in a copy of tests/upgrade/T1.
 
@@ -126,7 +126,7 @@ for name in ("T1", "T2", "T3"):
         os.makedirs(os.path.join(copy, "output"), exist_ok=True)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", pyazr.EngineWarning)
-            with pyazr.azure2(os.path.join(copy, f"{name}.azr")) as s:
+            with pyazr.Session(os.path.join(copy, f"{name}.azr")) as s:
                 kind_of = {p.name: p.kind for p in s.parameters}
     check(f"{name}: the parameters --describe names are the session's ({len(named)})",
           named and named <= set(kind_of), sorted(named - set(kind_of))[:5])
@@ -144,10 +144,10 @@ _, config_keys = _azure2.config_keys()
 check("options: the others are bool keys of <config>, under their keyword",
       all(o["key"] == kw and (kw, "bool") in [(n, t) for n, t, _ in config_keys]
           for kw, o in k["options"].items() if o["key"]) and sum(1 for o in k["options"].values() if o["key"]) == 11)
-init = inspect.signature(pyazr.azure2.__init__).parameters
-check("options: each is a keyword of pyazr.azure2", all(kw in init for kw in k["options"]),
+init = inspect.signature(pyazr.Session.__init__).parameters
+check("options: each is a keyword of pyazr.Session", all(kw in init for kw in k["options"]),
       [kw for kw in k["options"] if kw not in init])
-check("options: the defaults are pyazr.azure2's",
+check("options: the defaults are pyazr.Session's",
       all(init[kw].default == o["default"] or (kw in ("coulomb_table", "cwd") and init[kw].default is None
                                                and o["default"] == "")
           for kw, o in k["options"].items() if kw in init),
@@ -179,24 +179,24 @@ try:
     shutil.copytree(os.path.join(ROOT, "tests", "upgrade", "T1"), t1,
                     ignore=shutil.ignore_patterns("output", "checks"))
     os.makedirs(os.path.join(t1, "output"), exist_ok=True)
-    with pyazr.azure2(os.path.join(t1, "T1.azr")) as s:
+    with pyazr.Session(os.path.join(t1, "T1.azr")) as s:
         sd = s.describe()
-        json_clean("azure2.describe()", sd)
-        check("azure2.describe(): one entry per parameter", len(sd["parameters"]) == len(s.parameters))
-        check("azure2.describe(): the free ones are params_rwa's",
+        json_clean("Session.describe()", sd)
+        check("Session.describe(): one entry per parameter", len(sd["parameters"]) == len(s.parameters))
+        check("Session.describe(): the free ones are params_rwa's",
               [p["x"] for p in sd["parameters"] if p["free"]] == [float(v) for v in s.params_rwa])
-        check("azure2.describe(): every parameter's unit is its kind's",
+        check("Session.describe(): every parameter's unit is its kind's",
               all(p["unit"] == k["parameters"][p["kind"]]["unit"] for p in sd["parameters"]))
-        check("azure2.describe(): pairs and levels", len(sd["pairs"]) == len(s.pairs)
+        check("Session.describe(): pairs and levels", len(sd["pairs"]) == len(s.pairs)
               and len(sd["levels"]) == len(s.physical_levels()))
         rc, out = cli("--describe", "T1.azr", "--json", cwd=t1)
         names = [x["name"] for x in json.loads(out)["datasets"]]
-        check("azure2.describe(): the data sets of AZURE2 --describe", [x["name"] for x in sd["datasets"]] == names,
+        check("Session.describe(): the data sets of AZURE2 --describe", [x["name"] for x in sd["datasets"]] == names,
               names)
-        check("azure2.describe(): data sets have kind, unit, frame and points",
+        check("Session.describe(): data sets have kind, unit, frame and points",
               all(x["quantity"] and x["unit"] and x["frame"] for x in sd["datasets"])
               and all(x["points"] for x in sd["datasets"] if x["active"]), sd["datasets"][:2])
-        check("azure2.describe(): the options in effect", sd["options"]["use_brune"] is True
+        check("Session.describe(): the options in effect", sd["options"]["use_brune"] is True
               and sd["options"]["cwd"] == s.cwd and sd["mode"] == "data")
 
     # -- 4. the package docstring's session ------------------------------------------------------------------------

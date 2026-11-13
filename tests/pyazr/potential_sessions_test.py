@@ -37,7 +37,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -56,9 +56,9 @@ try:
         return path
 
     energies = np.array([0.5, 1.0, 2.0, 3.0])
-    A = azure2(variant("a80", 80.0), cwd=work)
+    A = Session(variant("a80", 80.0), cwd=work)
     before = A.coulomb_functions(1, energies, L=1)["S"].copy()
-    B = azure2(variant("b120", 120.0), cwd=work)
+    B = Session(variant("b120", 120.0), cwd=work)
     b_values = B.coulomb_functions(1, energies, L=1)["S"].copy()
     after = A.coulomb_functions(1, energies, L=1)["S"].copy()
     check(f"the two potentials give different shift functions (max |dS| {np.max(np.abs(before - b_values)):.2e})",

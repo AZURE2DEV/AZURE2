@@ -283,7 +283,7 @@ def apply_variant(model, s, spec):
 def penalty_rows(np, m, x):
     """AZURE2's norm and shift priors as residual rows and their Jacobian:
     one row per segment and prior kind, r = sqrt(t) with t the engine's term
-    (pyazr.azure2.penalties; the engine owns the priors and their centres),
+    (pyazr.Session.penalties; the engine owns the priors and their centres),
     dr/dx = (dt/dx)/(2r) from central differences of t over the free norm and
     shift parameters (the only ones t depends on).  sum(r^2) is the sum of the
     terms; for a term of one parameter, ((p - c)/sigma)^2, the row is
@@ -437,11 +437,11 @@ class StrengthCalc:
 def fit_variant(path, cwd, args, strengths, log):
     import numpy as np
     from scipy.optimize import least_squares
-    from pyazr import azure2
+    from pyazr import Session
 
     t0 = time.time()
     phook = load_hook(args.penalty_hook, "penalty") if args.penalty_hook else None
-    with azure2(path, cwd=cwd) as m:
+    with Session(path, cwd=cwd) as m:
         x0 = np.asarray(m.params_rwa, float)
         nres = len(m.residuals(x0))
         calc = StrengthCalc(m, strengths, set(args.strength_in or []),

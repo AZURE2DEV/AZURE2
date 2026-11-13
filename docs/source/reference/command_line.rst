@@ -382,7 +382,7 @@ Available Options
        reduced :math:`\chi^2` when it exceeds 1 (Birge ratio).  Never deflates.
    * - ``--use-api``
      - Removed.  AZURE2 no longer serves a socket API and stops with an error;
-       drive it from Python with ``from pyazr import azure2``.
+       drive it from Python with ``from pyazr import Session``.
 
 ``AZURE2 --help`` prints this list as the binary was built
 (``tests/cli_help/check.sh`` keeps the two, and this table, in step).

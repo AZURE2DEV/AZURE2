@@ -54,11 +54,11 @@ def write_model(path, photon_width_eV):
 
 def worker(work, width, brune, ignore, grad, out):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     azr = os.path.join(work, "m.azr")
     write_model(azr, float(width))
     res = {}
-    with azure2(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
+    with Session(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
         x = np.array(a.params_rwa, float)
         res["capture"] = np.asarray(a.calculate_rwa(x)[CAPTURE], float).tolist()
         if grad == "1":
@@ -85,7 +85,7 @@ def worker(work, width, brune, ignore, grad, out):
 def main():
     try:
         import numpy as np
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

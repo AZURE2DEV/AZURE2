@@ -1,5 +1,5 @@
 """Add and remove levels from Python and write a new project (original untouched)."""
-from pyazr import azure2, Project
+from pyazr import Session, Project
 
 model = Project.open("13N.azr")
 
@@ -13,5 +13,5 @@ path = model.save("13N_edited.azr")
 for level in model.levels():
     print(level.label, [(c.pair, c.l, c.s, c.width) for c in level.channels])
 
-azr = azure2(path)                                 # run the edited scheme
+azr = Session(path)                                 # run the edited scheme
 print(f"\n{len(azr.level_scheme.levels)} levels, {len(azr.params)} free parameters")

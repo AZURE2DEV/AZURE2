@@ -1,11 +1,10 @@
-"""High-level driver for one in-process AZURE2 engine instance.
+"""The session: one project set up by the engine in this interpreter (:class:`Session`).
 
-An :class:`azure2` object owns one ``_azure2.Session`` -- the AZUREAPI C++
-object bound into Python via pybind11 -- loaded from a single ``.azr`` file.
-There are no subprocesses, no sockets and no instance pools to manage: the
-engine runs inside the interpreter, so a session is exactly one Python object.
-Opening several ``azure2()`` objects in one interpreter is fine, each is
-independent; drive them from one thread, as the engine is not reentrant.
+A :class:`Session` owns one ``_azure2.Session`` -- the AZUREAPI C++ object bound into Python via pybind11 -- loaded
+from a single ``.azr`` file.  There are no subprocesses, no sockets and no instance pools: the engine runs inside the
+interpreter, so a session is one Python object.  Several sessions in one interpreter share nothing and run side by
+side; calls on one session from several threads are safe: every call that enters the engine holds the session's lock
+(:mod:`pyazr.locking`) and they run one after the other.
 """
 
 import copy
@@ -14,6 +13,7 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
 
 import numpy as np
 from typing import NamedTuple
@@ -29,13 +29,11 @@ except ImportError as err:                            # pragma: no cover
     ) from err
 
 from .errors import ParameterError, ParameterKeyError, close_names, listed
-from . import session_checks, session_options, session_physics
+from . import session_checks, session_options, session_physics, session_thm
+from .locking import engine_call
 from .parameters import Pair, PairSet, Parameter, ParameterSet, read_parameter_file
 from .project import require_format3
 from .potentials import _HybridPotentials
-
-
-_THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
 
 
 def _config_output_dir(path):
@@ -57,7 +55,7 @@ def _config_output_dir(path):
 
 class ScatteringLength(NamedTuple):
     """The s-wave scattering length of one channel spin of a particle pair
-    (:meth:`azure2.scattering_lengths`).  ``a0`` is complex when a lower channel
+    (:meth:`Session.scattering_lengths`).  ``a0`` is complex when a lower channel
     is open at the pair's threshold; ``has_levels`` is False when no level has a
     width in the channel (``a0`` is then the hard-sphere value)."""
     pair: int
@@ -74,7 +72,11 @@ class ScatteringLength(NamedTuple):
         return text + ("+" if self.parity > 0 else "-")
 
 
-class azure2(_HybridPotentials, session_physics.SessionPhysics):
+class Session(
+        _HybridPotentials,
+        session_physics.SessionPhysics,
+        session_thm.SessionTHM,
+):
     """One calculation session: a format-3 project set up by the engine in this interpreter (options: see __init__).
 
     Parameters: :attr:`params_rwa` (the free vector, start values, engine order), :attr:`parameters` (what each entry
@@ -89,7 +91,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
     SHIFT_PENALTY_FROM_ZERO = True
 
     @session_options.records_given
-    def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
+    def __init__(self, file, *, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
@@ -163,6 +165,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             for an engine notice met while setting up (an external-capture amplitude file that cannot be written).
         """
         self._sess = None
+        self._engine_lock = threading.RLock()  # every call that enters the engine holds it (pyazr.locking)
         self._azr_cache = {}
         require_format3(file)  # pyazr reads format 3 only: the engine's message names the conversion
         self.file = os.path.abspath(file)
@@ -200,6 +203,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             raise session_checks.session_closed(self.file, sys._getframe(1).f_code.co_name)
         return self._sess
 
+    @engine_call
     def close(self):
         """Release the engine.
 
@@ -209,6 +213,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         self._sess = None
 
+    @engine_call
     def describe(self):
         """What this session holds, as plain data: project, options and option_sources (where each came from),
         Coulomb table, pairs, levels, data sets, extrapolations, parameters (their records: name, kind, unit, x,
@@ -234,6 +239,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         outdir = _config_output_dir(self.file)
         return os.path.normpath(os.path.join(self.cwd, outdir)) if outdir else self.cwd
 
+    @engine_call
     def configure(self):
         """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
         s = self.sess
@@ -302,6 +308,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
     # -- parameter metadata ---------------------------------------------------
 
     @property
+    @engine_call
     def parameters(self):
         """A :class:`ParameterSet` describing every fit parameter.
 
@@ -322,6 +329,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return self._parameters
 
     @property
+    @engine_call
     def n_rmatrix(self):
         """How many leading entries of the free vector are R-matrix parameters.
 
@@ -337,12 +345,14 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
                and p.free_index is not None]
         return 1 + max(idx) if idx else 0
 
+    @engine_call
     def refresh_parameters(self):
         """Re-fetch and rebuild the cached :attr:`parameters`."""
         self._parameters = self._build_parameters()
         return self._parameters
 
     @property
+    @engine_call
     def pairs(self):
         """A :class:`PairSet` describing every particle pair (channel).
 
@@ -354,6 +364,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             self._pairs = self._build_pairs()
         return self._pairs
 
+    @engine_call
     def refresh_pairs(self):
         """Re-fetch and rebuild the cached :attr:`pairs`."""
         self._pairs = self._build_pairs()
@@ -361,6 +372,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- channel radius -------------------------------------------------------
 
+    @engine_call
     def set_channel_radius(self, pair, radius):
         """Change one particle pair's channel radius.
 
@@ -396,10 +408,10 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         pair = int(pair)
         if not any(p.number == pair for p in self.pairs):
             raise ParameterKeyError(f"set_channel_radius: no pair {pair} in this model (have "
-                                    f"{[p.number for p in self.pairs]}); azure2.pairs lists the pairs.")
+                                    f"{[p.number for p in self.pairs]}); Session.pairs lists the pairs.")
         if not radius > 0:
             raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
-                                 f"in fm, got {radius}; azure2.pairs.by_number({pair}).channel_radius is the "
+                                 f"in fm, got {radius}; Session.pairs.by_number({pair}).channel_radius is the "
                                  f"current one.")
         if not self.sess.set_radius(pair, float(radius)):
             raise RuntimeError(
@@ -417,6 +429,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return PairSet(Pair(r) for r in self.sess.pair_records())
 
     @property
+    @engine_call
     def level_scheme(self):
         """A structured, printable :class:`~pyazr.scheme.LevelScheme`.
 
@@ -430,6 +443,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return LevelScheme.from_azr(self)
 
     @property
+    @engine_call
     def datasets(self):
         """Per-segment dataset provenance (a :class:`~pyazr.described.DescribedDatasets`, the engine's
         description): for each data set, the data file it came from, the reaction channel (entrance/exit pairs), energy /
@@ -441,6 +455,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return copy.deepcopy(self._parsed("datasets"))
 
     @property
+    @engine_call
     def extrapolations(self):
         """Per-segment extrapolation grids (:class:`~pyazr.described.DescribedExtrapolations`).
 
@@ -460,6 +475,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- physical levels (turn a resonance on/off) ----------------------------
 
+    @engine_call
     def physical_levels(self):
         """The model's physical levels (resonances / poles) as
         :class:`~pyazr.parameters.LevelKey` objects, ordered ``(jgroup, level)``.
@@ -482,20 +498,21 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             if level in keys:
                 return level
             raise ParameterKeyError(f"{level!r} is not a level of this model (its levels: {have}); "
-                                    f"azure2.physical_levels() gives the keys.")
+                                    f"Session.physical_levels() gives the keys.")
         hits = [k for k in keys
                 if (jpi is None or k.jpi == jpi)
                 and (energy is None or (k.energy is not None
                                         and abs(k.energy - energy) <= tol))]
         if not hits:
             raise ParameterKeyError(f"no level matches jpi={jpi} energy={energy} (MeV, within {tol}); the levels: "
-                                    f"{have}; azure2.physical_levels() gives the keys.")
+                                    f"{have}; Session.physical_levels() gives the keys.")
         if len(hits) > 1:
             raise ParameterKeyError(f"ambiguous selector jpi={jpi} energy={energy}: "
                                     f"matches {[str(h) for h in hits]}; give energy= (MeV) as well, or level= one "
-                                    f"key of azure2.physical_levels().")
+                                    f"key of Session.physical_levels().")
         return hits[0]
 
+    @engine_call
     def level_free_width_indices(self, level=None, jpi=None, energy=None,
                                  tol=1e-2):
         """``free_index`` list of a level's non-fixed reduced-width parameters.
@@ -510,6 +527,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return [p.free_index for p in ps
                 if p.kind == "width" and not p.fixed and p.free_index is not None]
 
+    @engine_call
     def without_level(self, params, level=None, jpi=None, energy=None,
                       tol=1e-2):
         """A copy of the free-parameter vector with one level switched OFF.
@@ -524,6 +542,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         out[self.level_free_width_indices(level, jpi, energy, tol)] = 0.0
         return out
 
+    @engine_call
     def only_level(self, params, level=None, jpi=None, energy=None, tol=1e-2):
         """A copy of the free-parameter vector with ONLY one level active.
 
@@ -543,14 +562,17 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- index queries --------------------------------------------------------
 
+    @engine_call
     def norm_indices(self):
         """Free-vector positions of the normalization parameters."""
         return self.sess.normalization_indices()
 
+    @engine_call
     def shift_indices(self):
         """Free-vector positions of the energy-shift parameters."""
         return self.sess.energy_shift_indices()
 
+    @engine_call
     def energy_indices(self):
         """Packed indices of the free R-matrix level-energy parameters.
 
@@ -573,6 +595,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         (:func:`pyazr.parameters.read_parameter_file`)."""
         return read_parameter_file(path)[1]
 
+    @engine_call
     def full_rwa_from_sav(self, path):
         """The model's full RWA vector (fixed parameters included, ``p.index``
         order) with the values a parameter file names applied.
@@ -606,6 +629,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         1 Brune, 2 Park), or None for a file written before the tag existed."""
         return read_parameter_file(path)[0]
 
+    @engine_call
     def load_sav(self, path):
         """Load a parameter file into the session the way the CLI does, and
         return the free RWA vector to evaluate at.
@@ -714,12 +738,14 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
                 raise ValueError(message)
             warnings.warn(message, stacklevel=3)
 
+    @engine_call
     def update_rwa_params_from_sav(self):
         """Reload the run's param.sav (matched by name) into the session --
         fixed level parameters included, see :meth:`load_sav` -- and set
         params_rwa to its free values."""
         self.load_sav(os.path.join(self.cwd, self.output_dir, 'param.sav'))
 
+    @engine_call
     def update_sav_from_rwa_params(self, best):
         """Write a free RWA vector back out to param.sav.new, by name.
 
@@ -756,6 +782,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             for t in rows:
                 f.write(" ".join(t) + "\n")
 
+    @engine_call
     def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted",
                  close_session=False):
         """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
@@ -836,7 +863,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         if norms not in ("fitted", "nominal"):
             raise ParameterError(f"save_fit: norms must be 'fitted' or 'nominal', not {norms!r} (see "
-                                 f"help(pyazr.azure2.save_fit)).")
+                                 f"help(pyazr.Session.save_fit)).")
         if norms == "nominal" and not param_sav:
             raise ParameterError("save_fit: norms='nominal' keeps the fitted norms in the .sav "
                                  "only; it needs param_sav=True.")
@@ -844,7 +871,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         free = [i for i, p in enumerate(self.parameters) if not p.fixed]
         if x.size != len(free):
             raise ParameterError(f"save_fit: x has {x.size} entries; the session has {len(free)} free parameters "
-                                 f"(azure2.params_rwa is such a vector, azure2.parameters.free names its entries).")
+                                 f"(Session.params_rwa is such a vector, Session.parameters.free names its entries).")
         # Every parameter, with the free ones from x, and every parameter's
         # physical value, fixed ones included (see above).
         full = self._all_rwa(x)
@@ -883,7 +910,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
                 copy = Project.open(path)
                 copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
                 copy.save(probe)
-                with azure2(probe, cwd=self.cwd, **check_options) as check:
+                with Session(probe, cwd=self.cwd, **check_options) as check:
                     back_full = np.asarray(check.sess.params_all_rwa(), float)
                     got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
                     back = {p.name: float(back_full[i])
@@ -1002,10 +1029,12 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- transforms -----------------------------------------------------------
 
+    @engine_call
     def transform_rwa(self, params):
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
+    @engine_call
     def transform_all_rwa(self, params, include_fixed=False, free_only=None):
         """As transform_rwa, taking every parameter rather than the free ones.
 
@@ -1033,6 +1062,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             allx[i] = x[k]
         return allx
 
+    @engine_call
     def transform_physical(self, params):
         """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""
         raise NotImplementedError(
@@ -1042,6 +1072,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
     # -- dimensionless widths -------------------------------------------------
 
     @property
+    @engine_call
     def mass_number(self):
         """Mass number A of the compound nucleus, from the particle pairs."""
         for p in self.pairs:
@@ -1049,6 +1080,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
                 return int(round(p.M1 + p.M2))
         raise ValueError("no particle pair to take the compound mass from.")
 
+    @engine_call
     def wigner_widths(self, params=None, eps=1e-4):
         """``{free_index: Gamma_W}`` in eV -- the GUI's Wigner width per channel.
 
@@ -1113,6 +1145,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             return False
         return ex > pair.sep_energy + pair.excitation
 
+    @engine_call
     def dimensionless_widths(self, params=None, eps=1e-4):
         """Every channel's width made dimensionless -- a :class:`WidthTable`.
 
@@ -1173,6 +1206,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- chi-squared ----------------------------------------------------------
 
+    @engine_call
     def calculate_chi2_rwa(self, params):
         """Data chi-squared plus the model terms at a free RWA vector, as a one-element list.
 
@@ -1188,6 +1222,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         return [float(self.sess.calculate_chi2_rwa(params))]
 
+    @engine_call
     def calculate_chi2(self, params):
         """As calculate_chi2_rwa, taking the physical parameter vector instead.
 
@@ -1199,6 +1234,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         return [float(self.sess.calculate_chi2_physical(params))]
 
+    @engine_call
     def segment_norms(self, params=None):
         """The normalization each segment carries at ``params``.
 
@@ -1214,244 +1250,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         self.sess.calculate_chi2_rwa(x)
         return np.asarray(self.sess.current_norms(), float)
 
-    def thm_experiments(self, params=None):
-        """The THM experiments (``<thm>`` ``experiment[<name>]`` lines) as a
-        chi-squared evaluation at ``params`` profiles them.
-
-        Returns ``{name: report}``; see :meth:`thm_background` for a report.
-        Empty without experiments (or in extrapolation mode).  Runs a
-        chi-squared evaluation.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        out = {}
-        for r in self.sess.thm_experiments():
-            q = 1 + _THM_BACKGROUND_TERMS[r["background"]]
-            cov = np.asarray(r["covariance"], float).reshape(4, 4)[:q, :q]
-            value = np.asarray(r["value"], float)
-            out[r["name"]] = {
-                "segments": list(r["segments"]),
-                "background": r["background"],
-                "points": int(r["points"]),
-                "chi2": float(r["chi2"]),
-                "status": r["status"],
-                "norm": float(value[0]),
-                "b": value[1:q].copy(),
-                "cov": cov,
-                "sigma": np.sqrt(np.maximum(np.diag(cov), 0.0)),
-            }
-            if "cbkg_names" in r:
-                # Coherent background (cbackground=): its fit parameters,
-                # name -> value, as they are in the parameter vector.
-                out[r["name"]]["cbkg"] = dict(zip(r["cbkg_names"],
-                                                  map(float, r["cbkg_values"])))
-        return out
-
-    def thm_background(self, experiment, params=None):
-        """Shared norm and background of one THM experiment at ``params``.
-
-        The segments of ``experiment[<name>]`` share one profiled norm ``n*``
-        (it multiplies the data, as ``segment_norms``) and a background
-        ``b(E) = b0 + b1 E + b2 E^2`` added to the folded HOES model (model
-        units, E the c.m. energy of the THM entrance pair, MeV); both are
-        eliminated by closed-form weighted linear least squares at every
-        evaluation.  Returns a dict:
-
-        ``norm``        n*
-        ``b``           array of the background coefficients (length 0-3)
-        ``cov``         covariance of (norm, b0, ...) from the profile, at fixed
-                        R-matrix parameters (not scaled by chi2/nu)
-        ``sigma``       sqrt(diag(cov))
-        ``chi2``        the experiment's chi-squared, ``points``, ``segments``
-        ``background``  none | const | linear | quadratic
-        ``status``      "profiled", or what a degenerate profile fell back to
-
-        The model at a point, as the output files show it next to the data
-        scaled by n*, is ``calculate_rwa`` plus ``b(E)``.  Runs a chi-squared
-        evaluation.  KeyError for an unknown experiment.
-        """
-        reports = self.thm_experiments(params)
-        if experiment not in reports:
-            raise ParameterKeyError(f"no THM experiment {experiment!r} (have: {', '.join(reports) or 'none'})"
-                                    f"{close_names(experiment, reports)}; azure2.thm_experiments() lists them.")
-        return reports[experiment]
-
-    def thm_lineshape(self, experiment, energies, params=None):
-        """The Coulomb line shape N_C of a THM experiment (``lineshape=on``).
-
-        In A + a(x+s) -> s + F*(x+A) -> s + b + B the spectator s leaves in
-        the Coulomb field of F*, and of b and B once F* has decayed; each
-        level's exit amplitude is multiplied by
-        ``N_C = exp(pi zeta/2) (E_l - E - i G_l/2)^(-i zeta)``, so for an
-        isolated level ``|N_C|^2 = exp[2 zeta arctan(2 (E_l - E)/G_l)]``
-        (Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233, eqs. 55-62), with
-        ``zeta = eta_sB - eta_0`` (their case 2: B much heavier than s and b,
-        the s-b term eta_sb neglected), ``eta_0 = Z_s Z_F alpha mu_sF/k_sF``,
-        ``eta_sB = Z_s Z_B alpha mu_sB/k_sF`` and ``E_sF = E_aA - B - E``.
-        See docs/source/theory/thm_implementation.rst, "Coulomb line shape".
-
-        ``energies``: c.m. energies E of x + A (MeV).  The level poles
-        (observed energy and total width, Brune) are those of ``params``
-        (default: the current parameters; a chi-squared evaluation is run to
-        load them in data mode).  Returns a dict:
-
-        ``E``, ``E_sF``, ``eta_0``   arrays on the grid
-        ``E_aA``, ``B``, ``Zs``, ``ZF``, ``spectator``
-        ``exits``   one dict per exit pair of the experiment's segments:
-                    ``pair`` (key), ``Zb``/``ZB``, ``mb``/``mB`` (light and
-                    heavy nucleus), ``zeta`` and ``eta_sb`` (the neglected
-                    s-b parameter averaged over the b direction, a validity
-                    check: it should be << 1) on the grid, and ``levels``: per
-                    level of a J group coupling entrance and exit, ``jgroup``,
-                    ``level`` (1-based, as parameters.out), ``J``, ``pi``,
-                    ``E_level`` (c.m. of x + A), ``Gamma`` (MeV) and ``NC2``
-                    (|N_C|^2 on the grid).
-
-        Raises the engine error if the experiment is unknown or has no line
-        shape.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
-        return r
-
-    def thm_vertex(self, experiment, energies, params=None, strict=False):
-        """The THM entrance vertex of an experiment, averaged over its
-        spectator-momentum window (``ps=`` on the experiment line).
-
-        The off-shell x-A momentum is ``p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx``
-        (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31), so the vertex
-        ``M_l = (B_c - 1) j_l(rho) - rho j_l'(rho) (+ C_l)``, ``rho = p_xA a``,
-        changes with the spectator momentum p_s inside the accepted window.
-        At fixed E the spectator direction fixes |p_s|, and the engine
-        averages the cross section (not the amplitude) over the accepted
-        directions with the fixed-E event weight |phi(q)|^2 d cos(theta_cm),
-        i.e. |phi(q)|^2 q dq over the q = |p_s| the kinematics reach (not the
-        E-integrated |phi|^2 p_s^2 dp_s); this reports the vertex part of it.
-        See docs/source/theory/thm_implementation.rst, "Spectator-momentum
-        window".
-
-        ``energies``: c.m. energies E of x + A (MeV).  The per-level vertex
-        boundaries are those of ``params`` (default: the current parameters;
-        a chi-squared evaluation is run to load them in data mode).  Returns a
-        dict:
-
-        ``window``    description (``"delta"`` without a window)
-        ``p_s``, ``weights``, ``T_s``   lists over E: at each E the nodes
-                      (Gauss-Legendre in cos theta_cm on the directions inside
-                      the window) as |p_s| (MeV/c), their normalized weights
-                      and T_s = p_s^2/2mu_sx (MeV); ``theta_cm`` (deg) their
-                      spectator c.m. angles to the beam.  A delta experiment
-                      has one node at each E, p_s = 0 and T_s the
-                      ``spectatorEnergy`` of its pair
-        ``mu_sx``, ``B``, ``radius``, ``pair``   (MeV, MeV, fm, entrance key)
-        ``E``         the grid; ``rho``: list over E of the rho at each node
-        ``channels``  one dict per entrance channel of every J group:
-                      ``jgroup``, ``channel`` (1-based), ``J``, ``pi``, ``l``,
-                      ``s`` and ``levels``: per level ``level`` (1-based),
-                      ``boundary`` (the vertex boundary B_c for that level;
-                      NaN for ``vertex=onshell``, where it is S(E) + iP(E)),
-                      ``M2`` (<|M_l|^2> over the window) and ``M2_qf``
-                      (|M_l|^2 at p_s = 0) on the grid.
-        ``model``     ``"pw"``, or ``"dw"`` for an experiment with
-                      ``vertexModel=dw``: then the vertex is the surface term of
-                      the prior-form DWBA (docs, "Distorted-wave entrance
-                      vertex"), ``M2`` is its average over the nodes the engine
-                      uses (the reachable part of the ``ps`` window at each E, or
-                      the one ``spectatorAngle`` node), ``M2_qf`` its value at
-                      the ``spectatorAngle`` direction and ``M2_pw`` the
-                      plane-wave |M_l(p)|^2 there, p = |k_aA - alpha k_sF| (what
-                      the DW vertex becomes without distortion); ``rho`` is p a
-                      at each node, ``dw_q``/``dw_weights`` the nodes (q in MeV/c)
-                      and weights per energy, ``dw_q_delta`` (MeV/c) and
-                      ``dw_p_delta`` (fm^-1) those of the ``spectatorAngle``
-                      node.  ``p_s``, ``weights``, ``T_s`` are the nodes of
-                      the line's ``ps`` window (empty lists without one).
-                      With ``spectatorAngles=`` the
-                      vertex is averaged over the accepted spectator
-                      directions (the model is linear in the Gram matrix, so
-                      that is one node with the averaged matrix: ``dw_q`` its
-                      weighted mean q), and ``angle_theta_cm`` (deg, c.m. to
-                      the beam), ``angle_q`` (MeV/c), ``angle_weights`` give
-                      the directions at the grid energy nearest to each E.
-        ``reached``   bool array over E: False where the window (or, for
-                      ``dw``, the vertex grid) does not reach E.  The engine
-                      then uses the nodes and vertex of the nearest data point
-                      (nearest grid energy for ``dw``) -- right for a folding
-                      sub-point next to the data, but the row at such an E is
-                      not the vertex *at* E (several rows can come out
-                      identical).
-
-        Energies out of reach are not silent: a ``UserWarning`` names them,
-        or with ``strict=True`` a ``ValueError`` is raised instead.
-
-        Raises the engine error if the experiment is unknown.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
-        reached = np.asarray(r.get("reached", []), bool)
-        if reached.size and not reached.all():
-            far = np.asarray(r["E"], float)[~reached]
-            shown = ", ".join(f"{e:.6g}" for e in far[:8]) + (" ..." if far.size > 8 else "")
-            where = ("outside the DW vertex grid or beyond the reach of its spectator "
-                     "directions" if r.get("model") == "dw" else
-                     "beyond the reach of the experiment's spectator window")
-            msg = (f"thm_vertex({experiment!r}): {far.size} of {reached.size} energies "
-                   f"are {where} ({r.get('window', '')}); the vertex reported there "
-                   f"is that of the nearest data point / grid energy, not the vertex "
-                   f"at E (E = {shown} MeV; see the 'reached' entry)")
-            if strict:
-                raise ValueError(msg)
-            import warnings
-            warnings.warn(msg, UserWarning, stacklevel=2)
-        return r
-
-    def thm_distortion(self, experiment, energies):
-        """The distortion factor R(E) of a THM experiment (``distortion=`` on
-        its experiment line).
-
-        Zero-range prior-form DWBA (Mukhamedzhanov & Pang, PRC 99 (2019)
-        064618, eqs. 20-24; Mukhamedzhanov, arXiv:2609.04498, eqs. 22-30):
-        ``M(E) = <chi(-)_{k_sF} | phi_sx | chi(+)_{k_aA}(beta r)>``, beta =
-        m_s/m_a, summed over partial waves; ``M_PW`` is its plane-wave limit,
-        the Fourier transform of the s-x bound state at q = |k_sF - beta
-        k_aA|, which the PWA data reduction divides by.  The model is
-        multiplied by ``R(E) = rho(E)/rho(E_ref)`` before the folding, with
-        rho = |M|^2/|M_PW|^2 (``distortionRatio=dwpw``, default) or |M|^2
-        (``dw``, the published convention); equivalently the PWA-extracted
-        S* divided by R.  See docs/source/theory/thm_implementation.rst,
-        "Distortion factor R(E)".  R does not depend on the R-matrix
-        parameters.
-
-        ``energies``: c.m. energies E of x + A (MeV).  Returns a dict:
-
-        ``kind``, ``description``   coulomb | optical | table, the settings
-        ``E``, ``R_model``          the grid and the w(E) the model uses
-                                    (interpolated; the table's for
-                                    ``table:<file>``, then nothing else)
-        ``R``                       R evaluated directly at each E
-        ``M2``, ``M2_PW``           |M|^2 and |M_PW|^2 (fm^6 up to a constant)
-        ``E_sF``, ``k_sF``, ``eta_sF``   the spectator-F channel (MeV, fm^-1)
-        ``theta_cm``, ``x``, ``q``  spectator c.m. angle to the beam (deg),
-                                    cos(k_sF, k_aA), |k_sF - beta k_aA|
-        ``lmax``                    the highest partial wave summed
-
-        With ``spectatorAngles=`` (a window of spectator directions) ``M2``
-        and ``M2_PW`` are the averages over the accepted directions (weight
-        d cos theta_cm x acceptance), R is their ratio (``dwpw``), and
-        ``theta_cm``, ``x``, ``q`` are weighted means.
-        ``E_ref``, ``E_aA``, ``B``, ``k_aA``, ``eta_aA``, ``kappa``,
-        ``eta_b``, ``beta``         scalars of the experiment
-
-        Raises the engine error if the experiment is unknown, has no
-        distortion, or an energy leaves the spectator no energy.
-        """
-        return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
-
+    @engine_call
     def residuals(self, params=None):
         """Standardized residuals ``(fit_i - data_i*n)/(err_i*n)``, from a
         forward pass alone.  ``data_i`` and ``err_i`` are in the data set's own
@@ -1467,6 +1266,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         x = np.asarray(self.params_rwa if params is None else params, float)
         return np.asarray(self.sess.calculate_residuals_rwa(x.ravel()), float)
 
+    @engine_call
     def write_output_files(self, params=None):
         """Write the run's standard output files, as the CLI does at the end.
 
@@ -1504,6 +1304,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- chi-squared, per segment and per dataset -----------------------------
 
+    @engine_call
     def segment_chi2(self, params=None):
         """Chi-squared per data segment, in ``<segmentsData>`` order.
 
@@ -1527,6 +1328,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
                          for i in range(self.nsegments)])
 
+    @engine_call
     def dataset_chi2(self, params=None):
         """Chi-squared per *dataset*, which is how a fit is usually judged.
 
@@ -1545,6 +1347,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return out
 
     @property
+    @engine_call
     def active_datasets(self):
         """The data segments the engine evaluates, in the order its results
         come back: ``m.energies[i]``, ``m.cross[i]``, ``segment_chi2(x)[i]``
@@ -1560,6 +1363,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- AZURE2's own objective -----------------------------------------------
 
+    @engine_call
     def penalties(self, params=None):
         """The prior terms AZURE2 adds to chi-squared, per segment.
 
@@ -1640,6 +1444,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
                 "nuisance": float(value.get("nuisance priors", 0.0)),
                 "prior_covariance": float(value.get("prior covariance", 0.0))}
 
+    @engine_call
     def prior_covariance_residuals(self, params=None):
         """Whitened residuals r = L^-1 (p - mu) of the prior parameter covariance (``priorCovariance=<file>`` in
         ``<config>``, C = L L^T), one per prior parameter in :attr:`prior_covariance_names` order; empty without
@@ -1651,6 +1456,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return np.asarray(self.sess.prior_covariance_residuals(x), float)
 
     @property
+    @engine_call
     def prior_covariance_names(self):
         """The prior parameter covariance's parameter names, in its row order, after the engine marginalized the
         listed parameters that are fixed in this model; empty without the ``priorCovariance`` key."""
@@ -1659,6 +1465,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return list(self.sess.prior_covariance_names())
 
     @property
+    @engine_call
     def nuclei(self):
         """The compound nuclei of the project: ``{(Z, A): PairSet}`` of the
         pairs that form each, in pair-number order (one entry for every project
@@ -1678,6 +1485,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             return 2
         return 1 if self.options.get("use_brune") else 0
 
+    @engine_call
     def scattering_lengths(self, params=None):
         """The s-wave scattering lengths of every particle pair at a free RWA
         vector (default ``params_rwa``): a list of :class:`ScatteringLength`,
@@ -1693,6 +1501,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
         return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
 
+    @engine_call
     def scattering_length_chi2(self, params=None):
         """chi-squared of the measured scattering lengths at a free RWA vector: the term the engine adds inside
         :meth:`calculate_chi2_rwa`: the ``scattering_length`` data of ``<modelData>``, their rows of the engine's
@@ -1700,6 +1509,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         from .model_data import model_data
         return float(sum(d.chi2 for d in model_data(self, params) if d.quantity == "scattering_length"))
 
+    @engine_call
     def park_norms(self, params=None):
         """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
         R-matrix level, in ``physical_levels()`` order.
@@ -1714,6 +1524,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         x = np.asarray(self.params_rwa if params is None else params, float)
         return np.asarray(self.sess.park_norms(x), float)
 
+    @engine_call
     def refreeze_covariance(self):
         """Data covariances with ``relvector`` terms: forget the model frozen for them.
 
@@ -1725,6 +1536,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         return int(self.sess.refreeze_covariance())
 
+    @engine_call
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus every prior and constraint.
 
@@ -1739,18 +1551,21 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         x = np.asarray(self.params_rwa if params is None else params, float)
         return float(self.sess.calculate_objective_rwa(x))
 
+    @engine_call
     def fit_objective(self):
         """The fit's objective as one object for any minimiser or sampler (:class:`pyazr.objective.Objective`):
         ``f(x)``, ``f.grad``, ``f.residuals``, ``f.jacobian``, ``f.log_prob``, ``f.x0``, ``f.names``, ``f.bounds``."""
         from .objective import Objective
         return Objective(self)
 
+    @engine_call
     def evaluate(self, x=None):
         """Every number of the session at the free vector ``x`` (default ``params_rwa``) from one engine evaluation:
         a :class:`pyazr.evaluate.Evaluation` (objective, terms, data chi-squared, each data set's arrays)."""
         from .evaluate import evaluate
         return evaluate(self, x)
 
+    @engine_call
     def objective_and_grad(self, params):
         """Value and gradient of :meth:`objective` at the free RWA parameters.
 
@@ -1761,6 +1576,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         resp = np.asarray(self.sess.calculate_objective_grad_rwa(np.asarray(params, float).ravel()), dtype=float)
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
+    @engine_call
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
 
@@ -1785,6 +1601,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             dtype=float)
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
+    @engine_call
     def residual_jacobian(self, params, skip=None):
         """Standardized residuals and their Jacobian.
 
@@ -1855,6 +1672,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         J = resp[2 + n_res:].reshape(n_res, n_cols)
         return r, J
 
+    @engine_call
     def model_gradients(self, params):
         """Analytic ``d(observable)/d(parameter)`` for every calculated point.
 
@@ -1901,6 +1719,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
 
     # -- the external region, and the caches that make it affordable ----------
 
+    @engine_call
     def coulomb_functions(self, pair, energies, L=0, radius=0.0, J=None):
         """Coulomb wave functions on an energy grid.
 
@@ -1943,6 +1762,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         out["energy"] = e[:n]
         return out
 
+    @engine_call
     def ec_integrals(self, pair, energies):
         """External-capture radial integrals on an energy grid.
 
@@ -1982,6 +1802,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             })
         return out
 
+    @engine_call
     def recalculate_external_capture(self):
         """Force a from-scratch recomputation of every external-capture
         integral.
@@ -2005,6 +1826,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         session_checks.warn_engine_notices(self._sess, stacklevel=3)
         return self
 
+    @engine_call
     def cache_stats(self):
         """Input-file counters of the process (and the former Coulomb-memo counters, now always 0).
 
@@ -2059,11 +1881,12 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         p = np.asarray(params, float).ravel()
         if p.size != rwa.size:
             raise ParameterError(f"expected the free parameter vector ({rwa.size} values), got {p.size}; "
-                                 f"azure2.params_rwa is such a vector, azure2.parameters.free names its entries.")
+                                 f"Session.params_rwa is such a vector, Session.parameters.free names its entries.")
         n = self.n_rmatrix
         rwa[n:] = p[n:]
         return rwa
 
+    @engine_call
     def calculate_excitation_energy(self, params=None):
         """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares.
 
@@ -2074,6 +1897,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_excitation_energies(i) for i in range(nsegments)]
 
+    @engine_call
     def calculate_angles(self, params=None):
         """Per-segment angles of the calculated points, one array per segment.
 
@@ -2104,6 +1928,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             i += count
         return rows
 
+    @engine_call
     def calculate_analyzing_power(self, params):
         """Vector analyzing power A_y per segment, for analyzing-power segments.
 
@@ -2122,10 +1947,12 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         """
         return self.calculate(params)
 
+    @engine_call
     def calculate_analyzing_power_rwa(self, params):
         """:meth:`calculate_analyzing_power` from reduced-width amplitudes."""
         return self.calculate_rwa(params)
 
+    @engine_call
     def calculate_angular_dists(self, params):
         r"""Legendre coefficients of the angular distribution, per segment.
 
@@ -2150,6 +1977,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
+    @engine_call
     def calculate_angular_dists_rwa(self, params):
         """:meth:`calculate_angular_dists` from reduced-width amplitudes."""
         s = self.sess
@@ -2165,6 +1993,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         segment, the observable otherwise."""
         return self.sess.calculated_segments(i)
 
+    @engine_call
     def calculate(self, params):
         """Calculated observable per segment, from a physical parameter vector.
         Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
@@ -2192,16 +2021,19 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         y[:head] = x[:head]
         return y
 
+    @engine_call
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
         nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
         return [self._segment_values(i) for i in range(nsegments)]
 
+    @engine_call
     def calculate_all_rwa(self, params):
         """As calculate_rwa, taking every parameter rather than the free ones."""
         nsegments = int(self.sess.update_segments_all_rwa(params))
         return [self._segment_values(i) for i in range(nsegments)]
 
+    @engine_call
     def calculate_energies(self, params=None):
         """Centre-of-mass energies of the calculated points, per segment.
 
@@ -2219,6 +2051,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_energies(i) for i in range(nsegments)]
 
+    @engine_call
     def calculate_sfactor(self, params):
         """Astrophysical S-factor per segment (MeV b), from a physical parameter vector."""
         s = self.sess
@@ -2229,6 +2062,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             segments[i] = segments[i] * conv[i]
         return segments
 
+    @engine_call
     def calculate_sfactor_rwa(self, params):
         """As calculate_sfactor, from a free RWA vector."""
         s = self.sess
@@ -2286,10 +2120,12 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         self.fixed_params = fixed
         self._parameters = None
 
+    @engine_call
     def extrap_mode(self):
         """Switch to the <segmentsTest> grids. Re-initializes the engine."""
         self._set_mode(True)
 
+    @engine_call
     def data_mode(self):
         """Switch back to the <segmentsData> segments, which is what chi-squared uses. Re-initializes the engine."""
         self._set_mode(False)

@@ -10,7 +10,7 @@ Two places in pyazr used to count them anyway:
     wrote a fit one level early in any J-group with an inactive line -- which is how the 13C+alpha archive's 5/2+ block was
     silently corrupted at two successive bakes.
 
-  * azure2.penalties() / dataset_chi2() indexed datasets[i] for i below the
+  * Session.penalties() / dataset_chi2() indexed datasets[i] for i below the
     active count, dropping the normalization penalty of every active segment
     that sits past that position in the file and mislabeling datasets.
 
@@ -47,7 +47,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -99,7 +99,7 @@ with tempfile.TemporaryDirectory() as tmp:
           min(c.line for c in group[0].channels) < min(c.line for c in ghost[0].channels)
           < min(c.line for c in model.level(("1/2+", 20.0)).channels))
 
-    with azure2(spliced, cwd=work) as m:
+    with Session(spliced, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         chi2_ref = float(np.sum(m.calculate_chi2_rwa(x)))
         # every engine (jgroup, level) must land on a file level with the
@@ -144,7 +144,7 @@ with tempfile.TemporaryDirectory() as tmp:
     probe.set_config(output_dir=os.path.join(work, "output_snap") + "/")
     probe_path = probe.save(os.path.join(work, "snap_probe.azr"))
     os.makedirs(os.path.join(work, "output_snap"), exist_ok=True)
-    with azure2(probe_path, cwd=work) as m2:
+    with Session(probe_path, cwd=work) as m2:
         chi2_back = float(np.sum(m2.calculate_chi2_rwa(m2.params_rwa)))
         check("the snapshot reproduces the perturbed chi-squared",
               np.isclose(chi2_back, chi2_moved, rtol=1e-6),
@@ -160,7 +160,7 @@ with tempfile.TemporaryDirectory() as tmp:
     purged.set_config(output_dir=os.path.join(work, "output_purged") + "/")
     os.makedirs(os.path.join(work, "output_purged"), exist_ok=True)
     purged_path = purged.save(os.path.join(work, "purged.azr"))
-    with azure2(purged_path, cwd=work) as m3:
+    with Session(purged_path, cwd=work) as m3:
         chi2_purged = float(np.sum(m3.calculate_chi2_rwa(m3.params_rwa)))
         check("purging the inactive level changes nothing for the engine",
               np.isclose(chi2_purged, chi2_moved, rtol=1e-9),
@@ -184,7 +184,7 @@ with tempfile.TemporaryDirectory() as tmp:
     open(segazr, "w").write("\n".join(lines))
     os.makedirs(os.path.join(work, "output_seg"), exist_ok=True)
 
-    with azure2(segazr, cwd=work) as m:
+    with Session(segazr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         active = m.active_datasets
         check("active_datasets has one entry per engine segment",

@@ -25,7 +25,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import azure2
+from pyazr import Session
 
 
 def main() -> int:
@@ -36,7 +36,7 @@ def main() -> int:
                     help="a param.sav to load instead of the .azr values")
     args = ap.parse_args()
 
-    with azure2(str(args.azr)) as azr:
+    with Session(str(args.azr)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while

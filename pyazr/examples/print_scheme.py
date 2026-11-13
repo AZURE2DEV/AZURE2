@@ -1,7 +1,7 @@
 """Read a model's level scheme and dataset provenance."""
-from pyazr import azure2
+from pyazr import Session
 
-azr = azure2("13N.azr")
+azr = Session("13N.azr")
 
 print(azr.level_scheme)          # pairs, J-groups, levels, channels, widths, Wigner
 print()

@@ -46,7 +46,7 @@ def check(name, ok, detail=""):
 sys.path.insert(0, ROOT)
 try:
     import pyazr  # noqa: F401
-    from pyazr import azure2  # noqa: F401
+    from pyazr import Session  # noqa: F401
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -55,8 +55,8 @@ CHILD = r'''
 import sys
 sys.path.insert(0, sys.argv[1])
 import numpy as np
-from pyazr import azure2
-s = azure2(sys.argv[2])
+from pyazr import Session
+s = Session(sys.argv[2])
 if sys.argv[4] == "extrap":
     s.extrap_mode()
 if sys.argv[3] == "control":

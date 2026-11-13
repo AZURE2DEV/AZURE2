@@ -144,7 +144,7 @@ void BindDescription(py::module_ &m) {
         }
         return out;
       },
-      "The session options, one dict each: name (in the engine), keyword (of pyazr.azure2), key (of <config>; \"\" "
+      "The session options, one dict each: name (in the engine), keyword (of pyazr.Session), key (of <config>; \"\" "
       "for an option that is not project state, with its reason), flag and negation (the program's, \"\" where it "
       "has none), type, default, effect (physics, convention, numerics), doc.");
 }

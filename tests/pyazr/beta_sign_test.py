@@ -44,7 +44,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -59,7 +59,7 @@ for label, opts in MODES:
     snap = os.path.join(PROJECT, f"_beta_sign_{label}.azr")
     sav = os.path.splitext(snap)[0] + ".sav"
     try:
-        with azure2(AZR, cwd=PROJECT, **COMMON, **opts) as m:
+        with Session(AZR, cwd=PROJECT, **COMMON, **opts) as m:
             x = np.asarray(m.params_rwa, float)
             ph = np.asarray(m.transform_rwa(x), float)
             beta = [p for p in m.parameters
@@ -89,7 +89,7 @@ for label, opts in MODES:
             check("the sign matters to the data",
                   chi2_flipped > chi2 + 1.0, f"{chi2:.4g} vs {chi2_flipped:.4g}")
             m.save_fit(snap, x=x, param_sav=True, verify=True)
-        with azure2(snap, cwd=PROJECT, **COMMON, **opts) as back:
+        with Session(snap, cwd=PROJECT, **COMMON, **opts) as back:
             xb = np.asarray(back.params_rwa, float)
             chi2_back = float(back.calculate_chi2_rwa(xb)[0])
         # Brune and Park read the file's amplitudes back exactly; the standard
@@ -130,7 +130,7 @@ try:
     line = "1 -1 9.5822148 0 1 1 0 2 2 1 0 374277.9827112448"
     assert line in text
     open(variant, "w").write(text.replace(line, line.replace(" 1 0 374277", " 1 1 374277")))
-    with azure2(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
+    with Session(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
         x = np.asarray(m.params_rwa, float).copy()
         fixed_alpha = [p for p in m.parameters
                        if p.fixed and p.kind == "width" and p.radiation_type == "P"
@@ -144,7 +144,7 @@ try:
         chi2 = float(m.calculate_chi2_rwa(x)[0])
         all_before = np.asarray(m.sess.params_all_rwa(), float).copy()
         m.save_fit(snap, x=x, param_sav=False, verify=True)
-    with azure2(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
+    with Session(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
         xb = np.asarray(back.params_rwa, float)
         chi2_back = float(back.calculate_chi2_rwa(xb)[0])
         all_after = np.asarray(back.sess.params_all_rwa(), float)

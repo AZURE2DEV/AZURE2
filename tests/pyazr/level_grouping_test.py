@@ -30,7 +30,7 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -59,7 +59,7 @@ for project, azr in CASES:
         m0, m1 = Project.open(orig), Project.open(rev)
         check(f"{project}: the same {len(m0.levels())} levels from the interleaved lines", signature(m0) == signature(m1),
               f"{len(m0.levels())} vs {len(m1.levels())} levels")
-        s0, s1 = azure2(orig, cwd=d), azure2(rev, cwd=d)
+        s0, s1 = Session(orig, cwd=d), Session(rev, cwd=d)
         check(f"{project}: the engine reads the same parameters", sorted(np.asarray(s0.params_rwa).round(12)) ==
               sorted(np.asarray(s1.params_rwa).round(12)), "")
     finally:

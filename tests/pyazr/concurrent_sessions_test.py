@@ -112,9 +112,9 @@ def options(label, second_table):
 
 def evaluate(azr, opts, write=False):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     files = []
-    with azure2(azr, **opts) as s:
+    with Session(azr, **opts) as s:
         x = np.asarray(s.params_rwa, float)
         parts = [np.concatenate([np.asarray(v, float).ravel() for v in s.calculate_rwa(x)]),
                  np.asarray(s.segment_chi2(x), float)]
@@ -185,7 +185,7 @@ def main():
     try:
         sys.path.insert(0, ROOT)
         import numpy  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:
         print(f"skip: engine not available ({type(err).__name__}: {err})")
         return 77

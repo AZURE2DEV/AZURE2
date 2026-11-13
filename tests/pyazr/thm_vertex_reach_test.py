@@ -50,7 +50,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory() as tmp:
     m = Project.open(src)
     set_experiment(m, "A", [1, 2], background="none", ps="hulthen:0-40", psNodes=8, **KIN)
     m.save(os.path.join(work, "win.azr"))
-    with azure2(os.path.join(work, "win.azr"), cwd=work) as s:
+    with Session(os.path.join(work, "win.azr"), cwd=work) as s:
         data_e = np.sort(np.concatenate([np.asarray(e, float) for e in s.calculate_energies()]))
         E = [0.55, 0.7, 0.9, 3.0, 5.0]
         r, w = vertex(s, E)
@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory() as tmp:
     m = Project.open(src)
     set_experiment(m, "A", [1, 2], background="none", **KIN)
     m.save(os.path.join(work, "delta.azr"))
-    with azure2(os.path.join(work, "delta.azr"), cwd=work) as s:
+    with Session(os.path.join(work, "delta.azr"), cwd=work) as s:
         r, w = vertex(s, [0.55, 3.0, 5.0])
         check("reached everywhere, no warning", np.all(r["reached"]) and not w, (r["reached"], w))
 
@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory() as tmp:
     set_experiment(m, "A", [1, 2], background="none", distortion="coulomb", vertexModel="dw",
                    spectatorAngles="cm:0-180", **KIN)
     m.save(os.path.join(work, "dw.azr"))
-    with azure2(os.path.join(work, "dw.azr"), cwd=work) as s:
+    with Session(os.path.join(work, "dw.azr"), cwd=work) as s:
         r, w = vertex(s, [0.55, 0.9, 3.0])
         check("False outside the DW vertex grid only",
               np.asarray(r["reached"], bool).tolist() == [True, True, False], r["reached"])

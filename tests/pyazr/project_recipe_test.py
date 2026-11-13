@@ -48,7 +48,7 @@ try:
     os.makedirs(os.path.join(committed, "output"))
     shutil.copytree(os.path.join(recipe.STORY, "data"), os.path.join(committed, "data"))
     shutil.copy(os.path.join(recipe.STORY, "yield_story.azr"), committed)
-    with pyazr.azure2(os.path.join(committed, "yield_story.azr")) as m:
+    with pyazr.Session(os.path.join(committed, "yield_story.azr")) as m:
         want = float(sum(m.segment_chi2()))
     check(f"chi^2 of the recipe's project = the committed project's, bit for bit ({chi2!r})", chi2 == want, (chi2, want))
 finally:

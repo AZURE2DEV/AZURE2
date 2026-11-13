@@ -706,6 +706,16 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    `tests/pyazr/` call `azure2(`; 28 scripts elsewhere in `tests/` import pyazr), the 19 examples and the user guide
    (`pyazr.rst`, 1303 lines). The largest step: about 4000 lines of `pyazr/` and 2500 of `tests/` touched; done
    by one agent in one stride. Needs 2, 3, 4.
+   **Begun** (branch `feature/upgrade-8-pyazr3-session`; the measured table of every name is its HANDOFF entry).
+   Built: `pyazr/session.py` with the class `Session` (no `pyazr.azure2`, no alias; options keyword-only), the THM
+   methods in the mixin `session_thm.py`, the session's lock on every public member that reaches the engine
+   (`pyazr/locking.py`, `tests/pyazr/session_lock_test.py`); tests, examples, the web UI and the pages ported.
+   Differs from the plan: no `threads=` (the engine has no per-session thread count); `azure2.py` is not split into
+   `data.py` and `system.py` yet.  Not yet done: the evaluation family, one parameter vector and table, the Python
+   physics, the libraries.  Measured on T2 for the ports to come: `segment_chi2` and `dataset_chi2` split a
+   data-covariance group otherwise than `Evaluation.data[i].chi2` (equal sums); `chi2_and_grad` and
+   `residual_jacobian`'s `skip` have no replacement; the engine's evaluation runs in extrapolation mode (models bit
+   for bit those of `calculate_rwa`), so `evaluate` can serve the extrapolations without engine code.
 6. **Read-only views of set-up arrays** (`DataSet.energies`, `values`, `errors`, `grid`, `kernel`): `shared_ptr`
    set-up buffers in the engine's data, capsule-based arrays in the binding. `AZUREAPI.cpp`, `pybind_api.cpp`, the
    data access of `experiment/`. About 400 lines; a view test (read-only, alive after `close()`, unchanged after a

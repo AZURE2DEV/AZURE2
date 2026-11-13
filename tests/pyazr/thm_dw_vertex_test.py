@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmp:
     pl_dir = project("plane", f"experiment[A] {KIN} distortion=optical opticalAA=plane "
                               "opticalSF=plane vertexModel=dw")
     grid = np.linspace(0.45, 0.95, 26) + 0.003
-    with azure2(os.path.join(pl_dir, "run.azr"), cwd=pl_dir) as s:
+    with Session(os.path.join(pl_dir, "run.azr"), cwd=pl_dir) as s:
         r = s.thm_vertex("A", grid)
         check(f"model {r['model']}", r["model"] == "dw")
         lv = r["channels"][0]["levels"][0]
@@ -216,7 +216,7 @@ with tempfile.TemporaryDirectory() as tmp:
         for name, blk in (("pw", f"experiment[A] {KIN}"),
                           ("dw", f"experiment[A] {KIN} {extra} vertexModel=dw")):
             d = project(f"nf_{tag}_{name}", blk, fold=False)
-            with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+            with Session(os.path.join(d, "run.azr"), cwd=d) as s:
                 x = np.asarray(s.params_rwa, float)
                 model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
                 ecm = np.concatenate([np.asarray(v) for v in s.energies])

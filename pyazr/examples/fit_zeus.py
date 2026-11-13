@@ -7,7 +7,7 @@ import numpy as np
 from scipy import stats
 from multiprocess import Pool
 
-from pyazr import azure2
+from pyazr import Session
 
 NPROCS, NSTEPS = 8, 2000
 
@@ -15,7 +15,7 @@ NPROCS, NSTEPS = 8, 2000
 # that happen either way a Pool starts: under "spawn" each worker re-imports
 # this module and constructs its own, under "fork" each inherits a copy.  The
 # engine is not thread-safe, so process-level parallelism is the only kind.
-azr = azure2("13N.azr")
+azr = Session("13N.azr")
 best = np.asarray(azr.params_rwa, float)
 ndim = len(best)
 nwalkers = 2 * ndim

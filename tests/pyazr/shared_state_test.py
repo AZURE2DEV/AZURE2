@@ -46,7 +46,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory() as tmp:
              energies="range 0.2 2.5 MeV lab step 0.02")
     proj.save(azr_b)
 
-    A = azure2(azr_a)
+    A = Session(azr_a)
     A.__enter__()
     x = np.asarray(A.params_rwa, float)
 
@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("data session evaluates (reference cross sections)", xs0.size > 0 and np.all(np.isfinite(xs0)))
 
     # --- an extrapolation session on the same model, used, then closed
-    with azure2(azr_b, data_mode=False) as B:
+    with Session(azr_b, data_mode=False) as B:
         xsB = flat(B.calculate_rwa(np.asarray(B.params_rwa, float)))
         check("extrapolation session evaluates", xsB.size > 0 and np.all(np.isfinite(xsB)))
         # the data session, while B is open
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- a second DATA session on the same model
     azr_c = stage(tmp, ".data2")
-    with azure2(azr_c) as C:
+    with Session(azr_c) as C:
         xc = np.asarray(C.params_rwa, float)
         rc, _ = probe(C, xc)
         check("second data session reproduces the first's cross sections",

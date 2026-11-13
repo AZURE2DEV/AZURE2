@@ -34,10 +34,10 @@ First steps
 
 .. code-block:: python
 
-   from pyazr import azure2
+   from pyazr import Session
    import numpy as np
 
-   with azure2("13N.azr") as azr:
+   with Session("13N.azr") as azr:
        best = np.asarray(azr.params_rwa, float)   # free parameters
        chi2 = np.sum(azr.calculate_chi2_rwa(best))
        print(chi2)
@@ -48,18 +48,18 @@ data — rather than waiting for the garbage collector; without it, call
 
 .. note::
 
-   **One session per** ``azure2()`` **object, and any number of them.** Each
-   ``azure2()`` owns an independent engine, so several can coexist in one
+   **One session per** ``Session()`` **object, and any number of them.** Each
+   ``Session()`` owns an independent engine, so several can coexist in one
    interpreter — useful for sweeping model variants. They do not interfere:
    each reads and writes the model's relative paths in its own directory
    (``cwd``, by default the ``.azr`` file's), and the process's working
    directory is neither used nor changed.
 
-   **Two sessions may run on two threads at once; one session on one
-   thread at a time.** A session owns its model, its results, its scratch and
-   its diagnostics' counters; the evaluations release the GIL, so two
-   sessions' χ² or Jacobians run side by side and give the bytes each gives
-   alone (``tests/pyazr/concurrent_sessions_test.py``).  What a process still
+   **Two sessions may run on two threads at once; calls on one session run
+   one after the other** (each holds the session's lock).  A session owns its
+   model, results, scratch and diagnostics' counters; the evaluations release
+   the GIL, so two sessions' χ² or Jacobians run side by side and give the
+   bytes each gives alone (``tests/pyazr/concurrent_sessions_test.py``).  What a process still
    shares: immutable tables (the Coulomb tables, SRIM's stopping data, the
    bytes of input files read with the cache, keyed by path and file stamp),
    the environment switches (read once, when the first session is made: a
@@ -79,7 +79,7 @@ data — rather than waiting for the garbage collector; without it, call
 Session options
 ---------------
 
-``azure2(file, cwd=None, data_mode=True, use_brune=True,
+``Session(file, *, cwd=None, data_mode=True, use_brune=True,
 ignore_externals=True, transform=True, use_long_wavelength=True,
 use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime
 options of the CLI (:doc:`../reference/command_line`) as keywords.  All but
@@ -118,7 +118,7 @@ otherwise look up in the sources:
    k["physics"]            # the physics functions the compiled module binds (group, examples, sweeps)
    k["stopping"]           # the stopping functions as rows of the same shape, each with SRIM's citation
    k["errors"]             # the error classes below, with their bases
-   s = pyazr.azure2("model.azr")
+   s = pyazr.Session("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
                            # parameters (name, kind, unit, value, free), options in effect, output directory
 
@@ -153,8 +153,8 @@ class                     also a                                    raised for
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
 
    pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
-   every entry must be a finite number.  azure2.params_rwa is such a vector (the start values);
-   azure2.parameters.free names its entries in order.
+   every entry must be a finite number.  Session.params_rwa is such a vector (the start values);
+   Session.parameters.free names its entries in order.
 
 A notice of the engine that a session meets -- an external-capture amplitude file that cannot be written because the
 output directory does not exist, a normalization or shift file that cannot be written -- is a ``pyazr.EngineWarning``
@@ -378,7 +378,7 @@ its prior, which ``objective()`` adds.
 
 A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
 :doc:`chi_squared`, "Prior parameter covariance") is set up by the engine when the
-session starts (a refused file makes ``azure2()`` raise; listed parameters fixed in
+session starts (a refused file makes ``Session()`` raise; listed parameters fixed in
 the model are marginalized). ``penalties()["prior_covariance"]`` is its term
 :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}(\mathbf{p}-\boldsymbol{\mu})`, which
 ``objective()`` adds (it is not part of ``calculate_chi2_rwa``);
@@ -429,7 +429,7 @@ the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_o
 
 .. code-block:: python
 
-   s = pyazr.azure2("T2.azr")
+   s = pyazr.Session("T2.azr")
    f = s.fit_objective()
 
    # scipy: the gradient, or the rows and their Jacobian (pyazr/examples/fit_scipy.py)
@@ -530,7 +530,7 @@ an energy the window or the DW vertex grid does not reach; such energies raise a
 reads a format-3 block; a refusal raises :class:`~pyazr.FormatError` with the
 engine's message and leaves the project unchanged.
 
-To snapshot a fit, use :meth:`~pyazr.azure2.azure2.save_fit`:
+To snapshot a fit, use :meth:`~pyazr.Session.save_fit`:
 
 .. code-block:: python
 
@@ -560,7 +560,7 @@ format-3 nuisance states its prior with its own centre (``1.0 fit prior 1.0
 a fit started from the snapshot is pulled to the same centres, not to the fitted
 values; ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in
 the fields and the fitted ones in the ``.sav`` only (run with it as the parameter
-file to reproduce the fit; :meth:`~pyazr.azure2.azure2.load_sav` matches its
+file to reproduce the fit; :meth:`~pyazr.Session.load_sav` matches its
 names to the run's as AZURE2 does: names the project lacks warn with
 ``W_PARAMETER_FILE_NAMES``, a file with no name of the run is refused with
 ``E_PARAMETER_FILE_NO_MATCH``).  See
@@ -580,14 +580,14 @@ relative to itself, so a snapshot runs from the directory the original did.
    warning, a cache that no longer matches -- but only at session start.
    After any data edit, delete those caches (or give the edited model its own
    output directory) so the integrals are recomputed;
-   ``azure2.recalculate_external_capture()`` forces it inside a live session.
+   ``Session.recalculate_external_capture()`` forces it inside a live session.
    See ``pyazr/examples/edit_model.py``.
 
 Parameter and output files
 --------------------------
 
 Parameter files (``param.par``, ``param.sav``, ``param.fit``) are read by
-**name**, as AZURE2 reads them: ``azure2.read_sav(path)`` returns
+**name**, as AZURE2 reads them: ``Session.read_sav(path)`` returns
 ``{name: value}`` (the ``#parametrization`` line and comments skipped),
 ``full_rwa_from_sav(path)`` applies a file to the session's full vector
 (a name the file lacks keeps the session's value; a file with no name in
@@ -660,7 +660,7 @@ every member) becomes one record whose reaction is the sum of the members':
 
 .. code-block:: python
 
-   from pyazr import merge_projects, azure2
+   from pyazr import merge_projects, Session
 
    report = merge_projects(
        ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
@@ -669,7 +669,7 @@ every member) becomes one record whose reaction is the sum of the members':
    )
    print(report.pair_map, report.record_map, report.warnings)
 
-   m = azure2("natNe.azr")
+   m = Session("natNe.azr")
    m.nuclei                     # the compound nuclei and their abundances
    m.parameters.abundances      # the abundance parameters (<target>.isotope.<nucleus>), kind "abundance"
    m.penalties()["abundance"]   # the prior and sum-to-one terms at the current point
@@ -691,7 +691,7 @@ from an MCMC chain sample by sample:
 
 .. code-block:: python
 
-   m = azure2("7Be+p.azr")
+   m = Session("7Be+p.azr")
    for v in m.scattering_lengths():          # current parameters
        print(v.pair, v.jpi, v.a0, v.has_levels)
    a02 = [next(v.a0.real for v in m.scattering_lengths(x) if v.pair == 1 and v.jpi == "2-")
@@ -858,7 +858,7 @@ centre-of-mass. Energies AZURE2 could not evaluate come back as ``NaN`` rather
 than being dropped, so the rows always line up with the input.
 
 Each call writes a temporary model requesting exactly those energies and opens
-one ``azure2()`` session on it, so pass every energy in a single call rather
+one ``Session()`` session on it, so pass every energy in a single call rather
 than looping.
 
 Reading the result: :math:`a_0` is the normalisation, so :math:`a_0 = 1` with
@@ -893,7 +893,7 @@ of quantity ``legendre``: data rows ``E_lab  k  a_k  da_k`` with the order
 :math:`a_k = A_k/A_0` of :math:`d\sigma/d\Omega_\text{cm} = A_0[1 + \sum_k a_k P_k]`
 (the coefficients a ``legendre`` extrapolation computes), ``expansion absolute``
 (unit ``b/sr``) the absolute :math:`A_k`. The model's coefficient of each row's
-order comes back from :meth:`~pyazr.azure2.calculate_rwa` in the data slot, so
+order comes back from :meth:`~pyazr.Session.calculate_rwa` in the data slot, so
 :math:`\chi^2`, fitting and the analytic gradient need no special handling;
 target integration folds the absolute :math:`A_k` before the ratio. Normalised
 coefficients cannot carry a free norm (the engine refuses it); an elastic
@@ -1103,7 +1103,7 @@ Two things that will bite:
   to reduced-width amplitudes --- so ``params_rwa`` is re-derived by the
   rebuild, and a vector captured beforehand no longer describes the same model.
   Feed the old one back and the chi-squared is quietly wrong. This is the same
-  caveat as :meth:`~pyazr.azure2.set_channel_radius`, for the same reason.
+  caveat as :meth:`~pyazr.Session.set_channel_radius`, for the same reason.
 - **A fit made without the potential is not a fit made with it.** Refit before
   reading anything off the model.
 
@@ -1232,7 +1232,7 @@ calculation is :doc:`project_from_python`.
    p.validate()                          # [] or the engine's diagnostics (AZURE2 --validate --json)
    print(p.describe("s09_ratio"))        # AZURE2 --describe of that record
    p.save("T2_edited.azr")
-   with p.session() as m:                # pyazr.azure2 on the saved project
+   with p.session() as m:                # pyazr.Session on the saved project
        print(sum(m.segment_chi2()))
 
 ``Project.new(path, nuclear_part=file)`` starts from another format-3 file's
@@ -1396,10 +1396,10 @@ Worked scripts ship in ``pyazr/examples/``:
 Running in parallel
 -------------------
 
-There are no AZURE2 instances to pool — every ``azure2()`` object is already an
+There are no AZURE2 instances to pool — every ``Session()`` object is already an
 independent engine in-process. Two sessions can evaluate on two threads at
-once (above), but a sampler's walkers share one session, and a session is used
-by one thread at a time, so the simple unit of parallelism is the *process*:
+once (above), but a sampler's walkers share one session, whose calls run one
+after the other, so the simple unit of parallelism is the *process*:
 give each worker its own session by
 constructing it at module scope in the worker module. That works whichever way
 the pool starts its workers — under ``spawn`` each re-imports the module and
@@ -1409,7 +1409,7 @@ evaluates one χ² per walker:
 .. code-block:: python
 
    # worker module
-   azr = azure2("13N.azr")
+   azr = Session("13N.azr")
 
    f = azr.fit_objective()
 
@@ -1479,7 +1479,7 @@ MeV; a c.m. grid needs the entrance pair's masses in u::
 ``pyazr.refine_grid(start, model, tolerance, max_points)`` runs the refinement
 of an ``adaptive`` grid on any Python function ``model(xs)`` (one value, or one
 sequence of values, per abscissa) and returns the grid, the values and whether
-``max_points`` stopped it.  A session (``pyazr.azure2``) in extrapolation mode
+``max_points`` stopped it.  A session (``pyazr.Session``) in extrapolation mode
 refuses a project with an ``adaptive`` grid: the session evaluates at many
 parameter vectors, and the grid is made by the extrapolation run (menu 3) at
 one.

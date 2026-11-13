@@ -53,7 +53,7 @@ What each step gives:
    of that record: the observable, the reaction with the pair keys of
    ``<levels>``, the units, the data file and its rows, the effects and the fit
    parameters.  ``p.session(**options)`` saves the project and returns a
-   :class:`pyazr.azure2` session on it.
+   :class:`pyazr.Session` session on it.
 
 Edits after the first save change only the lines of the fields they name:
 ``p[name].set(field=value)`` (``None`` removes a field), ``p.rename(old, new)``
@@ -148,7 +148,7 @@ level)``; a channel by its pair key and (l, s).
         p.set_thm(kinematics="triple")
         p.set_thm_experiment("LC10", Ebeam=55)
 
-:meth:`pyazr.azure2.save_fit` of a format-3 project writes the fitted level
+:meth:`pyazr.Session.save_fit` of a format-3 project writes the fitted level
 values into the rows they come from with the same engine edits, the THM
 coherent backgrounds into their experiments and the free nuisances into their
 records.

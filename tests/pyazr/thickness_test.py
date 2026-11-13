@@ -44,7 +44,7 @@ try:
     try:
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         from pyazr import _azure2  # noqa: F401
     except Exception as err:
         print(f"skip engine part: {type(err).__name__}: {err}")
@@ -54,7 +54,7 @@ try:
         os.makedirs(os.path.join(work, "checks"))
         shutil.copy(os.path.join(tmp, "grad_fit.azr"), work)
         os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
-        with azure2(os.path.join(work, "grad_fit.azr"), cwd=work) as s:
+        with Session(os.path.join(work, "grad_fit.azr"), cwd=work) as s:
             tp = s.parameters.thicknesses
             print("    " + "; ".join(f"{p.name} (data set {p.segment_key}, prior {p.prior_sigma}, fixed {p.fixed})"
                                       for p in tp))

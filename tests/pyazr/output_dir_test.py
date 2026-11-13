@@ -42,7 +42,7 @@ def check(name, ok, detail=""):
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
-    from pyazr import azure2
+    from pyazr import Session
     from pyazr import Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory() as tmp:
     azr = os.path.join(work, AZR)
     text = open(azr).read().replace("output/", "   results/   ", 1)
     open(azr, "w").write(text)
-    with azure2(azr, cwd=work) as m:
+    with Session(azr, cwd=work) as m:
         check("output_dir is cwd/results", m.output_dir == os.path.join(work, "results"),
               m.output_dir)
         got = m.write_output_files()
@@ -89,7 +89,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(elsewhere)                       # set_config does not create the directory
     m0.set_config(output_dir=elsewhere + "/")
     m0.save()
-    with azure2(os.path.join(work, AZR), cwd=work) as m:
+    with Session(os.path.join(work, AZR), cwd=work) as m:
         got = m.write_output_files()
     check("write_output_files returns the absolute directory",
           os.path.normpath(got) == os.path.normpath(elsewhere), got)
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
     m0 = Project.open(os.path.join(work, AZR))
     m0.set_config(output_dir=fresh)
     m0.save()
-    with azure2(os.path.join(work, AZR), cwd=work) as m:
+    with Session(os.path.join(work, AZR), cwd=work) as m:
         got = m.write_output_files()
     check("the directory is created and the files are in it",
           os.path.normpath(got) == os.path.normpath(fresh) and "chiSquared.out" in outfiles(fresh), outfiles(fresh))
@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("4. output/")
     work = os.path.join(tmp, "usual")
     fresh_copy(work)
-    with azure2(os.path.join(work, AZR), cwd=work) as m:
+    with Session(os.path.join(work, AZR), cwd=work) as m:
         got = m.write_output_files()
     check("cwd/output, as before", got == os.path.join(work, "output"), got)
     check("the files are there", "chiSquared.out" in outfiles(got))

@@ -37,7 +37,7 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -48,7 +48,7 @@ try:
     os.makedirs(os.path.join(work, "checks"))
     shutil.copytree(os.path.join(os.path.dirname(SRC), "data"), os.path.join(work, "data"))
     shutil.copy(SRC, os.path.join(work, "m.azr"))
-    s = azure2(os.path.join(work, "m.azr"), cwd=work)
+    s = Session(os.path.join(work, "m.azr"), cwd=work)
     want = float(s.penalties()["scattering_length"])
     out = s.write_output_files()
     text = open(os.path.join(out, "chiSquared.out")).read()

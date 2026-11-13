@@ -140,8 +140,8 @@ _ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__))
 
 def session_refusal(project, path):
     project.save(path)
-    p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from pyazr import azure2;"
-                        " azure2(sys.argv[2], cwd=sys.argv[3])", _ROOT, path, os.path.dirname(path)],
+    p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from pyazr import Session;"
+                        " Session(sys.argv[2], cwd=sys.argv[3])", _ROOT, path, os.path.dirname(path)],
                        capture_output=True, text=True, timeout=600)
     return p.returncode != 0, p.stdout + p.stderr
 

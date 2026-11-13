@@ -34,7 +34,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 
 def entrance_pair(mdl: Project, pair: int):
@@ -82,7 +82,7 @@ def main() -> int:
         stale.unlink()
         print(f"removed stale {stale}")
 
-    with azure2(str(out)) as azr:
+    with Session(str(out)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while

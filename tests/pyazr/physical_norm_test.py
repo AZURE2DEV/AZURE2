@@ -44,7 +44,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, Project
+        from pyazr import Session, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -59,7 +59,7 @@ def main():
         azr = model.save(os.path.join(work, "free_norm.azr"))
 
         print("1. a moved normalization moves calculate_chi2 as it moves calculate_chi2_rwa")
-        with azure2(azr, cwd=work) as m:
+        with Session(azr, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]
             inorm = kinds.index("norm")
@@ -89,7 +89,7 @@ def main():
         print("\n3. with a scattering-length constraint the two bases still agree")
         model.add_datum("a_p12C", quantity="scattering_length", pair="p+12C", s="1/2", value="1.0 fm", error="0.2 fm")
         azr2 = model.save(os.path.join(work, "free_norm_sl.azr"))
-        with azure2(azr2, cwd=work) as m:
+        with Session(azr2, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]
             inorm = kinds.index("norm")

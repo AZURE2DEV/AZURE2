@@ -173,7 +173,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -212,7 +212,7 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -286,13 +286,13 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("4. one direction: ps=hulthen:30-30 == spectatorEnergy = 30^2/2mu_sx")
     one_dir = project("one", f"experiment[A] {KIN} ps=hulthen:30-30")
-    with azure2(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
+    with Session(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         x = np.asarray(s.params_rwa, float)
         m_one = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
         r = s.thm_vertex("A", [0.6], x)
     d = project("se30", f"spectatorEnergy={30.0 * 30.0 / (2 * MU_SX)!r}\n"
                         f"experiment[A] {KIN}")
-    with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+    with Session(os.path.join(d, "run.azr"), cwd=d) as s:
         m_se = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
     worst = float(np.max(np.abs(m_one / m_se - 1)))
     check(f"one node at q = 30 MeV/c, weight 1 ({r['p_s'][0]})",
@@ -300,9 +300,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check(f"model == spectatorEnergy session at {m_one.size} points (worst {worst:.1e})", worst < 1e-9)
     nokey_dir = project("nokey", f"experiment[A] {KIN}")
     delta_dir = project("delta", f"experiment[A] {KIN} ps=delta")
-    with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
+    with Session(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
         r_nokey = s.residuals(x)
-    with azure2(os.path.join(delta_dir, "run.azr"), cwd=delta_dir) as s:
+    with Session(os.path.join(delta_dir, "run.azr"), cwd=delta_dir) as s:
         check("ps=delta: residuals bit for bit those without the key",
               np.array_equal(s.residuals(x), r_nokey))
         r = s.thm_vertex("A", [0.6, 0.8], x)

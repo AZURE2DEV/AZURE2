@@ -53,7 +53,7 @@ def direct_session(client):
     """A session of today's pyazr on the text the session worker read, in the project's directory."""
     import pyazr
     state = client.app.state.server.state
-    return pyazr.azure2(state.session_file(), cwd=state.directory)
+    return pyazr.Session(state.session_file(), cwd=state.directory)
 
 
 # -- 1. numbers -----------------------------------------------------------------------------------------------------
@@ -297,7 +297,7 @@ def test_error_statuses_and_fields(t1):
     r = t1.patch("/api/x", json={"values": {"no_such_parameter": 1.0}})
     assert r.status_code == 404 and set(r.json()["known"]) == set(x["x"])
     r = t1.post("/api/evaluate/grid", json={})
-    assert r.status_code == 501 and r.json()["missing"] == "pyazr.Session.evaluate"
+    assert r.status_code == 501 and r.json()["missing"] == "pyazr.Session.evaluate.energies"
     r = t1.post("/api/jobs", json={"kind": "fit", "method": "engine_migrad"})
     assert r.status_code == 501 and "fit_with_engine" in r.json()["missing"]
     r = t1.post("/api/evaluate", content=b"[1, 2]", headers={"Content-Type": "application/json"})
@@ -351,7 +351,7 @@ def test_session_options_are_config_keys(t1):
     assert session["options"]["use_brune"] is False
     e = t1.post("/api/evaluate").json()
     import pyazr
-    with pyazr.azure2(t1.path, use_brune=False) as s:
+    with pyazr.Session(t1.path, use_brune=False) as s:
         assert e["objective"] == s.objective()
     r1 = rev(t1)
     r = t1.patch("/api/project/config", json={"entries": {"use_park": "1"}, "rev": r1})

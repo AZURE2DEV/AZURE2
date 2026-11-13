@@ -55,13 +55,13 @@ def rel(a, b):
 
 try:
     import numpy as np                                          # noqa: F401
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                       # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
 
-CHI2 = ("import sys, numpy as np; sys.path.insert(0, %r); from pyazr import azure2\n"
-        "with azure2(sys.argv[1], cwd=sys.argv[2]) as m:\n"
+CHI2 = ("import sys, numpy as np; sys.path.insert(0, %r); from pyazr import Session\n"
+        "with Session(sys.argv[1], cwd=sys.argv[2]) as m:\n"
         "    print('CHI2=' + repr(float(np.sum(np.asarray(m.residuals(np.asarray(m.params_rwa, float))) ** 2))))\n") % ROOT
 
 
@@ -95,13 +95,13 @@ with tempfile.TemporaryDirectory() as tmp:
           f"{fresh}")
     for order in ((4.1, 6.1, 4.1), (6.1, 4.1)):
         for i, r in enumerate(order):
-            with azure2(os.path.join(proj[r], AZR), cwd=proj[r]) as m:
+            with Session(os.path.join(proj[r], AZR), cwd=proj[r]) as m:
                 c = chi2(m)
             check(f"order {order}, session {i + 1} ({r} fm) == fresh", rel(c, fresh[r]) < 1e-10,
                   f"{c!r} vs {fresh[r]!r}")
 
     print("2. set_channel_radius on a live session")
-    with azure2(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as m:
+    with Session(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as m:
         c0 = chi2(m)
         m.set_channel_radius(1, 6.1)
         c1 = chi2(m)
@@ -127,11 +127,11 @@ with tempfile.TemporaryDirectory() as tmp:
         out = subprocess.run([sys.executable, "-c", CHI2, os.path.join(d, name + ".azr"), d],
                              capture_output=True, text=True, env=dict(os.environ))
         other[name] = (d, float([ln for ln in out.stdout.splitlines() if ln.startswith("CHI2=")][-1][5:]))
-    with azure2(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as a, \
-            azure2(os.path.join(other["7Li_p_a"][0], "7Li_p_a.azr"), cwd=other["7Li_p_a"][0]) as b:
+    with Session(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as a, \
+            Session(os.path.join(other["7Li_p_a"][0], "7Li_p_a.azr"), cwd=other["7Li_p_a"][0]) as b:
         values = [(chi2(a), fresh[4.1]), (chi2(b), other["7Li_p_a"][1]), (chi2(a), fresh[4.1]),
                   (chi2(b), other["7Li_p_a"][1])]
-    with azure2(os.path.join(other["6Li_d"][0], "6Li_d.azr"), cwd=other["6Li_d"][0]) as c:
+    with Session(os.path.join(other["6Li_d"][0], "6Li_d.azr"), cwd=other["6Li_d"][0]) as c:
         values.append((chi2(c), other["6Li_d"][1]))
     # To the bit within a session (the Coulomb functions are on the points);
     # against a fresh process to 1e-12: the process-wide Coulomb memo

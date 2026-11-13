@@ -48,7 +48,7 @@ try:
     import numpy as np
     import mpmath
     import pyazr
-    from pyazr import azure2, _azure2
+    from pyazr import Session, _azure2
 except Exception as err:
     print(f"skip: the engine or mpmath is not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -103,7 +103,7 @@ def write_project(work, name, text, files):
 
 def terms_of(d):
     """(model values, chi^2 terms) at the project's start parameters."""
-    with azure2(os.path.join(d, "m.azr"), cwd=d) as m:
+    with Session(os.path.join(d, "m.azr"), cwd=d) as m:
         x = np.asarray(m.params_rwa, float)
         model = np.concatenate([np.asarray(v, float) for v in m.calculate_rwa(x)])
         return model, np.asarray(m.calculate_chi2_rwa(x), float)
@@ -217,7 +217,7 @@ with tempfile.TemporaryDirectory() as work:
     in_sg = write_project(work, "sg", project_text(dataset("s.dat", "sfactor", "keV*b").replace(
         "    norm           1 fixed\n", "    norm           1 fit prior 1 5%\n    shift          offset 2 keV fit\n")),
         {"s.dat": rows_s})
-    with azure2(os.path.join(in_sg, "m.azr"), cwd=in_sg) as m:
+    with Session(os.path.join(in_sg, "m.azr"), cwd=in_sg) as m:
         x = np.asarray(m.params_rwa, float)
         c, g = m.chi2_and_grad(x)
         worst = 0.0

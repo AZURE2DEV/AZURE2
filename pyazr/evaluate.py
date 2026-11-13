@@ -1,6 +1,6 @@
 """The numbers of a session at one parameter point (docs/upgrade/pyazr3.md section 7).
 
-:func:`evaluate` (``azure2.evaluate(x)``) runs one evaluation of the engine and returns an :class:`Evaluation`: the
+:func:`evaluate` (``Session.evaluate(x)``) runs one evaluation of the engine and returns an :class:`Evaluation`: the
 objective, its terms by the engine's names, the data chi-squared, and every data set's arrays, read where the
 program's output writer reads them (``chiSquared.out``, ``AZUREOut_*``).  Every number is the engine's; the objects
 hold copies the caller owns, and no session.
@@ -8,7 +8,8 @@ hold copies the caller owns, and no session.
 import numpy as np
 
 from .model_data import ModelDatum
-from .objective import require_data_mode, session_lock
+from .locking import session_lock
+from .objective import require_data_mode
 
 
 class EvaluatedData:
@@ -82,7 +83,7 @@ class Evaluation:
     """The numbers of a session at one point x of the free vector, from one engine evaluation.
 
     - ``x``: a copy of the point.
-    - ``objective``: what the fit minimises, ``azure2.objective(x)`` and ``Objective(x)`` bit for bit.
+    - ``objective``: what the fit minimises, ``Session.objective(x)`` and ``Objective(x)`` bit for bit.
     - ``chi2``: the data chi-squared, ``Total-Chi-Squared`` of the program's ``chiSquared.out`` (THM norms profiled,
       a data covariance included); ``objective - chi2`` are the priors and constraints.
     - ``terms``: ``{name: value}``, one entry per term of the engine's objective (its table, ``src/Objective.cpp``),
@@ -94,7 +95,7 @@ class Evaluation:
     - ``log_prob``: ``Objective.log_prob(x)``; ``excluded``: the point is outside the engine's sampler's support.
     """
 
-    BUILT_BY = "azure2.evaluate(x)"
+    BUILT_BY = "Session.evaluate(x)"
     FIELDS = {
         "x": "a copy of the point", "objective": "what the fit minimises (= Objective(x))",
         "chi2": "the data chi-squared, Total-Chi-Squared of chiSquared.out",
@@ -149,7 +150,7 @@ class Evaluation:
 
 
 def evaluate(session, x=None):
-    """One engine evaluation of ``session`` (a :class:`pyazr.azure2` in data mode) at the free vector ``x``
+    """One engine evaluation of ``session`` (a :class:`pyazr.Session` in data mode) at the free vector ``x``
     (default its start, ``params_rwa``): an :class:`Evaluation`."""
     require_data_mode(session, "evaluate()")
     x = np.asarray(session.params_rwa if x is None else x, float).ravel()

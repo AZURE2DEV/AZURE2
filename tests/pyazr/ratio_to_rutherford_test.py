@@ -49,7 +49,7 @@ try:
     import numpy as np
     import mpmath  # noqa: F401  (truth.py)
     import truth
-    from pyazr import azure2, _azure2
+    from pyazr import Session, _azure2
 except Exception as err:
     print(f"skip: the engine or mpmath is not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -68,13 +68,13 @@ def project(work, name, text):
 
 
 def chi2_of(d):
-    with azure2(os.path.join(d, "m.azr"), cwd=d) as m:
+    with Session(os.path.join(d, "m.azr"), cwd=d) as m:
         x = np.asarray(m.params_rwa, float)
         return float(np.sum(m.calculate_chi2_rwa(x)))
 
 
 def values_of(d):
-    with azure2(os.path.join(d, "m.azr"), cwd=d) as m:
+    with Session(os.path.join(d, "m.azr"), cwd=d) as m:
         return np.concatenate([np.asarray(v, float) for v in m.calculate_rwa(np.asarray(m.params_rwa, float))])
 
 
@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory() as work:
         "<targets>\n", "<targets>\nbeam B\n    spread         0.05 MeV lab\n")
     for name, text in (("plain", story), ("beam", with_beam)):
         d = project(work, "g_" + name, text)
-        with azure2(os.path.join(d, "m.azr"), cwd=d) as m:
+        with Session(os.path.join(d, "m.azr"), cwd=d) as m:
             x = np.asarray(m.params_rwa, float)
             c, g = m.chi2_and_grad(x)
             worst = 0.0

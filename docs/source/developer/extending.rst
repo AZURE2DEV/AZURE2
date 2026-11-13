@@ -160,7 +160,7 @@ and a ``pyazr`` keyword under one name.
 2. Its place in ``Config``: a row of ``OptionStorages()``
    (``src/ProjectOptions.cpp``; ``upgrade_project_options`` fails for a row
    without one or a default unlike ``Config::Reset``).
-3. Its keyword in ``pyazr.azure2``'s signature and docstring
+3. Its keyword in ``pyazr.Session``'s signature and docstring
    (``pyazr_describe``).
 4. Both values in ``tests/config_options/check.sh`` and
    ``tests/pyazr/config_options_test.py``; its line in
@@ -244,7 +244,7 @@ arguments); there is no handler written per route.
 ``tests/pyazr/ui/routes_consistency_test.py`` fails for a row whose callable
 does not exist, and for a public method of ``pyazr.Project`` or of the
 session that is neither served nor listed in ``PROJECT_NOT_SERVED``
-(``routes.py``) or ``AZURE2_NOT_SERVED`` (``pyazr/ui/engine.py``). A **job
+(``routes.py``) or ``SESSION_NOT_SERVED`` (``pyazr/ui/engine.py``). A **job
 kind** (a fitter, a sampler) is a function and one row of ``JOBS`` in
 ``pyazr/ui/jobs.py`` (``tests/pyazr/ui/jobs_test.py``).
 

@@ -64,7 +64,7 @@ try:
     import thm_records
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -133,7 +133,7 @@ def fd_jacobians(path, kw, x, tmp):
 
 if len(sys.argv) == 6 and sys.argv[1] == "--fd-child":
     _, _, path, kw, xfile, out = sys.argv
-    m = azure2(path, **json.loads(kw))
+    m = Session(path, **json.loads(kw))
     r, J, G = jacobians(m, np.load(xfile))
     np.savez(out, r=r, J=J, G=G)
     sys.exit(0)
@@ -149,7 +149,7 @@ try:
     for name, (block, kw) in CASES.items():
         print(name)
         path = stage(tmp, name, block)
-        m = azure2(path, **kw)
+        m = Session(path, **kw)
         x = np.asarray(m.params_rwa, float)
         rA, JA, GA = jacobians(m, x)
         rF, JF, GF = fd_jacobians(path, kw, x, tmp)

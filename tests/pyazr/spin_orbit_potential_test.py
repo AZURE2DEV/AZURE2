@@ -49,7 +49,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -76,7 +76,7 @@ try:
     shutil.copy(os.path.join(SO, "spin_orbit_potential.azr"), os.path.join(work, "so"))
     shutil.copytree(os.path.join(HP, "data"), os.path.join(work, "hp", "data"))
     shutil.copy(os.path.join(HP, "hybrid_potential.azr"), os.path.join(work, "hp"))
-    A = azure2(os.path.join(work, "so", "spin_orbit_potential.azr"), cwd=os.path.join(work, "so"))
+    A = Session(os.path.join(work, "so", "spin_orbit_potential.azr"), cwd=os.path.join(work, "so"))
 
     # (1) against the independent integration
     above = np.array([0.5, 1.0, 2.0, 3.0])
@@ -95,7 +95,7 @@ try:
           worst <= 1e-6, f"{worst:.3e} > 1e-6")
 
     # (2) the API's term = the record's term
-    B = azure2(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
+    B = Session(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
     B.set_nuclear_potential(1, spin_orbit=TERM)
     same = all(np.array_equal(A.coulomb_functions(1, above, L=1, J=j)[k], B.coulomb_functions(1, above, L=1, J=j)[k])
                for j in (0.5, 1.5) for k in ("S", "P", "delta_hs"))
@@ -108,7 +108,7 @@ try:
 
     # (3) refusals
     check("E_SO_NEEDS_J: no J for the spin-orbit pair", refused("E_SO_NEEDS_J", lambda: A.coulomb_functions(1, above, L=1)))
-    C = azure2(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
+    C = Session(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
     check("E_SO_NO_TERM: a J for a pair without the term",
           refused("E_SO_NO_TERM", lambda: C.coulomb_functions(1, above, L=1, J=0.5)))
     check("a j that l = 1 and spin 1/2 cannot make", refused("TwoLDotI", lambda: A.coulomb_functions(1, above, L=1, J=2.5)))
@@ -129,7 +129,7 @@ try:
     E = np.array([0.5, 1.0])
     paths = {}
     for name in ("with", "without"):
-        M = azure2(os.path.join(cap, name + ".azr"), cwd=cap)
+        M = Session(os.path.join(cap, name + ".azr"), cwd=cap)
         for p in M.ec_integrals(1, E):
             if p["multipolarity"] == 1 and p["lf"] == 1 and p["li"] in (0, 2):
                 paths.setdefault((name, p["li"]), []).append(np.asarray(p["value"]))

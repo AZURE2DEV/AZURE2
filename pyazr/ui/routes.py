@@ -161,7 +161,7 @@ ROUTES = (
           "residuals, the S factor where offered.", args=("name",)),
     Route("POST", "/api/transform", S, "engine.Engine.transform",
           "Physical values of every parameter at x (entries given over the working x).", kwargs=("x",)),
-    Route("POST", "/api/evaluate/grid", M, "pyazr.Session.evaluate",
+    Route("POST", "/api/evaluate/grid", M, "pyazr.Session.evaluate.energies",
           "The model on energies and angles given (pyazr3.md 2.3)."),
     Route("GET", "/api/data/{name}/grid", M, "pyazr.DataSet.grid", "The sub-point grid E_n of a data set."),
     Route("GET", "/api/data/{name}/kernel", M, "pyazr.DataSet.kernel", "The kernel rows K_i(E_n) of a data set."),

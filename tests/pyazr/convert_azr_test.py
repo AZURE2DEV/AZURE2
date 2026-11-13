@@ -43,7 +43,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import pyazr
-    from pyazr import azure2, convert_azr, FormatError, Project
+    from pyazr import Session, convert_azr, FormatError, Project
     from pyazr import _azure2
 except ImportError as e:
     print(f"SKIP: {e}")
@@ -89,8 +89,8 @@ for project, azr, hybrid in CASES:
         f3 = os.path.join(d, "converted3.azr")
         rep = convert_azr(old, f3, report=os.path.join(d, "report.json"))
         check(f"{project}: converted to format 3", rep["ok"] and _azure2.project_format(open(f3, "rb").read()) == 3)
-        a = azure2(os.path.join(d, azr), cwd=d)
-        b = azure2(f3, cwd=d)
+        a = Session(os.path.join(d, azr), cwd=d)
+        b = Session(f3, cwd=d)
         x = np.asarray(a.params_rwa, float)
         ca, cb = float(np.sum(a.calculate_chi2_rwa(x))), float(np.sum(b.calculate_chi2_rwa(x)))
         check(f"{project}: the conversion's chi2 = the tree's project's ({ca:.10g})",
@@ -103,7 +103,7 @@ for project, azr, hybrid in CASES:
         for label, path in (("format 1", old), ("format 2", f2), ("format 3 over an old section", f3old),
                             ("empty", empty), ("not a project", notproject)):
             message = _azure2.not_format3_message(open(path, "rb").read(), path)
-            calls = {"azure2": lambda: azure2(path, cwd=d), "Project.open": lambda: Project.open(path),
+            calls = {"azure2": lambda: Session(path, cwd=d), "Project.open": lambda: Project.open(path),
                      "tabulate": lambda: pyazr.tabulate(path, [(1, 1)], 1.0, 2.0),
                      "angular_distribution": lambda: pyazr.angular_distribution(path, [1.0]),
                      "write_averaged_azr": lambda: pyazr.write_averaged_azr(path, os.path.join(d, "avg.azr"), {}),

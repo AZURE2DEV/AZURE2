@@ -68,7 +68,7 @@ check("a plain data set has no shift", "shift" not in m["xs_90_plain"] and "shif
 
 print("\n3. with the engine: one parameter per data set, and the penalty")
 try:
-    from pyazr import azure2
+    from pyazr import Session
     have_engine = True
 except Exception as e:                              # pragma: no cover
     print(f"  skip  engine not built ({e})")
@@ -84,7 +84,7 @@ if have_engine:
         proj.set("xs_40", shift=["offset 0.004 MeV fixed", "sqrt 0.003 MeV^1/2 fit prior 0 0.001"])
         azr = os.path.join(work, "t.azr")
         proj.save(azr)
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             sq = mdl.parameters.sqrt_shifts
             check("five sqrt_shift parameters (one per data set)", len(sq) == 5, len(sq))
             free = [p for p in sq if not p.fixed]

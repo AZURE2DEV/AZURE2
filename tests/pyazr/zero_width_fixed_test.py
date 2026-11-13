@@ -46,12 +46,12 @@ def prepare(work, project):
 
 def worker(project, brune, ignore, out):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     work = tempfile.mkdtemp(prefix="pyazr_zero_fixed_")
     try:
         azr = prepare(work, project)
         res = {}
-        with azure2(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
+        with Session(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
             res["free"] = sorted(p.name for p in a.parameters
                                  if p.kind in ("energy", "width") and not p.fixed)
             res["fixed"] = sorted(p.name for p in a.parameters if p.kind == "width" and p.fixed)
@@ -70,7 +70,7 @@ def worker(project, brune, ignore, out):
 def main():
     try:
         import numpy  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

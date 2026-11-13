@@ -2,6 +2,145 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the class `Session`, its lock
+
+**Measured before the renaming** (counts of each name of `pyazr3.md` section 2.3 by word in `pyazr/` without `ui/`
+and `examples/`, `pyazr/ui/`, `pyazr/examples/`, `tests/`, `docs/source/`, `tools/`, `scripts/`; a method is
+counted as `.name(` where the name is also a common word; script `work/pysess/count_uses.py`), and each old method
+against the replacement its callers are to be ported to, on a copy of T2 at a point displaced from the start
+(`work/pysess/measure_t2.py`, the start commit's pyazr on the base build `b-trial56`):
+
+| name | uses: pyazr ui examples tests docs tools scripts | replacement | same numbers on T2 |
+|---|---|---|---|
+| azure2 | 15 2 26 275 16 0 1 | `Session(file, **options)` (slice 1, done) | same object |
+| params_rwa | 68 2 19 195 8 0 1 | `parameters.x0` | yes, bit for bit |
+| calculate_rwa | 9 3 9 89 6 0 0 | `evaluate(x).data[i].model` | yes, bit for bit |
+| calculate | 1 2 0 4 1 0 0 | none: a physical vector is not an input (decision 10) | - |
+| calculate_all_rwa | 1 1 0 7 1 0 0 | none: the fit vector only | - |
+| calculate_sfactor | 2 1 0 1 0 0 0 | none (physical vector) | - |
+| calculate_sfactor_rwa | 1 1 1 3 0 0 0 | `data[i].model * data[i].extra['sfactor_conversion']` | yes, bit for bit |
+| calculate_analyzing_power | 2 1 0 0 0 0 0 | none (physical vector) | - |
+| calculate_analyzing_power_rwa | 1 1 0 0 2 0 0 | `data[i].model` (A_y) | as calculate_rwa |
+| calculate_angular_dists | 4 1 1 1 1 0 0 | none (physical vector) | - |
+| calculate_angular_dists_rwa | 2 1 1 1 1 0 0 | `data[i].extra['legendre']` | not checked (T2 has none) |
+| calculate_energies | 9 1 5 14 0 0 0 | `data[i].energies` | yes, bit for bit |
+| calculate_angles | 1 1 0 4 0 0 0 | `data[i].angles` | yes, bit for bit |
+| calculate_excitation_energy | 1 1 0 3 1 0 0 | `data[i].excitation_energies` | yes, bit for bit |
+| calculate_chi2_rwa | 21 1 9 193 10 0 0 | `ev.chi2` + 3 model terms of `ev.terms` | yes, bit for bit |
+| calculate_chi2 | 1 1 0 21 2 0 0 | none (physical vector) | - |
+| segment_chi2 | 6 5 1 39 1 0 3 | `data[i].chi2` | NO under a data covariance (whitened split vs chiSquared.out split) |
+| dataset_chi2 | 1 1 0 11 1 0 0 | `data[i].chi2` | NO, as segment_chi2 |
+| penalties | 4 0 0 49 1 0 1 | `ev.terms`, `data[i].norm_chi2`, `.shift_chi2` | yes (shift parts summed per set) |
+| scattering_length_chi2 | 1 1 0 1 1 0 0 | `ev.model_data` rows of that quantity | yes (model_data equal) |
+| objective | 4 0 0 55 1 0 0 | `objective()(x)` | yes, bit for bit |
+| objective_and_grad | 2 2 0 17 1 0 0 | `objective().value_and_grad(x)` | yes, bit for bit |
+| chi2_and_grad | 2 1 0 53 5 0 0 | none (data-chi2 gradient) | NO: no gradient |
+| residual_jacobian | 9 1 1 105 17 0 1 | `objective().residuals_and_jacobian` | yes, first 332 rows; no `skip` |
+| residuals | 3 1 1 30 2 0 2 | `objective().residuals(x)`, first rows | yes, bit for bit |
+| fit_objective | 7 1 4 9 5 0 0 | `objective()` | same object |
+| evaluate | 6 5 2 7 6 0 0 | stays | - |
+| transform_rwa | 13 1 0 23 4 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| transform_all_rwa | 6 1 0 7 0 0 1 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| transform_physical | 1 1 0 0 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| physical_levels | 8 2 3 3 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| wigner_widths | 2 1 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| dimensionless_widths | 2 1 3 0 2 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| norm_indices | 2 1 0 5 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| shift_indices | 2 1 0 2 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| energy_indices | 1 1 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| level_free_width_indices | 3 1 3 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| only_level | 2 1 2 0 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| without_level | 3 1 2 2 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| ParameterSet | 9 0 0 1 6 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| LevelKey | 10 0 3 0 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| read_sav | 3 1 0 2 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| load_sav | 8 1 0 19 2 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| update_sav_from_rwa_params | 2 1 0 4 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| update_rwa_params_from_sav | 2 1 0 2 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| full_rwa_from_sav | 5 1 0 5 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| read_sav_basis | 2 1 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| write_output_files | 4 6 0 43 3 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| extrap_mode | 7 2 3 3 2 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| data_mode | 21 3 0 23 3 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| set_channel_radius | 5 1 0 29 2 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| set_nuclear_potential | 3 1 5 21 11 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| clear_nuclear_potential | 1 1 4 4 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| Pair | 16 0 3 42 14 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| PairSet | 13 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| LevelScheme | 8 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| SchemeLevel | 5 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| SchemeChannel | 6 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| nuclei | 18 1 0 57 28 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| coulomb_functions | 11 1 4 40 11 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| parameter_records | 9 0 0 7 1 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| nds | 25 0 2 21 17 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| exfor_coulomb | 3 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| exfor_sfactor | 2 0 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| masses | 47 3 2 143 71 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| tabulate | 10 0 3 12 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| angular_distribution | 4 1 5 3 4 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| modelavg | 1 0 0 7 7 0 4 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| priors | 40 6 7 107 41 0 9 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| bands | 18 7 9 5 16 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| transform | 0 2 0 0 0 0 0 | as section 2.3 of pyazr3.md (later slice) | not measured |
+| widths | 74 7 29 290 221 3 9 | as section 2.3 of pyazr3.md (later slice) | not measured |
+
+Findings of the measurement: `segment_chi2` (and `dataset_chi2`, its sum by name) splits the chi-squared of data sets
+joined by a data covariance by the whitened rows, `Evaluation.data[i].chi2` by the program's `chiSquared.out` split
+(T2: 100.881 / 413.015 against 99.168 / 414.728, equal sums); the whitened split is the sum of the squares of
+`objective().residuals(x)` per data set, bit for bit.  `chi2_and_grad` has no replacement (no object gives the
+gradient of the data chi-squared without the priors).  `residual_jacobian(x, skip=...)` has no `skip` in `Objective`.
+`penalties` splits the shift prior per segment into constant, sqrt(E) and shift-function parts; `Evaluation` sums them.
+The engine's evaluation (`_azure2.Session.evaluation_rwa`) runs in extrapolation mode and gives the extrapolations'
+model values bit for bit equal to `calculate_rwa` (T1: 5 grids, T3: 9), with a meaningless chi-squared; so
+`Session(file, data_mode=False).evaluate(x)` can replace `calculate_rwa` there with no engine code (the Python check
+`require_data_mode` and the chi-squared fields must change).
+
+**Done** (one stride, Python and documents only).
+- `pyazr/azure2.py` → `pyazr/session.py`, class `azure2` → `Session` (`pyazr.Session(file, *, cwd=..., options)`:
+  the options are keyword-only now; no positional caller existed); `pyazr.azure2` is gone, no alias.
+  `Project.session()` opens a `Session`.  The THM methods (`thm_experiments`, `thm_background`, `thm_lineshape`,
+  `thm_vertex`, `thm_distortion`) moved into the mixin `pyazr/session_thm.py`; the class statement lists its mixins
+  one per line (`_HybridPotentials`, `session_physics.SessionPhysics`, `session_thm.SessionTHM`): a new mixin is one
+  line there.  `session.py` 2295 → 2131 lines (the size register lowered to it).
+- The lock: `pyazr/locking.py` (`session_lock`, `engine_call`); the session makes its `RLock` when it opens; every
+  public method and property getter of `Session` and its mixins that reaches the engine is an `engine_call` (76 in
+  `session.py`, 5 in `potentials.py`, 1 in `session_physics.py`, 5 in `session_thm.py`), `close()` too; `Objective`
+  and `evaluate` take the same lock.  The raw handle `sess` does not lock (it is the binding object).
+- Ported by script (`work/pysess/port_session.py`: import lists, `pyazr.azure2(`, bare `azure2(` calls,
+  `azure2.<method>` in prose, `pyazr/azure2.py`): 192 files, 764 substitutions in `pyazr/`, `tests/`, `docs/source/`,
+  `scripts/`, the root `CLAUDE.md`; then by hand: a variable `azure2` in `save_fit_norms_test.py`, the web UI's
+  `AZURE2_NOT_SERVED` → `SESSION_NOT_SERVED` and its consistency test, the class-scheme rows (`pyazr::Session`,
+  `_azure2::Session`, new boxes `pyazr::Objective` and `pyazr::Evaluation` in the front-ends figure, regenerated),
+  `docs/source/developer/api.rst`, `classes.rst`, `architecture.rst`, `pyazr/CLAUDE.md`.
+- New test `tests/pyazr/session_lock_test.py` (ctest `pyazr_session_lock`): every public member that reaches the
+  engine takes the lock (by its source); two threads on one T1 session (`evaluate` with `calculate_rwa` beside the
+  objective's value and gradient with `segment_chi2`) get each thread's values alone, bit for bit.  Shown to fail:
+  with `engine_call` made a no-op the process crashes (exit 139, three runs of three); with the decorator removed
+  from `calculate_rwa` check (a) names it.
+
+- Also changed: two messages and one doc string of the binding name the class (`api/src/pybind_api.cpp`,
+  `pybind_describe.cpp`: `Session.params_rwa`, `keyword (of pyazr.Session)`); the web UI's row of the missing call
+  for energies given to an evaluation names `pyazr.Session.evaluate.energies` (it named `pyazr.Session.evaluate`,
+  which now exists), and the routes test's check that no other UI file uses the class looks for code that makes,
+  imports or calls it (`Session(`, `import Session`, `pyazr.Session.<m>(`), not for the text in route rows (shown to
+  fail with a `Session("x.azr")` added to `jobs.py`).
+
+**Verified** (build `work/b-pysess`, 0 warnings): `ctest -R pyazr_ -LE slow -j 2` (OMP 1): 126 of 130, the four
+failures (an import lost in the moved THM code, the binding's message naming `azure2`, the route row above, a shell
+function named `azure2` the port script renamed in `tests/nuisance_prior_centre/continued.sh`, restored) fixed and
+those four rerun alone with `pyazr_session_lock`, `pyazr_describe`, `pyazr_ui_api`: 7 of 7; the consistency test;
+T1, T2, T3, 13N x 3 bases with the program of this build against the base build `b-trial56`: 12 of 12 output
+directories identical.  Not run: the whole `ctest -LE slow` beyond `pyazr_`, the slow tests, `tests/run_tests.sh`,
+all projects x 3 bases, the converted-tree gate (the program's code is unchanged; only `api/src` strings), Sphinx
+(not installed).
+
+**Open** (the next slices of the rename; nothing of them is started): the evaluation family, the parameter vector and
+table, the Python physics, the libraries (pyazr3.md section 4, step 5).  `threads=` of `Session` is not there: the
+engine takes no per-session thread count (the binding's `RuntimeOptions` has none; the program's `--threads` is
+another branch).  `docs/source/user_guide/pyazr.rst` and the reference pages name `Session` but still teach the old
+methods.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-objective`) — pyazr: `Objective`, `Evaluation`, three recipes
 
 **Done** (beside today's methods; nothing removed; design and as built: `pyazr3.md` section 7).

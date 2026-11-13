@@ -136,7 +136,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -190,7 +190,7 @@ with tempfile.TemporaryDirectory() as tmp:
             widths[level] = widths.get(level, 0.0) + float(mm.group(1)) / 1000
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -243,7 +243,7 @@ with tempfile.TemporaryDirectory() as tmp:
     on_dir = project("on1", on, one_level=True)
     off_dir = project("off1", KINKEYS, one_level=True)
     offk_dir = project("offk1", dict(KINKEYS, lineshape=False), one_level=True)
-    with azure2(os.path.join(off_dir, "run.azr"), cwd=off_dir) as s:
+    with Session(os.path.join(off_dir, "run.azr"), cwd=off_dir) as s:
         x = np.asarray(s.params_rwa, float)
         m_off = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
         r_off = s.residuals(x)
@@ -252,10 +252,10 @@ with tempfile.TemporaryDirectory() as tmp:
             check("an experiment without the line shape raises", False)
         except Exception as err:
             check(f"an experiment without the line shape raises ({err})", "no line shape" in str(err))
-    with azure2(os.path.join(offk_dir, "run.azr"), cwd=offk_dir) as s:
+    with Session(os.path.join(offk_dir, "run.azr"), cwd=offk_dir) as s:
         check("lineshape=off: residuals bit for bit those without the key",
               np.array_equal(s.residuals(x), r_off))
-    with azure2(os.path.join(on_dir, "run.azr"), cwd=on_dir) as s:
+    with Session(os.path.join(on_dir, "run.azr"), cwd=on_dir) as s:
         m_on = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
         ecm = np.concatenate([np.asarray(v) for v in s.energies])
         r = s.thm_lineshape("A", ecm, x)
@@ -264,7 +264,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"ratio == NC2 at {ecm.size} points, {nc2.min():.3f}-{nc2.max():.3f} (worst {worst:.1e})",
               worst < 1e-9)
     try:
-        with azure2(os.path.join(on_dir, "run.azr"), cwd=on_dir, use_brune=False):
+        with Session(os.path.join(on_dir, "run.azr"), cwd=on_dir, use_brune=False):
             pass
         check("a formal (non-Brune) session refuses lineshape=on", False, "it loaded")
     except Exception as err:

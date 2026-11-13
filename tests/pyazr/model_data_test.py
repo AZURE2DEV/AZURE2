@@ -35,7 +35,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     import pyazr
-    from pyazr import azure2, _azure2  # noqa: F401
+    from pyazr import Session, _azure2  # noqa: F401
 except Exception as err:
     print(f"skip: the engine is not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -85,7 +85,7 @@ try:
     path = os.path.join(work, "m.azr")
     with open(path, "w") as f:
         f.write(text + MODEL_DATA)
-    m = azure2(path)
+    m = Session(path)
     x = np.asarray(m.params_rwa, float)
     records = pyazr.model_data(m)
     check("three records, in file order", [r.name for r in records] == ["wg_L5", "G_L5", "a_p15N"], records)
@@ -129,7 +129,7 @@ try:
         fpath = os.path.join(work, f"fit_{name}.azr")
         with open(fpath, "w") as f:
             f.write("\n".join(fit_text) + "\n" + extra)
-        fit = azure2(fpath)
+        fit = Session(fpath)
         xf = np.asarray(fit.params_rwa, float)
         value, grad = fit.chi2_and_grad(xf)
         h = 1e-6 * np.maximum(1.0, np.abs(xf))

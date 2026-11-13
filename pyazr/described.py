@@ -6,12 +6,12 @@
   bound physics functions and error classes.  Every table is read from the engine's own tables at the first call
   (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option and physics tables); none is
   written a second time here.
-- :func:`describe_session` (``pyazr.azure2.describe()``): what one session holds.
+- :func:`describe_session` (``pyazr.Session.describe()``): what one session holds.
 - The data sets and extrapolations of a format-3 project as the engine built them (:class:`DescribedDataset`, ...):
   what the engine made of the records (``AZURE2 --describe --json``) -- the quantity, the observable it computes, the
   reaction tree with the ``<levels>`` pair keys, the lab-energy window, the data file and its rows read and kept, the
-  effects and the fit parameters; a calculation session hands them out (:attr:`pyazr.azure2.datasets`,
-  :attr:`~pyazr.azure2.active_datasets`, :attr:`~pyazr.azure2.extrapolations`).  Nothing here reads a project file.
+  effects and the fit parameters; a calculation session hands them out (:attr:`pyazr.Session.datasets`,
+  :attr:`~pyazr.Session.active_datasets`, :attr:`~pyazr.Session.extrapolations`).  Nothing here reads a project file.
 
 Every result is made of dicts, lists, strings, numbers, booleans and None: ``json.dumps`` takes it.
 """
@@ -168,7 +168,7 @@ class _Described(list):
             if x.key == key:
                 return x
         raise ParameterKeyError(f"no record with key {key!r} (the keys: {[x.key for x in self]}); "
-                                f"azure2.datasets and azure2.extrapolations list them.")
+                                f"Session.datasets and Session.extrapolations list them.")
 
     def by_name(self, name):
         """The record with this name; :class:`pyazr.ParameterKeyError` (a ``KeyError``) when there is none."""
@@ -177,7 +177,7 @@ class _Described(list):
                 return x
         names = [x.name for x in self]
         raise ParameterKeyError(f"no record named {name!r}{close_names(name, names)}; the names: {listed(names)}; "
-                                f"azure2.datasets and azure2.extrapolations list them.")
+                                f"Session.datasets and Session.extrapolations list them.")
 
     def by_reaction(self, entrance_key=None, exit_key=None):
         return type(self)(x for x in self if (entrance_key is None or x.entrance_key == entrance_key)
@@ -343,7 +343,7 @@ def kinds():
     - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
       :class:`pyazr.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
       describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);
-    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, ``key`` (the
+    - ``options``: the session options by their keyword of :class:`pyazr.Session`: type, default, ``key`` (the
       ``<config>`` key of an option of the calculation, the same word; "" for one that is not project state, with its
       ``reason``), the program's ``flag`` and ``negation``, ``effect`` (physics, convention, numerics), doc;
     - ``physics``: the rows of the binding's physics table, by name (:mod:`pyazr.physics` has one function per row):
@@ -368,7 +368,7 @@ def kinds():
 
 
 def describe_session(session):
-    """What one :class:`pyazr.azure2` session holds, as plain data (``azure2.describe()``); see there."""
+    """What one :class:`pyazr.Session` session holds, as plain data (``Session.describe()``); see there."""
     s = session
     common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
     parameters = []

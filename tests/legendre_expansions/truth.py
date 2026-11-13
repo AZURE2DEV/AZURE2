@@ -31,8 +31,8 @@ LAB = [5.9, 6.1, 6.3]
 
 
 def engine(workdir):
-    from pyazr import azure2
-    with azure2(os.path.join(workdir, "m.azr"), cwd=workdir, data_mode=False) as m:
+    from pyazr import Session
+    with Session(os.path.join(workdir, "m.azr"), cwd=workdir, data_mode=False) as m:
         coef = m.calculate_angular_dists(m.params)
         values = m.calculate(m.params)
         angles = m.calculate_angles(m.params)
