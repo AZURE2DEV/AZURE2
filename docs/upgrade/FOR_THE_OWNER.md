@@ -413,7 +413,10 @@ moved. Found with it and mended: `save_fit` did not write a fitted areal density
 potential or sample thickness back into the project at all (it kept the old value), which also made it refuse its own
 result. The old AZURE2 (`origin/dev`) has no centre to drop: its `<abundances>` line is `Z A value vary sigma` and the
 prior is centred on the value on the line, so a user who copies fitted abundances into that line moves the prior with
-them; through `param.sav` it was right.
+them; through `param.sav` it was right. The grids and the limits of a fitted density, Doppler temperature, stopping
+scale or kernel parameter are laid out from the centre too (when the start lies inside the range so laid out), so a
+fit written back with `save_fit` and computed again gives the fit's χ²; before, the Doppler temperature's moved by
+6e-6 and every layout moved with the start.
 
 ## What is in work and what comes next
 

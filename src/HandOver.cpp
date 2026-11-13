@@ -80,7 +80,7 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
     const TargetEffect *lead = Data().GetDensityTargetEffect(k);
     double v = p[idx];
     // The sub-point grids span the layout density: beyond it the depth integral would run off the grid.
-    const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityNominal();
+    const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityLayoutBase();
     if (v > vMax || !(v >= vMin)) {
       if (configure.FirstTime("areal density range"))
         configure.outStream << "WARNING: " << lead->GetTargetName() << ".areal_density = " << v << " is outside ["

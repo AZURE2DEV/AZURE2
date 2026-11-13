@@ -918,6 +918,12 @@ add_test(NAME pyazr_ui_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURC
 set_tests_properties(pyazr_ui_smoke PROPERTIES LABELS browser
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# A fit continued from its written values computes the fit it continues (docs/upgrade/parameter_kinds.md section 4):
+# tests/nuisance_prior_centre/continued.sh, whose part (5) needs the module (save_fit, the layouts the sessions report).
+add_test(NAME pyazr_continued_fit
+         COMMAND bash ${CMAKE_SOURCE_DIR}/tests/nuisance_prior_centre/continued.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" PROCESSORS 2)
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
