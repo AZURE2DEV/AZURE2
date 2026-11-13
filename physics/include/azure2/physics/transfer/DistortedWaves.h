@@ -77,6 +77,83 @@ DistortedWaves SolveDistortedWavesInPotential(const std::function<std::complex<d
                                               bool has_spin_orbit, double point_charge_MeV_fm,
                                               const ScatteringRequest &request);
 
+/*!
+ * One partial wave at a time (what SolveDistortedWaves is made of, and what a sum over l that stops at an l it does
+ * not know in advance needs).  RadialChannel is the potential of one channel at one energy on r_i = i h, tabulated
+ * once; SolvePartialWave integrates Eq. (4.1) for one (l, j) outward to the outer matching node and matches at that
+ * node and the inner one (S of Eq. (4.2) from the two values, as SolveDistortedWaves), keeping the first
+ * `stored_nodes` values.  A plane-wave channel (no potential, no charge) gives u_l = F_l(0, kr) = kr j_l(kr) exactly,
+ * S = 1 (Riccati-Bessel functions by Miller's downward recurrence normalised with sum (2l+1) j_l^2 = 1, upward where
+ * l < kr).
+ */
+struct RadialChannel {
+  double k_fm = 0.0, eta = 0.0, step_fm = 0.0;
+  int two_s = 0;
+  bool spin_orbit = false;   ///< waves per j
+  bool plane_wave = false;   ///< no potential and no Coulomb: the waves are Riccati-Bessel functions
+  double potential_range_fm = 0.0;   ///< beyond it the potential is point Coulomb (nuclear terms below e^-12)
+  double k2mu_per_MeV_fm2 = 0.0;     ///< 2 mu / hbar^2
+  double point_charge_MeV_fm = 0.0;  ///< C of a point-Coulomb term C/r in `central` (0 when finite at the origin)
+  std::complex<double> central_at_origin_MeV;     ///< the finite part of `central` at r -> 0 (C/r removed)
+  std::complex<double> spin_orbit_at_origin_MeV;  ///< the spin-orbit form at the first node (series start)
+  std::vector<std::complex<double>> central_MeV;     ///< central U(r_i) (MeV), index 0 unused
+  std::vector<std::complex<double>> spin_orbit_MeV;  ///< the spin-orbit form at r_i, empty without a spin-orbit term
+};
+
+/// The potential's channel on r_i = i h up to the node nearest radius_fm (the outer matching node of every wave
+/// solved on it must lie inside).  Throws std::invalid_argument as SolveDistortedWaves.
+RadialChannel TabulateChannel(const OpticalPotential &potential, const ScatteringRequest &request, double radius_fm);
+/// The plane-wave channel of the pair's mass at the request's energy (the pair's charges are ignored).
+RadialChannel PlaneWaveChannel(const ScatteringRequest &request, double radius_fm);
+
+/// Where a wave is matched: two nodes, outer > inner.
+struct WaveMatching {
+  int outer_node = 0;
+  int inner_node = 0;
+};
+/// SolveDistortedWaves' matching: the last node of the channel and the node nearest 1 fm inside (at least 5 nodes).
+WaveMatching MatchingAtLastNode(const RadialChannel &channel);
+/*!
+ * The matching of a wave whose sum over l is cut by a bound (the zero-range THM weight, ZeroRange.h): beyond the
+ * stored range, the potential and the turning point (eta + sqrt(eta^2 + l(l+1)))/k by max(n_q quarter wavelengths,
+ * min_fm), the inner node a quarter wavelength inside (at least 2 nodes) and beyond the stored nodes.  The channel must
+ * reach the outer node (MatchingRadius gives the radius to tabulate for the highest l).
+ */
+struct MatchingBeyondTurningPoint {
+  double quarter_wavelengths = 2.0;
+  double min_fm = 1.0;
+};
+WaveMatching MatchingFor(const RadialChannel &channel, int l, int stored_nodes, const MatchingBeyondTurningPoint &rule);
+/// The radius (fm) a channel must reach for the waves l <= l_max under the rule.
+double MatchingRadius(const RadialChannel &channel, int l_max, int stored_nodes, const MatchingBeyondTurningPoint &rule);
+
+/// One partial wave (l, j) normalised as Eq. (4.2), u on r_i, i < stored_nodes.  Throws std::runtime_error when the
+/// wave cannot be normalised (S or the scale not finite), std::invalid_argument for a matching outside the channel.
+PartialWave SolvePartialWave(const RadialChannel &channel, int l, int two_j, const WaveMatching &matching,
+                             int stored_nodes);
+/// The Coulomb phases sigma_l, l = 0 ... l_max (rad) of the channel (0 for a plane wave).
+std::vector<double> CoulombPhases(const RadialChannel &channel, int l_max);
+
+/// Plane waves on the request's grid: u_l = F_l(0, kr) for l = 0 ... l_max, S = 1, sigma = 0.
+DistortedWaves PlaneWaves(const ScatteringRequest &request);
+
+/// A spinless channel to solve: a potential, or a plane wave (no potential, no charge), the pair and the c.m.
+/// energy (MeV).
+struct WaveChannel {
+  bool plane_wave = false;
+  OpticalPotential potential;  ///< ignored for a plane wave
+  ChannelKinematics pair;
+  double energy_MeV = 0.0;
+};
+/// The channel on r_i = i h (h = step_fm), tabulated as far as the waves l <= l_max stored on `stored_nodes` nodes
+/// need under the rule.
+RadialChannel ChannelFor(const WaveChannel &channel, double step_fm, int stored_nodes, int l_max,
+                         const MatchingBeyondTurningPoint &rule);
+/// The waves l = 0 ... l_max of the channel on `stored_nodes` nodes of step h, each matched by the rule, with the
+/// Coulomb phases: what the THM distortions read.
+DistortedWaves SolveStoredWaves(const WaveChannel &channel, double step_fm, int stored_nodes, int l_max,
+                                const MatchingBeyondTurningPoint &rule);
+
 /// The wave of (l, j) (j ignored without spin-orbit); throws std::out_of_range when it was not solved.
 const PartialWave &WaveOf(const DistortedWaves &w, int l, int two_j);
 

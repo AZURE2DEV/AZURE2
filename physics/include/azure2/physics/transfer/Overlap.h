@@ -25,7 +25,10 @@ struct RadialOverlap {
   std::vector<double> u;              ///< u(r_i), in the unit of the kind
   std::vector<double> potential_MeV;  ///< V(r_i), Coulomb included (the post- or prior-form binding interaction)
   std::vector<double> coulomb_MeV;    ///< its Coulomb part
+  double r_min_fm = 0.0;              ///< u = 0 below it (a cut analytic tail): radial integrals start at that node
 };
+/// The first node of the radial integrals of an overlap: the node of r_min (0 without a cut).
+int FirstNode(const RadialOverlap &overlap);
 
 enum class OverlapKind { BoundState, Bin, ScatteringState };
 

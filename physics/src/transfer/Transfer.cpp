@@ -36,7 +36,7 @@ void CheckReaction(const TransferReaction &r, const DistortedWaves &in, const Di
 }
 
 /// R_{wf wi} = int dR u_wf(c_f R) u_F(R) u_wi(c_i R) / R (fm^-1/2 times the unit of u_F) on the residual overlap's
-/// grid, as far as both waves reach, for every pair of waves (Eq. (6.7)).
+/// grid, from its first node (r_min of a cut tail) as far as both waves reach, for every pair of waves (Eq. (6.7)).
 std::vector<cplx> ZeroRangeRadialIntegrals(const RadialOverlap &state, const DistortedWaves &in,
                                            const DistortedWaves &out, double c_i, double c_f) {
   const double hb = state.step_fm;
@@ -53,6 +53,7 @@ std::vector<cplx> ZeroRangeRadialIntegrals(const RadialOverlap &state, const Dis
     uf[k].resize(n);
     for (int p = 0; p < n; ++p) uf[k][p] = InterpolateOnGrid(Wave(out, k), out.step_fm, c_f * p * hb);
   }
+  const int first = FirstNode(state);  // 0, or the node of a cut tail's r_min
   std::vector<cplx> R(nwf * nwi, 0.0), f(n);
   for (std::size_t kf = 0; kf < nwf; ++kf)
     for (std::size_t ki = 0; ki < nwi; ++ki) {
@@ -60,7 +61,7 @@ std::vector<cplx> ZeroRangeRadialIntegrals(const RadialOverlap &state, const Dis
       if ((li + lf + state.l) % 2 != 0 || li < std::abs(lf - state.l) || li > lf + state.l) continue;
       f[0] = 0.0;
       for (int p = 1; p < n; ++p) f[p] = uf[kf][p] * state.u[p] * ui[ki][p] / (p * hb);
-      R[kf * nwi + ki] = Simpson(f, hb) / (c_i * c_f);
+      R[kf * nwi + ki] = Simpson(std::vector<cplx>(f.begin() + first, f.end()), hb) / (c_i * c_f);
     }
   return R;
 }
