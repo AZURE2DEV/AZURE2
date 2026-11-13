@@ -1860,28 +1860,47 @@ bool CNuc::TransformIn(const Config &configure) {
         // itself (it is +/- the input row); for a marked level it is the on-resonance amplitude of
         // FormalECOnResonance, which changes sign with the level's own row.  Before 2026-11-12 the sign of
         // an unmarked final state was whatever the solver returned (-e_1 instead of e_1 in 3 of 200,000
-        // random level sets).  A zero ANC gives no direction and nothing is turned.  A row that an isospin
-        // tie derives from another level is set again by the tie; that case is not covered.
+        // random level sets).  A row that an isospin tie derives from another level is set again by the
+        // tie; that case is not covered.
+        //
+        // An ANC of exactly zero (every particle amplitude of the final state entered as zero) gives no
+        // direction.  The level then has no particle overlap with the others: its rows of N and M are
+        // diagonal, its eigenvector is +/- e_la exactly, and its formal row is +/- its input row.  The row
+        // is taken with the positive sign, i.e. the eigenvector's component on the level itself positive,
+        // the convention FormalECOnResonance uses for a_f.  The rule above picks the same row for an ANC of
+        // either sign close to zero (the amplitude used is a_f times the entered one), so zero is now the
+        // continuous point, and a fit started from zero reports the ANC with the sign of the level's fitted
+        // formal amplitude.  Before 2026-11-13 nothing was turned and the solver's sign decided: with the
+        // ground state second of three 1/2- levels (tests/formal_ec_final_state, B_mid) its row came back
+        // reversed, parameters.out printed its static moment with the wrong sign (mu = +0.3222 nm for an
+        // entered -0.3222), and a fitted ANC and the external parts of reported gamma widths could come out
+        // with either sign.  The cross sections were not affected.
+        // A turned zero is written 0.0 - x, so that it stays +0 in param.par.
         if (formalEC) {
           for (int la = 0; la < (int)tempEnergies.size(); la++) {
             ALevel *theLevel = theJGroup->GetLevel(levelKeys[la]);
             if (!theLevel->IsECLevel()) continue;
-            double dot = 0.0;
+            double dot = 0.0, refNorm = 0.0;
             if (theLevel->HasECFinalState()) {
               vector_r onResonance;
               double sqrtNF = 0.0, offset = 0.0;
               if (!this->FormalECOnResonance(j, levelKeys[la], false, onResonance, sqrtNF, offset)) continue;
               for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
-                if (theJGroup->GetChannel(ch)->GetRadType() == 'P')
+                if (theJGroup->GetChannel(ch)->GetRadType() == 'P') {
                   dot += onResonance[ch - 1] * theLevel->GetECReferenceGamma(ch);
+                  refNorm += pow(theLevel->GetECReferenceGamma(ch), 2.0);
+                }
             } else {
               for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
-                if (theJGroup->GetChannel(ch)->GetRadType() == 'P')
+                if (theJGroup->GetChannel(ch)->GetRadType() == 'P') {
                   dot += theLevel->GetGamma(ch) * tempGammas[la][ch - 1];
+                  refNorm += pow(tempGammas[la][ch - 1], 2.0);
+                }
             }
+            if (refNorm == 0.0) dot = eigenFunc.eigenvectors()[la][rank[la]];
             if (dot < 0.0)
               for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
-                theLevel->SetGamma(ch, -theLevel->GetGamma(ch));
+                theLevel->SetGamma(ch, 0.0 - theLevel->GetGamma(ch));
           }
         }
       } else {
@@ -2865,7 +2884,8 @@ void CNuc::FillCompoundFromParams(const vector_r &pIn) {
  * pyazr vector gives the same cross section whatever the .azr says), they change sign with the level's own
  * formal row, and they do not jump when a fitted ANC passes through zero.  TransformIn chooses the sign of
  * that formal row so that the amplitudes start along the ANC entered in the input; the sign of the
- * external-capture term therefore follows the entered ANC, as in the Brune parametrization.  The one place
+ * external-capture term therefore follows the entered ANC, as in the Brune parametrization (an ANC of zero:
+ * the formal row is the input row, the limit of a vanishing ANC of either sign).  The one place
  * the rule can jump is \f$a_f=0\f$, a final state with no weight on its own level.
  */
 

@@ -559,8 +559,16 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   right; re-entering those widths changed the capture by up to 74 %. Do
   not carry `parameters.out` gamma widths of a `--no-brune` capture run of
   such a build into a new `.azr` when the final state is not first in its
-  group. An ANC of exactly zero gives no direction; a row derived by an
-  `<isospin>` tie is set by the tie.
+  group. An ANC of exactly zero gives no direction: since branch
+  `fix/formal-ec-zero-anc` (2026-11-13) the final state's formal row is then
+  its input row, the same row an ANC of +1e-6 or -1e-6 gives, so a fit
+  started from zero reports the ANC with the sign of the level's fitted
+  formal amplitude. Before, the solver's arbitrary sign decided: with the
+  ground state second of three levels its row came back reversed and
+  `parameters.out` printed its static moment with the wrong sign
+  (mu = +0.3222 nm for an entered -0.3222), and a fitted ANC could be
+  reported with either sign; the cross sections were right. A row derived
+  by an `<isospin>` tie is set by the tie.
   (2) *`--use-gradient`* is used for these models (the on-resonance
   amplitude is differentiated through the group's eigenvector). Before:
   finite differences for the whole model ("analytic block BAILED",

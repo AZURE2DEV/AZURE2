@@ -199,6 +199,35 @@ d="$(awk '{ sub(/\r$/, "") } /energy is .* keV away/ { for (i = 1; i < NF; i++) 
 if [ -n "$d" ] && awk -v d="$d" 'BEGIN { exit !(d < -49 && d > -51) }'; then ok "--no-transform A_orig: pole reported $d keV from the pair's energy (true -50)"
 else bad "--no-transform A_orig: pole distance '$d' keV, expected -50"; fi
 
+# An ANC of exactly zero gives the sign rule above no direction.  The final state's formal row must then be
+# its input row (DeBoer 2026-11-13), which is also the row the rule picks for an ANC of +1e-6 or of -1e-6
+# (the amplitude used is a_f times the entered one), so zero is the continuous point.  The ground state
+# carries a static moment (its M1 line), so its row is not zero and its sign can be seen: width_<gs>_2 in
+# param.par, and the moment printed in parameters.out.  Before, the solver's sign decided; with the ground
+# state second of three levels (B_mid) its row came back reversed and parameters.out printed mu = +0.3222
+# for the entered -0.3222 (the cross sections were right).
+zero_model() {  # MODEL ANC
+  awk -v a="$2" '$1 == "0.5" && $2 == "-1" && $3 == "0" && $6 == "1" && $12 == "1.62" { $12 = a; print " " $0; next }
+                 $1 == "0.5" && $2 == "-1" && $3 == "0" && $6 == "2" { $12 = "-0.3222"; print " " $0; next } { print }' "$1"
+}
+parval() { awk -v k="$2" '{ sub(/\r$/, "") } $1 == k { print $2; exit }' "$1"; }
+for c in "A_swap 2" "B_mid 2"; do
+  set -- $c
+  for a in 0 1e-6 -1e-6; do
+    zero_model "$M/$1.azr" "$a" > "$WORK/models/$1_anc$a.azr"
+    run "$1_anc$a" "$WORK/models/$1_anc$a.azr" "--no-brune" || true
+  done
+  z="$(parval "$WORK/$1_anc0/output/param.par" "width_$2_2")"; p="$(parval "$WORK/$1_anc1e-6/output/param.par" "width_$2_2")"
+  n="$(parval "$WORK/$1_anc-1e-6/output/param.par" "width_$2_2")"; z1="$(parval "$WORK/$1_anc0/output/param.par" "width_$2_1")"
+  if [ -n "$z" ] && [ -n "$p" ] && [ -n "$n" ] && awk -v z="$z" -v p="$p" -v n="$n" -v z1="$z1" '
+       function abs(x) { return x < 0 ? -x : x }
+       BEGIN { exit !(z + 0 != 0 && abs(z - p) <= 1e-4 * abs(z) && abs(z - n) <= 1e-4 * abs(z) && z1 !~ /^-/ && abs(z1) < 1e-12) }'; then
+    ok "zero ANC, $1: ground-state formal row = input row = that of ANC +-1e-6 (moment amplitude $z)"
+  else bad "zero ANC, $1: ground-state moment amplitude '$z', with ANC +1e-6 '$p', -1e-6 '$n' (particle '$z1')"; fi
+  if grep -q "mu = *-0.3222" "$WORK/$1_anc0/output/parameters.out" 2>/dev/null; then ok "zero ANC, $1: static moment reported with the entered sign"
+  else bad "zero ANC, $1: no 'mu = -0.3222' in parameters.out ($(grep -o "mu = *[-0-9.]*" "$WORK/$1_anc0/output/parameters.out" 2>/dev/null | head -1))"; fi
+done
+
 # Data mode.  Pseudo-data: the Brune capture cross section of A_orig (every fourth point, 5 %), entered in
 # the laboratory frame; then the 1/2+ width is moved from 34 to 30 keV so that chi^2 is far from zero.
 # chiSquared.out carries six digits, hence the 2e-5.
