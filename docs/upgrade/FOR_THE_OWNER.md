@@ -718,6 +718,15 @@ factor; the χ² table equal to the program's `chiSquared.out`, model data, angu
 the program's output files written on request. The numbers equal the program's `AZUREOut_*` files (tested on T1,
 T2); the model of a data set is drawn at its points, a dense grid waits for pyazr.
 
+The Physics tab (2026-11-13): every function of the engine's physics table (kinematics, Coulomb and Whittaker
+functions, P, S, the hard-sphere phase, widths, resonance quantities, Coulomb cross sections, S-factor conversions,
+the THM vertex) and the session's channel functions, each with a form generated from its row in the binding (a new
+row appears with no page code) and a first plot without typing; elements outside the domain are gaps with their
+reason counted in the status line; the CSV is the arrays as returned, and "Copy as Python" the `pyazr.physics` call
+that makes them (tested by running it: bit for bit). The stopping library's functions (stopping power, range,
+energy after a layer, areal density between two energies, straggling) are rows of the same kind, with SRIM's
+citation under every plot, in the CSV and in the Python text, their values those of `pyazr.stopping` bit for bit.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

@@ -405,13 +405,23 @@ Route → pyazr call: request → response.
   a status per element.  **Served**: the body `{"arguments": {name: number or list}}` (broadcast), always with
   `errors="mask"`; the answer `returns` (fields as lists), `units`, `status` per element and `status_words`, `shape`,
   `axis`; refusals (unknown function 404; unknown or missing argument, wrong type, shapes that do not broadcast,
-  more than 20000 elements 422) carry what / allowed / fix built from the row.  It runs in the server's process
+  more than 20000 elements 422) carry what / allowed / fix built from the row.  An argument may also be an axis
+  `{"from", "to", "points", "spacing"}` (linear, log, integer), made by the server with numpy, and a choice a list of
+  names; the answer adds `arguments` (each as used, the axis expanded) and `python` (the text of the pyazr call that
+  makes the same arrays, section 6.6).  It runs in the server's process
   (`pyazr/ui/physics.py`): the functions need no session, and the C++ loop releases the GIL; the bound keeps one
   request near 1 s (coulsm, 45 µs per element; `shift_derivative` about five times that).
 - `POST /api/session/channel_functions`, `/level_matrix` → `Session.channel_functions`, `level_matrix`.
   `channel_functions` is **served** in the session worker (adapter `Engine.channel_functions`, the budget as the
   other session routes), with the same bound of 20000 energies; `level_matrix` stays 501 (no engine call).
-- `POST /api/stopping/{fn}` → `pyazr.stopping.*`: material, ion, energies → arrays.
+- `GET /api/session/functions`, `POST /api/session/functions/{fn}` → the session's functions as rows of the shape of
+  `/api/physics` (`pyazr/ui/physics.py` `SESSION_ROWS`; finding 24) and a call of one answered as `/api/physics/{fn}`
+  answers (status -2 where the channel is closed, the Python text opening a session on the project file).
+  **Served** (the Physics tab).
+- `GET /api/stopping`, `POST /api/stopping/{fn}` → `kinds()["stopping"]`, `pyazr.stopping.evaluate`: the rows of
+  the binding's stopping table (the shape of the physics rows, a text argument `formula` first, SRIM's `citation`)
+  and a call of one, answered as `/api/physics/{fn}` answers, with the citation. **Served** (the same generic
+  handler, `pyazr/ui/physics.py` `TABLES`).
 - `GET /api/sources/exfor`, `/exfor/{id}`, `/ensdf/{nuclide}`, `/masses/{nuclide}` → `pyazr.sources.*` (network
   for EXFOR and ENSDF).
 - `GET /api/files[/{path}]` → the server's listing inside the root: → names; the first rows of a data file.
@@ -666,26 +676,95 @@ extrapolations on dense grids (`/api/evaluate/grid`); the reaction rate against 
 ### 6.6 Physics
 
 One generated form and one plot per row of the physics table (`pyazr3.md` 2.7), plus the per-session functions.
-Routes: `/api/physics*`, `/api/session/channel_functions`, `/level_matrix`, `/api/stopping/*`, `/api/data/{name}/grid`
+Routes: `/api/physics*`, `/api/session/channel_functions`, `/level_matrix`, `/api/stopping*`, `/api/data/{name}/grid`
 and `/kernel`.
 
 ```
 ┌ Physics ──────────────────────────────────────────────────────────────────────────────────────────┐
-│ function [coulomb_waves ▾]   search [        ]                                                     │
-│   kinematics · Coulomb · channel functions · widths · resonance quantities · transfer/THM ·       │
-│   stopping · this project: channel functions, level matrix, data-set grid and kernel              │
-│ ─ coulomb_waves(l, eta, rho, method) ─ "F, G, F′, G′ on ρ, by every method of pycoulomb" ───────  │
-│ l    [0] … [3]  (integer ≥ 0)                                                                      │
-│ eta  [0.5]                       (≥ 0)                                                             │
-│ rho  range [0.01] – [20] points [400] [log]   ← the plotted axis                                   │
-│ method [all ▾]                                                                                     │
-│ ┌ F_l, G_l against ρ, one line per l and method ───────────────────────────────────────────────┐   │
-│ └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
-│ status: 400 of 400 elements ok                         [Export (CSV)] [SVG] [Copy as Python]       │
+│ search [        ]          │ coulomb_waves(l, eta, rho, method)                                     │
+│ kinematics                 │ F, G, F′, G′ and σ_l at (l, η, ρ), by every method of pycoulomb        │
+│   sommerfeld_eta …         │ plot against [rho ▾]                                                   │
+│ Coulomb functions          │ rho   from [0.01] to [20]   points [400] (≤ 5000 for 4 lines) [log ▾]  │
+│ ▸ coulomb_waves            │ l     [0 1 2 3]   (several values: one line each)                      │
+│ channel functions …        │ eta   [0.5]                                                            │
+│ stopping …                 │ method [coulsm ▾]                                    [Plot] [Defaults] │
+│ this project               │ ┌ F, Fp, G, Gp against rho, one line per l ──────────────────────────┐ │
+│   channel_functions        │ └────────────────────────────────────────────────────────────────────┘ │
+│                            │ 1580 of 1600 elements computed; rho outside its domain (finite > 0): 20│
+│                            │ fields [x] F [x] Fp [x] G [x] Gp [ ] sigma   [log x] [log y]            │
+│                            │ [Export (CSV)] [SVG] [PNG] [Copy as Python]                            │
+│                            │ import numpy as np … pyazr.physics.coulomb_waves(l=…, rho=np.geomspace…)│
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-"Copy as Python" gives the pyazr call that makes the same arrays: the page teaches the API.
+**The list.** The rows of `GET /api/physics` (the binding's physics table), of the stopping table (`GET
+/api/stopping`, the second part of this step) and of the session's functions (`GET /api/session/functions`), grouped
+by the row's `group` in the table's order, the session's under "this project"; a search box filters by name,
+summary and group. A row of any table appears in the list and gets its form with no line of JavaScript.
+
+**What the rows must say** (the smallest addition to the table, made in `api/src/pybind_physics.cpp`, binding code
+only, read by `kinds()` unchanged): per row a `group` (the comment lines of the table become a field); per argument
+an `example` (a typical value: the form's start value where the argument has no `default`) and, for an argument a
+plot may run over, a `sweep` (`lower`, `upper`, `spacing` linear or log: the range of a first plot). The row's `axis`
+has a sweep; every argument without a default has an example or is the axis (`physics_table_test.py` checks both).
+A list of defaults in JavaScript was the alternative and is not taken: the row would not be complete for an agent.
+
+**How a row becomes a form.** A form of the existing generator (`forms.js` `describeForm`, drawn by `formview.js`):
+the tab writes the row as a record kind of a schema of its own, one field per argument, with these value types (one
+table, `ARGUMENT_KINDS` in `physicsform.js`, maps an argument kind to its field):
+
+- the axis (the row's `axis`; the selector offers every argument with a `sweep`): a `range` field (from, to, the
+  unit shown), `points` (an `integer`; the bound shown is the route's 20000 elements divided by the number of
+  lines) and `spacing` (`enum` linear / log, the sweep's by default); an integer axis takes every whole number from
+  `from` to `to` and has no points;
+- a real argument: a `number_list` (one value, or several separated by blanks: one line each);
+- an integer: an `integer` box (also several values: `0 1 2 3` gives four lines);
+- a choice (`method`): an `enum` of its choices and "all" (one line per choice);
+- a flag: an `enum` of 0, 1 and "both";
+- a pair of the project (the session's functions): an `enum` of the project's pairs (`GET /api/project/pairs`).
+
+Start values: the argument's `default`, else its `example`; the axis from its `sweep` with 200 points. Every row
+plots without typing. Several values of several arguments give the product of their lines (at most 24); each list
+is a broadcast dimension of its own, in the order of the row, the axis the last.
+
+**The request and the answer.** `POST /api/physics/{fn}` with `{"arguments": {...}}`: a list argument as a nested list
+of the shape that broadcasts (`l: [[0], [1], [2], [3]]`), a choice list by names, the axis as `{"from", "to",
+"points", "spacing"}`, which the server turns into the array with numpy (`linspace`, `geomspace`, `arange` for an
+integer axis): the page makes no number. The answer adds `arguments` (each argument as used, the axis expanded) and
+`python`, the text of the call that makes the same arrays.
+
+**The plot.** One plot per unit of the returned fields shown (checkboxes, all shown at first); one trace per field
+and line, named by the line's values (`F, l = 2`); an element whose status is not 0 is a gap (null in the trace,
+never a zero) and is counted under the plot. The status line: "N of M elements computed", then for each status that
+occurs its words (`status_words` of the answer) and its count. Log x and log y on request (log x at first where the
+spacing is log; what a log axis drops is counted). Axis titles: the argument and field names with the row's units.
+
+**Export.** CSV of exactly the arrays returned: one line per element, the arguments at that element (a choice by its
+name), every returned field to 17 significant digits ("nan" where not computed) and the status; units in the header.
+SVG and PNG of the figure through plotly's export (as the other tabs).
+
+**Copy as Python.** The answer's `python` (made by the server from the request, `pyazr/ui/physics.py`): `import numpy
+as np`, `import pyazr`, the axis as `np.linspace` / `np.geomspace` / `np.arange` of the numbers sent, a list as
+`np.array([...]).reshape(-1, 1, ...)`, and `result, status = pyazr.physics.<fn>(..., errors="mask")`; shown under the
+plot and copied by the button. The test runs the text and compares the arrays with the route's bit for bit.
+
+**The session's functions.** `channel_functions` (pair, l, radius, J, `e_cm` the axis) is a row of the same shape in
+`pyazr/ui/physics.py` (`SESSION_ROWS`: the session's methods have no table in the binding; a finding), served by
+`POST /api/session/channel_functions` in the session worker. When the project does not build, the form is drawn and
+the plot area shows the engine's refusal (what / allowed / fix) with "the functions above need no project"; the
+free functions keep working. Its Python text opens a session on the project file.
+
+**Stopping (the second part).** The stopping library's functions become rows of the same shape (arguments with unit,
+kind, domain, example and sweep; returns with units; `group` "stopping"; and the `citation` of SRIM, which the PI
+requires beside every use of the SRIM data), made by the binding with the same row types as the physics table
+(shared, not copied) and read as `kinds()["stopping"]`; a text argument (the material's formula, its phase) is a new
+argument kind, one value per call. `POST /api/stopping/{fn}` is the same generic handler as the physics route, on the
+stopping rows. Every stopping plot carries the citation under it, and the CSV and the Python text carry it too.
+
+**State (section 5).** The tab holds no model state. The form's texts per function, the axis, the fields shown and
+the log choices are page state, kept in the module while the page lives and lost on reload, as the Results tab keeps
+its view; hash parameters set them, so a view can be linked: `#/physics/coulomb_waves?axis=rho&from=-2&to=20&v.l=0 1`
+(`v.<argument>` an argument's text; `axis`, `from`, `to`, `points`, `spacing`, `fields`, `logx`, `logy`, `plot=table`).
 
 ### 6.7 THM (shown when the project has THM content)
 
@@ -809,7 +888,8 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    fitters once pyazr has `fit_with_engine` with progress and stop (decision 8 and finding 2). About 1000 lines.
    Recipes need `Objective` (pyazr step 3; today `objective_and_grad` serves); engine fits need pyazr's call.
 5. **Physics and THM.** `tabs/physics.js` generated from the physics table (pyazr step 4; before it, stopping only),
-   `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines.
+   `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines. **Physics tab done 2026-11-13**
+   (section 11.5, stopping included); THM to come.
 6. **Close-out.** `pyazr ui` as a command (pyazr step 7), static files and plotly in the wheel (pyazr step 8), the
    parity checklist ticked or dropped item by item, the smoke tests in their workflow, `numcmc` and the menus removed
    (Phase 9). About 400 lines and the checklist.
@@ -841,7 +921,8 @@ get, stop, kill, accept). **501, a pyazr call missing**: adding and removing pai
 `kernel`), the level matrix; jobs: the
 engine's MIGRAD and LM and MINOS (`fit_with_engine`), the sampler (`Objective.log_prob`), bands, the rate
 (`Session.reaction_rate`). **501, a later step** (pyazr has the call): system, channel functions, outputs,
-stopping, EXFOR, ENSDF, files, events.  (Served since: a physics function on arrays, the channel functions.)
+EXFOR, ENSDF, files, events.  (Served since: a physics function on arrays, the channel functions, the
+session's functions as rows and their calls, the stopping rows and their calls.)
 
 **Measured on the product** (a server process over HTTP at one thread, `work/uiserver/measure.py`): opening T2 takes
 1.2–1.5 s to the first answer and 1.2–1.8 s more for the first evaluation (worker start, import, session build
@@ -1075,6 +1156,62 @@ engine unit's dimension and the pair's charges, χ² and model data from the eng
 section whose records are evaluated: a group of the selector by itself; its arrays need one method of the adapter
 beside `_extrapolation_arrays` and a key of the payload read by `seriesOf` in `tabs/results.js`.
 
+### 11.5 Step 5, first part, as built (2026-11-13): the Physics tab
+
+`tabs/physics.js` (the tab: the list, the form, the answer drawn), `physicsform.js` (no document: the rules of
+section 6.6, the table `ARGUMENT_KINDS`), two options of shared modules (`renderForm(..., {whole})`: every field's
+text to the caller, "Defaults" instead of "Revert"; `drawPlot(..., {csv})`: the CSV text from the caller), the routes'
+side in `pyazr/ui/physics.py` (the axis, choices by name, the arguments as used, the Python text, the session rows),
+two rows of `routes.py`, and the rows' new fields in the binding (`group`; `example` and `sweep` per argument).
+Tests: `tests/pyazr/ui/physics_tab_test.py` (4), `js/physics.test.mjs` (9), the self-test's four Physics views and
+the smoke test's checks of them, a check of the rows in `tests/pyazr/physics_table_test.py`.
+
+**What a user can do.** Pick a function in the list (grouped as the table groups its rows, with a search box), see
+its signature, summary, formula and library function, choose the argument to plot against (any with a sweep), edit
+the generated form (the axis as from, to, points, spacing; several values of any other argument give one line each,
+"all" of a choice, "both" of a flag) and press Plot; every function plots at once with its start values. The
+answer: the status line ("400 of 444 elements computed; rho outside its domain (finite > 0): 44"), the fields to
+show, log x and log y, one plot per unit with a trace per field and line and gaps where an element is not computed,
+CSV of the arrays as returned (one line per element with the arguments at it and the status), SVG and PNG, and the
+pyazr call that makes the same arrays (shown, copied, or saved as a .py file). "this project": the session's channel
+functions of a pair of the project (its pairs offered by key and label), refused with the engine's words when the
+project does not build. A view is a link: `#/physics/coulomb_waves?from=-2&to=20&spacing=linear&v.l=0 1 2 3`.
+
+**Where it departs from section 6.6**: none in the rules. The radius of `channel_functions` defaults to 0 (the
+pair's channel radius) and `J` is not offered (a pair with a spin-orbit potential is refused with the engine's
+message). Its Python text opens the saved file: the session is built from the working text, which equals it when
+nothing is unsaved (finding 1).
+
+**Extensibility as built** (the PI's measure). A new physics function: one row of `BuildTable()` in
+`api/src/pybind_physics.cpp` with its `group`, an `example` for each argument without a default and a `sweep` for its
+axis (the check of `physics_table_test.py` fails without them), and its `row_test`; nothing in the page or the server
+(the node test draws a form for every row and for one injected there). A new kind of argument (a choice among named
+potentials): its kind in the binding's `ArgKind` and `KindName`, how the row's adapter converts it, and one row of
+`ARGUMENT_KINDS` in `physicsform.js` (the field of the form, how its text becomes values; the node test fails until
+the row exists); a choice whose names come from the project (as the session's `pair`) also says where the page reads
+them (`fctx` in `tabs/physics.js`). A new table of functions (the stopping rows): one row of `SOURCES` in
+`tabs/physics.js` and a route that answers rows of this shape.
+
+**Stopping, as built (the second part).** The row types of the physics table (`ArgSpec`, `OutSpec`, the domain
+check, their description as data) moved into `api/src/pybind_rows.h`, shared by `pybind_physics.cpp` and
+`pybind_stopping.cpp`; `ArgKind` gained `text` (one string per call, not broadcast). `pybind_stopping.cpp` has a
+table of five rows (`stopping_power`, `range`, `energy_after`, `areal_density_between`, `energy_straggling`): the
+material (`formula` text, `phase` choice, `compound_correction`) and projectile (`z1`, `mass_u`) arguments first,
+then the row's own; each row carries `group` "stopping", SRIM's `citation` and `implementation`. Each adapter calls
+the library function `pyazr.stopping`'s functions call, with the material and projectile made as they make them, so
+the values are theirs bit for bit (tested). A library refusal of one element (a layer at least the range) is status
+-2; a formula the library refuses is a refusal of the request (422). Python: `pyazr.stopping.table()` and
+`evaluate(name, formula, **arguments)`; `kinds()["stopping"]` is the table (it was a signature and a doc per binding
+function). The page lists the rows under "stopping" (one row of `SOURCES`, one row `text` of `ARGUMENT_KINDS`) and
+shows the citation under every stopping plot, in the CSV's first line and in the Python text. Not done: the
+provenance per element (`pyazr.stopping.provenance`) is not shown; user stopping tables of a project are not
+reachable (the rows evaluate SRIM's stopping only).
+
+*Extensibility of stopping*: a new stopping function is one row of `BuildStoppingTable()` in
+`api/src/pybind_stopping.cpp` (its own arguments with unit, domain, example, and a sweep for its axis; returns with
+units; an adapter calling the library); `physics_tab_test.py` plots every row without typing and runs its Python text,
+the node test draws its form; nothing in pyazr, the server or the page.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1158,6 +1295,19 @@ Found while building the Results tab (step 3):
 Smaller, in the parity list: an empty format-3 project (`Project.new` needs a source); the screening potential's
 adiabatic limit from electron binding energies; Gaussian priors on level parameters for the sampler (records carry
 priors of nuisances only).
+
+Found while building the Physics tab (step 5):
+
+24. **The session's physics functions as rows**: `channel_functions` (and later `level_matrix`) have no row in the
+    binding's table; the server writes the row of `channel_functions` by hand (`pyazr/ui/physics.py`
+    `SESSION_ROWS`, from its docstring). Wanted: the session's functions described as the physics table describes
+    its rows (arguments with unit, domain, example and sweep; returns with units), `J` among them.
+25. **A status per element from the session's functions**: `channel_functions` returns `open` and 0 where the
+    channel is closed; the tab turns `open` into status -2. Finding 12's remaining items (the level matrix, the
+    transfer functions on potentials, structured stopping rows, the rate) stand; its "page code" is built (11.5).
+
+26. **Stopping with the project's own targets**: the stopping rows take a formula; a target of the project (its
+    layers, a user stopping table, a fitted stopping scale) has no call that evaluates its stopping on arrays.
 
 ## 13. Decisions for the PI
 

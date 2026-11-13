@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-physics`) — the web UI's Physics tab
+
+**Done, first part** (the tab on the physics routes; design in `web_ui.md` section 6.6, as built in 11.5). The tab
+lists the rows of `/api/physics` and the session's functions (`/api/session/functions`, new) grouped by the row's
+`group`, with a search box; each row becomes a form of the existing generator (`physicsform.js`: the table
+`ARGUMENT_KINDS` maps an argument kind to a value type of `forms.js`); the axis is sent as `{from, to, points,
+spacing}` and made by the server with numpy; several values of an argument are a broadcast dimension each (one line
+per combination); the plot has one trace per field and line with gaps (null) where the status is not 0; the status
+line counts each status with its words; CSV of the arrays as returned; the answer's `python` (made by the server from
+the request) shown, copied, saved. The binding's rows gained `group` and, per argument, `example` and `sweep`
+(binding code only, `api/src/pybind_physics.cpp`; no engine number); the row check in `physics_table_test.py`.
+
+**Done, second part** (stopping). The row types moved into `api/src/pybind_rows.h` (shared by the physics and
+stopping tables; `ArgKind::text` added); `pybind_stopping.cpp` has a table of five rows (`stopping_power`, `range`,
+`energy_after`, `areal_density_between`, `energy_straggling`) with SRIM's citation, `_azure2.stopping.functions()`
+and `evaluate()`; `pyazr.stopping.table()` and `evaluate()`; `kinds()["stopping"]` is that table (it was a signature
+and a doc per binding function); `GET`/`POST /api/stopping` served by the physics route's handler; the page lists the
+rows under "stopping" and draws the citation under every stopping plot, in the CSV and the Python text.
+
+**Verified how** (build `work/b-uiphys`, 0 warnings): T1, T2, T3, 13N x 3 bases identical to `tab-t50-1` (tag
+`tab-uiphys-1`, 78 files per basis); the consistency test; `physics_table_test.py`; the UI tests as scripts
+(`physics_tab_test` 4, `physics_routes_test` 6, `routes_consistency_test` 8, `static_test` 9, `node_test` 46 node
+tests); the smoke test on T1 and T2 with screenshots (`work/uiphys/shots*`); each new check shown failing once with
+an injected error (14 cases, `tests/pyazr/ui/README.md`). Second part: T1, T2, T3, 13N x 3 bases identical to
+`tab-t50-1` (`tab-uiphys-2`); 4 more injected errors. At the end: `ctest -R pyazr_ -LE slow` 125 of 125 (one at a
+time); ten further smoke runs 10 of 10 (`work/uiphys/smoke10/`). Not run: all projects x 3 bases (no C++ outside
+`api/src/pybind_*.cpp` and the new `api/src/pybind_rows.h` changed), the slow tests, `tests/run_tests.sh`, sphinx.
+
+**Open.** The level matrix, the transfer functions on potentials and the reaction rate (no engine call); the THM
+tab; the session's functions described by the binding (finding 24); stopping of the project's own targets (26); the
+stopping provenance per element not shown; `J` of `channel_functions` not offered.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-4-cnuc-finish-design`) — the end of `CNuc`: design (documents only)
 
 **Done.** `cnuc_split.md` §12: the inventory of `CNuc` measured on the code at 6e8d000b (every member with its writers,

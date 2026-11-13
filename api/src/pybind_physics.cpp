@@ -4,6 +4,9 @@
 // element-wise to equal-length arrays and returns the values and a status per element; pyazr/physics.py builds one
 // Python function per row from physics_functions() (signature, docstring, broadcasting, DomainError).
 //
+// The row types (arguments, returned fields, the domain check, their description) are pybind_rows.h, shared with
+// the stopping table of pybind_stopping.cpp.
+//
 // A new function is one row here and a test naming it (tests/consistency check 41).  No physics in this file: an
 // adapter converts arguments (doubles to integers, masses to a ChannelKinematics) and calls the library.
 #include <pybind11/numpy.h>
@@ -15,6 +18,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "azure2/experiment/Frames.h"
@@ -28,70 +32,15 @@
 #include "azure2/physics/coulomb/Coulomb.h"
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "azure2/physics/transfer/ThmVertex.h"
+#include "pybind_rows.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
 namespace coul = azure2::physics::coulomb;
 namespace frames = azure2::experiment;
+using namespace azure2_rows;
 
 namespace {
-
-constexpr double kInf = std::numeric_limits<double>::infinity();
-constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
-
-/// Status of one element: 0 in the domain and computed; k > 0 argument k (1-based, in the order of the row) outside
-/// its domain; kJointly the arguments together outside the domain (each in its own); kFailed not converged or failed.
-constexpr int kOk = 0;
-constexpr int kFailed = -1;
-constexpr int kJointly = -2;
-
-enum class ArgKind { real, integer, flag, choice };
-
-/// One argument of a row: name, unit, meaning, kind and domain [lo, hi] (open ends where said); a default makes it
-/// optional in Python.  Every argument must be finite; an integer a whole number; a flag 0 or 1; a choice the index
-/// of one of `choices` (Python passes the name).
-struct ArgSpec {
-  std::string name, unit, doc;
-  ArgKind kind = ArgKind::real;
-  double lo = -kInf, hi = kInf;
-  bool lo_open = false, hi_open = false;
-  bool has_default = false;
-  double default_value = 0.0;
-  std::vector<std::string> choices;
-
-  ArgSpec gt(double v) const { ArgSpec a = *this; a.lo = v; a.lo_open = true; return a; }
-  ArgSpec ge(double v) const { ArgSpec a = *this; a.lo = v; a.lo_open = false; return a; }
-  ArgSpec lt(double v) const { ArgSpec a = *this; a.hi = v; a.hi_open = true; return a; }
-  ArgSpec le(double v) const { ArgSpec a = *this; a.hi = v; a.hi_open = false; return a; }
-  ArgSpec otherwise(double v) const { ArgSpec a = *this; a.has_default = true; a.default_value = v; return a; }
-};
-
-ArgSpec Real(const std::string &name, const std::string &unit, const std::string &doc) {
-  ArgSpec a;
-  a.name = name, a.unit = unit, a.doc = doc;
-  return a;
-}
-ArgSpec Integer(const std::string &name, const std::string &doc) {
-  ArgSpec a = Real(name, "", doc);
-  a.kind = ArgKind::integer;
-  return a;
-}
-ArgSpec Flag(const std::string &name, const std::string &doc, bool otherwise) {
-  ArgSpec a = Real(name, "", doc).ge(0).le(1).otherwise(otherwise ? 1.0 : 0.0);
-  a.kind = ArgKind::flag;
-  return a;
-}
-ArgSpec Choice(const std::string &name, const std::string &doc, std::vector<std::string> choices, int otherwise) {
-  ArgSpec a = Real(name, "", doc).ge(0).le(static_cast<double>(choices.size()) - 1).otherwise(otherwise);
-  a.kind = ArgKind::choice;
-  a.choices = std::move(choices);
-  return a;
-}
-
-/// One returned field: name, unit, meaning.
-struct OutSpec {
-  std::string name, unit, doc;
-};
 
 /// The adapter of a row: reads the row's arguments a[0 .. n_args), writes its fields o[0 .. n_outs), returns a status.
 using Adapter = int (*)(const double *a, double *o);
@@ -105,6 +54,7 @@ struct PhysicsRow {
   std::vector<ArgSpec> args;
   std::vector<OutSpec> outs;
   Adapter call;
+  std::string group = "";  ///< the row's section of the table (set by BuildTable from its section lines)
 };
 
 // ---------------------------------------------------------------- argument conversions (no physics)
@@ -136,18 +86,29 @@ coul::CoulombWaves ChannelWaves(const double *a, double &rho) {
 
 const std::vector<std::string> kMethods = {"coulsm", "coul", "coulfg", "coulcc"};  // coul::Method in order
 
-ArgSpec L() { return Integer("l", "orbital angular momentum").ge(0).le(10000); }
-ArgSpec Z(const std::string &n, const std::string &which) { return Integer(n, "charge number of " + which).ge(0); }
-ArgSpec M(const std::string &n, const std::string &which) { return Real(n, "u", "atomic mass of " + which).gt(0); }
-ArgSpec Ecm() { return Real("e_cm", "MeV", "c.m. kinetic energy of the pair").gt(0); }
-ArgSpec Radius() { return Real("radius", "fm", "channel radius a").gt(0); }
+// Examples: p + 12C (1H and 12C atomic masses, AME2020) unless a row says otherwise.
+constexpr double kMassH1 = 1.00782503, kMassC12 = 12.0, kMassHe4 = 4.00260325, kMassN15 = 15.0001089;
+
+ArgSpec L() {
+  return Integer("l", "orbital angular momentum").ge(0).le(10000).example(0).sweep(0, 10, Spacing::linear);
+}
+ArgSpec Z(const std::string &n, const std::string &which, double example) {
+  return Integer(n, "charge number of " + which).ge(0).example(example);
+}
+ArgSpec M(const std::string &n, const std::string &which, double example) {
+  return Real(n, "u", "atomic mass of " + which).gt(0).example(example);
+}
+ArgSpec Ecm() {
+  return Real("e_cm", "MeV", "c.m. kinetic energy of the pair").gt(0).example(1).sweep(0.01, 10, Spacing::log);
+}
+ArgSpec Radius() { return Real("radius", "fm", "channel radius a").gt(0).example(5).sweep(1, 10, Spacing::linear); }
 ArgSpec Rel() {
   return Flag("relativistic", "relativistic kinematics (the engine's option relativistic; Haeck et al., LA-UR-19-31084)",
               false);
 }
 std::vector<ArgSpec> Channel() {
-  return {L(), Z("z1", "particle 1"), Z("z2", "particle 2"), M("m1_u", "particle 1"), M("m2_u", "particle 2"),
-          Radius(), Ecm(), Rel()};
+  return {L(), Z("z1", "particle 1", 1), Z("z2", "particle 2", 6), M("m1_u", "particle 1", kMassH1),
+          M("m2_u", "particle 2", kMassC12), Radius(), Ecm(), Rel()};
 }
 const char *const kChannelDoc =
     "The channel is the pair (z1, m1_u) + (z2, m2_u) in orbital l at radius a and c.m. energy E > 0 (an open "
@@ -157,12 +118,14 @@ const char *const kChannelDoc =
 
 std::vector<PhysicsRow> BuildTable() {
   std::vector<PhysicsRow> t;
-  // -- kinematics
+  std::vector<std::pair<std::size_t, std::string>> sections;  // (first row, group) of each section of the table
+  const auto section = [&](const char *group) { sections.emplace_back(t.size(), group); };
+  section("kinematics");
   t.push_back({"sommerfeld_eta", "Sommerfeld parameter eta = Z1 Z2 e^2 / (hbar v) (dimensionless).",
                "eta = Z1 Z2 alpha (mu c^2 / 2E)^(1/2) with mu = m1 m2 / (m1 + m2), or the relativistic form.",
                "physics/ChannelFunctions.h: eta", "e_cm",
-               {Z("z1", "particle 1"), Z("z2", "particle 2"), M("m1_u", "particle 1"), M("m2_u", "particle 2"), Ecm(),
-                Rel()},
+               {Z("z1", "particle 1", 1), Z("z2", "particle 2", 6), M("m1_u", "particle 1", kMassH1),
+                M("m2_u", "particle 2", kMassC12), Ecm(), Rel()},
                {{"eta", "", "Sommerfeld parameter"}},
                [](const double *a, double *o) {
                  o[0] = phys::eta(Pair(a[0], a[1], a[2], a[3], a[5]), a[4]);
@@ -171,7 +134,7 @@ std::vector<PhysicsRow> BuildTable() {
   t.push_back({"wave_number", "Wave number k of the relative motion (fm^-1).",
                "k = (2 mu c^2 E)^(1/2) / hbar c, or the relativistic form; rho = k a.",
                "physics/ChannelFunctions.h: rho (at a = 1 fm)", "e_cm",
-               {M("m1_u", "particle 1"), M("m2_u", "particle 2"), Ecm(), Rel()},
+               {M("m1_u", "particle 1", kMassH1), M("m2_u", "particle 2", kMassC12), Ecm(), Rel()},
                {{"k", "fm^-1", "wave number"}},
                [](const double *a, double *o) {
                  o[0] = phys::rho(Pair(0, 0, a[0], a[1], a[3]), 1.0, a[2]);
@@ -181,8 +144,9 @@ std::vector<PhysicsRow> BuildTable() {
                "E_cm = E_lab m2 / (m1 + m2), or sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (relativistic): the "
                "engine's conversion of a lab data point.",
                "experiment/Frames.h: BeamToCM", "e_lab",
-               {M("m1_u", "the beam particle"), M("m2_u", "the target particle"),
-                Real("e_lab", "MeV", "lab kinetic energy of the beam").ge(0), Rel()},
+               {M("m1_u", "the beam particle", kMassH1), M("m2_u", "the target particle", kMassC12),
+                Real("e_lab", "MeV", "lab kinetic energy of the beam").ge(0).example(1).sweep(0, 10, Spacing::linear),
+                Rel()},
                {{"e_cm", "MeV", "c.m. kinetic energy"}},
                [](const double *a, double *o) {
                  frames::Partition p;
@@ -193,8 +157,9 @@ std::vector<PhysicsRow> BuildTable() {
   t.push_back({"cm_to_lab_energy", "Lab kinetic energy of the beam for a c.m. energy (MeV).",
                "The inverse of lab_to_cm_energy: E_lab = E_cm (m1 + m2) / m2, or the relativistic inverse.",
                "experiment/Frames.h: BeamLabFromCM", "e_cm",
-               {M("m1_u", "the beam particle"), M("m2_u", "the target particle"),
-                Real("e_cm", "MeV", "c.m. kinetic energy of the pair").ge(0), Rel()},
+               {M("m1_u", "the beam particle", kMassH1), M("m2_u", "the target particle", kMassC12),
+                Real("e_cm", "MeV", "c.m. kinetic energy of the pair").ge(0).example(1).sweep(0, 10, Spacing::linear),
+                Rel()},
                {{"e_lab", "MeV", "lab kinetic energy of the beam"}},
                [](const double *a, double *o) {
                  frames::Partition p;
@@ -209,8 +174,9 @@ std::vector<PhysicsRow> BuildTable() {
                "dsigma/dOmega_lab.  Status -2 beyond the maximum lab angle asin(m2/m1) of a beam heavier than the "
                "target.",
                "experiment/Frames.h: ElasticLabToCM, ParticleJacobian", "theta_lab",
-               {M("m1_u", "the beam (detected) particle"), M("m2_u", "the target particle"),
-                Real("theta_lab", "deg", "lab angle of the detected beam particle").ge(0).le(180)},
+               {M("m1_u", "the beam (detected) particle", kMassH1), M("m2_u", "the target particle", kMassC12),
+                Real("theta_lab", "deg", "lab angle of the detected beam particle").ge(0).le(180).example(90)
+                    .sweep(0, 180, Spacing::linear)},
                {{"theta_cm", "deg", "c.m. angle"}, {"jacobian", "", "dOmega_lab / dOmega_cm"}},
                [](const double *a, double *o) {
                  frames::Partition p;
@@ -227,10 +193,12 @@ std::vector<PhysicsRow> BuildTable() {
                "Reaction Analysis, 1968), non-relativistic, forward branch.  Status -2 below the exit threshold and "
                "beyond the maximum lab angle.",
                "experiment/Frames.h: ReactionLabToCM, ParticleJacobian", "theta_lab",
-               {M("m1_u", "the beam particle"), M("m2_u", "the target particle"), M("m3_u", "the detected particle"),
-                M("m4_u", "the residual particle"), Real("q_value", "MeV", "Q value of the reaction"),
-                Real("e_lab", "MeV", "lab kinetic energy of the beam").gt(0),
-                Real("theta_lab", "deg", "lab angle of the detected particle").ge(0).le(180)},
+               {M("m1_u", "the beam particle", kMassH1), M("m2_u", "the target particle", kMassN15),
+                M("m3_u", "the detected particle", kMassHe4), M("m4_u", "the residual particle", kMassC12),
+                Real("q_value", "MeV", "Q value of the reaction").example(4.965),
+                Real("e_lab", "MeV", "lab kinetic energy of the beam").gt(0).example(1).sweep(0.1, 10, Spacing::log),
+                Real("theta_lab", "deg", "lab angle of the detected particle").ge(0).le(180).example(90)
+                    .sweep(0, 180, Spacing::linear)},
                {{"theta_cm", "deg", "c.m. angle"}, {"jacobian", "", "dOmega_lab / dOmega_cm"}},
                [](const double *a, double *o) {
                  frames::Partition in, out;
@@ -241,14 +209,16 @@ std::vector<PhysicsRow> BuildTable() {
                  o[1] = frames::ParticleJacobian(in, out, a[5], a[6], o[0]);
                  return kOk;
                }});
-  // -- Coulomb functions
+  section("Coulomb functions");
   t.push_back({"coulomb_waves", "Coulomb functions F_l, G_l, their rho-derivatives and sigma_l at (l, eta, rho).",
                "Solutions of u'' + [1 - 2 eta/rho - l(l+1)/rho^2] u = 0, F regular, G irregular, F ~ sin(theta), G ~ "
                "cos(theta), theta = rho - eta ln(2 rho) - l pi/2 + sigma_l (DLMF 33.2); Wronskian F' G - F G' = 1.  "
                "method names the algorithm of pycoulomb (coulsm: the engine's).",
                "physics/coulomb/Coulomb.h: coulomb", "rho",
-               {L(), Real("eta", "", "Sommerfeld parameter (0 neutral, > 0 repulsive)").ge(0),
-                Real("rho", "", "k r").gt(0), Choice("method", "algorithm", kMethods, 0)},
+               {L(), Real("eta", "", "Sommerfeld parameter (0 neutral, > 0 repulsive)").ge(0).example(0.5)
+                         .sweep(0, 10, Spacing::linear),
+                Real("rho", "", "k r").gt(0).example(5).sweep(0.01, 20, Spacing::log),
+                Choice("method", "algorithm", kMethods, 0)},
                {{"F", "", "regular function F_l"}, {"Fp", "", "dF_l/drho"}, {"G", "", "irregular function G_l"},
                 {"Gp", "", "dG_l/drho"}, {"sigma", "rad", "Coulomb phase sigma_l"}},
                [](const double *a, double *o) {
@@ -258,7 +228,7 @@ std::vector<PhysicsRow> BuildTable() {
                }});
   t.push_back({"coulomb_phase", "Coulomb phase shift sigma_l(eta) = arg Gamma(l + 1 + i eta) (rad).",
                "The continuous branch, not reduced modulo 2 pi.", "physics/coulomb/Coulomb.h: coulomb_phase", "eta",
-               {L(), Real("eta", "", "Sommerfeld parameter")},
+               {L(), Real("eta", "", "Sommerfeld parameter").example(1).sweep(-10, 10, Spacing::linear)},
                {{"sigma", "rad", "Coulomb phase sigma_l"}},
                [](const double *a, double *o) {
                  o[0] = coul::coulomb_phase(Int(a[0]), a[1]);
@@ -270,8 +240,9 @@ std::vector<PhysicsRow> BuildTable() {
                "0-1000, rho = 1e-4-200).  W = mantissa 10^log10_scale; the field W is 0 or inf where W leaves the "
                "double range (mantissa and log10_scale keep the value).",
                "physics/coulomb/Whittaker.h: whittaker_scaled", "rho",
-               {L(), Real("eta_b", "", "bound-state Sommerfeld parameter Z1 Z2 e^2 mu / (hbar^2 kappa)").ge(0),
-                Real("rho", "", "kappa r").gt(0)},
+               {L(), Real("eta_b", "", "bound-state Sommerfeld parameter Z1 Z2 e^2 mu / (hbar^2 kappa)").ge(0)
+                         .example(1).sweep(0, 10, Spacing::linear),
+                Real("rho", "", "kappa r").gt(0).example(5).sweep(0.01, 20, Spacing::log)},
                {{"mantissa", "", "W / 10^log10_scale, in [1, 10)"}, {"log10_scale", "", "decimal exponent of W"},
                 {"log10_W", "", "log10 W"}, {"W", "", "W_l(rho)"}, {"rho_dlog", "", "rho W'/W, the shift function"}},
                [](const double *a, double *o) {
@@ -281,7 +252,7 @@ std::vector<PhysicsRow> BuildTable() {
                  o[3] = std::pow(10.0, o[2]);
                  return FromCoulomb(w.status);
                }});
-  // -- channel functions
+  section("channel functions");
   t.push_back({"penetrability", "Penetrability P_l = rho / (F_l^2 + G_l^2) of an open channel (dimensionless).",
                kChannelDoc, "physics/ChannelFunctions.h: penetrability", "e_cm", Channel(),
                {{"P", "", "penetrability"}},
@@ -322,25 +293,28 @@ std::vector<PhysicsRow> BuildTable() {
                  o[0] = v.dS_dE;
                  return FromCoulomb(v.status);
                }});
-  // -- THM
+  section("THM");
   t.push_back({"thm_vertex_function", "Plane-wave surface vertex M_l(p) of a Trojan-horse level (dimensionless).",
                "M_l(p) = (B - 1) j_l(pa) - pa j_l'(pa) (docs/upgrade/transfer.md eq. 8.3, THM.md section 1): the "
                "surface term of the vertex int_0^a w V u dr for the plane wave w = r j_l(pr) of the transferred "
                "particle, p its momentum, a the channel radius, B the level's boundary value.",
                "physics/transfer/ThmVertex.h: PlaneWaveSurfaceVertex", "p",
-               {L(), Real("p", "fm^-1", "momentum of the transferred particle").gt(0), Radius(),
-                Real("boundary", "", "boundary value B = a u'(a)/u(a) of the level")},
+               {L(), Real("p", "fm^-1", "momentum of the transferred particle").gt(0).example(0.5)
+                         .sweep(0.01, 3, Spacing::linear),
+                Radius(),
+                Real("boundary", "", "boundary value B = a u'(a)/u(a) of the level").example(0)
+                    .sweep(-5, 5, Spacing::linear)},
                {{"M", "", "plane-wave surface vertex M_l(p)"}},
                [](const double *a, double *o) {
                  o[0] = azure2::physics::transfer::PlaneWaveSurfaceVertex(Int(a[0]), a[1], a[2], a[3]);
                  return std::isfinite(o[0]) ? kOk : kFailed;
                }});
-  // -- widths
+  section("widths");
   t.push_back({"wigner_limit", "Wigner limit gamma_W^2 = 3 hbar^2 / (2 mu a^2) of a reduced width (MeV).",
                "The engine's convention (Parameter.wigner_limit; the Teichmann-Wigner sum-rule unit); hbar^2 / (mu a^2) "
                "is 2/3 of it.  theta^2 = gamma^2 / gamma_W^2.",
                "physics/Widths.h: wigner_limit", "radius",
-               {M("m1_u", "particle 1"), M("m2_u", "particle 2"), Radius()},
+               {M("m1_u", "particle 1", kMassH1), M("m2_u", "particle 2", kMassC12), Radius()},
                {{"gamma2_W", "MeV", "Wigner limit of gamma^2"}},
                [](const double *a, double *o) {
                  o[0] = phys::wigner_limit(a[0] * a[1] / (a[0] + a[1]), a[2]);
@@ -358,18 +332,20 @@ std::vector<PhysicsRow> BuildTable() {
   t.push_back({"photon_penetrability", "Photon penetrability (E_gamma / hbar c)^(2L+1) of a multipole L (fm^-(2L+1)).",
                "The factor of a photon channel's width Gamma = 2 gamma^2 P (Lane and Thomas section XIII), the engine's.",
                "physics/Widths.h: photon_penetrability", "e_gamma",
-               {Real("e_gamma", "MeV", "photon energy").gt(0), Integer("multipolarity", "multipolarity L").ge(1).le(10)},
+               {Real("e_gamma", "MeV", "photon energy").gt(0).example(1).sweep(0.1, 20, Spacing::log),
+                Integer("multipolarity", "multipolarity L").ge(1).le(10).example(1).sweep(1, 5, Spacing::linear)},
                {{"P", "fm^-(2L+1)", "photon penetrability"}},
                [](const double *a, double *o) {
                  o[0] = phys::photon_penetrability(a[0], Int(a[1]));
                  return kOk;
                }});
-  // -- resonance quantities, Coulomb scattering, S factor
+  section("resonance quantities");
   t.push_back({"statistical_factor", "Statistical factor omega = (2J+1)(1+delta_aA)/((2j_a+1)(2j_A+1)).",
                "Of a resonance strength (data_kinds.md eq. 8); spins doubled.", "physics/ResonanceQuantities.h: "
                "statistical_factor", "two_J",
-               {Integer("two_J", "2J of the level").ge(0), Integer("two_ja", "2j of entrance particle a").ge(0),
-                Integer("two_jA", "2j of entrance particle A").ge(0),
+               {Integer("two_J", "2J of the level").ge(0).example(1).sweep(0, 10, Spacing::linear),
+                Integer("two_ja", "2j of entrance particle a").ge(0).example(1),
+                Integer("two_jA", "2j of entrance particle A").ge(0).example(0),
                 Flag("identical", "the entrance particles are identical", false)},
                {{"omega", "", "statistical factor"}},
                [](const double *a, double *o) {
@@ -380,8 +356,10 @@ std::vector<PhysicsRow> BuildTable() {
                "From observed widths in one energy unit (the result carries it), the three widths independent "
                "(data_kinds.md eq. 8).  Status 4 for Gamma = 0.", "physics/ResonanceQuantities.h: resonance_strength",
                "gamma_a",
-               {Real("omega", "", "statistical factor"), Real("gamma_a", "width unit", "entrance width Gamma_a"),
-                Real("gamma_b", "width unit", "exit width Gamma_b"), Real("gamma", "width unit", "total width Gamma")},
+               {Real("omega", "", "statistical factor").example(1),
+                Real("gamma_a", "width unit", "entrance width Gamma_a").example(0.1).sweep(0.001, 1, Spacing::log),
+                Real("gamma_b", "width unit", "exit width Gamma_b").example(0.01).sweep(0.001, 1, Spacing::log),
+                Real("gamma", "width unit", "total width Gamma").example(1).sweep(0.1, 10, Spacing::log)},
                {{"value", "width unit", "omega gamma"}, {"d_gamma_a", "", "d/dGamma_a"}, {"d_gamma_b", "", "d/dGamma_b"},
                 {"d_gamma", "", "d/dGamma"}},
                [](const double *a, double *o) {
@@ -392,7 +370,8 @@ std::vector<PhysicsRow> BuildTable() {
                }});
   t.push_back({"branching_ratio", "Branching ratio Gamma_b / Gamma, with derivatives.", "Status 2 for Gamma = 0.",
                "physics/ResonanceQuantities.h: branching_ratio", "gamma_b",
-               {Real("gamma_b", "width unit", "exit width Gamma_b"), Real("gamma", "width unit", "total width Gamma")},
+               {Real("gamma_b", "width unit", "exit width Gamma_b").example(0.5).sweep(0, 1, Spacing::linear),
+                Real("gamma", "width unit", "total width Gamma").example(1).sweep(0.1, 10, Spacing::log)},
                {{"value", "", "Gamma_b / Gamma"}, {"d_gamma_b", "width unit^-1", "d/dGamma_b"},
                 {"d_gamma", "width unit^-1", "d/dGamma"}},
                [](const double *a, double *o) {
@@ -401,11 +380,13 @@ std::vector<PhysicsRow> BuildTable() {
                  o[0] = r.value, o[1] = r.d_exit, o[2] = r.d_total;
                  return kOk;
                }});
+  section("Coulomb scattering and S factor");
   t.push_back({"rutherford_cross_section", "Rutherford cross section (b/sr, c.m.) and its energy derivative.",
                "With the engine's eta and k (the Coulomb part of its elastic cross section).",
                "physics/CoulombScattering.h: rutherford_cross_section", "theta_cm",
-               {Z("z1", "particle 1"), Z("z2", "particle 2"), M("m1_u", "particle 1"), M("m2_u", "particle 2"), Ecm(),
-                Real("theta_cm", "deg", "c.m. angle").gt(0).lt(180), Rel()},
+               {Z("z1", "particle 1", 2), Z("z2", "particle 2", 6), M("m1_u", "particle 1", kMassHe4),
+                M("m2_u", "particle 2", kMassC12), Ecm().example(2),
+                Real("theta_cm", "deg", "c.m. angle").gt(0).lt(180).example(90).sweep(5, 175, Spacing::linear), Rel()},
                {{"value", "b/sr", "dsigma/dOmega_cm"}, {"d_dE", "b/sr/MeV", "d/dE at fixed angle"}},
                [](const double *a, double *o) {
                  const phys::CoulombCrossSection c =
@@ -416,8 +397,9 @@ std::vector<PhysicsRow> BuildTable() {
   t.push_back({"mott_cross_section", "Mott cross section of two identical particles (b/sr, c.m.), with d/dE.",
                "The symmetrised Coulomb amplitude with the interference weight (-1)^(2s)/(2s+1).",
                "physics/CoulombScattering.h: mott_cross_section", "theta_cm",
-               {Z("z", "each particle"), M("m_u", "each particle"), Integer("two_s", "2s, s the spin of each particle")
-                .ge(0), Ecm(), Real("theta_cm", "deg", "c.m. angle").gt(0).lt(180), Rel()},
+               {Z("z", "each particle", 6), M("m_u", "each particle", kMassC12),
+                Integer("two_s", "2s, s the spin of each particle").ge(0).example(0), Ecm().example(2),
+                Real("theta_cm", "deg", "c.m. angle").gt(0).lt(180).example(90).sweep(5, 175, Spacing::linear), Rel()},
                {{"value", "b/sr", "dsigma/dOmega_cm"}, {"d_dE", "b/sr/MeV", "d/dE at fixed angle"}},
                [](const double *a, double *o) {
                  const phys::CoulombCrossSection c =
@@ -428,7 +410,8 @@ std::vector<PhysicsRow> BuildTable() {
   t.push_back({"sfactor_conversion", "E exp(2 pi eta(E)) (MeV): S = sigma x this (S in MeV b, sigma in b).",
                "The engine's quantity sfactor; eta non-relativistic.  Status -2 for an uncharged pair.",
                "physics/AstrophysicalFactor.h: sfactor_conversion", "e_cm",
-               {Z("z1", "particle 1"), Z("z2", "particle 2"), M("m1_u", "particle 1"), M("m2_u", "particle 2"), Ecm()},
+               {Z("z1", "particle 1", 1), Z("z2", "particle 2", 6), M("m1_u", "particle 1", kMassH1),
+                M("m2_u", "particle 2", kMassC12), Ecm()},
                {{"factor", "MeV", "E exp(2 pi eta)"}},
                [](const double *a, double *o) {
                  o[0] = phys::sfactor_conversion(Pair(a[0], a[1], a[2], a[3], 0.0), a[4]);
@@ -439,13 +422,18 @@ std::vector<PhysicsRow> BuildTable() {
                "367), the engine's quantity modified_sfactor; g = 0.46 MeV^-1 for 12C + 12C.  Status -2 for an "
                "uncharged pair.",
                "physics/AstrophysicalFactor.h: modified_sfactor_conversion", "e_cm",
-               {Z("z1", "particle 1"), Z("z2", "particle 2"), M("m1_u", "particle 1"), M("m2_u", "particle 2"),
-                Real("g_per_MeV", "MeV^-1", "the constant g"), Ecm()},
+               {Z("z1", "particle 1", 6), Z("z2", "particle 2", 6), M("m1_u", "particle 1", kMassC12),
+                M("m2_u", "particle 2", kMassC12), Real("g_per_MeV", "MeV^-1", "the constant g").example(0.46),
+                Ecm().example(3).sweep(1, 8, Spacing::linear)},
                {{"factor", "MeV", "E exp(2 pi eta + g E)"}},
                [](const double *a, double *o) {
                  o[0] = phys::modified_sfactor_conversion(Pair(a[0], a[1], a[2], a[3], 0.0), a[5], a[4]);
                  return std::isfinite(o[0]) ? kOk : kJointly;
                }});
+  for (std::size_t k = 0; k < sections.size(); k++) {
+    const std::size_t end = k + 1 < sections.size() ? sections[k + 1].first : t.size();
+    for (std::size_t i = sections[k].first; i < end; i++) t[i].group = sections[k].second;
+  }
   return t;
 }
 
@@ -461,20 +449,6 @@ const PhysicsRow &Row(const std::string &name) {
 }
 
 // ---------------------------------------------------------------- the template
-
-/// 0 if every argument is in its own domain, else k (1-based) of the first that is not.
-int CheckDomain(const PhysicsRow &row, const double *a) {
-  for (std::size_t k = 0; k < row.args.size(); k++) {
-    const ArgSpec &s = row.args[k];
-    const double x = a[k];
-    bool ok = std::isfinite(x);
-    if (ok && s.kind != ArgKind::real) ok = x == std::floor(x);
-    if (ok) ok = s.lo_open ? x > s.lo : x >= s.lo;
-    if (ok) ok = s.hi_open ? x < s.hi : x <= s.hi;
-    if (!ok) return static_cast<int>(k) + 1;
-  }
-  return kOk;
-}
 
 using Column = py::array_t<double, py::array::c_style | py::array::forcecast>;
 
@@ -502,7 +476,7 @@ py::tuple Evaluate(const std::string &name, const std::vector<Column> &columns) 
     std::vector<double> a(na), o(no);
     for (py::ssize_t i = 0; i < n; i++) {
       for (std::size_t k = 0; k < na; k++) a[k] = in[k][i];
-      int s = CheckDomain(row, a.data());
+      int s = CheckDomain(row.args, a.data());
       if (s == kOk) s = row.call(a.data(), o.data());
       for (std::size_t j = 0; j < no; j++) v[j * n + i] = s == kOk ? o[j] : kNaN;
       st[i] = s;
@@ -511,80 +485,19 @@ py::tuple Evaluate(const std::string &name, const std::vector<Column> &columns) 
   return py::make_tuple(values, status);
 }
 
-const char *KindName(ArgKind k) {
-  switch (k) {
-    case ArgKind::integer: return "integer";
-    case ArgKind::flag: return "flag";
-    case ArgKind::choice: return "choice";
-    default: return "real";
-  }
-}
-
-std::string Number(double x) {
-  if (x == std::floor(x) && std::fabs(x) < 1e15) return std::to_string(static_cast<long long>(x));
-  std::string s = std::to_string(x);
-  while (!s.empty() && s.back() == '0') s.pop_back();
-  return s;
-}
-
-/// The domain of an argument in words: "finite > 0", "integer in [0, 10000]", "0 or 1", "one of ...".
-std::string DomainText(const ArgSpec &s) {
-  if (s.kind == ArgKind::flag) return "0 or 1 (False or True)";
-  if (s.kind == ArgKind::choice) {
-    std::string out = "one of";
-    for (std::size_t i = 0; i < s.choices.size(); i++) out += (i ? ", " : " ") + s.choices[i];
-    return out;
-  }
-  std::string out = s.kind == ArgKind::integer ? "integer" : "finite";
-  const bool lo = std::isfinite(s.lo), hi = std::isfinite(s.hi);
-  if (lo && hi)
-    out += std::string(" in ") + (s.lo_open ? "(" : "[") + Number(s.lo) + ", " + Number(s.hi) + (s.hi_open ? ")" : "]");
-  else if (lo)
-    out += (s.lo_open ? " > " : " >= ") + Number(s.lo);
-  else if (hi)
-    out += (s.hi_open ? " < " : " <= ") + Number(s.hi);
-  return out;
-}
-
 py::list Describe() {
   py::list rows;
   for (const PhysicsRow &r : Table()) {
     py::list args, outs;
-    for (const ArgSpec &s : r.args) {
-      py::dict d;
-      d["name"] = s.name;
-      d["unit"] = s.unit;
-      d["doc"] = s.doc;
-      d["kind"] = KindName(s.kind);
-      d["domain"] = DomainText(s);
-      d["lower"] = std::isfinite(s.lo) ? py::object(py::float_(s.lo)) : py::object(py::none());  // None: unbounded
-      d["upper"] = std::isfinite(s.hi) ? py::object(py::float_(s.hi)) : py::object(py::none());
-      d["lower_open"] = s.lo_open;
-      d["upper_open"] = s.hi_open;
-      d["choices"] = s.choices;
-      if (!s.has_default)
-        d["default"] = py::none();
-      else if (s.kind == ArgKind::choice)
-        d["default"] = s.choices.at(static_cast<std::size_t>(s.default_value));
-      else if (s.kind == ArgKind::flag)
-        d["default"] = s.default_value != 0.0;
-      else
-        d["default"] = s.default_value;
-      args.append(d);
-    }
-    for (const OutSpec &s : r.outs) {
-      py::dict d;
-      d["name"] = s.name;
-      d["unit"] = s.unit;
-      d["doc"] = s.doc;
-      outs.append(d);
-    }
+    for (const ArgSpec &s : r.args) args.append(DescribeArgument(s));
+    for (const OutSpec &s : r.outs) outs.append(DescribeReturn(s));
     py::dict row;
     row["name"] = r.name;
     row["summary"] = r.summary;
     row["doc"] = r.doc;
     row["library"] = r.library;
     row["axis"] = r.axis;
+    row["group"] = r.group;
     row["arguments"] = args;
     row["returns"] = outs;
     rows.append(row);
@@ -600,9 +513,10 @@ void BindPhysics(py::module_ &m) {
   BindStopping(m);
   m.def("physics_functions", &Describe,
         "The table of physics functions, one dict per row: name, summary, doc, library (the function called), axis "
-        "(the argument a plot puts on its horizontal axis), arguments (name, unit, doc, kind real / integer / flag / "
-        "choice, domain in words, lower and upper (None: unbounded), lower_open, upper_open, choices, default or None) "
-        "and returns (name, unit, doc); plain JSON data.  pyazr.physics builds one Python function per row from it.");
+        "(the argument a plot puts on its horizontal axis), group (its section of the table), arguments (name, unit, "
+        "doc, kind real / integer / flag / choice, domain in words, lower and upper (None: unbounded), lower_open, "
+        "upper_open, choices, default or None, example (a typical value) or None, sweep {lower, upper, spacing "
+        "linear / log} (the range of a first plot over it) or None) and returns (name, unit, doc); plain JSON data.  pyazr.physics builds one Python function per row from it.");
   m.def("physics_evaluate", &Evaluate, py::arg("name"), py::arg("arguments"),
         "Row `name` element-wise on equal-length 1-d float arrays, one per argument in the row's order (a choice as "
         "its index, a flag as 0 or 1): (values, status), values of shape (n_returns, n), NaN where status != 0; "

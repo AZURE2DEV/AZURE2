@@ -947,6 +947,10 @@ set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS
 add_test(NAME pyazr_ui_physics_routes
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_routes_test.py)
 set_tests_properties(pyazr_ui_physics_routes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The Physics tab's requests: every row plots without typing, the copied Python text gives the route's arrays.
+add_test(NAME pyazr_ui_physics_tab
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_tab_test.py)
+set_tests_properties(pyazr_ui_physics_tab PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # The options of the calculation as <config> keys (docs/upgrade/project_format3.md section 3.12): key = keyword for every
 # option and both values on tests/upgrade/T1, keyword > key > default with their sources, the refusals, set_config's

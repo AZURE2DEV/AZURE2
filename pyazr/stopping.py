@@ -26,7 +26,7 @@ import numpy as np
 from .azure2 import _azure2
 
 __all__ = ["CITATION", "IMPLEMENTATION", "Material", "projectile", "stopping", "energy_loss", "energy_after",
-           "areal_density_between", "range_of", "straggling", "provenance"]
+           "areal_density_between", "range_of", "straggling", "provenance", "table", "evaluate"]
 
 _st = _azure2.stopping
 
@@ -152,3 +152,46 @@ def provenance(material, proj):
     files, phase and compound correction, per element the data row, I, M, phase factor, and the uncertainties."""
     m, z1, mass = _pair(material, proj)
     return _st.provenance(m.formula, z1, mass, **m._args())
+
+
+def table():
+    """The rows of the binding's stopping table as plain data, by name (``pyazr.kinds()["stopping"]`` is the same):
+    ``summary``, ``doc``, ``library``, ``axis``, ``group``, ``citation`` (SRIM's: every use cites it),
+    ``arguments`` (``formula``, a text, then the numeric ones with unit, kind, domain, default, example, sweep) and
+    ``returns`` (name, unit, doc).  The rows are the functions above on arrays with a status per element."""
+    return {row["name"]: row for row in _st.functions()}
+
+
+def evaluate(name, formula, **arguments):
+    """Row ``name`` of :func:`table` for the material ``formula`` on numeric arguments that broadcast (numpy rules;
+    a choice by its name, or its index): ``(result, status)``, ``result`` a dict of arrays of the broadcast shape (NaN
+    where the status is not 0), ``status`` 0 computed, k > 0 numeric argument k (in the row's order after
+    ``formula``) outside its domain, -2 the arguments together outside it (a layer at least the range), -1 failed.
+    The same C++ functions as :func:`stopping`, :func:`range_of`, :func:`energy_after`,
+    :func:`areal_density_between` and :func:`straggling`, bit for bit.  Raises ``KeyError`` for an unknown row or
+    argument, ``ValueError`` for a missing argument or a formula the library refuses (its message)."""
+    rows = table()
+    if name not in rows:
+        raise KeyError(f"stopping: no function {name!r}; pyazr.stopping.table() lists {sorted(rows)}")
+    numeric = [a for a in rows[name]["arguments"] if a["kind"] != "text"]
+    unknown = sorted(set(arguments) - {a["name"] for a in numeric})
+    if unknown:
+        raise KeyError(f"stopping {name}: unknown argument(s) {unknown}; allowed: {[a['name'] for a in numeric]}")
+    values = []
+    for a in numeric:
+        if a["name"] not in arguments:
+            if a["default"] is None:
+                raise ValueError(f"stopping {name}: argument {a['name']} ({a['unit'] or 'no unit'}, {a['domain']}) "
+                                 f"is missing")
+            value = a["default"]
+        else:
+            value = arguments[a["name"]]
+        if a["kind"] == "choice" and isinstance(value, str):
+            if value not in a["choices"]:
+                raise ValueError(f"stopping {name}: {a['name']} = {value!r}; allowed: {a['domain']}")
+            value = a["choices"].index(value)
+        values.append(np.asarray(value, dtype=float))
+    (columns), shape = _arrays(*values)
+    out, status = _st.evaluate(name, formula, columns)
+    result = {r["name"]: np.asarray(out[j]).reshape(shape) for j, r in enumerate(rows[name]["returns"])}
+    return result, np.asarray(status).reshape(shape)

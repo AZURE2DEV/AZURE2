@@ -54,8 +54,9 @@ export class ApiError extends Error {
 /** The methods that change the project and therefore carry the revision. */
 const EDITS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** Paths whose POST is not a project edit (no revision needed): evaluations and jobs read or run. */
-const NOT_EDITS = [/^\/api\/evaluate$/, /^\/api\/transform$/, /^\/api\/jobs/];
+/** Paths whose POST is not a project edit (no revision needed): evaluations, jobs and functions read or run. */
+const NOT_EDITS = [/^\/api\/evaluate$/, /^\/api\/transform$/, /^\/api\/jobs/, /^\/api\/physics\//,
+  /^\/api\/stopping\//, /^\/api\/session\/(functions|channel_functions)/];
 
 export function isEdit(method, path) {
   return EDITS.has(method) && !NOT_EDITS.some((re) => re.test(path.split("?")[0]));

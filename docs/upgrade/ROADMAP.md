@@ -294,6 +294,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
       provisional `SESSION_OPTIONS` gone (2026-11-13).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
+      First part done (2026-11-13, `web_ui.md` section 11.5): every row of the physics table and the session's
+      channel functions, a form generated from the row, the plot with gaps and the status line, CSV, Copy as Python.
+      The stopping library's functions as rows of the same shape with SRIM's citation on every plot (2026-11-13).
+      The level matrix, the transfer functions on potentials and the rate wait for pyazr.
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.
 - [x] Qt parity checklist written from the Qt code before its removal (`docs/upgrade/qt_parity.md`, 201 items and 32

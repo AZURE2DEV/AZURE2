@@ -300,13 +300,8 @@ def _build_kinds():
                                    "effect": row["effect"], "reason": row["reason"], "doc": row["doc"]}
     # one entry per row of the binding's physics table (api/src/pybind_physics.cpp); pyazr.physics is built from it
     physics = {row["name"]: row for row in engine.physics_functions()}
-    stopping = {}
-    for name in dir(engine.stopping):
-        fn = getattr(engine.stopping, name)
-        if not name.startswith("_") and callable(fn):
-            doc = (getattr(fn, "__doc__", "") or "").strip().splitlines()
-            stopping[name] = {"signature": doc[0] if doc else name,
-                              "doc": " ".join(line.strip() for line in doc[1:] if line.strip())}
+    # one entry per row of the binding's stopping table (api/src/pybind_stopping.cpp), with SRIM's citation
+    stopping = {row["name"]: row for row in engine.stopping.functions()}
     error_classes = {}
     for name in errors.__all__:
         cls = getattr(errors, name)
@@ -343,7 +338,10 @@ def kinds():
       summary, doc, library (the C++ function called), axis (the argument a plot puts on its horizontal axis),
       arguments (name, unit, doc, kind, domain, lower, upper, lower_open, upper_open, choices, default) and returns
       (name, unit, doc);
-    - ``stopping``: the stopping functions (``_azure2.stopping``, :mod:`pyazr.stopping`): signature and doc;
+    - ``physics`` rows also carry ``group`` (their section of the table) and, per argument, ``example`` (a typical
+      value) and ``sweep`` (``lower``, ``upper``, ``spacing``: the range of a first plot over it);
+    - ``stopping``: the rows of the binding's stopping table, by name, in the shape of the physics rows (a ``text``
+      argument ``formula`` first) with ``citation``, SRIM's, owed by every use (:func:`pyazr.stopping.evaluate`);
     - ``errors``: pyazr's error classes with their bases;
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 

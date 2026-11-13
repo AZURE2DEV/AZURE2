@@ -80,12 +80,13 @@ export function themeColours() {
 
 /**
  * Draw a plot description into `el`: with plotly.js where the page loaded it, as a table of its numbers otherwise
- * (section 7); "Export data (CSV)" in both cases.  Returns "plotly" or "table".
+ * (section 7); "Export data (CSV)" in both cases (`csv`: a function giving the CSV text instead of the numbers
+ * drawn, as the Physics tab's arrays as returned).  Returns "plotly" or "table".
  */
-export function drawPlot(el, plot, fileName, { usePlotly = true, height = null } = {}) {
+export function drawPlot(el, plot, fileName, { usePlotly = true, height = null, csv = null } = {}) {
   el.textContent = "";
-  const bar = h("div.plot-bar", {}, button("Export data (CSV)", "The numbers drawn, with their units, as a CSV file",
-    () => download(`${fileName}.csv`, csvOf(plot))));
+  const bar = h("div.plot-bar", {}, button("Export data (CSV)", "The numbers, with their units, as a CSV file",
+    () => download(`${fileName}.csv`, csv ? csv() : csvOf(plot))));
   if (plot.note) bar.appendChild(h("span.hint", {}, plot.note));
   const Plotly = globalThis.Plotly;
   if (usePlotly && Plotly && typeof Plotly.newPlot === "function") {

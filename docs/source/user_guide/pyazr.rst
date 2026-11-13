@@ -115,7 +115,8 @@ otherwise look up in the sources:
    k["data"]               # data kinds (quantities): units, engine unit, energy frames, angle columns
    k["parameters"]         # parameter kinds (Parameter.kind): unit, owner fields, doc
    k["options"]            # session options: type, default, the program's flag, doc
-   k["physics"]            # the physics functions the compiled module binds
+   k["physics"]            # the physics functions the compiled module binds (group, examples, sweeps)
+   k["stopping"]           # the stopping functions as rows of the same shape, each with SRIM's citation
    k["errors"]             # the error classes below, with their bases
    s = pyazr.azure2("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
@@ -955,6 +956,17 @@ per atom of the material, areal densities atoms/cm\ :sup:`2` of the material, wi
    stopping.straggling(ta2o5, "a", [2.0], [1e18], beam_sigma=[0.001])["total"]
    stopping.range_of(ta2o5, (6, 12.0), [10.0])           # a 12C ion: (Z1, mass in u)
    print(stopping.provenance(ta2o5, "p"))                # SRIM-2013, the citation, the data per element
+
+The same functions are rows of a table (``pyazr.stopping.table()``, also ``pyazr.kinds()["stopping"]``) in the shape
+of the physics rows, each with SRIM's citation; ``stopping.evaluate(name, formula, **arguments)`` evaluates a row on
+broadcast arrays with a status per element (NaN where the status is not 0), bit for bit the functions above:
+
+.. code-block:: python
+
+   result, status = stopping.evaluate("stopping_power", "Ta2O5", z1=1, mass_u=1.00727646688,
+                                      energy=np.geomspace(0.001, 10, 200))
+   result, status = stopping.evaluate("energy_after", "Ta2O5", z1=1, mass_u=1.00727646688, energy_in=0.1,
+                                      areal_density=[1e17, 1e21])   # status [0, -2]: beyond the range
 
 A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
 file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
