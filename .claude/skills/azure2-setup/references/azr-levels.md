@@ -119,6 +119,14 @@ cross section is off by up to 14 % (`tests/hard_sphere`). Consequences:
   segment uses only draws a warning. Test: `tests/ec_final_state_listed`.
 - The final state is the level of its J^π within 1 keV of the pair's E_x. Two such levels stop the run
   (`tests/ec_final_state_ambiguous`): move the extra level, or set the pair's energy to the level it decays to.
+- **Does a transition need external capture?** Direct (external) capture runs from the channel radius outward with an
+  amplitude proportional to the final state's ANC; it dominates non-resonant capture to a loosely bound state, and
+  matters little for capture to a deeply bound state with a small ANC. Switch it on per photon pair with `ecMultMask`
+  (E1, M1, E2 bits; `ignore_externals` is another switch, of the resonant external widths); take the ANC from a transfer
+  measurement or a structure calculation with its error, never from the fit alone; then measure its share: the `bare`
+  column of azure2-calculate's `decompose.py` (every resonance's widths zeroed, the final states' ANCs kept) is the
+  direct capture alone. The capture operator (long-wavelength or exact, convection current) and the hybrid nuclear
+  potential of the external wave: azure2-calculate (its physics-options reference).
 
 ## 8. Verifying a newly built file
 
