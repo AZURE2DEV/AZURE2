@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
+
+**Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged
+earlier): `feature/upgrade-6-evaluation-4` (the diagnostics record of an evaluation; the environment switches read
+once per process by one reader, listed in one table and in the manual; `--describe` prints the switches that are
+set), `feature/upgrade-4-prior-centre` (the centre of every nuisance prior honoured: areal density, Doppler
+temperature, stopping scale, screening, thickness, abundance, apparatus; `save_fit` writes the fitted target values
+back; a rebuild of the model drops the nuisance manager of the old model), `feature/upgrade-9-webui-server`
+(`pyazr/ui`: server, state with history and revision, workers, jobs, the route table) and
+`feature/upgrade-9-webui-page` (the page: header, tabs Project, Nucleus, Data, generated forms, preview plot;
+plotly.js 4.1.2 vendored under MIT; no engine change).
+
+**Verified** on the four engine branches together (`work/b-trial50`, logs `work/director/vt50/`): all projects in
+three bases identical to the reference (887 / 851 / 887 files), 1 against 3 threads identical; the eight fits
+identical to the base build; the switch spot check; `tests/gamma_decay/check.sh` at 3 threads;
+`tests/nuisance_prior_centre/check.sh` without and with pyazr; `ctest -LE slow` 232 of 232; the slow tests 11 of 11;
+`tests/run_tests.sh` 166 passed, 0 failed; the specification equivalence 181 equal, 0 differ; the converted-tree
+gate 679 / 643 / 679 identical. The page (Python and static files only) on the merged tree: the consistency test
+and its seven tests (api, jobs, server, routes, static, node, the headless-Chrome smoke test) pass.
+
+**Reviewed by the director.** The prior-centre branch in full (no objection); the page's server edits: the file
+route stays inside the root (resolved path, tested), the Content-Security-Policy allows inline styles and `data:` /
+`blob:` images for plotly and nothing else beyond the server itself, no server text is inserted as HTML.
+
+**Open.**
+- A fit continued from its written-back values is computed on other grids than the fit (density, temperature,
+  stopping scale and kernel parameter are laid out from the start value): branch `feature/upgrade-4-layout-centre`.
+- The page's corrections (bounds of the file preview, cut text in the session-options table, the layout of repeated
+  groups, the web UI's tests registered below the block that must stay last in `tests/pyazr/CMakeLists.txt`) go
+  with the Results tab.
+- The stopping scale's default width is relative to the start, not the centre.
+- Nobody has used the page in a real browser by hand.
+
+**Reference** for the next branches: outputs `tab-t50-1`, base build `work/b-trial50` (outside the repository).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-9-webui-page`) — the web UI's page: Project, Nucleus, Data
 
 **Done.** `pyazr/ui/static/`: the header (project, unsaved, revision, Undo, Redo, Save, the engine's χ², status
