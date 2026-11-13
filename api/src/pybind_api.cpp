@@ -156,7 +156,7 @@ class Session {
     } else if (configStatus == Config::kConfigNotFormat3) {
       fail(azure2::io::NotFormat3Message(ReadProjectText(configfile), configfile));
     } else if (configStatus == Config::kConfigRefused && !config_->refusedOptions.empty()) {
-      fail(config_->refusedOptions + configfile + ": the options of this call contradict the project's <config> keys.");
+      fail(config_->refusedOptions + configfile + ": the options of this call contradict each other or the project's <config> keys.");
     } else if (configStatus == Config::kConfigRefused) {
       fail(configfile + " (format 3) is refused (see the ERROR lines above; AZURE2 --validate lists them).");
     } else if (configStatus < 0) {

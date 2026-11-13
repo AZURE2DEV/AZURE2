@@ -203,12 +203,44 @@ const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions() {
   static const std::vector<ConfigOptionContradiction> rows = {
       {"use_park", true, "use_brune", false, "Park's observed amplitudes are defined with Brune's shift functions"},
       {"use_rmc", true, "use_brune", true,
-       "the Reich-Moore capture is computed with constant boundary conditions only (the program drops Brune with a "
-       "warning, a session keeps it: state use_brune=0)"},
+       "the Reich-Moore capture is computed with constant boundary conditions only (Brune is on by default)"},
       {"ec_convection_current", false, "use_long_wavelength", true,
        "the convection current is a part of the exact EL operator only; with the long-wavelength approximation the "
        "key changes nothing"}};
   return rows;
+}
+
+namespace {
+
+// `name` = `on` as `spelling` writes it; "" for a flag that does not exist (an option without a flag for that value).
+std::string Spelled(const char *name, bool on, OptionSpelling spelling) {
+  if (spelling == OptionSpelling::kKeyword) return std::string(name) + "=" + (on ? "True" : "False");
+  if (spelling == OptionSpelling::kKey) return std::string(name) + "=" + (on ? "1" : "0");
+  const ConfigKey *k = ConfigOptionNamed(name);
+  return k ? std::string(on ? k->flag : k->negation) : std::string();
+}
+
+// One way out of the contradiction: `name` to `to` (it is at `!to` now), in `spelling`; `given` says whether the call
+// gave the present value (a flag to replace, a keyword to change) or not (one to add).
+std::string WayOut(const char *name, bool to, OptionSpelling spelling, bool given) {
+  const std::string want = Spelled(name, to, spelling), now = Spelled(name, !to, spelling);
+  if (spelling == OptionSpelling::kFlag) {
+    if (want.empty())  // no flag for that value: drop the flag given, else the project's key says it
+      return given && !now.empty() ? "leave out " + now : WayOut(name, to, OptionSpelling::kKey, false);
+    return given && !now.empty() ? want + " in place of " + now : "add " + want;
+  }
+  if (given) return want + " in place of " + now;
+  return spelling == OptionSpelling::kKeyword ? "pass " + want : "write " + want + " in <config>";
+}
+
+}  // namespace
+
+std::string ConfigOptionContradictionText(const ConfigOptionContradiction &c, const std::string &aWords,
+                                          const std::string &bWords, OptionSpelling spelling, bool aGiven, bool bGiven) {
+  auto value = [](const char *name, bool on) { return std::string(name) + "=" + (on ? "1" : "0"); };
+  return aWords + " with " + bWords + " cannot hold together: " + c.why + "; allowed: " + value(c.a, c.aValue) +
+         " with " + value(c.b, !c.bValue) + ", or " + value(c.a, !c.aValue) + "; fix: " +
+         WayOut(c.b, !c.bValue, spelling, bGiven) + " (or " + WayOut(c.a, !c.aValue, spelling, aGiven) + ")";
 }
 
 const ConfigEntry *ConfigSection::Find(const std::string &name) const {

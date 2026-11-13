@@ -9,8 +9,9 @@
 #   3. refusals: use_brune=yes (E_CONFIG_OPTION_VALUE), use_park=1 with use_brune=0 and use_rmc=1 alone
 #      (E_CONFIG_OPTIONS_CONTRADICT, both keys named), each by --validate (exit 2) and by the run (exit 1, no output);
 #      --use-rmc on a project with use_brune=1 (a flag against a key: refused by the run, the sources named).
-#   4. --describe: each option's value and source (default, project, command line) when one is not at its default;
-#      none in the text when all are (the description reads as before), always in --json.
+#      Contradicting flags without a key (--use-rmc alone, --use-park with --no-brune in either order,
+#      --no-ec-convection-current alone): refused by the run with what, allowed and the fix in flags.
+#   4. --describe: each option's value and source (default, project, command line), for every project, text and --json.
 #
 #   ./tests/config_options/check.sh path/to/AZURE2
 
@@ -138,6 +139,28 @@ else
   bad "--use-rmc with use_brune=1: --validate exit $vrc, run exit $rc"
 fi
 
+# Contradicting flags without a key: refused by the run (exit 1, no output) as a session refuses the keywords: the
+# same code and the same three parts (what, allowed, fix), the fix in flags.
+flags_refused() {  # flags_refused NAME TEXT -- FLAGS...
+  local name="$1" text="$2"; shift 3
+  run "$name" "$T1/T1.azr" "$@"
+  if [ "$rc" = 1 ] && [ ! -s "$WORK/$name/output/chiSquared.out" ] && grep -qF "E_CONFIG_OPTIONS_CONTRADICT" "$WORK/$name/run.log" \
+     && grep -qF -- "$text" "$WORK/$name/run.log"; then
+    ok "$*: the run refused (exit 1, no output): $text"
+  else
+    bad "$*: exit $rc, $(grep -F ERROR "$WORK/$name/run.log" | head -1)"
+  fi
+}
+flags_refused rmcflag "use_rmc=1 (command line) with use_brune=1 (the default) cannot hold together: the Reich-Moore \
+capture is computed with constant boundary conditions only (Brune is on by default); allowed: use_rmc=1 with use_brune=0, \
+or use_rmc=0; fix: add --no-brune (or leave out --use-rmc)" -- --use-rmc
+flags_refused parkfirst "use_park=1 (command line) with use_brune=0 (command line) cannot hold together: Park's observed \
+amplitudes are defined with Brune's shift functions; allowed: use_park=1 with use_brune=1, or use_park=0; fix: --use-brune \
+in place of --no-brune (or leave out --use-park)" -- --use-park --no-brune
+flags_refused brunefirst "use_park=1 (command line) with use_brune=0 (command line) cannot hold together" -- --no-brune --use-park
+flags_refused convection "ec_convection_current=0 (command line) with use_long_wavelength=1 (the default) cannot hold \
+together" -- --no-ec-convection-current
+
 # 4. --describe: value and source of each option
 d="$(cd "$WORK/k2" && "$AZURE2_BIN" --describe T1.azr --no-transform 2>&1)"
 if printf '%s' "$d" | grep -qF "  use_brune = 0 (project)" && printf '%s' "$d" | grep -qF "  transform = 0 (command line)" \
@@ -147,8 +170,11 @@ else
   bad "--describe: $(printf '%s' "$d" | grep -A12 'options of the calculation')"
 fi
 d0="$(cd "$WORK/base" && "$AZURE2_BIN" --describe T1.azr 2>&1)"
-printf '%s' "$d0" | grep -qF "options of the calculation" && bad "--describe of T1 alone lists the options (all at default)" \
-  || ok "--describe of T1 alone: no options block (every option at its default, the text as before)"
+if [ "$(printf '%s\n' "$d0" | grep -A11 -F "options of the calculation (value, source):" | grep -c ' (default)$')" = 11 ]; then
+  ok "--describe of T1 alone: the options block, all eleven at their default"
+else
+  bad "--describe of T1 alone: no options block with the eleven defaults"
+fi
 dj="$(cd "$WORK/k2" && "$AZURE2_BIN" --describe T1.azr --json 2>/dev/null)"
 printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); o=d["options"]; sys.exit(0 if o["use_brune"]=={"value": False, "source": "project"} and len(o)==11 else 1)' \
   && ok "--describe --json: options with value and source" || bad "--describe --json: no options member"

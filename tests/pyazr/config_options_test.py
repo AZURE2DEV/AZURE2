@@ -8,7 +8,9 @@
    ``option_sources`` and ``describe()["option_sources"]`` say "keyword", "project" or "default"; ``options`` holds the
    values in effect, and passed back as keywords they rebuild the same session.
 3. Refusals: ``set_config`` of a bad value (ValueError) and of each contradiction (the engine's code, the project
-   unchanged); a keyword against a key (AZURE2Error naming both and their sources).
+   unchanged); a keyword against a key (AZURE2Error naming both and their sources); contradicting keywords without a
+   key (``use_rmc=True`` with Brune at its default, ``use_park=True, use_brune=False``, ``ec_convection_current=False``
+   with the long-wavelength form at its default), refused as the program refuses the flags.
 4. ``set_config`` round trip (bool -> "1"/"0", ``None`` removes, the text back byte for byte); ``Project.new`` writes no
    option key T1 does not have (it keeps T1's ``<config>``); ``save_fit`` writes none it did not find.
 5. ``pyazr.kinds()["options"]``: every option of the calculation has its ``<config>`` key (the same word) and every
@@ -163,12 +165,31 @@ try:
         check("use_rmc=True against the key use_brune=1: AZURE2Error naming both and their sources",
               "E_CONFIG_OPTIONS_CONTRADICT" in str(err) and "use_rmc=1 (keyword)" in str(err)
               and "use_brune=1 (this file)" in str(err), err)
-    try:  # T1's capture has no Reich-Moore pathway: the session refuses it at set-up, as before the keys
-        pyazr.azure2(base_path, use_rmc=True).close()
-        check("use_rmc=True on T1 without keys: no option refusal", True)
-    except pyazr.AZURE2Error as err:
-        check("use_rmc=True on T1 without keys: no option refusal (the set-up's own, as before)",
-              "E_CONFIG_OPTIONS_CONTRADICT" not in str(err), err)
+    # Contradicting keywords, without a key: refused as the program refuses the flags (the same code, the same three
+    # parts: what, allowed, fix), the fix in keywords.
+    for keys, words in [({"use_rmc": True}, ["use_rmc=1 (keyword) with use_brune=1 (the default) cannot hold together",
+                                             "; allowed: use_rmc=1 with use_brune=0, or use_rmc=0",
+                                             "; fix: pass use_brune=False (or use_rmc=False in place of use_rmc=True)"]),
+                        ({"use_park": True, "use_brune": False},
+                         ["use_park=1 (keyword) with use_brune=0 (keyword) cannot hold together",
+                          "; allowed: use_park=1 with use_brune=1, or use_park=0",
+                          "; fix: use_brune=True in place of use_brune=False (or use_park=False in place of "
+                          "use_park=True)"]),
+                        ({"ec_convection_current": False},
+                         ["ec_convection_current=0 (keyword) with use_long_wavelength=1 (the default)",
+                          "; fix: pass use_long_wavelength=False"])]:
+        try:
+            pyazr.azure2(base_path, **keys).close()
+            check(f"{keys} on T1 without keys refused", False)
+        except pyazr.AZURE2Error as err:
+            check(f"{keys} on T1 without keys: AZURE2Error E_CONFIG_OPTIONS_CONTRADICT, what, allowed, fix",
+                  "E_CONFIG_OPTIONS_CONTRADICT" in str(err) and all(w in str(err) for w in words), err)
+    for keys in ({"use_park": True}, {"use_brune": False}):  # an implied value counts as given: no contradiction
+        try:
+            with pyazr.azure2(base_path, **keys) as s:
+                check(f"{keys} alone: accepted (the implied option given)", s.options["use_park"] == s.options["use_brune"])
+        except pyazr.AZURE2Error as err:
+            check(f"{keys} alone: accepted", False, err)
 
     # 4. round trip and writers
     p = pyazr.Project.open(base_path)

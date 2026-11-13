@@ -18,3 +18,15 @@ extrapolation Y_thick (extrapolation 1, line 61)
   grid: 81 energies E_lab 0.6 - 1.4 MeV at 1 angle(s) 0 - 0 deg
   effect: target N15T, beam pbeam, detector -
   parameters: Y_thick.shift.offset, Y_thick.shift.sqrt (energy shift, fixed)
+options of the calculation (value, source):
+  use_brune = 1 (default)
+  use_park = 0 (default)
+  transform = 1 (default)
+  ignore_externals = 1 (default)
+  use_long_wavelength = 1 (default)
+  ec_convection_current = 1 (default)
+  use_rmc = 0 (default)
+  use_gsl_coul = 0 (default)
+  use_coulomb_table = 1 (default)
+  use_ec_table = 1 (default)
+  replace_grids = 1 (default)

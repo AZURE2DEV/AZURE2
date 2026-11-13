@@ -69,17 +69,21 @@ computes what it computed before.  For example, a project in the standard
 and ``AZURE2 project.azr`` then runs it without ``--no-brune``;
 ``AZURE2 --use-brune project.azr`` runs the same project with Brune's level
 matrix for this run only.  ``--use-park`` also gives ``use_brune`` on, and
-``--no-brune`` also gives ``use_park`` off, as before.  ``AZURE2 --describe``
-prints each option's value and where it came from (``default``, ``project``,
-``command line``) when at least one is not at its default (``--json``:
-always, as the member ``options``).  Refused, by ``--validate`` and by the run, each with its
-code: a value other than 0, 1, true, false (``E_CONFIG_OPTION_VALUE``); and a
-pair that cannot hold together when at least one of the two is a key of the
-project (``E_CONFIG_OPTIONS_CONTRADICT``, naming both): ``use_park=1`` with
-``use_brune=0``, ``use_rmc=1`` with ``use_brune=1`` (Brune is on by default:
-write ``use_brune=0`` too), ``ec_convection_current=0`` with
-``use_long_wavelength=1``.  Without a key the program keeps its old rule for
-``--use-rmc``: it drops Brune with a warning.  pyazr sets a key with
+``--no-brune`` also gives ``use_park`` off, unless the same
+command line states that option itself.  ``AZURE2 --describe`` prints each
+option's value and where it came from (``default``, ``project``, ``command
+line``) for every project (``--json``: the member ``options``).  Refused, by
+``--validate`` and by the run, each with its code: a value other than 0, 1,
+true, false (``E_CONFIG_OPTION_VALUE``); and a pair that cannot hold together,
+whatever gave the two values -- a flag, a key or the default
+(``E_CONFIG_OPTIONS_CONTRADICT``, naming both with their sources, what is
+allowed and the fix): ``use_park=1`` with ``use_brune=0`` (so ``--use-park
+--no-brune`` is refused in either order), ``use_rmc=1`` with ``use_brune=1``
+(Brune is on by default: ``--use-rmc`` needs ``--no-brune``, a key
+``use_rmc=1`` needs ``use_brune=0``), ``ec_convection_current=0`` with
+``use_long_wavelength=1`` (``--no-ec-convection-current`` needs
+``--no-long-wavelength``).  A pyazr session refuses the same keywords the
+same way.  pyazr sets a key with
 ``Project.set_config(use_brune=False)``; the converter, ``Project.new`` and
 ``save_fit`` write no key they did not find.
 
@@ -189,7 +193,8 @@ Available Options
        turn the option off.
    * - ``--use-rmc``
      - Use the RMC capture formalism for neutron capture (equivalent to the
-       GUI option).
+       GUI option).  Needs ``--no-brune`` (or ``use_brune=0`` in the
+       project): with Brune on, the run is refused.
    * - ``--gsl-coul``
      - Use GSL Coulomb functions (equivalent to the GUI option).  Not
        recommended: against the default routine, :math:`P` and :math:`S` are

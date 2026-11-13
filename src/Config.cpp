@@ -89,6 +89,7 @@ void Config::Reset() {
   relativisticReferencePair = 0;
   priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
   optionSources.clear();     // every option at its default until a flag, keyword or key sets it
+  optionsStated.clear();
   refusedOptions.clear();
   environment = SettingsOf(azure2::support::ProcessEnvironment());
 }

@@ -89,7 +89,12 @@ given wins over the key, the key over the default the signature shows, and a
 keyword left out is not given.  ``session.options`` holds the values in
 effect, ``session.option_sources`` where each came from (``"default"``,
 ``"project"``, ``"keyword"``); ``Project.set_config(use_brune=False)`` writes
-``use_brune=0``.  ``pyazr.kinds()["options"]`` lists them all with type,
+``use_brune=0``.  Keywords that cannot hold together are refused as the
+program refuses the flags (``AZURE2Error``, ``E_CONFIG_OPTIONS_CONTRADICT``,
+with what is allowed and the fix): ``use_rmc=True`` needs ``use_brune=False``,
+``use_park=True`` with ``use_brune=False`` is refused, and
+``ec_convection_current=False`` needs ``use_long_wavelength=False``.
+``pyazr.kinds()["options"]`` lists them all with type,
 default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``:
 ``params_rwa`` then holds Park's amplitudes, ``park_norms()`` gives every
 level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard, Brune, Park:

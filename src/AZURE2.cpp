@@ -1511,11 +1511,6 @@ int main(int argc, char *argv[]) {
                           << std::endl;
     }
   }
-  if ((configure.paramMask & Config::USE_RMC_FORMALISM) && (configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-    configure.outStream << "WARNING: --use-brune is incompatible with --use-rmc. Ignoring --use-brune." << std::endl;
-    configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
-    configure.paramMask &= ~Config::USE_PARK_FORMALISM;
-  }
   // Before 2026-11-01 Brune OR ignore-externals forced the A-matrix ("--ignore-externals and --use-brune options
   // require A-Matrix"), and as ignore-externals is on by default with no flag to clear it the CLI could never use
   // the R-matrix route.  Brune has been implemented on the R-matrix route (RMatrixFunc; equal to the A-matrix route
