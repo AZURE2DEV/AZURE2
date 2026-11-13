@@ -7,8 +7,8 @@ an arbitrary energy means writing a file that requests it and evaluating that.
 
 :func:`angular_distribution` does exactly that and cleans up after itself. For
 coefficients at the grids a model already declares, use
-``Session.calculate_angular_dists`` on a live instance instead -- no temporary
-file, no second process.
+``Session.evaluate(x).data[i].extra["legendre"]`` on a live session instead -- no
+temporary file, no second session.
 """
 
 import os
@@ -21,7 +21,7 @@ from .project import Project
 
 
 def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
-                         params=None, use_rwa=True, lab=True, **azure2_kwargs):
+                         params=None, lab=True, **azure2_kwargs):
     r"""Legendre coefficients of the angular distribution at given energies.
 
     Parameters
@@ -37,10 +37,8 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
     order : int
         Highest Legendre order to compute.
     params : array_like, optional
-        Parameter vector to evaluate at. Defaults to the model's own values.
-        Interpreted as reduced-width amplitudes unless ``use_rwa=False``.
-    use_rwa : bool
-        Whether ``params`` is in reduced-width-amplitude space.
+        The free vector (the fit vector, ``Session.params_rwa`` of the model's
+        session) to evaluate at. Defaults to the model's own values.
     lab : bool
         Whether ``energies`` are laboratory (default) or centre-of-mass.
     **azure2_kwargs
@@ -91,30 +89,18 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
 
         with Session(tmp_azr, **azure2_kwargs) as m:
             m.extrap_mode()
-
-            # The grid energies do not depend on the parameters, and
-            # calculate_energies speaks the physical convention -- handing it a
-            # reduced-width vector is what the two conventions being separate
-            # means, and AZURE2 does not survive it.
-            calc_e = m.calculate_energies(m.params)
-
-            if use_rwa:
-                x = m.params_rwa if params is None else params
-                dists = m.calculate_angular_dists_rwa(x)
-            else:
-                x = m.params if params is None else params
-                dists = m.calculate_angular_dists(x)
+            grids = m.evaluate(m.params_rwa if params is None else params).data
 
         out_e = np.full(energies.size, np.nan)
         out_c = np.full((energies.size, order + 1), np.nan)
-        for i in range(min(len(dists), energies.size)):
-            rows = [r for r in dists[i] if r.size]
+        for i in range(min(len(grids), energies.size)):
+            rows = [r for r in grids[i].extra.get("legendre", []) if r.size]
             if not rows:
                 continue
             coeffs = rows[0]
             out_c[i, :min(coeffs.size, order + 1)] = coeffs[:order + 1]
-            if i < len(calc_e) and len(calc_e[i]):
-                out_e[i] = calc_e[i][0]
+            if len(grids[i].energies):
+                out_e[i] = grids[i].energies[0]
         return out_e, out_c
     finally:
         # The temporary model and whatever AZURE2 wrote beside it.

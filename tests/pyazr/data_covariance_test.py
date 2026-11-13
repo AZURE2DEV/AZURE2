@@ -8,8 +8,8 @@ with the engine, give a chi2, gradient and whitened residual Jacobian consistent
 
   1. the field is read, written on a new data set (Project.add) and read back;
   2. a diagonal covariance diag(e_i^2) gives the chi2 of no covariance;
-  3. dense covariance: sum of the whitened residuals squared = calculate_chi2_rwa, the
-     analytic gradient (chi2_and_grad) = central differences of calculate_chi2_rwa, and
+  3. dense covariance: sum of the whitened data rows squared = the data chi2, the
+     analytic gradient of the objective = central differences of the objective, and
      = 2 J^T w from the whitened residual Jacobian;
   4. relvector terms: the model is frozen at the first evaluation; refreeze_covariance()
      makes the next evaluation freeze it again (at that point chi2 changes).
@@ -98,7 +98,7 @@ if have_engine:
             azr, d = project(work, model)
             with Session(azr, cwd=d) as mdl:
                 x0 = np.asarray(mdl.params_rwa, float)
-                chi[model] = (float(np.sum(mdl.calculate_chi2_rwa(x0))), np.asarray(mdl.segment_chi2(x0), float))
+                chi[model] = (mdl.evaluate(x0).chi2, np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float))
         check("diag(e^2) covariance: chi2 = no covariance",
               abs(chi["diag"][0] - chi["plain"][0]) < 1e-9 * chi["plain"][0], (chi["diag"][0], chi["plain"][0]))
         check("... segment by segment", float(np.max(np.abs(chi["diag"][1] - chi["plain"][1]))) < 1e-9 * chi["plain"][0])
@@ -106,15 +106,18 @@ if have_engine:
         azr, d = project(work, "dense")
         with Session(azr, cwd=d) as mdl:
             x0 = np.asarray(mdl.params_rwa, float)
-            c0 = float(np.sum(mdl.calculate_chi2_rwa(x0)))
-            w, J = mdl.residual_jacobian(x0)
+            ev0 = mdl.evaluate(x0)
+            c0 = ev0.chi2
+            w, J = mdl.objective().residuals_and_jacobian(x0)
             w = np.asarray(w, float)
-            check("dense: sum of whitened residuals^2 = chi2", abs(float(w @ w) - c0) < 1e-9 * c0, (float(w @ w), c0))
-            check("... and segment_chi2 adds up to it", abs(float(np.sum(mdl.segment_chi2(x0))) - c0) < 1e-9 * c0)
+            wd = w[:ev0.data[-1].rows.stop]  # the data rows of the objective's rows
+            check("dense: sum of whitened residuals^2 = chi2", abs(float(wd @ wd) - c0) < 1e-9 * c0, (float(wd @ wd), c0))
+            check("... and data[i].chi2 adds up to it", abs(float(np.sum([d.chi2 for d in ev0.data])) - c0) < 1e-9 * c0)
             check("... and differs from the plain chi2", abs(c0 - chi["plain"][0]) > 0.1 * chi["plain"][0], (c0, chi["plain"][0]))
-            out = mdl.chi2_and_grad(x0)
+            out = mdl.objective().value_and_grad(x0)
             cg, g = float(out[0]), np.asarray(out[1], float)
-            check("chi2_and_grad's chi2 = calculate_chi2_rwa", abs(cg - c0) < 1e-9 * c0, (cg, c0))
+            f0 = mdl.objective()(x0)
+            check("value_and_grad's value = the objective", abs(cg - f0) < 1e-9 * f0, (cg, f0))
             jtw = 2.0 * np.asarray(J, float).T @ w
             scale = float(np.max(np.abs(g)))
             check("gradient = 2 J^T w (whitened Jacobian)", float(np.max(np.abs(jtw - g))) < 1e-7 * scale,
@@ -129,7 +132,7 @@ if have_engine:
                     xp, xm = x0.copy(), x0.copy()
                     xp[i] += h
                     xm[i] -= h
-                    fd = (float(np.sum(mdl.calculate_chi2_rwa(xp))) - float(np.sum(mdl.calculate_chi2_rwa(xm)))) / (2 * h)
+                    fd = (mdl.objective()(xp) - mdl.objective()(xm)) / (2 * h)
                     best = min(best, abs(fd - g[i]))
                 diff[i] = best
             worst = float(np.max(diff)) / scale
@@ -138,19 +141,19 @@ if have_engine:
         azr, d = project(work, "rel")
         with Session(azr, cwd=d) as mdl:
             x0 = np.asarray(mdl.params_rwa, float)
-            c0 = float(np.sum(mdl.calculate_chi2_rwa(x0)))            # freezes m at x0
-            g0 = np.asarray(mdl.chi2_and_grad(x0)[1], float)
+            c0 = mdl.evaluate(x0).chi2            # freezes m at x0
+            g0 = np.asarray(mdl.objective().value_and_grad(x0)[1], float)
             x1 = x0 - 1e-3 * g0 / max(float(np.max(np.abs(g0))), 1e-30) * np.maximum(np.abs(x0), 1e-2)
-            c1 = float(np.sum(mdl.calculate_chi2_rwa(x1)))            # m still frozen at x0
-            c1b = float(np.sum(mdl.calculate_chi2_rwa(x1)))
+            c1 = mdl.evaluate(x1).chi2            # m still frozen at x0
+            c1b = mdl.evaluate(x1).chi2
             check("rel: chi2 at a new point with the model frozen is reproducible", c1 == c1b, (c1, c1b))
             n = mdl.refreeze_covariance()
             check("refreeze_covariance() reports one relvector group", n == 1, n)
-            c1r = float(np.sum(mdl.calculate_chi2_rwa(x1)))           # freezes m at x1
+            c1r = mdl.evaluate(x1).chi2           # freezes m at x1
             check("... after it the model is frozen at the new point (chi2 changes)", abs(c1r - c1) > 1e-9 * c1,
                   (c1, c1r))
             mdl.refreeze_covariance()
-            c0r = float(np.sum(mdl.calculate_chi2_rwa(x0)))           # back at x0
+            c0r = mdl.evaluate(x0).chi2           # back at x0
             check("... and refreezing at the start point gives the start chi2 back", abs(c0r - c0) < 1e-10 * c0, (c0r, c0))
     finally:
         shutil.rmtree(work, ignore_errors=True)

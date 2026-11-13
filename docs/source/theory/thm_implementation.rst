@@ -534,7 +534,7 @@ their uncertainties and covariance, transformed from :math:`\operatorname{cov}(c
 by :math:`n = 1/s`, :math:`b_k = a_k/s`. They are the uncertainties of the
 profile at fixed R-matrix parameters, not scaled by :math:`\chi^2/\nu`.
 ``pyazr``: ``session.thm_background(name)`` (norm, ``b``, ``cov``, ``sigma``,
-``chi2``, ``status``) and ``session.thm_experiments()``; ``segment_norms()``
+``chi2``, ``status``) and ``session.thm_experiments()``; ``evaluate(x).data[i].norm``
 gives the shared :math:`n^*` for each segment. ``Project.thm()["experiments"]``,
 ``set_thm_experiment(name, background=..., spectator=..., ...)`` (sets or
 removes keys of the experiment's line; a data set joins the experiment by its
@@ -545,8 +545,8 @@ GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
 section, and keeps any token it does not know as written.
 
 *Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
-is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and
-``chi2_and_grad``, the covariance band), the dependence of the profiled
+is used (MIGRAD's THM gradient, the Jacobian and gradient of ``pyazr``'s
+``Session.objective()``, the covariance band), the dependence of the profiled
 :math:`c^*(p)` is included exactly. With :math:`\rho = \tilde y - \tilde A c`
 and :math:`\dot{\tilde A} = [J_m/e, 0, \dots]` (only the model column
 depends on :math:`p`), differentiating the normal equations gives
@@ -664,7 +664,7 @@ columns next to the R-matrix ones: ``covariance.dat`` then spans the free
 level energies, reduced widths and ``cbkg`` values, in that order (before
 October 2026 the band dropped them and was too narrow wherever :math:`c(E)`
 is uncertain). ``pyazr``: kind ``"cbkg"`` (``parameters.cbkg``, with the J group,
-entrance channel and exit pair), ``residual_jacobian`` and ``chi2_and_grad``
+entrance channel and exit pair), the objective's Jacobian and gradient
 carry their columns, ``thm_experiments()[name]["cbkg"]`` their values;
 ``save_fit`` writes the fitted values back into ``cbackground=`` (one explicit
 term per combination); ``Project.set_thm_experiment(..., cbackground=...)``
@@ -717,8 +717,8 @@ of a linear term) against central differences (rel. about :math:`10^{-9}` for
 the ``cbkg`` columns; the test asks for :math:`10^{-4}`), ``save_fit`` round trip, a fixed zero background bit
 for bit equal to none.
 
-*Effect study* (October 2026; joint least-squares fits with ``pyazr``'s
-``residual_jacobian``, the fitter in the user's script; not part of the
+*Effect study* (October 2026; joint least-squares fits with the Jacobian of ``pyazr``'s
+objective, the fitter in the user's script; not part of the
 tests).
 
 18O(p,α)15N, ``examples/o18_lacognata2010`` as it was before October 2026
@@ -3314,7 +3314,7 @@ every variant on its own and quotes the spread. ``pyazr.modelavg`` turns the
 fitted variants into one number per quantity; ``scripts/thm_model_average.py``
 produces the variants (one project per variant through ``pyazr.Project``, fitted
 one after the other, each in a fresh Python process, with scipy's
-``least_squares`` on ``residuals`` and ``residual_jacobian`` plus the norm
+``least_squares`` on the data rows of ``Session.objective().residuals`` and ``.jacobian`` plus the norm
 and shift penalty rows; pyazr itself does no fitting).
 
 *Weights.* For variant :math:`i` with minimised :math:`\chi^2_i`, :math:`N`

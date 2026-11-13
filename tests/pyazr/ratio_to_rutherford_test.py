@@ -70,12 +70,12 @@ def project(work, name, text):
 def chi2_of(d):
     with Session(os.path.join(d, "m.azr"), cwd=d) as m:
         x = np.asarray(m.params_rwa, float)
-        return float(np.sum(m.calculate_chi2_rwa(x)))
+        return m.evaluate(x).chi2
 
 
 def values_of(d):
     with Session(os.path.join(d, "m.azr"), cwd=d) as m:
-        return np.concatenate([np.asarray(v, float) for v in m.calculate_rwa(np.asarray(m.params_rwa, float))])
+        return np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.params_rwa, float)).data]])
 
 
 base = open(os.path.join(CASE, "models", "aC_data.azr")).read()
@@ -149,14 +149,14 @@ with tempfile.TemporaryDirectory() as work:
         d = project(work, "g_" + name, text)
         with Session(os.path.join(d, "m.azr"), cwd=d) as m:
             x = np.asarray(m.params_rwa, float)
-            c, g = m.chi2_and_grad(x)
+            c, g = m.objective().value_and_grad(x)
             worst = 0.0
             for i in range(len(x)):
                 h = 1e-6 * max(abs(x[i]), 1e-3)
                 xp, xm = x.copy(), x.copy()
                 xp[i] += h
                 xm[i] -= h
-                fd = (float(np.sum(m.calculate_chi2_rwa(xp))) - float(np.sum(m.calculate_chi2_rwa(xm)))) / (2 * h)
+                fd = (m.objective()(xp) - m.objective()(xm)) / (2 * h)
                 worst = max(worst, abs(g[i] - fd) / max(np.max(np.abs(g)), 1e-300))
             check(f"{name}: {len(x)} free parameters, analytic = central differences to 1e-6 of the largest",
                   len(x) >= 7 and worst <= 1e-6, f"worst {worst:.2e}, chi2 {c!r}")

@@ -5,7 +5,7 @@ The ``<config>`` key ``priorCovariance=<path>`` (path relative to the ``.azr``'s
     (p - mu)^T C^-1 (p - mu)
 
 to chi-squared over the parameters the file lists (``Total-Prior-Covariance-Chi-Squared`` in ``chiSquared.out``;
-``penalties()["prior_covariance"]`` in a pyazr session).  It is SAMMY's "PUP" / sequential Bayesian update: fit A's
+``evaluate(x).terms["prior covariance"]`` in a pyazr session).  It is SAMMY's "PUP" / sequential Bayesian update: fit A's
 parameters and covariance become the prior of fit B, which then adds new data.
 
 The file is plain text with ``#`` comments::

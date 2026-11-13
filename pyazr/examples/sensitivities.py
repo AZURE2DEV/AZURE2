@@ -99,8 +99,8 @@ def main() -> int:
                           step=args.step, cols=cols, nprocs=args.nprocs)[seg]
         elapsed = time.time() - t0
 
-        sigma = np.asarray(azr.calculate_rwa(x)[seg], float)
-        energy = np.asarray(azr.calculate_energies(x)[seg], float)
+        sigma = np.asarray(azr.evaluate(x).data[seg].model, float)
+        energy = np.asarray(azr.evaluate(x).data[seg].energies, float)
 
         how = args.method
         if args.method != "analytic" and args.nprocs > 1:

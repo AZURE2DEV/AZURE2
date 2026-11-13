@@ -97,7 +97,7 @@ CHILD = r"""
 import json, sys
 import pyazr
 from pyazr import stopping
-f = pyazr.Project.open(sys.argv[1]).session(use_coulomb_table=False).fit_objective()
+f = pyazr.Project.open(sys.argv[1]).session(use_coulomb_table=False).objective()
 s = stopping.stopping(stopping.Material("C"), "p", [0.25, 0.5, 1.0, 2.0])
 print(json.dumps({"file": pyazr.__file__, "version": pyazr.__version__, "objective": float(f(f.x0)).hex(),
                   "stopping": [float(v).hex() for v in s["total"]]}))
@@ -106,7 +106,7 @@ print(json.dumps({"file": pyazr.__file__, "version": pyazr.__version__, "objecti
 
 def in_tree(t2):
     from pyazr import stopping
-    f = pyazr.Project.open(t2).session(use_coulomb_table=False).fit_objective()
+    f = pyazr.Project.open(t2).session(use_coulomb_table=False).objective()
     s = stopping.stopping(stopping.Material("C"), "p", [0.25, 0.5, 1.0, 2.0])
     return {"objective": float(f(f.x0)).hex(), "stopping": [float(v).hex() for v in s["total"]]}
 

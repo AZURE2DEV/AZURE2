@@ -95,13 +95,23 @@ py::dict DataSetDict(const AZUREAPI &api, const AZUREAPI::ObjectiveBreakdown &b,
   const azure2::Results &res = api.results();
   const Segment &seg = wc.Data().GetSegments()[first];
   const int index = first + 1;  // the engine's segment number
-  double chi2 = 0.0, normChi2 = 0.0, shiftChi2 = 0.0;
+  double chi2 = 0.0, normChi2 = 0.0, shiftChi2 = 0.0, shiftConstant = 0.0, shiftSqrt = 0.0, shiftFunction = 0.0;
   for (int i = first + 1; i <= last + 1; i++) {
     chi2 += res.objective.segmentChi2[i];
     if (i < (int)b.segments.norm.size()) normChi2 += b.segments.norm[i];
-    if (i < (int)b.segments.shift.size())
+    if (i < (int)b.segments.shift.size()) {
       shiftChi2 += b.segments.shift[i] + b.segments.shiftSqrt[i] + b.segments.shiftFn[i];
+      shiftConstant += b.segments.shift[i];
+      shiftSqrt += b.segments.shiftSqrt[i];
+      shiftFunction += b.segments.shiftFn[i];
+    }
   }
+  // The data set's rows of the objective's least-squares rows (Objective.residuals): one per point of every segment,
+  // in segment order, the data rows first.
+  const std::vector<Segment> &all = wc.Data().GetSegments();
+  int firstRow = 0, rowCount = 0;
+  for (int i = 0; i < first; i++) firstRow += (int)all[i].GetPoints(wc).size();
+  for (int i = first; i <= last; i++) rowCount += (int)all[i].GetPoints(wc).size();
   const double norm = wc.NormUsed(index, res);
   std::vector<double> energies, angles, excitation, model, values, errors, residuals;
   const int thmGroup = wc.Data().ThmGroupOf(index);
@@ -136,6 +146,11 @@ py::dict DataSetDict(const AZUREAPI &api, const AZUREAPI::ObjectiveBreakdown &b,
   d["chi2"] = chi2;
   d["norm_chi2"] = normChi2;
   d["shift_chi2"] = shiftChi2;
+  d["shift_constant_chi2"] = shiftConstant;
+  d["shift_sqrt_chi2"] = shiftSqrt;
+  d["shift_function_chi2"] = shiftFunction;
+  d["first_row"] = firstRow;
+  d["rows"] = rowCount;
   d["norm"] = norm;
   d["energies"] = Array(energies);
   d["angles"] = Array(angles);
@@ -195,12 +210,13 @@ py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free) {
   return d;
 }
 
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian) {
+py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+                           const std::vector<int> &skip) {
   vector_r rows, jac;
   bool ok;
   {
     py::gil_scoped_release release;
-    ok = api.ObjectiveRowsRWA(free, rows, withJacobian ? &jac : nullptr);
+    ok = api.ObjectiveRowsRWA(free, rows, withJacobian ? &jac : nullptr, skip);
   }
   py::dict d;
   d["ok"] = ok;

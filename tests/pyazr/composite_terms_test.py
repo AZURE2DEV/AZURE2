@@ -48,7 +48,7 @@ def worker(azr, cwd, flags, out):
     from pyazr import Session
     try:
         with Session(azr, cwd=cwd, ignore_externals=flags[0] == "1", use_park=flags[1:2] == "1") as a:
-            v = a.calculate_rwa(np.array(a.params_rwa, float))
+            v = [d.model for d in a.evaluate(np.array(a.params_rwa, float)).data]
             res = {"values": [[None if not np.isfinite(x) else float(x) for x in np.ravel(np.asarray(s, float))]
                               for s in v]}
     except Exception as err:

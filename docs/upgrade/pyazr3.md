@@ -766,11 +766,22 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    methods in the mixin `session_thm.py`, the session's lock on every public member that reaches the engine
    (`pyazr/locking.py`, `tests/pyazr/session_lock_test.py`); tests, examples, the web UI and the pages ported.
    Differs from the plan: no `threads=` (the engine has no per-session thread count); `azure2.py` is not split into
-   `data.py` and `system.py` yet.  Not yet done: the evaluation family, one parameter vector and table, the Python
-   physics, the libraries.  Measured on T2 for the ports to come: `segment_chi2` and `dataset_chi2` split a
-   data-covariance group otherwise than `Evaluation.data[i].chi2` (equal sums); `chi2_and_grad` and
-   `residual_jacobian`'s `skip` have no replacement; the engine's evaluation runs in extrapolation mode (models bit
-   for bit those of `calculate_rwa`), so `evaluate` can serve the extrapolations without engine code.
+   `data.py` and `system.py` yet.
+   One evaluation, as built: the `calculate_*` family, `calculate_chi2*`, `segment_chi2`, `dataset_chi2`,
+   `segment_norms`, `penalties`, `scattering_length_chi2`, `objective(x)`, `objective_and_grad`, `chi2_and_grad`,
+   `residual_jacobian`, `residuals` are gone; `Session.objective()` is the object (`fit_objective` before) and
+   `Session.evaluate(x)` the evaluation.  `EvaluatedData.rows` (a slice of the objective's rows; the binding's
+   `first_row`, `rows`) and `shift_constant_chi2`, `shift_sqrt_chi2`, `shift_function_chi2` (fields of the data
+   set's record in `pybind_evaluation.cpp`) replace the whitened split and the per-part shift priors;
+   `Objective.jacobian(x, skip=)` forwards to `CalculateResidualJacobianRWA` (`AZUREAPI::ObjectiveRowsRWA` and the
+   binding's `objective_rows_rwa` take `skip`).  In extrapolation mode `evaluate` returns the extrapolations from
+   the engine's forward pass (the binding's `update_segments_rwa` and `calculated_*`, as `calculate_rwa` did), with
+   every chi-squared field `None`: the engine's objective evaluation needs the data (it fails with "the working copy
+   has no node table" in extrapolation mode on T2, 13N), so `s.extrapolations` beside `s.data` waits for the mode
+   switch to go.  Differs from 2.3: `chi2_and_grad`'s gradient is that of the data chi-squared plus the model's
+   terms (Park, abundances, model data), which no row range of the objective gives where priors exist; the tests
+   moved to the objective's gradient.  Not yet done: one parameter vector and table, the Python physics, the
+   libraries.
 6. **Read-only views of set-up arrays** (`DataSet.energies`, `values`, `errors`, `grid`, `kernel`): `shared_ptr`
    set-up buffers in the engine's data, capsule-based arrays in the binding. `AZUREAPI.cpp`, `pybind_api.cpp`, the
    data access of `experiment/`. About 400 lines; a view test (read-only, alive after `close()`, unchanged after a

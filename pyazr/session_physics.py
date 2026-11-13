@@ -9,7 +9,7 @@ from .locking import engine_call
 
 
 class SessionPhysics:
-    """Mixed into :class:`pyazr.Session`: uses its ``sess`` and ``pairs``."""
+    """Mixed into :class:`pyazr.Session`: uses its ``_engine`` and ``pairs``."""
 
     @engine_call
     def channel_functions(self, pair, e_cm, l=0, radius=0.0, J=None):
@@ -42,7 +42,7 @@ class SessionPhysics:
         energies = np.asarray(e_cm, float)
         e = energies.ravel()
         req = np.concatenate([[pair, l, -1 if J is None else round(2 * J), radius, e.size], e])
-        resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
+        resp = np.asarray(self._engine.coulomb_functions(req), dtype=float)
         block = resp[1:].reshape(int(round(resp[0])), 7)
         out = {k: block[:, i].reshape(energies.shape)
                for i, k in enumerate(("F", "Fp", "G", "Gp", "P", "S", "delta_hs"))}

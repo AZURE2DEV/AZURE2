@@ -115,29 +115,29 @@ if have_engine:
                   min(p.index for p in fn) > max(p.index for p in mdl.parameters.sqrt_shifts))
             idx = free[0].free_index
             x0 = np.asarray(mdl.params_rwa, float)
-            c = np.asarray(mdl.segment_chi2(x0), float)
+            c = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float)
             check("segment chi2 = the CLI's (expected/chiSquared.out)",
                   all(abs(c[k - 1] - expected[k]) < 1e-5 * max(1.0, expected[k]) for k in expected),
                   [(k, c[k - 1], expected[k]) for k in expected])
             x = x0.copy()
             x[idx] = 0.009                        # 4.5 sigma from zero (2 from the file value)
-            pen = mdl.penalties(x)
+            pen = mdl.evaluate(x)
             # measured from zero since 2026-10-25, the file value being only the start
-            check("penalty (a0/0.002)^2 = 20.25 (from zero), on segment 5", abs(float(pen["shift_fn"][4]) - 20.25) < 1e-9
-                  and abs(float(pen["shift_fn"].sum()) - 20.25) < 1e-9, pen["shift_fn"])
+            check("penalty (a0/0.002)^2 = 20.25 (from zero), on segment 5", abs(float(np.array([d.shift_function_chi2 for d in pen.data])[4]) - 20.25) < 1e-9
+                  and abs(float(np.array([d.shift_function_chi2 for d in pen.data]).sum()) - 20.25) < 1e-9, np.array([d.shift_function_chi2 for d in pen.data]))
             check("objective = chi2 + every penalty",
-                  abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + sum(
-                      float(np.sum(pen[k])) for k in ("norm", "shift", "shift_sqrt", "shift_fn")))) < 1e-9)
-            c2 = np.asarray(mdl.segment_chi2(x), float)
+                  abs(mdl.objective()(x) - (mdl.evaluate(x).chi2 + sum(
+                      float(np.sum([getattr(d, k) for d in pen.data])) for k in ("norm_chi2", "shift_constant_chi2", "shift_sqrt_chi2", "shift_function_chi2")))) < 1e-9)
+            c2 = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x).data]), float)
             check("moving a0 moves the group (segments 5 and 6) and nothing else",
                   abs(c2[4] - c[4]) > 1.0 and abs(c2[5] - c[5]) > 1.0
                   and all(abs(c2[k] - c[k]) < 1e-9 for k in (0, 1, 2, 3, 6)), (c, c2))
-            r, J = mdl.residual_jacobian(x0)
+            r, J = mdl.objective().residuals_and_jacobian(x0)
             h = 1e-6
             xp, xm = x0.copy(), x0.copy()
             xp[idx] += h
             xm[idx] -= h
-            fd = (mdl.residual_jacobian(xp)[0] - mdl.residual_jacobian(xm)[0]) / (2 * h)
+            fd = (mdl.objective().residuals_and_jacobian(xp)[0] - mdl.objective().residuals_and_jacobian(xm)[0]) / (2 * h)
             col = J[:, idx]
             scale = max(float(np.max(np.abs(fd))), 1e-12)
             check("Jacobian column of a0 matches finite differences",

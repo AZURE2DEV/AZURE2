@@ -226,10 +226,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``src/AZURECalc.cpp``), Minuit2's function; during a fit each evaluation
    takes a pooled copy of ``CNuc`` and of the working copy with its own
    ``Results`` (``AZURECalc::GetPooledCNuc``, ``GetPooledData``). *pyazr*:
-   ``Session.objective`` calls ``AZUREAPI::CalculateObjectiveRWA``, which runs
-   the same hand-over, point pass, model pass and ``Objective::Engine()`` on
-   the session's own objects. ``Session.fit_objective()`` gives that function
-   as an object for a fitter or sampler (``pyazr.Objective``), and
+   ``Session.objective()`` is ``AZUREAPI::CalculateObjectiveRWA`` as an object for a fitter or sampler
+   (``pyazr.Objective``), which runs the same hand-over, point pass, model pass and ``Objective::Engine()`` on
+   the session's own objects, and
    ``Session.evaluate(x)`` one evaluation with its terms and every data set's
    arrays (``pyazr.Evaluation``, ``AZUREAPI::EvaluateObjectiveRWA``).
 
@@ -240,7 +239,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``AZURECalc::RunLevenbergMarquardt``); the sampler is ``runMCMC``
    (``src/AZURE2.cpp``), which sets up its own ``CNuc`` and ``WorkingCopy``
    and runs ``AZURECalcMCMC::RunMCMCSampling`` on ``nu::Mcmc``. *pyazr*: the
-   fit is Python's (SciPy or iminuit on ``Session.objective_and_grad``;
+   fit is Python's (SciPy or iminuit on ``Session.objective().value_and_grad``;
    the web UI runs them as jobs, ``pyazr/ui/jobs.py``), with the same
    gradient through ``AZUREAPI``.
 

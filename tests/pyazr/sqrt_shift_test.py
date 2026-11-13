@@ -95,28 +95,28 @@ if have_engine:
             x0 = np.asarray(mdl.params_rwa, float)
             # The data chi-squared must respond to b: at the file value the
             # shifted segment 1 equals the pre-shifted segment 2.
-            c = mdl.segment_chi2(x0)
+            c = np.array([d.chi2 for d in mdl.evaluate(x0).data])
             check("shifted segment 1 == pre-shifted segment 2 (engine)",
                   abs(c[0] - c[1]) < 1e-6 * max(1.0, abs(c[1])), (c[0], c[1]))
             x = x0.copy()
             x[idx] = 0.005                        # 5 sigma from zero (2 from the file value)
-            pen = mdl.penalties(x)
+            pen = mdl.evaluate(x)
             # measured from zero since 2026-10-25, the file value being only the start
-            check("penalty (b/err)^2 = 25 (from zero)", abs(float(pen["shift_sqrt"].sum()) - 25.0) < 1e-9, pen["shift_sqrt"])
+            check("penalty (b/err)^2 = 25 (from zero)", abs(float(np.array([d.shift_sqrt_chi2 for d in pen.data]).sum()) - 25.0) < 1e-9, np.array([d.shift_sqrt_chi2 for d in pen.data]))
             check("objective = chi2 + penalties",
-                  abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + float(pen["norm"].sum())
-                                           + float(pen["shift"].sum()) + float(pen["shift_sqrt"].sum()))) < 1e-9)
-            c2 = mdl.segment_chi2(x)
+                  abs(mdl.objective()(x) - (mdl.evaluate(x).chi2 + float(np.array([d.norm_chi2 for d in pen.data]).sum())
+                                           + float(np.array([d.shift_constant_chi2 for d in pen.data]).sum()) + float(np.array([d.shift_sqrt_chi2 for d in pen.data]).sum()))) < 1e-9)
+            c2 = np.array([d.chi2 for d in mdl.evaluate(x).data])
             check("moving b moves segment 1 only", abs(c2[0] - c[0]) > 1.0 and
                   all(abs(c2[k] - c[k]) < 1e-9 for k in range(1, 5)), (c[0], c2[0]))
             # The Jacobian column of b: the API finite-differences every free
             # shift term; before 2026-10 a sqrt(E) column did not exist at all.
-            r, J = mdl.residual_jacobian(x0)
+            r, J = mdl.objective().residuals_and_jacobian(x0)
             h = 1e-6
             xp, xm = x0.copy(), x0.copy()
             xp[idx] += h
             xm[idx] -= h
-            fd = (mdl.residual_jacobian(xp)[0] - mdl.residual_jacobian(xm)[0]) / (2 * h)
+            fd = (mdl.objective().residuals_and_jacobian(xp)[0] - mdl.objective().residuals_and_jacobian(xm)[0]) / (2 * h)
             col = J[:, idx]
             scale = max(float(np.max(np.abs(fd))), 1e-12)
             check("Jacobian column of b matches finite differences",

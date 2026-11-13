@@ -102,7 +102,7 @@ def api_values(project):
     """The API's arrays of every segment, as JSON (NaN as the string "nan")."""
     from pyazr.session import Session
     m = Session(os.path.join(HERE, project, PROJECTS[project]))
-    s = m.sess
+    s = m._engine
     n = int(s.update_segments(m.params))
     get = {"sigma": s.calculated_segments, "e1": s.calculated_segments_e1, "e2": s.calculated_segments_e2,
            "energy": s.calculated_energies, "angle": s.calculated_angles, "angular": s.calculated_angular_dists}

@@ -12,28 +12,26 @@ full matrix and the diagonal pulls are only indicative).
 
 ```python
 import numpy as np
-from pyazr import azure2
+from pyazr import Session
 
-with azure2("project.azr", cwd=HERE) as m:
+with Session("project.azr", cwd=HERE) as m:
     x     = m.load_sav("output/param.sav")
-    calc  = m.calculate_rwa(x)            # c per segment (b or b/sr)
-    ecm   = m.calculate_energies(x)       # E_c.m. (MeV), including the fitted energy shift
-    norms = m.segment_norms(x)            # n per segment at x
-    i = 3                                 # calculated-segment index (data mode: m.datasets[i])
-    c, d, e, n = (np.asarray(calc[i]), np.asarray(m.cross[i]),
-                  np.asarray(m.cross_err[i]), norms[i])
-    pull = (c - d * n) / (e * n)
-    # upper panel: errorbar(ecm[i], d*n, e*n) and the curve; lower panel: pull against ecm[i]
+    ds    = m.evaluate(x).data            # one entry per data set, in the engine's order (m.active_datasets)
+    i = 3
+    c, ecm, n = ds[i].model, ds[i].energies, ds[i].norm   # model (b or b/sr), E_c.m. (MeV, shifted), norm in use
+    d, e = np.asarray(m.cross[i]), np.asarray(m.cross_err[i])
+    pull = (c - d * n) / (e * n)          # ds[i].residuals is this in the data set's own frame
+    # upper panel: errorbar(ecm, d*n, e*n) and the curve; lower panel: pull against ecm
 ```
 
 - For a smooth curve between data points, evaluate an extrapolation grid on the same pair and angle (azure2-calculate,
   Extrapolation) with `<targetInt>` matching the data segment's: folded if the data are folded.
 - Several segments of one data set: concatenate after sorting by energy; label by data set, not by segment.
-- On an E_x axis use `m.calculate_excitation_energy(x)` (includes the entrance pair's E*).
+- On an E_x axis use `ds[i].excitation_energies` (includes the entrance pair's E*).
 
 ## Angular distribution
 
-- Data and fit at the measured angles: `m.calculate_angles(x)[i]` (θ_c.m., deg) with `calc[i]` and the data as above,
+- Data and fit at the measured angles: `ds[i].angles` (θ_c.m., deg) with `ds[i].model` and the data as above,
   for each segment of a fixed energy. The `.azr` holds lab angles; the arrays are c.m.
 - A smooth curve: a `differential-cm` test segment per angle grid point, or Legendre coefficients from
   `pyazr.angular_distribution(azr_file, energies, entrance, exit, order, params=x)`, which returns

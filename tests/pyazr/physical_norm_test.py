@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""calculate_chi2 (physical parameters) must be the same objective as calculate_chi2_rwa.
+"""The engine's chi-squared of a physical parameter vector must be that of the fit vector (a test of the binding).
+
+pyazr's API takes the fit vector only; the engine's physical path (``CalculateChi2Physical``, the binding's
+``calculate_chi2_physical``) is what its fitters' physical basis uses, so it is tested here through the binding
+(``Session._engine``), against the binding's ``calculate_chi2_rwa`` (the data chi-squared plus the model's terms).
+
 
 The physical vector shares its tail (normalizations, energy shifts, screening) with the RWA
 vector, but CalculateChi2Physical never copied the norms out of it: the segments kept whatever
-norm the previous call had set, so calculate_chi2(x) ignored the norm entries of x and the value
+norm the previous call had set, so the physical chi-squared ignored the norm entries of x and the value
 depended on the call history (audit item 6, fixed 2026-10-26).  It also left out the Park,
 abundance and scattering-length terms, and returned 0 for a vector the transform rejects.
 
 Checks, on tests/13N/13N.azr with one normalization freed (5 % systematic error):
-  1. a moved norm changes calculate_chi2 exactly as it changes calculate_chi2_rwa;
-  2. no hysteresis: calculate_chi2 at the nominal vector gives the nominal value after a call
+  1. a moved norm changes calculate_chi2_physical exactly as it changes calculate_chi2_rwa;
+  2. no hysteresis: calculate_chi2_physical at the nominal vector gives the nominal value after a call
      with the moved norm, and calculate_chi2_rwa afterwards is unchanged;
   3. with a measured scattering length (a datum of <modelData>) the two bases still agree (the term is in both).
 (A vector the transform rejects now gives +inf instead of 0; CNuc::TransformIn only warns on a
@@ -58,15 +63,15 @@ def main():
         model.set("meyer_84", norm="1 fit prior 1 5%")
         azr = model.save(os.path.join(work, "free_norm.azr"))
 
-        print("1. a moved normalization moves calculate_chi2 as it moves calculate_chi2_rwa")
+        print("1. a moved normalization moves calculate_chi2_physical as it moves calculate_chi2_rwa")
         with Session(azr, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]
             inorm = kinds.index("norm")
-            ref = float(m.calculate_chi2_rwa(x)[0])
+            ref = float(m._engine.calculate_chi2_rwa(x))
             x8 = x.copy()
             x8[inorm] = 0.8
-            ref8 = float(m.calculate_chi2_rwa(x8)[0])
+            ref8 = float(m._engine.calculate_chi2_rwa(x8))
             check("the norm matters in the RWA basis", rel(ref, ref8) > 1e-3, f"{ref} vs {ref8}")
             # transform_rwa maps the free R-matrix block; the tail (norms, shifts, screening)
             # is the same in both bases, so the physical free vector is the two joined
@@ -75,15 +80,15 @@ def main():
             ph = np.concatenate([lev, x[lev.size:]])
             ph8 = ph.copy()
             ph8[inorm] = 0.8
-            p1 = float(m.calculate_chi2(ph)[0])
+            p1 = float(m._engine.calculate_chi2_physical(ph))
             check("physical == RWA at the nominal norm", rel(p1, ref) <= 1e-6, f"{p1} vs {ref}")
-            p8 = float(m.calculate_chi2(ph8)[0])
+            p8 = float(m._engine.calculate_chi2_physical(ph8))
             check("physical == RWA at norm 0.8", rel(p8, ref8) <= 1e-6, f"{p8} vs {ref8}")
 
             print("\n2. no hysteresis between calls")
-            p1b = float(m.calculate_chi2(ph)[0])
+            p1b = float(m._engine.calculate_chi2_physical(ph))
             check("nominal again after the moved call", rel(p1b, ref) <= 1e-6, f"{p1b} vs {ref}")
-            again = float(m.calculate_chi2_rwa(x)[0])
+            again = float(m._engine.calculate_chi2_rwa(x))
             check("calculate_chi2_rwa unchanged afterwards", rel(again, ref) <= 1e-12, f"{again} vs {ref}")
 
         print("\n3. with a scattering-length constraint the two bases still agree")
@@ -95,12 +100,12 @@ def main():
             inorm = kinds.index("norm")
             x8 = x.copy()
             x8[inorm] = 0.9
-            r = float(m.calculate_chi2_rwa(x8)[0])
-            sl = float(m.scattering_length_chi2(x8))
+            r = float(m._engine.calculate_chi2_rwa(x8))
+            sl = m.evaluate(x8).terms["model data"]
             check("the constraint term is nonzero", sl > 1e-3, f"{sl}")
             lev8 = np.asarray(m.transform_rwa(x8), float)
             ph8 = np.concatenate([lev8, x8[lev8.size:]])
-            p = float(m.calculate_chi2(ph8)[0])
+            p = float(m._engine.calculate_chi2_physical(ph8))
             check("physical == RWA with the constraint", rel(p, r) <= 1e-6, f"{p} vs {r}")
     finally:
         shutil.rmtree(work, ignore_errors=True)

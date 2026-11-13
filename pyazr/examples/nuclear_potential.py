@@ -44,7 +44,7 @@ def chi2(model):
     are what map physical widths to reduced-width amplitudes, so the vector is
     re-derived by the rebuild.
     """
-    return float(np.sum(model.calculate_chi2_rwa(np.asarray(model.params_rwa, float))))
+    return model.evaluate(np.asarray(model.params_rwa, float)).chi2
 
 
 with Session(AZR, cwd=PROJECT) as m:
@@ -103,7 +103,7 @@ with Session(AZR, cwd=PROJECT) as m:
     stale = np.asarray(m.params_rwa, float)            # captured *before*
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True,
                             V0=20.0, R=3.6, a=0.6)
-    with_stale = float(np.sum(m.calculate_chi2_rwa(stale)))
+    with_stale = m.evaluate(stale).chi2
     with_fresh = chi2(m)
     print(f"  reusing the pre-change vector : {with_stale:.3f}   <- wrong")
     print(f"  re-reading params_rwa         : {with_fresh:.3f}   <- right")

@@ -43,18 +43,18 @@ def main():
         open(p, "w").write(text)
         with Session(p, cwd=d) as m:
             x = np.array(m.params_rwa, float)
-            m.objective_and_grad(x)
-            check("the nuisance prior is 1 at the start", abs(m.penalties(x)["nuisance"] - 1.0) < 1e-9,
-                  m.penalties(x)["nuisance"])
+            m.objective().value_and_grad(x)
+            check("the nuisance prior is 1 at the start", abs(m.evaluate(x).terms["nuisance priors"] - 1.0) < 1e-9,
+                  m.evaluate(x).terms["nuisance priors"])
             m.set_channel_radius(1, 5.0)
             x = np.array(m.params_rwa, float)
-            o_a, g_a = m.objective_and_grad(x)
-            n_a = m.penalties(x)["nuisance"]
+            o_a, g_a = m.objective().value_and_grad(x)
+            n_a = m.evaluate(x).terms["nuisance priors"]
         with Session(p, cwd=d) as m:
             m.set_channel_radius(1, 5.0)
             x = np.array(m.params_rwa, float)
-            o_b, g_b = m.objective_and_grad(x)
-            n_b = m.penalties(x)["nuisance"]
+            o_b, g_b = m.objective().value_and_grad(x)
+            n_b = m.evaluate(x).terms["nuisance priors"]
         check("after the rebuild: the nuisance term of a fresh session", n_a == n_b, (n_a, n_b))
         check("after the rebuild: the objective of a fresh session", o_a == o_b, (o_a, o_b))
         check("after the rebuild: the gradient of a fresh session", bool(np.array_equal(g_a, g_b)),

@@ -131,10 +131,10 @@ with tempfile.TemporaryDirectory() as tmp:
         p_moved = np.asarray(m.params_rwa, float)
     with Session(orig, use_brune=False) as o:
         p_orig = np.asarray(o.params_rwa, float)
-        y = np.asarray(o.calculate_rwa(p_moved)[0], float)
+        y = np.asarray(o.evaluate(p_moved).data[0].model, float)
         e_cm = np.asarray(o.energies[0], float)
     with Session(dense, use_brune=False) as d:
-        yd = np.asarray(d.calculate_rwa(p_moved)[0], float)
+        yd = np.asarray(d.evaluate(p_moved).data[0].model, float)
         ed = np.asarray(d.energies[0], float)
 
     moved_by = np.max(np.abs(p_moved - p_orig))

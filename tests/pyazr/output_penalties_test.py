@@ -10,7 +10,7 @@ now evaluates them at the current parameters before writing.
 Check on tests/scattering_length/be7p_fit.azr (two phase-shift data sets plus scattering-length data of <modelData>,
 the old <scatteringLengths> constraints): the file's "Total-Model-Data-Chi-Squared" (the old section's
 "Total-Scattering-Length-Chi-Squared", class "scattering lengths as model data (label)" of tools/format3_gate.py)
-equals `penalties()["scattering_length"]` (which is > 0 here).
+equals `terms["model data"]` (which is > 0 here).
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/output_penalties_test.py
@@ -49,7 +49,7 @@ try:
     shutil.copytree(os.path.join(os.path.dirname(SRC), "data"), os.path.join(work, "data"))
     shutil.copy(SRC, os.path.join(work, "m.azr"))
     s = Session(os.path.join(work, "m.azr"), cwd=work)
-    want = float(s.penalties()["scattering_length"])
+    want = float(s.evaluate().terms["model data"])
     out = s.write_output_files()
     text = open(os.path.join(out, "chiSquared.out")).read()
     m = re.search(r"Total-Model-Data-Chi-Squared:\s*(\S+)", text)
@@ -57,7 +57,7 @@ try:
     check(f"the model has a scattering-length penalty to report ({want:.6g})", want > 1e-6)
     check("chiSquared.out carries Total-Model-Data-Chi-Squared", got is not None,
           "the line is missing: the API wrote the file with the penalty at 0")
-    check(f"the file's value equals penalties()['scattering_length'] ({got} vs {want:.6g})",
+    check(f"the file's value equals terms['model data'] ({got} vs {want:.6g})",
           got is not None and abs(got - want) <= 1e-5 * max(1.0, abs(want)))
 finally:
     shutil.rmtree(work, ignore_errors=True)

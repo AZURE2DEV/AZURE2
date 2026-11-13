@@ -58,7 +58,7 @@ def main(workdir):
 
     # 6. Calculate: the project is saved and opened as a pyazr.Session session.
     with p.session() as m:
-        chi2 = float(sum(m.segment_chi2()))
+        chi2 = m.evaluate().chi2
     print(f"chi2 = {chi2:.6g} on {len(m.energies[0])} points; the project is {p.path}")
     # [/recipe]
     return p, chi2

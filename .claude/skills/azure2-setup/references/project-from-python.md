@@ -18,7 +18,7 @@ The recipe is `pyazr/examples/project_from_python.py` (run by `tests/pyazr/proje
    argument and call again; the project is unchanged after a refusal. `p.validate()` lists every problem.
 5. **Describe before computing.** `p.describe(name)` (`--describe` of that record: observable, pair keys, units, rows
    read and kept, parameters). Compare it with what you meant.
-6. **Calculate.** `with p.session() as m: ...` (the project is saved first; `m` is a `pyazr.azure2` session).
+6. **Calculate.** `with p.session() as m: ...` (the project is saved first; `m` is a `pyazr.Session`).
 
 Edits: `p[name].set(field=value)` changes one line (`None` removes the field); `p.rename(old, new)` follows every
 reference and parameter name (`<parameterSettings>`, the prior-covariance file written by `save`); `p.remove(name)` is
@@ -28,4 +28,4 @@ norms="fitted")` writes norms, shift terms and isotope abundances into their nui
 
 Data sets declared in a spreadsheet: `pyazr.records_from_csv("datasets.csv", project=p)` (header row = field keys,
 `name` required, quote reactions); every refused row comes back at once with its row number. On a format-3 session
-`m.datasets` / `m.dataset_chi2()` are by record name (the engine's description).
+`m.datasets` / `m.evaluate().data[i].name` are by record name (the engine's description).

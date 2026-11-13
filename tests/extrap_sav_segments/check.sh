@@ -85,9 +85,9 @@ if [ -n "$PY" ] && (cd /tmp && PYTHONPATH="$ROOT" "$PY" -c "import pyazr._azure2
 import numpy as np
 from pyazr import Session
 with Session("t.azr", cwd=".", data_mode=False) as m:
-    e0 = np.asarray(m.calculate_energies(m.params_rwa)[0], float)
+    e0 = np.asarray(m.evaluate(m.params_rwa).data[0].energies, float)
     x = m.load_sav("shift.sav")
-    e1 = np.asarray(m.calculate_energies(x)[0], float)
+    e1 = np.asarray(m.evaluate(x).data[0].energies, float)
 print("MAXDIFF", np.max(np.abs(e1 - e0)))
 EOF
 )"

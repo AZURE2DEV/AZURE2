@@ -21,7 +21,7 @@ nominal norm. builds before 2026-10-25 (expires: 2027-02-01) measured the shift 
 57.6 → 317.3 at the same parameters, 45 inherited nominal shifts).
 
 A `shiftgroup` shares one shift among its members; the engine penalises it once, on the first member.
-builds before 2026-10-27 (expires: 2027-02-01): pyazr `penalties()` charged each follower a second shift penalty, so
+builds before 2026-10-27 (expires: 2027-02-01): pyazr's prior terms charged each follower a second shift penalty, so
 `objective()` differed from the CLI by a constant (gradients and the minimum unaffected).
 
 ## Consequences

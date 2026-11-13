@@ -10,7 +10,7 @@ project from nothing (new pairs, first level scheme) is `azure2-setup`.
 ## Adding, removing, deactivating
 
 ```python
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 p = Project.open("7Be.azr")
 for lv in p.levels():                             # label, J^pi, E_x, channels (pair, l, s, width), fixed, active
@@ -25,7 +25,7 @@ p.add_level(1.5, +1, 8.6,                         # add a 3/2+ resonance, E_x in
 p.set_level(("7/2-", 4.572), active=False)        # keep in the file, not read by the engine
 path = p.save("_test.azr")
 
-with azure2(path, cwd=HERE) as m:
+with Session(path, cwd=HERE) as m:
     ...
 ```
 
@@ -98,7 +98,7 @@ writes every level parameter at its current observed value (`transform_all_rwa(f
   reproducible between sessions to 10⁻⁷–10⁻⁶ relative. Near a destructive-interference minimum (a broad, high-lying
   background pole feeding a low-energy capture channel) that noise can move a data set's χ² by orders of magnitude: a
   5 × 10⁻⁷ relative change to one 887 keV-wide background level's widths turned one segment's χ² of 883 into 358,000.
-  Check the total (or `m.segment_chi2`) objective of a reopened snapshot before using it as a refit's start.
+  Check the objective (`m.objective()(x)`, or `m.evaluate(x)` per data set) of a reopened snapshot before using it as a refit's start.
 
 ## What a snapshot still cannot carry
 

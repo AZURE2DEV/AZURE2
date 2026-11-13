@@ -10,7 +10,7 @@ Two places in pyazr used to count them anyway:
     wrote a fit one level early in any J-group with an inactive line -- which is how the 13C+alpha archive's 5/2+ block was
     silently corrupted at two successive bakes.
 
-  * Session.penalties() / dataset_chi2() indexed datasets[i] for i below the
+  * the per-data-set priors and chi-squared (Session.evaluate) indexed datasets[i] for i below the
     active count, dropping the normalization penalty of every active segment
     that sits past that position in the file and mislabeling datasets.
 
@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     with Session(spliced, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
-        chi2_ref = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2_ref = m.evaluate(x).chi2
         # every engine (jgroup, level) must land on a file level with the
         # same J^pi and energy
         keys = {(lv.group, lv.level): lv for lv in Project.open(spliced).levels() if lv.active}
@@ -128,7 +128,7 @@ with tempfile.TemporaryDirectory() as tmp:
         moved = x.copy()
         for p in pole:
             moved[p.free_index] *= 1.2
-        chi2_moved = float(np.sum(m.calculate_chi2_rwa(moved)))
+        chi2_moved = m.evaluate(moved).chi2
         snap, sav = m.save_fit(os.path.join(work, "snap.azr"), moved)
         baked = Project.open(snap)
         g = [lv for lv in baked.levels() if lv.jpi == "1/2+" and not lv.active]
@@ -145,7 +145,7 @@ with tempfile.TemporaryDirectory() as tmp:
     probe_path = probe.save(os.path.join(work, "snap_probe.azr"))
     os.makedirs(os.path.join(work, "output_snap"), exist_ok=True)
     with Session(probe_path, cwd=work) as m2:
-        chi2_back = float(np.sum(m2.calculate_chi2_rwa(m2.params_rwa)))
+        chi2_back = m2.evaluate(m2.params_rwa).chi2
         check("the snapshot reproduces the perturbed chi-squared",
               np.isclose(chi2_back, chi2_moved, rtol=1e-6),
               f"{chi2_back} vs {chi2_moved} (unperturbed {chi2_ref})")
@@ -161,7 +161,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "output_purged"), exist_ok=True)
     purged_path = purged.save(os.path.join(work, "purged.azr"))
     with Session(purged_path, cwd=work) as m3:
-        chi2_purged = float(np.sum(m3.calculate_chi2_rwa(m3.params_rwa)))
+        chi2_purged = m3.evaluate(m3.params_rwa).chi2
         check("purging the inactive level changes nothing for the engine",
               np.isclose(chi2_purged, chi2_moved, rtol=1e-9),
               f"{chi2_purged} vs {chi2_moved}")
@@ -191,11 +191,11 @@ with tempfile.TemporaryDirectory() as tmp:
               len(active) == m.nsegments, f"{len(active)} vs {m.nsegments}")
         check("the inactive line is not among them",
               all(d.active for d in active) and len(m.datasets) == m.nsegments + 1)
-        byfile = m.dataset_chi2(x)
+        byfile = {d.name: (d.chi2, d.n) for d in m.evaluate(x).data}
         counts = {}
         for i, d in enumerate(active):
             counts[d.name] = counts.get(d.name, 0) + len(m.energies[i])
-        check("dataset_chi2 point counts follow the active segments",
+        check("evaluate().data point counts follow the active segments",
               all(byfile[k][1] == v for k, v in counts.items())
               and set(byfile) == set(counts))
         norm = m.parameters.norms[0]
@@ -203,16 +203,16 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the free norm belongs to meyer_84 by key", seg is not None and "meyer_84" in seg.name)
         moved = x.copy()
         moved[norm.free_index] = 1.10
-        pen = m.penalties(moved)
+        pen = m.evaluate(moved)
         check("the penalty lands on meyer_84's active slot",
-              np.isclose(pen["norm"].sum(), 4.0, rtol=1e-9)
-              and np.isclose(pen["norm"][[i for i, d in enumerate(active)
+              np.isclose(np.array([d.norm_chi2 for d in pen.data]).sum(), 4.0, rtol=1e-9)
+              and np.isclose(np.array([d.norm_chi2 for d in pen.data])[[i for i, d in enumerate(active)
                                           if d.key == seg.key][0]], 4.0),
-              str(pen["norm"]))
-        chi2_moved = float(np.sum(m.calculate_chi2_rwa(moved)))
+              str(np.array([d.norm_chi2 for d in pen.data])))
+        chi2_moved = m.evaluate(moved).chi2
         check("objective = chi-squared + penalty",
-              np.isclose(m.objective(moved), chi2_moved + 4.0, rtol=1e-12))
-        allrwa = list(np.asarray(m.sess.params_all_rwa(), float))
+              np.isclose(m.objective()(moved), chi2_moved + 4.0, rtol=1e-12))
+        allrwa = list(np.asarray(m._engine.params_all_rwa(), float))
         it = iter(range(len(moved)))
         sav = os.path.join(work, "moved.sav")
         with open(sav, "w") as fh:

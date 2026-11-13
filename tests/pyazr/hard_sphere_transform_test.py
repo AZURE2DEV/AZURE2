@@ -51,7 +51,7 @@ def evaluate(path, transform, where):
     Project.open(path).save(local)
     with Session(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
         x = np.array(m.params_rwa)
-        return [np.array(seg) for seg in m.calculate_rwa(x)]
+        return [np.array(seg) for seg in [d.model for d in m.evaluate(x).data]]
 
 
 d = tempfile.mkdtemp(prefix="pyazr_hs_transform_")

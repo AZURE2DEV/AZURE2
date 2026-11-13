@@ -5,7 +5,7 @@ The binding's array arguments were taken by value.  pybind11 moves the cast's
 result into such a parameter, so when the caller passes a list (or any
 non-float64 array) the temporary ndarray ``forcecast`` makes is owned by the
 parameter and freed at function exit -- inside the ``call_guard<gil_scoped_release>``
-of ``calculate_chi2_rwa``, ``update_segments_rwa`` & co., i.e. with the GIL
+of ``evaluate().chi2``, ``update_segments_rwa`` & co., i.e. with the GIL
 released: a segfault in ``PyObject_Free`` (seen 2026-10-13 on the 22Ne+n member
 of the natural-neon joint fit; rmfit never hit it because it passes arrays).
 With the arguments taken by const reference the temporary lives in pybind's
@@ -45,34 +45,34 @@ def main():
         return 0
     with Session(AZR, cwd=PROJECT, use_brune=True) as s:
         x = np.asarray(s.params_rwa, float)
-        xa = np.asarray(s.sess.params_all_rwa(), float)
+        xa = np.asarray(s._engine.params_all_rwa(), float)
         print(f"{os.path.basename(AZR)}: {x.size} free of {xa.size} parameters")
         forms = {"list": list, "int-ish list": lambda v: [float(f"{t:.6g}") for t in v],
                  "float32 array": lambda v: np.asarray(v, np.float32),
                  "float64 array": lambda v: np.asarray(v, float)}
-        ref = float(s.calculate_chi2_rwa(x)[0])
+        ref = s.evaluate(x).chi2
         for name, f in forms.items():
             v = f(x)
-            c = float(s.calculate_chi2_rwa(v)[0])
+            c = s.evaluate(v).chi2
             tol = 1e-3 * abs(ref) if "float32" in name or "int-ish" in name else 1e-12 * abs(ref)
-            check(f"calculate_chi2_rwa from a {name}", abs(c - ref) <= tol, f"{c} vs {ref}")
+            check(f"evaluate().chi2 from a {name}", abs(c - ref) <= tol, f"{c} vs {ref}")
         # the other GIL-releasing array calls, from a list
         xl = list(x)
-        check("update_segments_rwa from a list", s.sess.update_segments_rwa(xl) >= 0)
-        s.sess.set_params_all_rwa(list(xa))
+        check("update_segments_rwa from a list", s._engine.update_segments_rwa(xl) >= 0)
+        s._engine.set_params_all_rwa(list(xa))
         check("set_params_all_rwa from a list", True)
-        check("update_segments_all_rwa from a list", s.sess.update_segments_all_rwa(list(xa)) >= 0)
+        check("update_segments_all_rwa from a list", s._engine.update_segments_all_rwa(list(xa)) >= 0)
         phys = np.asarray(s.transform_rwa(x), float)
         check("transform_rwa from a list",
               np.allclose(np.asarray(s.transform_rwa(xl), float), phys))
-        cp = float(s.sess.calculate_chi2_physical(list(phys)))
+        cp = float(s._engine.calculate_chi2_physical(list(phys)))
         check("calculate_chi2_physical from a list", abs(cp - ref) <= 1e-6 * abs(ref), f"{cp} vs {ref}")
-        g = np.asarray(s.sess.calculate_chi2_grad_rwa(xl), float)
+        g = np.asarray(s._engine.calculate_chi2_grad_rwa(xl), float)
         check("calculate_chi2_grad_rwa from a list", g.size == x.size + 1 and np.all(np.isfinite(g)),
               f"size {g.size} vs {x.size + 1}")       # [chi2, grad...]
-        r, J = s.residual_jacobian(xl)
-        check("residual_jacobian from a list", len(r) > 0 and np.all(np.isfinite(J)))
-        check("chi2 unchanged afterwards", abs(float(s.calculate_chi2_rwa(x)[0]) - ref) <= 1e-12 * abs(ref))
+        r, J = s.objective().residuals_and_jacobian(xl)
+        check("objective().residuals_and_jacobian from a list", len(r) > 0 and np.all(np.isfinite(J)))
+        check("chi2 unchanged afterwards", abs(s.evaluate(x).chi2 - ref) <= 1e-12 * abs(ref))
     print("\n" + ("ALL PASSED" if not failures else f"FAILED: {failures}"))
     return 1 if failures else 0
 

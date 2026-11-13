@@ -50,6 +50,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .locking import session_lock
+
 __all__ = ["Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "active_indices",
            "trimmed_model", "uncertainty_bands", "extrapolation_bands"]
@@ -157,7 +159,8 @@ def live_parameters(model):
     ``(kind, jgroup, level, channel)`` (``None`` where a field does not apply) -- the key AZURE2 uses to match
     covariance columns across runs.
     """
-    free = [r for r in model.sess.parameter_records() if not r["fixed"]]
+    with session_lock(model):
+        free = [r for r in model._engine.parameter_records() if not r["fixed"]]
     return ([r["kind"] for r in free],
             [(r["kind"], r.get("jgroup"), r.get("level"), r.get("channel")) for r in free])
 
@@ -243,13 +246,14 @@ def _fetch(sess, segments, quantity):
 
 
 def _evaluate(model, params, segments, quantity):
-    s = model.sess
-    n = int(s.update_segments_rwa(np.asarray(params, float)))
-    bad = [i for i in segments if i < 0 or i >= n]
-    if bad:
-        raise IndexError(f"segment index/indices {bad} out of range: the model "
-                         f"calculates {n} (active) segments.")
-    return _fetch(s, segments, quantity)
+    with session_lock(model):  # the forward pass and the arrays read after it, one after the other
+        s = model._engine
+        n = int(s.update_segments_rwa(np.asarray(params, float)))
+        bad = [i for i in segments if i < 0 or i >= n]
+        if bad:
+            raise IndexError(f"segment index/indices {bad} out of range: the model "
+                             f"calculates {n} (active) segments.")
+        return _fetch(s, segments, quantity)
 
 
 # -- finite differences across processes ---------------------------------------
@@ -424,9 +428,10 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
         if quantity == "sfactor":
             # S = conv * sigma with conv fixed by the kinematics, so the
             # sensitivities scale by the same factor, row by row.
-            _evaluate(model, p0, segments, quantity)
-            return {seg: G[seg] * model.sess.calculated_conv(seg)[:, None]
-                    for seg in segments}
+            with session_lock(model):
+                _evaluate(model, p0, segments, quantity)
+                return {seg: G[seg] * model._engine.calculated_conv(seg)[:, None]
+                        for seg in segments}
         return {seg: G[seg] for seg in segments}
 
     cols = list(rmatrix_columns(model) if cols is None else cols)
@@ -577,28 +582,29 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
 
     # Leave the session holding the best fit again, and take the central
     # values from that same pass.
-    values = _evaluate(model, p0, segments, quantity)
-    s = model.sess
+    with session_lock(model):  # the forward pass and the arrays read after it, one after the other
+        values = _evaluate(model, p0, segments, quantity)
+        s = model._engine
 
-    out = {}
-    for s_, seg in enumerate(segments):
-        g = G[seg]
-        if g.shape[1] != C.shape[0]:
-            raise RuntimeError(
-                f"segment {seg}: {g.shape[1]} sensitivity columns against a "
-                f"{C.shape[0]}x{C.shape[0]} covariance.")
-        if g.shape[0] != len(values[s_]):
-            raise RuntimeError(
-                f"segment {seg}: {g.shape[0]} sensitivity rows for "
-                f"{len(values[s_])} calculated points.")
-        var = np.einsum("ij,jk,ik->i", g, C, g)
-        out[key_of[seg]] = Band(
-            segment=seg, key=key_of[seg],
-            energy=s.calculated_energies(seg),
-            angle=s.calculated_angles(seg),
-            excitation=s.calculated_excitation_energies(seg),
-            value=values[s_], sigma=np.sqrt(np.clip(var, 0.0, None)),
-            quantity=quantity, sensitivity=g)
+        out = {}
+        for s_, seg in enumerate(segments):
+            g = G[seg]
+            if g.shape[1] != C.shape[0]:
+                raise RuntimeError(
+                    f"segment {seg}: {g.shape[1]} sensitivity columns against a "
+                    f"{C.shape[0]}x{C.shape[0]} covariance.")
+            if g.shape[0] != len(values[s_]):
+                raise RuntimeError(
+                    f"segment {seg}: {g.shape[0]} sensitivity rows for "
+                    f"{len(values[s_])} calculated points.")
+            var = np.einsum("ij,jk,ik->i", g, C, g)
+            out[key_of[seg]] = Band(
+                segment=seg, key=key_of[seg],
+                energy=s.calculated_energies(seg),
+                angle=s.calculated_angles(seg),
+                excitation=s.calculated_excitation_energies(seg),
+                value=values[s_], sigma=np.sqrt(np.clip(var, 0.0, None)),
+                quantity=quantity, sensitivity=g)
     return out
 
 

@@ -70,7 +70,7 @@ Each line: the rule; the change made (then removed); the test that failed. Run o
   `routes_consistency_test.py::test_app_serves_the_rows_and_openapi_lists_them`.
 - workers die with the server: `die_with_parent` returns at once; fails
   `server_test.py::test_server_process_workers_die_with_it`.
-- the chi2 per data set is the program's: the rows' chi2 taken from `segment_chi2`; fails
+- the chi2 per data set is the program's: the rows' chi2 taken from `evaluate().data[i].chi2`; fails
   `api_test.py::test_chi2_per_dataset_is_the_programs[T2]`.
 - a stop ends a job before its next call: the tracker ignores the stop request; fails
   `jobs_test.py::test_stop_kill_and_resume_from_the_checkpoint`.

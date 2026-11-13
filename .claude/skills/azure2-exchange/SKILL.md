@@ -42,7 +42,7 @@ correlated (one p + p test: parabolic errors 0.4 % against 1.3 % in Brune).
 - **J_λ must stay positive.** A Park set with J_λ ≤ 0 has no R-matrix meaning (one channel: Γ < 2P/(dS/dE)). The
   objective adds Σ(J_λ/10⁻³)² over J_λ < 0 (`Total-Park-Chi-Squared` in `chiSquared.out`), MCMC rejects such points,
   and a run ending there prints `**WARNING: Park norm J = ... is not positive`. pyazr: `m.park_norms(x)` (one J
-  per level, `physical_levels()` order), `m.penalties(x)["park"]`. Levels that saturate in Brune (amplitudes of
+  per level, `physical_levels()` order), `m.evaluate(x).terms["Park J > 0"]`. Levels that saturate in Brune (amplitudes of
   10²–10³ MeV^½) appear in Park as J_λ → 0.
 - **Do not expect a different minimum.** The p + p test reaches χ² 99.6121 (Park) and 99.6123 (Brune), widths equal
   to 2 × 10⁻⁵. Near J_λ → 0 the Park form loses precision by cancellation (8 × 10⁻⁷ at the worst point of one

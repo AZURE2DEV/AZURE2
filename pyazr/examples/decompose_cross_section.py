@@ -58,8 +58,8 @@ def main() -> int:
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         i = args.segment - 1
-        energies = np.asarray(azr.calculate_energies(x)[i], float)
-        full = np.asarray(azr.calculate_rwa(x)[i], float)
+        energies = np.asarray(azr.evaluate(x).data[i].energies, float)
+        full = np.asarray(azr.evaluate(x).data[i].model, float)
 
         # The background: every free width off, leaving hard-sphere scattering
         # and external capture.
@@ -67,7 +67,7 @@ def main() -> int:
         for p in azr.parameters.widths:
             if p.free_index is not None:
                 bare_x[p.free_index] = 0.0
-        bare = np.asarray(azr.calculate_rwa(bare_x)[i], float)
+        bare = np.asarray(azr.evaluate(bare_x).data[i].model, float)
 
         print(f"{args.azr.name}, segment {args.segment}: "
               f"{len(energies)} points, {energies.min():.3f}-{energies.max():.3f} MeV")
@@ -78,10 +78,10 @@ def main() -> int:
             # Select by the LevelKey itself.  A (J^pi, energy) pair is
             # ambiguous when a level's energy is fixed and reported as None,
             # which is exactly the case for bound states and background poles.
-            off = np.asarray(azr.calculate_rwa(
-                azr.without_level(x, level=key))[i], float)
-            only = np.asarray(azr.calculate_rwa(
-                azr.only_level(x, level=key))[i], float)
+            off = np.asarray(azr.evaluate(
+                azr.without_level(x, level=key)).data[i].model, float)
+            only = np.asarray(azr.evaluate(
+                azr.only_level(x, level=key)).data[i].model, float)
             contrib = full - off
             bare_res = only - bare
             interference = contrib - bare_res

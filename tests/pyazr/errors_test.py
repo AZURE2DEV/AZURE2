@@ -154,17 +154,17 @@ try:
            pyazr.ParameterKeyError, KeyError, ["no pair 9", "have [", "Session.pairs"])
     expect("set_channel_radius with a negative radius", lambda: s.set_channel_radius(1, -1.0),
            pyazr.ParameterError, ValueError, ["got -1.0", "positive length in fm", "channel_radius"])
-    expect("objective with one parameter too few", lambda: s.objective(x[:-1]), pyazr.ParameterVectorError,
+    expect("objective with one parameter too few", lambda: s.objective()(x[:-1]), pyazr.ParameterVectorError,
            pyazr.AZURE2Error, [f"got {n - 1}", f"expected the free parameter vector ({n} values", "params_rwa"])
-    expect("calculate_chi2_rwa with one parameter too many", lambda: s.calculate_chi2_rwa(np.append(x, 1.0)),
+    expect("evaluate with one parameter too many", lambda: s.evaluate(np.append(x, 1.0)),
            pyazr.ParameterVectorError, ValueError, [f"got {n + 1}", f"({n} values", "Session.parameters.free"])
     bad = x.copy()
     bad[0] = np.nan
-    expect("objective with a NaN", lambda: s.objective(bad), pyazr.ParameterVectorError, RuntimeError,
+    expect("objective with a NaN", lambda: s.objective()(bad), pyazr.ParameterVectorError, RuntimeError,
            ["entry 0", first_free, "is nan", "must be a finite number", "params_rwa"])
     bad = x.copy()
     bad[-1] = np.inf
-    expect("objective_and_grad with an infinity", lambda: s.objective_and_grad(bad), pyazr.ParameterVectorError,
+    expect("value_and_grad with an infinity", lambda: s.objective().value_and_grad(bad), pyazr.ParameterVectorError,
            ValueError, [f"entry {n - 1}", "is inf", "finite", "params_rwa"])
     expect("ParameterSet.put with the wrong number of values",
            lambda: s.parameters.free.put(x, np.ones(n + 1)),
@@ -190,10 +190,10 @@ try:
           cf["F"][0] == 0 and cf["G"][0] == 0 and cf["P"][0] == 0 and cf["S"][0] != 0 and cf["P"][1] > 0, cf)
 
     s.close()
-    expect("objective on a closed session", lambda: s.objective(x), pyazr.SessionClosed, RuntimeError,
+    expect("objective on a closed session", lambda: s.objective()(x), pyazr.SessionClosed, RuntimeError,
            ["Session.objective", "is closed", "pyazr.Session("])
-    expect("calculate_chi2_rwa on a closed session", lambda: s.calculate_chi2_rwa(x), pyazr.SessionClosed,
-           RuntimeError, ["Session.calculate_chi2_rwa", "cannot be reopened", "is_alive()"])
+    expect("evaluate on a closed session", lambda: s.evaluate(x), pyazr.SessionClosed,
+           RuntimeError, ["Session.evaluate", "cannot be reopened", "is_alive()"])
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

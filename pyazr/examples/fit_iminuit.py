@@ -26,7 +26,7 @@ def fit(f, hesse=True):
 
 def main(path):
     with pyazr.Session(path) as s:
-        f = s.fit_objective()
+        f = s.objective()(s.params_rwa)
         m = fit(f)
         x = np.array(m.values)
         print(f"MIGRAD: objective {m.fval:.10g}, valid {m.valid}, {m.nfcn} calls, {m.ngrad} gradients")

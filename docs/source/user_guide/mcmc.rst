@@ -308,7 +308,7 @@ Sampling from Python instead
 
 Running the sampler through :doc:`pyazr` gives access to the wider ecosystem —
 ``emcee`` with its full range of moves and convergence diagnostics, ``zeus``,
-or nested sampling with ``dynesty``. ``s.fit_objective().log_prob`` is the posterior this sampler takes (−½ × the
+or nested sampling with ``dynesty``. ``s.objective().log_prob`` is the posterior this sampler takes (−½ × the
 fit's objective, −∞ outside its support, without the priors' normalisation constant); see :doc:`pyazr`, "The
 objective and the evaluation".  Worked examples ship with the package: ``pyazr/examples/fit_emcee.py`` (on
 ``log_prob``, one session per pool worker) and ``fit_zeus.py``.
