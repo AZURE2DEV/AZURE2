@@ -186,7 +186,7 @@ function resultBlock(ctx, rec, table, view) {
       + `project is at rev ${ctx.project.rev}`));
   }
   box.appendChild(facts);
-  if (written) box.appendChild(writtenBlock(ctx, ev, written, n));
+  if (written) box.appendChild(writtenBlock(ctx, ev, written));
 
   const actions = h("div.form-actions");
   if (v.hasBest) {
@@ -204,7 +204,9 @@ function resultBlock(ctx, rec, table, view) {
 }
 
 /** The fit's χ² beside the χ² of the project as written after Accept, both the engine's; a difference is said. */
-function writtenBlock(ctx, ev, w, n) {
+function writtenBlock(ctx, ev, w) {
+  // every digit as sent: the two numbers may differ in their last digits only
+  const n = (x) => (x === null || x === undefined ? "—" : formatNumber(x));
   const box = h("div.written", { data: { chi2Written: String(w.chi2), rev: String(w.rev) } },
     h("dl.facts", {}, h("dt", {}, "the fit"), h("dd", {}, `χ² ${n(ev?.chi2)} · objective ${n(ev?.objective)}`),
       h("dt", {}, `as written (rev ${w.rev})`), h("dd", {}, `χ² ${n(w.chi2)} · objective ${n(w.objective)}`

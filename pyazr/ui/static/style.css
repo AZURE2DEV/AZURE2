@@ -152,6 +152,7 @@ details.job-table summary, details.matrices summary { cursor: pointer; color: va
 table.grid tbody tr.unavailable { color: var(--muted); }
 .matrix { margin: 6px 0; }
 .matrix .table-wrap { max-height: 360px; overflow: auto; }
+@media (max-width: 1100px) { .fit-top > div:last-child { order: -1; } }  /* one column: the job shown first */
 
 /* forms */
 form.record-form { min-width: 0; }
