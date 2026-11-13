@@ -70,6 +70,10 @@ py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
 py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian);
 double LogProbability(const AZUREAPI &api, const vector_r &free);
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
+// pybind_fit.cpp: the engine's fitters on the session (fit_with_engine), StopRequest, fitters()
+py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
+                           unsigned int maxCalls, const py::object &progress, const py::object &stop);
+void BindFit(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
@@ -508,6 +512,10 @@ class Session {
     return ObjectiveRowsDict(*api_, v, jacobian);
   }
   std::vector<std::string> objective_term_names() const { return api_->ObjectiveTermNames(); }
+  py::dict fit_with_engine(const std::string &method, bool minos, const std::vector<double> &x0, unsigned int maxCalls,
+                           const py::object &progress, const py::object &stop) {
+    return FitWithEngineDict(*api_, method, minos, x0, maxCalls, progress, stop);
+  }
   double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p);
     expect_free(v, "log_prob_rwa");
@@ -865,6 +873,7 @@ PYBIND11_MODULE(_azure2, m) {
   BindErrors(m);
   BindPhysics(m);  // pybind_physics.cpp: the table of physics functions (physics_functions(), physics_evaluate)
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
+  BindFit(m);  // pybind_fit.cpp: the engine's fitters (fitters(), StopRequest)
 
   m.def(
       "parameter_kinds",
@@ -1028,6 +1037,9 @@ PYBIND11_MODULE(_azure2, m) {
            "read as the output writer reads them (pyazr.evaluate.Evaluation).")
       .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
            "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian.")
+      .def("fit_with_engine", &Session::fit_with_engine, py::arg("method"), py::arg("minos"), py::arg("x0"),
+           py::arg("max_calls"), py::arg("progress"), py::arg("stop"),
+           "The program's fit on the session (pyazr/session_fit.py): a row of fitters(), without the GIL.")
       .def("objective_term_names", &Session::objective_term_names,
            "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
       .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),

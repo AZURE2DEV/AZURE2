@@ -294,6 +294,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
       recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13). The engine's
       fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`).
+- [x] The engine's fit as a function (`fit.md`, 2026-11-13): a table of fitters, one function each with `FitControl`
+      and `FitResult`, HESSE and MINOS on a `FitResult`, progress as records, a stop request owned by the caller;
+      the program's run as named stages; `azure2.fit_with_engine` through the same functions, without the GIL.
+      The Fit tab's job for it is still to write (`web_ui.md` section 12, finding 20).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).

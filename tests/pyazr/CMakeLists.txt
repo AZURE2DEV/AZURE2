@@ -983,6 +983,15 @@ add_test(NAME pyazr_fit_recipes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SO
 set_tests_properties(pyazr_fit_recipes PROPERTIES LABELS slow PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# The engine's fitters on a session (docs/upgrade/fit.md): fit_with_engine against the program, fitter by fitter
+# (slow), and its controls -- the fitter table, progress records, the stop request.
+add_test(NAME pyazr_fit_with_engine COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_with_engine_test.py)
+set_tests_properties(pyazr_fit_with_engine PROPERTIES LABELS slow
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+add_test(NAME pyazr_fit_engine_control
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)
+set_tests_properties(pyazr_fit_engine_control PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

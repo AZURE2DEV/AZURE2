@@ -47,6 +47,8 @@ AZURE2_NOT_SERVED = {
     "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
     "the Objective for Python fitters and samplers; the jobs switch to it with the engine fitters (web_ui.md 12)":
         "fit_objective",
+    "the engine's own fitters: the Fit tab's job for them is a later step (web_ui.md 12, finding 20)":
+        "fit_with_engine",
 }
 
 

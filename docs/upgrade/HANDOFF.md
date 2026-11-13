@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-6-fit-function`) — the engine's fit as a function
+
+**Done** (design and as built: `docs/upgrade/fit.md`).
+- The fitters are one table, `Fitters()` (`src/Fitters.cpp`): `nlopt`, `gsl-lm`, `lm`, `migrad-gradient`, `migrad`
+  (program precedence), each a function `FitResult run(AZURECalc &, AZUREParams &, const FitControl &)`
+  (`src/FitMigrad.cpp`, `src/FitLeastSquares.cpp`, `src/FitGslTrustRegion.cpp`, `src/FitNLopt.cpp`); HESSE and MINOS
+  on a `FitResult` (`src/FitErrors.cpp`); progress as `FitProgress` records through `AZURECalc::Observe`
+  (`FitEvaluations`); a stop request owned by the caller (`FitControl::stop`) in place of `Config::stopFlag`'s
+  reader in `AZURECalc` (its set-up readers stay).
+- `AZUREMain::operator()()` (940 → 77 lines) calls named stages: `SetUpRun`, `SetUpObjective` (`src/RunSetUp.cpp`),
+  `RunFitStage` (`src/ProgramFit.cpp`, with `ProgramProgress`, the program's printer), `FinalEvaluation`,
+  `WriteRunOutputs` (`src/RunOutputs.cpp`), the rate, the transformation out. LM and GSL-LM left `AZURECalc.cpp`.
+- `azure2.fit_with_engine(method, minos, x0, max_calls, progress, stop)` (`pyazr/session_fit.py`, a mixin; one import
+  and the class line of `pyazr/azure2.py`), `AZUREAPI::FitWithEngine` (`api/src/AZUREAPIFit.cpp`), the binding
+  `api/src/pybind_fit.cpp` (GIL released, `StopRequest`, `fitters()`); `pyazr.kinds()["fitters"]`.
+- Consistency check 46 (the table against the parser, `command_line.rst` and the user guide's fitter table); tests
+  `pyazr_fit_engine_control` and `pyazr_fit_with_engine` (slow).
+
+**Verified.** See the branch's report (commands and results); the eight fits and T2 with every fitter, MINOS and
+the band byte for byte against the base build (outputs and standard output, progress bars masked).
+
+**Open.** The web UI's job for `fit_with_engine` (`web_ui.md` section 12, finding 20); progress and stop of the band
+and of a session build; `Config::stopFlag` in the set-up loops; the at-limit report after MIGRAD names the start
+values (as before); `--use-nlopt`'s usage line says BOBYQA, the code runs SBPLX (`src/AZURE2.cpp`, not touched).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-objective`) — pyazr: `Objective`, `Evaluation`, three recipes
 
 **Done** (beside today's methods; nothing removed; design and as built: `pyazr3.md` section 7).
