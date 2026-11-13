@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 20:40) — merged: ten branches (layout, records, physics, sampler, options, CLI, UI, guide)
+
+**Merged**, in this order (each has its entry below): `feature/upgrade-4-layout-centre`,
+`feature/upgrade-8-pyazr3-records`, `feature/upgrade-8-pyazr3-physics`, `feature/upgrade-6-sampler-objective`,
+`feature/upgrade-4-session-options`, `feature/upgrade-8-pyazr3-cli`, `feature/upgrade-4-cnuc-finish-design`,
+`feature/upgrade-9-webui-physics`, `feature/upgrade-docs-developer-guide`, `feature/upgrade-8-pyazr3-objective`.
+The last three started on a combined trial tree, so their merge commits carry the tree of that trial (the conflicts
+were resolved and tested there). Two commits of the director bring the Developer Guide up to the Physics tab's
+table rows and to `Objective` / `Evaluation` (`developer/extending.rst`, `api.rst`, `architecture.rst`).
+The web server lists `fit_objective` as not served (its jobs switch to it with the engine fitters).
+
+**Checked by the director** on combined trial trees, at two threads:
+- the first five branches, whole verification: all projects × 3 bases identical to `tab-t50-1` (887 / 851 / 887);
+  the eight fits identical to `work/b-trial50`; the prior-centre check with and without pyazr, and failing on the
+  base build as it must; `ctest -LE slow` 245 of 245; the slow tests 11 of 11; `tests/run_tests.sh` 167 passed,
+  0 failed; converted and original projects equal (181); the converted-tree gate 679 / 643 / 679 identical;
+  calculations at 1 against 2 threads identical;
+- the whole batch (this commit's tree): build with 0 warnings; all projects × 3 bases identical to `tab-t50-1`;
+  the pyazr and web UI tests 129 of 129 and the slow ones 12 of 12. The whole verification of this tree is running
+  after the merge; its result is in the next entry of the director.
+- by hand: `Objective` and `Evaluation` on T2 (the value equals `objective(x)` bit for bit, the squared rows sum
+  to it, the gradient equals 2 Jᵀ r to 3e-9, the terms sum to the objective); the five figures of the class
+  scheme and both screenshots of the Physics tab looked at.
+
+The reference tag stays `tab-t50-1` (every output file is identical); the base build of this tree is
+`work/b-trial56`.
+
+**Open.**
+- The sampler's support follows the rule of the sampler branch (limits of the `gamma_decay` numbers only); the
+  PI decided that every kind's limits are respected: a branch is in work; `Objective.log_prob`, the record field
+  `sampler_support` and their tests follow it afterwards.
+- Methods of one pyazr session are not safe from two threads (only `Objective` and `Evaluation` take the session's
+  lock): part of the rename step, in work.
+- The browser smoke test ran out of its time budget once on a loaded machine (passed alone): the budget, not the
+  page.
+- The program's MIGRAD on T2 stops 9e-4 above the minimum scipy reaches on the same objective (MINUIT's tolerance;
+  MINUIT is not patched): for the owner.
+- Stale lines named by the Developer Guide's entry (`CLAUDE.md` on an `inference/` directory, `MeshPlanner.h`,
+  two CMake comments, the `AZUREAPI` class comment, `coulomb_table.rst`, `ec_table.rst`): not yet corrected.
+- The site was not built (Sphinx is not installed here).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-objective`) — pyazr: `Objective`, `Evaluation`, three recipes
 
 **Done** (beside today's methods; nothing removed; design and as built: `pyazr3.md` section 7).
