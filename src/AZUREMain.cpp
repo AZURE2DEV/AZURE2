@@ -180,11 +180,7 @@ int AZUREMain::operator()() {
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Initialize shared EC amplitude cache for interpolation
     if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
-      InitializeECAmplitudeCache();
-      // Clear cache to ensure fresh start for this calculation
-      if (g_ecAmplitudeCache) {
-        g_ecAmplitudeCache->Clear();
-      }
+      InitializeECAmplitudeCache(configure());
       configure().outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
 
@@ -932,10 +928,7 @@ int AZUREMain::operator()() {
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
-    if (g_ecAmplitudeCache) {
-      // g_ecAmplitudeCache->PrintStats();
-    }
-    CleanupECAmplitudeCache();
+    CleanupECAmplitudeCache(configure());
   }
 
   return 0;

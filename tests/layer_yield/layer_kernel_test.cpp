@@ -33,9 +33,6 @@
 #include "Unit.h"
 #include "WorkingCopy.h"
 
-// Each consumer of the engine defines this (src/AZURE2.cpp, api/src/pybind_api.cpp); CoulFunc reads it.
-Config *g_config = nullptr;
-
 namespace {
 
 int failures = 0;
@@ -120,7 +117,6 @@ std::vector<double> Uniform(double hi, double lo, int n) {
 int main() {
   std::ostringstream sink;
   Config configure(sink);
-  g_config = &configure;
   std::cout << "layer kernel" << std::endl;
 
   const double N = 2.0e18, sigma0 = 0.37;

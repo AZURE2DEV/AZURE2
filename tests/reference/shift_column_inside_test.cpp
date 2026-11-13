@@ -40,8 +40,6 @@
 #include "Config.h"
 #include "WorkingCopy.h"
 
-Config *g_config = nullptr;
-
 namespace {
 
 int failures = 0;
@@ -97,7 +95,6 @@ struct Model {
     delete data;
   }
   bool Load() {
-    g_config = &cfg;
     if (cfg.ReadConfigFile() < 0) return false;
     compound = new CNuc();
     data = new WorkingCopy();

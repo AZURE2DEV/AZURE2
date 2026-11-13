@@ -440,7 +440,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
       cr.l = c->GetL();
       cr.s = c->GetS();
       // The vertex boundary of the model (THMMatrixFunc::CalculateTHMCrossSection).
-      const ThmVertexBoundary boundaryOf(configure, pair, jg, ch);
+      ThmVertexBoundary boundaryOf(configure, pair, jg, ch);
       // The pieces on the grid: [E][node] and the quasi-free [E].
       std::vector<std::vector<Pieces>> grid(energies.size());
       std::vector<Pieces> qf(energies.size());

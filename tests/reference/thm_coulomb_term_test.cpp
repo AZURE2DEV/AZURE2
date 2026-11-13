@@ -38,11 +38,6 @@
 #include "PPair.h"
 #include "ThmFunc.h"
 
-// Each consumer of the engine defines this itself (src/AZURE2.cpp for the CLI,
-// api/src/pybind_api.cpp for the Python API).  CoulFunc reads it at
-// construction; null means no hybrid nuclear potential.
-Config *g_config = nullptr;
-
 namespace {
 
 // |got - want| <= kRelTol |want| + kAbsTol.
@@ -212,7 +207,7 @@ PPair makePair(const PairSpec &s) {
        << s.z2 << " 0 0 0 1 0 0 " << s.a << " 0 0 0 " << s.bindingE;
   std::istringstream in(line.str());
   azure2::io::LevelRow nl(in);
-  return PPair(nl);
+  return PPair(nl, PairFunctionSettings{});
 }
 
 double halfOffShellMomentum(PPair &pair, double E, double B) {

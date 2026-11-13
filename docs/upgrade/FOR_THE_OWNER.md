@@ -321,7 +321,7 @@ Open from the drill: the three non-default Legendre definitions follow `docs/upg
 checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
 `calculate_sfactor` knows only the plain S factor.
 
-## No hidden state (first step, merged 2026-11-12; not finished)
+## No hidden state (two steps, 2026-11-12; not finished)
 
 The aim: every number the engine prints depends only on the project, the command line and a short list of
 environment switches (`docs/upgrade/evaluation.md` section 2), not on what ran before in the same process or on how
@@ -330,11 +330,19 @@ What the engine keeps between calls for speed now lives in objects that a run ow
 (in the evaluation's result buffer), the run's per-thread scratch of the external-capture integrals and the THM
 vertex (in the run's `Config`), and the warnings printed once per run.  `tests/pyazr/session_isolation_test.py` runs
 three projects in one process one after another, in both orders, at 1 and 3 threads, and checks that each gives the
-bytes of a fresh process.  What is not done: two global pointers that the Python binding swaps per call (two sessions
-evaluating at the same moment on two threads are not safe yet), three process-wide memos (the shift-function
-derivatives, the external-capture term table, the bytes of input files), the pooled copies of a fit and of the MCMC,
-diagnostic counters, the MCMC's progress globals.  Every one is a row of `tests/consistency/allowed_state.tsv` with
-the step that removes it (107 rows; 10 more are permanent: constant tables and locks of output streams).  What you
+bytes of a fresh process.  The second step removed the global
+pointer to the run's settings and the amplitude cache the Python binding swapped per call: each particle pair is built
+with the run's settings of its functions (relativistic or not, which Coulomb table), and the external-capture term
+table, Park's shift-derivative memo and the `--no-ec-table` amplitudes belong to the run.  Two sessions may now
+evaluate at the same moment on two Python threads: `tests/pyazr/concurrent_sessions_test.py` (slow, about 11 minutes)
+runs pairs of sessions at once 20 times, and two different Coulomb table files one after another, and each gives the
+bytes of a fresh process; the engine before this step failed it.  One caution for such use: the engine reads a
+project's relative paths against the process's working directory, which pyazr sets per call, so two sessions on two
+threads need projects with absolute paths or one working directory.  What is not done: the bytes of input files kept
+per process (moving them per session changes what `cache_stats()` counts: your decision), the pooled copies of a fit
+and of the MCMC, diagnostic counters, the MCMC's progress globals.  Every one is a row of
+`tests/consistency/allowed_state.tsv` with the step that removes it (88 rows; 10 more are permanent: constant tables
+and locks of output streams).  What you
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 
@@ -442,9 +450,12 @@ change, where it ran out of memory before. No number of the test tree moved. Kno
 layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
 cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
 
-In work now: the second step of "no hidden state" (the global pointers and process-wide memos, then a fit whose
-evaluations write only their own result buffer, so that the pooled copies of the working data go); no number may
-change. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+In work now: the third step of "no hidden state" (a fit's copies of the working data made only when one is needed,
+relative paths resolved without the process's working directory, the diagnostic switches read once into one
+record; no number may change); the stopping of a data set with an energy shift taken at the shifted beam energy
+(numbers of such data sets on a target change, by the logarithmic slope of the stopping times shift over energy);
+the total radiative width, the gamma branchings and the mixing ratios of a level as fit parameters. Merged in the
+earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

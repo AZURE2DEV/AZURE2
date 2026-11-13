@@ -23,8 +23,6 @@
 #include "Config.h"
 #include "MeshPlanner.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 using azure2::MeshAnchor;

@@ -2,6 +2,60 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 01:50) — merged: Phase 6, second branch (no process-wide pointers or memos; the solvers' buffers non-const)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation-2` (the
+agent's entry below says what was done, by file). No output file of a project changed.
+
+**What it is.** `g_config` is gone (its three definitions, 30 copies in test programs, `Kinematics::Relativistic`):
+a pair is built with the run's settings of its functions (`PairFunctionSettings` in `include/PPair.h`: relativistic
+kinematics, the Coulomb table and its file), a required constructor argument, and every former reader takes them
+from its pair. The Python binding no longer swaps a global `Config` and a global amplitude cache per call; the
+external-capture amplitudes, the external-capture term table and Park's shift-derivative memo belong to the run
+(`include/RunScratch.h`). No `mutable` is left in `AMatrixFunc.h`, `LevelMatrixSolver.h`, `ThmVertexBoundary.h`.
+`tests/pyazr/concurrent_sessions_test.py` (slow): pairs of sessions evaluating at the same moment on two Python
+threads, and two Coulomb table files in one process, each give the bytes of the session alone in a fresh process;
+on the engine before the branch 20 of 40 and 36 of 40 evaluations differed.
+
+**Not done by the branch** (its brief asked for them): the pooled copies of a fit and of the MCMC, and the
+diagnostics record. "No hidden state" is not reached and the roadmap's box is not ticked: 88 pending rows of
+`tests/consistency/allowed_state.tsv` (milestone 2: 4, milestone 3: 11, milestone 4: 44, milestone 5: 29).
+
+**Verified by the director** (own build `work/b-eval2m` of the branch head, reference `tab-gridm-1`, base build
+`work/b-head3`).
+Own build of the branch head (`work/b-eval2m`, 0 warnings). Whole tree × 3 bases (tag `tab-eval2m-1`) against `tab-gridm-1`:
+827 / 800 / 827 files identical. The eight fits (T2 by three routes, 13N by two, layer yield, stopping yield by two):
+identical file by file to the build of the merged head before (`work/b-head3`). `ctest -LE slow` 220 of 220, the slow
+tests 11 of 11 (`pyazr_concurrent_sessions` 515 s), `run_tests.sh` 160 of 160, spec equivalence 181 equal, the
+converted-tree gate 628 / 601 / 628 identical, calculations at 1 against 3 threads identical (T1, T2, T3, 13N × 3
+bases). Not run by the director: the agent's instruction counts (its table: within 0.1 % of the base).
+
+**Reviewed.** `PairFunctionSettings` and its readers (`Kinematics::Channel`, `CoulFunc`, `ShftFunc`, the key of the
+shift-derivative memo); `RunScratch`'s three shared members and their locks; the binding's diff (every `ConfigScope`
+removed, `InitializeECAmplitudeCache` and `InvalidateShiftFunctions` given the session's `Config`). Notes: (1) the
+settings are copied into the pairs at `CNuc::Fill`; nothing changes them afterwards (the three are set from the
+command line, the `<config>` block or the session's options before the set-up; searched); (2) one expected line of
+`tests/upgrade/predictions.txt` changed: `--print-predictions` ran before `main` set the global and so ignored
+`relativistic=1`; it now refuses the 44.9 degree point of `li7pn_edge_rel` as the calculation does. Accepted: it is
+the correction of a defect, and no output file moves.
+
+**Decided by the director.** The bytes of input files stay in one store per process (`src/InputFiles.cpp`): entries
+are keyed by absolute path and file stamp, immutable once read, behind a lock, and `cache_stats()` is documented per
+process; its rows of the allow-list become permanent in the next branch.
+
+**Found by the agent, in work in the next branch** (`feature/upgrade-6-evaluation-3`): the engine resolves a
+project's relative paths against the process's working directory, which pyazr changes per call, so two sessions in
+two directories on two threads race (the new test uses absolute paths); the signature of `intEC.dat` did not hold
+the Coulomb table. A third finding of that branch, for a later one: the pooled copies cannot be deleted without
+splitting the `Site` layer into problem and per-evaluation values (`evaluation.md` section 4.1 there).
+
+**Decided by the PI since the entry of 22:55 below** (its items 4 and 5): the stopping of a shifted, folded point is
+to be evaluated at the shifted energy (in work, `feature/upgrade-5-true-energy-stopping`); the radiative widths
+stay out of the level's total width: the engine's resonance strength, omega Gamma_gamma Gamma_p over the sum of the
+particle widths, is the convention of AZURE2 and is not to be changed or made optional. Also in work at the PI's
+wish: the total radiative width, the gamma branchings and the mixing ratios of a level as fit parameters
+(`feature/upgrade-8-gamma-branchings`).
+
 ## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-5-one-grid` (the
@@ -98,6 +152,27 @@ and on `b-thm5` (no CLI code is touched); `thm_dw_vertex` was not run (it sets 4
 
 **Open**: the per-temperature quadrature of the rate has no test now (no model reaches its fallback). The refusal of a
 folded point without an E_x frame (a beta-delayed spectrum without an exit pair) is reached by no project.
+
+## 2026-11-12 (agent, Phase 6 branch 2) — no process-wide pointers or memos; the solvers' buffers non-const (`feature/upgrade-6-evaluation-2`)
+
+**Done** (`evaluation.md` section 7.4).  `g_config` is deleted: each particle pair is built with the run's settings of
+its functions (`PPair::FunctionSettings`: relativistic kinematics, use and file of the Coulomb table), and every
+former reader takes them from its pair.  The binding's `ConfigScope` swap is deleted.  The EC term table, Park's
+shift-derivative memo and the `--no-ec-table` amplitude store are members of the run's scratch (`RunScratch`).  No
+`mutable` in `AMatrixFunc.h`, `LevelMatrixSolver.h`, `ThmVertexBoundary.h` (the writers are non-`const`; the
+`const_cast` of `GetAMatrix` is gone).  New test `tests/pyazr/concurrent_sessions_test.py` (ctest
+`pyazr_concurrent_sessions`, label slow, ~11 min): fails on the base (20/40 and 36/40 evaluations differ, one pair
+crashes at set-up; the two-table sequences give other bytes), passes here.  Merged `feature/upgrade-4-data` (3c6d0e9b).
+Allow-list 107 -> 88 pending rows.  One expected line changed: `tests/upgrade/predictions.txt` for li7pn_edge_rel
+(`--print-predictions` read "non-relativistic" through the null g_config; now refuses the point as the calculation does).
+**Verified** (build `work/b-eval2` of the merged head): whole tree x 3 bases against `tab-gridm-1` (tag `tab-eval2-a`):
+827 / 800 / 827 identical, run.log included; T1, T2, T3, 13N x 3 bases at 1 and 3 threads identical;
+`ctest -LE slow` 219 of 220 before the predictions line was regenerated (the one failure was that line; it passes
+after); `tests/run_tests.sh` 160 passed, 0 failed; the eight fits identical file by file to `work/b-head3`; the
+converted-tree gate (`geval2-a`) 628 / 601 / 628 identical; user-space instructions against `b-head3` at 1 thread:
+T2 +0.03 %, 13N -0.0002 %, natural_neon +0.10 %, 18O_p_a_thm +0.001 %, T2 fit +0.06 %, 13N fit +0.03 %.
+**Not done**: the input-file bytes (a decision: `cache_stats()` counts the process); part 3 (the pooled working copies),
+part 4 (diagnostics record).
 
 ## 2026-11-12 (director, 22:13) — merged: Phase 6, first branch (the engine's state surveyed, the per-thread caches and warn-once flags owned by the caller, a check against new state)
 

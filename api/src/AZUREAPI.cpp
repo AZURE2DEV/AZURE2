@@ -84,7 +84,7 @@ static std::vector<const Segment *> AllSegments(WorkingCopy *ld) {
 
 int AZUREAPI::Initialize() {
   // Initialize caches for performance
-  InitializeECAmplitudeCache();
+  InitializeECAmplitudeCache(configure());
 
   configure().paramMask |= Config::USE_EXTERNAL_CAPTURE;
 

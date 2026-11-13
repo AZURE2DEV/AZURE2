@@ -16,8 +16,6 @@
 #include "Segment.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 using namespace azure2::experiment;

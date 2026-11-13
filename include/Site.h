@@ -427,8 +427,10 @@ class Site {
   /// Compute the external-capture amplitudes for every matching pathway.
   /// `table`: the stage's channel table, for sqrt(P) and exp(-i phi) at a_c (null: computed).
   void CalculateECAmplitudes(WorkingCopy *data, CNuc *, const Config &, const ChannelTable *table = nullptr);
-  void AddECAmplitude(int, int, complex);
-  void AddECAmplitude(int, int, complex, double);
+  /// Keep an external-capture amplitude of pathway (k, m) at the point's energy (or at `energy`, MeV c.m.); with
+  /// --no-ec-table also in the run's cache (RunECAmplitudes).
+  void AddECAmplitude(int, int, complex, const Config &);
+  void AddECAmplitude(int, int, complex, double, const Config &);
   void ClearECAmplitudes();
   /// The external-capture amplitudes the point holds at c.m. energy `energy` (MeV) -- the set-up's, which
   /// GetECAmplitudeWithShift returns there instead of computing them; they need not agree to the last bit between

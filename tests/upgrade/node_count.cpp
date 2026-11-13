@@ -52,8 +52,6 @@
 #include "Unit.h"
 #include "WorkingCopy.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 std::uint64_t Bits(double x) {
@@ -230,7 +228,6 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  g_config = &cfg;
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;

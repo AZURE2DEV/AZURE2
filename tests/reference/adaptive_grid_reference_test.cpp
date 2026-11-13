@@ -34,8 +34,6 @@
 #include <cstring>
 #include <vector>
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;

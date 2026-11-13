@@ -31,8 +31,6 @@
 #include "PPair.h"
 #include "PathwayTable.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;
@@ -201,7 +199,6 @@ int main(int argc, char **argv) {
     Config cfg(sink);
     cfg.configfile = fs::path(file).filename().string();
     cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-    g_config = &cfg;
     CNuc compound;
     if (cfg.ReadConfigFile() < 0) {
       std::printf("  FAIL  %s: config\n", file.c_str());
@@ -211,7 +208,7 @@ int main(int argc, char **argv) {
     cfg.fileCheckMask = 0;
     cfg.screenCheckMask = 0;
     cfg.ResolveMatrixRoute();
-    InitializeECAmplitudeCache();
+    InitializeECAmplitudeCache(cfg);
     if (compound.Fill(cfg) == -1) continue;
     for (int a = 1; a <= compound.NumPairs(); a++)
       if (compound.GetPair(a)->GetPType() != 10) compound.GetPair(a)->SetEntrance();

@@ -98,8 +98,9 @@ class ThmVertexBoundary {
     if (rule_ == ON_SHELL) return onShell;
     return complex(level ? Level(level) : LevelFree(), 0.0);
   }
-  /// L_c(E) = S_c(E) + i P_c(E) at c.m. energy E above the pair's threshold.
-  complex OnShellAt(double e) const;
+  /// L_c(E) = S_c(E) + i P_c(E) at c.m. energy E above the pair's threshold (the channel functions keep their last
+  /// values, so the call is not const).
+  complex OnShellAt(double e);
 
   /*! S_c of `pair` at a compound-system level energy (MeV); with a memo (the run's per-thread scratch), through it. */
   static double ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
@@ -112,7 +113,7 @@ class ThmVertexBoundary {
   int two_j_;  ///< the channel's 2J key (PPair::SpinOrbitTwoJ)
   int lowest_;
   double fixed_;  // B_c, or S_c(E_min) for LOWEST_LEVEL_SHIFT
-  mutable ChannelFunc channelFunc_;
+  ChannelFunc channelFunc_;
 };
 
 /*!

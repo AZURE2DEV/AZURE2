@@ -99,7 +99,7 @@ __attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
 bool Site::QLabBoostAt(double ti, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   if (ti <= 0.0 || tf <= 0.0) return false;
-  if (Kinematics::Relativistic()) {
+  if (entrancePair->FunctionSettings().relativistic) {
     const double m1 = entrancePair->GetM(1) * uconv, m2 = entrancePair->GetM(2) * uconv;
     const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
     const double e1 = Kinematics::LabFromCM(m1, m2, ti);

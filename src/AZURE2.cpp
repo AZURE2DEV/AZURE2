@@ -55,9 +55,6 @@
 #include <string.h>
 #include <cstdlib>
 
-// Global Config pointer for use across the codebase
-Config *g_config = nullptr;
-
 struct SegPairs {
   int firstPair;
   int secondPair;
@@ -1137,11 +1134,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Initialize EC amplitude cache if using external capture
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-      InitializeECAmplitudeCache();
-      // Clear cache to ensure fresh start for this calculation
-      if (g_ecAmplitudeCache) {
-        g_ecAmplitudeCache->Clear();
-      }
+      InitializeECAmplitudeCache(configure);
       configure.outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
 
@@ -1429,7 +1422,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     AZURECalcMCMC::SetGUIIterationCallback(nullptr);
 
     if (!sampled) {
-      if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache();
+      if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache(configure);
       delete compound;
       delete data;
       return -1;
@@ -1443,12 +1436,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Cleanup EC amplitude cache if it was used
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-      if (g_ecAmplitudeCache) {
-        configure.outStream << "EC amplitude cache statistics:" << std::endl;
-        // Optionally print cache statistics if available
-        // g_ecAmplitudeCache->PrintStats();
-      }
-      CleanupECAmplitudeCache();
+      if (RunECAmplitudes(configure)) configure.outStream << "EC amplitude cache statistics:" << std::endl;
+      CleanupECAmplitudeCache(configure);
     }
 
     // Cleanup
@@ -1493,12 +1482,9 @@ int main(int argc, char *argv[]) {
     if (arg.compare(0, 22, "--build-coulomb-table=") == 0) return buildCoulombTable(arg.substr(22));
   }
 
-  // Initialize caches for performance optimization
-  InitializeECAmplitudeCache();
-
   // Create new configuration structure, and parse the command line parameters
   Config configure(std::cout);
-  g_config = &configure;  // Set global Config pointer for use across codebase
+  InitializeECAmplitudeCache(configure);
   // An unknown option, a value-taking flag without its value or with one that does not parse, or a bad
   // AZURE_REFINE_QUADRATURE: exit 2
   bool useReadline = false;
@@ -1653,7 +1639,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Cleanup caches
-  CleanupECAmplitudeCache();
+  CleanupECAmplitudeCache(configure);
 
   return returnValue != 0 ? 1 : 0;
 }

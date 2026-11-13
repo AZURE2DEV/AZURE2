@@ -3,7 +3,6 @@
 
 #include <cmath>
 
-#include "Config.h"
 #include "Constants.h"
 #include "PPair.h"
 #include "azure2/experiment/Frames.h"
@@ -33,9 +32,6 @@
  * Masses are in MeV/c^2 (PPair masses in u times uconv), energies in MeV, k in fm^-1.
  */
 namespace Kinematics {
-
-/// Is relativistic kinematics on for this run?
-inline bool Relativistic() { return g_config && g_config->relativistic; }
 
 // The relativistic k and eta, and Channel's eta and rho below, are physics/'s (azure2/physics/ChannelFunctions.h):
 // one formula for the engine and physics/.
@@ -73,9 +69,10 @@ struct Channel {
   bool rel = false;
 
   Channel() = default;
-  explicit Channel(const PPair *pair, bool relativistic = Relativistic())
+  /// The pair's kinematics, relativistic when the run's settings say so (PPair::FunctionSettings).
+  explicit Channel(const PPair *pair)
       : z1(pair->GetZ(1)), z2(pair->GetZ(2)), redmass(pair->GetRedMass()),
-        m1(pair->GetM(1) * uconv), m2(pair->GetM(2) * uconv), rel(relativistic) {}
+        m1(pair->GetM(1) * uconv), m2(pair->GetM(2) * uconv), rel(pair->FunctionSettings().relativistic) {}
   Channel(int z1_, int z2_, double redmass_, double m1u, double m2u, bool relativistic)
       : z1(z1_), z2(z2_), redmass(redmass_), m1(m1u * uconv), m2(m2u * uconv), rel(relativistic) {}
 

@@ -49,8 +49,6 @@
 #include "ParameterKind.h"
 #include "Results.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;
@@ -187,7 +185,6 @@ int RunProject(const std::string &path, bool externalCapture) {
   Config cfg(sink);
   cfg.configfile = file;
   if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  g_config = &cfg;
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;
@@ -219,7 +216,6 @@ int RunProject(const std::string &path, bool externalCapture) {
       data2.FillMnParams(params2);
     }
     check("a second load in the same process", loaded && data2.Initialize(&compound2, cfg2) != -1);
-    g_config = &cfg;
     auto keys = [](WorkingCopy &d) {
       std::vector<int> k;
       for (int i = 1; i <= d.Data().NumSegments(); i++)
