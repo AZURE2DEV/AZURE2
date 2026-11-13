@@ -222,17 +222,20 @@ BoundState AnalyticTail(TailShape shape, const BoundStateRequest &q, double anc,
   s.eta = shape == TailShape::Yukawa ? 0.0 : eta_bound(q.pair, q.binding_MeV);
   s.step_fm = q.step_fm;
   s.anc_fm_half = anc;
+  s.r_min_fm = r_min;
   const int n = static_cast<int>(std::lround(q.r_max_fm / q.step_fm)) + 1;
   s.u.assign(n, 0.0);
   s.potential_MeV.assign(n, 0.0);
   s.coulomb_MeV.assign(n, 0.0);
-  for (int i = 1; i < n; ++i) {
-    const double r = i * q.step_fm;
-    if (r < r_min) continue;
-    s.u[i] = shape == TailShape::Yukawa ? anc * std::exp(-s.kappa_fm * r)
-                                        : anc * std::exp(LogWhittaker(q.l, s.eta, s.kappa_fm, r));
-  }
+  for (int i = 1; i < n; ++i) s.u[i] = AnalyticTailAt(shape, q, anc, r_min, i * q.step_fm);
   return s;
+}
+
+double AnalyticTailAt(TailShape shape, const BoundStateRequest &q, double anc, double r_min, double r) {
+  if (!(r > 0.0) || r < r_min - 1e-12) return 0.0;
+  const double kappa = rho_bound(q.pair, 1.0, q.binding_MeV);
+  if (shape == TailShape::Yukawa) return anc * std::exp(-kappa * r);
+  return anc * std::exp(LogWhittaker(q.l, eta_bound(q.pair, q.binding_MeV), kappa, r));
 }
 
 }  // namespace transfer

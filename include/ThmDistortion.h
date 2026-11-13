@@ -2,6 +2,7 @@
 #define THM_DISTORTION_H
 
 #include "Constants.h"
+#include "azure2/physics/transfer/ZeroRangeWeight.h"
 
 #include <atomic>
 #include <memory>
@@ -44,11 +45,13 @@ struct ThmWeightTable;
  * 12C+12C.  Distorted waves: point Coulomb (distortion=coulomb) or, per
  * channel, plane / point Coulomb / Woods-Saxon real + imaginary volume +
  * imaginary surface with a uniform-sphere Coulomb term (distortion=optical,
- * opticalAA=, opticalSF=), all by the same complex Numerov integration
- * outward from the origin, matched to AZURE2's Coulomb functions (COUL)
- * beyond the turning point.  The radial integrals converge absolutely (the
- * bound state decays as e^{-kappa r}); the partial-wave sum runs until the
- * bound on the remaining terms is below 1e-13 |M|.
+ * opticalAA=, opticalSF=).  The physics is the library's (physics/transfer,
+ * docs/upgrade/transfer.md section 24): the waves (SolvePartialWave, matched
+ * beyond their turning point; plane waves as Riccati-Bessel functions), the
+ * bound state (AnalyticTail), the sum (PrepareZeroRangeEntrance once,
+ * ZeroRangeWeightSum per energy: until the bound on the remaining terms is
+ * below 1e-13 |M|) and M_PW (ZeroRangeMomentumAmplitude).  This class keeps
+ * the THM kinematics, the spectator directions, E_ref and the grid of ln R.
  */
 class ThmDistortion {
  public:
@@ -56,7 +59,7 @@ class ThmDistortion {
   /// One channel's distortion: none (plane wave), point Coulomb, or a
   /// Woods-Saxon potential p[] = V,R,a, W,RW,aW, WD,RD,aD, RC (MeV, fm;
   /// RC = 0 a point charge) plus Coulomb.  A global optical potential
-  /// (ThmOptical.h, global >= 0) is a Woods-Saxon channel whose p[] follow
+  /// (physics/transfer/GlobalOptical.h, global >= 0) is a Woods-Saxon channel whose p[] follow
   /// the energy: SetEnergy evaluates the model at the projectile's lab energy.
   struct Channel {
     enum Kind { PLANE, POINT_COULOMB, WOODS_SAXON };
@@ -64,10 +67,11 @@ class ThmDistortion {
     double p[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     int Z1 = 0, Z2 = 0;
     double mu = 0.0;  ///< reduced mass (MeV)
+    double muU = 0.0;  ///< the same in u
     double k = 0.0;   ///< wave number (fm^-1)
     double eta = 0.0; ///< Sommerfeld parameter (0 for PLANE)
     // Global optical potential.
-    int global = -1;           ///< index in ThmGlobalOpticals(), or -1
+    int global = -1;           ///< index in transfer::GlobalOpticalSets(), or -1
     bool extrapolate = false;  ///< allowed outside the validity range
     int Zp = 0, Ap = 0, Zt = 0, At = 0;  ///< projectile (the model's light ion) and target
     double mp = 0.0, mt = 0.0;           ///< their masses (u)
@@ -161,11 +165,15 @@ class ThmDistortion {
   double eAA = 0.0, muSx = 0.0, kappa = 0.0, etaB = 0.0, beta = 0.0, vcm = 0.0;
   double h = 0.0;      ///< radial step for r = r_sx (fm); the a + A wave uses beta h
   int i0 = 0, n = 0;   ///< integration from node i0 to node n-1 (Simpson)
-  std::vector<double> phi;  ///< phi_sx on the grid
-  std::vector<double> simpson;  ///< Simpson weights (times h), 0 below i0
-  std::vector<complex> sigmaAA;  ///< e^{i sigma_l^aA} ... stored as the phase factor
-  std::vector<std::vector<complex>> uAA;  ///< u_l^aA(beta r_i), l = 0..
-  std::vector<double> tailAA;  ///< sum_{l' >= l} (2l'+1) Int |phi u_l'^aA| (bound on what is left)
+  /// The radial step (fm): at most maxStep, at most phasePerStep over the
+  /// largest local wave number of either channel and stepKappa/kappa.
+  double maxStep = 0.02, phasePerStep = 0.1, stepKappa = 0.2;
+  /// The radial integrals end at rmin + tailKappa/kappa.
+  double tailKappa = 50.0;
+  /// The library's settings of the sum (c_i = beta, c_f = 1 set by Build; the rest its defaults).
+  azure2::physics::transfer::ZeroRangeWeightRequest numerics;
+  azure2::physics::transfer::RadialOverlap overlap;     ///< u_sx = r phi_sx on the grid (AnalyticTail)
+  azure2::physics::transfer::ZeroRangeEntrance entrance;  ///< the a + A waves and the bounds, once
   double refRatio = 0.0;  ///< rho(E_ref)
   Point ref;
   /// ln R on a uniform energy grid (cubic Lagrange interpolation).
@@ -188,8 +196,16 @@ class ThmDistortion {
   /// The s-x bound state phi(r) as Build tabulates it (0 below rmin).
   double Phi(double r) const;
   /// The plane-wave limit of the amplitude, M_PW(q) = 4 pi Int r^2 j_0(q r)
-  /// phi(r) dr on the radial grid (Simpson), q in fm^-1.
+  /// phi(r) dr on the radial grid (ZeroRangeMomentumAmplitude), q in fm^-1.
   double PlaneWaveSource(double q) const;
+  /// A channel as the library solves it at the channel's c.m. energy ecm (MeV).
+  azure2::physics::transfer::WaveChannel LibraryChannel(const Channel &c, double ecm) const;
+  /// The bound state's request (l = 0, B, the s-x pair, step h, to node n - 1) and tail shape.
+  azure2::physics::transfer::BoundStateRequest BoundRequest() const;
+  azure2::physics::transfer::TailShape Shape() const {
+    return yukawa || etaB == 0.0 ? azure2::physics::transfer::TailShape::Yukawa
+                                 : azure2::physics::transfer::TailShape::Whittaker;
+  }
   /// Sum of the Woods-Saxon depths of a channel (0 unless WOODS_SAXON; for a
   /// global potential the largest over its energies), MeV.
   static double Depth(const Channel &c);
@@ -244,11 +260,10 @@ class ThmDistortion {
   static double M2(const Point &p) { return p.nodes ? p.m2 : std::norm(p.m); }
   static double MPW2(const Point &p) { return p.nodes ? p.mpw2 : p.mpw * p.mpw; }
 
-  /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1 (Numerov from
-  /// the origin, normalized to F_l + T_l H_l^+, T_l = (S_l - 1)/2i the nuclear
-  /// part, returned in *T if asked); false if it fails.
-  bool Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u,
-            complex *T = nullptr) const;
+ private:
+  /// M at the directions x of one energy (one or the nodes of a window): the
+  /// library's sum; "" or what is wrong.
+  std::string Amplitudes(double energy, const std::vector<double> &x, std::vector<complex> &m, Point &p) const;
 };
 
 #endif

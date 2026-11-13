@@ -1,10 +1,8 @@
 #include "ThmDistortion.h"
 #include "Config.h"
-#include "GSLException.h"
 #include "ThmExperiment.h"
 #include "ThmNumerics.h"
-#include "ThmOptical.h"
-#include "CoulFunc.h"
+#include "azure2/physics/transfer/GlobalOptical.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,66 +10,39 @@
 #include <gsl/gsl_integration.h>
 
 /*
- * Numerics (docs/source/theory/thm_implementation.rst, "Distortion factor R(E)").
+ * Numerics (docs/source/theory/thm_implementation.rst, "Distortion factor R(E)";
+ * docs/upgrade/transfer.md section 24).
  *
  * Radial grid.  r = r_sx on nodes r_i = i h, h = 0.02 fm (smaller if a local
- * wave number times the step exceeds 0.1); the a + A wave is needed at
- * beta r_i, so it is integrated on its own grid of step beta h and read at the
- * same index.  A lower cutoff rmin of the bound state is a node.  The radial
- * integrals run from rmin to r_end = rmin + 50/kappa by Simpson's rule: the
- * integrand is phi_sx(r) u^sF(r) u^aA(beta r), and phi decays as e^{-kappa r}
- * while the regular waves stay bounded outside their turning points and
- * are small inside, so the integrals converge absolutely (no complex
- * rotation or damping is needed, unlike the Coulomb term C_l of the vertex);
- * the l = 0 integrand at r_end, over kappa, is reported relative to |M|.
+ * wave number times the step exceeds 0.1, or 0.2/kappa); the a + A wave is
+ * needed at beta r_i, so the library solves it on its own grid of step beta h
+ * and reads it at the same index.  A lower cutoff rmin of the bound state is a
+ * node.  The radial integrals run from rmin to r_end = rmin + 50/kappa by
+ * Simpson's rule (an even number of steps): the integrand is phi_sx(r)
+ * u^sF(r) u^aA(beta r), and phi decays as e^{-kappa r} while the regular waves
+ * stay bounded outside their turning points and are small inside, so the
+ * integrals converge absolutely; the l = 0 integrand at r_end, over kappa, is
+ * reported relative to |M|.
  *
- * Waves.  u'' = [l(l+1)/r^2 + 2 mu (V_C + U)/hbar^2 - k^2] u, integrated
- * outward from the origin by Numerov's method (complex for an optical
- * potential), started from the power series r^{l+1}(1 + a1 r + a2 r^2 +
- * a3 r^3) at the first two nodes and rescaled on the way (the regular
- * solution is the growing one under a barrier, so the outward integration is
- * stable).  Beyond the potential and the turning point
- * (eta + sqrt(eta^2 + l(l+1)))/k it is matched at two nodes a quarter
- * wavelength apart to c1 F_l + c2 G_l, with F_l, G_l from physics/coulomb
- * (coulsm, as CoulFunc), and divided by
- * N = c1 - i c2, which normalizes it to F_l + T_l H_l^+ (for point Coulomb
- * c2 = 0 up to the Numerov error, and u = F_l).
- *
- * Partial waves.  The a + A waves are computed once, for l = 0, 1, ... until
- * A_l = (2l+1) Int |phi u_l^aA| has fallen below 1e-17 of its largest value;
- * per energy the sum stops once sum_{l' > l} A_l' times max|u_l^sF| is below
- * 1e-13 |M|.
+ * Waves, bound state and the sum over l: the library (ZeroRangeWeight.h).
  */
 
 namespace {
 
+namespace transfer = azure2::physics::transfer;
+
 const double kGridStep = 0.01;  // MeV, the ln R grid
-const double kExpMax = 700.0;   // e^x beyond this: the Woods-Saxon form is 0 (no overflow)
-const double kWsRange = 12.0;   // the Woods-Saxon terms end at R + 12 a (below e^-12)
-const double kRescale = 1.0e150;    // the Numerov solution is rescaled beyond this
-const double kRescaleBy = 1.0e-150;  // ... by this factor
-const double kTailKappa = 50.0;   // the radial integrals end at rmin + 50/kappa
-const int kMaxRadial = 400000;    // radial nodes at most
-const double kWaveCut = 1.0e-17;  // a + A partial waves until A_l < 1e-17 of the largest
-const double kSumCut = 1.0e-13;   // the l sum stops once what is left is below 1e-13 |M|
+const int kMaxRadial = 400000;  // radial nodes at most
 
-double WoodsSaxon(double r, double R, double a) {
-  double x = (r - R) / a;
-  return x > kExpMax ? 0.0 : 1.0 / (1.0 + std::exp(x));
-}
-// 4 e^x/(1 + e^x)^2 = -4 a d/dr of the Woods-Saxon form factor.
-double SurfaceShape(double r, double R, double a) {
-  double x = (r - R) / a;
-  if (std::fabs(x) > kExpMax) return 0.0;
-  double e = std::exp(-std::fabs(x));
-  return 4.0 * e / ((1.0 + e) * (1.0 + e));
-}
-
-// F_l, G_l at rho (eta real).
-void CoulombFG(int l, double eta, double rho, double &F, double &G) {
-  const CoulWaves w = CoulombWavesAt(l, eta, rho);
-  F = w.F;
-  G = w.G;
+// The ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm) of a potential of the global table.
+void TenNumbers(const transfer::OpticalPotential &o, double p[10]) {
+  const transfer::WoodsSaxonTerm *terms[3] = {&o.real_volume, &o.imaginary_volume, &o.imaginary_surface};
+  for (int t = 0; t < 3; t++) {
+    p[3 * t] = terms[t]->depth_MeV;
+    p[3 * t + 1] = transfer::RadiusOf(o, terms[t]->r0_fm);
+    p[3 * t + 2] = terms[t]->diffuseness_fm;
+  }
+  p[9] = transfer::RadiusOf(o, o.coulomb_r0_fm);
 }
 
 }  // namespace
@@ -86,7 +57,7 @@ static std::string NucleusName(int Z, int A) {
 
 void ThmDistortion::Channel::SetEnergy(double ecm) {
   if (global < 0) return;
-  ThmGlobalOpticalEvaluate(global, Zp, Ap, Zt, At, LabEnergy(ecm), p);
+  TenNumbers(transfer::GlobalOpticalSets()[global].at(Zp, Ap, Zt, At, LabEnergy(ecm)), p);
 }
 
 std::string ThmDistortion::Channel::Describe() const {
@@ -98,7 +69,7 @@ std::string ThmDistortion::Channel::Describe() const {
     return s.str();
   }
   if (global >= 0)
-    s << ThmGlobalOpticals()[global].name << (extrapolate ? ":extrapolate" : "") << " (" << NucleusName(Zp, Ap)
+    s << transfer::GlobalOpticalSets()[global].name << (extrapolate ? ":extrapolate" : "") << " (" << NucleusName(Zp, Ap)
       << " on " << NucleusName(Zt, At) << ") ";
   s << "Woods-Saxon V=" << p[0] << " R=" << p[1] << " a=" << p[2] << ", W=" << p[3] << " RW=" << p[4]
     << " aW=" << p[5] << ", WD=" << p[6] << " RD=" << p[7] << " aD=" << p[8] << ", Coulomb "
@@ -106,82 +77,51 @@ std::string ThmDistortion::Channel::Describe() const {
   return s.str();
 }
 
-bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u,
-                         complex *T) const {
-  const double k = c.k;
-  const bool plane = c.kind == Channel::PLANE;
-  const bool ws = c.kind == Channel::WOODS_SAXON;
-  const double eta = plane ? 0.0 : c.eta;
-  const double fac = 2.0 * c.mu / (hbarc * hbarc);  // fm^-2 MeV^-1
-  const double zz = plane ? 0.0 : c.Z1 * c.Z2 * fstruc * hbarc;  // MeV fm
-  const double rc = ws ? c.p[9] : 0.0;
-  const bool sphere = rc > 0.0;
-  // Potential range (fm): where the Woods-Saxon terms are below e^-12.
-  double rPot = rc;
-  if (ws)
-    for (int t = 0; t < 3; t++)
-      if (c.p[3 * t] != 0.0) rPot = std::max(rPot, c.p[3 * t + 1] + kWsRange * c.p[3 * t + 2]);
-  // w(r) = 2 mu (V_C + U)/hbar^2 without the point-Coulomb 1/r part.
-  auto w = [&](double r) {
-    complex v(0.0, 0.0);
-    if (sphere) v += r >= rc ? zz / r : zz * (3.0 - r * r / (rc * rc)) / (2.0 * rc);
-    else if (r > 0.0) v += zz / r;
-    if (ws) {  // a term with depth 0 is absent (its R, a may be 0)
-      if (c.p[0] != 0.0) v -= c.p[0] * WoodsSaxon(r, c.p[1], c.p[2]);
-      if (c.p[3] != 0.0) v -= complex(0.0, c.p[3] * WoodsSaxon(r, c.p[4], c.p[5]));
-      if (c.p[6] != 0.0) v -= complex(0.0, c.p[6] * SurfaceShape(r, c.p[7], c.p[8]));
-    }
-    return fac * v;
-  };
-  const double rtp = (eta + std::sqrt(eta * eta + l * (l + 1.0))) / k;
-  const double quarter = 0.5 * M_PI / k;
-  double rMatch = std::max(std::max((nStore - 1) * step, rPot), rtp) + std::max(2.0 * quarter, 1.0);
-  int m1 = (int)std::ceil(rMatch / step);
-  int d = std::max(2, (int)std::lround(quarter / step));
-  if (m1 - d < nStore) m1 = nStore + d;
-  const int nInt = m1 + 1;
-  std::vector<complex> v(nInt), f(nInt);
-  for (int i = 1; i < nInt; i++) {
-    double r = i * step;
-    complex g = k * k - l * (l + 1.0) / (r * r) - w(r);
-    f[i] = 1.0 + step * step * g / 12.0;
+transfer::WaveChannel ThmDistortion::LibraryChannel(const Channel &c, double ecm) const {
+  transfer::WaveChannel w;
+  w.plane_wave = c.kind == Channel::PLANE;
+  w.pair.z1 = c.Z1;
+  w.pair.z2 = c.Z2;
+  w.pair.mu_u = c.muU;
+  w.energy_MeV = ecm;
+  if (c.kind == Channel::WOODS_SAXON) {
+    w.potential.real_volume = {c.p[0], c.p[1], c.p[2]};
+    w.potential.imaginary_volume = {c.p[3], c.p[4], c.p[5]};
+    w.potential.imaginary_surface = {c.p[6], c.p[7], c.p[8]};
+    w.potential.coulomb_r0_fm = c.p[9];
   }
-  // Series start: u = r^{l+1}(1 + a1 r + a2 r^2 + a3 r^3), with the point
-  // Coulomb 2 c1/r (c1 = eta k) and the finite rest w0 at the origin.
-  const double c1 = (sphere || plane) ? 0.0 : eta * k;
-  complex w0 = fac * complex(sphere ? zz * 1.5 / rc : 0.0, 0.0);
-  if (ws) {
-    if (c.p[0] != 0.0) w0 -= fac * c.p[0] * WoodsSaxon(0.0, c.p[1], c.p[2]);
-    if (c.p[3] != 0.0) w0 -= fac * complex(0.0, c.p[3] * WoodsSaxon(0.0, c.p[4], c.p[5]));
-    if (c.p[6] != 0.0) w0 -= fac * complex(0.0, c.p[6] * SurfaceShape(0.0, c.p[7], c.p[8]));
+  return w;
+}
+
+transfer::BoundStateRequest ThmDistortion::BoundRequest() const {
+  transfer::BoundStateRequest q;
+  q.pair.z1 = kin.Zs;
+  q.pair.z2 = kin.Zx;
+  q.pair.mu_u = kin.ms * kin.mx / (kin.ms + kin.mx);
+  q.binding_MeV = kin.bind;
+  q.step_fm = h;
+  q.r_max_fm = (n - 1) * h;
+  return q;
+}
+
+std::string ThmDistortion::Amplitudes(double energy, const std::vector<double> &x, std::vector<complex> &m,
+                                      Point &p) const {
+  transfer::ZeroRangeWeight w;
+  try {
+    w = transfer::ZeroRangeWeightSum(overlap, entrance, LibraryChannel(SfAt(energy), EsF(energy)), x, numerics);
+  } catch (const std::exception &e) {
+    return "the s + F channel at E = " + ThmNumberText(energy) + " MeV: " + e.what();
   }
-  complex a1 = c1 / (l + 1.0);
-  complex a2 = (2.0 * c1 * a1 + w0 - k * k) / (4.0 * l + 6.0);
-  complex a3 = (2.0 * c1 * a2 + (w0 - k * k) * a1) / (6.0 * l + 12.0);
-  auto series = [&](double r) { return 1.0 + r * (a1 + r * (a2 + r * a3)); };
-  v[0] = 0.0;
-  v[1] = series(step);
-  v[2] = std::pow(2.0, l + 1.0) * series(2.0 * step);
-  for (int i = 2; i + 1 < nInt; i++) {
-    v[i + 1] = ((12.0 - 10.0 * f[i]) * v[i] - f[i - 1] * v[i - 1]) / f[i + 1];
-    if (std::abs(v[i + 1]) > kRescale)
-      for (int j = 0; j <= i + 1; j++) v[j] *= kRescaleBy;
+  const double kb = beta * aa.k;
+  m.assign(x.size(), complex(0.0, 0.0));
+  double smallest = HUGE_VAL;
+  for (size_t k = 0; k < x.size(); k++) {
+    m[k] = 4.0 * M_PI / (p.ksf * kb) * w.sum[k];
+    smallest = std::min(smallest, std::abs(w.sum[k]));
   }
-  // Match c1 F + c2 G at m1 and m2 = m1 - d.
-  const int m2 = m1 - d;
-  double F1, G1, F2, G2;
-  CoulombFG(l, eta, k * m1 * step, F1, G1);
-  CoulombFG(l, eta, k * m2 * step, F2, G2);
-  double det = F1 * G2 - F2 * G1;
-  if (!(std::fabs(det) > 0.0) || !std::isfinite(det)) return false;
-  complex cf = (v[m1] * G2 - v[m2] * G1) / det;
-  complex cg = (F1 * v[m2] - F2 * v[m1]) / det;
-  complex norm = cf - complex(0.0, 1.0) * cg;
-  if (!(std::abs(norm) > 0.0) || !std::isfinite(std::abs(norm))) return false;
-  u.assign(nStore, complex(0.0, 0.0));
-  for (int i = 0; i < nStore; i++) u[i] = v[i] / norm;
-  if (T) *T = cg / norm;
-  return true;
+  p.lmax = w.l_max;
+  p.tail = smallest > 0.0 ? w.end_integrand / kappa / smallest : HUGE_VAL;
+  return "";
 }
 
 std::string ThmDistortion::CheckEnergy(double energy) const {
@@ -232,17 +172,7 @@ double ThmDistortion::SpectatorCos(double ksf, double *thetaCm, bool *clamped) c
   return (kin.horseIsBeam ? 1.0 : -1.0) * std::cos(theta);
 }
 
-double ThmDistortion::PlaneWaveSource(double q) const {
-  // The Fourier transform of phi at q.
-  double mpw = 0.0;
-  for (int i = i0; i < n; i++) {
-    double r = i * h;
-    double qr = q * r;
-    double j0 = qr < 1.0e-6 ? 1.0 - qr * qr / 6.0 : std::sin(qr) / qr;
-    mpw += simpson[i] * r * r * j0 * phi[i];
-  }
-  return 4.0 * M_PI * mpw;
-}
+double ThmDistortion::PlaneWaveSource(double q) const { return transfer::ZeroRangeMomentumAmplitude(overlap, q); }
 
 ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   if (angWindow) return EvaluateWindow(energy);
@@ -259,41 +189,10 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   const double kb = beta * aa.k;
   p.q = std::sqrt(std::max(0.0, p.ksf * p.ksf + kb * kb - 2.0 * p.ksf * kb * p.x));
   p.mpw = PlaneWaveSource(p.q);
-  // Partial waves.
-  Channel c = SfAt(energy);
-  const int lCap = (int)uAA.size() - 1;
-  std::vector<complex> sigma = ThmCoulombPhases(c.eta, lCap);
-  std::vector<complex> u;
-  complex sum(0.0, 0.0);
-  double pPrev = 1.0, pl = 1.0;  // Legendre recurrence
-  for (int l = 0; l <= lCap; l++) {
-    if (l == 1) {
-      pPrev = 1.0;
-      pl = p.x;
-    } else if (l > 1) {
-      double next = ((2.0 * l - 1.0) * p.x * pl - (l - 1.0) * pPrev) / l;
-      pPrev = pl;
-      pl = next;
-    }
-    if (!Wave(c, l, h, n, u)) {
-      std::ostringstream why;
-      why << "the s + F wave l = " << l << " at E = " << energy << " MeV could not be normalized";
-      p.why = why.str();
-      return p;
-    }
-    complex integral(0.0, 0.0);
-    double umax = 0.0;
-    for (int i = i0; i < n; i++) {
-      integral += simpson[i] * phi[i] * u[i] * uAA[l][i];
-      umax = std::max(umax, std::abs(u[i]));
-    }
-    sum += (2.0 * l + 1.0) * sigma[l] * sigmaAA[l] * pl * integral;
-    if (l == 0) p.tail = std::abs(phi[n - 1] * u[n - 1] * uAA[0][n - 1]) / kappa;
-    p.lmax = l;
-    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < kSumCut * std::abs(sum)) break;
-  }
-  p.m = 4.0 * M_PI / (p.ksf * kb) * sum;
-  p.tail = std::abs(sum) > 0.0 ? p.tail / std::abs(sum) : HUGE_VAL;
+  std::vector<complex> m;
+  p.why = Amplitudes(energy, {p.x}, m, p);
+  if (!p.why.empty()) return p;
+  p.m = m[0];
   p.ok = std::isfinite(std::abs(p.m)) && std::abs(p.m) > 0.0 && p.mpw != 0.0;
   if (!p.ok) {
     std::ostringstream why;
@@ -475,54 +374,20 @@ ThmDistortion::Point ThmDistortion::EvaluateWindow(double energy) const {
   for (const AngleNode &n : nodes)
     if (n.w > 0.0) act.push_back(n);
   const int nk = (int)act.size();
-  const double kb = beta * aa.k;
   // Plane-wave limits.
   std::vector<double> mpw(nk, 0.0);
   for (int k = 0; k < nk; k++) mpw[k] = PlaneWaveSource(act[k].q);
-  // Partial waves: the radial integrals once, P_l(x_k) per node.
-  Channel c = SfAt(energy);
-  const int lCap = (int)uAA.size() - 1;
-  std::vector<complex> sigma = ThmCoulombPhases(c.eta, lCap);
-  std::vector<complex> u, sum(nk, complex(0.0, 0.0));
-  std::vector<double> pPrev(nk, 1.0), pl(nk, 1.0);
-  for (int l = 0; l <= lCap; l++) {
-    for (int k = 0; k < nk; k++) {
-      if (l == 1) {
-        pPrev[k] = 1.0;
-        pl[k] = act[k].x;
-      } else if (l > 1) {
-        double next = ((2.0 * l - 1.0) * act[k].x * pl[k] - (l - 1.0) * pPrev[k]) / l;
-        pPrev[k] = pl[k];
-        pl[k] = next;
-      }
-    }
-    if (!Wave(c, l, h, n, u)) {
-      std::ostringstream why;
-      why << "the s + F wave l = " << l << " at E = " << energy << " MeV could not be normalized";
-      p.why = why.str();
-      return p;
-    }
-    complex integral(0.0, 0.0);
-    double umax = 0.0;
-    for (int i = i0; i < n; i++) {
-      integral += simpson[i] * phi[i] * u[i] * uAA[l][i];
-      umax = std::max(umax, std::abs(u[i]));
-    }
-    double smallest = HUGE_VAL;
-    for (int k = 0; k < nk; k++) {
-      sum[k] += (2.0 * l + 1.0) * sigma[l] * sigmaAA[l] * pl[k] * integral;
-      smallest = std::min(smallest, std::abs(sum[k]));
-    }
-    if (l == 0) p.tail = std::abs(phi[n - 1] * u[n - 1] * uAA[0][n - 1]) / kappa;
-    p.lmax = l;
-    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < kSumCut * smallest) break;
-  }
-  double wsum = 0.0, m2 = 0.0, mpw2 = 0.0, th = 0.0, xs = 0.0, qs = 0.0, smallest = HUGE_VAL;
+  // The radial integrals once, P_l(x_k) per node (the library's sum at every direction).
+  std::vector<double> xk(nk);
+  for (int k = 0; k < nk; k++) xk[k] = act[k].x;
+  std::vector<complex> mk;
+  p.why = Amplitudes(energy, xk, mk, p);
+  if (!p.why.empty()) return p;
+  double wsum = 0.0, m2 = 0.0, mpw2 = 0.0, th = 0.0, xs = 0.0, qs = 0.0;
   bool finite = true;
   for (int k = 0; k < nk; k++) {
-    const complex m = 4.0 * M_PI / (p.ksf * kb) * sum[k];
+    const complex m = mk[k];
     finite = finite && std::isfinite(std::abs(m)) && mpw[k] != 0.0;
-    smallest = std::min(smallest, std::abs(sum[k]));
     wsum += act[k].w;
     m2 += act[k].w * std::norm(m);
     mpw2 += act[k].w * mpw[k] * mpw[k];
@@ -540,7 +405,6 @@ ThmDistortion::Point ThmDistortion::EvaluateWindow(double energy) const {
   p.thetaCm = th / wsum;
   p.x = xs / wsum;
   p.q = qs / wsum;
-  p.tail = smallest > 0.0 ? p.tail / smallest : HUGE_VAL;
   p.ok = finite && p.m2 > 0.0 && p.mpw2 > 0.0 && std::isfinite(p.m2);
   if (!p.ok) {
     std::ostringstream why;
@@ -599,16 +463,17 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
     for (int t = 0; t < 10; t++) c.p[t] = o.p[t];
     c.Z1 = z1;
     c.Z2 = z2;
-    c.mu = m1 * m2 / (m1 + m2) * uconv;
+    c.muU = m1 * m2 / (m1 + m2);
+    c.mu = c.muU * uconv;
     if (kind != OPTICAL || o.kind != 3) return "";
     // A global potential: its projectile is the partner it is made for.
-    const ThmGlobalOptical &g = ThmGlobalOpticals()[o.global];
+    const transfer::GlobalOpticalSet &g = transfer::GlobalOpticalSets()[o.global];
     const std::string what = std::string(keys[which]) + "=" + g.name + " (" + g.reference + ", for " +
                              g.projectiles + "): the " + labels[which] + " channel is " + NucleusName(z1, a1) +
                              " + " + NucleusName(z2, a2);
     if (a1 <= 0 || a2 <= 0) return std::string(keys[which]) + "=" + g.name + ": the mass numbers are not known";
-    const bool first = ThmGlobalOpticalFor(o.global, z1, a1);
-    if (!first && !ThmGlobalOpticalFor(o.global, z2, a2))
+    const bool first = transfer::Describes(g, z1, a1);
+    if (!first && !transfer::Describes(g, z2, a2))
       return what + ", which it does not describe (heavy-ion and other channels take the ten numbers "
                     "V,R,a,W,RW,aW,WD,RD,aD,RC)";
     c.global = o.global;
@@ -633,7 +498,7 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   for (int which = 0; which < 2; which++) {
     Channel &c = which == 0 ? aa : sf;
     if (c.global < 0) continue;
-    const ThmGlobalOptical &g = ThmGlobalOpticals()[c.global];
+    const transfer::GlobalOpticalSet &g = transfer::GlobalOpticalSets()[c.global];
     double e0 = which == 0 ? eAA : EsF(hi), e1 = which == 0 ? eAA : EsF(lo);
     double l0 = c.LabEnergy(e0), l1 = c.LabEnergy(e1);
     if (which == 0) {
@@ -647,18 +512,18 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
       }
       c.SetEnergy(0.5 * (e0 + e1));
     }
-    const bool massOk = c.At >= g.aMin && c.At <= g.aMax;
-    const bool energyOk = l0 >= g.eMin && l1 <= g.eMax;
+    const bool massOk = c.At >= g.a_min && c.At <= g.a_max;
+    const bool energyOk = l0 >= g.e_min_MeV && l1 <= g.e_max_MeV;
     if (massOk && energyOk) continue;
     std::ostringstream why;
     why.precision(4);
     why << keys[which] << "=" << g.name << " (" << g.reference << ") is outside its validity range for "
         << NucleusName(c.Zp, c.Ap) << " + " << NucleusName(c.Zt, c.At) << ":";
-    if (!massOk) why << " target A = " << c.At << " (valid " << g.aMin << "-" << g.aMax << ")";
+    if (!massOk) why << " target A = " << c.At << " (valid " << g.a_min << "-" << g.a_max << ")";
     if (!energyOk) {
       why << (massOk ? "" : ",") << " lab energy of " << NucleusName(c.Zp, c.Ap) << " " << l0;
       if (which == 1 && l1 != l0) why << "-" << l1;
-      why << " MeV over the data (valid " << g.eMin << "-" << g.eMax << " MeV)";
+      why << " MeV over the data (valid " << g.e_min_MeV << "-" << g.e_max_MeV << " MeV)";
     }
     if (c.extrapolate) {
       warnings.push_back(why.str() + "; extrapolated as asked (:extrapolate).");
@@ -670,8 +535,8 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   // Radial step: h = 0.02 fm, or k_local h <= 0.1 in both channels.
   double kSF = std::sqrt(2.0 * sf.mu * (std::max(EsF(eLo), 0.0) + Depth(sf))) / hbarc;
   double kAA = std::sqrt(2.0 * aa.mu * (eAA + Depth(aa))) / hbarc;
-  h = std::min(0.02, std::min(0.1 / std::max(kSF, 1.0e-6), 0.1 / std::max(beta * kAA, 1.0e-6)));
-  h = std::min(h, 0.2 / kappa);
+  h = std::min(maxStep, std::min(phasePerStep / std::max(kSF, 1.0e-6), phasePerStep / std::max(beta * kAA, 1.0e-6)));
+  h = std::min(h, stepKappa / kappa);
   rmin = x.boundRmin;
   i0 = 0;
   if (rmin > 0.0) {
@@ -720,16 +585,18 @@ bool ThmDistortion::GlobalEnds(int which, double lo, double hi, double elab[2], 
   for (int end = 0; end < 2; end++) {
     const double ecm = which == 0 ? eAA : EsF(end == 0 ? lo : hi);
     elab[end] = c.LabEnergy(ecm);
-    ThmGlobalOpticalEvaluate(c.global, c.Zp, c.Ap, c.Zt, c.At, elab[end], p[end]);
+    TenNumbers(transfer::GlobalOpticalSets()[c.global].at(c.Zp, c.Ap, c.Zt, c.At, elab[end]), p[end]);
   }
   return true;
 }
 
 double ThmDistortion::Phi(double r) const {
-  if (!(r > 0.0) || r < rmin - 1.0e-12) return 0.0;
-  if (yukawa || etaB == 0.0) return ThmBoundStateTail(r, kappa, etaB, yukawa);
-  GslQuiet quiet;  // status checked in ThmBoundStateTail; thread-safe (GSLException.h)
-  return ThmBoundStateTail(r, kappa, etaB, yukawa);
+  if (!(r > 0.0)) return 0.0;
+  try {
+    return transfer::AnalyticTailAt(Shape(), BoundRequest(), 1.0, rmin, r) / r;
+  } catch (const std::exception &) {
+    return 0.0;  // the Whittaker function failed (far beyond the double range)
+  }
 }
 
 std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi,
@@ -740,48 +607,20 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   }
   std::string setup = Setup(x, k, eLo);
   if (!setup.empty()) return setup;
-  const double rEnd = rmin + kTailKappa / kappa;
+  const double rEnd = rmin + tailKappa / kappa;
   int intervals = (int)std::ceil((rEnd - rmin) / h);
   if (intervals % 2) intervals++;
   n = i0 + intervals + 1;
   if (n > kMaxRadial) return "the radial grid would need " + ThmNumberText(n) + " points (kappa too small)";
-  phi.assign(n, 0.0);
-  simpson.assign(n, 0.0);
-  {
-    GslQuiet quiet;  // statuses checked in ThmBoundStateTail; thread-safe (GSLException.h)
-    for (int i = std::max(i0, 1); i < n; i++) phi[i] = ThmBoundStateTail(i * h, kappa, etaB, yukawa);
+  // The bound state u_sx = r phi_sx (unit ANC) and the a + A side of the sum, once.
+  numerics.c_i = beta;
+  numerics.c_f = 1.0;
+  try {
+    overlap = transfer::RadialOverlapOf(transfer::AnalyticTail(Shape(), BoundRequest(), 1.0, rmin));
+    entrance = transfer::PrepareZeroRangeEntrance(overlap, LibraryChannel(aa, eAA), numerics);
+  } catch (const std::exception &e) {
+    return std::string("the a + A channel: ") + e.what();
   }
-  for (int i = i0; i < n; i++) {
-    int j = i - i0;
-    simpson[i] = h / 3.0 * ((i == i0 || i == n - 1) ? 1.0 : (j % 2 ? 4.0 : 2.0));
-  }
-
-  // The a + A waves, once.
-  uAA.clear();
-  std::vector<double> amp;
-  double ampMax = 0.0;
-  const int kLCap = 400;
-  // The waves are kept, (l + 1) n complex numbers: bound them before they
-  // grow (n <= kMaxRadial and l <= 400 alone would allow 2.6 GB).
-  const double kMaxWaveMB = 512.0;
-  for (int l = 0;; l++) {
-    if (l > kLCap) return "the partial-wave sum does not converge by l = " + ThmNumberText(kLCap);
-    if ((l + 1.0) * n * sizeof(complex) / 1048576.0 > kMaxWaveMB)
-      return "the a + A partial waves would need more than " + ThmNumberText(kMaxWaveMB) + " MB (" + ThmNumberText(n) +
-             " radial points, l = " + ThmNumberText(l) + ")";
-    std::vector<complex> u;
-    if (!Wave(aa, l, beta * h, n, u)) return "the a + A wave l = " + ThmNumberText(l) + " could not be normalized";
-    double a = 0.0;
-    for (int i = i0; i < n; i++) a += simpson[i] * std::fabs(phi[i]) * std::abs(u[i]);
-    a *= 2.0 * l + 1.0;
-    uAA.push_back(u);
-    amp.push_back(a);
-    ampMax = std::max(ampMax, a);
-    if (l >= 2 && a < kWaveCut * ampMax && a < amp[l - 1]) break;
-  }
-  tailAA.assign(amp.size() + 1, 0.0);
-  for (size_t l = amp.size(); l-- > 0;) tailAA[l] = tailAA[l + 1] + amp[l];
-  sigmaAA = ThmCoulombPhases(aa.eta, (int)uAA.size() - 1);
 
   SetAngleSlots(eHi);
   std::ostringstream d;

@@ -45,8 +45,9 @@ endif()
 # The Coulomb functions (docs/upgrade/coulomb.md): sources from pycoulomb, one directory per algorithm.
 include(coulomb/coulomb.cmake)
 
-# physics/transfer: optical potentials, bound states, distorted waves and the DWBA transfer amplitude
-# (docs/upgrade/transfer.md).  A leaf: its own target, which links physics/ and is linked by nothing of the engine.
+# physics/transfer: optical potentials and the global optical sets, bound states, distorted waves, the DWBA transfer
+# amplitude and the zero-range THM weight (docs/upgrade/transfer.md).  Its own target, which links physics/; the
+# engine's THM distortions (src/ThmDistortion.cpp, src/ThmDwVertex.cpp) call it.
 add_library(azure2_physics_transfer STATIC
   src/transfer/OpticalPotential.cpp
   src/transfer/RadialNumerics.cpp
@@ -58,7 +59,9 @@ add_library(azure2_physics_transfer STATIC
   src/transfer/TransferKernel.cpp
   src/transfer/TransferAmplitudes.cpp
   src/transfer/Transfer.cpp
-  src/transfer/ThmVertex.cpp)
+  src/transfer/ThmVertex.cpp
+  src/transfer/GlobalOptical.cpp
+  src/transfer/ZeroRangeWeight.cpp)
 add_library(azure2::physics_transfer ALIAS azure2_physics_transfer)
 target_link_libraries(azure2_physics_transfer PUBLIC azure2_physics)
 set_target_properties(azure2_physics_transfer PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
@@ -68,12 +71,14 @@ endif()
 
 # physics/transfer, against answers independent of its solvers (docs/upgrade/transfer.md section 9): the bound state
 # against a square well, its normalisation and tail; the distorted waves against free and point-Coulomb waves, a square
-# well, unitarity; the THM vertex against closed forms; and everything against FRESCO 3.5 (tests/data/fresco,
+# well, unitarity; the THM vertex against closed forms; the global optical table against RIPL-3 and FRONT21;
+# and everything against FRESCO 3.5 (tests/data/fresco,
 # make_fresco_benchmarks.py; the test never runs FRESCO).
 foreach(_src transfer_bound_state_test.cpp transfer_distorted_waves_test.cpp transfer_thm_vertex_test.cpp
              transfer_fresco_test.cpp transfer_continuum_test.cpp transfer_continuum_transfer_test.cpp
              transfer_continuum_fresco_test.cpp transfer_spin_orbit_test.cpp
-             transfer_he3_fresco_test.cpp transfer_n14_fresco_test.cpp)
+             transfer_he3_fresco_test.cpp transfer_n14_fresco_test.cpp transfer_global_optical_test.cpp
+             transfer_zero_range_weight_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics_transfer)

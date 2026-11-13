@@ -93,6 +93,12 @@ Trojan horse ¹⁸O(³He,d)¹⁹F (g.s. and 5/2⁺, finite and zero range, with 
 ¹⁴N Trojan horse ¹²C(¹⁴N,d)²⁴Mg to ¹²C + ¹²C states (0⁺, 2⁺, finite range) to ≤ 8.3e-4 of FRESCO. The ⁶Li bins remain
 open: Frescox 7.4 shows FRESCO 3.5's numerics (§23). Open: ³He and ¹⁴N to the continuum, global sets, wiring.
 
+Status (2026-11-13, branch `feature/upgrade-7-thm-wiring`, `transfer.md` §24): the global optical sets are one table of
+the library (`GlobalOptical.h`, `src/ThmOptical.cpp` deleted); the distortion factor R(E) calls the library for the
+waves, the tail, the sum and M_PW (`ThmDistortion` keeps kinematics, windows, E_ref, the ln R grid); the DW vertex
+takes its waves from the library. Numbers moved ≤ 9e-9. Open: the DW vertex's source S_lm(a) as a library function
+(§24.2), spin-orbit terms of the global sets, a THM weight with spin-orbit distortions.
+
 Open questions for Catania (formula sheet Q2): their potential geometry and radius convention (r0·A^{1/3} vs
 r0·(A1^{1/3} + A2^{1/3})), spin–orbit, Coulomb radius, node rule for clusters, whether the interaction radius equals
 the channel radius, which boundary condition fixes the level function, whether u is normalised inside a, and one

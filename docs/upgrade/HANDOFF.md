@@ -2,6 +2,86 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 06:57) — merged: the THM distortions and the DW vertex's waves from the transfer library; global optical sets one table
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-thm-wiring` (the
+agent's entry below says what was done, by file). No output file of a project of the tree changes (no project of the
+tree uses `distortion=` or `vertexModel=dw`); the quantities of the THM unit tests move by at most 1e-8 relative.
+
+**New reference tag of the whole tree: `tab-thmwm-1`** (the director's run of the merged tree, build
+`work/b-thmwm`; the files are those of `tab-gammam-1`).
+
+**What it is.** `src/ThmDistortion.cpp` keeps the THM kinematics, the window nodes, the reference energy and the
+tables per stage, and has no solver: waves, matching, the Trojan-horse tail, the zero-range weight's partial-wave sum
+and its plane-wave limit are `physics/transfer` (`DistortedWaves.h`: `SolveStoredWaves`, `MatchingFor`;
+`ZeroRangeWeight.h`: `PrepareZeroRangeEntrance`, `ZeroRangeWeightSum`, `ZeroRangeMomentumAmplitude`; `Overlap`'s
+`r_min_fm`). The seven global optical sets are one table (`GlobalOptical.h/.cpp`, a row and a test per set; recipe
+in `CLAUDE.md`); `src/ThmOptical.cpp` and its header are gone. `ThmDwVertex` takes its waves from the library and
+keeps its own 2D quadrature and Gram matrix.
+
+**Verified by the director** (rehearsal `wt-trial42`, build `work/b-thmwm`, against `tab-gammam-1` and `b-gammam`).
+Whole tree x 3 bases (tag tab-thmwm-1) against tab-gammam-1: 887 / 851 / 887 files identical, none new (no project of
+the tree has a distortion). The eight fits identical to the base build, file by file. The checks thm_distortion,
+thm_dw_vertex, thm_fit, thm_spectator_angles and thm_coulomb_consistency pass at 3 threads. ctest -LE slow 223/223;
+the slow tests 11/11; tests/run_tests.sh 162 passed, 0 failed; spec equivalence 181 of 181 converted projects equal;
+the converted-tree gate 679 / 643 / 679 identical; calculations at 1 against 3 threads identical. The director's own
+comparison of the unit tests' quantities, old build against new: thm_distortion_test 82 quantities, 47 moved, largest
+2.9e-9 relative; thm_optical_test 14 common quantities, largest 9.1e-9; thm_dw_vertex_test 644 quantities, 83 moved,
+largest 6.7e-10; all below the 1e-7 of the accepted rule.
+
+**The moved numbers, measured by the director** (`work/director/vthm/unit/`: the three unit tests run with `-v` in
+`work/b-gammam` and `work/b-thmwm` at 1 thread, every printed quantity compared): `thm_distortion_test` 82
+quantities, 47 moved, largest 2.9e-9; `thm_optical_test` 14 common quantities, all moved, largest 9.1e-9 (the other
+230 of the old test are the parameter values, now 23 points of ten numbers in
+`physics/tests/transfer_global_optical_test.cpp`, passing); `thm_dw_vertex_test` 644 quantities, 83 moved, largest
+6.7e-10. All are below 1e-7, the limit of the accepted rule for a moved number (the PI's rule for the fold
+quadrature, applied here by the director's decision; the owner has to see it). No golden value was re-baselined.
+
+**Reviewed by reading**: `src/ThmDistortion.cpp`, the diff of `src/ThmDwVertex.cpp`, `ZeroRangeWeight.h/.cpp`, the
+changes of `BoundState.cpp`, `Overlap.cpp`, `RadialNumerics.cpp`, `Transfer.cpp`. Notes: (1) the library now has two
+implementations of the zero-range orbital integral for an l = 0 overlap (`ZeroRangeOrbitalIntegral`, with
+Clebsch-Gordan coefficients and j ≤ 40, and `ZeroRangeWeightSum`, by the Legendre recurrence without that limit),
+tied to each other only through the FRESCO case at 1 %: a direct equality test, or one calling the other, is owed;
+(2) `CoulombSphere` (`physics/src/transfer/OpticalPotential.cpp`) returns NaN at r → 0 for a positive Coulomb
+radius; the wiring steps around it, the library has to be fixed; (3) the |M|² of an optical case is converged to
+about 5e-7 only, in the old code and in the new (radial step and matching radius each about 3e-6, of opposite
+sign); (4) the global sets are central terms only.
+
+**Not done: the DW vertex's quadrature in the library.** The engine's vertex is the surface bracket
+(B − 1) S_lm(a) − a S′_lm(a) of the source's projection; the library's `EntranceVertex` returns that term together
+with volume and interior terms that hold for a solution of the free equation and needs a level function, and no
+public function returns S_lm(a). The roadmap's box stays open; the continuation is a public source projection in
+`physics/transfer` that both `EntranceVertex` and the engine call (`work/briefs/BV_thm_dw_vertex_projection.md`).
+
+**Not run by anyone**: a refined calculation of the old engine (the moved quantities are under 1e-7, where the rule
+does not ask for one); a THM project with a distortion in the tree's comparison (there is none; the checks of
+`tests/thm_distortion`, `tests/thm_dw_vertex` and `tests/thm_fit` cover it).
+
+## 2026-11-13 (agent, branch `feature/upgrade-7-thm-wiring`) — the THM distortions call physics/transfer; global optical sets one table
+
+**Done.** (1) Design in `transfer.md` §24 (what each THM quantity comes from, what the engine keeps, the DW vertex,
+the named settings). (2) The seven global optical sets are one table of the library (`GlobalOptical.h/.cpp`), test
+`physics_transfer_global_optical` (RIPL-3/FRONT21 values); `src/ThmOptical.{h,cpp}` deleted; recipe "Add a global
+optical set" in `CLAUDE.md`. Tree identical after this part (860/833/860 against `tab-truem-1`). (3) The library gains
+waves one l at a time (`TabulateChannel`, `SolvePartialWave`, matching at the last node or beyond the turning point),
+exact plane waves, r_min on overlaps, the zero-range THM weight with its bound (`ZeroRangeWeight.h`), the a_3 term of
+the Numerov start; test `physics_transfer_zero_range_weight` (closed forms, the two matchings, FRESCO's zero-range
+¹²C(⁶Li,d) through the new sum to 6.3e-5). `ThmDistortion` keeps kinematics, windows, E_ref and the ln R grid and has
+no Numerov, matching or partial-wave sum; `ThmDwVertex` takes its waves from the library. Unit-test quantities move
+≤ 9e-9 (record and refinement table in `transfer.md` §24.5); no golden changed. Speed: the THM checks −80 % / −71 % /
+−7 % instructions (distortion / fit / dw vertex). Merged `feature/upgrade-4-data` at e4fb58f1.
+
+**Not done (stopped by the brief's rule).** The DW vertex itself: `EntranceVertex` is not the engine's surface-only
+vertex for a distorted source, and the library has no function for S_lm(a) (§24.2). Spin-orbit terms of the global
+sets (no primary source at hand; Frescox's `opticals/KDParamCode.f` has Koning–Delaroche's, not built here).
+
+**Verified how** (last commit, merged onto e4fb58f1, build 0 warnings): whole tree against `tab-gammam-1` 887/851/887
+identical; `ctest -LE slow` 223/223, slow 11/11; `tests/run_tests.sh` 162 passed; the eight fits identical to
+`work/b-gammam`; converted-tree gate 679/643/679 identical; 1 against 3 threads identical (T1, T2, T3, 13N,
+18O_p_a_thm and two distortion projects × 3 bases); the THM fits of `tests/thm_fit` same χ², parameters, calls.
+**Open**: the source projection S_lm(a) in the library; matching of optical waves just beyond R + 12a costs ~3e-6
+in |M|² (old and new alike, §24.5).
+
 ## 2026-11-13 (director, 04:03) — merged: a level's radiative decay as total width, branchings and mixing ratios (record `gamma_decay`)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):

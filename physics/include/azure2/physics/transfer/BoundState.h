@@ -58,6 +58,7 @@ struct BoundState {
   std::vector<double> coulomb_MeV;    ///< its Coulomb part V_C(r_i) (SolveBoundState; 0 from SolveBoundStateOfForm)
   double rms_radius_fm = 0.0;         ///< sqrt(int r^2 u^2 dr)
   double anc_fm_half = 0.0;           ///< C (fm^-1/2)
+  double r_min_fm = 0.0;              ///< u = 0 below it (a cut analytic tail); radial integrals start there
 };
 
 /*!
@@ -82,8 +83,12 @@ double ZeroRangeConstant(const BoundState &state);
 /// The tail alone, u(r) = C W_{-eta, l+1/2}(2 kappa r) (Whittaker) or C e^{-kappa r} (Yukawa, eta ignored), for
 /// r >= r_min and 0 below, on the grid of `request` (its pair, l, B, step, r_max): the two analytic bound states of
 /// the engine's THM distortion code.  Not normalised; depth 0, no potential.
+/// r_min is a node when it is within 1e-12 fm of one (the node then belongs to the tail).
 enum class TailShape { Whittaker, Yukawa };
 BoundState AnalyticTail(TailShape shape, const BoundStateRequest &request, double anc_fm_half, double r_min_fm);
+/// The same tail at one radius r (fm), off the grid (u in fm^-1/2; 0 below r_min).
+double AnalyticTailAt(TailShape shape, const BoundStateRequest &request, double anc_fm_half, double r_min_fm,
+                      double r_fm);
 
 }  // namespace transfer
 }  // namespace physics
