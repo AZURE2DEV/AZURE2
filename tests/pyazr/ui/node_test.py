@@ -1,6 +1,7 @@
 """The node tests of the page's modules (tests/pyazr/ui/js/*.test.mjs): the widget table and the schema-to-form
 description of forms.js, sorting and filtering of tables.js, the revision and error handling of api.js, the plot
-table of plots.js.  The engine's schema is written to a file for them (AZURE2_UI_SCHEMA).
+table of plots.js, the Fit tab's rows, job form and progress views of fitting.js.  The engine's schema and the
+server's job table are written to files for them (AZURE2_UI_SCHEMA, AZURE2_UI_JOBS).
 
 Needs ``node`` (version 18 or later: ``node --test``) on PATH or named by the environment variable NODE; without it,
 or without the engine module, prints ``skip: <reason>`` and exits 77.  Nothing is installed: the tests use node's own
@@ -30,14 +31,18 @@ def main():
         print(f"skip: {reason}")
         return 77
     import pyazr
+    from pyazr.ui.jobs import job_table
     with tempfile.TemporaryDirectory() as tmp:
         schema = os.path.join(tmp, "schema.json")
         with open(schema, "w") as f:
             json.dump(pyazr.schema(), f)
+        jobs = os.path.join(tmp, "jobs.json")
+        with open(jobs, "w") as f:
+            json.dump(job_table(), f)
         tests = sorted(os.path.join(uitest.HERE, "js", n) for n in os.listdir(os.path.join(uitest.HERE, "js"))
                        if n.endswith(".test.mjs"))
-        proc = subprocess.run([node, "--test", *tests], env=dict(os.environ, AZURE2_UI_SCHEMA=schema),
-                              capture_output=True, text=True, timeout=300)
+        env = dict(os.environ, AZURE2_UI_SCHEMA=schema, AZURE2_UI_JOBS=jobs)
+        proc = subprocess.run([node, "--test", *tests], env=env, capture_output=True, text=True, timeout=300)
     out = proc.stdout + proc.stderr
     failed = [line for line in out.splitlines() if line.startswith("not ok")]
     summary = [line for line in out.splitlines() if line.startswith(("# tests", "# pass", "# fail"))]
