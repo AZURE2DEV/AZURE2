@@ -4,8 +4,7 @@
 # docs/upgrade/gamma_parametrisation.md), against the same level written with partial widths:
 #   (a) identical calculations: models/partial.azr (the 14N(p,g)15O model, level 5 the 259.7 keV resonance with five
 #       radiative widths) and the same project with the record made by hand (models/make_record.py, the note's
-#       definitions, not the engine's map), in the Brune and Park bases; the formal basis and external capture on a
-#       record channel are refused;
+#       definitions, not the engine's map), in the Brune and Park bases; the formal basis is refused;
 #   (b) the sign of the mixing ratio: a 3/2+ level decaying by M1 and E2 (models/sign_partial.azr, E2 width written
 #       negative) and its record (delta = +0.5): the same angular distribution, whose a2/a0 is Krane-Steffen's for
 #       delta = +0.5 (the note's section 2.3, case a);
@@ -13,7 +12,13 @@
 #       the same chi^2 minimum; a prior on one branching: the pull the prior's formula gives;
 #   (d) the gradient in the record's numbers, the level's energy and a proton amplitude against central differences
 #       (AZURE_GRAD_CHECK, the gradient and the Jacobian paths), Brune and Park;
-#   (e) the boundary: a branching and the remainder driven below 0 end at 0 without NaN, with a note.
+#   (e) the boundary: a branching and the remainder driven below 0 end at 0 without NaN, with a note;
+#   (h) external capture on the record's channels (the twin: models/partial.azr with capture into the ground state
+#       and 6.1763 MeV by E1 and 6.7931 MeV by M1): identical calculations in both bases, also after moving the
+#       level's proton width, its energy and the ground state's ANC; the record's widths are TransformOut's; the
+#       gradient in every free parameter (the ANCs of the final states included) at two points; fits from displaced
+#       starts (MIGRAD with the gradient, Levenberg-Marquardt) with the twin's minimum and branchings; 1 against 3
+#       threads; a width below the floor 2P (Im gamma^ext)^2 / n as TransformIn handles it.
 #
 #   ./tests/gamma_decay/check.sh path/to/AZURE2
 
@@ -92,13 +97,6 @@ run formal 1 --no-brune
 if grep -q 'ERROR: <gammaDecays> record .level5. (level 5): the formal basis' "$WORK/formal/run.log" && [ ! -s "$WORK/formal/output/chiSquared.out" ]; then
   ok "--no-brune: refused with the message, nothing calculated"
 else bad "--no-brune: not refused"; fi
-project external "$M/record.azr"
-# external capture into the ground state of 15O (pair 2) by E1: column 31 of its rows
-edited "$M/record.azr" "$WORK/external/p.azr" awk '{ n = split($0, a, " "); if (n > 30 && a[6] == "2" && a[27] == "10") { $31 = 1; print " " $0 } else print }' \
-  || bad "external-capture variant"
-run external 1
-if grep -q 'has external capture by this multipolarity' "$WORK/external/run.log"; then ok "external capture on a record channel: refused"
-else bad "external capture on a record channel: not refused"; fi
 
 echo "-- (b) the sign of the mixing ratio (Krane-Steffen): M1/E2 of a 3/2+ level, the E2 width written negative"
 "$PY" "$M/make_record.py" "$M/sign_partial.azr" "$WORK/sign_record.azr" 1 5.183 fixed
@@ -231,6 +229,152 @@ else bad "the remainder is ${r:-missing}, not at 0"; fi
 sum="$(awk '$1 ~ /^level5\.branching\./ { s += $2 } END { printf "%.6f", s }' "$WORK/zero/output/param.sav")"
 if awk -v s="$sum" 'BEGIN { exit !(s > 0.99 && s < 1.002) }'; then ok "the wall holds the explicit branchings' sum at 1: $sum"
 else bad "the explicit branchings sum to ${sum:-missing}, not 1 (no wall?)"; fi
+
+echo "-- (h) external capture on the record's channels: ground state and 6.1763 MeV by E1, 6.7931 MeV by M1"
+# The twin: models/partial.azr with capture into the ground state (pair 2) and 6.1763 MeV (pair 6) by E1 and into
+# 6.7931 MeV (pair 3) by M1, column 31; the record made from it as models/record.azr is made from partial.azr.
+ec() { awk '{ n = split($0, a, " "); if (n > 30 && a[27] == "10" && (a[6] == "2" || a[6] == "6")) { $31 = 1; print " " $0 }
+  else if (n > 30 && a[27] == "10" && a[6] == "3") { $31 = 2; print " " $0 } else print }' "$1"; }
+# moved: level 5's proton width 974.937 -> 1100 eV, its energy 7.5567 -> 7.5569 MeV, the ground state's ANC 0.23 -> 0.30
+moved() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5") { $3 = 7.5569; if (a[27] == "0" && a[7] == "1") $12 = 1100; print " " $0 }
+  else if (n > 30 && a[9] == "1" && a[27] == "0" && a[7] == "1") { $12 = 0.30; print " " $0 } else print }' "$1"; }
+# free: level 5's energy and proton width, the ground state's first ANC and the two ANCs of 6.1763 MeV
+free() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5" ) { $4 = 0; if (a[27] == "0" && a[7] == "1") $11 = 0; print " " $0 }
+  else if (n > 30 && a[27] == "0" && ((a[9] == "1" && a[7] == "1") || (a[9] == "9" && a[12] != "0"))) { $11 = 0; print " " $0 }
+  else print }' "$1"; }
+# same_outputs A B LABEL: every output file but param.par and parameters.out identical, parameters.out's level part too
+same_outputs() {
+  local n=0 d=0 f base
+  for f in "$WORK/$1"/output/*; do
+    base="$(basename "$f")"
+    case "$base" in param.par|parameters.out) continue ;; esac
+    n=$((n + 1))
+    cmp -s "$f" "$WORK/$2/output/$base" || { d=$((d + 1)); echo "        differs: $base"; }
+  done
+  if [ "$n" -ge 6 ] && [ "$d" -eq 0 ] && [ "$(levelpart "$1" | md5sum)" = "$(levelpart "$2" | md5sum)" ]; then
+    ok "$3: $n output files and parameters.out's level parameters identical"
+  else bad "$3: $d of $n output files differ, or parameters.out's level parameters"; fi
+}
+# twin_b NAME E_x: Gamma_gamma (eV) and the branchings per photon pair of the level at E_x, from parameters.out's
+# observed widths (what TransformOut prints)
+twin_b() { awk -v E="$2" '$1 == "J" && $6 == E { on = 1; next } on && NF == 0 { on = 0 }
+  on && $4 == "L" { w = $12 * ($13 == "keV" ? 1e3 : $13 == "eV" ? 1 : $13 == "meV" ? 1e-3 : 0); g[$3] += w; t += w }
+  END { printf "total %.10g\n", t; for (r in g) printf "R%s %.10g\n", r, g[r] / t }' "$WORK/$1/output/parameters.out"; }
+# block_w NAME LABEL: the record block's first width (eV) of a final state; level_w NAME R [E_x]: TransformOut's (eV)
+block_w() { awk -v l="$2:" '$1 == l { for (k = 1; k <= NF; k++) if ($k == "Gamma") { print $(k + 2); exit } }' "$WORK/$1/output/parameters.out"; }
+level_w() { awk -v r="$2" -v E="${3:-7.5567}" '$1 == "J" && $6 == E { on = 1; next } on && NF == 0 { on = 0 }
+  on && $3 == r && $4 == "L" { print $12 * ($13 == "keV" ? 1e3 : $13 == "eV" ? 1 : 1e-3); exit }' "$WORK/$1/output/parameters.out"; }
+
+edited "$M/partial.azr" "$WORK/partial_ec.azr" ec || bad "external-capture twin"
+"$PY" "$M/make_record.py" "$WORK/partial_ec.azr" "$WORK/record_ec.azr" 5 5.183 fit
+for b in "" --use-park; do
+  project "pec$b" "$WORK/partial_ec.azr"
+  project "rec$b" "$WORK/record_ec.azr"
+  run "pec$b" 1 $b
+  run "rec$b" 1 $b
+  same_outputs "pec$b" "rec$b" "${b:---use-brune}, external capture"
+done
+# capture is on and large: g_ext of level 5 into the ground state and 6.1763 MeV
+gext="$(awk '$1 == "J" && $6 == "7.5567" { on = 1; next } on && NF == 0 { on = 0 } on && $4 == "L" && ($3 == 2 || $3 == 6) && $6 == "E1" { print $NF == "MeV^(1/2)" ? $(NF - 1) : $NF }' "$WORK/rec/output/parameters.out" | tr '\n' ' ')"
+if echo "$gext" | awk '{ exit !(NF == 2 && $1 !~ /^\(0.000000,0.000000\)$/ && $2 !~ /^\(0.000000,0.000000\)$/) }'; then
+  ok "level 5's external amplitudes into the ground state and 6.1763 MeV: $gext"
+else bad "level 5 has no external amplitude into the ground state or 6.1763 MeV: '$gext'"; fi
+for fr in "g+15O 2" "g+15O[6.1763] 6"; do
+  set -- $fr
+  check "the record's width to $1 is TransformOut's observed width" "$(block_w rec "$1")" "$(level_w rec "$2")" 2e-6
+done
+
+edited "$WORK/partial_ec.azr" "$WORK/partial_ec_m.azr" moved || bad "moved twin"
+edited "$WORK/record_ec.azr" "$WORK/record_ec_m.azr" moved || bad "moved record"
+project pec_m "$WORK/partial_ec_m.azr"
+project rec_m "$WORK/record_ec_m.azr"
+run pec_m 1
+run rec_m 1
+same_outputs pec_m rec_m "moved proton width, level energy and ground-state ANC"
+check "after the move the record's width to g+15O is still TransformOut's" "$(block_w rec_m g+15O)" "$(level_w rec_m 2 7.5569)" 2e-6
+
+echo "   the gradient against central differences, every free parameter, at three points"
+edited "$WORK/record_ec.azr" "$WORK/record_ec_free.azr" free || bad "free variant"
+edited "$WORK/record_ec_m.azr" "$WORK/record_ec_free2.azr" free || bad "free variant, second point"
+edited "$WORK/record_ec_free2.azr" "$WORK/record_ec_free2.azr" sed -e 's/^\(    total_width  \)[^ ]*/\10.05/' \
+  -e 's/^\(    branching    g+15O\[6.1763\] \)[^ ]*/\10.5/' -e 's/^\(    branching    g+15O \)[^ ]*/\10.03/' || bad "second point"
+# point 3: also level 6 (8.7502 MeV, 1/2+, Gamma_p = 35.7 keV) as a record; there Im gamma^ext into the ground state
+# is 1.3 % of the amplitude, so d gamma_int / d g = |g| / (g^2 - Im^2)^1/2 differs from 1 by 8e-5 (not at level 5)
+"$PY" "$M/make_record.py" "$WORK/record_ec_free.azr" "$WORK/record_ec_free3.azr" 6 5.183 fit
+edited "$WORK/record_ec_free3.azr" "$WORK/record_ec_free3.azr" sed -e '/^<\/gammaDecays>$/{N;s/^<\/gammaDecays>\n<gammaDecays>$//;}' \
+  -e 's/^\(    branching    g+15O\[6.7931\] 0.0\) fit$/\1 fixed/' || bad "the second record"
+grep -c '^gamma_decay level[56]$' "$WORK/record_ec_free3.azr" | grep -qx 2 || bad "the second record: not two records in one section"
+for pt in "" 2 3; do
+  project "gec$pt" "$WORK/record_ec_free$pt.azr"
+  (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+  iE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { print $3; exit }' "$WORK/gec$pt/grad.log")"
+  (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_H=1e-8 AZURE_GRAD_CHECK_IDX="${iE:-0}" \
+     run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > gradE.log 2>&1)
+  rows="$(grep -c '\[grad-check\] idx' "$WORK/gec$pt/grad.log")"
+  worst="$(awk '/\[grad-check\] idx/ && $4 != "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/gec$pt/grad.log")"
+  wE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/gec$pt/gradE.log")"
+  # the ANCs: idx 1 (ground state, J1 L1 ch1) and the 6.1763 MeV level (J3 L1 ch1, ch2)
+  ancs="$(grep -c '\[grad-check\] idx [0-9]* gamma J[13] L1 ' "$WORK/gec$pt/grad.log")"
+  if [ "$rows" -ge 10 ] && [ "$ancs" -eq 3 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+    ok "point ${pt:-1}: $rows parameters (3 ANCs of the final states), gradient and Jacobian paths, largest rel. difference $worst"
+  else bad "point ${pt:-1}: $rows parameters, $ancs ANCs, largest rel. difference $worst (limit 1e-6)"; fi
+  if awk -v w="$wE" 'BEGIN { exit !(w > 0 && w < 1e-5) }'; then ok "point ${pt:-1}: level energy, rel. difference $wE"
+  else bad "point ${pt:-1}: level energy, rel. difference ${wE:-missing} (limit 1e-5)"; fi
+done
+
+echo "   fits from displaced starts: the twin's minimum and branchings"
+# the twin: level 5's radiative widths x 1.3; the record: Gamma_gamma 0.05, two branchings moved; both: the ground
+# state's ANC free from 0.26
+anc() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "1" && a[27] == "0" && a[7] == "1") { $11 = 0; $12 = 0.26; print " " $0 } else print }' "$1"; }
+edited "$WORK/partial_ec.azr" "$WORK/pec_d.azr" awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5" && a[27] == "10" && a[12] != "0") { $12 = a[12] * 1.3; print " " $0 } else print }' \
+  && edited "$WORK/pec_d.azr" "$WORK/pec_d.azr" anc || bad "displaced twin"
+edited "$WORK/record_ec.azr" "$WORK/rec_d.azr" sed -e 's/^\(    total_width  \)[^ ]*/\10.05/' -e 's/^\(    branching    g+15O\[6.7931\] \)[^ ]*/\10.3/' \
+  -e 's/^\(    branching    g+15O\[6.1763\] \)[^ ]*/\10.5/' && edited "$WORK/rec_d.azr" "$WORK/rec_d.azr" anc || bad "displaced record"
+project fit_pec "$WORK/pec_d.azr"
+project fit_rec "$WORK/rec_d.azr"
+project fit_rec_lm "$WORK/rec_d.azr"
+run fit_pec 2 --use-gradient
+run fit_rec 2 --use-gradient
+run fit_rec_lm 2 --use-lm
+c0="$(chi2 fit_pec)"
+check "MIGRAD with the gradient: the record's chi^2 minimum equals the twin's" "$(chi2 fit_rec)" "$c0" 1e-5
+check "Levenberg-Marquardt: the same minimum" "$(chi2 fit_rec_lm)" "$c0" 1e-5
+twin_b fit_pec 7.5567 > "$WORK/twin_b.txt"
+check "Gamma_gamma (LM) equals the twin's fitted sum of widths" "$(sav fit_rec_lm level5.total_width)" "$(awk '$1 == "total" { print $2 }' "$WORK/twin_b.txt")" 1e-4
+for fr in "g+15O R2" "g+15O[6.7931] R3" "g+15O[6.1763] R6" "g+15O[6.8594] R7"; do
+  set -- $fr
+  ref="$(awk -v r="$2" '$1 == r { print $2 }' "$WORK/twin_b.txt")"
+  check "b($1) (LM) equals the twin's Gamma_f / Gamma_gamma" "$(sav fit_rec_lm "level5.branching.$1")" "$ref" 1e-4
+  check "b($1): MIGRAD and LM" "$(sav fit_rec "level5.branching.$1")" "$(sav fit_rec_lm "level5.branching.$1")" 1e-4
+done
+
+echo "   the record's fit at 1 and 3 threads"
+for t in 1 3; do
+  project "ecthr$t" "$WORK/rec_d.azr"
+  OMP_NUM_THREADS=$t run "ecthr$t" 2 --use-gradient
+done
+n=0; d=0
+for f in "$WORK/ecthr1"/output/*; do
+  n=$((n + 1)); cmp -s "$f" "$WORK/ecthr3/output/$(basename "$f")" || { d=$((d + 1)); echo "        differs: $(basename "$f")"; }
+done
+if [ "$n" -ge 9 ] && [ "$d" -eq 0 ]; then ok "$n output files identical at 1 and 3 threads"
+else bad "$d of $n output files differ between 1 and 3 threads"; fi
+
+echo "   a width below the floor 2P (Im gamma^ext)^2 / n: as TransformIn"
+# the ground-state width 3.85e-12 eV, below the floor of about 7e-10 eV
+edited "$WORK/partial_ec.azr" "$WORK/pec_floor.azr" awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "5" && a[27] == "10" && a[6] == "2") { $12 = 3.85e-12; print " " $0 } else print }' \
+  || bad "floor twin"
+"$PY" "$M/make_record.py" "$WORK/pec_floor.azr" "$WORK/rec_floor.azr" 5 5.183 fit
+project pec_floor "$WORK/pec_floor.azr"
+project rec_floor "$WORK/rec_floor.azr"
+run pec_floor 1
+run rec_floor 1
+same_outputs pec_floor rec_floor "below the floor"
+grep -q 'Imaginary portion of the external width is greater' "$WORK/pec_floor/run.log" \
+  && grep -q 'below 2P (Im gamma^ext)^2 / n' "$WORK/rec_floor/run.log" \
+  && grep -q 'note: the width 3.85e-12 eV to g+15O is below the floor' "$WORK/rec_floor/output/parameters.out" \
+  && ok "the twin's TransformIn warning, the record's warning and its note in parameters.out" \
+  || bad "the floor: a warning or the note of parameters.out is missing"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "gamma_decay: all checks passed"; else echo "gamma_decay: $failures check(s) FAILED"; fi
