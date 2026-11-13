@@ -6,6 +6,7 @@
 // the c.m. energies of a point's slots.  Used by WorkingCopy::SetUpTargetEffects (one plan per nucleus) and by the
 // hand-over, WorkingCopy::ReplaceSubPointGrids (a new plan when the quantized anchors change).
 
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -56,9 +57,11 @@ bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *ex
 bool EdgeAtFloor(const TargetEffect &effect, double low, double floor);
 
 /// Records a folded point's support (E_x) in the mesh of its nucleus and the mesh's place in its grid record; the
-/// support of a point with an energy shift (spec.shifted) is the planned one at its start centre (ShiftedFold.h).
+/// support of a point with an energy shift (spec.shifted) is the planned one at its start centre (ShiftedFold.h), its
+/// window's growth at a shift given by `thicknessChange` (azure2::SupportThicknessChange).
 MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point, const TermRef &term,
-                         Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard);
+                         Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard,
+                         const std::function<double(double)> &thicknessChange);
 
 /// The support of a folded point (E_x) as its kernels give it at the nominal point, from its grid record.
 MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSet);

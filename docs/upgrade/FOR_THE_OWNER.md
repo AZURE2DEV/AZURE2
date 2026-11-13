@@ -421,10 +421,22 @@ reach adds nodes). Only the projects with a folded shifted data set change (T2, 
 know of.** (1) The fitted shifts of T2 move by 0.13 of their errors, onto the refined engine's fit (within 0.01 σ).
 (2) When a fit walks a shift beyond the planned reach, the mesh is planned again and χ² steps by the quadrature
 difference there (measured 1.3e-2 in 10,500); a prior on the shift sets the reach. The old engine had steps of that
-size inside the range a fit visits. (3) A thick- or thin-target fold of a shifted point reads the stopping power at
-the node's energy minus the shift, as the old rigid move did, so that numbers stay; reading it at the true energy is
-a physics choice left for you. Two defects of the first version were found in the review and fixed with tests before
+size inside the range a fit visits. (3) A thick- or thin-target fold of a shifted point read the stopping power at
+the node's energy minus the shift, as the old rigid move did, so that numbers stayed; the PI decided on 2026-11-12 to
+read it at the true energy (the paragraph below). Two defects of the first version were found in the review and fixed with tests before
 the merge (a stopping formula called at negative energy; an error stop for shifted data with external capture).
+
+**An energy shift is the true beam energy (branch of 2026-11-13).** A folded data set with an energy shift took the
+stopping power, the target thickness and the depth window at the measured (unshifted) beam energy and only moved them
+with the shift, so a yield on a resonance was off by (d ln ε/d ln E) × shift/E, 0.9 % for a 10 keV shift at 270 keV;
+now a shifted point is folded exactly as the same point without a shift at the shifted energy.  Your files change only
+where a data set has both an energy shift and a target integration with an energy-dependent stopping: in the test tree
+T2's truth file (0.21 % at most, χ² 330.43 → 330.84) and the `shift_sqrt_subpoints` models (−0.89 to −0.97 %); a
+fitted shift on such data moves accordingly.
+Not moved to the shifted energy, and yours to decide: the beam-profile kernel's window and detailed-balance norm, a
+user-defined resolution kernel's table, and the 5 σ support of a Gaussian beam spread whose width depends on energy
+(about 1e-7). None of them reads the stopping; whether they should follow depends on what a shift means for those
+data (a calibration of the beam energy, or of the reconstructed energy).
 
 **Six follow-ups (merged 2026-11-12).** What a user sees of them: a yield on a target layer thinner than 1 eV is
 σ(E)·N (the file was refused before, with a misleading message; with an energy shift on the data set it is still a
@@ -452,9 +464,12 @@ change, where it ran out of memory before. No number of the test tree moved. Kno
 layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
 cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
 
-In work now: the second step of "no hidden state" (the global pointers and process-wide memos, then a fit whose
-evaluations write only their own result buffer, so that the pooled copies of the working data go); no number may
-change. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+In work now: the third step of "no hidden state" (a fit's copies of the working data made only when one is needed,
+relative paths resolved without the process's working directory, the diagnostic switches read once into one
+record; no number may change); the total radiative width, the gamma branchings and the mixing ratios of a level
+as fit parameters. Merged on 2026-11-13: the stopping of a data set with an energy shift is taken at the shifted beam
+energy (numbers of such data sets on a target change, by the logarithmic slope of the stopping times shift over
+energy). Merged in the earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

@@ -276,18 +276,30 @@ multiplier 5 and 20; the yields differ by 2.0 × 10⁻³ (relative) at 253.8 keV
   node. ∂m/∂ν = (dO/dE) ∂E_0/∂ν, with dO/dE from the channel-function derivatives (S′, P′) or a difference on that
   node alone.
 - **With a fold** the nodes stay; the kernel moves: K_in(ν) = K(E_n; E_0(ν)). The quadrature is the same rule on
-  fixed nodes, the χ² is smooth in ν (no re-placed node, no table recomputed), and ∂K/∂ν is analytic (§3). Today the
-  sub-points move rigidly with the point (`ShiftFrames.cpp`, since 2026-10-26), which in exact arithmetic is the same
-  integral; the numbers move by the quadrature difference only.
+  fixed nodes and the χ² is smooth in ν (no re-placed node, no table recomputed).
+- **The rule (the PI, 2026-11-12):** a shift is a calibration of the beam energy, so **the fold of a point with a shift
+  is the fold of the same point without a shift at the beam energy E_n + s**, for every kernel that depends on the beam
+  energy.  For the target kernel this is not a rigid translation: the layer's back edge solves ∫_{E_out}^{E_0} dE/ε = N
+  from the true E_0 (the window's width changes by (d ln ε/d ln E) s/E), the infinite target reaches from E_0 to 1 keV,
+  the straggling grows along that window, and the stopping at a node is the node's own ε(E_n).  Until then the engine
+  translated the kernel rigidly (stopping, thickness and window as at the nominal energy): a yield on a resonance was
+  off by (d ln ε/d ln E) s/E, 0.9 % on `shift_sqrt_subpoints/narrow_sqrt`.  The statement is `include/ShiftedFold.h`'s;
+  the identity is `tests/shift_true_energy`.
 - The **interpolated mode** of `ARCHITECTURE.md` §1 (observables on a fixed mesh, an unfolded shifted point as
   interpolation weights) stays opt-in, with its check against the exact mode.
 
-**Design of the shifted fold on the fixed nodes (branch 8 `shift-kernel`, 2026-11-12; the full text is the comment of
-`include/ShiftedFold.h`, which owns it).**  Δ_i(ν) = E_cm,i(ν) − E_cm,i(0) is the c.m. shift of point i; the kernel is
-translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold before in exact arithmetic.
+**Design of the shifted fold on the fixed nodes (branch 8 `shift-kernel`, 2026-11-12, with the rule above from
+`feature/upgrade-5-true-energy-stopping`; the full text is the comment of `include/ShiftedFold.h`, which owns it).**
+Δ_i(ν) = E_cm,i(ν) − E_cm,i(0) is the c.m. shift of point i; the kernel is the one at the true energy E_0; for a kernel
+whose shape does not depend on E_0 that is the rigid translation K_i(E − Δ_i; E_n).
 
 1. *The planner's support.*  The unshifted support [a_i, b_i] moved by a centre c_i and widened by a reach R_i on each
-   side (never below the integration floor, a hard edge there).  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
+   side, its low edge further by G_i, the growth of the target's window over the reach (never below the integration
+   floor, a hard edge there).  At the shift Δ the low edge is a_i + Δ − dT(Δ), dT the change of the support's target
+   thickness (`TargetEffect::SupportThickness`) from the set-up's; G_i is the largest dT at c_i − R_i, c_i, c_i + R_i plus
+   their spread, which bounds dT over the reach (it is monotone there, and near the stopping's maximum the spread covers
+   its curvature).  dT = 0 bit for bit without a target or with a constant stopping; with R_i = 0 the planned support is
+   the set-up's at E + c_i.  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
    varied shift parameters k (a follower: its leader's; a shift-function group: the owner's), σ_k the prior width; a
    varied parameter without a prior adds b_i − a_i; R_i = 0 when nothing of the point's shift varies (a fixed shift
    moves the support once, no node added).  From what the project already says (the priors), no new field.
@@ -297,21 +309,21 @@ translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold 
    (§2.3); deterministic at any thread count, counted in `run.log`; χ² steps by the quadrature difference there.
 3. *The sites a point reads.*  Its slots are its planned range (fixed for the stage); the fold reads the tightest
    sub-range enclosing the moved support [a_i + Δ_i, b_i + Δ_i] (at least two nodes), the kernel clips there; the block
-   is not rewritten.  What depends on ν besides the kernel's centre: the stopping the target kernel reads, ε(max(E_n − Δ_i, a_i))
-   (the fold before kept each sub-point's stopping at its unshifted energy: the depth profile and T are the point's as
-   measured), computed in the gather from the target's stopping — the point's, not the site's; and the c.m. angle of a
+   is not rewritten (the moved support is [a_i + Δ_i − dT_i, b_i + Δ_i]).  What depends on ν besides the kernel's centre:
+   the target at the true energy (`MoveTargetToShift`, in the shift step): the point's thickness at E_0 and dT_i; the
+   stopping at a node is the node's own ε(E_n) for every reader; and the c.m. angle of a
    lab-frame differential point (converted at its shifted energy), which its group's sites carry: their Legendre rows
    and Coulomb amplitude are recomputed by the slot's writer when it changes (the channel rows stay), and the group key
    holds the point's nominal lab energy so that every reader of a block has the same angle at every ν.
-   (The argument is held at the nominal support's lower edge a_i: an outer node below the moved support only shapes
-   the edge interval's interpolant, and at a thick target's floor E_n − Δ_i < 0 is outside the stopping's domain.)
    A segment with external capture whose shift leaves the reach is re-placed like any other: its new sites take their
    capture amplitudes from the tables at their energies (`Site::GetECAmplitudeWithShift`).
 4. *Writers.*  Ranges, blocks, writers, plan tasks and the energy pass's task list are those of the planned ranges, fixed
    for the stage; every site of a block is computed (the margin is the cost).
 5. *Gradient.*  A shift column of a folded segment is the central difference of the fold on the fixed nodes: at ν ± h
-   the points move and are folded again from the node values of ν (the same `FoldValues`), no node recomputed, no level
-   matrix solved; shift kinds enter through Δ_i only.  The analytic ∂K/∂E_0 is open for every kernel (it needs the
+   the points move (their target at the true energy with them) and are folded again from the node values of ν (the
+   same `FoldValues`), no node recomputed, no level matrix solved; shift kinds enter through Δ_i only.  The difference
+   carries the kernel's own dependence on E_0 (the window's edges, 1/ε); `tests/shift_true_energy` checks it against a
+   central difference of χ².  The analytic ∂K/∂E_0 is open for every kernel (it needs the
    kernels' energy arithmetic on a dual type).  A lab-frame differential segment's column still recomputes its sites'
    observables at the moved angle (open for the observables per node, branch 9).
 

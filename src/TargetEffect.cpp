@@ -625,6 +625,19 @@ double TargetEffect::TargetThickness(double energy, const Config &configure) con
   return this->TargetThickness(energy, configure, this->GetDensity(), stoppingScaleNominal_);
 }
 
+double TargetEffect::SupportThickness(double eLab, double eCM, double cmFactor, const Config &configure) const {
+  if (IsThickTarget()) return std::max(eCM - minIntegrationEnergy, 0.0);
+  double thickness = cmFactor * TargetThickness(eLab, configure, GetLayoutDensity(), GetLayoutStoppingScale());
+  if (IsLayerYield()) thickness *= LayerGridMargin();
+  return thickness;
+}
+
+double TargetEffect::KernelThickness(double eLab, double eCM, double cmFactor, const Config &configure, double density,
+                                     double scale) const {
+  if (IsThickTarget()) return std::max(eCM - minIntegrationEnergy, 0.0);
+  return cmFactor * TargetThickness(eLab, configure, density, scale);
+}
+
 double TargetEffect::GetLayoutStoppingScale() const {
   if (!hasStoppingScale_ || !stoppingScaleVary_) return stoppingScaleNominal_;
   const double s0 = stoppingScaleNominal_;

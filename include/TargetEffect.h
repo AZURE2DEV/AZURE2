@@ -171,6 +171,15 @@ class TargetEffect {
   double TargetThickness(double, const Config &) const;
   /// The same for an areal density \p density (atoms/cm^2) and a stopping scale \p scale instead of the line's.
   double TargetThickness(double, const Config &, double density, double scale) const;
+  /// The c.m. energy loss (MeV) below a point at lab energy \p eLab, c.m. energy \p eCM (factor \p cmFactor) that the
+  /// nodes of its target integration span: an infinitely thick target down to 1 keV, otherwise the thickness at the
+  /// layout density and stopping scale, a layer's widened by LayerGridMargin().  The set-up lays the support out with
+  /// it at the nominal energy, an energy shift moves it to the true one (ShiftedFold.h): one formula for both.
+  double SupportThickness(double eLab, double eCM, double cmFactor, const Config &configure) const;
+  /// The c.m. energy loss (MeV) the target kernel reads at a point (KernelPoint::targetThickness) at areal density
+  /// \p density and stopping scale \p scale: an infinitely thick target down to 1 keV, otherwise the target thickness.
+  double KernelThickness(double eLab, double eCM, double cmFactor, const Config &configure, double density,
+                         double scale) const;
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.

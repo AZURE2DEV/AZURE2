@@ -27,3 +27,12 @@ re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out, chiSquared.ou
   refined eightfold (docs/upgrade/energy_grid.md section 7.1).  chi2 calc_start: seg 1 697.326 -> 697.517, 4 286.444 ->
   286.473, 11 92.0754 -> 92.148, 12 121.489 -> 121.586, norm 0.00196991 -> 0.00196953; calc_truth: seg 1 39.6105 ->
   39.5894, 4 25.0769 -> 25.0744, 11 23.2836 -> 23.2908, 12 36.1786 -> 36.1683, norm 0.00204256 -> 0.00204223.
+re-pinned: calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared.out only, 2026-11-13 with the engine of
+  feature/upgrade-5-true-energy-stopping 6c8793fe (build work/b-truestop), --no-coulomb-table, OMP_NUM_THREADS=3
+  (regen_compare.py --regenerate --only calc_truth): the stopping, thickness and window of a shifted, folded point are
+  taken at its true (shifted) energy (include/ShiftedFold.h, the rule; the PI, 2026-11-12).  T2_true's shifted data sets
+  move: segment 1 (layer, eps ~ E^-0.45, offset 2 keV) by at most 2.08e-3 (estimate (d ln eps/d ln E) s/E <= 4.5e-3 on a
+  resonance; the thin target's average over a smooth cross section moves less), segment 4 (thick target, sqrt shift
+  1.5e-3 MeV^1/2) by at most 1.45e-3 (estimate 1.35e-3); chi2 seg 1 39.5894 -> 39.7256, seg 4 25.0744 -> 25.3481.
+  Evidence: tests/shift_true_energy (a shifted data set equals its twin without a shift at the shifted energies).
+  thm_experiments.out moved by 1.9e-8 (kept); calc_start moved by 1.2e-6 at most (kept, inside 1e-5).

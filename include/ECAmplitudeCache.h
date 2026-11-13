@@ -8,8 +8,9 @@
 
 /*!
  * The external-capture amplitudes of a run at the energies of each segment's points, for interpolation at a shifted
- * energy with --no-ec-table (Site::GetECAmplitudeWithShift).  One per run, held by its scratch (azure2::RunScratch::ecAmplitudes):
- * its keys (k-group, EC m-group, entrance, exit, segment key) name positions in one model, so two runs never share one.
+ * energy with --no-ec-table (Site::GetECAmplitudeWithShift).  One per run, held by its scratch
+ * (azure2::RunScratch::ecAmplitudes): its keys (k-group, EC m-group, entrance, exit, segment key) name positions in
+ * one model, so two runs never share one.
  */
 class ECAmplitudeCache {
  public:

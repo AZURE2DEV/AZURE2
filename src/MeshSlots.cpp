@@ -43,7 +43,8 @@ bool EdgeAtFloor(const TargetEffect &effect, double low, double floor) {
 
 /// Records a folded point's support (E_x) in the mesh of its nucleus and the mesh's place in its grid record.
 MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point, const TermRef &term,
-                         Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard) {
+                         Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard,
+                         const std::function<double(double)> &thicknessChange) {
   const PPair *frame = FramePair(entrance, exit);
   const int nucleus = entrance->GetNucleus();
   spec.frameShift = frame->GetSepE() + frame->GetExE();
@@ -65,7 +66,7 @@ MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point,
                   std::to_string(point.GetOriginalEnergy()) + " MeV";
   spec.mesh = (int)m;
   spec.meshSupport = (int)mesh.supports.size();
-  mesh.supports.push_back(spec.shifted ? PlannedShiftSupport(nominal, spec, spec.startShift) : nominal);
+  mesh.supports.push_back(spec.shifted ? PlannedShiftSupport(nominal, spec, spec.startShift, thicknessChange) : nominal);
   return {&point, term, (int)m};
 }
 

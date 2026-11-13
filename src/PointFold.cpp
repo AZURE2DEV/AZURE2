@@ -21,7 +21,8 @@ namespace {
 
 /// One point's view for its kernels: the effect's parameters, the point, and its sub-points as nodes: all of them,
 /// or for a point with an energy shift on the shared mesh those of its slots [first, first + nodes.n) that enclose
-/// its moved support (ShiftedFold.h), with the stopping translated with the shift.
+/// its moved support (ShiftedFold.h).  The stopping at a node is the node's own; the point's target thickness and moved
+/// support are at its true (shifted) energy.
 struct PointKernelInput {
   const TargetEffect *effect;
   azure2::experiment::KernelParameters parameters;
@@ -60,11 +61,9 @@ struct PointKernelInput {
     const int n = shifted ? moved.count : unit.NumSubPoints();
     energy.resize(n > 0 ? n : 0);
     for (int j = 1; j <= n; j++) energy[j - 1] = unit.GetSubPoint(data, first + j)->GetCMEnergy();
-    if (target && shifted) {
-      azure2::TranslatedStopping(unit, data, configure, moved, stopping);
-    } else if (target) {
+    if (target) {
       stopping.resize(energy.size());
-      for (int j = 1; j <= n; j++) stopping[j - 1] = unit.GetSubPoint(data, j)->GetStoppingPower();
+      for (int j = 1; j <= n; j++) stopping[j - 1] = unit.GetSubPoint(data, first + j)->GetStoppingPower();
     }
     nodes.n = n > 0 ? n : 0;
     nodes.energy = energy.data();

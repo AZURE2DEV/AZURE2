@@ -714,6 +714,11 @@ an inelastic group, and a Doppler-broadened target, electron screening and
 detector attenuation coefficients on such a data set (``E_NOT_BUILT``).  The worked example is
 :doc:`../examples/ratio_to_rutherford`.
 
+An energy shift (``shift``) is a calibration of the beam energy: a folded point
+measured at :math:`E` with the shift :math:`s` is folded as the same point
+without a shift at :math:`E + s`, the target's stopping taken at the shifted
+energies (:doc:`../user_guide/experimental_effects`).
+
 Parameter names follow the records: a data set's own are
 ``<data set>.norm``, ``<data set>.shift.offset`` and ``<data set>.shift.sqrt``
 (every data set has the two shift parameters, fixed at 0 without a shift); a
