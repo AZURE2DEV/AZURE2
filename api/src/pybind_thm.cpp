@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "ThmExperiment.h"
-#include "ThmOptical.h"
+#include "azure2/physics/transfer/GlobalOptical.h"
 
 namespace py = pybind11;
 
@@ -60,13 +60,13 @@ void BindThm(py::module_ &m) {
       "thm_global_opticals",
       []() {
         py::list out;
-        for (const ThmGlobalOptical &g : ThmGlobalOpticals()) {
+        for (const azure2::physics::transfer::GlobalOpticalSet &g : azure2::physics::transfer::GlobalOpticalSets()) {
           py::dict d;
           d["name"] = g.name;
           d["projectiles"] = g.projectiles;
           d["reference"] = g.reference;
-          d["a_range"] = py::make_tuple(g.aMin, g.aMax);
-          d["e_range"] = py::make_tuple(g.eMin, g.eMax);
+          d["a_range"] = py::make_tuple(g.a_min, g.a_max);
+          d["e_range"] = py::make_tuple(g.e_min_MeV, g.e_max_MeV);
           out.append(d);
         }
         return out;

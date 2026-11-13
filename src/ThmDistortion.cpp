@@ -3,8 +3,8 @@
 #include "GSLException.h"
 #include "ThmExperiment.h"
 #include "ThmNumerics.h"
-#include "ThmOptical.h"
 #include "CoulFunc.h"
+#include "azure2/physics/transfer/GlobalOptical.h"
 
 #include <algorithm>
 #include <cmath>
@@ -55,6 +55,19 @@ const int kMaxRadial = 400000;    // radial nodes at most
 const double kWaveCut = 1.0e-17;  // a + A partial waves until A_l < 1e-17 of the largest
 const double kSumCut = 1.0e-13;   // the l sum stops once what is left is below 1e-13 |M|
 
+namespace transfer = azure2::physics::transfer;
+
+// The ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm) of a potential of the global table.
+void TenNumbers(const transfer::OpticalPotential &o, double p[10]) {
+  const transfer::WoodsSaxonTerm *terms[3] = {&o.real_volume, &o.imaginary_volume, &o.imaginary_surface};
+  for (int t = 0; t < 3; t++) {
+    p[3 * t] = terms[t]->depth_MeV;
+    p[3 * t + 1] = transfer::RadiusOf(o, terms[t]->r0_fm);
+    p[3 * t + 2] = terms[t]->diffuseness_fm;
+  }
+  p[9] = transfer::RadiusOf(o, o.coulomb_r0_fm);
+}
+
 double WoodsSaxon(double r, double R, double a) {
   double x = (r - R) / a;
   return x > kExpMax ? 0.0 : 1.0 / (1.0 + std::exp(x));
@@ -86,7 +99,7 @@ static std::string NucleusName(int Z, int A) {
 
 void ThmDistortion::Channel::SetEnergy(double ecm) {
   if (global < 0) return;
-  ThmGlobalOpticalEvaluate(global, Zp, Ap, Zt, At, LabEnergy(ecm), p);
+  TenNumbers(transfer::GlobalOpticalSets()[global].at(Zp, Ap, Zt, At, LabEnergy(ecm)), p);
 }
 
 std::string ThmDistortion::Channel::Describe() const {
@@ -98,7 +111,7 @@ std::string ThmDistortion::Channel::Describe() const {
     return s.str();
   }
   if (global >= 0)
-    s << ThmGlobalOpticals()[global].name << (extrapolate ? ":extrapolate" : "") << " (" << NucleusName(Zp, Ap)
+    s << transfer::GlobalOpticalSets()[global].name << (extrapolate ? ":extrapolate" : "") << " (" << NucleusName(Zp, Ap)
       << " on " << NucleusName(Zt, At) << ") ";
   s << "Woods-Saxon V=" << p[0] << " R=" << p[1] << " a=" << p[2] << ", W=" << p[3] << " RW=" << p[4]
     << " aW=" << p[5] << ", WD=" << p[6] << " RD=" << p[7] << " aD=" << p[8] << ", Coulomb "
@@ -602,13 +615,13 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
     c.mu = m1 * m2 / (m1 + m2) * uconv;
     if (kind != OPTICAL || o.kind != 3) return "";
     // A global potential: its projectile is the partner it is made for.
-    const ThmGlobalOptical &g = ThmGlobalOpticals()[o.global];
+    const transfer::GlobalOpticalSet &g = transfer::GlobalOpticalSets()[o.global];
     const std::string what = std::string(keys[which]) + "=" + g.name + " (" + g.reference + ", for " +
                              g.projectiles + "): the " + labels[which] + " channel is " + NucleusName(z1, a1) +
                              " + " + NucleusName(z2, a2);
     if (a1 <= 0 || a2 <= 0) return std::string(keys[which]) + "=" + g.name + ": the mass numbers are not known";
-    const bool first = ThmGlobalOpticalFor(o.global, z1, a1);
-    if (!first && !ThmGlobalOpticalFor(o.global, z2, a2))
+    const bool first = transfer::Describes(g, z1, a1);
+    if (!first && !transfer::Describes(g, z2, a2))
       return what + ", which it does not describe (heavy-ion and other channels take the ten numbers "
                     "V,R,a,W,RW,aW,WD,RD,aD,RC)";
     c.global = o.global;
@@ -633,7 +646,7 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   for (int which = 0; which < 2; which++) {
     Channel &c = which == 0 ? aa : sf;
     if (c.global < 0) continue;
-    const ThmGlobalOptical &g = ThmGlobalOpticals()[c.global];
+    const transfer::GlobalOpticalSet &g = transfer::GlobalOpticalSets()[c.global];
     double e0 = which == 0 ? eAA : EsF(hi), e1 = which == 0 ? eAA : EsF(lo);
     double l0 = c.LabEnergy(e0), l1 = c.LabEnergy(e1);
     if (which == 0) {
@@ -647,18 +660,18 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
       }
       c.SetEnergy(0.5 * (e0 + e1));
     }
-    const bool massOk = c.At >= g.aMin && c.At <= g.aMax;
-    const bool energyOk = l0 >= g.eMin && l1 <= g.eMax;
+    const bool massOk = c.At >= g.a_min && c.At <= g.a_max;
+    const bool energyOk = l0 >= g.e_min_MeV && l1 <= g.e_max_MeV;
     if (massOk && energyOk) continue;
     std::ostringstream why;
     why.precision(4);
     why << keys[which] << "=" << g.name << " (" << g.reference << ") is outside its validity range for "
         << NucleusName(c.Zp, c.Ap) << " + " << NucleusName(c.Zt, c.At) << ":";
-    if (!massOk) why << " target A = " << c.At << " (valid " << g.aMin << "-" << g.aMax << ")";
+    if (!massOk) why << " target A = " << c.At << " (valid " << g.a_min << "-" << g.a_max << ")";
     if (!energyOk) {
       why << (massOk ? "" : ",") << " lab energy of " << NucleusName(c.Zp, c.Ap) << " " << l0;
       if (which == 1 && l1 != l0) why << "-" << l1;
-      why << " MeV over the data (valid " << g.eMin << "-" << g.eMax << " MeV)";
+      why << " MeV over the data (valid " << g.e_min_MeV << "-" << g.e_max_MeV << " MeV)";
     }
     if (c.extrapolate) {
       warnings.push_back(why.str() + "; extrapolated as asked (:extrapolate).");
@@ -720,7 +733,7 @@ bool ThmDistortion::GlobalEnds(int which, double lo, double hi, double elab[2], 
   for (int end = 0; end < 2; end++) {
     const double ecm = which == 0 ? eAA : EsF(end == 0 ? lo : hi);
     elab[end] = c.LabEnergy(ecm);
-    ThmGlobalOpticalEvaluate(c.global, c.Zp, c.Ap, c.Zt, c.At, elab[end], p[end]);
+    TenNumbers(transfer::GlobalOpticalSets()[c.global].at(c.Zp, c.Ap, c.Zt, c.At, elab[end]), p[end]);
   }
   return true;
 }

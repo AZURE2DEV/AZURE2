@@ -56,7 +56,7 @@ class ThmDistortion {
   /// One channel's distortion: none (plane wave), point Coulomb, or a
   /// Woods-Saxon potential p[] = V,R,a, W,RW,aW, WD,RD,aD, RC (MeV, fm;
   /// RC = 0 a point charge) plus Coulomb.  A global optical potential
-  /// (ThmOptical.h, global >= 0) is a Woods-Saxon channel whose p[] follow
+  /// (physics/transfer/GlobalOptical.h, global >= 0) is a Woods-Saxon channel whose p[] follow
   /// the energy: SetEnergy evaluates the model at the projectile's lab energy.
   struct Channel {
     enum Kind { PLANE, POINT_COULOMB, WOODS_SAXON };
@@ -67,7 +67,7 @@ class ThmDistortion {
     double k = 0.0;   ///< wave number (fm^-1)
     double eta = 0.0; ///< Sommerfeld parameter (0 for PLANE)
     // Global optical potential.
-    int global = -1;           ///< index in ThmGlobalOpticals(), or -1
+    int global = -1;           ///< index in transfer::GlobalOpticalSets(), or -1
     bool extrapolate = false;  ///< allowed outside the validity range
     int Zp = 0, Ap = 0, Zt = 0, At = 0;  ///< projectile (the model's light ion) and target
     double mp = 0.0, mt = 0.0;           ///< their masses (u)

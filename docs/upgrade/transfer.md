@@ -867,6 +867,6 @@ lab-energy range, the function of (Z_p, A_p, Z_t, A_t, E_lab) returning an `Opti
 The seven sets of the engine moved, with their numbers: ancai06, daehnick80, kd03, bg71, liang09, mcfadden66,
 avrigeanu94. Central terms only (the THM weight is spinless); a row gains its spin-orbit term with its primary source
 or an independent code's table in front of the author, and a test. Test:
-`physics/tests/transfer_global_optical_test.cpp` (the values of `tests/reference/thm_optical_reference.py`: RIPL-3 and FRONT21). The engine maps `opticalAA=<name>`
-and `:extrapolate` onto the table (`ThmExperiment.cpp`, `ThmDistortion.cpp`); the ten numbers in its reports are
-`RadiusOf` of the row's radii.
+`physics/tests/transfer_global_optical_test.cpp` (the values of `tests/reference/thm_optical_reference.py`: RIPL-3
+and FRONT21). The engine maps `opticalAA=<name>` and `:extrapolate` onto the table (`ThmExperiment.cpp`,
+`ThmDistortion.cpp`); the ten numbers in its reports are `RadiusOf` of the row's radii.

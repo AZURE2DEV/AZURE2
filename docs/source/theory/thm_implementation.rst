@@ -2150,7 +2150,7 @@ hardly depend on the channel radius any more, but they depend on the distorted
 waves (previous section: a factor 1.5-3 between Coulomb and optical waves).
 To scan that dependence with standard choices instead of typing ten numbers
 per channel, ``opticalAA=`` and ``opticalSF=`` also take the name of a
-built-in global parametrisation (``src/ThmOptical.cpp``), for the distortion
+built-in global parametrisation (the table of ``physics/src/transfer/GlobalOptical.cpp``), for the distortion
 factor and the DW vertex alike:
 
 ================ ========= ======================================================= =========== ====================

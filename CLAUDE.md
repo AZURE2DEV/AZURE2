@@ -262,6 +262,17 @@ section (check 34).
 3. A FRESCO case in `physics/tests/data/make_fresco_benchmarks.py` that uses it (run the script, commit the data) and
    its check in `physics/tests/transfer_fresco_test.cpp`: the listing first, then S and the cross sections.
 
+**Add a global optical set** (`opticalAA=<name>` / `opticalSF=<name>` of a THM experiment; `docs/upgrade/transfer.md`
+§24.4). Never a second copy of the numbers in `src/`.
+1. One row of `kSets` in `physics/src/transfer/GlobalOptical.cpp`: name, projectiles in words and as (Z, A),
+   reference, target-mass and lab-energy range, and the function of (Z_p, A_p, Z_t, A_t, E_lab) that returns the
+   `OpticalPotential` (R = r0 A_t^{1/3}; the helper `Central` for central sets). Spin-orbit only with its primary
+   source or an independent code's table in front of you (name the file in the comment) and a test.
+2. Its points in `physics/tests/transfer_global_optical_test.cpp` (at least two per row; the expected ten numbers from
+   the paper's table or an independent code, `tests/reference/thm_optical_reference.py` for RIPL-3 sets: say which).
+3. Its line in the table of `docs/source/theory/thm_implementation.rst` ("Global optical potentials"). The engine,
+   the parser and pyazr's `thm_global_opticals()` read the table; nothing else changes.
+
 **A model-only datum** (no beam energy: a resonance strength, a width, an ANC; `docs/upgrade/data_model.md` §4, M10).
 The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<modelData>`.
 1. Its formula in `physics/` (`ResonanceQuantities.h` is the pattern) with a unit test against numbers by hand and its
