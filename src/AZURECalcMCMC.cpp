@@ -48,6 +48,8 @@ struct AZURECalcMCMC::Run {
 #endif
 
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
+  // Outside the support (the fit's limits of any parameter): zero probability, nothing evaluated.
+  if (!InsideFitLimits(p)) return -std::numeric_limits<double>::infinity();
   CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
@@ -135,6 +137,14 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
     return -std::numeric_limits<double>::infinity();
   }
 
+  // The fit's vector at this point (amplitudes, the data parameters from the tail of the observed vector), so that the
+  // support and a term reading the vector read the fit's: the limits act on the converted amplitudes and energies.
+  const vector_r fitVector = FitVectorOfObserved(localCompound, localData, params_);
+  if (!InsideFitLimits(fitVector)) {
+    ReturnPooledCNuc(localCompound);
+    ReturnPooledData(working);
+    return -std::numeric_limits<double>::infinity();
+  }
   localCompound->FillMnParams(params, &configure());
   localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
@@ -148,11 +158,6 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &configure());
 
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
-  // The fit's vector at this point (amplitudes, the data parameters from the tail of the observed vector), so that a
-  // term reading the vector reads the fit's.
-  vector_r fitVector = params.GetMinuitParams().Params();
-  for (size_t i = (size_t)localData->Data().GetNormParamOffset(); i < fitVector.size() && i < params_.size(); i++)
-    fitVector[i] = params_[i];
   return LogLikelihoodOfFilled(localCompound, working, fitVector);
 }
 
@@ -167,8 +172,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   fixed_.clear();
   paramNames_.clear();
   paramKinds_.clear();
-  supportLower_.clear();
-  supportUpper_.clear();
+  fitLimits_.clear();
 
   AZUREParams params;
   compound()->FillMnParams(params, &configure());
@@ -176,6 +180,11 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
     params.ReconcileBasis(compound(), configure());
+  }
+  // The fit's limits, as AZUREMain sets them before a fit: the kinds' own (FillMnParams) and <parameterSettings>.
+  {
+    ParameterLimitsManager limits(&configure(), compound(), data(), &params);
+    if (limits.ReadParameterSettings()) limits.ApplyAllParameterSettings(params);
   }
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
@@ -187,14 +196,12 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
     paramNames_.push_back(params.GetMinuitParams().GetName(i));
     paramKinds_.push_back(params.Kind(i));
-    // If not fixed, add to rwa, with its limits when they bound the posterior (ParamKindRow::samplerSupport).  The
-    // numbers of such a kind are the same in both bases (a gamma_decay record's: gamma_parametrisation.md 2.8).
+    // If not fixed, add to rwa, and its limits to the support (objective.md section 6: every kind's).
     const ROOT::Minuit2::MinuitParameter &par = params.GetMinuitParams().Parameter(i);
     if (!par.IsFixed()) {
       rwa_.push_back(par.Value());
-      const bool bounded = KindRow(params.Kind(i)).samplerSupport;
-      supportLower_.push_back(bounded && par.HasLowerLimit() ? par.LowerLimit() : -std::numeric_limits<double>::infinity());
-      supportUpper_.push_back(bounded && par.HasUpperLimit() ? par.UpperLimit() : std::numeric_limits<double>::infinity());
+      fitLimits_.push_back({i, par.HasLowerLimit() ? par.LowerLimit() : -std::numeric_limits<double>::infinity(),
+                            par.HasUpperLimit() ? par.UpperLimit() : std::numeric_limits<double>::infinity()});
     }
   }
 
@@ -553,9 +560,6 @@ double AZURECalcMCMC::LogPriorNormalisation() const {
 }
 
 double AZURECalcMCMC::CalculateLogPrior(const std::vector<double> &params) const {
-  // Outside the limits of a parameter whose limits bound the posterior: zero probability (objective.md section 6).
-  for (size_t i = 0; i < params.size() && i < supportLower_.size(); i++)
-    if (!(params[i] >= supportLower_[i] && params[i] <= supportUpper_[i])) return -std::numeric_limits<double>::infinity();
   // Prior parameter covariance: -0.5 (p - mu)^T C^-1 (p - mu) - 0.5 log det(2 pi C).
   double covLogPrior = 0.0;
   if (priorCov_ && priorCov_->Size() > 0) {
@@ -1040,14 +1044,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         configure().outStream << "\n";
       }
 
-      for (int i = 0; i < nwalkers; i++) {
-        std::vector<double> pos = initialParams;
-        for (int j = 0; j < ndim; j++) {
-          std::normal_distribution<double> init_distribution(0.0, paramSpread[j]);
-          pos[j] += init_distribution(generator);
-        }
-        initial_positions.push_back(pos);
-      }
+      initial_positions = DrawInitialEnsemble(nwalkers, initialParams, paramSpread, generator, useRWA);
     }
 
     // Check the start before any step (see RunMCMCSampling in the header).

@@ -7,6 +7,7 @@
 #include "WorkingData.h"
 #include <atomic>
 #include <functional>
+#include <random>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -226,6 +227,22 @@ class AZURECalcMCMC {
   struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMC.cpp)
   /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
   double LogLikelihoodOfFilled(CNuc *compound, WorkingData *working, const vector_r &p) const;
+  /// The support of the posterior in the parameters (docs/upgrade/objective.md section 6): every varying component of
+  /// the fit's vector `fitVector` (all parameters, the fit's order) inside the limits the fit gives it (MINUIT's, with
+  /// those of <parameterSettings>).  The one test of every kind's limits, in both sampling bases.
+  bool InsideFitLimits(const vector_r &fitVector) const;
+  /// The fit's vector at an observed-basis point: the amplitudes and energies of `transformed` (a compound filled
+  /// from the observed vector and transformed in), the data parameters from the tail of `observedFull` (`copy`: the
+  /// evaluation's working copy, whose layout gives the tail's start).
+  vector_r FitVectorOfObserved(CNuc *transformed, WorkingCopy *copy, const vector_r &observedFull) const;
+  /// A walker's start, drawn in the sampled basis, inside the fit's limits (InsideFitLimits after the conversion of
+  /// an observed-basis point; a point whose conversion fails counts as inside: its posterior is zero as before).
+  bool StartInsideFitLimits(const std::vector<double> &sampled, bool useRWA) const;
+  /// The initial ensemble: `nwalkers` points drawn from Gaussians of widths `spread` about `centre` (the sampled
+  /// basis), each drawn again while it lies outside the fit's limits (SamplerSupport.cpp).
+  std::vector<std::vector<double>> DrawInitialEnsemble(int nwalkers, const std::vector<double> &centre,
+                                                       const std::vector<double> &spread,
+                                                       std::default_random_engine &generator, bool useRWA) const;
   /// One completed step into the run's sample file and best walker; after it, the callbacks and snapshot files.
   void RecordStep(Run &run, int step, const std::vector<std::vector<double>> &positions,
                   const std::vector<double> &logps) const;
@@ -247,9 +264,13 @@ class AZURECalcMCMC {
   mutable std::vector<std::string> paramNames_;
   mutable std::vector<ParamKind> paramKinds_;
   bool parametersInitialized_;
-  // Limits of each varying parameter that bound the posterior (ParamKindRow::samplerSupport), +-infinity otherwise
-  std::vector<double> supportLower_;
-  std::vector<double> supportUpper_;
+  // The fit's limits of each varying parameter (full index, lower, upper; +-infinity where it has none): the support
+  // of the posterior (InsideFitLimits), set by UpdateParameterVectors.
+  struct FitLimit {
+    int index;
+    double lower, upper;
+  };
+  std::vector<FitLimit> fitLimits_;
 
   ProgressCallback progressCallback_;
   IterationCallback iterationCallback_;

@@ -42,7 +42,7 @@ CNucTransformMessages.cpp ProjectSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
-    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp)
+    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp SamplerSupport.cpp)
 endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
