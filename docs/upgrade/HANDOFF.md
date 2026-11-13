@@ -2,6 +2,57 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (packaging) — pyazr as a wheel: scikit-build-core, install rules, the Coulomb table's commands
+
+Branch `feature/upgrade-8-pyazr3-packaging` (from 5b6f645b). Design and as-built: `pyazr3.md` section 2.9 and step 8.
+
+**Done.**
+- `pyproject.toml` builds with scikit-build-core: version from `pyazr/__init__.py`, Python >= 3.10, numpy >= 1.24
+  (mpmath and scipy stay until the Python formulas that import them go), console script `pyazr = pyazr.cli:main`;
+  targets `_azure2` and `AZURE2`, install component `python` (module into `pyazr/`, program into the wheel's
+  scripts), `BUILD_TESTING` and `USE_READLINE` off, `USE_MCMC` on (the module's `SamplerLogProbability` needs the
+  vendored sampler); the package directory copied less `wheel.exclude`; licence files LICENSE, the SRIM notice,
+  plotly's. `[tool.cibuildwheel]` and `.github/workflows/wheels.yml` (Linux x86-64/arm64, macOS arm64/x86-64; by
+  hand and on packaging pull requests; artifacts only, publishes nothing; never run: it cannot run here).
+- CMake: option `BUILD_TESTING` (default ON) guards `tests/`; the readline block moved before `add_subdirectory(api)`
+  and `(src)`, so `USE_READLINE=OFF` works (it had no effect: the program always linked readline); in a wheel build
+  `PYAZR_OUTPUT_DIR` defaults to the build directory and the configuration stops while `pyazr/_azure2*` exists
+  (`wheel.exclude` would drop the installed module too).
+- `pyazr/datafiles.py`: the non-Python files of the package, shipped or not (with the reason); consistency check 48.
+- `pyazr/coulomb_table.py` and the rows `coulomb-table where|fetch|build` (replacing two rows that exited 2):
+  `fetch` (URL and SHA-256 as constants, empty until the owner publishes), `build` (the binding's new
+  `build_coulomb_table` = `CoulombTable::BuildFile`), both into the engine's default file.
+- Tests: `pyazr_wheel` (slow), `pyazr_coulomb_table`, the coulomb-table cases of `pyazr_cli`, check 48;
+  `tests/pyazr/wheel_smoke.py` is the workflow's test command (stored χ² of T1-T3 and the program on T1).
+- Docs: installation page, `pyazr.rst`, `command_line.rst`, `coulomb_table.rst`, `architecture.rst`,
+  `extending.rst`, `contributing.rst`, README, the skill azure2-calculate, `pyazr/CLAUDE.md`, FOR_THE_OWNER, ROADMAP.
+  Sphinx is not installed here: the pages were not built.
+
+**Verified** (two threads):
+- in-tree build (`work/build.sh`, `work/b-pkg`): 0 warnings; consistency test (check 48 shown to fail for an
+  unlisted data file, a missing one, a changed `wheel.exclude`);
+- all projects × 3 bases against `tab-t50-1` (`tools/runall.sh`, tag `tab-pkg1`): 887 / 851 / 887 identical;
+  T1, T2, T3, 13N × 3 bases identical to `work/b-trial56`;
+- `ctest -LE slow`: 250 of 250; `ctest -L slow`: 13 of 13 (with `pyazr_wheel`: a wheel built from scratch in the
+  build directory, 365 s); `tests/run_tests.sh` stopped by me after 141 of its entries on the director's word
+  (lighter end checks):
+  all passed but `cli_help`, which fails at random on this tree and on the base alike (see Open);
+- by hand: the wheel (`pip wheel --no-build-isolation`, `PIP_NO_INDEX=1`, CPython 3.12, Linux x86-64): 8.2 MB, 83
+  files; `ldd`: libgsl, libgslcblas, libgomp, libstdc++ of the system, no readline; unpacked: T2's objective and
+  the stopping bit for bit as the in-tree build, `wheel_smoke.py`, the wheel's AZURE2 on T1 identical to the
+  in-tree program; a wheel without the mass table fails `wheel_test.py`; an in-tree module in `pyazr/` stops the
+  wheel's configuration; `pyazr_coulomb_table` fails with the hash comparison or the removal taken out.
+- Not run: the workflow and cibuildwheel, auditwheel, delocate (not installed, nothing may be installed); macOS;
+  `pip install` of the wheel; the converted-tree gate and the Sphinx build (not installed).
+
+**Open.**
+- The workflow's first run (Linux manylinux_2_28 with `gsl-devel` from powertools, macOS with Homebrew); Windows
+  (MSVC against MinGW) is the owner's choice; the published Coulomb table (`TABLE_URL`, `TABLE_SHA256`).
+- `tests/cli_help/check.sh` is flaky (0, then 2 failures on identical inputs, with different flags each time): under
+  `set -o pipefail`, `printf ... | grep -q` can end with SIGPIPE and count as "not found". Not fixed (not mine).
+- When the session class is renamed, `wheel_test.py` and `wheel_smoke.py` use `pyazr.Project.open(...).session(...)`
+  and `fit_objective()` only; mpmath and scipy leave `dependencies` when their last import goes.
+
 ## 2026-11-13 (director, 20:40) — merged: ten branches (layout, records, physics, sampler, options, CLI, UI, guide)
 
 **Merged**, in this order (each has its entry below): `feature/upgrade-4-layout-centre`,

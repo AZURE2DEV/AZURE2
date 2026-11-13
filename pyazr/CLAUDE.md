@@ -95,6 +95,20 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
+## The wheel (`pyproject.toml`)
+
+- `pip install .` / `pip wheel .` build with scikit-build-core: the same CMake files with `BUILD_TESTING` and
+  `USE_READLINE` off (`USE_MCMC` on: the binding needs the sampler), targets `_azure2` and `AZURE2`, the install rules of component `python` (module into the
+  package, program into the scripts), the package directory copied as it is less `wheel.exclude`.  The in-tree build
+  (`work/build.sh`, `PYAZR_OUTPUT_DIR`, `PYAZR_ENGINE_DIR`) is what every test uses; the wheel is tested by
+  `pyazr_wheel` (slow: builds, unpacks, never installs) and `tests/pyazr/wheel_smoke.py` (the workflow's test).
+- **A run-time data file**: put it under `pyazr/`, read it from next to its module (`__file__`), and add its row to
+  `DATA_FILES` in `datafiles.py` (or to `NOT_SHIPPED` and `wheel.exclude` if the wheel must not carry it); check 48
+  and `pyazr_wheel` fail otherwise.  Never an environment variable for a file of the package.
+- The Coulomb table: `coulomb_table.py` (`where`, `fetch`, `build`; `pyazr coulomb-table ...`).  `TABLE_URL` and
+  `TABLE_SHA256` are set together by the owner when he publishes the file; never download anything in a test (the
+  test serves a small table from `http.server` on 127.0.0.1).
+
 ## Rules
 
 - **Public API = `__all__` in `__init__.py`.** Adding a name is a minor version

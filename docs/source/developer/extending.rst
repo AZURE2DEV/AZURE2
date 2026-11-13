@@ -235,6 +235,24 @@ A command of ``python -m pyazr``
    ``cli.write_reference_page()`` (check 42 fails for a row without a case, a
    case without a row, an unknown argument type or a stale page).
 
+A run-time data file of pyazr
+-----------------------------
+
+1. The file under ``pyazr/`` (the wheel carries the package directory as it
+   is), read by its module from next to itself (``__file__``), never through
+   an environment variable.
+2. Its row of ``DATA_FILES`` in ``pyazr/datafiles.py`` (path, what it is, who
+   reads it); a file the wheel must not carry is a row of ``NOT_SHIPPED``
+   instead, with the same pattern in ``wheel.exclude`` of ``pyproject.toml``.
+
+Check 48 fails for a tracked non-Python file under ``pyazr/`` in neither list,
+a row naming no file, or ``wheel.exclude`` differing from ``NOT_SHIPPED``;
+``pyazr_wheel`` (slow) fails when the built wheel lacks a listed file or holds
+an unlisted one. A new C++ source of the binding is one name in the
+``pybind11_add_module(_azure2 ...)`` list of ``api/src/CMakeLists.txt``
+(nothing for the wheel). A new optional dependency is one entry of
+``[project.optional-dependencies]`` in ``pyproject.toml``.
+
 A route and a tab of the web UI
 -------------------------------
 

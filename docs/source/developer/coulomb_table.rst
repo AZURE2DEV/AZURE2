@@ -188,7 +188,9 @@ The tool
 renames it over ``FILE``, so a job that has the old file open keeps reading
 it. ``AZURE2 --build-coulomb-table[=FILE]`` runs the same build
 (``CoulombTable::BuildFile``) with the default specification, so a ready-built
-AZURE2, which ships without the tool, can make the table. ``BuildSpec::rowsDone``
+AZURE2, which ships without the tool, can make the table; pyazr binds the same
+function (``build_coulomb_table`` of ``_azure2``, ``pyazr.coulomb_table.build``,
+``pyazr coulomb-table build``). ``BuildSpec::rowsDone``
 and ``BuildSpec::cancel`` report progress and stop a build from another thread,
 and ``CoulombTable::ForgetMissing`` makes a running process load a file built
 after it started (ctest ``coulomb_table_build``). ``validate`` takes ``--n``, ``--seed``, ``--order``, ``--limit`` (1e-7) and
@@ -328,10 +330,12 @@ adaptive-grid settings of the dialog, under **Experimental Effects**
 (:doc:`../user_guide/experimental_effects`); the command-line options are in
 :doc:`../reference/command_line`.
 
-The table does not ship with AZURE2 (decided 2026-10-20): each user builds it
-once with ``AZURE2 --build-coulomb-table``, about 5 minutes, and keeps it in
-``~/.azure2/``. The file is 88 MB, and building it takes only minutes, so a
-copy in the repository or the release is not worth its size.
+The table is not in the repository nor in pyazr's wheel (88 MB). A user gets it
+once into ``~/.azure2/`` (or ``$AZURE2_COULOMB_TABLE``): ``pyazr coulomb-table
+fetch`` downloads the published copy (``TABLE_URL`` of ``pyazr/coulomb_table.py``)
+and accepts it only with the published SHA-256 (``TABLE_SHA256``); ``pyazr
+coulomb-table build`` or ``AZURE2 --build-coulomb-table`` builds it here, about
+5 minutes on four threads.
 
 Still open: whether ``save_fit`` should write fitted norms and shifts into the
 segment lines.

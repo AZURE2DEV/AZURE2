@@ -34,9 +34,10 @@ interference and external-capture parts.
   samplers. pyazr does not call the CLI binary; rebuilding `_azure2` is the update. Its version is
   `pyazr.__version__`.
 
-Install pyazr from the repository root: `pip install -e .` (core: numpy, mpmath, scipy), `".[examples]"` adds
-matplotlib, emcee, multiprocess; `".[all]"` adds zeus-mcmc. The C++ module is not built by pip: build `_azure2` with
-CMake (`USE_API=ON`, the default), which places it in `pyazr/`.
+Install pyazr from the repository root: `pip install .` builds the engine (scikit-build-core, CMake) and installs
+the package with `_azure2`, the commands `pyazr` and `AZURE2` (core: numpy, mpmath, scipy); `".[examples]"` adds
+matplotlib, emcee, multiprocess; `".[all]"` adds zeus-mcmc. The Coulomb table once: `pyazr coulomb-table fetch`
+(or `build`). In a checkout, the CMake build (`USE_API=ON`, the default) places `_azure2` in `pyazr/`.
 
 Behaviour reference: `docs/source/reference/command_line.rst` (flags, prompts, exit status),
 `docs/source/reference/output_files.rst`, `docs/source/user_guide/calculate.rst`, `docs/source/user_guide/pyazr.rst`,

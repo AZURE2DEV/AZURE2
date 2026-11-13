@@ -532,23 +532,22 @@ Worth having in 3.0 (each a thin call of a pyazr function; `--json` for agents):
 `pyazr import ensdf NUCLIDE`, `pyazr stopping MATERIAL ION ENERGY...`, `pyazr coulomb-table build|fetch|check`. The
 program `azure2` itself is in the wheel. Waiting for the UI (Phase 9): `pyazr ui`, `pyazr libraries update`.
 
-Built (`pyazr/cli.py`, `python -m pyazr` until packaging gives an entry point): one table of commands, `COMMANDS`
-(name, arguments with types, the pyazr function called, help line), from which the parser, every `--help`, `pyazr
-commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made. `describe [FILE]`
-(`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds [TABLE]`, `stopping`,
-`coulomb-table check [FILE]`, `ui FILE`, `import exfor ID` (`fetch_exfor`, the local EXFOR master files with
-`--source local`), `import ensdf NUCLIDE` (`fetch_levels`), `commands`. `--json` gives one document on standard output
-(`command`, `ok`, `exit`, `result`, and `error` with `what`, `allowed`, `fix`); the engine's output goes to standard
-error meanwhile. Exit codes those of the program's project commands: 0, 1 a failed run, 2 a wrong call or a refused
-input, 3 an old project. `describe` and `validate` call the engine functions the program calls
-(`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give the same JSON on T2; the program's
-`--validate` and `--describe` also report the stopping of each target (`ReportTargetStoppings` in
-`src/ProjectCommands.cpp`), which the binding does not. Not built, as rows that exit 2 with what to do instead:
-`coulomb-table build` (the engine's `CoulombTable::BuildFile` is not bound; the program builds the table) and
-`coulomb-table fetch` (no published copy). Not here: `pyazr libraries update`; `import exfor --to FILE` (pyazr has
-no single call that writes any EXFOR entry as a data set: `to_dataset` takes ratios to Rutherford or Mott,
-`to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate FILE` belongs here once `Evaluation`
-exists (a call and a printer: the numbers at the project's parameters, for an agent without a session).
+Built (`pyazr/cli.py`; `python -m pyazr`, and the console script `pyazr` of the wheel): one table of commands,
+`COMMANDS` (name, arguments with types, the pyazr function called, help line), from which the parser, every
+`--help`, `pyazr commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made.
+`describe [FILE]` (`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds
+[TABLE]`, `stopping`, `coulomb-table check|where|fetch|build [FILE]` (section 2.9), `ui FILE`, `import exfor ID`
+(`fetch_exfor`, the local EXFOR master files with `--source local`), `import ensdf NUCLIDE` (`fetch_levels`),
+`commands`. `--json` gives one document on standard output (`command`, `ok`, `exit`, `result`, and `error` with
+`what`, `allowed`, `fix`); the engine's output goes to standard error meanwhile. Exit codes those of the program's
+project commands: 0, 1 a failed run, 2 a wrong call or a refused input, 3 an old project. `describe` and `validate`
+call the engine functions the program calls (`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give
+the same JSON on T2; the program's `--validate` and `--describe` also report the stopping of each target
+(`ReportTargetStoppings` in `src/ProjectCommands.cpp`), which the binding does not. Not here: `pyazr libraries
+update`; `import exfor --to FILE` (pyazr has no single call that writes any EXFOR entry as a data set: `to_dataset`
+takes ratios to Rutherford or Mott, `to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate
+FILE` belongs here once `Evaluation` exists (a call and a printer: the numbers at the project's parameters, for an
+agent without a session).
 
 ### 2.9 Packaging
 
@@ -556,8 +555,9 @@ A wheel carries the module `_azure2` (the core linked in), the program `AZURE2`,
 (`pyazr/data/mass_1.mas20`, 464 kB), the web page's files (`pyazr/ui/static/`, with the vendored plotly) and the
 SRIM-2013 data (two files, 388 kB, compiled into the library) under decision 6; not the Coulomb table (85 MB,
 decision 7). GSL and the OpenMP runtime are dynamic libraries of the build machine; the platform's repair tool
-(auditwheel, delocate) copies them into the wheel. readline and the sampler `numcmc` are left out of the wheel's
-program (decision 3).
+(auditwheel, delocate) copies them into the wheel. readline is left out of the wheel's program (decision 3); the
+sampler `numcmc` (vendored, static, nothing to ship) stays in, because the module's `SamplerLogProbability`
+(`api/src/pybind_evaluation.cpp`) does not compile without it.
 
 **Measured on the start of this step** (commit 5b6f645b).
 
@@ -597,11 +597,11 @@ shipped. `cli.py`'s `REFERENCE_PAGE` (the docs page) is written by the consisten
   the wheel without being named); `wheel.exclude` leaves out what is not run-time (the examples, `CLAUDE.md`, a
   module an in-tree build left in the source). The licence files: `LICENSE`, the SRIM data's notice
   (`stopping/data/srim/README.md`), plotly's licence.
-- The CMake option set of a wheel (the `[tool.scikit-build]` table, keyed in CMake on `SKBUILD`):
-  `BUILD_TESTING=OFF` (a new option, default ON, guarding the `tests/` directories), `USE_MCMC=OFF`,
-  `USE_READLINE=OFF` (the readline block moved before `add_subdirectory(api)` and `src`, so that the option works;
-  a default build is unchanged), build targets `_azure2` and `AZURE2` only, install component `python` only (so
-  Minuit2's rules install nothing).
+- The CMake option set of a wheel (the `[tool.scikit-build]` table, keyed in CMake on `SKBUILD`): `BUILD_TESTING=OFF`
+  (a new option, default ON, guarding the `tests/` directories), `USE_MCMC=ON` (planned OFF; the module needs the
+  sampler, see above), `USE_READLINE=OFF` (the readline block moved before `add_subdirectory(api)` and `src`, so that
+  the option works; a default build is unchanged), build targets `_azure2` and `AZURE2` only, install component
+  `python` only (so Minuit2's rules install nothing).
 - `install(TARGETS _azure2 LIBRARY DESTINATION pyazr COMPONENT python)` and `install(TARGETS AZURE2 RUNTIME
   DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)` in a wheel build; elsewhere the program's rule is as
   before. In a wheel build `PYAZR_OUTPUT_DIR` defaults to the build directory, so the build writes nothing into
@@ -777,6 +777,16 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    configuration and a workflow of its own building and testing wheels on Linux, macOS, Windows (publishing
    nothing). `pyproject.toml`, three `CMakeLists.txt` (about 60 lines), the workflow (about 120). Needs decisions 5,
    6, 7.
+   **Done** (branch `feature/upgrade-8-pyazr3-packaging`; section 2.9 is the plan). As built, and where it differs:
+   `USE_MCMC` stays ON in the wheel (the module's `SamplerLogProbability` needs the vendored, static sampler);
+   `wheel.exclude` applies to what CMake installs as well, so it cannot drop a stale in-tree module: the wheel's
+   configuration stops while `pyazr/_azure2*` exists; Windows is left out of the workflow. Decision 7 as built:
+   `pyazr coulomb-table fetch` (URL and SHA-256 as two named constants, empty until the owner publishes the file),
+   `build` (the engine's `CoulombTable::BuildFile`, bound as `build_coulomb_table`, with `l_max` and `per_decade` for
+   a small table), `where`; the table is not built on first use without being asked. The wheel on this machine
+   (CPython 3.12, Linux x86-64, not repaired): 8.2 MB, 83 files; the module and the program need libgsl,
+   libgslcblas, libgomp and libstdc++ of the system (auditwheel copies them in the workflow). Tests: `pyazr_wheel`
+   (slow), `pyazr_coulomb_table`, the `coulomb-table` cases of `pyazr_cli`, consistency check 48.
 
 Side by side: 1, 2, 4, 7 and 8 touch different files and can run at once (1 and 2 both touch `pybind_api.cpp`, in
 different functions: merge 1 first). 3 needs 2; 5 needs 2, 3, 4; 6 needs 5. The critical path is 2 → 3 → 5 → 6.
