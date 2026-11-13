@@ -56,7 +56,10 @@ void Store(Config &config, const std::string &name, bool on) {
 std::string OptionWords(const Config &config, const char *name) {
   const OptionSource source = OptionSourceOf(config, name);
   return std::string(name) + "=" + (OptionIsOn(config, name) ? "1" : "0") + " (" +
-         (source == OptionSource::kProject ? "this file" : OptionSourceName(source)) + ")";
+         (source == OptionSource::kProject   ? "this file"
+          : source == OptionSource::kDefault ? "the default"
+                                             : OptionSourceName(source)) +
+         ")";
 }
 
 }  // namespace
@@ -88,8 +91,11 @@ OptionSource OptionSourceOf(const Config &config, const std::string &name) {
 void GiveOption(Config &config, const std::string &name, bool on, OptionSource source) {
   Store(config, name, on);
   config.optionSources[name] = source;
+  config.optionsStated.insert(name);
+  // An implied value fills an option the call did not state itself; a stated one stays, so that a contradiction
+  // between two stated values is seen (ApplyProjectOptions) whatever their order.
   for (const azure2::io::ConfigOptionImplication &i : azure2::io::ConfigOptionImplications())
-    if (name == i.name && on == i.value) {
+    if (name == i.name && on == i.value && !config.optionsStated.count(i.implied)) {
       Store(config, i.implied, i.impliedValue);
       config.optionSources[i.implied] = source;
     }
@@ -122,19 +128,33 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
     Store(config, k.name, on);
     config.optionSources[k.name] = OptionSource::kProject;
   }
+  // The front end that gave values spells the fix: a session's keywords, else the program's flags, else the keys.
+  azure2::io::OptionSpelling spelling = azure2::io::OptionSpelling::kKey;
+  for (const auto &given : config.optionSources)
+    if (given.second == OptionSource::kKeyword)
+      spelling = azure2::io::OptionSpelling::kKeyword;
+    else if (given.second == OptionSource::kCommandLine && spelling == azure2::io::OptionSpelling::kKey)
+      spelling = azure2::io::OptionSpelling::kFlag;
+  auto givenIn = [&config, spelling](const char *name) {
+    const OptionSource source = OptionSourceOf(config, name);
+    return spelling == azure2::io::OptionSpelling::kKey ? source == OptionSource::kProject
+                                                        : source == OptionSource::kCommandLine || source == OptionSource::kKeyword;
+  };
+  // Every contradicting pair is refused, whatever the source of its two values (a pair of defaults never contradicts).
   for (const azure2::io::ConfigOptionContradiction &c : azure2::io::ConfigOptionContradictions()) {
-    const bool fromProject = OptionSourceOf(config, c.a) == OptionSource::kProject ||
-                             OptionSourceOf(config, c.b) == OptionSource::kProject;
-    if (!fromProject || OptionIsOn(config, c.a) != c.aValue || OptionIsOn(config, c.b) != c.bValue) continue;
-    const char *key = OptionSourceOf(config, c.a) == OptionSource::kProject ? c.a : c.b;
-    const azure2::io::ConfigEntry *e = section.Find(key);
+    if (OptionIsOn(config, c.a) != c.aValue || OptionIsOn(config, c.b) != c.bValue) continue;
+    const char *key = OptionSourceOf(config, c.a) == OptionSource::kProject   ? c.a
+                      : OptionSourceOf(config, c.b) == OptionSource::kProject ? c.b
+                                                                              : c.a;
+    const azure2::io::ConfigEntry *e = OptionSourceOf(config, key) == OptionSource::kProject ? section.Find(key) : nullptr;
     azure2::experiment::Diagnostic d;
     d.code = azure2::experiment::codes::kConfigOptionsContradict;
     d.file = config.configfile;
     d.line = e ? tagLine + e->line : 0;
     d.section = "config";
     d.field = key;
-    d.message = OptionWords(config, c.a) + " with " + OptionWords(config, c.b) + " cannot hold together: " + c.why;
+    d.message = azure2::io::ConfigOptionContradictionText(c, OptionWords(config, c.a), OptionWords(config, c.b), spelling,
+                                                          givenIn(c.a), givenIn(c.b));
     config.refusedOptions += d.ToText() + "\n";
     config.outStream << "ERROR: " << d.ToText() << std::endl;
   }
@@ -153,7 +173,7 @@ std::string WithOptions(const std::string &described, bool json, const Config &c
   const std::size_t close = out.rfind('}');
   if (json && close != std::string::npos)
     out.insert(close, ",\n \"options\": " + OptionsJson(config) + "\n");
-  else if (!json && !config.optionSources.empty())  // the text names the options only when one is not at its default
+  else if (!json && !described.empty())  // an empty text describes nothing (a record pyazr asks for that has no entry)
     out += "options of the calculation (value, source):\n" + OptionsText(config);
   return out;
 }

@@ -28,8 +28,8 @@ bool OptionIsOn(const Config &config, const std::string &name);
 /// Where the value of option `name` came from (kDefault when nothing set it).
 OptionSource OptionSourceOf(const Config &config, const std::string &name);
 
-/// An option given by a flag or a keyword: sets it, then the options it implies (io::ConfigOptionImplications), each
-/// marked as given by `source`.  std::invalid_argument for a name that is not an option.
+/// An option given by a flag or a keyword: sets it, then the options it implies (io::ConfigOptionImplications) that no
+/// flag or keyword stated itself, each marked as given by `source`.  std::invalid_argument for a name that is not an option.
 void GiveOption(Config &config, const std::string &name, bool on, OptionSource source);
 
 /// A flag of an option row (its flag or its negation): GiveOption(..., kCommandLine); false when `arg` is neither.
@@ -37,9 +37,10 @@ bool ApplyOptionFlag(Config &config, const std::string &arg);
 
 /*!
  * The project's option keys, for the options not given by a flag or keyword (marked kProject), then the
- * contradictions (io::ConfigOptionContradictions) in which at least one value came from the project.  False when
- * there is one: each is printed as an ERROR line (E_CONFIG_OPTIONS_CONTRADICT, naming both options and their
- * sources) and kept in Config::refusedOptions.  `tagLine`: the 1-based line of the <config> tag in the file.  A key
+ * contradictions (io::ConfigOptionContradictions), whatever the source of the two values.  False when there is one:
+ * each is printed as an ERROR line (E_CONFIG_OPTIONS_CONTRADICT: both options with their sources, what is allowed, and
+ * the fix in the words of the front end that gave values: a flag, a keyword, or a key) and kept in
+ * Config::refusedOptions.  `tagLine`: the 1-based line of the <config> tag in the file.  A key
  * whose value is not one the engine reads is skipped (ReadFormat3Project refused it before).
  */
 bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &section, int tagLine);
@@ -49,9 +50,9 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
 /// lines printed) when a flag and a key contradict each other.
 bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config);
 /// A description of the project (experiment::DescribeText or DescribeJson) with the options of `config` after it: the
-/// JSON member "options" (OptionsJson) always; in the text the lines "options of the calculation (value, source):" and
-/// OptionsText when a flag, keyword or key set one (a project and a command line without any read as before).
-/// AZURE2 --describe and pyazr.describe give the same text.
+/// JSON member "options" (OptionsJson), in the text the lines "options of the calculation (value, source):" and
+/// OptionsText, for every project (an empty text, which describes nothing, stays empty).  AZURE2 --describe and
+/// pyazr.describe give the same text.
 std::string WithOptions(const std::string &described, bool json, const Config &config);
 
 /// "  use_brune = 1 (default)" per option, one line each, in the table's order.

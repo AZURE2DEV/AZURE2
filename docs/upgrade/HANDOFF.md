@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-6-switches-options`) — one rule for the options; the switches that move numbers as options; `--threads`; the rate's fallback tested
+
+**Done.** (1) The PI's three decisions on the options of the calculation (`project_format3.md` §3.12): a pair of the
+table of contradictions is refused whatever the source of its two values, in the program, a session and `--validate`
+(`--use-rmc` alone: refused, add `--no-brune`; `--use-park --no-brune` in either order, `use_park=True,
+use_brune=False`: refused; `--no-ec-convection-current` alone: refused, no committed test or documented use gave it);
+an implied option fills only what the call did not state (`Config::optionsStated`); the refusal is one line in three
+parts (what, allowed, fix in the front end's words; `io::ConfigOptionContradictionText`); the program's
+warning-and-drop of Brune under `--use-rmc` is gone; `tests/thm_lineshape` passes `--no-brune` and prints the same
+refusal; `--describe` prints the options block for every project (`tests/ratio_to_rutherford`, `tests/units_scales`
+re-baselined: exactly the added block). (2) The fourteen switches of kind numbers have their option in their row of
+`SwitchTable()` (evaluation.md §9: names, all properties of the run, no `<config>` key); one parser from the table;
+`main` makes the process's record first with the command line's switch options (command line over options file over
+variable over default, each value with its source); `--help` and `--describe` (text and `--json`) list them with
+value and source; check 43; `--options-file=FILE`. (3) `--threads=N` (N >= 1): set before any parallel region and the
+project commands; the run's header and `--describe` print the count and its source; `azure2-coulomb-table
+--threads=N` with the same check. (4) `tests/reaction_rate` case (c): the per-temperature quadrature, reached by a
+contrived exit that opens at E_cm = 48 MeV, agrees with the integral of a dense extrapolation to 1.4e-6 (tol 1e-5).
+
+**Verified** (build `work/b-switches`, 2 threads, 0 warnings): see the report of this branch; the tree's outputs are
+identical to `tab-t50-1` in all bases; every run.log has one more line (`Threads: 1 (OMP_NUM_THREADS)`). The model
+of the rate's case (c) is made from `models/p12C.azr` when the test runs, so it joins no tree comparison and not
+`tests/upgrade/predictions.txt`. Three pyazr tests asked for Park with `use_brune=False, use_park=True` (refused now):
+they pass `use_park=True` alone, which computed the same before (Park won).
+
+**Open.** For the PI: whether the two convergence checks (`--refine-quadrature`, `--ec-table-nodes`) and the
+coupling-order test should also be `<config>` keys (all fourteen are properties of the run now); for the options of
+the calculation the options file's flags still win over the command line's, for the switches the command line wins;
+the ten unused switches (unchanged). For the director: the meaning of `E_CONFIG_OPTIONS_CONTRADICT` in the code table
+still says "at least one of them a <config> key" (changing it re-baselines `tests/schema/schema_v3.json` and
+`format3.rst`: not done); the sampler's thread question should take `--threads` as its default; a pyazr session
+(`pyazr3.md` §4 item 9). Known, not of this branch: a T1 session with `use_rmc=True, use_brune=False` fails at
+set-up while the program runs.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the class `Session`, its lock
 
 **Measured before the renaming** (counts of each name of `pyazr3.md` section 2.3 by word in `pyazr/` without `ui/`

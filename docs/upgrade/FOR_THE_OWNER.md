@@ -458,22 +458,40 @@ Nothing else. A project without the keys computes exactly what it computed (the 
 identical); every flag and keyword stays and means what it meant (`--use-park` still gives Brune too, `--no-brune`
 still clears Park). `AZURE2 --describe` prints each option with its value and where it came from; a session's
 `option_sources` says the same. Refused, by `--validate`, the run and `Project.set_config`: a value other than 0, 1,
-true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together when one of the two is a key of the file
+true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together
 (`E_CONFIG_OPTIONS_CONTRADICT`, naming both): Park without Brune, Reich-Moore capture with Brune, no convection current
 with the long-wavelength approximation. The converter, `Project.new` and `save_fit` write no key they did not find;
 the web page sets them as any `<config>` entry. Not keys: the fit's settings, the menu's mode, threads, files and
 directories of the machine, and the environment switches.
 
-**Where the program and a session disagree** (not changed: it would move the numbers of a call). The defaults are the
-same; two rules of combination are not. (1) `--use-rmc` drops Brune and Park with a warning, `use_rmc=True` in a
-session keeps them. (2) The program applies `--use-park` and `--no-brune` in the order given, a session lets Park
-win. Recommendation: refuse Reich-Moore with Brune on in both (as a project's keys already are), and refuse
-`--use-park --no-brune` on one command line.
+**Two combinations are now refused** (the PI, 2026-11-13; James should see this): Reich-Moore capture with Brune on
+(`--use-rmc` alone, `use_rmc=True` alone: add `--no-brune` / `use_brune=False`; the program used to drop Brune with a
+warning, a session kept it) and Park with Brune off on one call (`--use-park --no-brune` in either order,
+`use_park=True, use_brune=False`; the order used to decide). One rule in every front end: a contradicting pair is
+refused whatever the source of its two values, with what, what is allowed and the fix. `--describe` now prints the
+options block for every project.
 
 **One table, one row.** The options are rows of the `<config>` key table (`io/src/ConfigSection.cpp`: name, flags,
 default, what it changes); the program's parser and help, `--describe`, pyazr's `kinds()` and the web page read them
 there. A new option is that row, its place in the engine's configuration (`src/ProjectOptions.cpp`), and its keyword
 in pyazr's constructor; tests fail when one of the three is missing.
+
+**The switches that move numbers are options of the program.** Each of the fourteen environment switches that
+can change an output number (the Coulomb table file, the SRIM data directory, the options file, the quadrature
+refinement, the external-capture table density, the coupling-order test, the older routes of the shift function, the
+level-space solve and the gradient routes) is also an option of the program, from the same row of the table:
+`--coulomb-table=FILE`, `--srim-data-dir=DIR`, `--options-file=FILE`, `--refine-quadrature=K`, `--ec-table-nodes=N`,
+`--swap-coupling-order`, `--bound-shift-numerical`, `--no-neutral-closed-form`, `--shift-derivative-1ev`,
+`--level-space`, `--thm-by-differences`, `--gradient-adjoint`, `--gradient-dense`, `--fold-weights-by-differences`.
+`AZURE2 --help` lists them; `AZURE2 --describe` prints, for every project, the value in force of each and where it
+came from (option, options file, environment, default). The variables still work with the same effect; the option on
+the command line wins over the options file, the file over the variable. A new switch that moves numbers is its row
+(with the option), its reader, and its line in the manual; a check fails when the option or the line is missing.
+`--threads=N` states the threads of a run (over `OMP_NUM_THREADS`, which still works); the run prints the count and
+where it came from after its banner. Waiting for your word, unchanged: the ten switches no test uses
+(`AZURE2_SWAP_COUPLING_ORDER`, `AZURE_BOUND_SHIFT_NUMERICAL`, `AZURE_NO_NEUTRAL_CLOSED_FORM`, `AZURE_SHIFT_DE_1EV`,
+`AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`, `AZURE_GRAD_DEBUG`,
+`AZURE_CHANNEL_DEBUG`): kept, and the seven of them that move numbers now have options.
 
 ## What is in work and what comes next
 

@@ -69,17 +69,21 @@ computes what it computed before.  For example, a project in the standard
 and ``AZURE2 project.azr`` then runs it without ``--no-brune``;
 ``AZURE2 --use-brune project.azr`` runs the same project with Brune's level
 matrix for this run only.  ``--use-park`` also gives ``use_brune`` on, and
-``--no-brune`` also gives ``use_park`` off, as before.  ``AZURE2 --describe``
-prints each option's value and where it came from (``default``, ``project``,
-``command line``) when at least one is not at its default (``--json``:
-always, as the member ``options``).  Refused, by ``--validate`` and by the run, each with its
-code: a value other than 0, 1, true, false (``E_CONFIG_OPTION_VALUE``); and a
-pair that cannot hold together when at least one of the two is a key of the
-project (``E_CONFIG_OPTIONS_CONTRADICT``, naming both): ``use_park=1`` with
-``use_brune=0``, ``use_rmc=1`` with ``use_brune=1`` (Brune is on by default:
-write ``use_brune=0`` too), ``ec_convection_current=0`` with
-``use_long_wavelength=1``.  Without a key the program keeps its old rule for
-``--use-rmc``: it drops Brune with a warning.  pyazr sets a key with
+``--no-brune`` also gives ``use_park`` off, unless the same
+command line states that option itself.  ``AZURE2 --describe`` prints each
+option's value and where it came from (``default``, ``project``, ``command
+line``) for every project (``--json``: the member ``options``).  Refused, by
+``--validate`` and by the run, each with its code: a value other than 0, 1,
+true, false (``E_CONFIG_OPTION_VALUE``); and a pair that cannot hold together,
+whatever gave the two values -- a flag, a key or the default
+(``E_CONFIG_OPTIONS_CONTRADICT``, naming both with their sources, what is
+allowed and the fix): ``use_park=1`` with ``use_brune=0`` (so ``--use-park
+--no-brune`` is refused in either order), ``use_rmc=1`` with ``use_brune=1``
+(Brune is on by default: ``--use-rmc`` needs ``--no-brune``, a key
+``use_rmc=1`` needs ``use_brune=0``), ``ec_convection_current=0`` with
+``use_long_wavelength=1`` (``--no-ec-convection-current`` needs
+``--no-long-wavelength``).  A pyazr session refuses the same keywords the
+same way.  pyazr sets a key with
 ``Project.set_config(use_brune=False)``; the converter, ``Project.new`` and
 ``save_fit`` write no key they did not find.
 
@@ -189,7 +193,8 @@ Available Options
        turn the option off.
    * - ``--use-rmc``
      - Use the RMC capture formalism for neutron capture (equivalent to the
-       GUI option).
+       GUI option).  Needs ``--no-brune`` (or ``use_brune=0`` in the
+       project): with Brune on, the run is refused.
    * - ``--gsl-coul``
      - Use GSL Coulomb functions (equivalent to the GUI option).  Not
        recommended: against the default routine, :math:`P` and :math:`S` are
@@ -207,6 +212,16 @@ Available Options
        (see :doc:`../developer/coulomb_table`).
    * - ``--no-coulomb-table``
      - Exact Coulomb functions everywhere.
+   * - ``--threads=N``
+     - The OpenMP threads of the process (``N`` >= 1), over
+       ``OMP_NUM_THREADS``; without it, ``OMP_NUM_THREADS`` or the OpenMP
+       runtime's default decide.  The run prints the count in force and where
+       it came from after its banner (``Threads: 2 (--threads, over
+       OMP_NUM_THREADS=4)``), ``--describe`` in its last block.  Results depend
+       on the count only as they depend on ``OMP_NUM_THREADS``.
+       ``--build-coulomb-table`` and ``azure2-coulomb-table`` (whose
+       ``--threads=N`` means the same) take it.  The sampler still asks for its
+       own thread count.
    * - ``--build-coulomb-table[=FILE]``
      - Build the Coulomb table with the default specification on all OpenMP
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
@@ -282,8 +297,13 @@ Available Options
        described (exit 2 when the project has no such record).  A data set without an
        ``energy_window`` reads "window E_lab all energies (no energy_window)".
        ``pyazr.describe(path, as_json=False)`` returns the same; ``Project.describe(name)`` one record.
-       The text form ends with the environment switches that are set, one line each
-       (``NAME=value (kind)``, see `Environment switches`_); ``pyazr.describe`` leaves them out.
+       After the records come the options of the calculation, each with its
+       value and source, for every project.  The text form ends with the
+       settings of this run and machine: the threads in force and every switch
+       of kind *numbers* with its value and source, then the other switches
+       that are set (``NAME=value (kind)``, see `Environment switches`_);
+       ``--json`` has them as the members ``threads`` and ``switches``.
+       ``pyazr.describe`` leaves this last block out.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the
@@ -387,9 +407,11 @@ Available Options
 ``AZURE2 --help`` prints this list as the binary was built
 (``tests/cli_help/check.sh`` keeps the two, and this table, in step).
 
-Options can also be read from a file, one per line, named by the environment
-variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
-line.  An unknown option (a mistyped ``--use-gradiant``) stops the run before
+Options can also be read from a file, one per line, named by
+``--options-file=FILE`` or the environment variable ``AZURE_OPTIONS_FILE``;
+the flags of the file are applied after those on the command line (for an
+option of the calculation the file's flag wins), while for a switch option
+(`Environment switches`_) the command line wins over the file.  An unknown option (a mistyped ``--use-gradiant``) stops the run before
 anything is read: ``ERROR: Unknown option --use-gradiant.``, the usage line, exit
 status 2.  A flag that
 takes a value (``--max-calls=N``, ``--refreeze-covariance=N``,
@@ -657,132 +679,187 @@ says what setting it does: *numbers* (an output number can move -- other
 physics, another input, or another route equal to rounding), *cost* (the same
 bits in another time), *prints* (prints, dumps or checks; may exit), *test*
 (injects a failure for a test).  The switches of kind *numbers* are copied into
-the run's settings when the run starts.  ``AZURE2 --describe`` ends with the
-switches that are set, their values and kinds.
+the run's settings when the run starts.
+
+Each switch of kind *numbers* is also an option of the program (the column
+Option), the stated way to set it; the variable is its equivalent and keeps
+working.  A flag option (``--level-space``) has the effect of the variable set to
+``1``.  The value in force is the first of: the option on the command line, the
+option in the options file (``--options-file=FILE`` or
+``AZURE_OPTIONS_FILE``), the variable, the default.  ``--refine-quadrature=K``
+and ``AZURE_REFINE_QUADRATURE`` refuse a value outside 1..64 alike (exit 2); an
+option that takes a value refuses to be given without one.  ``AZURE2 --help``
+lists the options.  ``AZURE2 --describe`` ends with a block ``settings of this
+run and machine (value, source):``: the threads in force (``--threads=N``,
+``OMP_NUM_THREADS`` or the OpenMP runtime's default) and every switch of kind
+*numbers* with its value and source (``option``, ``options file``,
+``environment``, ``default``); then the other switches that are set, under
+``Environment switches set:``.  ``--describe --json`` has the members
+``threads`` and ``switches``.
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
+   :widths: 25 25 10 40
 
    * - Variable
+     - Option
      - Kind
      - What setting it does
    * - ``AZURE2_COULOMB_TABLE``
+     - ``--coulomb-table=FILE``
      - numbers
      - the Coulomb table file when ``--coulomb-table`` names none (default ``~/.azure2/coulomb_table.bin``)
    * - ``AZURE2_SRIM_DATA_DIR``
+     - ``--srim-data-dir=DIR``
      - numbers
      - the directory of SRIM-2013's ``SCOEF03.DAT`` and ``SNUC03.dat`` (default: the copy compiled in)
    * - ``AZURE_OPTIONS_FILE``
+     - ``--options-file=FILE``
      - numbers
      - a file of command-line options, one per line, applied after those on the command line
    * - ``AZURE_REFINE_QUADRATURE``
+     - ``--refine-quadrature=K``
      - numbers
      - ``K``: every sub-point grid gets K times its points (1..64; a bad value exits 2)
    * - ``AZURE2_EC_TABLE_NODES``
+     - ``--ec-table-nodes=N``
      - numbers
      - nodes per decade of the external-capture tables, over ``ecTableNodesPerDecade``
    * - ``AZURE2_SWAP_COUPLING_ORDER``
+     - ``--swap-coupling-order``
      - numbers
      - couples the two particle spins of a channel spin the other way round
        (a convention test, :doc:`../theory/conventions`)
    * - ``AZURE_BOUND_SHIFT_NUMERICAL``
+     - ``--bound-shift-numerical``
      - numbers
      - the bound-state shift function from the numerical Whittaker derivative, not the U ratio
    * - ``AZURE_NO_NEUTRAL_CLOSED_FORM``
+     - ``--no-neutral-closed-form``
      - numbers
      - the neutral bound-state shift without its closed form
    * - ``AZURE_SHIFT_DE_1EV``
+     - ``--shift-derivative-1ev``
      - numbers
      - dS/dE by a 1 eV central difference of the exact S (the route before 2026-10-19)
    * - ``AZURE_LEVEL_SPACE``
+     - ``--level-space``
      - numbers
      - every J group solved in level space; equal to rounding
    * - ``AZURE2_THM_FD``
+     - ``--thm-by-differences``
      - numbers
      - the THM rows of the gradient and Jacobian by finite differences
    * - ``AZURE_GRAD_ADJOINT``
+     - ``--gradient-adjoint``
      - numbers
      - the adjoint gradient instead of the Jacobian path; equal to rounding
    * - ``AZURE_GRAD_DENSE``
+     - ``--gradient-dense``
      - numbers
      - the dense level-matrix adjoint instead of the rank-one terms; equal to rounding
    * - ``AZURE_TE_WEIGHTS_FD``
+     - ``--fold-weights-by-differences``
      - numbers
      - the target-effect combiner weights by finite differences
    * - ``AZURE_SERIAL_CHI2``
+     - none
      - cost
      - the points of an evaluation one by one (the same bits)
    * - ``AZURE_GRAD_CHECK``
+     - none
      - prints
      - analytic derivatives against finite differences; ``exit`` stops after the check
    * - ``AZURE_GRAD_CHECK_H``
+     - none
      - prints
      - the relative step of the gradient check (default 1e-6)
    * - ``AZURE_GRAD_CHECK_IDX``
+     - none
      - prints
      - the parameters the gradient check differentiates (``i,j,a-b``)
    * - ``AZURE_GRAD_CHECK_N``
+     - none
      - prints
      - how many parameters the gradient check samples (default 16)
    * - ``AZURE_GRAD_CHECK_ROWS``
+     - none
      - prints
      - how many rows of the gradient check are printed (default 60)
    * - ``AZURE_GRAD_CHECK_SEGS``
+     - none
      - prints
      - the segments whose norms and shifts the gradient check differentiates
    * - ``AZURE_SHIFT_GRAD_CHECK``
+     - none
      - prints
      - the energy-shift Jacobian columns against full differences
    * - ``AZURE_TE_WEIGHTS_CHECK``
+     - none
      - prints
      - ``N``: the combiner weights of N points against finite differences
    * - ``AZURE_PROFILE``
+     - none
      - prints
      - per-stage times and counters on standard error
    * - ``AZURE_GRAD_TIMING``
+     - none
      - prints
      - the time of every gradient call
    * - ``AZURE_GRID_TIMING``
+     - none
      - prints
      - the time and the moves of every re-placement of the sub-point grids
    * - ``AZURE_PLAN_CHECK``
+     - none
      - prints
      - checks the calculation plan and the node tables (stops on a difference)
    * - ``AZURE_NODE_CHECK``
+     - none
      - prints
      - checks every unit's nodes and channel rows after each hand-over (stops on a difference)
    * - ``AZURE_POOL_CHECK``
+     - none
      - prints
      - the pooled, parallel chi-squared against a fresh serial one (first five calls)
    * - ``AZURE_CHANNEL_VERIFY``
+     - none
      - prints
      - every channel-space solve against the level-space solve (slow)
    * - ``AZURE2_EC_TABLE_CHECK``
+     - none
      - prints
      - every external-capture integral also directly, with the largest difference
    * - ``AZURE_TRACE_FCN``
+     - none
      - prints
      - every chi-squared evaluation of a fit; ``fresh`` also on a fresh copy
    * - ``AZURE_DUMP_NONFINITE``
+     - none
      - prints
      - dumps an evaluation whose chi-squared is not finite or above the threshold
    * - ``AZURE_GRAD_DEBUG``
+     - none
      - prints
      - why the gradient falls back to differences
    * - ``AZURE_CHANNEL_DEBUG``
+     - none
      - prints
      - the formal representation of each J group
    * - ``AZR_DEBUG_GRID``
+     - none
      - prints
      - the adaptive integration grids as they are built
    * - ``AZURE_POISON_RESULTS``
+     - none
      - prints
      - reused result storage filled with NaN at the start of every evaluation
    * - ``AZURE_TEST_FAIL_E``
+     - none
      - test
      - the calculation of a point at this lab energy (MeV) fails (``tests/pyazr/failed_point_test.py``)
    * - ``AZURE_TEST_FAIL_EXIT``
+     - none
      - test
      - ... only for this exit pair key
 

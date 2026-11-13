@@ -228,6 +228,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
       Status 2026-11-13: milestone 5 done (one table of 39 environment switches, one reader in `support/`, read once;
       the switches that move numbers in `Config::environment`; the counters in `RunDiagnostics`); milestone 3 partly
       (copies when needed); 53 pending rows (milestones 3 and 4), 15 permanent.
+      The fourteen switches that move numbers are options of the program too (`--refine-quadrature=K`, ...;
+      `evaluation.md` §9), listed by `--help` and with value and source by `--describe`; `--threads=N` states the
+      thread count. Open: the same in a pyazr session (`pyazr3.md` §4 item 9); the ten unused switches (the PI).
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 - [x] A level's radiative decay as Γ_γ, branchings and mixing ratios (`gamma_parametrisation.md`; record

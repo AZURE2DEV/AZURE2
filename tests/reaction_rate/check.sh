@@ -8,9 +8,12 @@
 #                  0.9 % low at T9 = 0.01 (now ln sigma against ln E; audit F1);
 #   (b) n12C       neutron entrance, sigma ~ 1/v: sigma was zero below 1 keV, 49 % low at
 #                  T9 = 0.01 (now from 0.1 eV; audit F2);
-#   (c) went with the key useAdaptiveGrid (2026-11-12): the rate has one path, the tabulated one; its
-#       per-temperature quadrature is reached only as the fallback of a grid with fewer than three
-#       points of sigma > 0, which no model here has;
+#   (c) p12C_closed the per-temperature quadrature, the fallback of a grid with fewer than three points of
+#                  sigma > 0: made from p12C by closed_model.py, p12C with an exit pair 3, p + 12C in a
+#                  (fictitious) state at 48 MeV, which opens at E_cm = 48 MeV, between the grid's last
+#                  two nodes (47.66 and 50 MeV), so the grid has one point of sigma > 0; the rate into
+#                  pair 3 at T9 = 2 to 10 (temperatures_closed.dat) equals the integral of the dense
+#                  extrapolation (closed_model.py --truth) to 1e-5, and the run says it fell back;
 #   (d) moved      a 22 eV wide 1/2+ level at E_x = 2.0935 MeV in the .azr, evaluated with the
 #                  parameter file of the same model at 2.0985 MeV (expected/moved.par): the grid
 #                  clusters followed the .azr value, the resonance fell between backbone nodes
@@ -54,8 +57,9 @@ rate() {
   local model="$1" par="$2" exit_key="${3:-2}" entrance_key="${4:-1}" d="$WORK/$1"
   [ -n "${3:-}" ] && d="$WORK/$1.x$exit_key"
   mkdir -p "$d/output" "$d/checks"
-  cp "$HERE/models/$model.azr" "$d/t.azr"
-  cp "$HERE/temperatures.dat" "$d/"
+  if [ "$model" = p12C_closed ]; then python3 "$HERE/closed_model.py" "$HERE/models/p12C.azr" > "$d/t.azr"
+  else cp "$HERE/models/$model.azr" "$d/t.azr"; fi
+  cp "$HERE/${TEMPERATURES:-temperatures.dat}" "$d/temperatures.dat"
   [ -n "$par" ] && cp "$HERE/expected/$par" "$d/"
   (cd "$d" && printf '5\n%s\n%s\n%s\nyes\ntemperatures.dat\n' "$par" "$entrance_key" "$exit_key" |
      run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
@@ -89,6 +93,16 @@ rate p12C ""      && compare "(a) p12C, charged entrance"              "$WORK/p1
 rate n12C ""      && compare "(b) n12C, 1/v neutron entrance"          "$WORK/n12C/output/reactionrates.out"      "$HERE/expected/rates_n12C.dat" $TOL
 rate moved moved.par && compare "(d) moved, narrow level from the parameter file" "$WORK/moved/output/reactionrates.out" "$HERE/expected/rates_moved_azr.dat" $TOL
 rate moved_azr ""    && compare "(e) moved_azr, the same level in the .azr"      "$WORK/moved_azr/output/reactionrates.out" "$WORK/moved/output/reactionrates.out" 1e-9
+
+# (c) the per-temperature quadrature: 1e-5 is the 6 printed digits of reactionrates.out (5e-6) with room; the
+# truth's trapezoid on 0.125 keV steps is good to 1e-8 against kT >= 0.17 MeV
+if TEMPERATURES=temperatures_closed.dat rate p12C_closed "" 3; then
+  grep -qF "Grid too small for spline; using per-temperature integration." "$WORK/p12C_closed.x3/run.log" &&
+    ok "(c) p12C_closed: the rate fell back to the per-temperature quadrature (said)" ||
+    bad "(c) p12C_closed: the rate did not take the per-temperature quadrature"
+  compare "(c) p12C_closed, the per-temperature quadrature" "$WORK/p12C_closed.x3/output/reactionrates.out" \
+    "$HERE/expected/rates_p12C_closed.dat" 1e-5
+fi
 
 # ---- total radiative capture (exit key -1) -----------------------------------
 # sum_check <label> <total.out> <part.out>... <tol>: total = sum of the parts at every temperature

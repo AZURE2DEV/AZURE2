@@ -25,8 +25,8 @@ The **alternative level matrix of C. R. Brune** (the default), the standard
 Lane-Thomas parametrisation (``--no-brune``) and **Park's parametrization**
 (``--use-park``, the observed widths as fit parameters; the same cross
 sections as Brune's) are supported (:doc:`../reference/command_line`).
-Capture may use the **Reich–Moore approximation** (``--use-rmc``), and
-external (direct) capture is included.
+Capture may use the **Reich–Moore approximation** (``--use-rmc --no-brune``),
+and external (direct) capture is included.
 
 Observables
 -----------

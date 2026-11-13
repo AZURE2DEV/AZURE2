@@ -50,7 +50,7 @@ Runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
    `AZURE2 --describe` prints each option with its source. Without keys, pass the flags every time, taken from the
    project's own job scripts, never from memory or defaults. The parametrization is a flag:
    Brune is the default; `--use-park` selects Park's observed amplitudes; `--no-brune` the Lane–Thomas basis with
-   constant boundary conditions; `--use-rmc` the Reich–Moore formalism (switches Brune and Park off; for (n,γ) only).
+   constant boundary conditions; `--use-rmc --no-brune` the Reich–Moore formalism (for (n,γ) only; `--use-rmc` with Brune on is refused).
    Conventions and conversions between bases: azure2-exchange.
 2. **Write the flags out.** zsh does not word-split an unquoted variable: `F="--no-readline --use-brune"; AZURE2 $F x.azr`
    passes one argument, which AZURE2 reports as an unknown option and ignores, so the run uses other physics. Use a

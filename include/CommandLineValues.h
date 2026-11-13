@@ -2,6 +2,13 @@
 #define AZURE2_COMMANDLINEVALUES_H
 
 #include <string>
+#include <vector>
+
+namespace azure2 {
+namespace support {
+class Environment;
+}
+}  // namespace azure2
 
 /*!
  * The values of the command line's value-taking flags (parseOptions in src/AZURE2.cpp) and of the diagnostic
@@ -18,9 +25,25 @@ bool OptionIs(const std::string &option, const std::string &flag);
 long OptionWholeNumber(const std::string &option, const std::string &flag, long low, long high);
 /// The text of `option` = "<flag>TEXT" (`flag` given as "--name="), not empty.
 std::string OptionText(const std::string &option, const std::string &flag);
-/// The refinement factor k of the sub-point grids from AZURE_REFINE_QUADRATURE (Config::refineQuadrature): 1 when the
-/// variable is unset, else a whole number from 1 to 64.
+/// The refinement factor k of the sub-point grids (Config::refineQuadrature) from the process's record:
+/// --refine-quadrature=K or AZURE_REFINE_QUADRATURE, 1 when neither is given, else a whole number from 1 to 64.
 int RefineQuadratureFromEnvironment();
+
+/// The largest N of --threads=N.
+constexpr long kMaxThreads = 4096;
+/// The OpenMP threads of the process and where the count came from: "--threads", "--threads, over
+/// OMP_NUM_THREADS=M", "OMP_NUM_THREADS", "the OpenMP runtime's default".
+struct ThreadsInForce {
+  int count = 1;
+  std::string source;
+};
+/// --threads=N (the last one given; 1 <= N <= kMaxThreads, else std::invalid_argument): sets the OpenMP thread count
+/// of the process.  Called by main before any parallel region; without the option, OMP_NUM_THREADS or the runtime's
+/// default decide, as they did.  Returns the count in force.
+ThreadsInForce ApplyThreadsOption(const std::vector<std::string> &arguments,
+                                  const azure2::support::Environment &environment);
+/// {"value": N, "source": "..."} for --describe --json.
+std::string ThreadsJson(const ThreadsInForce &threads);
 /// The CLI's refusal of a flag or variable: "ERROR: <message>" and the usage line on standard output; returns 2, the
 /// exit status.
 int OptionError(const std::string &message);
