@@ -93,12 +93,12 @@ py="$(cd "$WORK" && AZURE_REFINE_QUADRATURE=x python3 -I - "$HERE/../.." "$HERE/
 import os, sys
 sys.path.insert(0, sys.argv[1])
 try:
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:
     print("skip", type(err).__name__, err)
     sys.exit(0)
 try:
-    azure2(sys.argv[2], cwd=os.getcwd())
+    Session(sys.argv[2], cwd=os.getcwd())
     print("opened")
 except ValueError as err:
     print("ValueError", err)

@@ -62,7 +62,7 @@ def main():
             os.makedirs(os.path.join(d, "checks"))
             shutil.copy(os.path.join(models, name + ".azr"), os.path.join(d, "t.azr"))
             # the model has extrapolation segments only, so the session starts in extrapolation mode
-            with pyazr.azure2(os.path.join(d, "t.azr"), cwd=d, data_mode=False, use_brune=False) as s:
+            with pyazr.Session(os.path.join(d, "t.azr"), cwd=d, data_mode=False, use_brune=False) as s:
                 sig = np.asarray(s.calculate(s.params)[0], float)
                 T = np.asarray(s.calculate_energies(s.params)[0], float)
             k = np.sqrt(k2(T, rel))

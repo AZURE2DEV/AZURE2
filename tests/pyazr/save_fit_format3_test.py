@@ -38,7 +38,7 @@ def check(name, ok, detail=""):
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 import numpy as np  # noqa: E402
-from pyazr import azure2, convert_azr, Project  # noqa: E402
+from pyazr import Session, convert_azr, Project  # noqa: E402
 
 
 def functions(A, pair=1):
@@ -71,7 +71,7 @@ def fitted(work):
     p = Project.open(os.path.join(d, "T2.azr"))
     p["s01_int_thin"].set(shift="offset 0 keV fit prior 0 3")  # the offset in keV: written back in keV
     p.save()
-    with azure2(p.path, cwd=d) as m:
+    with Session(p.path, cwd=d) as m:
         x = np.array(m.params_rwa, float)
         by_name = {q.name: q for q in m.parameters}
         moved = {"s01_int_thin.norm": 1.0234, "D.value": 0.9871, "s01_int_thin.shift.offset": 0.0012,
@@ -122,12 +122,12 @@ def potentials(work):
     stated = os.path.join(d, "stated.azr")
     with open(stated, "w") as f:
         f.write(re.sub(r"(step +)0\.0275 fm", r"\g<1>0.02 fm", re.sub(r"(matching_radius +)15 fm", r"\g<1>12 fm", text)))
-    with azure2(stated, cwd=d) as s:
+    with Session(stated, cwd=d) as s:
         want = functions(s)
         view = s.nuclear_potential(1)
     check("the record's matching radius and step in the view (12 fm, 0.02 fm)",
           view.matching_radius == 12.0 and view.step == 0.02, repr((view.matching_radius, view.step)))
-    with azure2(f3, cwd=d) as m:
+    with Session(f3, cwd=d) as m:
         base = functions(m)
         p = m.set_nuclear_potential(1, matching_radius=12.0, step=0.02)
         got = functions(m)
@@ -139,7 +139,7 @@ def potentials(work):
     written = open(os.path.join(d, "written.azr")).read()
     check("save_fit writes the matching radius and step into the record",
           re.search(r"matching_radius +12 fm", written) and re.search(r"step +0\.02 fm", written), written[-600:])
-    with azure2(os.path.join(d, "written.azr"), cwd=d) as w:
+    with Session(os.path.join(d, "written.azr"), cwd=d) as w:
         check("  and the written project gives the same channel functions", functions(w) == want)
 
 

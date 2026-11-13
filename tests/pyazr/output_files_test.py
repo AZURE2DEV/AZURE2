@@ -39,7 +39,7 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory() as tmp:
     from_cli = run(cli_dir)
     check("the binary wrote something", bool(from_cli), "no output files")
 
-    with azure2(os.path.join(py_dir, "hybrid_potential.azr"), cwd=py_dir) as m:
+    with Session(os.path.join(py_dir, "hybrid_potential.azr"), cwd=py_dir) as m:
         outdir = m.write_output_files()
     check("write_output_files returned the output directory",
           os.path.isdir(outdir), outdir)

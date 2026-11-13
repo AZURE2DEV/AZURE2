@@ -134,7 +134,7 @@ In the calculation
   channel-space or the level route, :doc:`../developer/level_matrix`), so
   ``--use-gradient``, ``--use-lm`` and ``--use-gsl-lm`` treat a constraint like
   a data point (one residual row per constrained part).
-* **pyazr.**  :meth:`azure2.scattering_lengths` returns the values at any
+* **pyazr.**  :meth:`Session.scattering_lengths` returns the values at any
   parameter vector, so a posterior of :math:`a_0` follows from an MCMC chain;
   the measured lengths are ``datum`` records of quantity ``scattering_length``, edited with :class:`pyazr.Project`.
 

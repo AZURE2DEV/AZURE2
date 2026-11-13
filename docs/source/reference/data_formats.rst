@@ -965,6 +965,6 @@ are converted to MeV (deg).  The same forms describe an angle grid
    A single level of width 1 eV at 300 keV (``tests/extrapolation_grids``)
    needs fewer than 400 points for its peak and its integral to 10⁻³; a uniform
    grid of the same count misses the peak by more than half.  pyazr sessions
-   (``pyazr.azure2``) evaluate at many parameter vectors and refuse an adaptive
+   (``pyazr.Session``) evaluate at many parameter vectors and refuse an adaptive
    grid; ``pyazr.refine_grid`` runs the same refinement on any Python function,
    and ``pyazr.extrapolation_grid`` gives the energies of the other forms.

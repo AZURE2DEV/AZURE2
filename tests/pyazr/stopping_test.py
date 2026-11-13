@@ -32,7 +32,7 @@ def check(name, ok, detail=""):
 try:
     import numpy as np
     from pyazr import stopping
-    from pyazr.azure2 import _azure2  # noqa: F401
+    from pyazr import _azure2  # noqa: F401
 except Exception as err:  # pragma: no cover
     print(f"skip: the engine module is not available ({type(err).__name__}: {err})")
     sys.exit(77)

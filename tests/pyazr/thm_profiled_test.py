@@ -52,7 +52,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # within it when e.g. the shift-function derivative gets more accurate.
     check("the CLI still lands on the pin (rel 1e-3)", rel(cli_chi2, PIN) < 1e-3,
           f"{cli_chi2} vs {PIN}")
-    with azure2(os.path.join(py_dir, "7Li_p_a.azr"), cwd=py_dir) as m:
+    with Session(os.path.join(py_dir, "7Li_p_a.azr"), cwd=py_dir) as m:
         x = np.asarray(m.params_rwa, float)
         chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
         print(f"        pyazr chi2 {chi2!r}")
@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as tmp:
             model.set_channel(lv, c.pair, c.l, c.s, fixed=not keep)
     model.save(os.path.join(small, "small.azr"))
 
-    with azure2(os.path.join(small, "small.azr"), cwd=small) as m:
+    with Session(os.path.join(small, "small.azr"), cwd=small) as m:
         x = np.asarray(m.params_rwa, float)
         print(f"        {x.size} free parameters: "
               + ", ".join(p.name for p in m.parameters.free))

@@ -41,7 +41,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -57,7 +57,7 @@ try:
     before = p["yield_1"]["shift"]
     p.set("yield_1", shift="offset 0.01043168251 MeV fit prior 0 0.0005")
     check("the shift of yield_1 is varied now", p["yield_1"]["shift"] != before, before)
-    a = azure2(p.save(os.path.join(work, "smooth.azr")), cwd=work)
+    a = Session(p.save(os.path.join(work, "smooth.azr")), cwd=work)
     x0 = np.array(a.params_rwa, float)
     free = [q for q in a.parameters if not q.fixed]
     k = [i for i, q in enumerate(free) if q.kind == "shift"][0]

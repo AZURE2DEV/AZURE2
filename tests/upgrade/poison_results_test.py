@@ -100,8 +100,8 @@ def run_cli(binary, project, menu, extra, poison, tmp, src=None, azr=None):
 
 def api_values(project):
     """The API's arrays of every segment, as JSON (NaN as the string "nan")."""
-    from pyazr.azure2 import azure2
-    m = azure2(os.path.join(HERE, project, PROJECTS[project]))
+    from pyazr.session import Session
+    m = Session(os.path.join(HERE, project, PROJECTS[project]))
     s = m.sess
     n = int(s.update_segments(m.params))
     get = {"sigma": s.calculated_segments, "e1": s.calculated_segments_e1, "e2": s.calculated_segments_e2,
@@ -189,7 +189,7 @@ def main():
                     problems.append(f"{name} calc: output/{f} differs with poisoning")
             print(f"{name} calc: {len(plain)} files compared")
     try:
-        import pyazr.azure2  # noqa: F401
+        import pyazr.session  # noqa: F401
         have_api = True
     except Exception as e:  # the module is optional (pyazr tests skip without it)
         print(f"pyazr part skipped: {e}")

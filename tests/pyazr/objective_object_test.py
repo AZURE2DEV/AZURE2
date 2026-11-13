@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""pyazr.Objective (azure2.fit_objective()) against today's methods, the engine's sampler and itself.
+"""pyazr.Objective (Session.fit_objective()) against today's methods, the engine's sampler and itself.
 
 (a) On T1, T2, T3 (tests/upgrade), 13N_fast (tests/mcmc_physical_norm), a project of each nuisance kind with a prior
     (screening: tests/electron_screening/grad.azr; stopping scale: tests/stopping_yield fit.azr; a kernel's width:
     tests/rectangular_resolution fit.azr) and the 15O gamma_decay record with priors (tests/gamma_decay
     record.azr, the variant of tests/reference/sampler_objective_test.cpp), at the start and at a displaced point:
-    f(x) and f.value_and_grad(x) equal azure2.objective(x) and objective_and_grad(x) bit for bit; the first rows of
-    f.residuals(x) are azure2.residuals(x) bit for bit, and the first rows and columns of f.residuals_and_jacobian(x)
+    f(x) and f.value_and_grad(x) equal Session.objective(x) and objective_and_grad(x) bit for bit; the first rows of
+    f.residuals(x) are Session.residuals(x) bit for bit, and the first rows and columns of f.residuals_and_jacobian(x)
     those of residual_jacobian(x); the sum of the squares of the rows is f(x) (1e-10), from the forward rows and from
     the Jacobian's rows; f.log_prob(x) = -0.5 f(x); x0, names and bounds are the free rows of the records.
 (b) The gradient against a central difference of f, on T1 and 13N_fast (analytic there), and the Jacobian against a
@@ -43,7 +43,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     import pyazr
-    from pyazr import azure2
+    from pyazr import Session
     pyazr.kinds()
 except Exception as err:  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -158,7 +158,7 @@ def central_jacobian(label, f, x, rel_tol):
 with tempfile.TemporaryDirectory() as tmp:
     def session(name, src, project, edits=(), **options):
         path = copy_dir(src, os.path.join(tmp, name), project, edits)
-        return azure2(path, **options)
+        return Session(path, **options)
 
     print("(a) the object against today's methods")
     upgrade = os.path.join(TESTS, "upgrade")

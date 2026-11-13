@@ -54,8 +54,8 @@ def make_model(work, density):
 
 def worker(work, density, out):
     import numpy as np
-    from pyazr import azure2
-    a = azure2(make_model(work, density == "1"), cwd=work)
+    from pyazr import Session
+    a = Session(make_model(work, density == "1"), cwd=work)
     x = np.array(a.params_rwa, float)
     free = [p for p in a.parameters if not p.fixed]
     cols = [i for i, p in enumerate(free) if p.kind in KINDS]
@@ -92,7 +92,7 @@ def profile_calls(log, stage):
 def main():
     try:
         import numpy as np
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

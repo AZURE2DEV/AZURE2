@@ -14,7 +14,7 @@ Checks:
      numbers them as the engine does, and save_fit writes a snapshot of them;
   3. two targets: four abundance parameters, the sum-to-one prior of each target, save_fit writes each target's
      fitted values;
-  4. the runtime side: Pair.nucleus, azure2.nuclei, the abundance parameters (kind, nucleus, prior sigma),
+  4. the runtime side: Pair.nucleus, Session.nuclei, the abundance parameters (kind, nucleus, prior sigma),
      penalties()["abundance"] against the engine's chi-squared;
   5. the abundance column of residual_jacobian against central differences;
   6. save_fit of a free abundance: the target's isotope field carries the fitted value, the .sav carries the
@@ -35,7 +35,7 @@ MODELS = os.path.join(ROOT, "tests", "natural_target", "models")
 sys.path.insert(0, ROOT)
 
 try:
-    from pyazr import Project, azure2
+    from pyazr import Project, Session
     from pyazr.nuclei import merge_projects
     import pyazr._azure2  # noqa: F401
 except ImportError as e:  # as the other pyazr tests: no package or engine module -> nothing to test
@@ -68,7 +68,7 @@ def copy_model(name, work, dest=None):
 
 
 def grids(path, cwd):
-    with azure2(path, cwd=cwd, data_mode=False, use_brune=True) as s:
+    with Session(path, cwd=cwd, data_mode=False, use_brune=True) as s:
         x = np.asarray(s.params_rwa, float)
         return [np.asarray(v, float) for v in s.calculate_rwa(x)]
 
@@ -123,7 +123,7 @@ def run(work):
     aa = Project.open(merged2)
     check("twin forms a second nucleus", sorted({lv.nucleus for lv in aa.levels()}) == [(7, 13), (7, 14)])
     keys = {(lv.group, lv.level): lv for lv in aa.levels() if lv.active}
-    with azure2(merged2, cwd=work, data_mode=False, use_brune=True) as s:
+    with Session(merged2, cwd=work, data_mode=False, use_brune=True) as s:
         bad = []
         for pp in s.parameters:
             if pp.kind != "energy":
@@ -149,7 +149,7 @@ def run(work):
         with open(os.path.join(work, f), "w") as fh:
             for e, v in zip(e_lab, y):
                 fh.write(f"{e:.6f} 0 {v:.12e} {0.001 * v:.12e}\n")
-    with azure2(msd, cwd=work, use_brune=True) as s:
+    with Session(msd, cwd=work, use_brune=True) as s:
         ab = s.parameters.abundances
         check("four abundance parameters, target by target",
               [p.name for p in ab] == ["natural.isotope.12C", "natural.isotope.13C", "enr.isotope.12C",
@@ -179,10 +179,10 @@ def run(work):
     with open(os.path.join(work, "data.dat"), "w") as f:
         for e, v in zip(e_lab, y):
             f.write(f"{e:.6f} 0 {v:.12e} {0.01 * v:.12e}\n")
-    with azure2(mfile, cwd=work, use_brune=True) as s:
+    with Session(mfile, cwd=work, use_brune=True) as s:
         pairs = s.pairs
         check("Pair.nucleus", [p.nucleus for p in pairs] == [(7, 13), (7, 14)], str([p.nucleus for p in pairs]))
-        check("azure2.nuclei", sorted(s.nuclei) == [(7, 13), (7, 14)] and [p.key for p in s.nuclei[(7, 14)]] == [2])
+        check("Session.nuclei", sorted(s.nuclei) == [(7, 13), (7, 14)] and [p.key for p in s.nuclei[(7, 14)]] == [2])
         ab_params = s.parameters.abundances
         check("two abundance parameters after the level block",
               len(ab_params) == 2 and all(p.kind == "abundance" for p in ab_params)
@@ -241,7 +241,7 @@ def run(work):
         got = isotopes(Project.open(snap), "natural")
         check("the snapshot's isotopes carry the fitted values", got == {"12C": 0.7, "13C": 0.3}, str(got))
         check("param.sav carries the abundances", ab_params[1].name in open(sav).read())
-    with azure2(snap, cwd=work, use_brune=True) as s2:
+    with Session(snap, cwd=work, use_brune=True) as s2:
         x2 = np.asarray(s2.params_rwa, float)
         chi2 = float(s2.calculate_chi2_rwa(x2)[0]) - s2.penalties(x2)["abundance"]
         check("snapshot re-evaluates to the same data chi-squared", abs(chi2 - chif) < 1e-6 * max(1.0, chif),

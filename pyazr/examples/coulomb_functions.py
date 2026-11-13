@@ -32,7 +32,7 @@ try:
 except ImportError:
     sys.exit("this example needs matplotlib: pip install 'pyazr[examples]'")
 
-from pyazr import azure2
+from pyazr import Session
 
 
 def main() -> int:
@@ -51,7 +51,7 @@ def main() -> int:
 
     energies = np.linspace(args.emin, args.emax, args.npoints)
 
-    with azure2(str(args.azr)) as azr:
+    with Session(str(args.azr)) as azr:
         pair = azr.pairs[args.pair - 1]
         radius = args.radius or pair.channel_radius
         curves = {L: azr.coulomb_functions(args.pair, energies, L=L,

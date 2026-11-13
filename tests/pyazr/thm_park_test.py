@@ -72,7 +72,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     sys.stdout.reconfigure(line_buffering=True)
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -152,7 +152,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"\n{label}")
         azr_b = stage(tmp, f"v{k}.brune", block)
         azr_p = stage(tmp, f"v{k}.park", block)
-        with azure2(azr_b, use_brune=True) as mb, azure2(azr_p, use_park=True) as mp:
+        with Session(azr_b, use_brune=True) as mb, Session(azr_p, use_park=True) as mp:
             xb = np.asarray(mb.params_rwa, float)
             xp = np.asarray(mp.params_rwa, float)
             levels = level_of(mp)

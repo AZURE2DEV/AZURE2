@@ -20,7 +20,7 @@ parameters the model has.  Finite differences are available as a cross-check
 Two entry points:
 
 ``uncertainty_bands(model, segments, ...)``
-    band for selected segments of a *live* :class:`~pyazr.azure2.azure2`
+    band for selected segments of a *live* :class:`~pyazr.Session`
     session, in whichever mode it is in (data or extrapolation).  The session
     is the in-process engine itself -- one ``_azure2.Session``, no subprocess
     or instance pool to talk to.
@@ -35,7 +35,7 @@ Two entry points:
 
 Examples
 --------
->>> from pyazr import azure2, extrapolation_bands
+>>> from pyazr import Session, extrapolation_bands
 >>> bands = extrapolation_bands("7Be.azr", keys=[113], quantity="sfactor")
 >>> b = bands[113]
 >>> b.value[0], b.sigma[0]                          # S(E->0) +- 1 sigma
@@ -106,7 +106,7 @@ class Band:
 def _model_dir(model):
     """The directory a session's ``output/`` lives in.
 
-    ``azure2`` switches the process into the ``.azr``'s directory for the
+    ``Session`` switches the process into the ``.azr``'s directory for the
     session's lifetime, and AZURE2 names ``output/`` relative to that -- so
     that is where ``param.sav`` and ``covariance.dat`` are.
     """
@@ -198,14 +198,14 @@ def best_fit_params(model, path=None):
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    # By NAME (azure2.full_rwa_from_sav): a parameter the file does not list
+    # By NAME (Session.full_rwa_from_sav): a parameter the file does not list
     # keeps the session's value, so a file from an older layout (no
     # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
     # and in extrapolation mode the file's segment rows simply find no home.
     #
     # The file's FIXED level parameters are part of the fit too (the CLI's
     # reader applies them), and the free vector alone cannot carry them, so a
-    # session that has azure2.load_sav takes the whole file into the engine
+    # session that has Session.load_sav takes the whole file into the engine
     # first -- names matched against the live parameter list, either mode.
     if hasattr(model, "load_sav"):
         free = np.asarray(model.load_sav(path), float)
@@ -271,7 +271,7 @@ def _worker_setup(spec):
     from the parent's caches, so the integrals are reused rather than rebuilt
     -- the same trick :func:`trimmed_model` uses.
     """
-    from .azure2 import azure2
+    from .session import Session
     from .project import Project
 
     cwd, workdir = spec["cwd"], os.path.join(spec["workdir"], str(os.getpid()))
@@ -294,7 +294,7 @@ def _worker_setup(spec):
     os.close(fd)
     edited.save(path)
 
-    model = azure2(path, cwd=cwd, **spec["options"])
+    model = Session(path, cwd=cwd, **spec["options"])
     if spec["mode"] == "extrap":
         model.extrap_mode()
     _WORKER.update(model=model, base=None)
@@ -378,7 +378,7 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
 
     Parameters
     ----------
-    model : a live :class:`~pyazr.azure2.azure2` session.
+    model : a live :class:`~pyazr.Session` session.
     segments : calculated-segment indices (0-based, counting **active**
         segments only -- see :func:`active_indices`).
     params : the free parameter vector to differentiate about; defaults to
@@ -488,13 +488,13 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
 
     Parameters
     ----------
-    model : a live :class:`~pyazr.azure2.azure2`, in data or extrapolation
+    model : a live :class:`~pyazr.Session`, in data or extrapolation
         mode; the bands are computed for whichever segments that mode exposes.
     segments : calculated-segment indices (0-based).  Mutually exclusive with
         ``keys``.
     keys : 1-based segment numbers as they appear in the ``.azr`` file, which
-        is what :attr:`~pyazr.azure2.azure2.extrapolations` /
-        :attr:`~pyazr.azure2.azure2.datasets` report.  Translated to calculated
+        is what :attr:`~pyazr.Session.extrapolations` /
+        :attr:`~pyazr.Session.datasets` report.  Translated to calculated
         indices for you (inactive segments are not calculated).
     params : parameters to evaluate at; defaults to ``output/param.sav``, since
         that -- not the ``.azr`` -- is what a fit writes and what the
@@ -689,7 +689,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     ----------
     azr_file : the model.
     keys : 1-based extrapolation numbers of the file to keep, in file order (as reported
-        by :attr:`~pyazr.azure2.azure2.extrapolations`).  The returned dict is
+        by :attr:`~pyazr.Session.extrapolations`).  The returned dict is
         keyed by these same numbers.
     grids : alternatively, an iterable of grids the file does not contain, keyed 1, 2, ... in the order given:
         dicts of :meth:`pyazr.Project.add_extrapolation` fields (``reaction``, ``quantity``, ``unit``,
@@ -708,7 +708,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     is left alone.  Building those integrals is the bulk of the startup cost
     for a capture grid, so the second call on the same grid is much faster.
     """
-    from .azure2 import azure2
+    from .session import Session
 
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(azr_file)) or "."
@@ -717,7 +717,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd)
 
     try:
-        with azure2(tmp, cwd=cwd) as m:
+        with Session(tmp, cwd=cwd) as m:
             m.extrap_mode()
             if params is None:
                 params = best_fit_params(

@@ -50,7 +50,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "4")
     sys.stdout.reconfigure(line_buffering=True)
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
         # --- Brune and Park give the same cross sections from the same file.
         #     Brune's analytic gradient is established; its finite-difference
         #     agreement calibrates what the same check can resolve for Park.
-        with azure2(azr_b, use_brune=True) as mb:
+        with Session(azr_b, use_brune=True) as mb:
             xb = np.asarray(mb.params_rwa, float)
             xs_b = np.concatenate([np.asarray(s, float).ravel() for s in mb.calculate_rwa(xb)])
             chi_b = mb.objective(xb)
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as tmp:
             gfd_b = fd_gradient(lambda z: float(np.sum(mb.calculate_chi2_rwa(z))), xb, hb)
             ref = rel(gb, gfd_b)
             print(f"  (Brune mode: analytic gradient vs finite differences, rel {ref:.1e})")
-        with azure2(azr, use_park=True) as m:
+        with Session(azr, use_park=True) as m:
             x = np.asarray(m.params_rwa, float)
             xs_p = np.concatenate([np.asarray(s, float).ravel() for s in m.calculate_rwa(x)])
             chi_p = m.objective(x)

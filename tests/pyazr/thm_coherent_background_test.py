@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -186,7 +186,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # An experiment whose name holds "norm" and "shift": its cbkg parameters
     # are neither (they were taken for both by a substring test).
     named = project("named", "experiment[normshift] cbackground=1/2+:2=0.3,-0.2")
-    with azure2(os.path.join(named, "run.azr"), cwd=named) as s:
+    with Session(os.path.join(named, "run.azr"), cwd=named) as s:
         cbi = [p.free_index for p in s.parameters.cbkg]
         norms = {int(round(i)) for i in s.norm_indices()}
         shifts = {int(round(i)) for i in s.shift_indices()}
@@ -196,7 +196,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("2. the engine: parameters, chi2, report, zero background")
     names = ["cbkg_E_1/2+_2_1/2,0,1/2,1_" + p for p in ("re0", "im0", "re1", "im1")]
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         cb = s.parameters.cbkg
         check("four cbkg parameters, last, in order", [p.name for p in cb] == names and
               [p.index for p in cb] == list(range(len(s.parameters) - 4, len(s.parameters))),
@@ -251,7 +251,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the snapshot's cbackground carries the values",
           fit.thm()["experiments"]["E"]["cbackground"] == "1/2+:2:1/2,0,1/2,1:linear=0.31,-0.19,0.04,0.12",
           fit.thm()["experiments"]["E"])
-    with azure2(path, cwd=py_dir) as s:
+    with Session(path, cwd=py_dir) as s:
         y = np.asarray(s.params_rwa, float)
         check("reloaded: same parameter vector", np.allclose(y, xs, rtol=1e-12, atol=0), f"{y} vs {xs}")
         check("reloaded: same chi2", rel(float(s.calculate_chi2_rwa(y)[0]), chi_s) < 1e-9)
@@ -259,10 +259,10 @@ with tempfile.TemporaryDirectory() as tmp:
     zero_dir = project("zero", "experiment[E] background=linear "
                                "cbackground=1/2+:2:linear=0f,0f,0f,0f")
     none_dir = project("none", "experiment[E] background=linear")
-    with azure2(os.path.join(none_dir, "run.azr"), cwd=none_dir) as s:
+    with Session(os.path.join(none_dir, "run.azr"), cwd=none_dir) as s:
         x = np.asarray(s.params_rwa, float)
         r0, J0 = s.residual_jacobian(x)
-    with azure2(os.path.join(zero_dir, "run.azr"), cwd=zero_dir) as s:
+    with Session(os.path.join(zero_dir, "run.azr"), cwd=zero_dir) as s:
         check("fixed zero background: no free cbkg parameter",
               len(s.parameters.cbkg) == 4 and all(p.fixed for p in s.parameters.cbkg))
         r1, J1 = s.residual_jacobian(x)

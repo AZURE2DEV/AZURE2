@@ -185,7 +185,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -226,7 +226,7 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -241,7 +241,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("3. thm_distortion")
     qf_dir = project("qf", f"experiment[A] {KIN} distortion=coulomb")
-    with azure2(os.path.join(qf_dir, "run.azr"), cwd=qf_dir) as s:
+    with Session(os.path.join(qf_dir, "run.azr"), cwd=qf_dir) as s:
         r = s.thm_distortion("A", [REF_HE3_QF[0]])
         check(f"kind coulomb, theta_cm 180 (Trojan horse = target, qf): {r['kind']}, {r['theta_cm']}",
               r["kind"] == "coulomb" and abs(r["theta_cm"][0] - 180) < 1e-12 and r["x"][0] == 1.0)
@@ -268,7 +268,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("3b. thm_distortion with global potentials (liang09 for 3He + 18O, ancai06 for d + 19F)")
     gd = project("global", f"experiment[A] {KIN} distortion=optical "
                  "opticalAA=liang09 opticalSF=ancai06")
-    with azure2(os.path.join(gd, "run.azr"), cwd=gd) as s:
+    with Session(os.path.join(gd, "run.azr"), cwd=gd) as s:
         r = s.thm_distortion("A", [0.45, 0.6, 0.75])
         check(f"runs, R(E_ref) scale: {r['kind']}, R = {np.round(r['R'], 4)}",
               r["kind"] == "optical" and np.all(np.isfinite(r["R"])) and np.all(r["R"] > 0))
@@ -278,7 +278,7 @@ with tempfile.TemporaryDirectory() as tmp:
     bad = project("global_bad", f"experiment[A] {KIN} distortion=optical "
                   "opticalSF=daehnick80")
     try:
-        with azure2(os.path.join(bad, "run.azr"), cwd=bad) as s:
+        with Session(os.path.join(bad, "run.azr"), cwd=bad) as s:
             s.thm_distortion("A", [0.6])
         check("the session refuses daehnick80 for d + 19F", False, "no error")
     except Exception as err:
@@ -299,7 +299,7 @@ with tempfile.TemporaryDirectory() as tmp:
     model = {}
     for name, blk in runs.items():
         d = project("nf_" + name, blk, fold=False)
-        with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+        with Session(os.path.join(d, "run.azr"), cwd=d) as s:
             x = np.asarray(s.params_rwa, float)
             model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
             ecm = np.concatenate([np.asarray(v) for v in s.energies])

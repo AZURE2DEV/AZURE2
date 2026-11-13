@@ -211,7 +211,7 @@ def read_parameter_file(path):
 
 class Parameters(list):
     """The table of a session's fit parameters: one :class:`Parameter` per row, in the engine's order
-    (``azure2.parameters``; built once per session and layout).
+    (``Session.parameters``; built once per session and layout).
 
     The fit vector ``x`` (the free parameters, in the order of their ``free_index``, the engine's basis) is the only
     vector of the interface.  ``x0`` is a copy of its start; every selection carries the same ``x0``, so
@@ -242,7 +242,7 @@ class Parameters(list):
         """A copy of the start of the fit vector (every free parameter's ``start``, in ``free_index`` order)."""
         if self._x0 is None:
             raise ParameterError("this set of parameters was built without its session, so it has no fit vector; "
-                                 "azure2.parameters is the session's table (its x0 is azure2.params_rwa).")
+                                 "Session.parameters is the session's table (its x0 is Session.params_rwa).")
         return self._x0.copy()
 
     @property
@@ -393,7 +393,7 @@ class Parameters(list):
         """Write a parameter file (as ``param.sav``): the basis tag, then every row with its value, a free one from
         ``x``, a fixed one its start.  The table must hold every parameter of the session."""
         if [p.index for p in self] != list(range(len(self))):
-            raise ParameterError("write needs the session's whole table (azure2.parameters), not a selection: a "
+            raise ParameterError("write needs the session's whole table (Session.parameters), not a selection: a "
                                  "parameter file names every parameter.")
         x = self._vector(x)
         with open(os.fspath(path), "w") as fh:
@@ -614,7 +614,7 @@ class PairSet(list):
             if p.number == number:
                 return p
         raise ParameterKeyError(f"no pair {number!r} (the pair numbers: {[p.number for p in self]}); "
-                                f"azure2.pairs lists the pairs.")
+                                f"Session.pairs lists the pairs.")
 
     def __repr__(self):
         return f"PairSet({len(self)} pairs)"

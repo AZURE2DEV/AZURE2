@@ -43,8 +43,8 @@ CALLS = ["calculate_chi2_rwa", "calculate_chi2", "calculate_rwa", "calculate", "
 def worker(model_dir, azr, out):
     """One process: every call at x0 and at a moved x; results and the profile labels to `out`."""
     import numpy as np
-    from pyazr import azure2
-    a = azure2(os.path.join(model_dir, azr), cwd=model_dir)
+    from pyazr import Session
+    a = Session(os.path.join(model_dir, azr), cwd=model_dir)
     res = {}
     x0 = np.array(a.params_rwa, float)
     p0 = np.array(a.params, float)
@@ -92,7 +92,7 @@ def close(a, b, rel=1e-12):
 def main():
     try:
         import numpy  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

@@ -296,7 +296,7 @@ method; `docs/upgrade/project_format3.md` §3.12). It is a `<config>` key, a fla
    `ConfigOptionContradictions()`.
 2. Its place in `Config` (a bit of `paramMask` or a bool member): one row of `OptionStorages()` in
    `src/ProjectOptions.cpp` [`upgrade_project_options`: a row without one, or a default unlike `Config::Reset`, fails].
-3. Its keyword in `pyazr.azure2.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
+3. Its keyword in `pyazr.Session.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
 4. Its case, both values, in `tests/config_options/check.sh` (key = flag) and `tests/pyazr/config_options_test.py`
    (key = keyword); its line in the table of `docs/source/reference/command_line.rst`.
 An option that is not project state (a file or directory of this machine, the menu's mode) is a field of

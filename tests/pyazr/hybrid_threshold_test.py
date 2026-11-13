@@ -7,7 +7,7 @@ DecayingSolution, HybridBoundShift); above it rho H'/H of the outgoing one.  Bui
 threshold from the undistorted Whittaker function, so S of tests/hybrid_potential (p + 12C, Woods-Saxon 20 / 3.6 /
 0.6 MeV, fm, a_c = 3.6 fm) jumped at E = 0 by 1.07 (l = 0), 0.92 (l = 1), 0.75 (l = 2) (work/so-note/threshold.py).
 
-Checks through `azure2.coulomb_functions` (S at the channel radius, E <= 0 included), pair 1, l = 0-2:
+Checks through `Session.coulomb_functions` (S at the channel radius, E <= 0 included), pair 1, l = 0-2:
   (1) |S(E) - S(0)| <= 1e-3 for |E| <= 1e-3 MeV, on both sides and in the closed band (eta > 100, E < 8e-5 MeV,
       where S = 2 S(0) - S(-E)); dS/dE is about 0.3-0.8 MeV^-1 there, so 1e-3 MeV moves S by < 1e-3;
   (2) S(-1.94351 MeV) (the 13N ground state) against the independent DOP853 integration
@@ -40,7 +40,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -55,7 +55,7 @@ try:
     os.makedirs(os.path.join(work, "output"))
     shutil.copytree(os.path.join(SRC, "data"), os.path.join(work, "data"))
     shutil.copy(os.path.join(SRC, "hybrid_potential.azr"), work)
-    A = azure2(os.path.join(work, "hybrid_potential.azr"), cwd=work)
+    A = Session(os.path.join(work, "hybrid_potential.azr"), cwd=work)
     near = np.array([-1e-3, -1e-4, -1e-5, -1e-7, 0.0, 1e-7, 1e-5, 5e-5, 1e-4, 1e-3])
     for L in (0, 1, 2):
         S = A.coulomb_functions(1, near, L=L)["S"]

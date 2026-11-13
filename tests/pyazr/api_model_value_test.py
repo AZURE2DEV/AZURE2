@@ -37,7 +37,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"skip: engine not importable ({e})")
@@ -61,7 +61,7 @@ def main():
             f.write(text)
 
         E1, E2 = "angle-integrated cross section, E1 part", "angle-integrated cross section, E2 part"
-        with azure2(azr, cwd=work) as m:
+        with Session(azr, cwd=work) as m:
             s = m.sess
             obs = [d.observable for d in m.active_datasets]
             check("the model has a total, an E1-only and an E2-only capture segment",

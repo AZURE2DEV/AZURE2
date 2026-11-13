@@ -81,10 +81,10 @@ def norm_values(path):
 
 
 try:
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip 2-3: engine not available ({type(err).__name__}: {err})")
-    azure2 = None
+    Session = None
 
 binary = os.environ.get("AZURE2_BIN")
 if not binary:
@@ -103,11 +103,11 @@ def cli_chi2(work, azr):
     return float(tot[1]), float(tot[3])
 
 
-if azure2 is not None:
+if Session is not None:
     with tempfile.TemporaryDirectory() as tmp:
         work = os.path.join(tmp, "w")
         fresh_copy(work)
-        with azure2(os.path.join(work, AZR), cwd=work) as s:
+        with Session(os.path.join(work, AZR), cwd=work) as s:
             norms = s.parameters.norms
             idx = [p.free_index for p in norms if not p.fixed]
             keys = [p.segment_key for p in norms if not p.fixed]
@@ -133,7 +133,7 @@ if azure2 is not None:
             pen_fit = s.penalties(x)
             pen_fit_norm = float(pen_fit["norm"].sum())
             check("the fit pays a norm prior", pen_fit_norm > 0.1, pen_fit)
-            with azure2(fit_azr, cwd=work) as t:
+            with Session(fit_azr, cwd=work) as t:
                 chi_alone = t.calculate_chi2_rwa(t.params_rwa)[0]
                 pen = t.penalties(t.params_rwa)
             check("the snapshot alone gives the fit's chi2", rel(chi_alone, chi_fit) < 1e-9,
@@ -161,7 +161,7 @@ if azure2 is not None:
             names = {p.segment_key: p.name for p in norms}
             check("the .sav has the fitted norms",
                   all(rel(sav[names[k]], want[k]) < 1e-7 for k in want), sav)
-            with azure2(nom_azr, cwd=work) as t:
+            with Session(nom_azr, cwd=work) as t:
                 chi_nom = t.calculate_chi2_rwa(t.params_rwa)[0]
             check("alone it is not the fit (the trade-off)", rel(chi_nom, chi_fit) > 1e-3,
                   (chi_nom, chi_fit))
@@ -174,12 +174,12 @@ if azure2 is not None:
 
         # 4. -------------------------------------------------------------------
         print("4. close_session=True")
-        s = azure2(os.path.join(work, AZR), cwd=work)
+        s = Session(os.path.join(work, AZR), cwd=work)
         last_azr, _ = s.save_fit(os.path.join(work, "last.azr"), x, close_session=True)
         check("the session is closed", not s.is_alive())
         check("the snapshot is written and verified (same norms as 2)",
               norm_fields(last_azr) == norm_fields(fit_azr))
-        with azure2(last_azr, cwd=work) as t:
+        with Session(last_azr, cwd=work) as t:
             chi_last = t.calculate_chi2_rwa(t.params_rwa)[0]
         check("alone it gives the fit's chi2", rel(chi_last, chi_fit) < 1e-9, (chi_last, chi_fit))
         try:
@@ -192,7 +192,7 @@ print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
     sys.exit(1)
-if azure2 is None:
+if Session is None:
     # 77 is SKIP_RETURN_CODE in tests/pyazr/CMakeLists.txt: ctest reports a
     # test whose engine part could not run as Skipped, not as Passed.
     print("save_fit norm checks skipped (no engine)")

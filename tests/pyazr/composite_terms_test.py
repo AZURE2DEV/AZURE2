@@ -45,9 +45,9 @@ def edit(src, dst, fn):
 
 def worker(azr, cwd, flags, out):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     try:
-        with azure2(azr, cwd=cwd, ignore_externals=flags[0] == "1", use_park=flags[1:2] == "1") as a:
+        with Session(azr, cwd=cwd, ignore_externals=flags[0] == "1", use_park=flags[1:2] == "1") as a:
             v = a.calculate_rwa(np.array(a.params_rwa, float))
             res = {"values": [[None if not np.isfinite(x) else float(x) for x in np.ravel(np.asarray(s, float))]
                               for s in v]}
@@ -87,7 +87,7 @@ def project(suite, model, datafile=None):
 def main():
     try:
         import numpy as np
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

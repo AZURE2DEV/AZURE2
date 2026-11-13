@@ -42,7 +42,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -65,7 +65,7 @@ def session(shift):
             p.set(name, active="no")
     p.add_beam("beam_fels", spread="0.002 MeV lab")
     p.set("skowronski_fels", shift=shift, beam="beam_fels", quadrature="points 20")
-    return azure2(p.save(os.path.join(folder, "ec.azr")), cwd=folder)
+    return Session(p.save(os.path.join(folder, "ec.azr")), cwd=folder)
 
 
 def shift_index(a):

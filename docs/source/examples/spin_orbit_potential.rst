@@ -50,7 +50,7 @@ In pyazr
 
 .. code-block:: python
 
-   m = pyazr.azure2("hybrid_potential.azr")
+   m = pyazr.Session("hybrid_potential.azr")
    m.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6, "diffuseness": 0.6, "on": "light"})
    p12 = m.coulomb_functions(1, [0.5, 1.0, 3.0], L=1, J=0.5)
    p32 = m.coulomb_functions(1, [0.5, 1.0, 3.0], L=1, J=1.5)

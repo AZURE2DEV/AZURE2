@@ -35,8 +35,8 @@ def check(name, ok, detail=""):
 
 
 def objective_of(path, work):
-    from pyazr import azure2
-    return azure2(path, cwd=work).objective()
+    from pyazr import Session
+    return Session(path, cwd=work).objective()
 
 
 if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "--fresh":
@@ -49,7 +49,7 @@ if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "--fresh":
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)

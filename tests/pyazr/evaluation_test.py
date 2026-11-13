@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pyazr.Evaluation (azure2.evaluate(x)) against the program's own output files, on T1, T2 and T3 (tests/upgrade).
+"""pyazr.Evaluation (Session.evaluate(x)) against the program's own output files, on T1, T2 and T3 (tests/upgrade).
 
 - The program runs menu 1 (a calculation with the data) on a copy of the project; a session on another copy
   evaluates at its start x.
@@ -10,7 +10,7 @@
   the Legendre coefficients of an angular distribution) to the eleven digits printed.
 - T2 at a displaced point (norms and shifts off their centres): the rows and totals of the chiSquared.out the
   session's writer (write_output_files) gives at that point.
-- The objective is azure2.objective(x) bit for bit and the sum of the terms; Evaluation.chi2 plus the model terms
+- The objective is Session.objective(x) bit for bit and the sum of the terms; Evaluation.chi2 plus the model terms
   (Park, abundances, model data) is calculate_chi2_rwa(x); the model data are pyazr.model_data's (T3).
 - One evaluation per Evaluation: an evaluate(x) takes the time of one objective(x) (13N; the engine's
   Coulomb-function counters, cache_stats, stay at zero when the Coulomb table serves the functions).
@@ -44,7 +44,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     import pyazr
-    from pyazr import azure2
+    from pyazr import Session
     pyazr.kinds()
 except Exception as err:  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -135,7 +135,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"== {name}")
         program, proc = run_program(copy_project(name, os.path.join(tmp, name + "_cli")))
         rows, totals = chi_squared_file(program)
-        s = azure2(copy_project(name, os.path.join(tmp, name + "_api")))
+        s = Session(copy_project(name, os.path.join(tmp, name + "_api")))
         x = np.asarray(s.params_rwa, float)
         ev = s.evaluate(x)
         check(f"{name}: one data set per row of chiSquared.out ({len(ev.data)})", len(rows) == len(ev.data),
@@ -160,7 +160,7 @@ with tempfile.TemporaryDirectory() as tmp:
         found = blocks(program)
         missing = [d.name for d in ev.data if not any(matches(d, b) for _, b in found)]
         check(f"{name}: every data set's arrays are a block of the program's AZUREOut_* files", not missing, missing)
-        check(f"{name}: objective = azure2.objective(x) bit for bit ({ev.objective:.10g})",
+        check(f"{name}: objective = Session.objective(x) bit for bit ({ev.objective:.10g})",
               ev.objective == s.objective(x))
         total = sum(ev.terms.values())
         check(f"{name}: the terms add up to the objective", abs(total - ev.objective) <= 1e-12 * max(1, ev.objective))
@@ -195,7 +195,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "output"))
     os.symlink(os.path.join(TESTS, "13N", "data"), os.path.join(work, "data"))
     shutil.copy(os.path.join(TESTS, "13N", "13N.azr"), work)
-    with azure2(os.path.join(work, "13N.azr")) as s:
+    with Session(os.path.join(work, "13N.azr")) as s:
         x = np.asarray(s.params_rwa, float)
         s.objective(x)
         s.evaluate(x)  # both paths warm

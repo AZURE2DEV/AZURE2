@@ -45,7 +45,7 @@ try:
     try:
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         from pyazr import _azure2  # noqa: F401
     except Exception as err:
         print(f"skip engine part: {type(err).__name__}: {err}")
@@ -56,7 +56,7 @@ try:
             os.makedirs(os.path.join(work, "checks"))
             shutil.copy(os.path.join(tmp, name + ".azr"), work)
             os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
-            with azure2(os.path.join(work, name + ".azr"), cwd=work) as s:
+            with Session(os.path.join(work, name + ".azr"), cwd=work) as s:
                 return [np.asarray(v, float) for v in s.calculate_rwa(np.asarray(s.params_rwa, float))]
         def session(name):
             work = os.path.join(tmp, "run_" + name)
@@ -64,7 +64,7 @@ try:
             os.makedirs(os.path.join(work, "checks"))
             shutil.copy(os.path.join(tmp, name + ".azr"), work)
             os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
-            return azure2(os.path.join(work, name + ".azr"), cwd=work)
+            return Session(os.path.join(work, name + ".azr"), cwd=work)
 
         bare, dop, dopT = evaluate("bare"), evaluate("dop"), evaluate("dopT")
         rel = float(np.max(np.abs(dop[0] / bare[0] - 1.0)))

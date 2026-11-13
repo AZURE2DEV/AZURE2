@@ -42,7 +42,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import azure2
+from pyazr import Session
 from pyazr.bands import best_fit_params, rmatrix_columns, sensitivities
 
 
@@ -75,7 +75,7 @@ def main() -> int:
                     help="also finite-difference, and compare with the analytic matrix")
     args = ap.parse_args()
 
-    with azure2(str(args.azr)) as azr:
+    with Session(str(args.azr)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             x = np.asarray(best_fit_params(azr, str(args.params)), float)

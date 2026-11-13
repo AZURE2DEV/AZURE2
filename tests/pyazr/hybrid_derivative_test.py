@@ -15,7 +15,7 @@ Coulomb functions to ~1e-8 (physics_hybrid_potential), and this test asks for 1e
 
 Model: tests/hybrid_potential/hybrid_potential.azr (p + 12C, pair 1) with its <potentials> section
 replaced: once empty (no potential), once one record for p + 12C, a Woods-Saxon of depth 1e-9 MeV.  Compared through
-`azure2.coulomb_functions` at l = 0..3, 0.3-4 MeV, at the channel radius and at an off-node radius.
+`Session.coulomb_functions` at l = 0..3, 0.3-4 MeV, at the channel radius and at an off-node radius.
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -43,7 +43,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -61,8 +61,8 @@ try:
         open(path, "w").write(text[:s] + "<potentials>\n" + records + "</potentials>" + text[e:])
         return path
 
-    plain = azure2(variant("plain", ""), cwd=work)
-    tiny = azure2(variant("tiny", "potential p12C\n    pair            p+12C\n    coulomb_radius  3.5 fm\n"
+    plain = Session(variant("plain", ""), cwd=work)
+    tiny = Session(variant("tiny", "potential p12C\n    pair            p+12C\n    coulomb_radius  3.5 fm\n"
                                   "    central         woods_saxon depth 1e-9 MeV radius 3.6 fm diffuseness 0.6 fm\n"
                                   "    matching_radius 15 fm\n    step            0.0275 fm\n"), cwd=work)
     energies = np.array([0.3, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0])

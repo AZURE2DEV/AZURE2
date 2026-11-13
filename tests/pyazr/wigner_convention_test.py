@@ -31,13 +31,13 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2, teichmann_wigner, lane_thomas_wigner
+    from pyazr import Session, teichmann_wigner, lane_thomas_wigner
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
 
 work = os.path.join(ROOT, "tests", "13N")
-m = azure2(os.path.join(work, "13N.azr"), cwd=work)
+m = Session(os.path.join(work, "13N.azr"), cwd=work)
 widths = [p for p in m.parameters.widths if p.wigner_limit]
 check("the 13N widths carry a Wigner limit", len(widths) >= 3, f"{len(widths)} widths with a limit")
 n = 0

@@ -58,7 +58,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -206,7 +206,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print(f"CLI: chi2 {cli_chi2!r}, {file_val}")
 
     print("2. the engine: shared norm and linear background")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         check("six free parameters", x.size == 6, x.size)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
@@ -247,7 +247,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
 
     print("3. derivatives through the profile (norm + linear background)")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         r, J = s.residual_jacobian(x)
@@ -276,10 +276,10 @@ with tempfile.TemporaryDirectory() as tmp:
     print("4. one-data-set experiments == no experiment; a session refuses a bad theta window")
     plain_dir = project("plain")
     one_dir = project("one", [("A", [1], dict(background="none")), ("B", [2], dict(background="none"))])
-    with azure2(os.path.join(plain_dir, "run.azr"), cwd=plain_dir) as s:
+    with Session(os.path.join(plain_dir, "run.azr"), cwd=plain_dir) as s:
         x = np.asarray(s.params_rwa, float)
         r0, J0 = s.residual_jacobian(x)
-    with azure2(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
+    with Session(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         r1, J1 = s.residual_jacobian(x)
         check("the experiments are reported",
               sorted(s.thm_experiments(x)) == ["A", "B"])
@@ -287,7 +287,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("Jacobian bit for bit", np.array_equal(J0, J1))
     bad_dir = project("bad", bad_block="experiment[A] background=linear theta=x")
     try:
-        with azure2(os.path.join(bad_dir, "run.azr"), cwd=bad_dir):
+        with Session(os.path.join(bad_dir, "run.azr"), cwd=bad_dir):
             pass
         check("a session refuses a bad theta", False, "it loaded")
     except Exception as err:

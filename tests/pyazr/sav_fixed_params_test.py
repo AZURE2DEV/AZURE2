@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A parameter file's FIXED level parameters reach the engine (azure2.load_sav).
+"""A parameter file's FIXED level parameters reach the engine (Session.load_sav).
 
 AZURE2's external parameter file sets every parameter it names, fixed level
 energies and widths included (AZUREParams::ReadUserParameters).  pyazr's
@@ -48,7 +48,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory() as tmp:
     azr = model.save(os.path.join(work, "fixed_width.azr"))
     sav = os.path.join(work, "fixed.sav")
 
-    with azure2(azr, cwd=work) as m:
+    with Session(azr, cwd=work) as m:
         names = [p.name for p in m.parameters]
         fixed = np.asarray(m.fixed_params, bool)
         full0 = np.asarray(m.sess.params_all_rwa(), float)

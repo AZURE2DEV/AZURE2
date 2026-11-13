@@ -17,7 +17,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
-from pyazr import azure2  # noqa: E402
+from pyazr import Session  # noqa: E402
 
 failures = []
 CASES = [("density", "tgt_meyer_84.areal_density"), ("doppler", "D.doppler"), ("scale", "stopping_scale.TiN.1H"),
@@ -36,7 +36,7 @@ def layout(m, name):
 
 
 def evaluate(path, cwd, sav, name):
-    with azure2(path, cwd=cwd) as m:
+    with Session(path, cwd=cwd) as m:
         x = m.load_sav(sav)
         return m.objective(x), {k: v[0] for k, v in m.dataset_chi2(x).items()}, layout(m, name)
 
@@ -60,7 +60,7 @@ def main(work):
               (fo, wo, fd, wd, fl, wl))
         if case == "scale":
             continue
-        with azure2(os.path.join(d, "t.azr"), cwd=d) as m:
+        with Session(os.path.join(d, "t.azr"), cwd=d) as m:
             x = m.load_sav(sav)
             try:
                 m.save_fit(os.path.join(d, "snapshot.azr"), x, param_sav=False)
@@ -68,7 +68,7 @@ def main(work):
             except Exception as e:  # noqa: BLE001 -- what the base build gives for the Doppler temperature
                 check(f"({case}) save_fit(verify=True): the snapshot reads back as the fit", False, f"{type(e).__name__}: {e}")
     d = os.path.join(work, "outside")
-    with azure2(os.path.join(d, "t.azr"), cwd=d) as m:
+    with Session(os.path.join(d, "t.azr"), cwd=d) as m:
         got = layout(m, "D.doppler")
     check(f"(4) the start outside the centre's range: the start's layout ({got!r} K, want 1.21 x 400)", got == 1.21 * 400.0,
           got)

@@ -25,7 +25,7 @@ def fit(f, hesse=True):
 
 
 def main(path):
-    with pyazr.azure2(path) as s:
+    with pyazr.Session(path) as s:
         f = s.fit_objective()
         m = fit(f)
         x = np.array(m.values)

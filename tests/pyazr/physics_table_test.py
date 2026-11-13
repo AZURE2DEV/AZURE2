@@ -320,7 +320,7 @@ def main():
     # ------------------------------------------------------------------ the engine's own use: 13N
     print("the engine's own use (tests/13N/13N.azr, exact Coulomb routine)")
     azr = os.path.join(ROOT, "tests", "13N", "13N.azr")
-    s = pyazr.azure2(azr, use_coulomb_table=False)
+    s = pyazr.Session(azr, use_coulomb_table=False)
     try:
         for pair in s.pairs:
             if pair.ptype != 0:

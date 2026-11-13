@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.normpath(os.path.join(SOURCE, "..", "..")))
 try:
     import numpy as np
     from pyazr import _azure2  # noqa: F401  (the compiled engine)
-    from pyazr import azure2
+    from pyazr import Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -105,7 +105,7 @@ def variant(tmp, records):
 NO_HYBRID = ""      # no record: no pair has a potential
 
 print("1. the project as committed (pair 1's record)")
-with azure2(AZR, cwd=HERE) as m:
+with Session(AZR, cwd=HERE) as m:
     x = np.asarray(m.params_rwa, float)
     chi2_file = float(np.sum(m.calculate_chi2_rwa(x)))
     check("chi2 from the file equals expected/chiSquared.out", chi2_file, EXPECTED_CHI2, EXPECTED_TOL)
@@ -120,7 +120,7 @@ with azure2(AZR, cwd=HERE) as m:
 
 print("\n3. no hybrid at all")
 path = variant("_no_hybrid.azr", NO_HYBRID)
-with azure2(path, cwd=HERE) as m:
+with Session(path, cwd=HERE) as m:
     chi2_off = float(np.sum(m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))))
     print(f"        baseline chi2 = {chi2_off:.6f}")
     # 1e-4, not the 1e-3 this used to demand. The potential's effect on this
@@ -136,7 +136,7 @@ with azure2(path, cwd=HERE) as m:
                f"{chi2_off} vs {FILE_CHI2}")
 
 print("\n4. switching pair 1 off at runtime returns the baseline")
-with azure2(AZR, cwd=HERE) as m:
+with Session(AZR, cwd=HERE) as m:
     m.set_nuclear_potential(1, enabled=False)
     m.set_nuclear_potential(0, enabled=False)
     # Re-read: the potential changes the penetrabilities, which are what map
@@ -145,13 +145,13 @@ with azure2(AZR, cwd=HERE) as m:
     check("chi2 with everything off", float(np.sum(m.calculate_chi2_rwa(x))), chi2_off)
 
 print("\n5. setting a potential through the API equals loading it from a file")
-with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
+with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
     x = np.asarray(m.params_rwa, float)
     check("chi2 built through the API", float(np.sum(m.calculate_chi2_rwa(x))), FILE_CHI2)
 
 print("\n6. the Coulomb memo is keyed on the potential, so a change is seen")
-with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
+with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     seen = []
     for v0 in (10.0, 20.0, 30.0):
         m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=v0, R=3.6, a=0.6)
@@ -161,7 +161,7 @@ with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     check("V0=20 matches the file", seen[1], FILE_CHI2)
 
 print("\n7. a parameter vector captured before the change no longer fits the model")
-with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
+with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     stale = np.asarray(m.params_rwa, float)
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
     with_stale = float(np.sum(m.calculate_chi2_rwa(stale)))

@@ -112,7 +112,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -154,7 +154,7 @@ with tempfile.TemporaryDirectory() as tmp:
             print(proc.stdout[-2000:])
             sys.exit(1)
         cli_chi2 = float(hit[-1])
-        with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+        with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
             x = np.asarray(s.params_rwa, float)
             chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
             check(f"{tag}: calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -169,7 +169,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("3. thm_distortion with a window")
     d = project("dist", f"experiment[A] {KIN} distortion=coulomb spectatorAngles=cm:120-180")
     grid = np.linspace(0.45, 0.95, 21) + 0.003
-    with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+    with Session(os.path.join(d, "run.azr"), cwd=d) as s:
         r = s.thm_distortion("A", grid)
         ref = s.thm_distortion("A", [r["E_ref"]])
         rho = np.asarray(r["M2"]) / np.asarray(r["M2_PW"])
@@ -190,7 +190,7 @@ with tempfile.TemporaryDirectory() as tmp:
                       ("dw", f"experiment[A] {KIN} distortion=coulomb vertexModel=dw "
                              "spectatorAngles=0-180")):
         dd = project(f"nf_{name}", blk, fold=False)
-        with azure2(os.path.join(dd, "run.azr"), cwd=dd) as s:
+        with Session(os.path.join(dd, "run.azr"), cwd=dd) as s:
             x = np.asarray(s.params_rwa, float)
             model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
             ecm = np.concatenate([np.asarray(v) for v in s.energies])

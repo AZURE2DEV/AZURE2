@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scattering lengths through pyazr: the constraints as `datum` records of <modelData> (Project: read, added,
 removed),
-azure2.scattering_lengths against the reference values of tests/scattering_length, the constraint term
+Session.scattering_lengths against the reference values of tests/scattering_length, the constraint term
 in calculate_chi2_rwa / penalties(), chi2_and_grad and the residual_jacobian rows against central
 finite differences.  Model: tests/scattering_length/be7p_fit.azr (7Be+p, every kind of constraint; in format 3
 the constraints are scattering_length data of <modelData>).
@@ -75,7 +75,7 @@ try:
     try:
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         from pyazr import _azure2  # noqa: F401  the compiled engine
     except Exception as err:  # engine not built
         print(f"skip engine part: {type(err).__name__}: {err}")
@@ -87,7 +87,7 @@ try:
         for d in ("output", "checks"):
             os.makedirs(os.path.join(work, d), exist_ok=True)
         # be7p.azr has no data segments: an extrapolation-mode session
-        session = azure2(os.path.join(work, "be7p.azr"), data_mode=False)
+        session = Session(os.path.join(work, "be7p.azr"), data_mode=False)
 
     if session is not None:
         values = {(v.pair, v.jpi): v for v in session.scattering_lengths()}
@@ -96,7 +96,7 @@ try:
         check("7Be*+p 0-: hard sphere", not values[(2, "0-")].has_levels, values[(2, "0-")])
         check("7Be*+p 1-: complex", values[(2, "1-")].a0.imag < -1e-3, values[(2, "1-")])
 
-        fit = azure2(os.path.join(work, "be7p_fit.azr"))
+        fit = Session(os.path.join(work, "be7p_fit.azr"))
         x = np.asarray(fit.params_rwa, float)
         pen = fit.penalties(x)["scattering_length"]
         # CODATA 2018 constants since 2026-11-05 (were 48.3471155 and 275.3872387 with the CODATA 2006 ones)

@@ -61,7 +61,7 @@ def write_model(path, amatrix, target_int):
 def main():
     try:
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77
@@ -81,7 +81,7 @@ def main():
         def calc(amatrix, target_int, brune):
             path = os.path.join(work, f"m_{int(amatrix)}{int(target_int)}{int(brune)}.azr")
             write_model(path, amatrix, target_int)
-            with azure2(path, cwd=work, use_brune=brune, ignore_externals=False) as a:
+            with Session(path, cwd=work, use_brune=brune, ignore_externals=False) as a:
                 return np.asarray(a.calculate_rwa(np.array(a.params_rwa, float))[0], float)
 
         def calc_project(name, amatrix, brune):
@@ -97,7 +97,7 @@ def main():
             lines[c + 1], lines[c + 2] = "output/", "checks/"
             open(path, "w").write("\n".join(lines))
             try:
-                with azure2(path, cwd=pw, use_brune=brune, ignore_externals=False) as a:
+                with Session(path, cwd=pw, use_brune=brune, ignore_externals=False) as a:
                     v = a.calculate_rwa(np.array(a.params_rwa, float))
                     return np.concatenate([np.ravel(np.asarray(x, float)) for x in v]), ""
             except Exception as err:

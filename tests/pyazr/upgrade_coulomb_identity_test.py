@@ -49,7 +49,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     import mpmath as mp
-    from pyazr import azure2
+    from pyazr import Session
     sys.path.insert(0, os.path.join(UPGRADE, "lib"))
     import upgrade_project as up
 except ImportError as e:
@@ -79,7 +79,7 @@ def channel(project, pair_key, m1, m2, z1, z2, a):
 
 
 def _channel(work, project, pair_key, m1, m2, z1, z2, a, mu, energies, worst):
-    with azure2(up.project_copy(project, work), data_mode=False) as m:
+    with Session(up.project_copy(project, work), data_mode=False) as m:
         for l in range(5):
             cf = m.coulomb_functions(pair_key, energies, L=l)
             for i, e in enumerate(energies):

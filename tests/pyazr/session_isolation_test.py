@@ -66,11 +66,11 @@ def worker(tmp, sequence):
     """Run the sessions of `sequence` one after another in this process; print one digest per evaluation."""
     sys.path.insert(0, ROOT)
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 
     out = []
     for label in sequence:
-        with azure2(stage(tmp, PROJECTS[label] + ("-r" if label in RADIUS else ""))) as s:
+        with Session(stage(tmp, PROJECTS[label] + ("-r" if label in RADIUS else ""))) as s:
             x = np.asarray(s.params_rwa, float)
             parts = [np.concatenate([np.asarray(v, float).ravel() for v in s.calculate_rwa(x)]),
                      np.asarray(s.segment_chi2(x), float)]
@@ -101,7 +101,7 @@ def main():
         sys.path.insert(0, ROOT)
         import numpy  # noqa: F401
         import pyazr  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:
         print(f"skip: engine not available ({type(err).__name__}: {err})")
         return 77

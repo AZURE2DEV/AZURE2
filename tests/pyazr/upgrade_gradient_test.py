@@ -3,8 +3,8 @@
 
 For the free parameters x of T1 and T3 (the engine's reduced-width vector in the Brune basis: level energies E_x in
 MeV, reduced width amplitudes and ANC-derived amplitudes in MeV^1/2, beta amplitudes), the gradient of the data chi^2
-from azure2.chi2_and_grad (reverse-mode adjoint of the engine) must equal the Richardson-extrapolated central
-difference of azure2.calculate_chi2_rwa,
+from Session.chi2_and_grad (reverse-mode adjoint of the engine) must equal the Richardson-extrapolated central
+difference of Session.calculate_chi2_rwa,
 
     D(h) = [chi^2(x + h e_i) - chi^2(x - h e_i)] / (2 h),   d chi^2 / d x_i ~ [4 D(h/2) - D(h)] / 3,
     h = 1e-6 max(|x_i|, 1e-2),
@@ -42,7 +42,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     sys.path.insert(0, os.path.join(ROOT, "tests", "upgrade", "lib"))
     import upgrade_project as up
 except ImportError as e:
@@ -54,7 +54,7 @@ def gradient_check(project, azr_name):
     work = tempfile.mkdtemp(prefix=f"upgrade_grad_{project}.")
     try:
         up.project_copy(project, work)
-        with azure2(os.path.join(work, azr_name + ".azr")) as m:
+        with Session(os.path.join(work, azr_name + ".azr")) as m:
             x = np.asarray(m.params_rwa, float)
             chi2, grad = m.chi2_and_grad(x)
             chi2_ref = float(np.sum(m.calculate_chi2_rwa(x)))

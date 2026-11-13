@@ -69,7 +69,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, Project
+        from pyazr import Session, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -97,7 +97,7 @@ def main():
 
         R_STAR = 4.37
         d_ref, azr_ref = project("ref", radius=R_STAR)
-        with azure2(azr_ref, cwd=d_ref, use_coulomb_table=False) as r:
+        with Session(azr_ref, cwd=d_ref, use_coulomb_table=False) as r:
             chi_ref = chi2(r)
 
         d, azr = project("main")
@@ -110,7 +110,7 @@ def main():
                 os.utime(os.path.join(root, name), (old, old))
         out = []
         with captured_stdout(out):
-            m = azure2(azr, cwd=d, use_coulomb_table=False)
+            m = Session(azr, cwd=d, use_coulomb_table=False)
         first = out[-1]
         try:
             what_fn, what_grp = "shift function on segment", "shift group 'G'"
@@ -144,7 +144,7 @@ def main():
                   f"{notes(rebuilds, what_grp)} lines")
             out = []
             with captured_stdout(out):
-                with azure2(azr, cwd=d) as m2:
+                with Session(azr, cwd=d) as m2:
                     chi2(m2)
             check("a new session prints them again", notes(out[-1], what_fn) == 1 and notes(out[-1], what_grp) == 1,
                   f"{notes(out[-1], what_fn)} / {notes(out[-1], what_grp)}")
@@ -174,7 +174,7 @@ def main():
                         fh.writelines(rows)
 
                 d_edit, azr_edit = project("edited", radius=R_STAR, edit=scale_165)
-                with azure2(azr_edit, cwd=d_edit, use_coulomb_table=False) as e:
+                with Session(azr_edit, cwd=d_edit, use_coulomb_table=False) as e:
                     chi_edit = chi2(e)
                 check("the edit changes chi2", rel(chi_edit, chi_ref) > 1e-6, f"{chi_edit} vs {chi_ref}")
                 before = m.cache_stats()["input_files_read"]
