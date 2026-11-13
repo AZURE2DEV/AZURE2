@@ -1,8 +1,8 @@
 Segment#, Chi-Squared,  N,  Norm,  Norm-Chi-Squared 
-1,39.5894,40,1.04,0
+1,39.7256,40,1.04,0
 2,42.17,30,0.95,0
 3,40.3825,30,0.95,0
-4,25.0744,30,0.98,0
+4,25.3481,30,0.98,0
 5,27.0451,26,1,0
 6,19.8181,25,1.02,0
 7,6.04379,10,0.97,0
@@ -12,5 +12,5 @@ Segment#, Chi-Squared,  N,  Norm,  Norm-Chi-Squared
 11,23.2908,30,0.00204223,0
 12,36.1683,28,0.00204223,0
 13,13.2468,16,0.740741,0
-Total-Chi-Squared: 330.425 Total-Norm-Chi-Squared: 0 Total-N: 330
+Total-Chi-Squared: 330.835 Total-Norm-Chi-Squared: 0 Total-N: 330
 
