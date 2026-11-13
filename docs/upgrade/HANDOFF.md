@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, Phase 6 branch 3, `feature/upgrade-6-evaluation-3`) — copies made when needed; the Coulomb table in the intEC signature
+
+**Done.**  (1) `evaluation.md` 4.1: what an evaluation of a fit writes, member by member.  Finding: for shifted
+terms, fitted target-effect parameters and re-placed grids the hand-over rewrites most of a `Site` (energies, angles,
+channel values, Coulomb amplitude, rows, stopping, thickness, slot layout), so removing `WorkingCopy::Clone` needs a
+split of the `Site` layer, not only of `SegmentState` and the overflow nodes.  (2) The pools of `AZURECalc` and
+`AZURECalcMCMC` start empty and clone a copy only when no idle one is left (was `max(4, threads)` for a fit, twice
+the hardware threads for the MCMC); `InitializePools`, `pools_initialized_` deleted.  (3) The `intEC.dat` signature
+holds the Coulomb table's file (path, size, modification time) or "exact Coulomb functions"
+(`tests/ec_table_signature`, fails on the base).  (4) `tests/describe_relativistic`: `--validate`/`--describe` read
+`relativistic` (already true on the base).  (5) The input-file byte store's four allow-list rows are permanent.
+Allow-list pending rows 88 -> 82 (milestone 2: 4 -> 0; 4: 44 -> 42; 3: 11; 5: 29).
+
+**Verified** (build `work/b-eval3`, 0 warnings, one thread): T1, T2, T3, 13N, natural_neon, 18O_p_a_thm x 3 bases
+against `tab-gridm-1`: 96 / 96 / 96 files, every number equal, only the 3 `intEC.dat.sig` per basis differ (13N, T1,
+T1_start: the new signature); ctest `upgrade_history`, `pyazr_session_isolation`, `repo_consistency` pass.
+
+**Not done** (the thread budget stayed at 1): the whole tree, the eight fits, `AZURE_TRACE_FCN=fresh`, the memory
+table, instruction counts, `ctest -LE slow`, `run_tests.sh`, 1 against 3 threads, the converted-tree gate.  Not
+started: relative paths without the working directory (plan in `evaluation.md` 7.5), the diagnostics record,
+`AZUREAPI`'s `mutable` members.
+
 ## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-5-one-grid` (the
