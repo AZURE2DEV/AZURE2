@@ -6,6 +6,7 @@
 #include "AdaptiveExtrapolation.h"
 #include "CNucChecks.h"
 #include "CaptureAyRequests.h"
+#include "ProjectSetup.h"
 #include "CNucReport.h"
 #include "Objective.h"
 #include "ModelData.h"
@@ -99,6 +100,7 @@ int AZUREMain::operator()() {
         configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
+      RequestDataEntrances(*compound(), configure());
     } else {
       if (const int made = data()->MakePoints(configure(), compound()); made != 0) {
         if (made != WorkingCopy::kFillRefused) configure().outStream << "Could not fill data object from file." << std::endl;
@@ -107,6 +109,7 @@ int AZUREMain::operator()() {
         configure().outStream << "Extrapolation segments produce no data." << std::endl;
         return -1;
       }
+      RequestExtrapolationEntrances(*compound(), configure());
     }
     // The capture-A_y terms the data sets need are built with the pathway table (CNuc::Initialize below).
     RequestCaptureAyTerms(*compound(), *data());
@@ -124,6 +127,7 @@ int AZUREMain::operator()() {
       return -1;
     } else {
       compound()->GetPair(compound()->GetPairNumFromKey(configure().rateParams.entrancePair))->SetEntrance();
+      compound()->RequestEntrance(compound()->GetPairNumFromKey(configure().rateParams.entrancePair));
     }
   }
 

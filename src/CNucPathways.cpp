@@ -3,6 +3,9 @@
 #include "CNucPathways.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -60,6 +63,25 @@ void CNuc::RequestCaptureAy(int entrancePair, int exitPair) {
   captureAyRequests_.push_back(request);
 }
 
+void CNuc::RequestEntrance(int pair) {
+  for (int r : entranceRequests_)
+    if (r == pair) return;
+  entranceRequests_.push_back(pair);
+}
+
+void CNuc::CompareEntranceRequests(const char *where) const {
+  std::set<int> flagged, requested(entranceRequests_.begin(), entranceRequests_.end());
+  for (int aa = 1; aa <= this->NumPairs(); aa++)
+    if (this->GetPair(aa)->IsEntrance()) flagged.insert(aa);
+  if (flagged == requested) return;
+  std::cerr << "ENTRANCE COMPARISON FAILED at " << where << ": flagged by the data set-up {";
+  for (int aa : flagged) std::cerr << " " << aa;
+  std::cerr << " }, requested from the specs {";
+  for (int aa : requested) std::cerr << " " << aa;
+  std::cerr << " }" << std::endl;
+  std::abort();
+}
+
 /*!
  * Builds the pathway table from the System's structure, the external-capture final states and the configuration:
  * R-matrix capture, the largest Legendre order, the entrance pairs (PPair::IsEntrance, set while the data are read)
@@ -70,6 +92,7 @@ void CNuc::BuildPathways(const Config &configure) {
   azure2::PathwayTableOptions options;
   options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;
   options.max_l_order = configure.maxLOrder;
+  this->CompareEntranceRequests("CNuc::BuildPathways");
   for (int aa = 1; aa <= this->NumPairs(); aa++)
     if (this->GetPair(aa)->IsEntrance()) options.entrances.push_back(aa);
   options.capture_ay = captureAyRequests_;

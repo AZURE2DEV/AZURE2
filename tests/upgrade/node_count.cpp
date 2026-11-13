@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "AMatrixFunc.h"
+#include "ProjectSetup.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
@@ -236,6 +237,7 @@ void RunProject(const std::string &path) {
     if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1)
       return (void)std::printf("%s\tdoes not set up\n", path.c_str());
     if (g_plan) anchorsByPair = AnchorsByPair(compound, cfg);
+    RequestDataEntrances(compound, cfg);
     compound.Initialize(cfg);
     compound.FillMnParams(params, &cfg);
     data.FillMnParams(params);

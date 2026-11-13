@@ -766,6 +766,7 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;
   if (this->InitializeLeaves(compound, configure) == -1) return -1;
+  compound->CompareEntranceRequests("WorkingCopy::Initialize, end");
   // The readers of angle-free slots with one angle share their rows (RowSet.h).
   this->BuildRowSets(compound, configure);
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the

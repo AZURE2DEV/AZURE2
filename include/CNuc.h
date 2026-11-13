@@ -263,6 +263,11 @@ class CNuc {
   /// Ask Initialize to build the capture analyzing-power terms of (entrance pair, exit pair), both 1-based, in the
   /// pathway table.  Set-up state, like PPair::SetEntrance: it must be called before Initialize.
   void RequestCaptureAy(int entrancePair, int exitPair);
+  /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
+  void RequestEntrance(int pair);
+  /// Comparison of the entrance requests with the flags the data set-up sets (PPair::SetEntrance): aborts with both
+  /// sets printed when they differ.
+  void CompareEntranceRequests(const char *where) const;
 
   /// Deep copy. AZURECalc gives each thread its own, since a calculation
   /// writes the fitted parameters into the object it runs on.
@@ -308,6 +313,7 @@ class CNuc {
   /// The pathway table (Initialize) and the capture-A_y requests it is built with.
   std::shared_ptr<const azure2::PathwayTable> pathways_;
   std::vector<std::pair<int, int> > captureAyRequests_;
+  std::vector<int> entranceRequests_;  ///< RequestEntrance, 1-based pair numbers
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;

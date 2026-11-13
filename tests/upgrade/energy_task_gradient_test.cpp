@@ -21,6 +21,7 @@
 #endif
 
 #include "AZUREGrad.h"
+#include "ProjectSetup.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -68,6 +69,7 @@ int main(int argc, char **argv) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
+  RequestDataEntrances(compound, cfg);
   compound.Initialize(cfg);
   compound.FillMnParams(params, &cfg);
   data.FillMnParams(params);

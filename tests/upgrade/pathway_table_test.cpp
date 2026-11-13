@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "AChannel.h"
+#include "ProjectSetup.h"
 #include "ALevel.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -211,7 +212,10 @@ int main(int argc, char **argv) {
     InitializeECAmplitudeCache(cfg);
     if (compound.Fill(cfg) == -1) continue;
     for (int a = 1; a <= compound.NumPairs(); a++)
-      if (compound.GetPair(a)->GetPType() != 10) compound.GetPair(a)->SetEntrance();
+      if (compound.GetPair(a)->GetPType() != 10) {
+        compound.GetPair(a)->SetEntrance();
+        compound.RequestEntrance(a);
+      }
     for (int a = 1; a <= compound.NumPairs(); a++)
       for (int p = 1; p <= compound.NumPairs(); p++)
         if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);

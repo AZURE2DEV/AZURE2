@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "AZURECalc.h"
+#include "ProjectSetup.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "CaptureAyRequests.h"
@@ -100,6 +101,7 @@ struct Model {
     data = new WorkingCopy();
     if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
     RequestCaptureAyTerms(*compound, *data);
+    RequestDataEntrances(*compound, cfg);
     compound->Initialize(cfg);
     compound->FillMnParams(params, &cfg);
     data->FillMnParams(params);

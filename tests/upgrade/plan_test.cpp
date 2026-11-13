@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include "AMatrixFunc.h"
+#include "ProjectSetup.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "CalculationPlan.h"
@@ -141,6 +142,7 @@ void RunProject(const std::string &path) {
       std::printf("  --    %s: does not set up\n", path.c_str());
       return;
     }
+    RequestDataEntrances(compound, cfg);
     compound.Initialize(cfg);
     compound.FillMnParams(params, &cfg);
     data.FillMnParams(params);
