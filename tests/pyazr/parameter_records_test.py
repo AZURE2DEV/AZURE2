@@ -16,8 +16,8 @@ of the engine (api/src/pybind_records.cpp: _azure2.parameter_record_fields(), pa
      engine's description of the project; a THM background term through the program's thm_experiments.out);
   3. on the same projects: x0 is params_rwa (a copy), free / of_kind / of_level / by_name select rows, put and take
      write and read x by row, write and read a parameter file give x back, a fixed row is refused by put; on 13N
-     azure2.write_values puts x into a Project in memory (the file untouched) and the project saved from it starts
-     at x;
+     pyazr.snapshot.write_values puts x into a Project in memory (the file untouched) and the project saved
+     from it starts at x;
   4. the pair records against the project's pairs (Project.pairs(): key, masses, separation energy, excitations,
      channel radius), and the session's pairs in order of their numbers.
 
@@ -53,6 +53,7 @@ try:
     from pyazr import _azure2, azure2, Project
     import thm_records
     from pyazr.described import describe_project
+    from pyazr.snapshot import write_values
 except Exception as err:  # pragma: no cover
     print(f"skip: the engine module is not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -198,7 +199,7 @@ def check_project(label, path, cwd, write_back=False):
             check(f"{label}: write then read gives x back", np.allclose(back, x1, rtol=1e-7, atol=0))
         if target is not None and write_back:
             before = open(path).read()
-            edited = s.write_values(Project.open(path), x1)
+            edited = write_values(s, Project.open(path), x1)
             check(f"{label}: write_values edits the project in memory, the file untouched",
                   open(path).read() == before and edited.text != before)
             edited.save(os.path.join(cwd, "written.azr"))

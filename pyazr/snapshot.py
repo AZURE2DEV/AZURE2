@@ -1,4 +1,4 @@
-"""A fit's values into its project: :meth:`pyazr.azure2.write_values` (a :class:`pyazr.Project` edited in memory)
+"""A fit's values into its project: :func:`write_values` (a :class:`pyazr.Project` edited in memory)
 and the file writer of :meth:`pyazr.azure2.save_fit` (:func:`write_format3`, a copy of the project on disk).
 
 The project is edited through :class:`pyazr.Project`, the engine's edits of the level rows, the <thm> lines and the
@@ -10,27 +10,25 @@ from .described import _engine as _engine_module
 from .errors import ParameterError
 
 
-class _Snapshots:
-    """Mixed into :class:`pyazr.azure2`: the values of a fit vector written into a project."""
-
-    def write_values(self, project, x=None, norms="fitted"):
-        """Write the values of the fit vector ``x`` (default: the start, ``params_rwa``) into ``project``, a
-        :class:`pyazr.Project` of this session's file (``Project.open(azure2.file)``, or an edit of it), in memory:
-        nothing is saved, the caller saves it (or keeps it as one edit of its history).  The values are those
-        :meth:`pyazr.azure2.save_fit` writes: the level parameters as the ``<levels>`` rows state them (energies in
-        MeV, partial widths in eV, ANCs), fixed ones included; the THM coherent backgrounds; the session's potentials;
-        with ``norms="fitted"`` every free nuisance into the record it comes from (``"nominal"``: the abundances only).
-        Returns ``project``."""
-        if norms not in ("fitted", "nominal"):
-            raise ParameterError(f"write_values: norms must be 'fitted' or 'nominal', not {norms!r}.")
-        x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        if x.size != len(self.parameters.free):
-            raise ParameterError(f"write_values: x has {x.size} entries; the session has {len(self.parameters.free)} "
-                                 f"free parameters (azure2.params_rwa is such a vector, azure2.parameters.free names "
-                                 f"its entries).")
-        full = self._all_rwa(x)
-        place_values(self, project, x, np.asarray(self.transform_all_rwa(full, include_fixed=True), float), full, norms)
-        return project
+def write_values(session, project, x=None, norms="fitted"):
+    """Write the values of the fit vector ``x`` (default: the start, ``session.params_rwa``) of a
+    :class:`pyazr.azure2` ``session`` into ``project``, a :class:`pyazr.Project` of the session's file
+    (``Project.open(session.file)``, or an edit of it), in memory: nothing is saved, the caller saves it (or keeps it
+    as one edit of its history).  The values are those :meth:`pyazr.azure2.save_fit` writes: the level parameters as
+    the ``<levels>`` rows state them (energies in MeV, partial widths in eV, ANCs), fixed ones included; the THM
+    coherent backgrounds; the session's potentials; with ``norms="fitted"`` every free nuisance into the record it
+    comes from (``"nominal"``: the abundances only).  Returns ``project``."""
+    if norms not in ("fitted", "nominal"):
+        raise ParameterError(f"write_values: norms must be 'fitted' or 'nominal', not {norms!r}.")
+    x = np.asarray(session.params_rwa if x is None else x, float).ravel()
+    n = len(session.parameters.free)
+    if x.size != n:
+        raise ParameterError(f"write_values: x has {x.size} entries; the session has {n} free parameters "
+                             f"(azure2.params_rwa is such a vector, azure2.parameters.free names its entries).")
+    full = session._all_rwa(x)
+    want = np.asarray(session.transform_all_rwa(full, include_fixed=True), float)
+    place_values(session, project, x, want, full, norms)
+    return project
 
 
 def place_values(self, project, x, want, full, norms):

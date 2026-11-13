@@ -33,7 +33,6 @@ from . import session_checks
 from .parameters import Pair, PairSet, Parameter, ParameterSet, read_parameter_file
 from .project import require_format3
 from .potentials import _HybridPotentials
-from .snapshot import _Snapshots
 
 
 _THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
@@ -75,7 +74,7 @@ class ScatteringLength(NamedTuple):
         return text + ("+" if self.parity > 0 else "-")
 
 
-class azure2(_HybridPotentials, _Snapshots):
+class azure2(_HybridPotentials):
     """One calculation session: a format-3 project set up by the engine in this interpreter (options: see __init__).
 
     Parameters: :attr:`params_rwa` (the free vector, start values, engine order), :attr:`parameters` (what each entry

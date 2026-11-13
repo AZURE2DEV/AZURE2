@@ -16,7 +16,8 @@ Update this file at the end of every work session: what changed, what is next, w
 - `pyazr/parameters.py` (804 → 620 lines): `Parameter` and `Pair` are the records; `Parameters` (the table of the fit
   vector: `x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`, `free`, `of_kind`, `of_level`, `by_name`, `put`,
   `take`, `read`, `write`, `table`, `to_records`); `ParameterSet` = `Parameters` and the old views.
-  `azure2.write_values(project, x)`: a `Project` edited in memory (`snapshot.py`, web UI wish 8).
+  `pyazr.snapshot.write_values(session, project, x)`: a `Project` edited in memory (`snapshot.py`, web UI wish 8; a
+  function, not a session method: a new public name of the session would need a line in `pyazr/ui/engine.py`).
 - Tests: `tests/pyazr/parameter_records_test.py` (new); the tests of the removed layouts read the records
   (`parameter_kinds`, `extrap_layout`, `thm_profiled`, `light_excitation`).
 
@@ -58,14 +59,24 @@ radius, spin factor, nucleus Z and A, abundance, light excitation, THM binding e
 fields of the pair record now, plus `pair_kind`.  Read by nobody outside `parameters.py` itself: `input_is_rwa`,
 `sample_kind`, `thickness_leader`, the apparatus value of field 5, the pair's `i1i2factor` (repr only).
 
-**Verified** (build `work/b-records`, 2 threads): VERIFY
+**Verified** on the merged state (build `work/b-records`, 0 warnings; 2 threads): all projects in three bases
+against `tab-t50-1` (tag `tab-records-2`): 887 / 851 / 887 identical; the converted-tree gate (`grecords2`): 679 /
+643 / 679 identical; the eight fits of `work/director/fits_vs_base2.sh` against `work/b-trial50`: 8 identical;
+`ctest -LE slow`: 235 of 236, then `ui_routes_consistency` (a new public name of the session) and the slow
+`formal_brune_iteration` (it finds a parameter by its repr) after two Python fixes, with the other tests concerned:
+10 of 10; the slow tests 10 of 11 before that fix; `tests/run_tests.sh`: 166 passed, 0 failed;
+`repo_consistency_test.py`: consistent.  Before the merge: the same tree and gate against `tab-t45-1` identical, the
+eight fits against `b-trial46` identical.  Injected errors: a kind without an owner field (C++) and `start` read from
+the physical values (C++) each made `parameter_records_test` fail.  Speed on 13N (before / after): session
+construction 0.59 / 0.62 s (noise), the first `parameters` 1.5 / 0.6 ms, cached accesses 0.1 µs each, `pairs`
+0.2 / 0.03 ms.
 
 **Merged** `feature/upgrade-4-data` at 3298f372 (prior centres, diagnostics record, web UI): `PriorOf` reads the
 centres where the objective reads them (`include/Objective.h`); the conflicts were the deleted `GetParameterInfo` /
 `GetPairsInfo` and `Parameter.from_record` (whose new `prior_nominal` of an abundance and an apparatus number is the
 record's `prior_centre`).  The web UI (`pyazr/ui/engine.py`) reads `describe()["parameters"]` and
 `parameters` (`free_index`, `fixed`, `name`), both from the records now; its text of a fit (`save_fit` to a file,
-read back) is what `azure2.write_values` gives in memory.
+read back) is what `pyazr.snapshot.write_values` gives in memory.
 
 **Open.** (1) `bounds` are the limits as created; a `<parameterSettings>` block's limits act only in the
 program's fit.  (3) `_sync_layout` and `_mode_free_vector` count energies and widths as the free R-matrix block, not

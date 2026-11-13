@@ -257,8 +257,8 @@ limits the engine creates the parameter with, ``(-inf, inf)`` where it sets none
 earlier releases (``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
 ``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``,
 ``.cbkg``, ``.fixed``, ``.by_level(...)``, ``.by_physical_level()``) are ``of_kind`` and the level
-selections under their old names. ``azr.write_values(project, x)`` writes the values of ``x`` into a
-:class:`pyazr.Project` of the session's file in memory (what ``save_fit`` writes, without saving).
+selections under their old names. ``pyazr.snapshot.write_values(azr, project, x)`` writes the values
+of ``x`` into a :class:`pyazr.Project` of the session's file in memory (what ``save_fit`` writes, without saving).
 
 ``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in
 the order of the parameter vector (the abundances follow the level block):

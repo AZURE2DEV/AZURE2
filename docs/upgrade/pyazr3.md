@@ -635,8 +635,9 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    (`AZUREAPI::GetParameterBounds`).  `pyazr.Parameters` (`x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`,
    `free`, `of_kind`, `of_level`, `by_name`, `put`, `take`, `read`, `write`, `table`, `to_records`; a selection is a
    `Parameters` with the same `x0`), `Parameter` and `Pair` the records themselves (a field of another kind reads
-   `None`), `ParameterSet` = `Parameters` plus the views of earlier releases; `azure2.write_values(project, x)` (a
-   `Project` edited in memory, web UI wish 8).  Removed: `GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`,
+   `None`), `ParameterSet` = `Parameters` plus the views of earlier releases;
+   `pyazr.snapshot.write_values(session, project, x)` (a `Project` edited in memory, web UI wish 8).
+   Removed: `GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`,
    `kPairInfoFields` (301 lines of `AZUREAPI.h/.cpp`), `parameter_info`, `pairs_info`, the two `_NFIELDS`, the
    numeric type codes (in the records, `parameter_kinds()`, `kinds()`, `bands.py`, `azure2.py`), the fall-backs for
    engines with 19 or 20 pair fields, `Parameter.from_record`, `Pair.from_record`.  Differs from the plan: `free` is

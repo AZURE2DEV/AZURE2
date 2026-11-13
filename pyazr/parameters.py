@@ -171,7 +171,7 @@ class Parameter(_Record):
                         if getattr(self, f) is not None)
 
     def __repr__(self):
-        return (f"Parameter(#{self.index} {self.name} {self.kind} {'fixed' if self.fixed else 'free'} "
+        return (f"Parameter(#{self.index}, {self.name}, {self.kind}, {'fixed' if self.fixed else 'free'}, "
                 f"start={self.start:.6g} {self.unit}" + (f", {self.owner_text()}" if self.owner_text() else "") + ")")
 
 
