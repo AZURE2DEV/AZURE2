@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-4-cnuc-finish-design`) — the end of `CNuc`: design (documents only)
+
+**Done.** `cnuc_split.md` §12: the inventory of `CNuc` measured on the code at 6e8d000b (every member with its writers,
+readers and class; the fit, input and report sets of `ALevel`; `PPair`, `JGroup`, `AChannel`; the 134 files naming the
+class, grouped by what they want), the end state (`CompoundSystem` immutable and shared, holding the `System` built
+once; `LevelInputs` a value; `LevelState` owned by the evaluation; `ObservedLevelTable` returned by a function;
+`LevelParameterLayout` the one walk of the level block), six steps (five bit-identical, one that fixes a defect and
+changes numbers), the defects in the way, the PI's measure before and after, costs, other open work, decisions. One
+pointer line in `ROADMAP.md`. No code, test or build file changed.
+
+**Measured.** The counts by scripts in `work/cnucdesign/` (`defs.py`, `members.py`, `naming.py`, `group.py`); the copy:
+`clone_probe.cpp` linked against `work/b-trial50`'s libraries, one thread: `Clone` copies 7.8 / 12.9 / 131 kB in
+5 / 7.5 / 56 µs (T2 / 13N / `natural_neon`), of which the per-vector part is 0.8 / 1.4 / 22 kB; one calculation of each
+under `gdb` cloned 1 / 0 / 1 times. Nothing else was run (no tree comparison: no code changed).
+
+**Found.** The notes are behind the code in five places (§12.1.5: the decay-position defect, the trees and
+`ExitPairKeysInFile` are done or gone, two photon pairs of one final state are refused, the engine does call eleven
+`level_parameters` functions). A defect by reading, not run: the sub-point-grid copy of `TargetSetup.cpp` keeps the
+final state's N_f^½ of the moment it was made (Brune basis, external capture, fitted final-state amplitude); proposed
+as its own step before the state moves. Dead: `PPair::SetBindingEnergy`, `PPair::ec_entrance_`, `ALevel::NumGammas`,
+`ALevel::SetShiftDerivatives`, `CNuc::GammaDecayInputs()`.
+
+**Open.** The decisions of §12.7 (structure classes kept in design 1 or replaced by the `System` now; names;
+abundances owned by the data; a pool of `LevelState`; the defect's step; the order against the sampler, records and
+physics-table branches).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-cli`) — the pyazr command line
 
 **Done.** `python -m pyazr COMMAND ... [--json]` (`pyazr/cli.py`, `pyazr/__main__.py`; `pyazr3.md` 2.8 and step 7 of
