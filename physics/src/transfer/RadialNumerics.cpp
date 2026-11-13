@@ -63,7 +63,7 @@ std::vector<std::complex<double>> NumerovOutward(const std::vector<std::complex<
   const double h2 = h * h / 12.0;
   for (int i = 2; i < n - 1; ++i) {
     u[i + 1] = (2.0 * (1.0 - 5.0 * h2 * q[i]) * u[i] - (1.0 + h2 * q[i - 1]) * u[i - 1]) / (1.0 + h2 * q[i + 1]);
-    if (std::abs(u[i + 1]) > kRescale)
+    if (std::max(std::fabs(u[i + 1].real()), std::fabs(u[i + 1].imag())) > kRescale)  // cheaper than |u|
       for (int j = 0; j <= i + 1; ++j) u[j] /= kRescale;
   }
   return u;

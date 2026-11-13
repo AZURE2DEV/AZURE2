@@ -109,11 +109,12 @@ ZeroRangeWeight ZeroRangeWeightSum(const RadialOverlap &overlap, const ZeroRange
     } catch (const std::runtime_error &) {
       throw std::runtime_error("the exit wave l = " + std::to_string(l) + " could not be normalized");
     }
-    double u_max = 0.0;
+    double u_max2 = 0.0;  // max |u_l^f|^2
     for (int p = first; p < n; ++p) {
       f[p - first] = phi[p] * pw.u[p] * entrance.u[l][p];
-      u_max = std::max(u_max, std::abs(pw.u[p]));
+      u_max2 = std::max(u_max2, std::norm(pw.u[p]));
     }
+    const double u_max = std::sqrt(u_max2);
     const cplx radial = Simpson(f, h);
     const cplx phase = std::polar(1.0, sigma[l]) * std::polar(1.0, entrance.sigma[l]);
     double smallest = HUGE_VAL;
