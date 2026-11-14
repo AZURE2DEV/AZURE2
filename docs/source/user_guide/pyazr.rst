@@ -152,7 +152,10 @@ A message says what was wrong with the value given, what is allowed, and which c
 
 Where a message is built from these three parts they are also attributes of the error, ``e.what``, ``e.allowed`` and
 ``e.fix`` (texts, each a part of the message; ``None`` where the message is the engine's own text); a
-``pyazr.FormatError`` takes them from its first diagnostic (the validator's ``message``, ``allowed`` and ``fix``)::
+``pyazr.FormatError`` takes them from its first diagnostic (the validator's ``message``, ``allowed`` and ``fix``), or
+from the engine's refusal of an edit of the nuclear part (``set_pair``, ``set_channel``, ``set_level``, ``add_pair``,
+``remove_pair``, ``add_level``, ``remove_level``, ``allowed_channels``: ``e.what`` headed by the object edited, as
+the message is)::
 
    try:
        s.channel_functions(1, 0.5, l=-1)
@@ -571,8 +574,12 @@ a session made with ``parameter_file=`` matches its names to the run's as AZURE2
 ``W_PARAMETER_FILE_NAMES``, a file with no name of the run is refused with ``E_PARAMETER_FILE_NO_MATCH``).  See
 :ref:`nominal-norm`.  The check opens a second engine beside the fit's; as the last call of a fit, ``save_fit(path, x,
 close_session=True)`` closes the fit's session first, so that only one is in memory (a 19F THM session is about 220
-MB, 390 MB with the verifying one beside it).  ``path`` is always explicit; nothing is written in place.  Note a
-``.azr`` names its data files relative to itself, so a snapshot runs from the directory the original did.
+MB, 390 MB with the verifying one beside it).  ``path`` is always explicit; nothing is written in place.  A ``.azr``
+names its files relative to its directory: a snapshot written to another directory gets its paths rewritten relative
+to that one (``relative_to=`` names another).  A data covariance file names its data files relative to the project's
+directory, which the snapshot cannot rewrite without a second copy of the file: such a project is refused in another
+directory before anything is written (``pyazr.ParameterError`` with ``e.what``, ``e.allowed``, ``e.fix``); write its
+snapshot in the project's own directory.
 
 .. warning::
 

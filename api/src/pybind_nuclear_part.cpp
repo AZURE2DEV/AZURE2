@@ -38,8 +38,20 @@ py::list Replacements(const std::vector<ex::LineReplacement> &edits) {
   return out;
 }
 
+// A refused edit as a ValueError whose attributes what, allowed and fix are the refusal's parts (None when empty);
+// pyazr's FormatError takes them from there.
+[[noreturn]] void ThrowRefusal(const ex::EditRefusal &r) {
+  auto part = [](const std::string &s) { return s.empty() ? py::object(py::none()) : py::object(py::str(s)); };
+  py::object error = py::reinterpret_borrow<py::object>(PyExc_ValueError)(r.Text());
+  error.attr("what") = part(r.what);
+  error.attr("allowed") = part(r.allowed);
+  error.attr("fix") = part(r.fix);
+  PyErr_SetObject(PyExc_ValueError, error.ptr());
+  throw py::error_already_set();
+}
+
 py::list Done(const ex::LevelEdit &e) {
-  if (!e.error.empty()) throw py::value_error(e.error);
+  if (!e.error.empty()) ThrowRefusal(e.refusal);
   return Replacements(e.replacements);
 }
 
@@ -231,8 +243,9 @@ void BindNuclearPart(py::module_ &m) {
         ex::LevelRowTable t;
         std::string why;
         if (!ex::ReadLevelRowTable(doc, t, why)) throw py::value_error(why);
-        const int k = ex::FindLevel(t, Address(level), why);
-        if (k < 0) throw py::value_error(why);
+        ex::EditRefusal unknown;
+        const int k = ex::FindLevel(t, Address(level), unknown);
+        if (k < 0) ThrowRefusal(unknown);
         return k;
       },
       py::arg("doc"), py::arg("level"),
@@ -360,7 +373,7 @@ void BindNuclearPart(py::module_ &m) {
         limits.multipolarityMax = multipolarityMax;
         limits.multipolaritiesMax = multipolaritiesMax;
         const ex::AllowedChannelList a = ex::AllowedChannels(doc, twoJ, parity, limits, pairs);
-        if (!a.error.empty()) throw py::value_error(a.error);
+        if (!a.error.empty()) ThrowRefusal(a.refusal);
         py::list out;
         for (const ex::LevelChannelInfo &c : a.channels) out.append(py::make_tuple(c.pairKey, c.l, c.twoS));
         return out;
