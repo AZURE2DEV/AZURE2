@@ -2,11 +2,12 @@
 #include "CaptureAyRequests.h"
 
 #include "CompoundSystem.h"
+#include "CompoundSystemSetUp.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
 #include "PPair.h"
 
-void RequestCaptureAyTerms(CompoundSystem &compound, WorkingCopy &data) {
+void RequestCaptureAyTerms(const CompoundSystem &compound, const WorkingCopy &data, CompoundSetUpRequests &requests) {
   for (int i = 1; i <= data.Data().NumSegments(); i++) {
     const Segment &segment = *data.Data().GetSegment(i);
     if (!segment.IsAnalyzingPower()) continue;
@@ -15,7 +16,7 @@ void RequestCaptureAyTerms(CompoundSystem &compound, WorkingCopy &data) {
       if (!compound.IsPairKey(entranceKey) || !compound.IsPairKey(exitKey)) continue;
       const int exitPair = compound.GetPairNumFromKey(exitKey);
       if (compound.GetPair(exitPair)->GetPType() != 10) continue;
-      compound.RequestCaptureAy(compound.GetPairNumFromKey(entranceKey), exitPair);
+      requests.AddCaptureAy(compound.GetPairNumFromKey(entranceKey), exitPair);
     }
   }
 }

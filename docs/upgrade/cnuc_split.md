@@ -1550,7 +1550,8 @@ When `CNuc` is gone, the compound-nucleus side of the engine is six objects, one
   the pair-key map, the entrance pairs, the `System` with its index map, the external-capture set-up (formal-basis
   final-state blocks, capture-mask set-up), the model data, the `gamma_decay` set, the pathway table, the
   level-parameter layout; owner: `shared_ptr<const CompoundSystem>`, made by `BuildCompoundSystem`, held by the run or
-  the session and shared by every evaluation, thread and walker; immutable: yes; file: `include/CompoundSystem.h`,
+  the session and shared by every evaluation, thread and walker (as built: `std::unique_ptr<const CompoundSystem>`
+  made by `SetUpCompoundSystem` around the data's set-up, §12.3 "the one set-up as built"); immutable: yes; file: `include/CompoundSystem.h`,
   `src/CompoundSystem.cpp` (queries), `src/CompoundSystemBuild.cpp` (from `Fill`, `AddHardSphereGroups`, `Initialize`),
   `src/ExternalCaptureFinalStates.cpp` (from `ParseExternalCapture`, `SetUpECFinalBlocks`, `SetUpFormalCaptureMasks`).
 - `LevelInputs` — one job: the levels' starting values in the engine's basis (what `TransformIn` makes of `<levels>` or
@@ -2062,8 +2063,8 @@ segments whose exit is a capture pair; besides, `ParseExternalCapture` reads the
 prints the data's set-up (`Filling Data Structures...`, its warnings, the data check) between `Fill`'s lines and
 `Initialize`'s (`Performing Input Parameter Transformation...`, `Sorting Reaction Pathways...`, their warnings), so
 a build that returns the finished object before the data's set-up changes every `run.log`, and the order of the
-refusals of a project refused by both. The choices are the director's (see the HANDOFF entry). Until then the
-compound is made by the four set-up calls as before and held by its maker as before: `AZUREMain::compound_` and
+refusals of a project refused by both. The choices are the director's (see the HANDOFF entry). Until the one set-up
+(below) the compound was made by the four set-up calls and held by its maker: `AZUREMain::compound_` and
 `AZUREAPI::compound_` (`CompoundSystem *`, written by the set-up only), `runMCMC`'s local; every other holder takes
 `const CompoundSystem *` or `const CompoundSystem &` of that maker, which outlives it.
 
@@ -2085,12 +2086,37 @@ the nuisance priors, `GetParameterBounds`, `OutsideSamplerSupport`, `GetThmExper
 `inputs()`, `data()`, `results()` return `const` references from a `const` session. The callers holding a
 `const AZUREAPI &` were the binding's own (`pybind_evaluation.cpp`, `pybind_model_data.cpp`, `pybind_records.cpp`,
 `pybind_api.cpp`): they hold `AZUREAPI &` now. `results_` and the three nuisance members are no longer `mutable`
-(four rows of `allowed_state.tsv` gone). `GetThmExperiments` only reads, but through
-`WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)`, which are not `const`.
+(four rows of `allowed_state.tsv` gone). `GetThmExperiments` only reads; it is
+`const` again since `WorkingCopy::ThmExperimentReports` is and `Segment::GetPoint` has a `const` form (the one set-up
+as built).
 
 **The channel functions once.** `ParticleChannelValues(pair, l, 2j, E_c, gsl)` (`EngineChannelFunctions.h`) holds
 the lines of a particle channel (S, dS/dE, P; the ANC factor below threshold); `EngineChannelFunctions` and the
 binding's level doors call it.
+
+*The one set-up as built* (branch `feature/upgrade-5-one-setup`, start b2650269). The director's decision on the
+stopped build: neither the finished compound before the data nor two objects, but the order the code needs, written
+once. `SetUpCompoundSystem(const Config &, const DataSetUpStep &, radii)` (`include/CompoundSystemSetUp.h`,
+`src/CompoundSystemSetUp.cpp`) runs `Fill` (with `AddHardSphereGroups` and `ParseExternalCapture` inside it), the
+refusal of an empty structure, the caller's data set-up (a callable that reads `const CompoundSystem &` and the input
+values and returns `std::optional<CompoundSetUpRequests>`: the entrance pairs and the capture-A_y pairs, or nothing
+when it refused), then `Initialize(config, state, inputs, requests)`; it returns `CompoundSetUp`: the finished
+compound as `std::unique_ptr<const CompoundSystem>`, the owner's `LevelState` and `LevelInputs`, or the step that
+refused (unreadable, no nuclear data, the data, the last part with its message). The caller keeps its own messages:
+the program's run, the sampler and the session (its set-up and its rebuild) print or keep silent as before, so every
+line of `run.log` stays where it was. The design's `BuildCompoundSystem(const Config &, const SetupRequests &)` is not
+the form: the requests are made in the middle, from the structure. `std::unique_ptr` and not `std::shared_ptr`: one
+owner (`ProgramRun::compound`, the sampler's run, `AZUREAPI::compound_`) outlives every reader, which borrows a
+`const` pointer or reference; nothing keeps the compound past its owner. The segments' trees
+(`azure2::ProjectPredictions`) never finished the compound: they take the structure through
+`InspectCompoundStructure`, which runs `Fill` and a reader and never the last part. `Fill`, `AddHardSphereGroups`,
+`ParseExternalCapture`, `Initialize`, `CalcBoundaryConditions` and `BuildPathways` are private, with the two
+functions as friends; `RequestEntrance`, `RequestCaptureAy` and their members are gone (the requests are an argument
+of `Initialize`). The probe of step 5 is permanent: `HasFormalECFinalBlocks`, `FormalCaptureMaskSlot` and
+`FormalCaptureMaskOf` refuse (`std::logic_error`) before the last part has written them (`CompoundSystem::finished_`),
+`Pathways` before the table exists (as before), `AChannel::GetBoundaryCondition` and `ALevel::GetECEnergy` before
+their setter ran (one flag each). The five sequences compared side by side and their differences: the HANDOFF entry
+of this branch.
 
 **Side by side.** Steps 1, 2 and 2b together; then 3; then 4; then 5. Step 3 cannot run beside 1 (both edit every
 external-capture function and `CNuc.cpp`'s fills), nor 4 beside 3 (the same owners' lines). Step 5 is the conflict

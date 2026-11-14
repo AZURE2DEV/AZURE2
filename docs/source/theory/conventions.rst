@@ -36,14 +36,15 @@ A particle channel is :math:`c = (\alpha, l, s)`, coupled as
    |(j_1 j_2) s\,\nu\rangle = \sum_{m_1 m_2} (j_1 m_1\, j_2 m_2 | s\,\nu)\,|j_1 m_1\rangle |j_2 m_2\rangle ,
 
 with :math:`s` running from :math:`|j_1 - j_2|` to :math:`j_1 + j_2`
-(``CNuc.cpp:1440``, ``PolarizationFunc.cpp:50-59``).
+(``physics::reaction_pathways``, ``physics/src/Pathways.cpp``; ``PolarizationFunc.cpp:50-59``).
 
 - **Channel spin, light particle first.** The engine couples particle 1 first.
   This is the order of LT Sec. III.2a, which the code quotes
   (``PolarizationFunc.cpp:333-343``; ``ParticleCG``, lines 21-38). The same
   order enters the M1 spin operator of external capture
   (``ECIntegral.cpp:436-452``) and the secondary-:math:`\gamma` (UPOS)
-  coefficients (``CNuc.cpp:1918-1937``, whose comment records that Eq. (22) of
+  coefficients (``AddInterferences``, ``src/PathwayTable.cpp``, and ``physics::upos_interference``,
+  ``physics/src/ObservableCoupling.cpp``, whose comment records that Eq. (22) of
   Brune and deBoer, PRC 102, 024628 (2020), as printed, couples the heavy
   particle first). Coupling the other way multiplies every amplitude of
   channel spin :math:`s` by :math:`(-1)^{j_1+j_2-s}`.
@@ -308,7 +309,7 @@ with its sign.
 
 On output (``CompoundSystem::TransformOut``) the reported width carries the sign of the
 amplitude, and for photon channels with external capture the sign of the real
-part of the total amplitude (``CNuc.cpp:2483-2499``).
+part of the total amplitude (``physics::observed_levels``, ``physics/src/LevelParameters.cpp``).
 
 Collision matrix and T-matrix
 -----------------------------
@@ -452,7 +453,8 @@ where the inner sum adds internal and external amplitudes with the same
 :math:`\sigma_{\rm tot} = (\pi/k^2)\,g_I\sum (2J+1)\,2\,\mathrm{Re}\,T_{cc}`
 (lines 103-123).
 
-Angular distributions (Blatt–Biedenharn; ``CNuc.cpp:1833-1982``,
+Angular distributions (Blatt–Biedenharn; ``AddInterferences``, ``src/PathwayTable.cpp``, with
+``physics::particle_interference`` and ``photon_interference``, ``physics/src/ObservableCoupling.cpp``;
 ``GenMatrixFunc.cpp:261-426``):
 
 .. math::
@@ -474,11 +476,11 @@ for a particle exit pair. For a photon exit,
 \,W(L_1J_1L_2J_2; j_fL)`, where :math:`j_f` is the final spin. The orders
 allowed are those with :math:`l_1+l_2+L` even and
 :math:`l'_1+l'_2+w_1+w_2+L` even, where :math:`w = 1` for E and 0 for M and
-particle exits (``CNuc.cpp:1903-1916``). Angular-distribution segments report
+particle exits (``AddInterferences``, ``src/PathwayTable.cpp``). Angular-distribution segments report
 :math:`a_k` in :math:`d\sigma/d\Omega = (\sigma/4\pi)[1+\sum_k a_kP_k]`
 (``GenMatrixFunc.cpp:427-438``). Secondary-γ (UPOS) coefficients follow Brune
 and deBoer (2020) Eq. (22) in the coupling order of Eq. :eq:`conv-coupling`
-(``CNuc.cpp:1918-1937``).
+(``physics::upos_interference``, ``physics/src/ObservableCoupling.cpp``).
 
 Elastic scattering adds the Coulomb amplitude and its interference
 (``Unit.cpp:1890-1934``, ``GenMatrixFunc.cpp:439-516``):
@@ -509,7 +511,8 @@ Reversing the interference term changes the cross section by 7–74 % on that
 grid.
 
 **Identical particles.** Channels with :math:`l + s` odd are refused for
-pairs with spin and warned about for spin 0 (``CNuc.cpp:671-728, 947-980``).
+pairs with spin and warned about for spin 0 (``RefuseForbiddenIdenticalChannels`` and
+``WarnForbiddenSpinlessChannels``, ``src/CompoundSystemChecks.cpp``).
 In elastic scattering the nuclear term is multiplied by 4 and the
 interference by 2. The Coulomb amplitude of channel spin :math:`s` is
 :math:`C_\alpha(\theta) + (-1)^s C_\alpha(\pi-\theta)`; for spin-0 bosons it

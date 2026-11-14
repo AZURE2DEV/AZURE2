@@ -182,6 +182,7 @@ class Segment {
   int TermFirstUnit(const WorkingCopy &data, int t) const;
   /// Point i (1-based) of term t.
   Unit *GetTermPoint(WorkingCopy &data, int t, int i) const;
+  const Unit *GetTermPoint(const WorkingCopy &data, int t, int i) const;
   /// What term t's points compute (shared by them and their sub-points; immutable once set up).
   const std::shared_ptr<const TermSettings> &TermSettingsOf(int t) const { return Fixed(t).settings; }
   int TermEntranceKey(int t) const { return t ? leaves_[t - 1].entranceKey : entrancekey_; }
@@ -405,6 +406,7 @@ class Segment {
   void SetMaxAngle(double);
   /// Point \p i (1-based) of the segment's own term, and its points.
   Unit *GetPoint(WorkingCopy &data, int i) const { return GetTermPoint(data, 0, i); }
+  const Unit *GetPoint(const WorkingCopy &data, int i) const { return GetTermPoint(data, 0, i); }
   UnitRange<Unit> GetPoints(WorkingCopy &data) const { return TermPoints(data, 0); }
   UnitRange<const Unit> GetPoints(const WorkingCopy &data) const { return TermPoints(data, 0); }
 

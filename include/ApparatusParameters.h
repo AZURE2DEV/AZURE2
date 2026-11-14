@@ -77,6 +77,6 @@ void WriteApparatusChiSquared(const WorkingCopy &data, std::ostream &out);
 std::string ApparatusLabel(const DataSet &data, int k);
 /// The apparatus block of the index map, from full index \p i on (advanced past it); no analytic derivative: the
 /// parameters are differenced on the whole chi^2, as a density (AZURECalc.cpp).
-void AppendApparatusParams(ParamIndexMap &map, WorkingCopy *data, int &i);
+void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data, int &i);
 
 #endif

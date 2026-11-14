@@ -1,4 +1,6 @@
 #include "ALevel.h"
+
+#include <stdexcept>
 #include "azure2/io/LevelRows.h"
 
 /*!
@@ -176,11 +178,15 @@ void ALevel::AddECConversionFactor(double conversionFactor) {
  */
 
 double ALevel::GetECEnergy() const {
+  if (!hasECEnergy_)
+    throw std::logic_error("ALevel::GetECEnergy: read before the compound system's last part set the final state's "
+                           "energy");
   return ec_energy_;
 }
 
 void ALevel::SetECEnergy(double energy) {
   ec_energy_ = energy;
+  hasECEnergy_ = true;
 }
 
 /*!

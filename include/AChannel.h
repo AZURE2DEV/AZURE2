@@ -30,7 +30,8 @@ class AChannel {
   int GetL() const;
   /// Channel spin, the coupling of the two particles' intrinsic spins.
   double GetS() const;
-  /// Boundary condition \f$B_c\f$, fixed at the energy of the group's first level.
+  /// Boundary condition \f$B_c\f$, fixed at the energy of the group's lowest level by the compound system's last
+  /// part (CompoundSystem::CalcBoundaryConditions); std::logic_error before it set it.
   double GetBoundaryCondition() const;
   /// Radiation type: 'P' particle, 'E'/'M' electric/magnetic multipole, 'F'/'G' beta decay.
   char GetRadType() const;
@@ -50,6 +51,7 @@ class AChannel {
   double s_;
   char radtype_;
   double boundary_condition_;
+  bool hasBoundaryCondition_ = false;  ///< set by SetBoundaryCondition; GetBoundaryCondition refuses before
   double wigner_limit_;
 };
 

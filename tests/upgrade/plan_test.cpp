@@ -18,6 +18,7 @@
 #include <tuple>
 #include <unistd.h>
 
+#include "SetUpForTests.h"
 #include "AMatrixFunc.h"
 #include "ProjectSetup.h"
 #include "AZUREParams.h"
@@ -57,7 +58,7 @@ std::string CrossCheck(WorkingCopy &data) {
 // (and external-capture amplitude source: the T-matrix groups) and numTMatrices their count; the tasks by decreasing cost.  Counts the solves of a pass (energy tasks) against the
 // units.
 long energyTasks = 0, energyUnits = 0;
-std::string CheckEnergyTasks(WorkingCopy &data, CompoundSystem &compound, const Config &cfg) {
+std::string CheckEnergyTasks(WorkingCopy &data, const CompoundSystem &compound, const Config &cfg) {
   azure2::CalculationPlan &plan = const_cast<azure2::CalculationPlan &>(data.Plan());
   std::vector<int> work(plan.NumTasks());
   for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
@@ -133,22 +134,18 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
-  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
+  CompoundSetUp made;
   try {
-    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
+    if (cfg.ReadConfigFile() < 0 || (made = test_setup::WithData(cfg, data)).refusal != CompoundSetUp::Refusal::kNone) {
       notSetUp++;
       std::printf("  --    %s: does not set up\n", path.c_str());
       return;
     }
-    RequestDataEntrances(compound, cfg);
-    compound.Initialize(cfg, state, inputs);
-    compound.FillMnParams(params, state, inputs, &cfg);
+    made.compound->FillMnParams(params, made.state, made.inputs, &cfg);
     data.FillMnParams(params);
-    if (data.Initialize(&compound, cfg) == -1) {
+    if (data.Initialize(made.compound.get(), cfg) == -1) {
       notSetUp++;
       std::printf("  --    %s: does not initialize\n", path.c_str());
       return;
@@ -163,7 +160,7 @@ void RunProject(const std::string &path) {
   setUp++;
   std::string why = CrossCheck(data);
   if (!why.empty()) return Fail(path, why);
-  why = CheckEnergyTasks(data, compound, cfg);
+  why = CheckEnergyTasks(data, *made.compound, cfg);
   if (!why.empty()) return Fail(path, why);
   std::unique_ptr<WorkingCopy> copy(data.Clone());
   if (copy->Plan().NumTasks() != data.Plan().NumTasks()) return Fail(path, "the copy has another plan");

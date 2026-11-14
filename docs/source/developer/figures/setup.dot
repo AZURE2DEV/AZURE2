@@ -9,6 +9,8 @@ digraph setup {
   n_azure2__experiment__DatasetSpec [label=<<b>azure2::experiment::DatasetSpec</b><br/><font point-size="12">one data set as built:<br/>observable, pairs,<br/>nuisances</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read, scratch</font>>, shape=box, style="filled", fillcolor="white"];
   n_CompoundSystem [label=<<b>CompoundSystem</b><br/><font point-size="12">compound nuclei as set<br/>up: pairs, J groups,<br/>levels (read-only<br/>after set-up, not<br/>copied)</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_CompoundSetUp [label=<<b>CompoundSetUp</b><br/><font point-size="12">the one set-up of the<br/>compound and the data:<br/>the finished compound<br/>and the owner&#x27;s<br/>levels, or the<br/>refusing step</font>>, shape=box, style="filled", fillcolor="white"];
+  n_CompoundSetUpRequests [label=<<b>CompoundSetUpRequests</b><br/><font point-size="12">what the data&#x27;s set-up<br/>asks of the compound&#x27;s<br/>last part: entrances,<br/>capture-A_y pairs</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_PPair [label=<<b>PPair</b><br/><font point-size="12">a particle pair:<br/>masses, spins, radius,<br/>key</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_JGroup [label=<<b>JGroup</b><br/><font point-size="12">one J^pi group: its<br/>channels and levels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_AChannel [label=<<b>AChannel</b><br/><font point-size="12">a channel (pair, l, s)<br/>with its boundary<br/>value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
@@ -42,6 +44,10 @@ digraph setup {
   n_CompoundSystem -> n_SystemOfCompound [style=dashed, arrowhead=vee];
   n_SystemOfCompound -> n_azure2__physics__System [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_CompoundSystem -> n_azure2__PathwayTable [style=dashed, arrowhead=vee];
+  n_CompoundSetUp -> n_CompoundSystem [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CompoundSetUp -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CompoundSetUp -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CompoundSystem -> n_CompoundSetUpRequests [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_azure2__experiment__DatasetSpec [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_CompoundSystem [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_DataSet [style=dotted, penwidth=1.6, arrowhead=empty];

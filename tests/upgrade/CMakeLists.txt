@@ -87,6 +87,13 @@ add_test(NAME upgrade_external_capture_exit
          COMMAND external_capture_exit_test ${CMAKE_CURRENT_BINARY_DIR}/ec_exit_position/neutron_pair_first.azr)
 set_tests_properties(upgrade_external_capture_exit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
+# The one set-up of the compound and the data: what the last part writes refuses to be read in the middle, the
+# requests, the refusals by step, the structure alone (include/CompoundSystemSetUp.h; cnuc_split.md section 12.3).
+add_executable(compound_setup_test compound_setup_test.cpp)
+target_link_libraries(compound_setup_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_compound_setup COMMAND compound_setup_test ${CMAKE_SOURCE_DIR}/tests)
+set_tests_properties(upgrade_compound_setup PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
 add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
 target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIES})

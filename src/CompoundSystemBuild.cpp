@@ -389,7 +389,8 @@ int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
  * contributions and coefficients.  A CompoundSystem object can only be initialized for use AFTER it is filled.
  */
 
-void CompoundSystem::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs) {
+void CompoundSystem::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs,
+                                const CompoundSetUpRequests &requests) {
   WarnForbiddenSpinlessChannels(*this, configure);
 
   // Calculate Boundary Conditions
@@ -412,8 +413,10 @@ void CompoundSystem::Initialize(const Config &configure, LevelState &state, Leve
   // Sort reaction pathways
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
-  this->BuildPathways(configure);
+  this->BuildPathways(configure, requests);
   this->SetUpFormalCaptureMasks(configure, state);
+  // Everything the last part writes is written; what follows reads it.
+  finished_ = true;
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     WritePathwaysCheck(*this, configure);
 
@@ -518,33 +521,31 @@ const azure2::PathwayTable &CompoundSystem::Pathways() const {
   return *pathways_;
 }
 
-void CompoundSystem::RequestCaptureAy(int entrancePair, int exitPair) {
-  const std::pair<int, int> request(entrancePair, exitPair);
-  for (const std::pair<int, int> &r : captureAyRequests_)
-    if (r == request) return;
-  captureAyRequests_.push_back(request);
+void CompoundSystem::RefuseUnfinished(const char *accessor) const {
+  if (!finished_)
+    throw std::logic_error(std::string(accessor) + ": read before the compound system's last part wrote it "
+                                                   "(only SetUpCompoundSystem finishes a compound system)");
 }
 
-void CompoundSystem::RequestEntrance(int pair) {
-  for (int r : entranceRequests_)
-    if (r == pair) return;
-  entranceRequests_.push_back(pair);
+bool CompoundSystem::HasFormalECFinalBlocks() const {
+  RefuseUnfinished("CompoundSystem::HasFormalECFinalBlocks");
+  return ecFinalBlocks_ != nullptr;
 }
 
 /*!
  * Builds the pathway table from the System's structure, the external-capture final states and the configuration:
- * R-matrix capture, the largest Legendre order, the entrance pairs (RequestEntrance, flagged on their PPair here)
- * and the capture-A_y requests.  Run by Initialize after the input transformation; nothing writes the table
+ * R-matrix capture, the largest Legendre order, the entrance pairs of the data's requests (flagged on their PPair
+ * here) and their capture-A_y pairs.  Run by Initialize after the input transformation; nothing writes the table
  * afterwards.
  */
-void CompoundSystem::BuildPathways(const Config &configure) {
-  for (int pair : entranceRequests_) pairs_[pair - 1].SetEntrance();
+void CompoundSystem::BuildPathways(const Config &configure, const CompoundSetUpRequests &requests) {
+  for (int pair : requests.entrancePairs) pairs_[pair - 1].SetEntrance();
   azure2::PathwayTableOptions options;
   options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;
   options.max_l_order = configure.maxLOrder;
   for (int aa = 1; aa <= this->NumPairs(); aa++)
     if (pairs_[aa - 1].IsEntrance()) options.entrances.push_back(aa);
-  options.capture_ay = captureAyRequests_;
+  options.capture_ay = requests.captureAyPairs;
   pathways_ = azure2::BuildPathwayTable(this->SystemStructure(),
                                         ECFinalStates(*this), options);
 }

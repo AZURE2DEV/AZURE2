@@ -138,8 +138,8 @@ class ParamIndexMap {
   int EIndexFlat(int jGroup, int level) const { return eFlat_[jGroup - 1][level - 1]; }
   int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
 
-  friend ParamIndexMap BuildParamIndexMap(const CompoundSystem *, WorkingCopy *, const std::vector<bool> &);
-  friend void AppendApparatusParams(ParamIndexMap &, WorkingCopy *, int &);
+  friend ParamIndexMap BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, const std::vector<bool> &);
+  friend void AppendApparatusParams(ParamIndexMap &, const WorkingCopy *, int &);
 
  private:
   std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
@@ -278,7 +278,7 @@ struct GradAccum {
  * \param fixed     the per-full-index fixed mask (same as AZUREAPI::fixed_).
  *                  If empty, all parameters are treated as non-fixed.
  */
-ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, WorkingCopy *data,
+ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, const WorkingCopy *data,
                                  const std::vector<bool> &fixed);
 
 /*!
