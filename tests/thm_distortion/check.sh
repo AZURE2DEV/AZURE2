@@ -85,7 +85,8 @@ run() {
 ratios() {
   paste -d' ' <(tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }') \
               <(tr -d '\r' < "$WORK/$2/output/$OUT" | awk 'NF > 4 { print $1, $4 }') |
-    awk '{ if ($1 != $3) { print "ENERGY", $1, $3; exit 1 } printf "%.12e %.12e\n", $1, $2 / $4 }'
+    awk '{ if (e) next; if ($1 != $3) { print "ENERGY", $1, $3; e = 1; next } printf "%.12e %.12e\n", $1, $2 / $4 }
+         END { exit e }'
 }
 
 # awk programs editing the .azr
@@ -171,7 +172,7 @@ MEMBERS=pts run d_19 "experiment[T] $K12 Ebeam=30 distortion=coulomb distortionR
 MEMBERS=pts run d_26 "experiment[T] $K12 Ebeam=30.11 distortion=coulomb distortionRatio=dw distortionRef=2.664" "C12MIN" c12
 compare() {  # compare RUN COLUMN LABEL
   paste -d' ' <(ratios "$1" d_off) <(echo "$DIG") |
-    awk -v c="$2" '{ if (($1 - $3) > 1e-6 || ($3 - $1) > 1e-6) { print "ENERGY", $1, $3; exit 1 }
+    awk -v c="$2" '{ if (e) next; if (($1 - $3) > 1e-6 || ($3 - $1) > 1e-6) { print "ENERGY", $1, $3; e = 1; next }
       d = log(1 / $2) / log(10) - log($c) / log(10); s += d * d; n++; if (d < 0) d = -d; if (d > m) m = d }
       END { printf "%d %.4f %.4f\n", n, sqrt(s / n), m }' > "$WORK/$1.cmp"
   read -r n rms mx < "$WORK/$1.cmp"

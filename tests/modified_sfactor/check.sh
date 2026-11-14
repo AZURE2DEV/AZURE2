@@ -84,11 +84,11 @@ fi
 
 # ---- 3. --describe
 desc="$(cd "$WORK/fit_sstar" && "$AZURE2_BIN" --describe m.azr 2>&1)"
-if echo "$desc" | grep -q "modified_sfactor: angle-integrated" &&
-   echo "$desc" | grep -q "the model is the modified S factor E sigma exp(2 pi eta + g E), g = 0.46 1/MeV"; then
+if grep -q "modified_sfactor: angle-integrated" <<< "$desc" &&
+   grep -q "the model is the modified S factor E sigma exp(2 pi eta + g E), g = 0.46 1/MeV" <<< "$desc"; then
   ok "--describe names the modified S factor and g"
 else
-  bad "--describe: $(echo "$desc" | head -5)"
+  bad "--describe: $(echo "$desc" | sed -n '1,5p')"
 fi
 
 # ---- 4. 1 and 2 threads
@@ -109,7 +109,7 @@ cd "$WORK/fit_sstar" || exit 1
 refused() {  # refused WHAT FILE CODE TEXT
   local msg
   msg="$("$AZURE2_BIN" --validate "$2" 2>&1)"
-  if echo "$msg" | grep -q "$3" && echo "$msg" | grep -q "$4"; then ok "refused: $1 ($3)"; else bad "$1 not refused: $msg"; fi
+  if grep -q "$3" <<< "$msg" && grep -q "$4" <<< "$msg"; then ok "refused: $1 ($3)"; else bad "$1 not refused: $msg"; fi
 }
 edited m.azr noshape.azr sed '/^    shape          0.46 1\/MeV$/d' || bad "edit: no shape"
 refused "no shape" noshape.azr E_FIELD_REQUIRED "field 'shape' is missing"

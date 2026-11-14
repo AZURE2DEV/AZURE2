@@ -104,10 +104,10 @@ sed -e 's|^    norm           1 fit prior 1 3%$|&\n    beam           B\n    qua
 setup grad "$WORK/grad.azr"
 (cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 300 "$AZURE2_BIN" --use-gradient --no-gui \
    --no-readline m.azr > run.log 2>&1)
-line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
+line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
-if echo "$line" | grep -q "energy 0/3 gamma 0/3 norm 0/1; Jacobian path: energy 0/3 gamma 0/3 norm 0/1" &&
+if grep -q "energy 0/3 gamma 0/3 norm 0/1; Jacobian path: energy 0/3 gamma 0/3 norm 0/1" <<< "$line" &&
    awk -v w="$worst" 'BEGIN { exit !(w < 1e-5) }'; then
   ok "story with a beam spread: analytic gradient = finite differences (7 parameters, largest relative $worst)"
 else
@@ -117,7 +117,7 @@ fi
 # ---- 6. a refusal
 sed -e 's|quantity       ratio_to_mott|quantity       ratio_to_rutherford|' "$HERE/models/aa_hs.azr" > "$WORK/aa_rth.azr"
 msg="$("$AZURE2_BIN" --validate "$WORK/aa_rth.azr" 2>&1)"
-if echo "$msg" | grep -q "E_REACTION_NOT_ALLOWED" && echo "$msg" | grep -q "ratio_to_mott"; then
+if grep -q "E_REACTION_NOT_ALLOWED" <<< "$msg" && grep -q "ratio_to_mott" <<< "$msg"; then
   ok "ratio_to_rutherford of alpha + alpha refused, naming ratio_to_mott"
 else
   bad "the identical-particle refusal: $msg"

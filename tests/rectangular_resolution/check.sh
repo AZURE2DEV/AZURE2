@@ -54,7 +54,7 @@ refused() {  # WHAT CODE SED: --validate of models/fit.azr edited by SED prints 
   local dir="$WORK/refused"; mkdir -p "$dir"; cp -r "$HERE/models/data" "$dir/"
   sed -e "$3" "$HERE/models/fit.azr" > "$dir/t.azr"
   local msg; msg="$(cd "$dir" && "$AZURE2_BIN" --validate t.azr 2>&1)"
-  if echo "$msg" | grep -q "$2"; then echo "  ok    (f) $1 is refused ($2)"
+  if grep -q "$2" <<< "$msg"; then echo "  ok    (f) $1 is refused ($2)"
   else echo "  FAIL  (f) $1: no $2"; FAILS=$((FAILS + 1)); fi
 }
 
@@ -165,7 +165,7 @@ dir="$WORK/target"; mkdir -p "$dir/output" "$dir/checks"; cp -r "$HERE/models/da
 sed -e 's/^    detector       det_fit$/    detector       det_fit\n    target         T1/' "$HERE/models/fit.azr" |
   sed -e 's|^</targets>|target T1\n    kind           layer\n    active         16O\n    areal_density  1e17 atoms/cm2 fixed\n    stopping       formula "1e-15" eV*cm2/atom\n    straggling     none\n</targets>|' > "$dir/t.azr"
 msg="$(cd "$dir" && printf '1\n\n\n7\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr 2>&1)"
-if echo "$msg" | grep -q "cannot be combined with a target"; then echo "  ok    (f) the fitted width beside a target is refused"
+if grep -q "cannot be combined with a target" <<< "$msg"; then echo "  ok    (f) the fitted width beside a target is refused"
 else echo "  FAIL  (f) the fitted width beside a target: no refusal"; FAILS=$((FAILS + 1)); fi
 # ---- (g) the triangular resolution's base width, fitted
 python3 - "$WORK/bare/$OUT" "$WORK/tri-data" "$HERE/models/data" <<'PY'

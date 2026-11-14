@@ -73,7 +73,7 @@ switch() {
   local moves="the same files as without"
   same "$tag.var" "$tag.base" || moves="differs from the run without ($(diff -rq "$WORK/$tag.var/output" "$WORK/$tag.base/output" | wc -l) files)"
   if same "$tag.var" "$tag.opt"; then ok "$var=$value = $option on $folder: identical files; $moves"
-  else bad "$var=$value and $option on $folder: the files differ ($(diff -rq "$WORK/$tag.var/output" "$WORK/$tag.opt/output" | head -2))"; fi
+  else bad "$var=$value and $option on $folder: the files differ ($(diff -rq "$WORK/$tag.var/output" "$WORK/$tag.opt/output" | sed -n '1,2p'))"; fi
   local d
   d="$(cd "$WORK/$tag.opt" && "$AZURE2_BIN" --describe "$azr" "$option" 2>/dev/null | grep -F "($var) = ")"
   case "$d" in *"(option)") ;; *) bad "$option: --describe says '$d'";; esac
@@ -128,8 +128,8 @@ refused() {  # refused WHAT TEXT VAR=VALUE... -- FLAGS...
   [ $# -gt 0 ] && shift
   local out; out="$(cd "$WORK" && env "${vars[@]}" "$AZURE2_BIN" --no-gui "$@" no_such_project.azr < /dev/null 2>&1)"
   local rc=$?
-  if [ "$rc" = 2 ] && printf '%s' "$out" | grep -qF -- "$text"; then ok "$what: exit 2, $text"
-  else bad "$what: exit $rc, $(printf '%s' "$out" | head -2)"; fi
+  if [ "$rc" = 2 ] && grep -qF -- "$text" <<< "$out"; then ok "$what: exit 2, $text"
+  else bad "$what: exit $rc, $(printf '%s' "$out" | sed -n '1,2p')"; fi
 }
 refused "--refine-quadrature=65" "ERROR: --refine-quadrature needs a whole number from 1 to 64, not '65'" -- --refine-quadrature=65
 refused "AZURE_REFINE_QUADRATURE=65" "ERROR: AZURE_REFINE_QUADRATURE needs a whole number from 1 to 64, not '65'" \
@@ -145,7 +145,7 @@ run srim.var stopping_yield/models stopping_yield.azr "$CALC" AZURE2_SRIM_DATA_D
 run srim.opt stopping_yield/models stopping_yield.azr "$CALC" -- "--srim-data-dir=$WORK/empty"
 if [ "$(cat "$WORK/srim.var/status")" != 0 ] && [ "$(cat "$WORK/srim.var/status")" = "$(cat "$WORK/srim.opt/status")" ] &&
    grep -q ERROR "$WORK/srim.var/log" &&
-   [ "$(grep ERROR "$WORK/srim.var/log" | head -3)" = "$(grep ERROR "$WORK/srim.opt/log" | head -3)" ]; then
+   [ "$(grep ERROR "$WORK/srim.var/log" | sed -n '1,3p')" = "$(grep ERROR "$WORK/srim.opt/log" | sed -n '1,3p')" ]; then
   ok "an empty SRIM directory refuses a project with a target alike by option and variable (exit $(cat "$WORK/srim.var/status"))"
 else
   bad "an empty SRIM directory: exit $(cat "$WORK/srim.var/status") / $(cat "$WORK/srim.opt/status")"

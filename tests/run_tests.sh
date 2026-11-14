@@ -90,7 +90,7 @@ if [ "${#bins[@]}" -gt 1 ]; then
 fi
 # A binary older than the engine sources it is built from tests old code.
 newer_src="$(find "$REPO_ROOT/src" "$REPO_ROOT/include" -type f \( -name '*.cpp' -o -name '*.h' \) \
-               -newer "$AZURE2_BIN" 2>/dev/null | head -3)"
+               -newer "$AZURE2_BIN" 2>/dev/null | sed -n '1,3p')"
 if [ -n "$newer_src" ]; then
   echo "WARNING: the tested binary is older than engine sources, e.g.:"
   echo "$newer_src" | sed "s|^$REPO_ROOT/|    |"
@@ -102,7 +102,7 @@ pass=0
 fail=0
 
 for project_dir in "$REPO_ROOT"/tests/*/; do
-  azr="$(find "$project_dir" -maxdepth 1 -name '*.azr' | head -1)"
+  azr="$(find "$project_dir" -maxdepth 1 -name '*.azr' | sed -n 1p)"
   [ -n "$azr" ] || continue
 
   name="$(basename "$project_dir")"
@@ -112,7 +112,7 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
   # allowed so the reason can live in the file.
   project_tol="$TOL"
   if [ -f "$project_dir/tolerance" ]; then
-    project_tol="$(grep -vE '^[[:space:]]*(#|$)' "$project_dir/tolerance" | head -1 | tr -d '[:space:]')"
+    project_tol="$(grep -vE '^[[:space:]]*(#|$)' "$project_dir/tolerance" | sed -n 1p | tr -d '[:space:]')"
     if [ -z "$project_tol" ]; then
       echo "  WARNING: $name/tolerance holds no number; using $TOL"
       project_tol="$TOL"

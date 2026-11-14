@@ -39,16 +39,16 @@ open(sys.argv[2], "w").write(s.replace("</data>", add + "</data>", 1))
 PY
 RUN="$(guard_command 120)"
 out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --validate t.azr 2>&1)"; rc=$?
-if [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q "ay_beta.*E_REACTION_NOT_ALLOWED.*an analyzing power needs a particle entrance"; then
-  ok "--validate refuses it (exit 2): $(printf '%s\n' "$out" | grep -m1 'particle entrance' | cut -c1-160)"
+if [ "$rc" = 2 ] && grep -q "ay_beta.*E_REACTION_NOT_ALLOWED.*an analyzing power needs a particle entrance" <<< "$out"; then
+  ok "--validate refuses it (exit 2): $(grep -m1 'particle entrance' <<< "$out" | cut -c1-160)"
 else
-  bad "--validate: exit $rc, $(printf '%s\n' "$out" | grep -E 'error|valid' | head -3 | tr '\n' ' ')"
+  bad "--validate: exit $rc, $(printf '%s\n' "$out" | grep -E 'error|valid' | sed -n '1,3p' | tr '\n' ' ')"
 fi
 (cd "$WORK" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); rc=$?
 if [ "$rc" = 1 ] && grep -q "an analyzing power needs a particle entrance" "$WORK/run.log" && [ ! -f "$WORK/output/chiSquared.out" ]; then
   ok "the run refuses it (exit 1, no chiSquared.out)"
 else
-  bad "run: exit $rc, $(grep -iE 'error|chi' "$WORK/run.log" | head -3 | tr '\n' ' ')"
+  bad "run: exit $rc, $(grep -iE 'error|chi' "$WORK/run.log" | sed -n '1,3p' | tr '\n' ' ')"
 fi
 if [ "$failures" -ne 0 ]; then echo "  FAIL ($failures)"; exit 1; fi
 echo "  PASS"

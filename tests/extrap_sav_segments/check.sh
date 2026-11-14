@@ -51,7 +51,7 @@ g="$WORK/sav/output/AZUREOut_aa=2_R=3.extrap"
 grep -q "Reading User Parameter File" "$WORK/sav/run.log" || bad "the .sav was not read"
 # energies identical; the values to 1e-6 (the file carries the level parameters with 7 digits)
 cmp_out="$(paste <(awk 'NF >= 4 { print $1, $4 }' "$f") <(awk 'NF >= 4 { print $1, $4 }' "$g") | awk '
-  { if ($1 != $3) { print "GRID"; exit } d = $2 - $4; if (d < 0) d = -d; m = $4 < 0 ? -$4 : $4; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
+  { if (e) next; if ($1 != $3) { print "GRID"; e = 1; next } d = $2 - $4; if (d < 0) d = -d; m = $4 < 0 ? -$4 : $4; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
   END { printf "%.2e %d", w, n }')"
 if [ "$cmp_out" = "GRID" ]; then bad "(a) the .sav moved the extrapolation grid: $(first "$f") vs $(first "$g")"
 elif awk -v w="${cmp_out%% *}" 'BEGIN { exit !(w + 0 <= 1e-6) }'; then ok "(a) the grid is unchanged with x1.shift.offset = 0.01 in the file (first energy $(first "$g" | cut -d' ' -f1) MeV; values to ${cmp_out%% *}, ${cmp_out##* } points)"

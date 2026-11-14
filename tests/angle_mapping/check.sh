@@ -103,9 +103,9 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   tag="${mode%%:*}"; flags="${mode#*:}"
   gradcheck "g_$tag" "$flags"
   nrows="$(wc -l < "$WORK/g_$tag.rows" | tr -d ' ')"
-  summary="$(grep "components with relative" "$WORK/g_$tag/run.log" | head -1 | sed 's/.*analytic block //')"
+  summary="$(grep "components with relative" "$WORK/g_$tag/run.log" | sed -n 1p | sed 's/.*analytic block //')"
   if [ "$nrows" -lt 20 ]; then
-    bad "$tag: gradient check listed $nrows parameters"; grep -i "grad" "$WORK/g_$tag/run.log" | head -5
+    bad "$tag: gradient check listed $nrows parameters"; grep -i "grad" "$WORK/g_$tag/run.log" | sed -n '1,5p'
     continue
   fi
   # finite differences with a 1e-8 relative step (the J = 3/2- level is narrow, 1e-6 is too

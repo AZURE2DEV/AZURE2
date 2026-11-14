@@ -74,7 +74,7 @@ stage() {
   rm -rf "$d"
   mkdir -p "$d/output" "$d/checks"
   cp -R "$src/data" "$d/data"
-  azr="$(ls "$src"/*.azr | head -1)"
+  azr="$(ls "$src"/*.azr | sed -n 1p)"
   if [ -n "${4:-}" ]; then tr -d '\r' < "$azr" | awk "$4" > "$d/run.azr"; else tr -d '\r' < "$azr" > "$d/run.azr"; fi
   [ -z "${3:-}" ] || thm_set "$d/run.azr" "$3" $(thm_datasets "$d/run.azr")
 }
@@ -100,7 +100,7 @@ models() {
     [ -f "$WORK/$2/output/$f" ] || { echo x; return; }
     r="$(paste <(tr -d '\r' < "$WORK/$1/output/$f" | awk 'NF > 4 { print $1, $4 }') \
                <(tr -d '\r' < "$WORK/$2/output/$f" | awk 'NF > 4 { print $1, $4 }') |
-      awk '{ if ($1 != $3 || NF != 4) { print "x"; exit } d = $2 - $4; if (d < 0) d = -d; s = $2 < 0 ? -$2 : $2
+      awk '{ if (e) next; if ($1 != $3 || NF != 4) { print "x"; e = 1; next } d = $2 - $4; if (d < 0) d = -d; s = $2 < 0 ? -$2 : $2
              if (s > 0 && d / s > w) w = d / s; else if (s == 0 && d > 0) w = 1 } END { if (NR == 0) print "x"; else printf "%.3e\n", w }')"
     [ "$r" = x ] && { echo x; return; }
     w="$(awk -v a="$w" -v b="$r" 'BEGIN { print (b > a ? b : a) }')"

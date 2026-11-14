@@ -197,6 +197,18 @@ A check must not pass for the wrong reason: test that a run succeeded
 (``counted``) before reporting it equal. Strip ``\r`` before counting fields
 (Windows line ends), and use portable ``sed``/``awk`` (macOS has BSD tools).
 
+A script that sets ``pipefail`` (most do) never pipes into a reader that
+leaves before the end of its input: ``grep -q``, ``grep -m``, ``head -n``,
+``sed`` with ``q``, ``awk`` with ``exit`` outside ``END``. The reader leaves
+at its first match, the writer's next write gets ``SIGPIPE``, and the
+pipeline's status becomes 141, so on a loaded machine a match reads as "not
+found" (and, under ``!``, a miss as a pass) at random. Search a variable with
+a here-string, ``grep -q PATTERN <<< "$text"``; capture a command's output
+first, ``out="$(cmd)"``, or let the reader read to the end (``sed -n 1p``
+for the first line, a flag instead of ``exit`` in ``awk``). ``head -c N`` is
+a cap and allowed. Check 50 of ``tests/consistency/repo_consistency_test.py``
+finds such a pipe.
+
 Skipped tests: exit 77
 ^^^^^^^^^^^^^^^^^^^^^^
 

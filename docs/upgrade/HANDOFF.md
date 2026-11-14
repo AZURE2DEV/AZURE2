@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (branch `feature/upgrade-7-tests-no-quiet-pipe`) — the shell tests: no pipe into a reader that leaves early
+
+**Done.** Under `set -o pipefail` a pipe into `grep -q`, `grep -m`, `head -n`, a `sed` with `q` or an `awk` with
+`exit` outside `END` fails at random on a loaded machine: the reader leaves at its first match, the writer's next
+write gets SIGPIPE, the pipeline's status is 141 (a match reads as "not found", under `!` a miss as a pass). In
+the 145 shell scripts of `tests/` and `tools/` that set pipefail there were 186 such pipes (57 `grep -q`, 5
+`grep -m`, 105 `head`, 19 `awk ... exit`) in 73 files; all are rewritten without changing an assertion: a variable
+searched with a here-string, a command's output captured first, `| head -N` as `| sed -n '1,Np'`, an awk `exit`
+as a flag. Check 50 of `tests/consistency/repo_consistency_test.py` keeps it so; the rule is in `tests/CLAUDE.md`
+and `docs/source/developer/contributing.rst`.
+
+**Verified.** Consistency test passes (check 50 fails on one injected line); ten changed tests each fail on an
+error injected into what they grep (a wrapper of the binary that edits its output); `tests/run_tests.sh` 168 passed,
+0 failed; `ctest -LE slow -j2` 262 of 262; `tests/cli_help/check.sh` and five other changed tests 25 times each
+beside a running `ctest` (see the report for the counts).
+
+**Left.** `head -c N` (28 lines: a cap, it reads all its input up to N); seven early readers in four scripts without
+pipefail (`tests/upgrade/node_check.sh`, `plan_runtime.sh`, `tests/nuisance_prior_centre/continued.sh`,
+`tests/cli_yes_no/check.sh`, `tools/run_one.sh`); `scripts/` (out of scope: five in `scripts/sanitize_upgrade.sh`,
+all in messages or captured values).
+
+**Open, found (not fixed: the failure path of the test, not the race).** When the energies of the two files differ,
+the awk of `models()` in `tests/thm_park/check.sh`, of `cmp_out` in `tests/extrap_sav_segments/check.sh` and of
+`maxrel()` in `tests/sum_lab_frame/check.sh` and `tests/upos_pair_index/check.sh` prints its mismatch mark and
+then, from `END`, the number as well; the caller compares the two lines with `x` / `GRID` (never equal) or reads
+them as a number (`awk` takes "grid..." as 0), so a moved grid passes when the values before the first moved point
+agree. The rewrite kept this output exactly; the fix (print the mark only, or test the first line) is a change of
+what the tests assert and is left to the director.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-state`) — grid copy measured; report set out of `ALevel`
 
 **The stale copy the sub-point grids are laid out from** (`cnuc_split.md` §12.4 defect 1): real, and worse than

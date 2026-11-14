@@ -73,7 +73,7 @@ while read -r key value flags moves partner; do
     label="$flags"; [ "$flags" = "-" ] && label="no flag"
     ok "$key=$value ${partner_key:+($partner_key) }= $label${partner_flag:+ $partner_flag}: output files identical"
   else
-    bad "$key=$value: exit $krc, files differ from the run with $flags ($(diff -rq "$WORK/k$n/output" "$WORK/$ref/output" 2>&1 | head -3))"
+    bad "$key=$value: exit $krc, files differ from the run with $flags ($(diff -rq "$WORK/k$n/output" "$WORK/$ref/output" 2>&1 | sed -n '1,3p'))"
   fi
   if [ "$moves" = 1 ]; then
     same "k$n" base && bad "$key=$value: T1's files did not move (the key did nothing)" || ok "$key=$value: T1's files move"
@@ -116,13 +116,13 @@ refused() {  # refused NAME CODE TEXT... : --validate exit 2 and the run exit 1 
   run "$name" "$WORK/$name.azr"
   local all=1 t
   for t in "$code" "$@"; do
-    printf '%s' "$v" | grep -qF -- "$t" || all=0
+    grep -qF -- "$t" <<< "$v" || all=0
     grep -qF -- "$t" "$WORK/$name/run.log" || all=0
   done
   if [ "$vrc" = 2 ] && [ "$rc" = 1 ] && [ ! -s "$WORK/$name/output/chiSquared.out" ] && [ "$all" = 1 ]; then
     ok "$name: --validate exit 2, the run exit 1 without output, $code $*"
   else
-    bad "$name: --validate exit $vrc, run exit $rc, texts found $all: $(printf '%s' "$v" | grep -F "$code" | head -1)"
+    bad "$name: --validate exit $vrc, run exit $rc, texts found $all: $(printf '%s' "$v" | grep -F "$code" | sed -n 1p)"
   fi
 }
 with_keys "$WORK/badvalue.azr" "use_brune=yes" && refused badvalue E_CONFIG_OPTION_VALUE "use_brune=yes"
@@ -148,7 +148,7 @@ flags_refused() {  # flags_refused NAME TEXT -- FLAGS...
      && grep -qF -- "$text" "$WORK/$name/run.log"; then
     ok "$*: the run refused (exit 1, no output): $text"
   else
-    bad "$*: exit $rc, $(grep -F ERROR "$WORK/$name/run.log" | head -1)"
+    bad "$*: exit $rc, $(grep -F ERROR "$WORK/$name/run.log" | sed -n 1p)"
   fi
 }
 flags_refused rmcflag "use_rmc=1 (command line) with use_brune=1 (the default) cannot hold together: the Reich-Moore \
@@ -163,8 +163,8 @@ together" -- --no-ec-convection-current
 
 # 4. --describe: value and source of each option
 d="$(cd "$WORK/k2" && "$AZURE2_BIN" --describe T1.azr --no-transform 2>&1)"
-if printf '%s' "$d" | grep -qF "  use_brune = 0 (project)" && printf '%s' "$d" | grep -qF "  transform = 0 (command line)" \
-   && printf '%s' "$d" | grep -qF "  use_coulomb_table = 1 (default)"; then
+if grep -qF "  use_brune = 0 (project)" <<< "$d" && grep -qF "  transform = 0 (command line)" <<< "$d" \
+   && grep -qF "  use_coulomb_table = 1 (default)" <<< "$d"; then
   ok "--describe: use_brune 0 from the project, transform 0 from the command line, use_coulomb_table 1 by default"
 else
   bad "--describe: $(printf '%s' "$d" | grep -A12 'options of the calculation')"

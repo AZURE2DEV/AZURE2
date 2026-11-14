@@ -61,14 +61,14 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-out() { ls "$WORK/$1/output/" | grep '^AZUREOut_aa=' | head -1; }
+out() { ls "$WORK/$1/output/" | grep '^AZUREOut_aa=' | sed -n 1p; }
 ran() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -n "$(out "$1")" ] || { bad "run $1 failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; return 1; }; }
 model() { tr -d '\r' < "$WORK/$1/output/$(out "$1")" | awk 'NF > 4 { print $1, $4 }'; }
 chi2() { tr -d '\r' < "$WORK/$1/log" | awk '/Total Chi-Squared:/ { v = $NF } END { print v }'; }
 # worst |model(A) * F / model(B) - 1| (energies must agree): "n worst"
 worst() {
   paste -d' ' <(model "$1") <(model "$2") |
-    awk -v f="${3:-1}" '{ if ($1 != $3) { e = 1; exit } d = $2 * f / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
+    awk -v f="${3:-1}" '{ if (e) next; if ($1 != $3) { e = 1; next } d = $2 * f / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
          END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
 # check_worst A B FACTOR TOL LABEL

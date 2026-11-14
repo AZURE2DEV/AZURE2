@@ -57,7 +57,7 @@ expect() {  # LABEL NAME CODE COUNT EXIT RUN-PATTERN REFUSED(1/0)
     ok "$label"
   else
     bad "$label: $n x $code (want $count), --validate exit $e (want $exit), run: refused=$r (want $refuse)"
-    grep -E "error|warning" "$WORK/$name/validate.log" | head -3; grep -E "ERROR|WARNING" "$WORK/$name/run.log" | head -3
+    grep -E "error|warning" "$WORK/$name/validate.log" | sed -n '1,3p'; grep -E "ERROR|WARNING" "$WORK/$name/run.log" | sed -n '1,3p'
   fi
 }
 

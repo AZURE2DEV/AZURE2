@@ -66,7 +66,7 @@ awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
        print idx, a, f, j }' "$WORK/grad/run.log" | sort -n > "$WORK/grad.rows"
 nrows="$(wc -l < "$WORK/grad.rows" | tr -d ' ')"
 if [ "$nrows" -lt 10 ]; then
-  bad "(d) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/grad/run.log" | head -5
+  bad "(d) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/grad/run.log" | sed -n '1,5p'
 else
   worst="$(awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a; g[NR] = $2; f[NR] = $3; j[NR] = $4 }
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
@@ -83,7 +83,7 @@ fi
 if [ -n "$REF_BIN" ]; then
   for m in spin2_plus spin2_multil mixing; do
     run "$REF_BIN" "ref_$m" "$m" 1 ""
-    f="$(basename "$(ls "$WORK/$m/output/"AZUREOut_* | head -1)")"
+    f="$(basename "$(ls "$WORK/$m/output/"AZUREOut_* | sed -n 1p)")"
     if [ "$(tail -n +14 "$WORK/$m/output/$f" | tr -d '\r')" = "$(tail -n +14 "$WORK/ref_$m/output/$f" | tr -d '\r')" ]; then  # no cmp on the Windows runners
       ok "(e) $m: angle-integrated and particle angular distribution byte-identical to the reference build"
     else

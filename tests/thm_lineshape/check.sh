@@ -116,7 +116,7 @@ ratio_check() {  # ratio_check TAG ON OFF
             mpair = 1.00727647 + 17.99477097; m15 = 14.99626884
             eaa = 115 * m3 / (m18 + m3); bind = (mp + md - m3) * 931.49410242
             musf = md * mpair / (md + mpair) * u; musb = md * m15 / (md + m15) * u }
-    { if ($1 != $3) { print "ENERGY", $1, $3; bad = 1; exit }
+    { if (bad) next; if ($1 != $3) { print "ENERGY", $1, $3; bad = 1; next }
       esf = eaa - bind - $1; k = sqrt(2 * musf * esf) / hbarc
       zeta = alpha * (7 * musb - 9 * musf) / (hbarc * k)
       want = exp(2 * zeta * atan2(2 * (EL - $1), G))
