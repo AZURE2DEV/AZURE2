@@ -8,8 +8,9 @@ What is written:
 - MF=2/MT=151 (pp. 64-65, 71-74): the particle channels in the formal basis, LRF=7 KRM=4 IFG=1
   (:func:`pyazr.endf.from_session`, the engine's door).
 - MF=3 per reaction (pp. 103-104): every particle exit (MT 600 + k, 650 + k, ..., 800 + k, 50 + k) and the total
-  capture (MT=102) from the engine on one grid refined by :func:`pyazr.refine_grid` (the engine's refinement of an
-  adaptive extrapolation grid) to the tolerance of linear interpolation, lab energies of the projectile in eV,
+  capture (MT=102) from the engine on one grid (:mod:`pyazr.endf.grid`: the engine's refinement of an adaptive
+  extrapolation grid, started at the level energies and thresholds, checked at quarter points) to the tolerance of
+  linear interpolation, lab energies of the projectile in eV,
   barns, INT=2.  Before the file is written, MF=2 is read back into a project and its
   reaction cross sections compared with MF=3 at every grid point (the PI's decision: LRP=2 with the statement that
   MF=2 reproduces MF=3); a difference above ``MF2_TOLERANCE`` refuses the write.
@@ -27,7 +28,7 @@ import tempfile
 import numpy as np
 
 from ..errors import FormatRefused
-from . import names
+from . import grid, names
 from .material import M_NEUTRON_U
 from .model import EV_PER_MEV, from_session, to_project
 from .records import RecordWriter, NUMBER_FORMS
@@ -79,13 +80,11 @@ def _zsymam(z, a):
 
 
 def _engine_grid(session, x, reactions, energy_range_MeV, tolerance, max_points, workdir):
-    """The engine's values on one grid for every reaction, refined by :func:`pyazr.refine_grid` (the engine's own
-    refinement of an ``adaptive`` extrapolation grid, the same C++ function): an interval is split while the midpoint
-    differs from the linear interpolation by more than ``tolerance`` (relative, floor 1e-3 of the largest value) for
-    any reaction.  Each sweep is one session of a project made of the session's nuclear part, at the fit vector x,
-    with one extrapolation per reaction at the sweep's lab energies.  Returns (lab energies in MeV, {label: values
-    in b}, the refinement's report)."""
-    from ..grids import refine_grid
+    """The engine's values on one grid for every reaction: :func:`pyazr.endf.grid.refine` (the engine's refinement of
+    an adaptive extrapolation grid with the quarter-point check) from :func:`pyazr.endf.grid.start_grid` (even points,
+    the level energies and the thresholds).  Each sweep is one session of a project made of the session's nuclear
+    part, at the fit vector x, with one extrapolation per reaction at the sweep's lab energies.  Returns (lab energies
+    in MeV, {MT: values in b}, the refinement's report)."""
     from ..project import Project
     from ..session import Session
     path = os.path.join(workdir, "grid.azr")
@@ -113,7 +112,7 @@ def _engine_grid(session, x, reactions, energy_range_MeV, tolerance, max_points,
         finally:
             s.close()
 
-    refined = refine_grid(np.linspace(lo, hi, 41), model, tolerance, max_points)
+    refined = grid.refine(grid.start_grid(session, x, (lo, hi)), model, tolerance, max_points)
     e = np.asarray(refined["x"], float)
     v = np.asarray(refined["values"], float)
     return e, {mt: v[:, k] for k, (_, mt, _) in enumerate(reactions)}, refined
