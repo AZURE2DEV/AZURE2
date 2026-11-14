@@ -2,6 +2,94 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 23:30) — merged: the compound system's name, the model curve, ENDF MF=6, pyazr repairs
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 78 (rehearsal 77 plus four branches and three
+commits of mine). The agents' entries follow.
+
+- **The compound system** (`feature/upgrade-5-compound-system`): `CNuc` is `CompoundSystem`, its files are
+  named by job, consistency check 59 keeps the old name out of the engine; every method of `AZUREAPI` that
+  writes the session's state lost `const`; a particle channel's functions exist once. **Not done: the one
+  build** (below).
+- **The model as a curve; a project from an evaluation and back** (`feature/upgrade-9-webui-curve-export`):
+  `Session.model_curve`, `pyazr/model_curve.py`, `GET /api/evaluation/curve/{name}`; the Plot and ENDF tabs
+  draw the model between the data points; "New project from a file" and "Export this project" on the ENDF
+  tab; each tab lists its own jobs; the first view's lists show the old program's columns; a chain records
+  its parametrization and the prior builder reads it.
+- **The ENDF writer's loose ends and MF=6** (`feature/upgrade-8-endf-mf6`): the grid of every written
+  section seeded with the level energies and thresholds; the list of what is not written exact; MF=6 from
+  the engine (LAW=2 of each particle exit, LAW=5 LTP=12 of charged-particle elastic scattering, capture's
+  primary photons per final state).
+- **pyazr's library calls** (`feature/upgrade-7-pyazr-repairs`, Python only): answers in the project's words
+  (pairs by key and kind, units per part), refusals in three parts, nothing written beside the project,
+  library calls quiet (`pyazr/engine_text.py`: the engine's lines go to the logger `pyazr.engine`), priors
+  and limits of a level parameter as `Project` edits (`pyazr/parameter_settings.py`), a phase-shift data set
+  cannot be stranded by an edit, the skills' stale example names.
+
+**The director's decision on the one build.** None of the agent's three ways (a new order of `run.log`; two
+objects; nothing). The dependency is real in both directions, so the compound and the data are set up by
+one function, written once instead of four times, which runs the caller's data set-up in the middle and
+returns a constant, finished compound; every output file stays identical, `run.log` included. An agent is
+on it (`feature/upgrade-5-one-setup`, from the rehearsal's second merge).
+
+**Conflicts and their resolutions.** The front ends' class figure twice (tables merged, figure regenerated:
+30 boxes and 35 arrows, then 31 and 36); ROADMAP's ENDF line (both kept); HANDOFF by union. The repairs
+branch touched no file of the page but two rows of `routes.py PROJECT_NOT_SERVED`.
+
+**The director's commits on the rehearsal.**
+1. The page and the writer did not fit: the export preview read a constant of the writer that the writer's
+   branch had replaced (`KeyError` in the page's export test, a 500 in the browser test). The writer now has
+   `not_written_known(record)` (what is known before the engine computes anything: elastic scattering of a
+   neutral projectile), `write` lists the same lines first, and the preview calls it; a refused project's
+   preview has the same keys as an accepted one.
+2. The writer's test took 387 s in the quick set: `pyazr_endf_write` runs T1 and the narrow level,
+   `pyazr_endf_write_slow` (label `slow`) T2 and 13N; the page's export test writes 0.3 to 0.6 MeV at
+   tolerance 1e-2 (30 s instead of 237 s) and checks the preview's list against the written file's.
+3. The export screen's text names MF=6 and says that writing takes a minute or more.
+
+**Verified.** The C++ part (unchanged after the second merge; build `work/b-trial78`): 0 warnings; all
+projects in the three bases against `tab-t74-1` (tag `tab-t78-1`): Brune 887, formal 851, Park 887 files,
+all identical; the eight fits by command identical to `b-trial77`; my own runs by command, every output
+file compared (natural-target fit in two fitters, the T2 sampler in both modes, MINOS, a fit with band, the
+rate, three `gamma_decay` fits, a T1 extrapolation with band): identical. On the whole merged tree: the
+consistency test; the quick set 295 of 296, the one failure the browser test (next paragraph); the slow
+writer test (T2, 13N, with the real checking codes) passed.
+
+**The browser test is not steady under load.** `tests/pyazr/ui/smoke_test.py` failed in 2 of 4 direct runs
+and once in the full run (machine at 17 of 24 cores), each time with several requests "Failed to fetch" at
+once (the curve requests, which the self-test does not wait for, with `/api/outputs` or `/api/evaluation`);
+alone on a quieter machine 3 of 3. Cause not found; not hidden by a retry; first item of the next page
+branch (whether a user can lose a curve the same way).
+
+**The limit of the written elastic section, plainly.** The manual (printed pp. 144-147, eqs. 6.19, 6.20)
+gives sigma_NI(E) in MF=3 and P_NI(mu, E) in MF=6 each its own interpolation; a processing code multiplies
+the two. The branch changed the module's reader to interpolate the product, and its tolerance (elastic to
+3.4e-3) holds under that reading only. Where sigma_NI changes sign between two grid energies, a code that
+follows the manual is off by about the size of sigma_e - sigma_c in a narrow region. Merged as built, with
+this said; the next ENDF branch measures both readings and makes the written file right under the manual's.
+
+**Measured by me.** An export at one thread on a loaded machine: T1 94.8 s (736 energies, up to 267
+cosines, 28 engine sessions), 0.3 to 0.6 MeV 24.2 s, tolerance 1e-2 alone 31.8 s, both 10.8 s. The quiet
+calls cost about 30 microseconds per session call. Their weak points, accepted until the engine keeps its
+own text: file descriptor 1 is redirected during a call, so the engine's last lines are lost if it aborts
+inside one; the phase-shift rule exists in Python and in the engine's set-up.
+
+**Seen, not repaired** (the next branches): the export form's labels speak the format's language ("MAT",
+"number form"); the import report's first line names a temporary path; `POST /api/project/open` resolves a
+relative path in the server's working directory; a ratio data set's unit reads "b"; one data set's curve
+alone differs from the data session by 2.4e-3 on T2 (all together 4e-9); the curve's grid is linear and
+misses a narrow peak; `endf.write`'s sessions recompute the external capture every sweep; a job's log no
+longer gets the engine's lines; the seven `CNuc.cpp:NNNN` references of `conventions.rst` (the set-up
+agent's list); nine functions without a caller (the repairs agent's list; the PI decides).
+
+**Open, for the PI**: whether written MF=6 stays under CHECKR's limits (200 energies, 201 cosines per
+panel) although the manual allows more; whether the logger is the right shape for quiet calls and whether
+`Objective` calls are held too; a level narrower than about 1e3 times the ER field's last digit is refused
+by the writer (kept); the library file's MF=6/MT=600 normalisation (to be verified independently first).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial78`; the quick test set has 296 tests.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-7-pyazr-repairs`) — pyazr's library calls: the defects the examples met
 
 Each item measured on the start commit (`5884aa62`, engine of `work/b-pyfix`, copies of the projects, one thread),
