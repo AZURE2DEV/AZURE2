@@ -113,6 +113,8 @@ export async function render(ctx, el, args) {
   el.appendChild(extras);
   const file = selected.fields.file;
   if (typeof file === "string" && file) extras.appendChild(fileRows(ctx, file));
+  if (ctx.schema.records[selected.kind]?.fields?.covariance) extras.appendChild(button("Covariance…",
+    "Build the covariance from parts", () => ctx.navigate(`#/covariance/${encodeURIComponent(selected.name)}`)));
   if (evaluated[selected.name]) extras.appendChild(await preview(ctx, selected.name));
 }
 

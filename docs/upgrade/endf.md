@@ -545,6 +545,11 @@ implementation in C++ would break the rule of one. The command line is pyazr's (
 
 ## 11. Decisions for the PI
 
+Status (2026-11-14): decisions 1 (photon channels out of MF=2, capture pointwise in MF=3/MF=6), 3 (LRP=2 with full
+pointwise MF=3), 7 (the MAT 228 extract committed as test data) and 10 (MF=32 from a formal-basis HESSE) are
+**decided by the PI**, as recommended. Decisions 2, 4, 5, 6, 8 and 9 are the director's interim choices, as
+recommended (HANDOFF, 2026-11-14 15:00).
+
 1. **Photon channels.** (a) In MF=2 as channels of photon pairs (KRM=4, P = 1, Gamma_gamma kept at E_lambda): the
    radiative widths then enter the level matrix of every code that reads the file, the energy dependence
    E_gamma^(2L+1) and external capture are lost, and the file's capture is not AZURE2's. (b) MF=2 holds the particle
@@ -598,3 +603,137 @@ changes no output number of the engine.
 Stage 1 alone answers "an easy way of checking the evaluations" for every library file with MF=3/MF=6 (all 69
 charged-particle materials of VIII.1); stage 2 adds the evaluations that carry LRF=7. The class scheme
 (`docs/source/developer/figures/classes.tsv`) gets the module's records as rows when they are built, not before.
+
+## 13. As built
+
+### 13.1 Stage 1: read, summarise, curves
+
+`pyazr/endf/` holds `records.py` (lines, the three number forms, CONT, LIST, TAB1, TAB2 and a cursor over a
+section), `interpolation.py` (INT 1-6), `names.py` (the manual's names of files, reactions, sublibraries, formats),
+`material.py` (`read`, `Material`, `Header`), `distributions.py` (MF=3, MF=6 LAW=2 and LAW=5), `summary.py`,
+`curves.py` (`CurveRequest`, `Curve`, `CoulombTerms`, `request_of`) and `format_check.py` (the own check of
+stage 4, built here because the reader and the check share the cursor). `pyazr.FormatRefused` (`ValueError`) is a
+class of `pyazr/errors.py`; a malformed file raises pyazr's `FormatError` with one diagnostic (file, line, columns,
+found, allowed, the page). Commands: `pyazr endf summary FILE`, `pyazr endf curves FILE PROJECT [--record]`.
+
+What differs from the design, and why:
+- `Material.curves(data, session=s)`: an `EvaluatedData` does not carry its pairs, so the session is passed (its
+  `datasets` and `pairs` give them); `CurveRequest` is the plain form (`request_of(session, data)` makes it).
+- The lab energy of a point is the engine's own (`EvaluatedData.extra["energy_lab"]`, after the energy shift);
+  the `cm_to_lab_energy` row is used only when the file's projectile is the pair's second particle. The data set's
+  angles are already c.m. (the engine's), so no lab-angle row is needed.
+- The MT of a particle exit is found by the file's own Q values (QM - QI = the residual's excitation, p. 105).
+- `check_resonances` (stage 6) and the LRP=1 sum of MF=2 and MF=3 are not built: an LRP=1 file gives MF=3 alone.
+- Capture to one final state (MF=6/MT=102 yields, MF=12) is refused; capture to every final state is MF=3/MT=102.
+
+What the manual leaves open, and how it is read (each in the module's text):
+- INT=6 threshold T for Q <= 0 (eq. 2, p. 26: "the threshold", no formula): the lab energy at E_cm = -QI, the
+  engine's `cm_to_lab_energy` on the file's masses (AWI of MF=1, AWR of the section).
+- INT=4, 5 with a zero end: 0 inside the interval (the law's limit); a change of sign: NaN.
+- Between the incident energies of MF=6: the value at fixed mu (Cartesian, eq. 7 p. 26); unit-base laws 21-25 taken
+  as 1-5 (equal for distributions over the same mu range, p. 27); corresponding-point laws refused. For LAW=5 the
+  interpolated quantity is sigma_e - sigma_c for every LTP (the manual tabulates it so for LTP 12-15 and is silent
+  for LTP 1 and 2); the Coulomb part is computed at the energy asked.
+- LTP=12 and 15 both "linear in mu" (pp. 146-147): read alike; LTP=14 ln P linear in mu.
+- LAW=5 has no yield factor (MF=3 holds 1.0 or sigma_NI, p. 145); LAW=2 multiplies by the product's yield.
+- A tabulated distribution outside its cosines is zero (stated for LAW=1, p. 142; taken for LAW=2 and LAW=5).
+- The TPID line may carry MAT 0 (the library file does); it is the first line with MF = MT = 0 and not an end record.
+- Fields after a record's last value: blanks or zeros (FUDGE pads the interpolation line with zeros) are accepted;
+  anything else is a warning of the check (a count smaller than what was written, which a reader cannot see).
+
+Tested (`tests/pyazr/endf_read_test.py`, 82 checks): against hand values from the manual's equations -- the number
+forms, INT 1-6 (INT=6 in both of the manual's forms), MF=3 on a table with five laws, LAW=2 LANG 0, 12, 14 at and
+between panels, LAW=5 LTP 1, 2 (distinguishable and identical), 12, 14, 15, the Coulomb term against eqs. 6.9-6.12
+(2e-6), the curves of sigma, dsigma/dOmega, sfactor and ratio_to_rutherford with the lab energy by hand; against
+itself only -- the session route (`curves(data, session=s)` equals the request built by hand on T1). The column
+rules: a line beyond column 80 (read; a warning), a wrong sequence number (read; a warning), a count larger than
+the lines (refused; an error), lines left after the last record (refused; an error), a count one smaller on the
+same lines (read; a warning: the reader cannot know), a number with D (refused with file:line:columns and p. 31), a
+line without MAT, MF, MT (refused), a wrong directory NC and a missing SEND (errors of the check). Two injected errors
+(the Legendre factor (2l+1)/2 made 2l+1; INT=3 made linear) failed nine checks; removed.
+
+The own check on the library file `h-002_He_004.endf` (not in the repository) finds no error: one warning (LRP=2 in
+a primary evaluation, p. 42) and one note (no sequence numbers). On the committed extract it finds in addition the
+three sections the directory lists and the extract left out (the test expects exactly these).
+
+### 13.2 Stage 4: the checking codes
+
+`pyazr/endf/checkers.py`: `PROGRAMS` (one row per code: family, kind check / rewrite / derive, what it does),
+`checkers(search=None)`, `check(path, codes=None, timeout=300)` (the own format check first, then CHECKR, FIZCON,
+PSYCHE), `standardize(path, program="stanef", mf2=False)` returning a `Candidate` (`diff()`, `summary()`,
+`accept(to=None, overwrite=False)`), `compare(a, b)`. Commands `pyazr endf check FILE [--program]` and
+`pyazr endf standardize FILE [--program] [--mf2] [--write NEW [--overwrite]]`. The stand-in of the tests:
+`tests/pyazr/endf_standin/standin.py`; the real codes run in `tests/pyazr/endf_check_test.py` when
+`AZURE2_ENDF_UTILITIES` and `AZURE2_PREPRO` are set.
+
+The codes were built by the director under `opt/` with the PI's yes (`opt/README-endf-codes.md`: utility codes at
+ea2638b2, PREPRO 2023 at cc5fd087) and run here. Where the manuals, the sources and the built programs differ, the
+programs' behaviour was taken:
+- **The deck ends with DONE** (checkr.f lines 255-270, 806-861). Without it the program reaches the end of its input
+  after a complete report and stops with a Fortran runtime error, exit status 2. With it the codes exit 0 whatever
+  they found: the exit status says nothing about findings (the director's first runs had read status 2 as
+  "findings"; it was the end of input).
+- **CHECKR counts "SECTION CANNOT BE CHECKED" as an error**; FIZCON wraps one message over two lines (seen twice);
+  PSYCHE prints tables and comments under "FILE n / SECTION mt" and has no count. The parser reads them so and
+  compares its count with the report's "Encountered N errors, M warnings" (a finding when they differ).
+- **STANEF's standard options rewrite MF=2 too** (the manual's pp. 4-5 say MF=2 on request; the built 8.10 rounds
+  the 67 changed numbers of the 3He + 4He MF=2 with blank options as with `0,Y,Y,Y`).
+- **STANEF corrupts a float written without a decimal point**: `35070343` and `12377043` (ER of background poles,
+  eV) became `3.507034+3` and `1.237704+3`. The manual allows such a field (p. 31: "digits optionally containing a
+  decimal symbol").
+- **FIXUP 2023-1 refuses to run without option 5** ("Cross Section Reconstruction is MANDATORY"): the deck sets
+  column 1 (ZA, AWR) and column 5 = 2 (built-in summation rules), every other test off.
+- **CHECKR 8.24 does not know LTP=15** (p. 147 of the 2023 manual defines it).
+
+Measured on the ENDF/B-VIII.1 3He + 4He file (`standardize` on a copy; digits lost = significant digits written
+before minus after, the largest in the section):
+
+- STANEF (standard options, and with MF=2): MF=1 bookkeeping; MF=2/151 67 numbers, 2 digits lost, two values 1e4
+  too small; MF=3/2 1 number, 2 digits; MF=3/600 30 numbers, 2 digits (4.9e-7); MF=6/2 349, 2 digits (4.7e-7);
+  MF=6/600 2, 2 digits.
+- FIXUP (columns 1 and 5): MF=1 bookkeeping (51 -> 66 lines); MF=2, MF=6 numbers written another way, values equal;
+  MF=3/2 other fields; MF=3/600 4 numbers, 1 digit (2.5e-6).
+- DICTIN: MF=1 bookkeeping (51 -> 52 lines); every other section unchanged.
+- ENDF2C: MF=1 bookkeeping; MF=2, MF=3 form only; MF=6/2 1441 numbers, 1 digit (3.6e-5); MF=6/600 540, 1 digit
+  (2.2e-5).
+
+So the design's reading of the sources holds for STANEF's 7 digits and DICTIN's bookkeeping; ENDF2C loses one digit
+in exponent fields (`-1.38025-12` -> `-1.3803E-12`), FIXUP one in a few MF=3 fields; STANEF's handling of MF=2 and of
+integer-looking floats is worse than the sources suggested.
+
+The real codes on the files of the repository (exit status 0 everywhere; every finding the reports count was read):
+
+- The 3He + 4He extract: own check 3 errors, 1 warning, 1 note; CHECKR 4 errors (LRP=2, three sections missing);
+  FIZCON 1 (MF=3/600 needs MF=6); PSYCHE 1 warning (AP: LRF=7 misread).
+- The library file itself (not committed): own 0/1/1; CHECKR 5 errors (LRP=2, NE > 200 twice and "cannot be checked"
+  twice); FIZCON 1 (MF=6/600: energy range of the LIST records against the TAB1); PSYCHE 1 warning (AP), 8 notes.
+- `p-C012_hand.endf` (the example): own 0/0/0; CHECKR, FIZCON none; PSYCHE 3 notes.
+- The read test's hand files (MT=800/801; three number forms): own none (a note when unsequenced); CHECKR none;
+  FIZCON 4 (EMAX not reached twice, LIST against TAB1 energy range twice); PSYCHE 2 warnings (a negative LAW=2
+  distribution).
+- The LAW=5 files (LTP 1, 2, 12, 14, 15): own none; CHECKR none, but 3 for LTP=15 (not known to it); FIZCON EMAX and,
+  for LTP 12-15, the normalisation of P_NI; PSYCHE notes. Identical-particle files: CHECKR 1 warning (ZSYMAM
+  text), FIZCON AWI atomic and EMAX.
+
+The findings on the hand-written files are true of them (made-up coefficients, a 6 MeV table under EMAX = 20 MeV);
+the own check does not test physics or procedures (FIZCON's and PSYCHE's domain): it found none of them, and no code
+found a format error the own check missed on these files.
+
+### 13.3 What the page needs (routes and screens, a later branch)
+
+- Results tab, "Evaluations", add a file: `pyazr.endf.read(path).summary().to_dict()` on a path in the project's
+  root; answer: MAT, target, projectile, library, lab, date, authors, LRP, EMAX, the sections (MF, MT, reaction,
+  lines, what) and the text.
+- The curve of a data set: `Material.curves(data, session=s)` (or `pyazr endf curves FILE PROJECT --record NAME
+  --json`) for the file and a data set of the open session; answer: energies, angles, values (NaN where none),
+  coverage, quantity, unit, source, notes; or a refusal's what, allowed, fix.
+- "Check ENDF", the codes found: `pyazr.endf.checkers()`; answer: name, path, family, kind, what it does.
+- Run a check (a job, one thread): `pyazr.endf.check(path, codes=[...]).to_dict()`; answer: the own findings (line,
+  MF, MT, message, page) and per code its version, exit status, findings (MF, MT, record, text, meaning) and report.
+- "Standardize" (a job): `pyazr.endf.standardize(path, program=, mf2=)`; answer: the candidate's path and its
+  `diff()` rows; "Keep as new file" is `accept(to=)`, "Replace" `accept(to=path, overwrite=True)` after a second
+  question.
+- "New project from ENDF": not built (the start model, the next stage).
+
+Routes, one per call: `POST /api/endf/summary`, `POST /api/endf/curves`, `GET /api/endf/checkers`; jobs
+`endf_check` and `endf_standardize` (with `accept`).

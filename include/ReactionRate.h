@@ -71,6 +71,8 @@ class ReactionRate {
    * Writes the rates to an output file.
    */
   void WriteRates();
+  /// The rates computed (temperature in GK, N_A<sigma v> in cm^3 mol^-1 s^-1), in the order WriteRates writes them.
+  const std::vector<RateData> &Rates() const { return rates_; }
 
  private:
   int entrance_key_;

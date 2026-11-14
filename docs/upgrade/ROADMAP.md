@@ -355,6 +355,13 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       chain to `output/chain_<id>.npy`, quantiles, split R-hat and τ on the page, a chain continued) and the bands
       (linear from a fit's covariance, percentiles of a chain's draws; drawn in the Results tab) as jobs
       (2026-11-14, section 11.7).
+- [x] Two utilities on pyazr modules (2026-11-14, `web_ui.md` section 11.12): the covariance builder
+      (`pyazr.covariance`: a data set's covariance file from named parts, checked as the engine reads it; the Data
+      tab's "Covariance…", the file and the field as one history entry) and the reaction rate (`pyazr.rate`: the
+      engine's rate in-process at any parameters, its band from a covariance or draws, the Gamow window; the Rate
+      tab as a job). The rate in the libraries' formats (`pyazr.rate_formats`: STARLIB's table with
+      the band's factor uncertainty, REACLIB sets fitted with a stated tolerance); the prior-covariance builder is
+      open.
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
@@ -395,6 +402,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [ ] ENDF for the evaluators (`endf.md`: the mapping of a project to ENDF-6 MF=2 LRF=7 and the other sections, a
       measured spike, the checking codes, `pyazr.endf` and the page's screens; design written 2026-11-14): six
       stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).
+      Stage 1 built (`pyazr/endf/`: read, summary, MF=3 and MF=6 LAW=2/LAW=5 curves at a data set's points, the
+      module's own format check; `pyazr endf summary|curves`); stage 4 built (the checking codes found and run,
+      their reports read, candidates with their difference; `pyazr endf check|standardize`); next: the start model
+      from LRF=7 (stage 2, with the engine's door 2), then the writer.
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

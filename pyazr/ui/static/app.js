@@ -17,6 +17,8 @@ import * as fitTab from "./tabs/fit.js";
 import * as resultsTab from "./tabs/results.js";
 import * as physicsTab from "./tabs/physics.js";
 import * as thmTab from "./tabs/thm.js";
+import * as rateTab from "./tabs/rate.js";
+import * as covarianceTab from "./tabs/covariance.js";
 
 /** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it;
  * `shown(ctx)` (where given): whether the project has what the tab is about (its link is hidden otherwise; the route
@@ -29,6 +31,8 @@ export const TABS = [
   { id: "results", title: "Results", module: resultsTab },
   { id: "physics", title: "Physics", module: physicsTab },
   { id: "thm", title: "THM", module: thmTab, shown: thmTab.shown },
+  { id: "rate", title: "Rate", module: rateTab },
+  { id: "covariance", title: "Covariance", module: covarianceTab, shown: covarianceTab.shown },
 ];
 
 /** The keys of the page, shown by "?" (the overlay lists exactly this table). */

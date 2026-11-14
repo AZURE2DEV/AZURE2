@@ -24,6 +24,7 @@ from functools import lru_cache, partial
 import numpy as np
 
 from .errors import Conflict, Missing, NotFound, Refused, UIError, describe_exception
+from .utilities import rate_engine
 
 FINAL = ("stopped", "converged", "ended", "finished", "failed", "killed", "interrupted")
 TRACE_POINTS = 500  # the most points of a job's trace (objective against call); older points are thinned by two
@@ -475,6 +476,10 @@ def _as_number(value):
     return number
 
 
+def _as_text(value):
+    return "" if value is None else str(value).strip()
+
+
 def _as_names(value):
     if value is None or value == "":
         return []
@@ -489,6 +494,7 @@ SETTING_TYPES = {
     "boolean": (_as_boolean, "true or false"),
     "names": (_as_names, "names of free parameters, separated by blanks or commas; empty: every free parameter"),
     "number": (_as_number, "a finite number, or empty for the default"),
+    "text": (_as_text, "a word or a path, as the setting's doc says"),
 }
 
 
@@ -568,7 +574,31 @@ JOBS = (
                                             "the model is evaluated at"),
                                     Setting("seed", "integer", 1, "the seed of the choice of draws")),
            facts=(("from", "a sampler job (its best point as the start)"),)),
-    JobRow("rate", "engine", "the reaction rate", missing="Session.reaction_rate (web_ui.md finding 6)"),
+    JobRow("rate", "engine", "the reaction rate N_A<sigma v> of a pair of pairs at the start point, computed by the "
+           "engine as the program's rate command (pyazr.rate), with the Gamow window, an optional band and an "
+           "optional comparison table", run=rate_engine, follows=(("fit", None), ("sample", "emcee")),
+           settings=(Setting("entrance", "integer", 1, "the entrance pair's key"),
+                     Setting("exit", "integer", 2, "the exit pair's key; -1 the total radiative capture"),
+                     Setting("grid", "text", "table", "table or log20 (pyazr.rate.TEMPERATURE_GRIDS), or custom: "
+                             "t_min to t_max in steps of t_step (GK, the program's grid)"),
+                     Setting("t_min", "number", None, "custom grid: the lowest temperature (GK)"),
+                     Setting("t_max", "number", None, "custom grid: the highest temperature (GK)"),
+                     Setting("t_step", "number", None, "custom grid: the step (GK)"),
+                     Setting("band", "text", "none", "none; covariance (the start job's, linear in ln rate); draws "
+                             "(the start job's chain: 16th, 50th, 84th percentiles)"),
+                     Setting("draws", "integer", 100, "band from draws: the vectors of the chain the rate is "
+                             "computed at"),
+                     Setting("seed", "integer", 1, "band from draws: the seed of the choice of vectors"),
+                     Setting("comparison", "text", "", "a rate table of the project folder to compare with: T9 (GK), "
+                             "N_A<sigma v>, optionally its uncertainty"),
+                     Setting("starlib_label", "text", "azr2", "STARLIB: the reference label (one to four characters)"),
+                     Setting("starlib_flag", "text", "", "STARLIB: the interaction label: empty, w, g or v"),
+                     Setting("reaclib_label", "text", "azr2", "REACLIB: the set label (four characters)"),
+                     Setting("reaclib_flag", "text", "n", "REACLIB: the resonance flag: n, r or w"),
+                     Setting("reaclib_tolerance", "number", 0.05, "REACLIB: the largest relative deviation of the "
+                             "sets from the computed rate on 0.01-10 GK"),
+                     Setting("reaclib_sets", "integer", 3, "REACLIB: the most sets tried")),
+           facts=(("program command", "AZURE2 rate"), ("table", "output/rate_<id>.csv"))),
 )
 
 

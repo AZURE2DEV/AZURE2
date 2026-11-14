@@ -231,3 +231,71 @@ Calls ``pyazr.fetch_levels``.
   auto).
 - ``--json``: one JSON document on standard output.
 
+``endf summary``
+----------------
+
+What an ENDF-6 file holds: material, projectile, library, sections in words, the header text.
+
+.. code-block:: text
+
+   python -m pyazr endf summary FILE [--mat N] [--json]
+
+Calls ``pyazr.endf.read``.
+
+- ``FILE``: an ENDF-6 file (an existing file).
+- ``--mat``: the material (MAT) of a file that holds several (a whole number).
+- ``--json``: one JSON document on standard output.
+
+``endf curves``
+---------------
+
+The evaluation at each data set's points in its quantity and unit (--json: the values beside the model at the project's start values).
+
+.. code-block:: text
+
+   python -m pyazr endf curves FILE PROJECT [--record TEXT] [--mat N] [--json]
+
+Calls ``pyazr.endf.Material.curves``.
+
+- ``FILE``: an ENDF-6 file (the evaluation) (an existing file).
+- ``PROJECT``: the project whose data sets are compared (an existing format-3 project file (.azr)).
+- ``--record``: only the data set of this name (a text).
+- ``--mat``: the material (MAT) of a file that holds several (a whole number).
+- ``--json``: one JSON document on standard output.
+
+``endf check``
+--------------
+
+The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their reports read into findings.
+
+.. code-block:: text
+
+   python -m pyazr endf check FILE [--program CHOICE] [--timeout X] [--json]
+
+Calls ``pyazr.endf.check``.
+
+- ``FILE``: an ENDF-6 file (an existing file).
+- ``--program``: the one checking code to run (default: CHECKR, FIZCON and PSYCHE, those found) (one of checkr,
+  fizcon, psyche, inter).
+- ``--timeout``: seconds each code may take (a number; default 300.0).
+- ``--json``: one JSON document on standard output.
+
+``endf standardize``
+--------------------
+
+Run a code that rewrites a copy of the file and show what changed per section (numbers, digits lost); nothing is written without --write.
+
+.. code-block:: text
+
+   python -m pyazr endf standardize FILE [--program CHOICE] [--mf2] [--write FILE] [--overwrite] [--timeout X] [--json]
+
+Calls ``pyazr.endf.standardize``.
+
+- ``FILE``: an ENDF-6 file (never changed) (an existing file).
+- ``--program``: the code that rewrites a copy (one of stanef, fixup, dictin, endf2c; default stanef).
+- ``--mf2``: STANEF: rewrite the numbers of MF=2/MT=151 too (an option without a value).
+- ``--write``: keep the candidate as this file (a file to write, in an existing folder).
+- ``--overwrite``: with --write: replace an existing file (an option without a value).
+- ``--timeout``: seconds the code may take (a number; default 300.0).
+- ``--json``: one JSON document on standard output.
+

@@ -372,6 +372,38 @@ A command of ``python -m pyazr``
    ``cli.write_reference_page()`` (check 42 fails for a row without a case, a
    case without a row, an unknown argument type or a stale page).
 
+A section (MF/MT) of ``pyazr.endf``
+-----------------------------------
+
+The format work of ENDF-6 is ``pyazr/endf/`` (user guide :doc:`../user_guide/endf`); every rule it codes cites
+the printed page of ENDF-102 (2023) in a comment. A section that can be read and evaluated:
+
+1. Its records: a ``read_*`` function and a record class in ``pyazr/endf/distributions.py`` (or a new file of the
+   package for a new file MF), read with the ``Cursor`` of ``records.py`` and ending with ``_require_done``; a
+   method of ``Material`` (``material.py``) that calls it.
+2. Its words in ``Material.summary()``: a branch of ``_describe_section`` (``summary.py``); a new reaction or file
+   name is a row of the tables of ``names.py``.
+3. Its record counts in the own check: a branch of ``_check_records`` (``format_check.py``).
+4. If it gives a quantity of a data set: a branch of ``curves`` (``curves.py``); physics (a kinematic or Coulomb
+   formula) is a row of ``pyazr.physics``, never a formula in the package.
+5. A hand-written file of the section (``tests/pyazr/endf_testfiles.py`` writes it) and checks against hand values
+   from the manual's equations in ``tests/pyazr/endf_read_test.py``.
+
+A checking code of ``pyazr.endf``
+---------------------------------
+
+The codes are found, never installed (``pyazr/endf/checkers.py``):
+
+1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does).
+2. Its deck: for a checking code the one of ``_run_check``, for a rewriting code the branch of ``standardize`` (a
+   PREPRO code: ``_prepro_deck``); take the deck from the program's source, cite the lines.
+3. Its report: a branch of ``parse_report`` that gives findings (severity, MAT, MF, MT, record, text) and the
+   totals the report states; known messages with their meaning are rows of ``MEANINGS``.
+4. The stand-in ``tests/pyazr/endf_standin/standin.py`` writes its report in the program's layout (lines copied from
+   a real report, cited); cases in ``tests/pyazr/endf_check_test.py``, and a case with the real program in its last
+   part (run when ``AZURE2_ENDF_UTILITIES`` / ``AZURE2_PREPRO`` are set).
+5. The command's choices in ``pyazr/cli.py`` (``endf check --program``, ``endf standardize --program``).
+
 A run-time data file of pyazr
 -----------------------------
 

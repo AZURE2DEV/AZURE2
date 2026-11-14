@@ -109,9 +109,12 @@ comments and free-form numbers (any whitespace, line breaks anywhere)::
   count that does not match the file is an error. ``size N`` may follow as
   a check.
 - The terms (``block``, ``diagonal``, ``vector``, ``relvector``,
-  ``matrix``) add up to :math:`C`, in the units of the files' value column
-  (lab frame, as in the data file: (b/sr)\ :sup:`2` for differential cross
-  sections). Blocks may overlap and need not be contiguous; ``block`` and
+  ``matrix``) add up to :math:`C`, in the engine's unit of the quantity
+  (lab frame: (b/sr)\ :sup:`2` for differential cross sections), which is
+  the value column's unit unless the data set's ``columns`` give another
+  (the rows are taken to the engine's unit before the covariance is applied).
+  ``pyazr.covariance`` builds the file from named parts
+  (:doc:`../user_guide/covariance_builder`). Blocks may overlap and need not be contiguous; ``block`` and
   ``matrix`` must be symmetric (to :math:`10^{-6}` relative).
 - ``relvector`` multiplies its fractions by the model :math:`m` (in the
   data's units), frozen at the first evaluation of the run and written to

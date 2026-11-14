@@ -352,6 +352,70 @@ def case_import_ensdf():
     check("import ensdf: pyazr.fetch_levels's levels", result == reference and len(result) == 3, result)
 
 
+EXTRACT = os.path.join(HERE, "data", "endf", "h-002_He_004_extract.endf")
+
+
+def case_endf_summary():
+    code, doc, _ = run("endf", "summary", EXTRACT, "--json")
+    result = ok_doc("endf summary", code, doc, "endf summary") or {}
+    reference = cli.plain(pyazr.endf.read(EXTRACT).summary().to_dict())
+    check("endf summary: pyazr.endf.read(FILE).summary()", result == reference and result.get("mat") == 228, result)
+    code, text, _ = run("endf", "summary", EXTRACT)
+    check("endf summary as text: the material and its sections", code == 0 and "MAT 228" in text and "(z,p0)" in text,
+          text)
+
+
+def case_endf_curves():
+    sys.path.insert(0, HERE)
+    from endf_testfiles import Writer, material
+    folder = os.path.join(TMP, "endf_T1")
+    if not os.path.isdir(folder):
+        shutil.copytree(os.path.dirname(T1), folder, ignore=shutil.ignore_patterns("output*"))
+        os.makedirs(os.path.join(folder, "output"), exist_ok=True)
+    w = Writer().cont(6012.0, 11.89691, 0, 2, 1, 0).tab1(1001, 0.998623, 0, 5, (2,), (2,), [1e6, 3e6], [1.0, 1.0])
+    w.tab2(0.0, 0.0, 0, 0, (2,), (2,), 2).list(0.0, 1e6, 2, 0, 1, [0.1, 0.05]).list(0.0, 3e6, 2, 0, 1, [0.2, 0.0])
+    path = material(os.path.join(TMP, "p12C.endf"), {(6, 2): w})
+    code, doc, _ = run("endf", "curves", path, os.path.join(folder, "T1.azr"), "--record", "el_lab090", "--json")
+    result = ok_doc("endf curves", code, doc, "endf curves") or [{}]
+    row = result[0]
+    with pyazr.Session(os.path.join(folder, "T1.azr")) as s:
+        d = [x for x in s.evaluate(s.parameters.x0).data if x.name == "el_lab090"][0]
+        c = pyazr.endf.read(path).curves(d, session=s)
+    check("endf curves --record: Material.curves of the data set, values beside the model",
+          len(result) == 1 and row.get("source") == "MF=6/MT=2 LAW=5" and row.get("covered") == int(c.coverage.sum())
+          and row.get("values") == cli.plain(c.values) and len(row.get("model", [])) == d.n, row)
+
+
+def _standin_bin():
+    folder = os.path.join(TMP, "endf_bin")
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+        for name in ("checkr", "fizcon", "psyche", "stanef"):
+            os.symlink(os.path.join(HERE, "endf_standin", "standin.py"), os.path.join(folder, name))
+    return folder
+
+
+def case_endf_check():
+    code, doc, _ = run("endf", "check", EXTRACT, "--program", "checkr", "--json",
+                       AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="findings")
+    result = ok_doc("endf check", code, doc, "endf check") or {}
+    own = [f["code"] for f in result.get("own", {}).get("findings", [])]
+    reports = result.get("reports", [])
+    check("endf check: the own check and CHECKR's findings (the stand-in)", own.count("DIRECTORY") == 3 and
+          len(reports) == 1 and reports[0]["program"] == "checkr" and
+          sum(f["severity"] == "error" for f in reports[0]["findings"]) == 3, result)
+
+
+def case_endf_standardize():
+    out = os.path.join(TMP, "extract.stanef.endf")
+    code, doc, _ = run("endf", "standardize", EXTRACT, "--write", out, "--json",
+                       AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="lossy")
+    result = ok_doc("endf standardize", code, doc, "endf standardize") or {}
+    changed = {(c["mf"], c["mt"]): c for c in result.get("changes", [])}
+    check("endf standardize --write: the candidate's changes and the file written", result.get("written") == out and
+          os.path.isfile(out) and changed.get((3, 600), {}).get("kind") == "numbers", result)
+
+
 JSON_CASES = {
     "commands": case_commands,
     "describe": case_describe,
@@ -367,6 +431,10 @@ JSON_CASES = {
     "ui": case_ui,
     "import exfor": case_import_exfor,
     "import ensdf": case_import_ensdf,
+    "endf summary": case_endf_summary,
+    "endf curves": case_endf_curves,
+    "endf check": case_endf_check,
+    "endf standardize": case_endf_standardize,
 }
 
 # (arguments, exit code, error class): wrong calls; each is run with --json and without
@@ -380,6 +448,7 @@ WRONG = [
     (["stopping", "C", "q", "1"], 2, "BadArgument"),
     (["stopping", "Xx2", "p", "1"], 2, "ValueError"),
     (["import", "exfor", "T0001002", "--plus", "one"], 2, "BadArgument"),
+    (["endf", "summary", T2], 2, "FormatError"),
     (["validate", OLD_T2], 3, "FormatError"),
 ]
 
