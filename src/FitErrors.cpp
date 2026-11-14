@@ -2,6 +2,7 @@
 #include "FitErrors.h"
 
 #include <Minuit2/FunctionMinimum.h>
+#include <Minuit2/MinosError.h>
 #include <Minuit2/MnHesse.h>
 #include <Minuit2/MnMinos.h>
 #include <Minuit2/MnUserCovariance.h>
@@ -39,11 +40,18 @@ void RunMinos(AZURECalc &objective, const AZUREParams &params, double up, FitRes
   ROOT::Minuit2::MnMinos minos(objective, *result.minimum);
   const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   result.minos.clear();
+  result.minosValidity.clear();
   for (int i = 0; i < (int)mp.Params().size(); i++) {
     log << "\tParameter " << i + 1 << "..." << std::endl;
-    if (!mp.Parameter(i).IsFixed())
-      result.minos.push_back(minos(i));
-    else
+    MinosValidity validity;
+    if (!mp.Parameter(i).IsFixed()) {
+      const ROOT::Minuit2::MinosError error = minos.Minos(i);
+      result.minos.push_back(error());
+      validity.lower = MinosSide{error.LowerValid(), error.AtLowerLimit(), error.AtLowerMaxFcn(), error.LowerNewMin()};
+      validity.upper = MinosSide{error.UpperValid(), error.AtUpperLimit(), error.AtUpperMaxFcn(), error.UpperNewMin()};
+    } else {
       result.minos.push_back(std::pair<double, double>(0., 0.));
+    }
+    result.minosValidity.push_back(validity);
   }
 }

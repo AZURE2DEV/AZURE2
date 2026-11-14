@@ -14,6 +14,10 @@
 #   3. the same with --use-gradient (the other MIGRAD call);
 #   4. a malformed --max-calls is refused with an error (exit 2) and no fit is run (before November 2026: a warning,
 #      and the fit ran without a limit).
+#   5. --use-lm --max-calls=20: LM ignores the limit and says so (a "Note:" line); fitStatus.out is written with the
+#      keys MIGRAD's has (one writer for every fitter), minimizer and fitter lm, call_limit "20 (--max-calls) ignored";
+#   6. MINOS (menu 4): its progress lines say they are MINOS's ("MINOS evaluation:"), no "Iteration:" line after
+#      "Performing parameter error analysis".
 #
 #   ./tests/fit_call_limit/check.sh path/to/AZURE2
 
@@ -38,7 +42,8 @@ fit() {
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$HERE/../identical_pp_res/data" "$dir/data"
   cp "$HERE/../identical_pp_res/identical_pp_res.azr" "$dir/"
-  (cd "$dir" && printf '2\nn\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$@" identical_pp_res.azr > run.log 2>&1)
+  (cd "$dir" && printf "${MENU:-2\nn\n\n\n7\n}" |
+     "$AZURE2_BIN" --no-gui --no-readline "$@" identical_pp_res.azr > run.log 2>&1)
 }
 field() { awk -v k="$2" '$1 == k { $1 = ""; sub(/^ /, ""); print; exit }' "$WORK/$1/output/fitStatus.out" 2>/dev/null; }
 
@@ -78,6 +83,30 @@ grep -q "^ERROR: --max-calls needs a whole number" "$WORK/malformed/run.log" && 
   && ok "--max-calls=lots: refused with an error, exit 2" || bad "--max-calls=lots: exit $rc, no error"
 [ ! -e "$WORK/malformed/output/fitStatus.out" ] && ok "--max-calls=lots: no fit was run" \
   || bad "--max-calls=lots: a fit ran (status '$(field malformed status)')"
+
+# ---- 5. LM ignores the limit, says so, and writes fitStatus.out with MIGRAD's keys -----------------------------
+fit lm --use-lm --max-calls=20
+keys() { awk '{ print $1 }' "$WORK/$1/output/fitStatus.out" 2>/dev/null | tr '\n' ' '; }
+grep -q "^Note: lm does not honour a call limit: the limit 20 (--max-calls) was ignored" "$WORK/lm/run.log" \
+  && ok "--use-lm --max-calls=20: the run says LM ignored the limit" || bad "--use-lm --max-calls=20: no notice"
+if [ -n "$(keys lm)" ] && [ "$(keys lm)" = "$(keys limit)" ] && [ "$(field lm minimizer)" = lm ] &&
+   [ "$(field lm fitter)" = lm ] && [ "$(field lm call_limit)" = "20 (--max-calls) ignored" ] &&
+   [ "$(field lm edm)" = none ]; then
+  ok "--use-lm: fitStatus.out with MIGRAD's keys ($(keys lm)), status $(field lm status), limit ignored"
+else
+  bad "--use-lm: fitStatus.out keys '$(keys lm)' (MIGRAD's '$(keys limit)'), minimizer '$(field lm minimizer)',\
+ call_limit '$(field lm call_limit)'"
+fi
+
+# ---- 6. MINOS's progress lines are MINOS's ---------------------------------------------------------------------
+MENU='4\n1\nn\n\n\n7\n' fit minos
+after="$(tr '\r' '\n' < "$WORK/minos/run.log" | sed -n '/Performing parameter error analysis/,$p')"
+if [ -n "$after" ] && grep -q "MINOS evaluation:" <<< "$after" && ! grep -q "Iteration:" <<< "$after"; then
+  ok "MINOS: its progress lines say MINOS, no 'Iteration:' line during it"
+else
+  n_it=$(grep -c 'Iteration:' <<< "$after"); n_minos=$(grep -c 'MINOS evaluation:' <<< "$after")
+  bad "MINOS: $n_it 'Iteration:' and $n_minos MINOS lines in it"
+fi
 
 echo
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s)"; exit 1; fi

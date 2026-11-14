@@ -427,15 +427,21 @@ The engine's own fitters
 program's fit on the session: the same table of fitters and the same functions as ``AZURE2`` (``migrad``,
 ``migrad-gradient``, ``lm``, ``gsl-lm``, ``nlopt`` where built; ``pyazr.kinds()["fitters"]``, :doc:`fitting`, "The
 Engine's Fitters"), from the session's values or ``x0``, with ``<parameterSettings>`` applied as the program applies
-it, and HESSE after a MIGRAD row.  The method is the one named: the program's plain run of a project with THM data is
-``migrad-gradient``.  It returns an ``EngineFitResult``: ``x`` (the free vector at the end), ``objective``
-(the number the program prints as ``Total Chi-Squared``), ``status``, ``converged``, ``edm``, ``calls``,
-``covariance`` (or None), ``errors``, ``minos`` (name to ``(lower, upper)`` with ``minos=True``), ``names``, ``log``
-(the fitter's lines).  It writes no file and leaves the session's parameter values as they were; ``save_fit(path,
-x=r.x)`` and ``write_outputs`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
-called with a record per evaluation (MIGRAD, NLopt) or iteration (LM, GSL-LM): ``calls``, ``objective``, ``best``,
-``x`` and the rest (the docstring lists them); ``stop`` is a ``pyazr.session_fit.StopRequest`` or a
-``threading.Event``: set from another thread, the fit ends at the best point it has seen, status ``"stopped"``.
+it, and HESSE after a MIGRAD row. The method is the one named: the program's plain run of a project with THM data is
+``migrad-gradient``. It returns an ``EngineFitResult``: ``x`` (the free vector at the end: the lowest objective the
+fitter reached, at a call limit the lowest it evaluated), ``objective`` (the number the program prints as ``Total
+Chi-Squared``), ``status`` (the fitter's own word), ``outcome`` (the same in the words every fitter shares,
+``fitStatus.out``'s ``status``: ``converged``, ``call_limit``, ``iteration_limit``, ``stopped``, ``invalid``,
+``failed``), ``converged``, ``edm``, ``calls``, ``covariance`` (or None), ``errors``, ``minos`` (name to ``(lower,
+upper)`` with ``minos=True``), ``minos_valid`` (name to ``{"lower": ..., "upper": ...}``, each side Minuit2's verdict:
+``valid``, ``at_limit``, ``call_limit``, ``new_minimum``), ``notices`` (one sentence each: a fallback to MIGRAD, a
+setting the fitter ignored such as ``max_calls`` on ``lm`` and ``gsl-lm``, the best point kept at a call limit),
+``fell_back_to_migrad``, ``names``, ``log`` (the fitter's lines). ``max_calls`` limits the fitters whose row has
+``call_limit`` true. It writes no file and leaves the session's parameter values as they were; ``save_fit(path,
+x=r.x)`` and ``write_outputs`` write, as after any other fit. The engine runs without the GIL. ``progress`` is called
+with a record per evaluation (MIGRAD, NLopt) or iteration (LM, GSL-LM): ``calls``, ``objective``, ``best``, ``x`` and
+the rest (the docstring lists them); ``stop`` is a ``pyazr.session_fit.StopRequest`` or a ``threading.Event``: set
+from another thread, the fit ends at the best point it has seen, status ``"stopped"``.
 
 .. code-block:: python
 

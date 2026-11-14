@@ -2,6 +2,80 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 10:38) — merged: the engine's fit path
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 67 (a true merge of the rehearsal branch; its tree
+plus the entry below this one): `feature/upgrade-6-fit-path`. The agent's entry follows.
+
+- A MIGRAD fit stopped by its call limit ends at the lowest objective it evaluated, with a notice; before, it
+  ended at Minuit2's last accepted state, which can be the start. Minuit2 is not patched. The covariance
+  reported is still the one of Minuit2's last state (the notice says so).
+- The fitter table has the columns "honours a call limit" and "falls back to"; the program's fitter switches
+  and their usage lines are generated from the table; a fitter this build lacks (`--use-nlopt`) is refused
+  with the three parts.
+- MINOS: validity per side (valid, at limit, call limit, new minimum) in the result; its evaluations are
+  printed as `MINOS evaluation:` lines and no longer write the fit's intermediate files.
+- `fitStatus.out` has one writer for every fitter. **Its format changed**: `minimizer` is the table's row name
+  (`migrad`, `migrad-gradient`, `lm`, ...), the keys `fitter` and `fitter_status` are new, and LM and GSL-LM
+  now write the file.
+
+**Verified on the merged tree** (build `work/b-trial67`, four threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits against the base build: every output
+identical but `fitStatus.out` (the new format; new for the two LM fits), the totals equal; 266 of 266 quick
+tests pass. The director's own run (`work/director/spot67/`): T2 by the program with `--max-calls=40` ends at
+10910.1338428 on the base build and at 7087.92418676 on this one, with the notice and `status call_limit`.
+Not run here: the slow tests, the NLopt build (not installed), `pyazr_wheel`, the long suite.
+
+**New reference**: tag `tab-t67-1`, base build `work/b-trial67`.
+
+**Open, for a later branch or a decision**:
+
+- The program's warning at a call limit still says "the parameters and outputs written are its last point"
+  one line before the notice that says they are the lowest point evaluated: reword.
+- `param.fit` of a fit without an analytic Jacobian depends on the number of threads (T2 `--use-lm`: up to
+  4e-5 relative; `param.sav` and every other output identical): it is the snapshot of every hundredth
+  evaluation, and the order of arrival decides which point that is. Making it the best point seen changes
+  what the file means: for the PI.
+- HESSE after a session's MIGRAD costs 13 to 39 % of the fit (T2, 13N); an option without it is proposed, not
+  built: for the PI.
+- LM and GSL-LM do not re-freeze a relative data covariance (`--refreeze-covariance` is ignored for them
+  without a word; read in the code, not run).
+- `AZURECalc::operator()` reads the error-analysis flag from a pooled working copy made before MINOS began;
+  the fit driver now marks MINOS by its stage instead. Any other reader of that flag is still wrong.
+- The web page does not yet read `notices`, `outcome`, `minos_valid` and the two new columns.
+- `pyazr_ec_relativistic` (slow) fails on this and on earlier builds: it parses a number from a line that now
+  reads `Objective(14 free parameters ...)` (found by the agent of the level state; not run by the director).
+
+## 2026-11-14 (agent, branch `feature/upgrade-6-fit-path`) — what a fit returns, the same for every fitter
+
+**Done** (`include/FitControl.h`, `include/Fitters.h`, `src/Fitters.cpp`, `src/FitMigrad.cpp`, `src/FitErrors.cpp`,
+`src/FitEvaluations.cpp`, `src/FitLeastSquares.cpp`, `src/ProgramFit.cpp`, `src/AZURE2.cpp`, `api/src/AZUREAPIFit.cpp`,
+`api/src/pybind_fit.cpp`, `pyazr/session_fit.py`):
+
+- A MIGRAD that stops at its call limit ends at the lowest objective it evaluated (on T2, `max_calls` 40: 7087.92,
+  where Minuit2 returns its start, 10910.13), with a notice; Minuit2 untouched (`MigradPass`, `AdoptMigradEndPoint`).
+- The fitter table has `callLimit` and `fallback`; `RunFitter` adds a notice when the fitter that ran ignores a call
+  limit (LM, GSL-LM). `FitResult::notices` (pyazr `notices`) carries it and the fallback notice; `outcome` is the
+  status in the shared words (`FitOutcome`).
+- MINOS: validity per parameter and side (`FitResult::minosValidity`, pyazr `minos_valid`). MINOS's progress lines
+  say MINOS (`MINOS evaluation:`): the pooled working copies did not carry the error-analysis flag, so MINOS printed
+  `Iteration:` lines and wrote the intermediate files (`param.fit`) at its scan points; the records of a
+  `FitEvaluations` of stage `minos` are MINOS's now.
+- `fitStatus.out`: one writer for every fitter, the same keys (`minimizer`, `fitter`, `status`, `fitter_status`,
+  `valid`, `edm`, `edm_goal`, `calls`, `call_limit`).
+- The fitters' switches and usage lines come from the table; `--use-nlopt` in a build without NLopt is refused in
+  three parts (before: `Unknown option`; it was not in that build's usage text).
+
+**Verified**: see the commit messages (tests `pyazr_fit_engine_control`, `tests/fit_call_limit`, `tests/cli_help`,
+check 46, each shown failing on an injected error or on the base build).
+
+**Open**: `param.fit` differs between one and two threads (T2 `--use-lm`, which runs MIGRAD): the snapshot is the
+evaluation numbered a multiple of 100, and under Minuit2's parallel numerical gradient which point draws that number
+depends on the threads (up to 4e-5 relative in a value; every other output identical). Not fixed: the file's meaning
+would change (e.g. the best point at the 100th call). LM and GSL-LM do not re-freeze a relvector data covariance
+(`--refreeze-covariance`; read in the code, not run). HESSE after a session's MIGRAD costs 13-39 % of the fit on T2
+and 13N (measured); a setting to skip it is the owner's decision.
+
 ## 2026-11-14 (director, 09:07) — merged: session edits and libraries, the observed level table, shell tests, THM tab
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 66 (a true merge of the rehearsal branch; its tree

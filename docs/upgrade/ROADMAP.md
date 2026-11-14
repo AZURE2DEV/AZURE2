@@ -326,6 +326,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       and `FitResult`, HESSE and MINOS on a `FitResult`, progress as records, a stop request owned by the caller;
       the program's run as named stages; `Session.fit_with_engine` through the same functions, without the GIL.
       The Fit tab runs it (below).
+- [x] What a fit returns, the same for every fitter (2026-11-14): the end point is the lowest objective reached (a
+      MIGRAD at its call limit: the lowest it evaluated, not Minuit2's start); the table's columns `callLimit` and
+      `fallback`, notices of a fallback or an ignored setting; MINOS validity per side; one `fitStatus.out` writer
+      for every fitter; the switches and usage lines from the table, a fitter not built refused.
 - [x] The Fit tab, second part: the engine's fitters as jobs, their rows made from `pyazr.kinds()["fitters"]`, with
       progress, Stop, the engine's status, errors, covariance, MINOS (as a setting and as a job after the fit),
       Accept and Undo (2026-11-14, `web_ui.md` section 11.6). The emcee sampler (progress, stop between steps, the

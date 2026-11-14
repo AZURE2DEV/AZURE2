@@ -99,7 +99,6 @@ FitResult FitNLopt(AZURECalc &objective, AZUREParams &params, const FitControl &
   }
   const long nloptCalls = nlopt_get_numevals(opt);
   result.calls = nloptCalls;
-  result.statusMinimizer = "NLopt";
   if (stopped) {
     result.status = "stopped";
     log << std::endl << "NLopt stopped on request after " << nloptCalls << " function calls." << std::endl;
@@ -116,7 +115,6 @@ FitResult FitNLopt(AZURECalc &objective, AZUREParams &params, const FitControl &
   } else {
     result.status = std::string("converged_") + nlopt_result_to_string(status);
     result.converged = true;
-    result.statusValid = true;
     log << std::endl;
     log << "NLopt optimization succeeded: " << nlopt_result_to_string(status) << std::endl;
     log << "Final chi-squared: " << minf << std::endl;

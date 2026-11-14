@@ -2,6 +2,7 @@
 #include "FitEvaluations.h"
 
 #include <cmath>
+#include <string>
 
 #include "AZURECalc.h"
 #include "WorkingCopy.h"
@@ -33,7 +34,9 @@ void FitEvaluations::Evaluated(long evaluation, double value, const std::vector<
   record.stage = stage_;
   record.evaluation = evaluation;
   record.objective = value;
-  record.errorAnalysis = errorAnalysis;
+  // The working copy's flag is the evaluation's own (a pooled copy made before MINOS began does not carry it): the
+  // stage says it as well.
+  record.errorAnalysis = errorAnalysis || std::string(stage_) == "minos";
   record.x = &p;
   {
     std::lock_guard<std::mutex> lock(mutex_);
