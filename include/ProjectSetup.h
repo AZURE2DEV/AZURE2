@@ -9,6 +9,7 @@
 
 class CompoundSystem;
 class Config;
+struct CompoundSetUpRequests;
 
 /*!
  * What the set-up reads of a project before the compound nucleus is filled (src/ProjectSetup.cpp): the <levels>
@@ -28,6 +29,12 @@ std::vector<std::pair<int, int>> ProjectReactionPairs(const Config &, bool data)
 void RequestDataEntrances(CompoundSystem &compound, const Config &);
 /// The same for a run without data: the terms of the active extrapolations.
 void RequestExtrapolationEntrances(CompoundSystem &compound, const Config &);
+/// The entrance pairs of a run with data, asked for in `requests` (CompoundSystemSetUp.h): the entrance pair of every
+/// term (the leading one and the components of a SUM or RATIO) of the active data sets.  A key that names no pair is
+/// passed over (the data set-up refuses or skips its set).
+void RequestDataEntrances(const CompoundSystem &compound, const Config &, CompoundSetUpRequests &requests);
+/// The same for a run without data: the terms of the active extrapolations.
+void RequestExtrapolationEntrances(const CompoundSystem &compound, const Config &, CompoundSetUpRequests &requests);
 /// An active data set with a THM observable.
 bool ProjectHasThmData(const Config &);
 

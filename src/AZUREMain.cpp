@@ -21,7 +21,7 @@ namespace {
 void RunReactionRate(ProgramRun &run) {
   const Config &configure = run.configure;
   configure.outStream << "Performing reaction rate calculation..." << std::endl;
-  ReactionRate reactionRate(run.compound, run.state, run.inputs, run.params.GetMinuitParams().Params(), configure,
+  ReactionRate reactionRate(run.compound.get(), run.state, run.inputs, run.params.GetMinuitParams().Params(), configure,
                             configure.rateParams.entrancePair, configure.rateParams.exitPair);
   if (configure.rateParams.useFile)
     reactionRate.CalculateFileRates();
@@ -35,7 +35,7 @@ void RunReactionRate(ProgramRun &run) {
 }  // namespace
 
 int AZUREMain::operator()() {
-  ProgramRun run(configure(), compound_, data_);  // the run holds the levels, the compound the set-up
+  ProgramRun run(configure(), data_);  // the run holds the compound system and the levels its set-up makes
   if (SetUpRun(run) != 0) return -1;
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     if (SetUpObjective(run) != 0) return -1;
@@ -55,14 +55,14 @@ int AZUREMain::operator()() {
   configure().outStream << "Performing final parameter transformation..." << std::endl;
   ObservedLevelTable observed;
   try {
-    observed = compound()->TransformOut(configure(), run.state, run.inputs);
+    observed = run.compound->TransformOut(configure(), run.state, run.inputs);
   } catch (GSLException e) {
     configure().outStream << e.what() << std::endl;
     configure().outStream << "Problem with output transformation.  Aborting."
                           << std::endl;
     return -1;
   }
-  WriteParametersOut(*compound(), run.state, observed, configure());
+  WriteParametersOut(*run.compound, run.state, observed, configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

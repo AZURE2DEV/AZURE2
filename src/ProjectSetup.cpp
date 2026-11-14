@@ -3,6 +3,8 @@
 // MakePoints, WorkingCopy::SetAbundanceSamples) consumes its specs.
 #include "ProjectSetup.h"
 
+#include "CompoundSystemSetUp.h"
+
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
@@ -112,6 +114,27 @@ void RequestDataEntrances(CompoundSystem &compound, const Config &configure) {
 
 void RequestExtrapolationEntrances(CompoundSystem &compound, const Config &configure) {
   RequestEntrancesOf(compound, configure.project->built.extrapolations.extrapolations.items);
+}
+
+namespace {
+// Every entrance pair key of the active items of `items` that names a pair of `compound`, asked for in `requests`.
+template <class Items>
+void AddEntrancesOf(const CompoundSystem &compound, const Items &items, CompoundSetUpRequests &requests) {
+  auto add = [&compound, &requests](int entranceKey, int) {
+    if (compound.IsPairKey(entranceKey)) requests.AddEntrance(compound.GetPairNumFromKey(entranceKey));
+  };
+  for (const auto &item : items)
+    if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
+}
+}  // namespace
+
+void RequestDataEntrances(const CompoundSystem &compound, const Config &configure, CompoundSetUpRequests &requests) {
+  AddEntrancesOf(compound, configure.project->built.data.datasets.items, requests);
+}
+
+void RequestExtrapolationEntrances(const CompoundSystem &compound, const Config &configure,
+                                   CompoundSetUpRequests &requests) {
+  AddEntrancesOf(compound, configure.project->built.extrapolations.extrapolations.items, requests);
 }
 
 bool ProjectHasThmData(const Config &configure) {
