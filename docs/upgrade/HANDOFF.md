@@ -2,6 +2,55 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-compound-system`) — the compound system: the name, the session's constness, the channel functions; the one build stopped
+
+**Done** (six commits): `CNuc` is `CompoundSystem` and its files are named by job; consistency check 59 keeps the old
+name out; every method of `AZUREAPI` that writes the session's state lost `const`; a particle channel's functions
+are one function. **Not done**: the one build (`BuildCompoundSystem`), stopped as the brief says, because the data's
+set-up reads the compound between `Fill` and `Initialize` (below; a decision for the director).
+
+**Measured first** (start 5884aa62; the table of members, the readers of the half-built object and the set-up requests
+are in `cnuc_split.md` §12.3, "Step 5 as built"). In short: the callers make the compound by `Fill` (which calls
+`AddHardSphereGroups` and `ParseExternalCapture`), then the data's set-up, the entrance and capture-A_y requests, then
+`Initialize`. Between `Fill` and `Initialize` the data's set-up (`WorkingCopy::Fill` / `MakePoints`), the check file
+of the compound, the entrance requests, the rate's pair check and `RequestCaptureAyTerms` read the half-built object:
+its structure and the input values before the transformation (the target effects' sub-point meshes branch on
+`LevelInputs::TransformedIn()`). A probe that aborted on any read of B_c, the final-state energies, the
+external-capture blocks, the capture masks or the pathway table between the two calls ran all projects in the Brune
+and formal bases without an abort (tag `tab-cnuc9-probe`, outputs identical to `tab-t74-1`; the probe was not
+committed: `work/cnuc9/probe.patch`).
+
+**Why the one build stopped.** A build that returns the finished object before the data's set-up changes every
+`run.log` (`Filling Data Structures...` and the data's warnings and check move after `Performing Input Parameter
+Transformation...` and `Sorting Reaction Pathways...`), the order of the refusals of a project refused by both, and
+makes the data's set-up read transformed input values unless the file's values are kept apart. Options for the
+director: (a) accept the new order of `run.log` once (a classified difference of `run.log` only) and keep the file's
+input values for the data's set-up: then `BuildCompoundSystem(config, SetupRequests)` with the requests taken from
+the specs (the capture-A_y requests from the specs instead of the built segments: a comparison commit first, as for
+the entrances); (b) two finished objects: the structure (what `Fill` makes, read by the data's set-up) and the
+compound system built from it with the requests; B_c and the final-state energies then leave `AChannel` and `ALevel`
+(22 reads of B_c in 12 files, 6 of the energy), so function bodies change; (c) keep the four calls.
+
+**What changed, by file**: see the commits.  The class scheme (`classes.tsv`, `arrows.tsv`, figures) follows.
+
+**Verified how**: build `work/b-cnuc9` (6 jobs, 0 warnings at every commit). Per commit: consistency test, the quick set (12
+folders x 3 bases, T1-T3, 13N, two external-capture, THM, sub-point grids) against `tab-t74-1` identical, the unit
+tests near the change (63 for the rename, 8 for the channel functions, 138 pyazr/consistency/api tests for the
+session's constness). Check 59: injected `CNuc *old_;` and a `Clone()` into `CompoundSystem.h`, two failures
+(removed). The doors' numbers (`work/cnuc9/doors/dump.py`: both doors on every particle block of T1, T2, 13N, Brune
+and Park) byte-identical between `b-trial77` and this build. At the end (head of the code 1d845f37): all projects
+in the three bases against `tab-t74-1` (tag `tab-cnuc9-T`) Brune 887, formal 851, Park 887 files, all identical;
+the own runs against `b-trial77` (`work/cnuc9/extra.sh`: the eight fits and the natural-target fits, T2 sampled in
+both bases, `gamma_decay`, MINOS, a fit with band, a rate) 16 of 16 identical; a T2 fit at 1 and at 6 threads, 14
+output files identical; `OMP_NUM_THREADS=1 ctest -LE slow -j2` 289 of 289; `docs_build` 60 pages;
+`tools/check_skills.py`.
+
+**Open**: the one build (above); `GetThmExperiments` only reads but is not `const` (the engine's
+`WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)` are not `const`); `Config &configure()
+const` still hands out a writable `Config` from a `const` session (not changed: the brief named the levels); stale
+line references `CNuc.cpp:NNNN` in `docs/source/theory/conventions.rst` predate this branch (the file had 982 lines
+at the start) and were left.
+
 ## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits
