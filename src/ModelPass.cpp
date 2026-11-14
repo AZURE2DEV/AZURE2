@@ -213,7 +213,7 @@ struct PointInputs {
     }
     for (std::size_t q = 0; q < np; q++) {
       const ParamRef &r = p.params[q];
-      paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? cnuc->GetAbundance(segment.GetNaturalSample(), r.nucleus)
+      paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? data.Abundance(segment.GetNaturalSample(), r.nucleus)
                                                             : segment.GetSampleThickness(data.State(segment));
     }
     paramValue[np] = 0.0;

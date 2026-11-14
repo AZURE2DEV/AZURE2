@@ -84,7 +84,7 @@ class ParamIndexMap {
   int EnergyShiftIndex(int segment) const;
   /// Full index of the sqrt(E) energy-shift coefficient for a 1-based segment, or -1.
   int EnergyShiftSqrtIndex(int segment) const;
-  /// Full index of the abundance parameter with this 1-based ordinal (CNuc::AbundanceOrdinal), or -1.
+  /// Full index of the abundance parameter with this 1-based ordinal (AbundanceSamples::Ordinal), or -1.
   int AbundanceIndex(int ordinal) const;
   /// Full index of parameter aj of the shift function declared on a 1-based segment, or -1.
   int EnergyShiftFnIndex(int segment, int j) const;
@@ -182,7 +182,7 @@ struct GradAccum {
   std::vector<std::vector<double>> e;
   // gamma[j-1][la-1][ch-1]  -> dlnL/dgamma_{j,la,ch}
   std::vector<std::vector<std::vector<double>>> gamma;
-  // abundance[k-1]          -> d/dw_k, one per (sample, nucleus) in ordinal order (zero-length without an <abundances> block)
+  // abundance[k-1]          -> d/dw_k, one per (sample, nucleus) in ordinal order (as long as the largest ordinal added)
   std::vector<double> abundance;
   // screening[k-1]          -> d/dU_e (eV) of screening parameter k (grows on first use)
   std::vector<double> screening;
@@ -238,9 +238,11 @@ struct GradAccum {
   void AddGamma(int jGroup, int level, int channel, double v) {
     gamma[jGroup - 1][level - 1][channel - 1] += v;
   }
-  /// Add an abundance contribution (1-based ordinal, CNuc::AbundanceOrdinal); ignored without an <abundances> block.
+  /// Add an abundance contribution (1-based ordinal, AbundanceSamples::Ordinal).
   void AddAbundance(int ordinal, double v) {
-    if (ordinal >= 1 && ordinal <= (int)abundance.size()) abundance[ordinal - 1] += v;
+    if (ordinal < 1) return;
+    if (ordinal > (int)abundance.size()) abundance.resize(ordinal, 0.0);
+    abundance[ordinal - 1] += v;
   }
   /// Add a contribution to d/dU_e (eV) of screening parameter k (1-based).
   void AddScreening(int k, double v) {
@@ -289,13 +291,13 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
 vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
 
 /*!
- * \brief Gradient of CNuc::ParkNormPenalty with respect to the level energies and
+ * \brief Gradient of Park's J > 0 wall (the objective's term T6) with respect to the level energies and
  * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
  * has J < 0; a no-op outside the Park formalism.
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
-/// Gradient of the isotopic-abundance priors and sum-to-one penalty (CNuc::AbundancePenalty), into the accumulator.
-void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
+/// Gradient of the isotopic-abundance priors and sum-to-one penalty (the objective's term T7), into the accumulator.
+void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)

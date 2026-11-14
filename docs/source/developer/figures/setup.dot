@@ -17,6 +17,7 @@ digraph setup {
   n_azure2__physics__System [label=<<b>azure2::physics::System</b><br/><font point-size="12">partitions, channels<br/>and J^pi blocks</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_azure2__PathwayTable [label=<<b>azure2::PathwayTable</b><br/><font point-size="12">reaction pathways and<br/>interference terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_DataSet [label=<<b>DataSet</b><br/><font point-size="12">the data as set up:<br/>segments, effects,<br/>meshes</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_AbundanceSamples [label=<<b>AbundanceSamples</b><br/><font point-size="12">the targets&#x27; isotopic<br/>abundances: samples,<br/>priors; the abundance<br/>block of the vectors</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_Segment [label=<<b>Segment</b><br/><font point-size="12">one data set:<br/>measurement, settings,<br/>terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_TargetEffect [label=<<b>TargetEffect</b><br/><font point-size="12">a target, beam or<br/>detector effect and<br/>its kernels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">what an evaluation<br/>changes; builds the<br/>DataSet</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
@@ -39,5 +40,6 @@ digraph setup {
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
   n_DataSet -> n_Segment [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_DataSet -> n_TargetEffect [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_DataSet -> n_AbundanceSamples [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

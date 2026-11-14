@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "Objective.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
 #include "GradEnergyTasks.h"
@@ -26,7 +27,6 @@
 #include "THMMatrixFunc.h"
 #include "PointFold.h"
 #include <cstring>
-#include <iostream>
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -81,7 +81,7 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
-  const double s2 = CNuc::kParkNormScale * CNuc::kParkNormScale;
+  const double s2 = kParkNormScale * kParkNormScale;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     const JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
@@ -103,20 +103,23 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 }
 
 /*!
- * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
+ * Gradient of the abundance term of the objective (T7): the prior
  * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
  * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
-void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
-  if (!compound->HasAbundanceBlock()) return;
-  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum) {
+  const AbundanceSamples &samples = data.Data().Abundances();
+  if (!samples.Present()) return;
+  const std::vector<double> &values = data.AbundanceValues();
+  for (int k = 1; k <= samples.NumParams(); k++) {
     int sample, nucleus;
-    compound->AbundanceOf(k, sample, nucleus);
-    const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
-    const double centre = compound->GetSample(sample)->sumCentre;
-    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - centre) / (s * s) : 0.0;
-    const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
+    samples.Of(k, sample, nucleus);
+    const double s = samples.SumSigma(sample, configure.abundanceSumSigma);
+    const double centre = samples.Sample(sample).sumCentre;
+    double g = (s > 0.0) ? 2.0 * (samples.Sum(values, sample) - centre) / (s * s) : 0.0;
+    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
+    const double w = values[k - 1];
+    if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (w - e.nominal) / (e.sigma * e.sigma);
     accum.AddAbundance(k, g);
   }
 }
@@ -142,7 +145,7 @@ void GradAccum::Init(CNuc *compound) {
   lmK.assign(nJ, {});
   lmN.assign(nJ, {});
   lmUsed.assign(nJ, 0);
-  abundance.assign(compound->NumAbundanceParams(), 0.0);
+  abundance.clear();
   screening.clear();
   doppler.clear();
   thickness.clear();
@@ -186,7 +189,8 @@ void GradAccum::Add(const GradAccum &o) {
         gamma[j][la][ch] += o.gamma[j][la][ch];
     }
   }
-  for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
+  if (o.abundance.size() > abundance.size()) abundance.resize(o.abundance.size(), 0.0);
+  for (int k = 0; k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
   if (o.doppler.size() > doppler.size()) doppler.resize(o.doppler.size(), 0.0);
@@ -352,10 +356,10 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
   }
 
   // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
-  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+  for (int k = 1; data && k <= data->Data().Abundances().NumParams(); k++) {
     map.abundanceIndex_[k] = i;
     ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
-    compound->AbundanceOf(k, d.sample, d.nucleus);
+    data->Data().Abundances().Of(k, d.sample, d.nucleus);
     map.desc_.push_back(d);
     i++;
   }
@@ -655,7 +659,7 @@ void AddParamCotangents(const azure2::ModelCotangents &c, const Segment *segment
     if (c.params[q] == 0.0) continue;
     const ParamRef &r = (*c.refs)[q];
     if (r.kind == ParamRef::Kind::Abundance) {
-      accum.AddAbundance(compound->AbundanceOrdinal(segment->GetNaturalSample(), r.nucleus), c.params[q]);
+      accum.AddAbundance(data.Data().Abundances().Ordinal(segment->GetNaturalSample(), r.nucleus), c.params[q]);
     } else {
       const int k = data.Data().ThicknessParamOfSegment(i);
       if (k > 0) accum.AddThickness(k, c.params[q]);
@@ -1067,7 +1071,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     bool lineshape = false;
     for (size_t t = 0; t < rows.size(); t++)
       if (ld->Data().GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
-    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, config, sdp, lineshape);
+    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, ld->ThmCoherentValues(), config, sdp, lineshape);
     const int nCoherent = ld->Data().NumThmCoherentParams();
     std::vector<size_t> slot(order.size());
     {
@@ -1126,12 +1130,12 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
       const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
       vector_r pp = full;
       pp[f] = x0 + h;
-      ld->FillThmCoherentFromParams(pp, lc);
+      ld->FillThmCoherentFromParams(pp);
       models(mp);
       pp[f] = x0 - h;
-      ld->FillThmCoherentFromParams(pp, lc);
+      ld->FillThmCoherentFromParams(pp);
       models(mm);
-      ld->FillThmCoherentFromParams(full, lc);
+      ld->FillThmCoherentFromParams(full);
       for (size_t t = 0; t < rows.size(); t++)
         for (size_t i = 0; i < m0[t].size(); i++)
           rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);

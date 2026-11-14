@@ -32,6 +32,7 @@ bool AZURECalcMCMC::StartInsideFitLimits(const std::vector<double> &sampled, boo
   try {
     const vector_r observed = ReconstructFullParametersPhysical(sampled);
     c->FillCompoundFromParamsPhysical(observed);
+    working->data->FillAbundancesFromVector(observed);
     if (c->TransformIn(configure())) inside = InsideFitLimits(FitVectorOfObserved(c, working->data.get(), observed));
   } catch (...) {
   }

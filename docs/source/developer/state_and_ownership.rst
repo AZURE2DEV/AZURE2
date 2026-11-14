@@ -61,7 +61,9 @@ The per-evaluation objects
    - ``WorkingCopy`` (``include/WorkingCopy.h``): what an evaluation changes
      -- the state of every segment and term (``SegmentState``: norms,
      shifts, frames), the present values of the apparatus parameters
-     (``TargetEffectValues``), the points (``Unit``) and slots (``Site``) with
+     (``TargetEffectValues``), of the isotopic abundances
+     (``WorkingCopy::AbundanceValues``) and of the THM coherent backgrounds
+     (``WorkingCopy::ThmCoherentValues``, handed to the HOES model), the points (``Unit``) and slots (``Site``) with
      their energies after a shift, the plan's positions. ``WorkingCopy::Clone``
      is a plain copy that shares the ``DataSet``.
    - ``CNuc``: the levels at the present parameter vector (energies,

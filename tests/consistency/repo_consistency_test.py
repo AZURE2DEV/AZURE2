@@ -460,11 +460,11 @@ if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
 #     the model data (scattering lengths, <modelData>), target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
 #     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
 #     a term changes.  Allowed elsewhere: the files that define the terms, and the listed uses with their reason.
-PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "ScatteringLength::Chi2",
+PENALTIES = ("ScatteringLength::Chi2",
              "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
              "ModelData::Gradient", "ModelData::AppendRows",
              "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
-DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
+DEFINERS = {"src/Objective.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
             "src/Segment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;

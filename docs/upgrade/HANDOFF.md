@@ -2,6 +2,77 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 02:57) — merged: abundances, THM coherent values and the penalties out of `CNuc`
+
+**Merged into `feature/upgrade-4-data`**: `feature/upgrade-5-cnuc-passengers` through rehearsal 64 (its tree).
+
+- The samples of `<abundances>` are an `AbundanceSamples` in the `DataSet`: the one place that writes the
+  abundance block into a parameter vector and reads it back (17 call sites outside `CNuc` handled it before).
+  Their present values and the THM coherent values are in the working copy.
+- The Park wall and the abundance priors and sums are the bodies of their `Objective` terms.
+- `CNuc.cpp` / `CNuc.h`: 1526 / 350 lines before, 1355 / 272 now. The parameter vector's order, names and records
+  are unchanged.
+
+**Verified on the merged tree** (build `work/b-trial64`, four threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits identical to the base build; 264 of 264
+quick tests pass. The director's own run, rehearsal 64 against the base build: `angle_mapping` (free abundances
+with priors and a sum prior) fitted with the gradient and with LM, and T2 sampled (8 walkers, 100 steps, a free
+abundance) in both sampling bases — every output file identical. Not run here: the long suite (next batch).
+
+**New reference**: tag `tab-t64-1`, base build `work/b-trial64`.
+
+**Open, for a later branch or a decision**:
+
+- The reader's warning about an `<abundances>` row that names a nucleus no pair forms now prints at the data
+  set-up, after "Filling Data Structures...", and a rate run without data no longer reads the block. No project
+  of the tree prints it. A user-visible message that moved: for the PI.
+- The session's transform calls (`SetParamsAllRWA`, the three `Transform...` functions of `AZUREAPI`) write the
+  session's working copy's abundances, as they wrote the compound's before: a transform that writes state. It
+  goes when the parameter vector's step makes the observed table a value.
+- `THMMatrixFunc::CalculateTHMCrossSection` has no caller (it got the new argument, not deleted).
+- Next of the design (`cnuc_split.md` 12.3): the stale copy the sub-point grids are laid out from (it changes
+  numbers of fits, judged by the rule for such steps), then the level values out of `ALevel`.
+
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-passengers`) — abundances, THM values, penalties out of `CNuc`
+
+**Measured first** (start commit adfb0118): 17 calls outside `CNuc` put the abundance block into a vector or read it
+back (`GetTransformParams` / `FillCompoundFromParamsPhysical`: `AZUREAPI.cpp` 7, `AZURECalcMCMC.cpp` 4,
+`ParameterLimitsManager.cpp` 2, `SamplerSupport.cpp`, `AZURE2.cpp`, `TargetSetup.cpp`, `ReactionRate.cpp`); the THM
+coherent values were held twice (`THMMatrixFunc.cpp` read the `CNuc` copy at 2 places); `CNuc.cpp` / `CNuc.h`
+1,526 / 350 lines (1,355 / 272 after).
+
+**Done**, in four commits that can each be merged:
+- 71ef224a: one place for the abundance block of the parameter vectors, `AbundanceSamples`
+  (`include/AbundanceSamples.h`, `src/AbundanceSamples.cpp`): `AddParameters` (fit's vector), `AppendTo` (observed
+  vector: the block of the fit's vector it was made from), `ReadFrom` (either); `GetTransformParams` returns the
+  level block and its seven callers that hand out an observed vector append the block; still on `CNuc`'s storage.
+- 2e17e299 (comparison): the samples in the `DataSet` (`WorkingCopy::SetAbundanceSamples`, first step of the data
+  set-up), the values in the working copy (`AbundanceValues`, `FillAbundancesFromVector`), the THM coherent values
+  handed to the HOES model from the working copy (`SolveAtOneEnergy`, `HoesCrossSection`, `ThmAdjointContext`); the
+  compound's copies kept and compared at every read, abort on a difference.  It found two places where only the compound
+  had been filled: the session's `SetParamsAllRWA` and three `Transform...RWAParameters` functions, and the sampler's
+  reference test; both read the block into the working copy now.
+- 278cb042: the compound's copies and the comparison deleted; `WorkingCopy::FillMnParams` writes the abundance block
+  first, at the old position (`DataSet::GetAbundanceParamOffset`).
+- 531a2eab: `ParkTerm` and `AbundanceTerm` compute their penalties themselves (`CNuc::ParkNormPenalty`,
+  `AbundanceSamples::Penalty`/`SumPenalty` deleted; `kParkNormScale` in `Objective.h`).
+
+**Verified how** (build `work/b-cnuc2`, 2 threads, 0 warnings): every commit the consistency test, the projects near
+the change (T1, T2, T3, 13N, natural_neon, natural_target/models, data_covariance, angle_mapping,
+thm_coherent_background/toy, 18O_p_a_thm) x 3 bases identical to the reference, and the tests near it.  The comparison
+commit: ctest -LE slow (the two aborts above, fixed; then those tests pass), the eight fits of
+`work/director/fits_vs_base2.sh` identical to `work/b-trial62`, angle_mapping fitted with free abundances
+(`--use-gradient`, `--use-lm`) and T2 sampled (8 walkers x 100 steps, both bases) identical to `b-trial62`, no abort.
+The last commit: all projects x 3 bases 887 / 851 / 887 identical to `tab-t62-1` (51 `run.log` files differ in
+`Segment #` progress lines only); ctest -LE slow 262 of 262; the eight fits identical; the angle_mapping fits and the
+T2 chains identical to `b-trial62` (`work/cnuc2/extra.sh`).  An error injected into `AbundanceSamples::ReadFrom` and
+into the Park wall made park_chi2_fallback, pyazr_natural_target and pyazr_park_gradient fail.
+
+**Open.** The reader's messages of the `<abundances>` block print at the data set-up now (after "Filling Data
+Structures..."), and a rate run does not read the block; no project prints one.  The pair record's `abundance` field
+reads the session's working copy (`api/src/pybind_records.cpp`: the pair fields take the working copy).
+
 ## 2026-11-14 (director, 02:02) — merged: pyazr's one parameter vector, the skills on it, the Fit tab's engine fitters
 
 **Merged into `feature/upgrade-4-data`** with the tree of rehearsal 63 (verified as one tree):

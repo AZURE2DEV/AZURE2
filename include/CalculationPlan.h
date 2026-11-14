@@ -139,13 +139,14 @@ class CalculationPlan {
 
 /// One energy task's calculation (EnergyPass.cpp): the level matrix filled and factored with the first unit that reads
 /// a T-matrix, then for each unit in turn a T-matrix built from it when it starts a T-matrix group, and its observable
-/// into `results`; a THM site (kHoes) by the HOES formula on the same fill or a level-space fill of its own.  The
+/// into `results`; a THM site (kHoes) by the HOES formula on the same fill or a level-space fill of its own, with the
+/// working copy's THM coherent-background values `thmCoherentValues` (WorkingCopy::ThmCoherentValues).  The
 /// units share the nucleus, route and E_x bits of units[0] (an EnergyTask, or one unit alone).  The groups are
 /// `tGroups` (one per unit, non-decreasing), or, if null, runs of one (entrance, exit) pair.  `progress`, if given,
 /// holds the index of the unit being calculated (so a caller that catches an exception knows whose it was: the fill's
 /// and factorisation's are units[0]'s).
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
-                      const int *tGroups = nullptr, int *progress = nullptr);
+void SolveAtOneEnergy(CNuc *cnuc, const std::vector<double> &thmCoherentValues, const Config &configure,
+                      Results &results, Site *const *units, int n, const int *tGroups = nullptr, int *progress = nullptr);
 /// AZURE_PLAN_CHECK=1: every unit of `tasks` solved alone (fill and factorisation, T-matrix and record with it) and
 /// compared bit for bit with the shared solve of its task (the bilinear forms g^T A g of every J-group, the route, the
 /// T-matrix, the record), written into a copy of `results`.  Prints the counts and the first differences to stderr;
