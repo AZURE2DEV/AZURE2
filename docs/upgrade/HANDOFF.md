@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 02:57) — merged: abundances, THM coherent values and the penalties out of `CNuc`
+
+**Merged into `feature/upgrade-4-data`**: `feature/upgrade-5-cnuc-passengers` through rehearsal 64 (its tree).
+
+- The samples of `<abundances>` are an `AbundanceSamples` in the `DataSet`: the one place that writes the
+  abundance block into a parameter vector and reads it back (17 call sites outside `CNuc` handled it before).
+  Their present values and the THM coherent values are in the working copy.
+- The Park wall and the abundance priors and sums are the bodies of their `Objective` terms.
+- `CNuc.cpp` / `CNuc.h`: 1526 / 350 lines before, 1355 / 272 now. The parameter vector's order, names and records
+  are unchanged.
+
+**Verified on the merged tree** (build `work/b-trial64`, four threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits identical to the base build; 264 of 264
+quick tests pass. The director's own run, rehearsal 64 against the base build: `angle_mapping` (free abundances
+with priors and a sum prior) fitted with the gradient and with LM, and T2 sampled (8 walkers, 100 steps, a free
+abundance) in both sampling bases — every output file identical. Not run here: the long suite (next batch).
+
+**New reference**: tag `tab-t64-1`, base build `work/b-trial64`.
+
+**Open, for a later branch or a decision**:
+
+- The reader's warning about an `<abundances>` row that names a nucleus no pair forms now prints at the data
+  set-up, after "Filling Data Structures...", and a rate run without data no longer reads the block. No project
+  of the tree prints it. A user-visible message that moved: for the PI.
+- The session's transform calls (`SetParamsAllRWA`, the three `Transform...` functions of `AZUREAPI`) write the
+  session's working copy's abundances, as they wrote the compound's before: a transform that writes state. It
+  goes when the parameter vector's step makes the observed table a value.
+- `THMMatrixFunc::CalculateTHMCrossSection` has no caller (it got the new argument, not deleted).
+- Next of the design (`cnuc_split.md` 12.3): the stale copy the sub-point grids are laid out from (it changes
+  numbers of fits, judged by the rule for such steps), then the level values out of `ALevel`.
+
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-passengers`) — abundances, THM values, penalties out of `CNuc`
 
 **Measured first** (start commit adfb0118): 17 calls outside `CNuc` put the abundance block into a vector or read it
