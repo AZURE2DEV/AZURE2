@@ -10,14 +10,12 @@
 #   1. Loads the CRC modules AZURE2 needs (Python, GSL, CMake).
 #   2. Installs pybind11/numpy into your own ~/.local if missing (needed to
 #      build the pyazr `_azure2` extension).
-#   3. Configures a Release build in ./build with pyazr, MCMC and readline
-#      all enabled.
+#   3. Configures a Release build in ./build with pyazr and MCMC enabled.
 #   4. Builds with `make -jN`.
 #   5. Copies the resulting executable to ~/bin/AZURE2 (creating ~/bin if
 #      needed).
 #
 # Not needed on this cluster (already handled elsewhere):
-#   - readline headers: system-wide (readline-devel), no module for it.
 #   - Minuit2 (vendored under external/), the Coulomb functions (physics/) and
 #     the stopping powers (stopping/): built in-tree automatically.
 #   - The GSL install path: once the modules below are loaded, CMake
@@ -60,7 +58,6 @@ cmake -S . -B $BUILD_DIR \
     -DCMAKE_BUILD_TYPE=Release \
     -DUSE_API=ON \
     -DUSE_MCMC=ON \
-    -DUSE_READLINE=ON \
     -DUSE_STAT=ON \
     -Dpybind11_DIR="$PYBIND11_DIR"
 if ($status != 0) then

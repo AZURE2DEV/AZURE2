@@ -175,7 +175,7 @@ handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-pa
                    "--record"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
-removed = {"--use-api"}
+removed = {"--use-api", "--no-readline"}
 
 for flag in sorted(flags):
     if flag not in cli_doc:
