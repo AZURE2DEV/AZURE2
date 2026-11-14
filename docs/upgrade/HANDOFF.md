@@ -2,6 +2,59 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 02:02) — merged: pyazr's one parameter vector, the skills on it, the Fit tab's engine fitters
+
+**Merged into `feature/upgrade-4-data`** with the tree of rehearsal 63 (verified as one tree):
+
+- `feature/upgrade-8-pyazr3-vector`: `Session.parameters` (one table for every parameter kind, one vector),
+  `Session.transform(x)`, `Session(file, parameter_file=path)`, `describe()["parameters"]` as the records,
+  `channel_functions`. `ParameterSet`, `LevelKey`, the amplitude / physical pairs of calls and the `.sav` readers
+  are gone; every removed name is in the migration table of `docs/source/user_guide/pyazr.rst`.
+- The skills (`.claude/skills/`) ported to those names by a separate agent in the rehearsal: the nine `--sav`
+  paths open the session with `parameter_file=`, the prose teaches `s.transform(x)` and `Parameters.put`.
+- `feature/upgrade-9-webui-fit-engine`: the Fit tab's rows are generated from `pyazr.kinds()["fitters"]`; the
+  engine's fitters and MINOS run as jobs with progress, Stop, Accept and Undo; the emcee sampler writes its chain
+  to `output/chain_<id>.npy`; uncertainty bands (from a covariance, from draws) are drawn in the Results tab.
+
+**What the director changed at the merge** (the two branches were written against different pyazr names):
+
+- `docs/source/user_guide/pyazr.rst`: the migration row about the fields of `describe()["parameters"]` names
+  `s.describe()["parameters"]` in the 3.0 column, so that the skills checker does not read `describe` as removed.
+- `pyazr/ui/engine.py`: the list of session calls the server does not serve joined from both sides;
+  `open_for_job` returns `e.s.parameters.x0`.
+- `tests/pyazr/ui/engine_jobs_test.py`: the start point is `s.parameters.x0`.
+
+**Verified on the merged tree** (build `work/b-trial63`, four threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits identical to the base build; 264 of 264
+quick tests pass. The director's own run over HTTP at one thread: on T3 and T2 every engine fitter as a job ends
+at the objective of the direct `Session.fit_with_engine` call (all digits) and of the program (12 digits) — T3
+509.3125016649391 (MIGRAD), 509.31249471170713 (GSL-LM), 509.3124947112076 (LM), 509.3124963010905 (MIGRAD with
+the gradient); T2 297.8603087301522 and 297.8603085507331; Accept writes the job's χ², Undo restores the start
+χ² exactly; a Stop on T2 is answered in 0.2 s. Not run here: the long suite, the wheel test (the package gained
+`parameter_file.py` and files of the page: it runs with the next batch).
+
+**New reference**: tag `tab-t63-1`, base build `work/b-trial63`.
+
+**Known, not defects**:
+
+- A session opened with `parameter_file=` and `evaluate(parameters.read(file))` can differ by about 6e-4 in χ²
+  on a project with fixed parameters that the file rounds: `Parameters.write` writes eight significant digits and
+  the keyword takes the fixed values from the file too, `read` only the free ones. Same as the program's
+  `param.sav`.
+- On T2 the LM and GSL-LM rows run MIGRAD (a data set there has no analytic Jacobian); the job's message says so.
+
+**Open, for a later branch**:
+
+- `parameter_file=` is a `Session` keyword, not a `<config>` key (the rule is that session options are keys of
+  `<config>`): the PI's decision.
+- `Parameters.write` writes every row and drops other columns of an existing file.
+- The linear band varies the level parameters only, the band from draws every free parameter; the band is drawn
+  around the band job's start point; a killed sampler's chain cannot be continued from the page.
+- The engine's fitter table has no column "honours a call limit" and no validity flag per MINOS interval.
+- `--sav` / `--params` paths of the skill scripts are not covered by the self-tests (four were run by hand).
+- `bands.best_fit_params` makes a live session take a parameter file through a private call.
+
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page's sampler and bands
 
 **Done** (`web_ui.md` section 11.7).
