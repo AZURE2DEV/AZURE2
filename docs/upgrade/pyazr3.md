@@ -1150,7 +1150,8 @@ The findings 9-11, 24, 27 and 28 of `web_ui.md` section 12, each as a call of py
   `kinds()["optical_potentials"]` (the global optical potentials), from the engine's tables (`_azure2.thm_nuclides`,
   `thm_global_opticals`); the THM keys' reference page lists both.
 - **Small defects**: `Session.save_fit` to another directory rewrites the snapshot's relative paths (record fields of
-  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`);
+  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`;
+  `relative_to=` names them from another directory: the web page's server passes its working directory);
   `python -m pyazr --help` runs without the engine (the package's engine imports are skipped only for the command
   line; `import pyazr` still raises); `pyazr ui FILE --json` serves (the captured standard output answers
   `isatty()`; an interrupt ends it with status 0); `Project.set_pair`'s refusals name the value and what to give;
@@ -1164,7 +1165,8 @@ The findings 9-11, 24, 27 and 28 of `web_ui.md` section 12, each as a call of py
   `kinds()["optical_potentials"]` (the global optical potentials), from the engine's tables (`_azure2.thm_nuclides`,
   `thm_global_opticals`); the THM keys' reference page lists both.
 - **Small defects**: `Session.save_fit` to another directory rewrites the snapshot's relative paths (record fields of
-  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`);
+  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`;
+  `relative_to=` names them from another directory: the web page's server passes its working directory);
   `python -m pyazr --help` runs without the engine (the package's engine imports are skipped only for the command
   line; `import pyazr` still raises); `pyazr ui FILE --json` serves (the captured standard output answers
   `isatty()`; an interrupt ends it with status 0); `Project.set_pair`'s refusals name the value and what to give;

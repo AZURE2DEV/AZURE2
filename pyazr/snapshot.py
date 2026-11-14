@@ -38,7 +38,7 @@ def write_values(session, project, x=None, norms="fitted"):
 
 
 def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
-             close_session=False):
+             close_session=False, relative_to=None):
     """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
 
     ``path`` is required and is written to explicitly -- nothing is ever
@@ -105,6 +105,9 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
     another directory gets its paths rewritten relative to that directory
     (:func:`rebase_paths`), so it reopens there and reads the original's data;
     its output and checks directories are its own (relative to it).
+    ``relative_to`` (a directory) names the paths relative to it instead,
+    for a text opened with that working directory (the web page's server
+    keeps the project's text so); the check then runs there.
 
     ``close_session`` closes this session once the files are written and
     what the check compares with has been computed, *before* the
@@ -133,7 +136,8 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
     want = session.transform(x)
 
     path = os.path.abspath(path)
-    write_format3(session, path, x, want, full, norms)
+    home = os.path.abspath(relative_to) if relative_to is not None else os.path.dirname(path)
+    write_format3(session, path, x, want, full, norms, home)
 
     sav = None
     if param_sav:
@@ -154,7 +158,6 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
         # relative to it) and with its output redirected, so that opening it
         # does not overwrite a run's output/param.par there.
         probe = tmpdir = None
-        home = os.path.dirname(path)
         try:
             tmpdir = tempfile.mkdtemp(prefix=".azr_verify_", dir=home)
             fd, probe = tempfile.mkstemp(suffix=".azr", dir=home)
@@ -291,26 +294,27 @@ def place_values(self, project, x, want, full, norms):
         else {p.name: float(x[p.free_index]) for p in self.parameters if p.free_index is not None})
 
 
-def write_format3(self, path, x, want, full, norms):
+def write_format3(self, path, x, want, full, norms, home):
     """save_fit of a format-3 project: :func:`place_values` on the session's project, written to ``path``."""
     from .project import Project
     project = Project.open(self.file)
     place_values(self, project, x, want, full, norms)
-    rebase_paths(project, path, self.cwd)
+    rebase_paths(project, path, self.cwd, home)
     project.save(path)
 
 
-def rebase_paths(project, path, base):
-    """Make ``project`` read the same files from ``path``'s directory: every relative path it names -- the record
+def rebase_paths(project, path, base, home):
+    """Make ``project`` read the same files from the directory ``home``: every relative path it names -- the record
     fields of type ``path`` in the engine's schema (a data set's file, covariance, THM weight table), the ``<config>``
     keys of kind path (``priorCovariance``) and the ``table:<file>`` values of ``<thm>`` experiments -- rewritten
     relative to the new directory; absolute paths and the output and checks directories (the snapshot's own) are
-    kept.  ``base`` is the directory the paths are read from now (the session's working directory).  The project's
-    :attr:`~pyazr.Project.path` becomes ``path``, so that its edits are validated there."""
+    kept.  ``base`` is the directory the paths are read from now (the session's working directory), ``home`` the one
+    they are read from in the snapshot (its own directory, or save_fit's ``relative_to``).  The edits are validated
+    as from ``home``; :meth:`Project.save` then writes the text to ``path``."""
     import os
     from .described import _engine
-    old, new = os.path.abspath(base), os.path.dirname(os.path.abspath(path))
-    project.path = os.path.abspath(path)
+    old, new = os.path.abspath(base), os.path.abspath(home)
+    project.path = os.path.join(new, os.path.basename(path))
     if os.path.normpath(old) == os.path.normpath(new):
         return
 
