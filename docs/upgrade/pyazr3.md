@@ -1083,5 +1083,25 @@ as the writer forms them (`SigmaAndS`), read-only views.
   `s.extrapolations` evaluation beside `s.data` (the engine evaluates one segment set per session);
   `s.extrapolations` stays the description of the records.  The web page's adapter keeps a second session for the
   extrapolations.
-- Not done in this part: `set_channel_radius`, `set_nuclear_potential`, `clear_nuclear_potential` still edit a live
-  session; `bands.best_fit_params` still makes a live session take a parameter file (`_take_parameter_file`).
+- The session's radius and potential edits are gone (`set_channel_radius`, `set_nuclear_potential`,
+  `clear_nuclear_potential`, `potential_records`): a channel radius is `Project.set_pair(pair, radius=)`, a potential
+  the pair's `potential` record (`Project.set` / `add` / `remove`), then a new session; `save_fit` writes
+  `<potentials>` as the project has it.  A radius through a new session costs no more than the live edit did (T1
+  0.05 s against 3.4 s, T2 0.17 s against 0.17 s, with the evaluation; the input files are cached per process).
+  `nuclear_potential(s)` stays as the view of what each pair resolves to.
+- `bands.best_fit_params(s, path)` changes no session: the session's own `x0` when it was made with
+  `parameter_file=path`, else the vector of a second session made with it, refused (`ParameterError`) when the file
+  moves a fixed parameter; `extrapolation_bands` makes its session with `parameter_file=`.
+- `wigner_widths` / `dimensionless_widths` stay the probe (the engine's transformation of a probe vector); their
+  docstrings and the user guide say where it is not the single-channel `2 P gamma_W^2` (a decision for the PI).
+- `Session(file, extrapolations=True)` on a project without an active extrapolation record is refused by pyazr
+  (`AZURE2Error`: what, what is needed, the two fixes) before the engine is asked.
+- The libraries are `pyazr.sources`: `nds`, `masses`, `exfor_coulomb`, `exfor_sfactor` moved with their names
+  (`python -m pyazr.sources.nds`); differs from 2.2: no split of `nds` into `exfor` and `ensdf` (`nds.py` stays one
+  file of 1450 lines, above the 800 of step 5); the functions of `nds` keep their top-level names.
+  `write_output_files(params)` is `write_outputs(x)` (no `directory=`: the output directory is the project's).
+- The bindings without a caller are gone (18 of `_azure2.Session` and `Document.common_ending`); `coulomb_functions`
+  stays (it is what `channel_functions` calls).  `import pyazr` imports neither scipy nor mpmath: the one dependency
+  is numpy, scipy is in the extras `web` and `examples`.  `pyazr.__all__` and the user guide's list "The names of the
+  package" are compared by the consistency test.  Not done: `tabulate` / `angular_distribution` on given energies,
+  `modelavg` / `priors` into `pyazr.bands`.

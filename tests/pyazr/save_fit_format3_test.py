@@ -8,8 +8,9 @@
      with a free abundance and a fitted areal density moved off their prior centres too: the snapshot keeps the
      original centres and pays the same priors (the engine took the start value as the centre until 2026-11-13, and
      verify raised), and Parameter.prior_centre is the centre written;
-  2. set_nuclear_potential(..., matching_radius=, step=) (fm): the view reports them, the channel functions equal
-     those of a record stating them, bit for bit, and save_fit writes them into the format-3 record.
+  2. a record's matching_radius and step (fm), stated in the file or set by Project.set: the view reports them, the
+     channel functions of the edited project equal those of the record stating them, bit for bit, and save_fit keeps
+     them in the format-3 record.
 
 Needs the compiled module.  Run from anywhere:  python3 tests/pyazr/save_fit_format3_test.py
 """
@@ -129,15 +130,18 @@ def potentials(work):
           view.matching_radius == 12.0 and view.step == 0.02, repr((view.matching_radius, view.step)))
     with Session(f3, cwd=d) as m:
         base = functions(m)
-        p = m.set_nuclear_potential(1, matching_radius=12.0, step=0.02)
+    edited = Project.open(f3)
+    edited.set("p12C", matching_radius="12 fm", step="0.02 fm")
+    with Session(edited.save(os.path.join(d, "edited.azr")), cwd=d) as m:
+        p = m.nuclear_potential(1)
         got = functions(m)
-        check("set_nuclear_potential(matching_radius=12, step=0.02): the view", p.matching_radius == 12.0 and p.step == 0.02,
-              repr(p))
+        check("Project.set(p12C, matching_radius=12 fm, step=0.02 fm): the view", p.matching_radius == 12.0
+              and p.step == 0.02, repr(p))
         check("  the channel functions equal those of the record stating them, bit for bit (and differ from 15 fm, "
               "0.0275 fm)", got == want and got != base, max(abs(a - b) for a, b in zip(got, want)))
         m.save_fit(os.path.join(d, "written.azr"), verify=False, norms="nominal")
     written = open(os.path.join(d, "written.azr")).read()
-    check("save_fit writes the matching radius and step into the record",
+    check("save_fit keeps the matching radius and step in the record",
           re.search(r"matching_radius +12 fm", written) and re.search(r"step +0\.02 fm", written), written[-600:])
     with Session(os.path.join(d, "written.azr"), cwd=d) as w:
         check("  and the written project gives the same channel functions", functions(w) == want)

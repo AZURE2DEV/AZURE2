@@ -14,7 +14,7 @@ level factor that does not depend on the vertex):
      edit, or when a session is made), also set_thm(coulombIntegral /
      entranceL / spectatorEnergy) against a dw experiment.
   2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
-     files of write_output_files (thm_experiments.out included).
+     files of write_outputs (thm_experiments.out included).
   3. thm_vertex: model "dw"; plane waves in both channels: M2_qf == M2_pw
      (1e-8, the plane-wave vertex at p = |k_aA - alpha k_sF|) and M2 == M2_qf
      without a window; dw_p_delta from the kinematics.
@@ -176,11 +176,11 @@ with tempfile.TemporaryDirectory() as tmp:
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
-        s.write_output_files(x)
+        s.write_outputs(x)
     from_py = output_files(py_dir)
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-        check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
+        check(f"write_outputs: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
     check("thm_experiments.out has the DW vertex rows",
           from_cli["thm_experiments.out"].count("dw_vertex_point") == 3)
 

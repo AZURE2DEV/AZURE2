@@ -229,3 +229,18 @@ pre.python { white-space: pre-wrap; background: var(--grid); padding: 6px 8px; b
 .physics-main form.record-form .form-line { border-bottom: 0; }
 .physics-main form.record-form .form-actions { flex-basis: 100%; }
 .physics-main p.citation { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+/* the THM tab: the diagnostics as a row of links, the facts of an answer, its tables */
+a.tab[hidden] { display: none; }
+nav.fn-choices { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0 8px; font-size: 13px; }
+nav.fn-choices a.fn { padding: 2px 8px; border: 1px solid var(--grid); border-radius: 3px; color: var(--fg);
+  text-decoration: none; font-family: var(--font-mono, monospace); }
+nav.fn-choices a.fn.active { background: var(--grid); font-weight: 600; }
+dl.function-facts { margin: 6px 0; font-size: 13px; }
+.physics-out .table-wrap { margin: 6px 0; }
+section.panel.model-options form.record-form, section.panel.experiments form.record-form {
+  display: flex; flex-wrap: wrap; column-gap: 18px; align-items: flex-end; }
+section.panel.model-options form.record-form .form-line,
+section.panel.experiments form.record-form .form-line { border-bottom: 0; }
+section.panel.model-options form.record-form .form-actions,
+section.panel.experiments form.record-form .form-actions { flex-basis: 100%; }

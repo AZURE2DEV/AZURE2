@@ -120,7 +120,6 @@ void BindProject(py::module_ &m) {
           for (const py::bytes &b : lines) v.push_back(std::string(b));
           d.ReplaceLines(first, last, v);
         }, py::arg("first"), py::arg("last"), py::arg("lines"))
-        .def("common_ending", [](const Document &d) { return py::bytes(d.CommonEnding()); })
         .def("format", [](const Document &d) { return azure2::io::FormatOf(d); });
   }
   m.def(

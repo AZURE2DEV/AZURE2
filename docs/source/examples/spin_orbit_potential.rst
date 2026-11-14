@@ -50,12 +50,13 @@ In pyazr
 
 .. code-block:: python
 
-   m = pyazr.Session("hybrid_potential.azr")
-   m.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6, "diffuseness": 0.6, "on": "light"})
+   p = pyazr.Project.open("hybrid_potential.azr")
+   p.set("p12C", spin_orbit="woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s")
+   m = pyazr.Session(p.save("with_spin_orbit.azr"))
    p12 = m.channel_functions(1, [0.5, 1.0, 3.0], l=1, J=0.5)
    p32 = m.channel_functions(1, [0.5, 1.0, 3.0], l=1, J=1.5)
 
 At :math:`E_{cm}` = 0.5 MeV and :math:`a_c` = 3.6 fm the shift function is :math:`-0.7518` (:math:`p_{1/2}`) and
 :math:`-0.2428` (:math:`p_{3/2}`), the penetrability 3.583·10\ :sup:`-3` and 4.418·10\ :sup:`-3`.  The elastic
 :math:`\chi^2` of the Meyer data at 144° moves from 2259.87 to 2117.49 with the term; the level parameters are
-re-derived with the new :math:`S` and :math:`P`, as for any change of the potential.
+derived with the new :math:`S` and :math:`P` in the new session, as for any change of the potential.

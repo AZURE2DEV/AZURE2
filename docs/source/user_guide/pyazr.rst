@@ -432,7 +432,7 @@ it, and HESSE after a MIGRAD row.  The method is the one named: the program's pl
 (the number the program prints as ``Total Chi-Squared``), ``status``, ``converged``, ``edm``, ``calls``,
 ``covariance`` (or None), ``errors``, ``minos`` (name to ``(lower, upper)`` with ``minos=True``), ``names``, ``log``
 (the fitter's lines).  It writes no file and leaves the session's parameter values as they were; ``save_fit(path,
-x=r.x)`` and ``write_output_files`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
+x=r.x)`` and ``write_outputs`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
 called with a record per evaluation (MIGRAD, NLopt) or iteration (LM, GSL-LM): ``calls``, ``objective``, ``best``,
 ``x`` and the rest (the docstring lists them); ``stop`` is a ``pyazr.session_fit.StopRequest`` or a
 ``threading.Event``: set from another thread, the fit ends at the best point it has seen, status ``"stopped"``.
@@ -578,12 +578,14 @@ by what the file is to do:
   with the free values alone against the program's 9868.04). Names are matched as the program matches them; in an
   extrapolation run the data sets' normalizations and shifts are not applied.
 
-``pyazr.bands.best_fit_params(s, path)`` gives the bands the fit vector of a parameter file (the session takes the file
-as ``parameter_file=`` does). Do not read these files by row position: rows are added as the code grows (the
-:math:`\sqrt{E}` coefficients, the tag line), and a positional read of a file from another layout is silently off by
-one or more rows.
+``pyazr.bands.best_fit_params(s, path)`` gives the bands the fit vector of a parameter file: the session's own
+``parameters.x0`` when it was made with ``parameter_file=path``, else the vector of a second session of the same
+project made with it (``s`` is not changed), refused with :class:`~pyazr.ParameterError` when the file sets a fixed
+parameter to another value than ``s`` holds. Do not read these files by row position: rows are added as the code
+grows (the :math:`\sqrt{E}` coefficients, the tag line), and a positional read of a file from another layout is
+silently off by one or more rows.
 
-``write_output_files(params=None)`` writes the CLI's output files (``AZUREOut_*``, ``chiSquared.out``, ...) for a
+``write_outputs(x=None)`` writes the CLI's output files (``AZUREOut_*``, ``chiSquared.out``, ...) for a
 fit vector, into ``output_dir``: the output directory of the project's ``<config>``, relative to ``cwd``, as the
 engine resolves it (not necessarily ``output/``).
 
@@ -594,13 +596,14 @@ only rescale or move the data and carry no band.
 Masses and separation energies
 ------------------------------
 
-``pyazr.masses`` reads the AME2020 atomic mass table that ships with pyazr (``pyazr/data/mass_1.mas20``). Particles
-are named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``, ``"n"``, ``"d"``, ``"t"``, ``"a"``,
-``"helion"``):
+``pyazr.sources.masses`` reads the AME2020 atomic mass table that ships with pyazr (``pyazr/data/mass_1.mas20``).
+Particles are named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``, ``"n"``, ``"d"``, ``"t"``,
+``"a"``, ``"helion"``):
 
 .. code-block:: python
 
-   from pyazr import masses, Project
+   from pyazr import Project
+   from pyazr.sources import masses
 
    masses.atomic_mass("p")               # 1.007825031898 u, atomic
    masses.separation_energy("p", "12C")  # 1.943490064 MeV, from the mass excesses
@@ -697,12 +700,12 @@ same-J\ :sup:`π` levels interfere, and that is a useful check on any decomposit
 Fetching data from EXFOR and NDS
 --------------------------------
 
-``pyazr.nds`` wraps the IAEA web services for experimental nuclear data and converts the results straight into AZURE2
-form (network required).  EXFOR holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
+``pyazr.sources.nds`` wraps the IAEA web services for experimental nuclear data and converts the results straight into
+AZURE2 form (network required).  EXFOR holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
 
 .. code-block:: python
 
-   from pyazr import nds
+   from pyazr.sources import nds
 
    # search EXFOR: target, reaction (proj,exit) and quantity filters
    hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
@@ -762,17 +765,18 @@ is refused.  A dimensionless differential whose reaction code was dropped (``x4g
 
 The module needs nothing beyond NumPy and the standard library, and doubles as a command-line tool::
 
-   python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
-   python -m pyazr.nds download O2599004 -o data/skowronski.dat
-   python -m pyazr.nds reference O2599004
+   python -m pyazr.sources.nds search --target C-13 --reaction p,g --quantity SIG
+   python -m pyazr.sources.nds download O2599004 -o data/skowronski.dat
+   python -m pyazr.sources.nds reference O2599004
 
 The IAEA services are sometimes unreachable, or answer every request with a Cloudflare challenge page. ``fetch_exfor``
 and ``reference`` then read the entry from a local copy of the EXFOR library, with a warning. The copy is a clone of
 `IAEA-NDS/exfor_master <https://github.com/IAEA-NDS/exfor_master>`_ (about 1.5 GB; ``git clone --depth 1``, refreshed
 with ``git pull``) at ``$AZURE2_EXFOR_MASTER`` or ``~/.azure2/exfor_master``. ``nds.exfor_master_path()`` says which
-copy is used. ``source="web"`` or ``source="local"`` uses only one of the two, and ``python -m pyazr.nds download <ID>
---source local`` does the same from the command line. The local copy gives the original units only (``plus=0``). A
-subentry holding several datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the Web-API.
+copy is used. ``source="web"`` or ``source="local"`` uses only one of the two, and ``python -m pyazr.sources.nds
+download <ID> --source local`` does the same from the command line. The local copy gives the original units only
+(``plus=0``). A subentry holding several datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the
+Web-API.
 
 The Qt setup utility of the released versions has its own EXFOR reader (``gui/src/ExforData.cpp`` on ``dev``), an
 independent implementation of the same Web-API.
@@ -887,6 +891,16 @@ Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); 
 unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``) is pyazr's one physics
 formula of its own (the engine has none); every other number of the table is the engine's.
 
+The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, the denominator of θ²) is the
+engine's transformation of a probe vector: ``x`` with every free particle amplitude set to a small ``eps`` and every
+free photon amplitude to 0, transformed by ``azr.transform``, each channel's :math:`|\Gamma_c|/\epsilon^2` times
+:math:`\gamma_W^2`.  It is the single-channel :math:`2P_l(E_\lambda)\gamma_W^2` (P from ``channel_functions`` at the
+level energy) when the probe makes the level's shift denominator 1 and leaves the levels of a J-group unmixed: in the
+Brune basis, for a level whose particle widths are all free (T1, 13N: equal to :math:`5\cdot10^{-9}`).  It is not where a
+level has fixed nonzero widths (their shift terms stay: T2, 0.80--0.99 of :math:`2P\gamma_W^2`) or where the levels
+of a J-group mix through the probe (the formal basis, closed channels: T2 formal up to :math:`8\cdot10^3`, 17O from
+0.05 to :math:`10^4`).
+
 The external region, and the caches
 -----------------------------------
 
@@ -956,9 +970,9 @@ broadcast arrays with a status per element (NaN where the status is not 0), bit 
    result, status = stopping.evaluate("energy_after", "Ta2O5", z1=1, mass_u=1.00727646688, energy_in=0.1,
                                       areal_density=[1e17, 1e21])   # status [0, -2]: beyond the range
 
-A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
-file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
-print the setup ``Note:`` lines again: a session prints each once.
+The sessions of one process share a cache of the input files: a new session (of a project edited to another channel
+radius or potential, say) reads from disk only the files that changed (the ``input_files_*`` counters of
+``cache_stats()``, for the whole process).
 
 The Coulomb functions follow the run's own configuration, so the same call returns the accurate routine's values,
 GSL's (``--gsl-coul``), or the Numerov solution through a nuclear potential (the hybrid model of the ``<potential>``
@@ -993,41 +1007,42 @@ The hybrid nuclear potential, per particle pair
 -----------------------------------------------
 
 A nuclear potential belongs to a **particle pair**: it bends the radial wave functions of that channel and no other.
-Each pair therefore carries its own setting, and ``pair=0`` is the default that a pair without one inherits.
+In a project it is the pair's ``potential`` record (below); a session reads what each pair resolves to:
 
 .. code-block:: python
 
-   azr.nuclear_potentials()          # {0: default, 1: ..., 2: ...}, resolved
-   azr.nuclear_potential(1)          # one pair; .own says if it is its own
+   azr.nuclear_potentials()          # {0: no default, 1: ..., 2: ...}, resolved
+   azr.nuclear_potential(1)          # one pair; .own says if it has a record
 
-   azr.set_nuclear_potential(1, type="WoodsSaxon", enabled=True,
-                             V0=20.0, R=3.6, a=0.6)
-   azr.set_nuclear_potential(2, type="Gaussian", enabled=True, V0=60.0, r0=4.0,
-                             coulomb_radius=4.0)
-   azr.set_nuclear_potential(2, enabled=False)   # off for pair 2 alone
-   azr.clear_nuclear_potential(1)                # follow the default again
+A potential, like a channel radius, is changed by an edit of the :class:`pyazr.Project` and a new session (the session
+reads its model when it is made):
 
-Anything left at ``None`` keeps what the pair already resolves to, so switching one pair off is just
-``set_nuclear_potential(2, enabled=False)``. Setting several pairs is cheaper with ``reinitialize=False`` on all but
-the last: the potential is read when ``CoulFunc`` is constructed, deep inside a calculation, so it only reaches the
-model when the model is rebuilt.
+.. code-block:: python
+
+   p = pyazr.Project.open("hybrid_potential.azr")
+   p.set("p12C", central="woods_saxon depth 30 MeV radius 3.6 fm diffuseness 0.6 fm", coulomb_radius="4 fm")
+   p.set("p12C", matching_radius="12 fm", step="0.02 fm")
+   p.remove("p12C")                                     # no potential for the pair
+   p.add("potential", "p12C", pair="p+12C", coulomb_radius="3.5 fm",
+         central="gaussian depth 60 MeV width 4 fm")     # a record for a pair without one
+   with pyazr.Session(p.save("_variant.azr")) as m:
+       x = m.parameters.x0
 
 Two things that will bite:
 
-- **Re-read the parameter vector afterwards.** The potential moves the
+- **Take the new session's parameter vector.** The potential moves the
   penetrabilities and shift functions, and those are what map physical widths
-  to reduced-width amplitudes --- so ``parameters.x0`` is re-derived by the
-  rebuild, and a vector captured beforehand no longer describes the same model.
-  Feed the old one back and the chi-squared is quietly wrong. This is the same
-  caveat as :meth:`~pyazr.Session.set_channel_radius`, for the same reason.
+  to reduced-width amplitudes --- so the ``parameters.x0`` of a session of the
+  edited project differs from the old session's, and the old one fed to the new
+  session gives a chi-squared that is quietly wrong. A channel radius changed by
+  :meth:`pyazr.Project.set_pair` has the same caveat, for the same reason.
 - **A fit made without the potential is not a fit made with it.** Refit before
   reading anything off the model.
 
-``coulomb_radius`` (fm, default 3.5) is the radius :math:`R_C` of the uniformly charged sphere of the potential's
-Coulomb term; ``nuclear_potential(p).coulomb_radius`` reads it back. ``matching_radius`` (fm) is where the solution
-inside the potential is matched to the Coulomb functions and ``step`` (fm) the radial step of the integration (15 fm
-and 0.0275 fm unless the record states others); ``set_nuclear_potential(1, matching_radius=12.0, step=0.02)`` sets
-them and ``nuclear_potential(p).matching_radius`` / ``.step`` read them back.
+``coulomb_radius`` (fm) is the radius :math:`R_C` of the uniformly charged sphere of the potential's Coulomb term;
+``nuclear_potential(p).coulomb_radius`` reads it back. ``matching_radius`` (fm) is where the solution inside the
+potential is matched to the Coulomb functions and ``step`` (fm) the radial step of the integration (15 fm and 0.0275
+fm unless the record states others); ``nuclear_potential(p).matching_radius`` / ``.step`` read them back.
 
 In a project of format 3 a potential is a ``potential`` record of the ``<potentials>`` section, one per particle pair;
 a pair without a record has none, and there is no default record:
@@ -1054,25 +1069,21 @@ the entrance pair of THM data) are in :doc:`../reference/format3`.
 A pair with one spinning particle can have a spin–orbit term (FRESCO's
 convention, operator :math:`2\,\mathbf{l}\cdot\mathbf{i}`; :doc:`../theory/hybrid_potential`):
 the record's ``spin_orbit woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s``,
-or in pyazr
+set in pyazr as a field of the record:
 
 .. code-block:: python
 
-   azr.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6,
-                                            "diffuseness": 0.6, "on": "light"})
-   azr.nuclear_potential(1).spin_orbit        # the dict, or None
-   azr.set_nuclear_potential(1, spin_orbit=False)   # remove it
-   azr.channel_functions(1, energies, l=1, J=1.5)   # J required for such a pair
+   p.set("p12C", spin_orbit="woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s")
+   p.set("p12C", spin_orbit=None)                     # remove it
+   m.nuclear_potential(1).spin_orbit                  # in a session: the dict, or None
+   m.channel_functions(1, energies, l=1, J=1.5)       # J required for such a pair
 
 The channel functions of such a pair depend on J: ``channel_functions`` needs ``J`` for it (``E_SO_NEEDS_J``) and
 refuses one for any other pair (``E_SO_NO_TERM``).  A term on a pair whose two particles both have spin
-(``E_SO_TWO_SPINS``), on a spin-0 particle (``E_SO_ZERO_SPIN``) or on the default ``pair=0`` is refused with a
-``ValueError``.
+(``E_SO_TWO_SPINS``) or on a spin-0 particle (``E_SO_ZERO_SPIN``) is refused by the edit with a
+:class:`~pyazr.FormatError`.
 
-``save_fit`` of a format-3 project writes the session's potentials as these records when ``set_nuclear_potential``
-changed them (the converter's writer: a session default becomes one record per particle pair it applies to).  An older
-project's ``<potential>`` block is not written: ``save_fit`` of a format-1/2 project whose potential the session
-changed raises ``ValueError`` with the conversion command (``pyazr.convert_azr(old, new)``).
+``save_fit`` of a format-3 project writes the ``<potentials>`` section as the project has it.
 
 An older project has the ``<potential>`` block instead, where keys before the first ``pair=`` are the default and a
 ``pair=`` line opens a section that starts from it:
@@ -1097,9 +1108,9 @@ gives a potential (the default expanded, ``coulomb_radius 3.5 fm`` written out; 
 (``E_OLD_POTENTIAL_BLOCK``). The engine, pyazr and the converter read the block through one parser, so they cannot
 drift. Worked example: ``pyazr/examples/nuclear_potential.py``; ``tests/hybrid_potential`` pins the behaviour.
 
-The potential belongs to the session. Several sessions in one process keep their own default and per-pair settings: a
-second session's ``<potential>`` block, or ``set_nuclear_potential`` on it, leaves the first session computing with
-the settings it was opened with. (``tests/pyazr/potential_sessions_test.py``.)
+The potential belongs to the session. Several sessions in one process keep their own settings: a second session's
+potentials leave the first session computing with the settings it was opened with.
+(``tests/pyazr/potential_sessions_test.py``.)
 
 The Coulomb functions are computed at every call: there is no process-wide memo (``docs/upgrade/coulomb.md``). Earlier
 builds kept one, which took energies within :math:`10^{-12}` MeV as equal, so that a second session in one process
@@ -1208,6 +1219,28 @@ The transform to physical parameters (``Session.transform``) works at the level 
 fit or a sampler moves at every call, and evaluates the external part of each radiative width there. It shares Coulomb
 functions within the call but leaves none in the memo afterwards, so a sampler that transforms at every step (physical
 priors, a fixed total gamma width) keeps a constant footprint.
+
+The names of the package
+------------------------
+
+``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
+lists): the classes and functions above, the libraries' functions of :mod:`pyazr.sources.nds`, the modules
+``system``, ``sources``, ``stopping`` and ``physics``, and the error classes.
+
+.. code-block:: text
+
+   Session convert_azr convert_params ScatteringLength whittaker_wave tabulate TabulatedCrossSection
+   angular_distribution Parameter Parameters system NuclearPotential sources stopping physics fitted_norms ExforData
+   ExforDataset GroundState Gamma Reference search_exfor fetch_exfor fetch_levels fetch_gammas fetch_ground_state
+   reference resolve_doi aps_doi sfactor_to_cross_section cm_to_lab ChannelWidth WidthTable weisskopf_width Band
+   load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
+   uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
+   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat schema validate
+   describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
+   records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
+   DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
+   EngineError AZURE2Error DomainError DomainZeroDivision SessionClosed MissingFile EngineWarning Objective
+   Evaluation EvaluatedData
 
 Earlier names
 -------------
@@ -1331,6 +1364,20 @@ call.
      - ``Session(file, extrapolations=True)``: a session is made for the data sets or for the extrapolations;
        ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's fit
        vector to the extrapolation session ``t``
+   * - ``s.set_channel_radius(pair, a)``
+     - an edit of the project and a new session: ``p = pyazr.Project.open(file)``, ``p.set_pair(pair, radius=a)``,
+       ``pyazr.Session(p.save(path))``
+   * - ``s.set_nuclear_potential(pair, ...)``, ``s.clear_nuclear_potential(pair)``, ``s.potential_records()``
+     - the pair's ``potential`` record edited in the project (``p.set(name, central=..., coulomb_radius=...,
+       spin_orbit=...)``, ``p.remove(name)``, ``p.add("potential", name, pair=..., ...)``) and a new session;
+       ``save_fit`` writes ``<potentials>`` as the project has it
+   * - the modules ``pyazr.nds``, ``pyazr.masses``, ``pyazr.exfor_coulomb``, ``pyazr.exfor_sfactor``;
+       ``python -m pyazr.nds``
+     - ``pyazr.sources.nds``, ``pyazr.sources.masses``, ``pyazr.sources.exfor_coulomb``,
+       ``pyazr.sources.exfor_sfactor``; ``python -m pyazr.sources.nds`` (the functions ``pyazr.fetch_exfor``,
+       ``pyazr.fetch_levels``, ... keep their top-level names)
+   * - ``s.write_output_files(params)``
+     - ``s.write_outputs(x)``
 
 Examples
 --------

@@ -60,7 +60,7 @@ compare() {
     { key = sprintf("%.4f %.1f", $1, $2); if (!(key in t)) { print "missing"; exit 2 }
       e = sprintf("%.4f", $1); d = ($3 - t[key]) / big[e]; if (d < 0) d = -d; if (d > m) m = d }
     END { printf "%.3e", m }' "$exp" "$fit")"
-  if [ -n "$worst" ] && awk -v m="$worst" -v tol="$TOL" 'BEGIN { exit !(m <= tol) }'; then ok "$label: AZURE2 = truth at all 21 points (largest difference $worst of the row maximum)"; else bad "$label: largest difference '$worst' of the row maximum (tolerance $TOL)"; paste "$fit" <(awk '!/^#/' "$exp") | awk -v col="$col" '{ printf "    E %s theta %s: AZURE2 %s truth %s\n", $1, $2, $3, $(3 + col) }' | head -7; fi
+  if [ -n "$worst" ] && awk -v m="$worst" -v tol="$TOL" 'BEGIN { exit !(m <= tol) }'; then ok "$label: AZURE2 = truth at all 21 points (largest difference $worst of the row maximum)"; else bad "$label: largest difference '$worst' of the row maximum (tolerance $TOL)"; paste "$fit" <(awk '!/^#/' "$exp") | awk -v col="$col" '{ printf "    E %s theta %s: AZURE2 %s truth %s\n", $1, $2, $3, $(3 + col) }' | sed -n '1,7p'; fi
 }
 
 for case in s p; do

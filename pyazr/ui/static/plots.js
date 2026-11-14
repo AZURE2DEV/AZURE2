@@ -165,7 +165,8 @@ export function resultsPlots(sets, view, { schema, levels = [], title = null } =
         const x = pick(d[xc.key], order);
         const style = { color: s.color, marker: s.marker, group: d.name };
         if (view.band !== false && s.y.band) {
-          traces.push({ role: "band", name: `${d.name}${suffix}: band`, x, y: pick(s.y.band.upper, order),
+          traces.push({ role: "band", name: `${d.name}${suffix}: ${d.band?.label || "band"}`, x,
+            y: pick(s.y.band.upper, order),
             lower: pick(s.y.band.lower, order), ...style });
         }
         if (!s.extrapolation && s.y.value) {

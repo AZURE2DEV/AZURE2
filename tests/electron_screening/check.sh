@@ -85,10 +85,10 @@ fi
 
 # ---- 3. gradient ------------------------------------------------------------------------
 run grad "$HERE/grad.azr" 2 "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS" AZURE_GRAD_CHECK=exit
-line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
-if echo "$line" | grep -q "screening 0/1;.*screening 0/1"; then ok "d chi2/d U_e: analytic = finite differences, adjoint and Jacobian paths"
+line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
+if grep -q "screening 0/1;.*screening 0/1" <<< "$line"; then ok "d chi2/d U_e: analytic = finite differences, adjoint and Jacobian paths"
 else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/run.log"; fi
-rel="$(sed -n 's/.*screening J-1.*analytic \([^ ]*\) *fd \([^ ]*\) *rel \([^ ]*\).*/\3/p' "$WORK/grad/run.log" | head -1)"
+rel="$(sed -n 's/.*screening J-1.*analytic \([^ ]*\) *fd \([^ ]*\) *rel \([^ ]*\).*/\3/p' "$WORK/grad/run.log" | sed -n 1p)"
 if [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-6) }'; then ok "U_e gradient: relative difference $rel"
 else bad "U_e gradient: relative difference ${rel:-missing}"; fi
 
@@ -125,7 +125,7 @@ if [ -s "$(out scr)" ]; then
   done
   run fit_prior "$WORK/fit_prior.azr" 2 "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS"
   ue="$(par fit_prior tgt_targetInt3.screening)"
-  sc="$(sed -n 's/.*Total-Screening-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit_prior/output/chiSquared.out" | head -1)"
+  sc="$(sed -n 's/.*Total-Screening-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit_prior/output/chiSquared.out" | sed -n 1p)"
   if [ -n "$ue" ] && [ -n "$sc" ] && awk -v u="$ue" -v s="$sc" 'BEGIN { p = ((u - 300) / 50)^2; d = s - p; if (d < 0) d = -d
          exit !(u > 300 && u < 1000 && d <= 1e-4 * (p + 1)) }'; then
     ok "prior 300 +- 50 eV pulls U_e to $ue eV; Total-Screening-Chi-Squared $sc = ((U_e - 300)/50)^2"

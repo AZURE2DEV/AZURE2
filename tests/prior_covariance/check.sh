@@ -315,7 +315,7 @@ spec.loader.exec_module(m)
 m.prior_from_fit(sys.argv[2] + "/param.sav", sys.argv[2] + "/covariance.dat", sys.argv[3])
 PYEOF
   cols="$(awk '$1 == "#columns" { $1 = ""; sub(/^ /, ""); print }' "$WORK/f_a/output/covariance.dat")"
-  names="$(grep -v '^#' "$WORK/f_prior.txt" | head -1)"
+  names="$(grep -v '^#' "$WORK/f_prior.txt" | sed -n 1p)"
   means_ok="$(awk -v sav="$WORK/f_a/output/param.sav" 'BEGIN { while ((getline l < sav) > 0) { split(l, t, " "); v[t[1]] = t[2] } }
      /^#/ { next } { n++ } n == 1 { for (i = 1; i <= NF; i++) nm[i] = $i; k = NF }
      n == 2 { bad = 0; for (i = 1; i <= k; i++) { d = $i - v[nm[i]]; if (d < 0) d = -d; if (d > 1e-15 * (v[nm[i]] < 0 ? -v[nm[i]] : v[nm[i]])) bad = 1 } print bad ? "no" : "yes" }' "$WORK/f_prior.txt")"

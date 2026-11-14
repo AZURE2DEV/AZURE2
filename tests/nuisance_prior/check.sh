@@ -108,6 +108,6 @@ d="$WORK/b"
 if grep -q "Nuisance priors from <parameterSettings>: 1 level/background parameter" "$d/mcmc.log"; then
   echo "  ok    (e) MCMC: the nuisance prior of <parameterSettings> is applied"
 else
-  echo "  FAIL  (e) MCMC: no nuisance prior applied"; grep -i "prior" "$d/mcmc.log" | head -5; bad=1
+  echo "  FAIL  (e) MCMC: no nuisance prior applied"; grep -i "prior" "$d/mcmc.log" | sed -n '1,5p'; bad=1
 fi
 exit "$bad"

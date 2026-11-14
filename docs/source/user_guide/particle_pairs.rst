@@ -363,7 +363,7 @@ the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
   Pairs that differ from the table start ticked. A pair whose particles the
   table does not know cannot be ticked.
 
-In pyazr, ``pyazr.masses`` gives the table (``atomic_mass("12C")``,
+In pyazr, ``pyazr.sources.masses`` gives the table (``atomic_mass("12C")``,
 ``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
 ``masses.mass_check(project)`` / ``masses.fill_masses(project)`` do what the
 dialog does for a :class:`pyazr.Project` (see the pyazr page).

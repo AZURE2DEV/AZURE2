@@ -1,4 +1,5 @@
-// AZUREAPI: the channel functions of a pair on a requested energy grid (pyazr's coulomb_functions).
+// AZUREAPI: the channel functions of a pair on a requested energy grid (pyazr's channel_functions, through the
+// binding coulomb_functions).
 #include <cmath>
 #include <stdexcept>
 #include <string>

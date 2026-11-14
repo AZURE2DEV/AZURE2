@@ -58,7 +58,7 @@ mkdir -p "$dir/output" "$dir/checks"
 ln -s "$HERE/data" "$dir/data"
 awk '/^<extrapolations>$/ { x = 1 } /^<\/extrapolations>$/ { x = 0 } x && /^    (beam|quadrature) / { next } { print }' \
   "$HERE/natural_neon.azr" > "$dir/t.azr"
-awk '/^<extrapolations>$/,/^<\/extrapolations>$/' "$dir/t.azr" | grep -q '^    beam ' && bad "an extrapolation keeps its beam field"
+grep -q '^    beam ' <<< "$(awk '/^<extrapolations>$/,/^<\/extrapolations>$/' "$dir/t.azr")" && bad "an extrapolation keeps its beam field"
 (cd "$dir" && printf '3\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
 
 f20="$dir/output/AZUREOut_aa=2_R=2.extrap"; f22="$dir/output/AZUREOut_aa=4_R=4.extrap"; f21="$dir/output/AZUREOut_aa=6_R=6.extrap"

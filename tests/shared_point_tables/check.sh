@@ -55,7 +55,7 @@ run() {
   local sub=$! pid="" hwm=0 h
   while kill -0 "$sub" 2> /dev/null; do
     # the AZURE2 process: the subshell itself, or the child of timeout
-    [ -z "$pid" ] && { if [ -n "$TIMEOUT_CMD" ]; then pid="$(pgrep -P "$sub" 2> /dev/null | head -1)"; else pid="$sub"; fi; }
+    [ -z "$pid" ] && { if [ -n "$TIMEOUT_CMD" ]; then pid="$(pgrep -P "$sub" 2> /dev/null | sed -n 1p)"; else pid="$sub"; fi; }
     if [ -n "$pid" ] && [ -r "/proc/$pid/status" ]; then
       h="$(awk '/VmHWM/ { print $2 }' "/proc/$pid/status" 2> /dev/null)"
       [ -n "$h" ] && [ "$h" -gt "$hwm" ] && hwm="$h"

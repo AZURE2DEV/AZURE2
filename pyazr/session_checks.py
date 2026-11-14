@@ -29,6 +29,21 @@ def missing_directory(cwd, project_file):
                             f"file's own ({os.path.dirname(project_file)}).")
 
 
+def require_extrapolations(project_file, cwd):
+    """Refuse a session for the extrapolations (``extrapolations=True``) of a project without an active extrapolation
+    record, before the engine is asked (it would refuse a run without an active segment)."""
+    from .described import session_records
+    described = session_records("extrapolations", project_file, cwd)
+    if not any(e.active for e in described):
+        what = (f"its {len(described)} extrapolation record(s) are all inactive" if len(described)
+                else "it has no extrapolation record")
+        raise AZURE2Error(
+            f"Session(extrapolations=True): {os.path.basename(project_file)} has nothing to extrapolate ({what}); a "
+            f"session for the extrapolations needs at least one active extrapolation record.  Add one "
+            f"(pyazr.Project.open({project_file!r}).add_extrapolation(...), then save), or make a session for the "
+            f"data sets: pyazr.Session({project_file!r}).")
+
+
 def fit_vector(x, n, call):
     """``x`` as a flat float array, checked to have the ``n`` entries of the session's fit vector."""
     x = np.asarray(x, float).ravel()

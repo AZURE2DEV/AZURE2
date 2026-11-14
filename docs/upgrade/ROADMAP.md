@@ -203,6 +203,10 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 - [x] Abundances, THM coherent values and the two penalties out of `CNuc`: the samples in the `DataSet`, the values in
       the working copy, one place for the abundance block of the parameter vectors (`AbundanceSamples`), the Park
       wall and the abundance penalties the bodies of their objective terms (`cnuc_split.md` §12.3, step 2 as built).
+- [ ] The level values out of `ALevel`. Done: the report set (`CNuc::TransformOut` returns an `ObservedLevelTable`;
+      the reports, the model data and the observed vector read it). Open: the fit set into a `LevelState`
+      (`cnuc_split.md` §12.3, step 3 as built). The stale copy the sub-point grids are laid out from was measured
+      and cannot move a grid (step 2b as found).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -290,9 +294,11 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
         `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
         outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Rename and remove (`pyazr3.md` section 4, step 5): `Session`, one evaluation, one parameter vector, no
-      physics in Python (`transform.py` deleted, `pyazr.system`, the extrapolations a session option: section 8).
-      Open: the session's radius and potential edits, `best_fit_params`, the libraries to `pyazr.sources`,
-      `write_outputs`, the unused bindings.
+      physics in Python (`transform.py` deleted, `pyazr.system`, the extrapolations a session option: section 8);
+      radius and potential as Project edits, `best_fit_params` without a live file, `pyazr.sources`,
+      `write_outputs`, 18 unused bindings removed, numpy the one dependency.  Open: the probe of `wigner_widths`
+      (the PI's decision), `tabulate` / `angular_distribution` on given energies, `modelavg` / `priors` into
+      `pyazr.bands`.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
       Built: `pyproject.toml` (scikit-build-core), the install rules, `pyazr coulomb-table fetch|build|where`,
       `.github/workflows/wheels.yml` (Linux, macOS; publishes nothing), tests `pyazr_wheel`, `pyazr_coulomb_table`,
@@ -311,8 +317,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [x] The server (`pyazr/ui`: route table, state and history, workers, jobs; 2026-11-13).
 - [x] The page: header, tabs Project, Nucleus, Data with generated forms, the engine's descriptions and a preview plot;
-      plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Physics, THM tabs to
-      come.
+      plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). The Physics tab
+      (2026-11-13) and the THM tab (2026-11-14, `web_ui.md` section 11.8: options and experiments as generated
+      forms, the THM pairs and channels read-only, the session's five THM diagnostics drawn as the Physics tab's).
 - [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
       recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13).
 - [x] The engine's fit as a function (`fit.md`, 2026-11-13): a table of fitters, one function each with `FitControl`
@@ -335,7 +342,8 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       First part done (2026-11-13, `web_ui.md` section 11.5): every row of the physics table and the session's
       channel functions, a form generated from the row, the plot with gaps and the status line, CSV, Copy as Python.
       The stopping library's functions as rows of the same shape with SRIM's citation on every plot (2026-11-13).
-      The level matrix, the transfer functions on potentials and the rate wait for pyazr.
+      The level matrix, the transfer functions on potentials and the rate wait for pyazr.  The THM diagnostics of
+      the session (vertex, line shape, distortion, profiles) are drawn the same way in the THM tab (2026-11-14).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.
 - [x] Qt parity checklist written from the Qt code before its removal (`docs/upgrade/qt_parity.md`, 201 items and 32

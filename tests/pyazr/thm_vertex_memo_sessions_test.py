@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """vertex=constant: the boundary B_c = S_c(E_lowest) follows the channel radius
-across pyazr sessions and after set_channel_radius on a live session.
+across pyazr sessions, one after the other and alive at once.
 
 THMMatrixFunc keeps a per-thread memo of S_c at the lowest level of each J
 group.  It used to be keyed by the PPair address, l and the level energy: the
@@ -9,14 +9,14 @@ address back from the allocator and read S_c of another radius, and a radius
 changed in place was never seen.  The model-averaging driver fits its radius
 variants one after the other in one process; on the 18O(p,a) narrow-resonance
 example a 6.1 fm variant read the 4.1 fm S_c (chi2 35.99 instead of 208.6 for
-the same parameters).  Now the memo is keyed by the physical quantities.
+the same parameters).  The memo is keyed by the physical quantities.
 
 On tests/18O_p_a_thm (two interfering 1/2+ levels, vertex=constant):
   1. chi2 of a 4.1 fm and a 6.1 fm copy, each computed in a fresh process,
      equal the in-process values in the orders 4.1, 6.1, 4.1 and 6.1, 4.1
      (rel 1e-10);
-  2. set_channel_radius(1, 6.1) on a live 4.1 fm session gives the fresh
-     6.1 fm chi2 (rel 1e-10), and back;
+  2. a 4.1 fm and a 6.1 fm session alive at once, evaluated in turn
+     (4.1, 6.1, 4.1, 6.1): each gives its fresh chi2 (rel 1e-10);
   3. sessions of different THM models (18O_p_a_thm, 7Li_p_a, 6Li_d) evaluated
      in turn in one process: a model's chi2 is the same to the bit after
      the other's, and its fresh-process chi2 to 1e-12 (the per-thread THM
@@ -100,16 +100,12 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"order {order}, session {i + 1} ({r} fm) == fresh", rel(c, fresh[r]) < 1e-10,
                   f"{c!r} vs {fresh[r]!r}")
 
-    print("2. set_channel_radius on a live session")
-    with Session(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as m:
-        c0 = chi2(m)
-        m.set_channel_radius(1, 6.1)
-        c1 = chi2(m)
-        m.set_channel_radius(1, 4.1)
-        c2 = chi2(m)
-    check("4.1 fm session == fresh", rel(c0, fresh[4.1]) < 1e-10, f"{c0!r}")
-    check("-> 6.1 fm in place == fresh 6.1 fm", rel(c1, fresh[6.1]) < 1e-10, f"{c1!r} vs {fresh[6.1]!r}")
-    check("-> back to 4.1 fm == fresh 4.1 fm", rel(c2, fresh[4.1]) < 1e-10, f"{c2!r}")
+    print("2. a 4.1 fm and a 6.1 fm session alive at once, evaluated in turn")
+    with Session(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as a, \
+            Session(os.path.join(proj[6.1], AZR), cwd=proj[6.1]) as b:
+        turns = [(4.1, chi2(a)), (6.1, chi2(b)), (4.1, chi2(a)), (6.1, chi2(b))]
+    for i, (r, c) in enumerate(turns):
+        check(f"turn {i + 1}: the {r} fm session == fresh {r} fm", rel(c, fresh[r]) < 1e-10, f"{c!r} vs {fresh[r]!r}")
 
     # 3. The THM level-matrix function is reused by every point of a thread
     # (Unit::Calculate, as the classic A-matrix function): its buffers carry

@@ -1,6 +1,6 @@
 """Fetch nuclear data from EXFOR/NDS and drop it into an AZURE2 model.
 
-Demonstrates the ``pyazr.nds`` module end to end:
+Demonstrates the ``pyazr.sources.nds`` module end to end:
 
 1. search EXFOR for a reaction (``search_exfor``)
 2. fetch a dataset and convert it to an AZURE2 data file (``ExforData.to_azr``)
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
 from pyazr import Project
-from pyazr import nds as N
+from pyazr.sources import nds as N
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, "_exfor_demo")

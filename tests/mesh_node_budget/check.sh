@@ -56,13 +56,13 @@ if [ "$rc" = 1 ] && grep -q "^ERROR: $MESSAGE" "$WORK/prior/run.log" &&
    grep -q "Give the energy shift a narrower prior, or fix it" "$WORK/prior/run.log" && [ "$secs" -le 10 ]; then
   ok "a 3 keV prior on a 1e14 layer: refused at the set-up in ${secs} s"
 else
-  bad "a 3 keV prior: exit $rc after ${secs} s: $(grep -E 'ERROR|what' "$WORK/prior/run.log" | head -2 | cut -c1-200)"
+  bad "a 3 keV prior: exit $rc after ${secs} s: $(grep -E 'ERROR|what' "$WORK/prior/run.log" | sed -n '1,2p' | cut -c1-200)"
 fi
 case_run flat 1e+16 "offset 0.02 MeV fit" '2\nn\n\n\n7\n'
 if grep -q "$MESSAGE" "$WORK/flat/run.log" && ! grep -q "bad_alloc" "$WORK/flat/run.log" && [ "$secs" -le 20 ]; then
   ok "a free shift on a flat chi^2: the fit ends with the message in ${secs} s (exit $rc)"
 else
-  bad "a flat fit: exit $rc after ${secs} s: $(grep -E 'ERROR|what|bad_alloc' "$WORK/flat/run.log" | head -2 | cut -c1-200)"
+  bad "a flat fit: exit $rc after ${secs} s: $(grep -E 'ERROR|what|bad_alloc' "$WORK/flat/run.log" | sed -n '1,2p' | cut -c1-200)"
 fi
 if [ "$failures" -ne 0 ]; then echo "  FAIL ($failures)"; exit 1; fi
 echo "  PASS"

@@ -111,8 +111,8 @@ bundled in-tree.
 - [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
-- Python 3.10+ with [NumPy](https://numpy.org/) 1.24+, [SciPy](https://scipy.org/)
-  and [mpmath](https://mpmath.org/); `pip install .` from the repository's root builds the engine with
+- Python 3.10+ with [NumPy](https://numpy.org/) 1.24+ ([SciPy](https://scipy.org/) with the extras `web` and
+  `examples`); `pip install .` from the repository's root builds the engine with
   scikit-build-core and installs pyazr, the commands `pyazr` and `AZURE2`, and these dependencies
 - [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2`
   module; without it CMake warns and builds no module)
@@ -306,9 +306,9 @@ to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 (`USE_API=ON`, the default) writes it into `pyazr/`, so `import pyazr` picks it
 up from the repository root.
 
-### Fetching experimental data (`pyazr.nds`)
+### Fetching experimental data (`pyazr.sources.nds`)
 
-`pyazr.nds` is the package's client for the IAEA data services: **EXFOR** for
+`pyazr.sources.nds` is the package's client for the IAEA data services: **EXFOR** for
 measured cross sections, differential cross sections, analyzing powers and
 yields, and **LiveChart/ENSDF** for evaluated level schemes and gamma
 transitions. It converts what it fetches into AZURE2's own conventions — lab
@@ -317,7 +317,8 @@ without hand editing:
 
 ```python
 import os
-from pyazr import nds, Project
+from pyazr import Project
+from pyazr.sources import nds
 
 hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
 data = nds.fetch_exfor("O2599004")                # S-factor, reported in b·keV
@@ -339,8 +340,8 @@ S-factors → barns, `NB/SR` → b/sr, ratio-to-Rutherford → b/sr). It needs o
 the standard library beyond NumPy, and works from the shell too:
 
 ```bash
-python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
-python -m pyazr.nds download O2599004 -o data/skowronski.dat
+python -m pyazr.sources.nds search --target C-13 --reaction p,g --quantity SIG
+python -m pyazr.sources.nds download O2599004 -o data/skowronski.dat
 ```
 
 See `pyazr/examples/exfor_fetch.py`.

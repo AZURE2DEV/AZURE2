@@ -15,7 +15,7 @@ has a deuteron Trojan horse (x = p, s = n):
      refusals AZURE2 makes (no kinematics, bad values, psNodes alone; a window
      together with spectatorEnergy for the same pair, when a session is made).
   2. The engine against the CLI with a Hulthen window: evaluate().chi2
-     (rel 1e-9) and the output files written by write_output_files.
+     (rel 1e-9) and the output files written by write_outputs.
   3. thm_vertex: at every energy the Gauss-Legendre nodes in cos(theta_cm) on
      the part of the sphere with q in [0, 40] MeV/c, the Hulthen weights
      |phi(q)|^2, T_s and rho against an independent evaluation of the
@@ -217,7 +217,7 @@ with tempfile.TemporaryDirectory() as tmp:
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
-        s.write_output_files(x)
+        s.write_outputs(x)
 
         print("3. thm_vertex against an independent evaluation")
         grid = np.linspace(0.45, 0.95, 11)
@@ -280,7 +280,7 @@ with tempfile.TemporaryDirectory() as tmp:
     from_py = output_files(py_dir)
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-        check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
+        check(f"write_outputs: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
     check("thm_experiments.out lists the nodes at the lowest and highest point",
           from_cli["thm_experiments.out"].count("ps_node") == 32)
 

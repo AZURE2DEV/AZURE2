@@ -119,12 +119,37 @@ def test_stop_between_steps_and_resume(t3, fit_and_chain):
     assert np.array_equal(new[:old.shape[0]], old)
 
 
+def test_killed_sampler_continues_from_its_saved_chain(t3, fit_and_chain):
+    """A sampler killed (or interrupted by a restart: no result either) continues from its chain file as last saved
+    (every SAVE_EVERY stored steps); the page offers the sampler beside a sampler job (its follows)."""
+    from pyazr.ui.jobs import SAVE_EVERY, job_row
+    fit, _ = fit_and_chain
+    job = start(t3, kind="sample", method="emcee", x0={"job": fit["id"]}, settings={"steps": 100000})
+    path = f"/api/jobs/{job['id']}"
+    assert wait_until(lambda: ((t3.get(path).json().get("progress") or {}).get("step") or 0) > SAVE_EVERY + 2, 300)
+    t3.post(f"{path}/kill")
+    killed = wait_job(t3, job["id"])
+    assert killed["state"] == "killed" and not killed.get("result"), killed
+    saved = os.path.join(os.path.dirname(t3.path), "output", f"chain_{job['id']}.npy")
+    old = np.load(saved)
+    assert old.shape[0] >= SAVE_EVERY and old.shape[0] % SAVE_EVERY == 0
+    more = wait_job(t3, start(t3, kind="sample", method="emcee", x0={"job": job["id"]}, settings={"steps": 10})["id"])
+    new = np.load(more["result"]["chain"])
+    assert more["result"]["continues"] == job["id"] and more["result"]["continued_from"] == saved
+    assert new.shape == (old.shape[0] + 10,) + old.shape[1:] and np.array_equal(new[:old.shape[0]], old)
+    assert ("sample", "emcee") in job_row("sample", "emcee").follows
+
+
 def test_linear_band_and_band_from_draws_agree(t3, fit_and_chain):
     fit, sample = fit_and_chain
     linear = wait_job(t3, start(t3, kind="bands", method="covariance", x0={"job": fit["id"]})["id"])
     draws = wait_job(t3, start(t3, kind="bands", method="draws", x0={"job": sample["id"]},
                                settings={"draws": 400})["id"])
     assert linear["state"] == draws["state"] == "finished", (linear["result"], draws["result"])
+    # which parameters each band varied, from its result: the level parameters (linear), every free one (draws)
+    free = list(fit["result"]["errors"])
+    assert draws["result"]["varied"] == draws["result"]["free"] == free
+    assert linear["result"]["free"] == free and set(linear["result"]["varied"]) <= set(free)
     ev = t3.get("/api/evaluation").json()
     names = [d["name"] for d in ev["datasets"]] + [d["name"] for d in ev["extrapolations"]]
     points = {d["name"]: len(d["e_cm"]) for d in ev["datasets"] + ev["extrapolations"]}

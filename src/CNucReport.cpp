@@ -280,7 +280,7 @@ void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configur
              });
 }
 
-void WriteParametersOut(const CNuc &compound, const Config &configure) {
+void WriteParametersOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
   namespace phys = azure2::physics;
   char filename[256];
   snprintf(filename, sizeof(filename), "%sparameters.out", configure.outputdir.c_str());
@@ -294,15 +294,15 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
       for (int la = 1; la <= theJGroup->NumLevels(); la++) {
         out.precision(1);
         out << std::fixed;
-        const ALevel *theLevel = theJGroup->GetLevel(la);
+        const ObservedLevel &theLevel = table.Level(j, la);
         out << "J = " << std::setw(3) << theJGroup->GetJ();
         if (theJGroup->GetPi() == -1)
           out << '-';
         else
           out << '+';
         out.precision(4);
-        out << "  E_level = " << std::setw(8) << theLevel->GetTransformE() << " MeV"
-            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations();
+        out << "  E_level = " << std::setw(8) << theLevel.E << " MeV"
+            << "  ITERATIONS = " << std::setw(5) << theLevel.iterations;
         if (compound.NumNuclei() > 1) out << "  NUCLEUS " << compound.NucleusLabel(theJGroup->GetNucleus());
         out << std::endl;
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
@@ -322,16 +322,16 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
             out << "  s = " << std::setw(4) << theChannel->GetS();
           out.precision(6);
           // The observed quantities of TransformOut (physics/ observed_levels): W and the reported value by kind.
-          const double W = theLevel->GetBigGamma(ch);
-          switch (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch))) {
+          const double W = theLevel.W[ch - 1];
+          switch (static_cast<phys::ObservedKind>(theLevel.kind[ch - 1])) {
             case phys::ObservedKind::ANC:
               out << "  C  = " << std::setw(12) << sqrt(fabs(W)) << " fm^(-1/2)";
               break;
             case phys::ObservedKind::MagneticMoment:
-              out << "  mu = " << std::setw(12) << theLevel->GetObservedValue(ch) << " nm       ";
+              out << "  mu = " << std::setw(12) << theLevel.value[ch - 1] << " nm       ";
               break;
             case phys::ObservedKind::QuadrupoleMoment:
-              out << "  Q  = " << std::setw(12) << theLevel->GetObservedValue(ch) << " b        ";
+              out << "  Q  = " << std::setw(12) << theLevel.value[ch - 1] << " b        ";
               break;
             case phys::ObservedKind::Beta:
               out << "  B  = " << std::setw(12) << W << "          ";
@@ -345,22 +345,22 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
                 out << "  G  = " << std::setw(12) << fabs(W) * 1e9 << " meV      ";
               break;
           }
-          out << "  g_int = " << std::setw(12) << theLevel->GetTransformGamma(ch);
+          out << "  g_int = " << std::setw(12) << theLevel.gamma[ch - 1];
           if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')
             out << " MeV^(1/2) ";
           else
             out << "           ";
-          out << "  g_ext = " << std::setw(20) << theLevel->GetExternalGamma(ch);
+          out << "  g_ext = " << std::setw(20) << theLevel.external[ch - 1];
           if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F') out << " MeV^(1/2) ";
           out << std::endl;
         }
         out << std::endl;
       }
     }
-    out << compound.GetGammaDecays().Report(compound);
+    out << compound.GetGammaDecays().Report(compound, table);
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
-  if (configure.relativistic) WriteRelativisticOut(compound, configure);
+  if (configure.relativistic) WriteRelativisticOut(compound, table, configure);
 }
 
 /*!
@@ -372,7 +372,7 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
  * in both): Gamma' = Gamma (1 + T0/m0), gamma' = gamma sqrt(1 + T0/m0).  This is exact at each level energy; away
  * from it the two energy dependences differ at second order in T0/m0.
  */
-void WriteRelativisticOut(const CNuc &compound, const Config &configure) {
+void WriteRelativisticOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
   char filename[256];
   snprintf(filename, sizeof(filename), "%srelativistic.out", configure.outputdir.c_str());
   std::ofstream out(configure.OpenPath(filename));
@@ -403,8 +403,8 @@ void WriteRelativisticOut(const CNuc &compound, const Config &configure) {
     const double m0 = (ref->GetM(1) + ref->GetM(2)) * uconv;
     const double s0 = ref->GetSepE() + ref->GetExE();
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      const ALevel *theLevel = theJGroup->GetLevel(la);
-      const double ex = theLevel->GetTransformE();
+      const ObservedLevel &theLevel = table.Level(j, la);
+      const double ex = theLevel.E;
       const double t0 = ex - s0;
       const double d = 1.0 + t0 / m0;
       out.precision(1);
@@ -425,11 +425,11 @@ void WriteRelativisticOut(const CNuc &compound, const Config &configure) {
         if (localEnergy < 0.0) {
           out << "  (bound in this channel)";
         } else {
-          out << "  G = " << std::setw(13) << fabs(theLevel->GetBigGamma(ch)) * 1e3 << " keV  G_s = " << std::setw(13)
-              << fabs(theLevel->GetBigGamma(ch)) * d * 1e3 << " keV";
+          out << "  G = " << std::setw(13) << fabs(theLevel.W[ch - 1]) * 1e3 << " keV  G_s = " << std::setw(13)
+              << fabs(theLevel.W[ch - 1]) * d * 1e3 << " keV";
         }
-        out << "  g = " << std::setw(13) << theLevel->GetTransformGamma(ch) << "  g_s = " << std::setw(13)
-            << theLevel->GetTransformGamma(ch) * sqrt(d) << " MeV^(1/2)" << std::endl;
+        out << "  g = " << std::setw(13) << theLevel.gamma[ch - 1] << "  g_s = " << std::setw(13)
+            << theLevel.gamma[ch - 1] * sqrt(d) << " MeV^(1/2)" << std::endl;
       }
       out << std::endl;
     }

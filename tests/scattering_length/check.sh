@@ -123,7 +123,7 @@ refuse() {  # refuse LABEL OLD NEW EXPECTED-TEXT TAG: the datum text OLD replace
 sys.stdout.write(t.replace(o, n))' "$HERE/be7p_fit.azr" "$(printf "$2")" "$(printf "$3")" > "$dir/m.azr"
   (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
   if grep -q "$4" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1"
-  else bad "not refused: $1"; grep -i error "$dir/run.log" | head -3; fi
+  else bad "not refused: $1"; grep -i error "$dir/run.log" | sed -n '1,3p'; fi
 }
 if [ -n "$PYTHON" ]; then
   refuse "channel spin 3 of p+7Be" '    s              1\n    value          17.0 fm' '    s              3\n    value          17.0 fm' \

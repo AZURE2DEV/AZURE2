@@ -24,7 +24,7 @@ needs, so fetched data go straight into an evaluation as a ``dataset`` record::
     p.save()
 
 A ratio to Rutherford or Mott (``,DA,,RTH``, ``,DA,,MOT``) is a format-3
-quantity: ``ExforData.to_dataset`` writes it (``pyazr/exfor_coulomb.py``).
+quantity: ``ExforData.to_dataset`` writes it (``pyazr/sources/exfor_coulomb.py``).
 
 When the EXFOR Web-API cannot be reached (it is intermittently behind a
 Cloudflare challenge), ``fetch_exfor`` and ``reference`` read the entry from a
@@ -42,9 +42,9 @@ same Web-API, and a parsing rule learned by either belongs in both.
 
 Command line, for a quick look without writing a script::
 
-    python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
-    python -m pyazr.nds download O2599004 -o data/roughton.dat
-    python -m pyazr.nds download O2599004 --source local
+    python -m pyazr.sources.nds search --target C-13 --reaction p,g --quantity SIG
+    python -m pyazr.sources.nds download O2599004 -o data/roughton.dat
+    python -m pyazr.sources.nds download O2599004 --source local
 """
 
 import csv
@@ -853,7 +853,7 @@ def sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u):
     for p + 12C at 100 keV).  For a fit, give the data as ``quantity sfactor`` (:meth:`ExforData.to_sfactor_dataset`)
     and let the engine convert the model instead.
     """
-    from .physics import sfactor_conversion
+    from ..physics import sfactor_conversion
     E = np.atleast_1d(np.asarray(E_cm_kev, float)) / 1e3
     conv = sfactor_conversion(int(z1), int(z2), float(m1_u), float(m2_u), E)  # MeV
     out = np.asarray(S, float) / 1e3 / (conv if np.ndim(E_cm_kev) else conv[0])
@@ -1379,7 +1379,7 @@ def aps_doi(journal, volume, page):
 # -- command line -------------------------------------------------------------
 
 def _main(argv=None):
-    """``python -m pyazr.nds`` -- search EXFOR, or fetch one dataset.
+    """``python -m pyazr.sources.nds`` -- search EXFOR, or fetch one dataset.
 
     The scripted path is the module API; this is for looking something up
     without opening an editor.
@@ -1388,7 +1388,7 @@ def _main(argv=None):
     import sys
 
     ap = argparse.ArgumentParser(
-        prog="python -m pyazr.nds",
+        prog="python -m pyazr.sources.nds",
         description="Search the IAEA EXFOR database, or convert one dataset "
                     "into an AZURE2 data file.")
     sub = ap.add_subparsers(dest="cmd", required=True)

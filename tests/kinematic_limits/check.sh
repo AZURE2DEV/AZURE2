@@ -42,7 +42,7 @@ prep() { mkdir -p "$WORK/$1/output" "$WORK/$1/checks"; cp -r "$2/data" "$WORK/$1
 run() { (cd "$WORK/$1" && printf '%s\n\n\n7\n' "$2" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1); }
 errors() { grep -c "beyond the kinematic maximum" "$WORK/$1/run.log"; }
 below() { grep -c "below the threshold of the exit pair" "$WORK/$1/run.log"; }
-has_nan() { grep -il "nan" "$WORK/$1/output"/AZUREOut_* "$WORK/$1/output/chiSquared.out" 2> /dev/null | head -1; }
+has_nan() { grep -il "nan" "$WORK/$1/output"/AZUREOut_* "$WORK/$1/output/chiSquared.out" 2> /dev/null | sed -n 1p; }
 
 # (a) test segment past theta_max
 # ext NAME ENERGIES ANGLE: 7Li_p_ay with a 7Li(p,n)7Be dsigma/dOmega extrapolation (lab angle in deg) as its first one

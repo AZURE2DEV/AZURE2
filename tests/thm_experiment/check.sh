@@ -64,7 +64,7 @@ run() {
 }
 # Byte-identical files, without cmp (not in every MSYS2 image); \r stripped.
 # field FILE KEY -> the value after "KEY" in thm_experiments.out (first match)
-field() { tr -d '\r' < "$1" | awk -v k="$2" '$1 == k || $1 == k ":" { print $2; exit }'; }
+field() { tr -d '\r' < "$1" | awk -v k="$2" '!f && ($1 == k || $1 == k ":") { print $2; f = 1 }'; }
 
 # (a) ----------------------------------------------------------------------
 echo "(a) one-segment experiments without background == no experiment"

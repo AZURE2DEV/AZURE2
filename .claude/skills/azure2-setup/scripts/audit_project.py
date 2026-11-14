@@ -5,8 +5,8 @@ Reads a format-3 project (``.azr``) and its data files (relative to the project'
 and prints:
 
 1. the engine's validation (``pyazr.validate``): every error and warning with its code;
-2. every particle pair against AME2020 (``pyazr.masses.mass_check``): masses in u, S in MeV, and the difference of
-   S from the table in keV; a mass that is a mass number (an integer, other than 12C) is flagged;
+2. every particle pair against AME2020 (``pyazr.sources.masses.mass_check``): masses in u, S in MeV, and the difference
+   of S from the table in keV; a mass that is a mass number (an integer, other than 12C) is flagged;
 3. the channel radius of each pair beside 1.4 (A1^1/3 + A2^1/3) fm, a usual starting value (information only);
 4. every data set as the engine reads it (``pyazr.describe(path, as_json=True)``): quantity, reaction, rows of
    the file and rows kept inside the windows; a data set that keeps no row is flagged;
@@ -24,7 +24,7 @@ from pathlib import Path
 def audit(path, tol_kev=1.0):
     """(lines, flags) of the audit of the project ``path``."""
     import pyazr
-    from pyazr import masses
+    from pyazr.sources import masses
     lines, flags = [], []
     diagnostics = pyazr.validate(path)
     lines.append(f"validation: {sum(d['severity'] == 'error' for d in diagnostics)} error(s), "

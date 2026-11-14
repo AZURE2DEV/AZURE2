@@ -235,7 +235,7 @@ section (check 34).
    independent value (closed form, mpmath `truth.py`, a published number).
 2. Exposed in the binding with array inputs (`api/src/pybind_physics.cpp`) so pyazr and the web UI call it.
 3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
-   from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
+   from `pyazr/data/mass_1.mas20` (`pyazr.sources.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
 
 **An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).
@@ -280,7 +280,7 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity")
    and in `ModelQuantities()` (`experiment/src/ModelDatum.cpp`), with what `BuildModelData` must find in `<levels>`
    (level, pairs, channel) and its refusals (a code each, recipe "A format-3 diagnostic code").
-3. Its case in `LevelValue` (`src/ModelData.cpp`), from the observed slots `CNuc::ObservedOfFitValues` fills (never
+3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CNuc::ObservedOfFitValues` returns (never
    formal parameters); its gradient comes with it (central differences over the level's J^π group).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.

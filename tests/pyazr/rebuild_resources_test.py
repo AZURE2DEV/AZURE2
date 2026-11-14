@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""A pyazr rebuild (set_channel_radius, a potential change) must not accumulate memory, re-read unchanged
-input files, or print the setup Notes again.
+"""A scan over a channel radius is a Project edit and a new session per radius: the sessions of one process must not
+accumulate memory, re-read unchanged input files, or print one another's setup Notes.
 
-Before 2026-11-04, sampling a channel radius in a likelihood (3H+d free-radius MCMC, 2026-11-03):
-  - grew the Coulomb-function memo by one set of keys per new radius, never released (the key holds the
-    radius): ~96 kB per call, 239 GB over 16 workers;
-  - re-read the .azr and every data file at every rebuild, which on /groups stalled 16 forked workers;
-  - printed every setup "Note:" line (shift function, shift group, ...) again at every rebuild.
+Sampling a channel radius in a likelihood (3H+d free-radius MCMC, 2026-11-03) once grew a Coulomb-function memo by one
+set of keys per radius, re-read the .azr and every data file per radius (which on /groups stalled 16 forked workers),
+and printed every setup "Note:" line again per radius.
 
 Checks, on tests/angle_mapping/angle_mapping.azr (p+12C and p+13C, a shift group and a shift function),
 without the Coulomb table (which covers these channels and would leave the memo unused):
-  1. 40 rebuilds at random radii of pair 1: no Coulomb memo holds anything (since docs/upgrade/coulomb.md there
-     is none; before, it had to hold no more keys than after one calculation at one radius), and chi2 at a radius equals a fresh session on an .azr with that radius written in (rel 1e-12);
-  2. the Notes of the session's first build are not printed again by rebuilds, and a new session prints them;
-  3. rebuilds read no input file from disk; an edited data file is read again (only it) and its new values
-     are used (chi2 equals a fresh session on the edited file).
-The old engine fails 1, 2 and 3.
+  1. 8 sessions at random radii of pair 1, one after the other: no Coulomb memo holds anything (keys 0 after each),
+     and a session at a radius after them gives the chi2 of the first session at that radius (rel 1e-12);
+  2. every session prints the shift-function and shift-group Notes once;
+  3. the input files are cached per process: a session at a new radius reads its new .azr from disk and serves the
+     unchanged data files from memory; an edited data file is read again (only it, with the new .azr) and its new
+     values are used (chi2 equals a session on the edited file in its own directory).
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -108,84 +106,77 @@ def main():
         for root, _, files in os.walk(d):
             for name in files:
                 os.utime(os.path.join(root, name), (old, old))
-        out = []
-        with captured_stdout(out):
-            m = Session(azr, cwd=d, use_coulomb_table=False)
-        first = out[-1]
-        try:
-            what_fn, what_grp = "shift function on segment", "shift group 'G'"
-            check("the first build prints the shift-function and shift-group Notes",
-                  notes(first, what_fn) == 1 and notes(first, what_grp) == 1,
-                  f"{notes(first, what_fn)} / {notes(first, what_grp)}")
+        what_fn, what_grp = "shift function on segment", "shift group 'G'"
 
-            print("1. No Coulomb memo across rebuilds")
-            chi2(m)
-            k0 = m.cache_stats()["keys"]
-            rng = np.random.default_rng(20261104)
+        def at_radius(radius, name):
+            """A session of the main copy with pair 1 at ``radius`` (fm), its .azr saved as ``name``: (chi2, stdout)."""
+            mdl = Project.open(azr)
+            mdl.set_pair(1, radius=radius)
+            path = mdl.save(os.path.join(d, name))
+            os.utime(path, (old, old))  # dated back as the rest (a file written within 3 s is read at every open)
             out = []
             with captured_stdout(out):
-                for _ in range(40):
-                    m.set_channel_radius(1, 4.0 + 1.5 * rng.random())
-                    chi2(m)
-            k40 = m.cache_stats()["keys"]
-            # The process-wide Coulomb memo whose growth this bounded was deleted (docs/upgrade/coulomb.md): nothing
-            # is kept across rebuilds, so its counters stay 0 (a memo coming back would show here).
-            check("no Coulomb memo: keys 0 after one radius and after 40 random radii", k0 == 0 and k40 == 0, f"{k0} -> {k40}")
-            m.set_channel_radius(1, R_STAR)
-            c = chi2(m)
-            check("chi2 at a radius == fresh session with it in the file", rel(c, chi_ref) <= 1e-12,
-                  f"{c!r} vs {chi_ref!r} (rel {rel(c, chi_ref):.2e})")
+                with Session(path, cwd=d, use_coulomb_table=False) as m:
+                    c = chi2(m)
+                    keys = m.cache_stats()["keys"]
+            return c, out[-1], keys
 
-            print("\n2. Notes once per session")
-            rebuilds = out[-1]
-            check("40 rebuilds print no shift-function Note", notes(rebuilds, what_fn) == 0,
-                  f"{notes(rebuilds, what_fn)} lines")
-            check("40 rebuilds print no shift-group Note", notes(rebuilds, what_grp) == 0,
-                  f"{notes(rebuilds, what_grp)} lines")
-            out = []
-            with captured_stdout(out):
-                with Session(azr, cwd=d) as m2:
-                    chi2(m2)
-            check("a new session prints them again", notes(out[-1], what_fn) == 1 and notes(out[-1], what_grp) == 1,
-                  f"{notes(out[-1], what_fn)} / {notes(out[-1], what_grp)}")
+        print("1. No Coulomb memo across sessions")
+        rng = np.random.default_rng(20261104)
+        runs = [at_radius(4.0 + 1.5 * rng.random(), f"r{i}.azr") for i in range(8)]
+        check("no Coulomb memo: keys 0 after each of 8 sessions at random radii", all(k == 0 for _, _, k in runs),
+              f"{[k for _, _, k in runs]}")
+        c, text, _ = at_radius(R_STAR, "rstar.azr")
+        check("chi2 at a radius after them == the first session at it", rel(c, chi_ref) <= 1e-12,
+              f"{c!r} vs {chi_ref!r} (rel {rel(c, chi_ref):.2e})")
 
-            print("\n3. input files read once")
-            st = m.cache_stats()
-            check("cache_stats reports the input files", "input_files_read" in st, f"{sorted(st)}")
-            if "input_files_read" in st:
-                for k in range(5):
-                    m.set_channel_radius(1, 4.5 + 0.1 * k)
-                st2 = m.cache_stats()
-                check("5 rebuilds read nothing from disk", st2["input_files_read"] == st["input_files_read"],
-                      f"{st['input_files_read']} -> {st2['input_files_read']}")
-                check("... and are served from memory", st2["input_files_served"] > st["input_files_served"],
-                      f"{st['input_files_served']} -> {st2['input_files_served']}")
+        print("\n2. Notes once per session")
+        counts = [(notes(t, what_fn), notes(t, what_grp)) for _, t, _ in runs] + [(notes(text, what_fn),
+                                                                                 notes(text, what_grp))]
+        check("every session prints the shift-function and shift-group Notes once", all(n == (1, 1) for n in counts),
+              f"{counts}")
 
-                def scale_165(dd):
-                    p = os.path.join(dd, "data", "p12c_165.dat")
-                    rows = []
-                    for line in open(p):
-                        f = line.split()
-                        if len(f) >= 4 and not line.lstrip().startswith("#"):
-                            f[2] = repr(float(f[2]) * 1.07)
-                            line = " ".join(f) + "\n"
-                        rows.append(line)
-                    with open(p, "w") as fh:
-                        fh.writelines(rows)
+        print("\n3. input files read once per process")
+        with Session(azr, cwd=d, use_coulomb_table=False) as m0:
+            st = m0.cache_stats()
+        check("cache_stats reports the input files", "input_files_read" in st, f"{sorted(st)}")
+        if "input_files_read" in st:
+            for k in range(3):
+                at_radius(4.5 + 0.1 * k, f"s{k}.azr")
+            with Session(azr, cwd=d, use_coulomb_table=False) as m0:
+                st2 = m0.cache_stats()
+            check("3 sessions at new radii read only their 3 new .azr files from disk",
+                  st2["input_files_read"] - st["input_files_read"] == 3,
+                  f"{st['input_files_read']} -> {st2['input_files_read']}")
+            check("... and serve the rest from memory", st2["input_files_served"] > st["input_files_served"],
+                  f"{st['input_files_served']} -> {st2['input_files_served']}")
 
-                d_edit, azr_edit = project("edited", radius=R_STAR, edit=scale_165)
-                with Session(azr_edit, cwd=d_edit, use_coulomb_table=False) as e:
-                    chi_edit = chi2(e)
-                check("the edit changes chi2", rel(chi_edit, chi_ref) > 1e-6, f"{chi_edit} vs {chi_ref}")
-                before = m.cache_stats()["input_files_read"]
-                scale_165(d)
-                m.set_channel_radius(1, R_STAR)
-                after = m.cache_stats()["input_files_read"]
-                check("the edited file (only) is read again", after - before == 1, f"{before} -> {after}")
-                c = chi2(m)
-                check("its new values are used", rel(c, chi_edit) <= 1e-12, f"{c!r} vs {chi_edit!r}")
-        finally:
-            m.close() if hasattr(m, "close") else m.__exit__(None, None, None)
+            def scale_165(dd):
+                p = os.path.join(dd, "data", "p12c_165.dat")
+                rows = []
+                for line in open(p):
+                    f = line.split()
+                    if len(f) >= 4 and not line.lstrip().startswith("#"):
+                        f[2] = repr(float(f[2]) * 1.07)
+                        line = " ".join(f) + "\n"
+                    rows.append(line)
+                with open(p, "w") as fh:
+                    fh.writelines(rows)
+
+            d_edit, azr_edit = project("edited", radius=R_STAR, edit=scale_165)
+            with Session(azr_edit, cwd=d_edit, use_coulomb_table=False) as e:
+                chi_edit = chi2(e)
+            check("the edit changes chi2", rel(chi_edit, chi_ref) > 1e-6, f"{chi_edit} vs {chi_ref}")
+            with Session(azr, cwd=d, use_coulomb_table=False) as m0:
+                before = m0.cache_stats()["input_files_read"]
+            scale_165(d)
+            os.utime(os.path.join(d, "data", "p12c_165.dat"), (old, old))
+            c, _, _ = at_radius(R_STAR, "edited.azr")
+            with Session(azr, cwd=d, use_coulomb_table=False) as m0:
+                after = m0.cache_stats()["input_files_read"]
+            check("the edited file (only) is read again, with the new .azr", after - before == 2,
+                  f"{before} -> {after}")
+            check("its new values are used", rel(c, chi_edit) <= 1e-12, f"{c!r} vs {chi_edit!r}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

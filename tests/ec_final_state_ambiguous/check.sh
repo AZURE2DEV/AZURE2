@@ -113,19 +113,19 @@ make_model plain ""; make_model dup 0.0008; make_model far 0.002
 run plain; run dup; run far
 t="$(total plain)"
 if near "$t" "$want"; then ok "(a) the plain 13N reproduces its expected total ($t)"; else bad "(a) the plain 13N gives '$t', expected $want"; fi
-if [ ! -f "$WORK/dup/output/chiSquared.out" ] && grep -q "ERROR: external capture into pair 2: 2 levels of J^pi = 0.5- lie within 1 keV of its final-state energy" "$WORK/dup/run.log"; then ok "(b) a second 1/2- level 0.8 keV from the final state is refused: $(grep -o 'ERROR: external capture into pair 2: 2 levels[^,]*' "$WORK/dup/run.log" | head -1)"; else bad "(b) the duplicate final state was not refused (chiSquared.out present: $([ -f "$WORK/dup/output/chiSquared.out" ] && echo yes || echo no))"; grep -i "error" "$WORK/dup/run.log" | head -2; fi
+if [ ! -f "$WORK/dup/output/chiSquared.out" ] && grep -q "ERROR: external capture into pair 2: 2 levels of J^pi = 0.5- lie within 1 keV of its final-state energy" "$WORK/dup/run.log"; then ok "(b) a second 1/2- level 0.8 keV from the final state is refused: $(grep -o 'ERROR: external capture into pair 2: 2 levels[^,]*' "$WORK/dup/run.log" | sed -n 1p)"; else bad "(b) the duplicate final state was not refused (chiSquared.out present: $([ -f "$WORK/dup/output/chiSquared.out" ] && echo yes || echo no))"; grep -i "error" "$WORK/dup/run.log" | sed -n '1,2p'; fi
 t="$(total far)"
-if [ -n "$t" ] && [ -f "$WORK/far/output/chiSquared.out" ]; then ok "(c) the duplicate moved to 2 keV runs ($t)"; else bad "(c) the duplicate at 2 keV did not run"; grep -i "error" "$WORK/far/run.log" | head -2; fi
+if [ -n "$t" ] && [ -f "$WORK/far/output/chiSquared.out" ]; then ok "(c) the duplicate moved to 2 keV runs ($t)"; else bad "(c) the duplicate at 2 keV did not run"; grep -i "error" "$WORK/far/run.log" | sed -n '1,2p'; fi
 
 make_pairs pairs; run pairs
 PAIRS="ERROR: external capture into pairs 2 and 3: both have the final state J^pi = 0.5- at E_x = 0 MeV"
-if [ ! -f "$WORK/pairs/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs/run.log"; then ok "(d) two photon pairs with one final state are refused: $(grep -o 'ERROR: external capture into pairs[^(]*' "$WORK/pairs/run.log" | head -1)"; else bad "(d) two photon pairs with one final state were not refused (chiSquared.out present: $([ -f "$WORK/pairs/output/chiSquared.out" ] && echo yes || echo no))"; grep -i "error" "$WORK/pairs/run.log" | head -2; fi
+if [ ! -f "$WORK/pairs/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs/run.log"; then ok "(d) two photon pairs with one final state are refused: $(grep -o 'ERROR: external capture into pairs[^(]*' "$WORK/pairs/run.log" | sed -n 1p)"; else bad "(d) two photon pairs with one final state were not refused (chiSquared.out present: $([ -f "$WORK/pairs/output/chiSquared.out" ] && echo yes || echo no))"; grep -i "error" "$WORK/pairs/run.log" | sed -n '1,2p'; fi
 make_pairs_old pairs_old
 mkdir -p "$WORK/pairs3/output" "$WORK/pairs3/checks"; cp -r "$BASE/data" "$WORK/pairs3/"
 (cd "$WORK/pairs_old" && run_limited 300 "$AZURE2_BIN" --convert t.azr "$WORK/pairs3/t.azr" --to 3 > convert.log 2>&1)
 if [ -f "$WORK/pairs3/t.azr" ]; then
   run pairs3
-  if [ ! -f "$WORK/pairs3/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs3/run.log"; then ok "(e) its format-3 conversion is refused the same way"; else bad "(e) the format-3 conversion of the two-pair model was not refused"; grep -i "error" "$WORK/pairs3/run.log" | head -2; fi
+  if [ ! -f "$WORK/pairs3/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs3/run.log"; then ok "(e) its format-3 conversion is refused the same way"; else bad "(e) the format-3 conversion of the two-pair model was not refused"; grep -i "error" "$WORK/pairs3/run.log" | sed -n '1,2p'; fi
 else
   bad "(e) the two-pair model did not convert to format 3"; tail -3 "$WORK/pairs_old/convert.log"
 fi

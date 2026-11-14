@@ -14,8 +14,11 @@ import * as dataTab from "./tabs/data.js";
 import * as fitTab from "./tabs/fit.js";
 import * as resultsTab from "./tabs/results.js";
 import * as physicsTab from "./tabs/physics.js";
+import * as thmTab from "./tabs/thm.js";
 
-/** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it. */
+/** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it;
+ * `shown(ctx)` (where given): whether the project has what the tab is about (its link is hidden otherwise; the route
+ * still draws it). */
 export const TABS = [
   { id: "project", title: "Project", module: projectTab },
   { id: "nucleus", title: "Nucleus", module: nucleusTab },
@@ -23,8 +26,7 @@ export const TABS = [
   { id: "fit", title: "Fit", module: fitTab },
   { id: "results", title: "Results", module: resultsTab },
   { id: "physics", title: "Physics", module: physicsTab },
-  { id: "thm", title: "THM", later: "the physics and THM step: THM model options, experiments, channels and "
-    + "diagnostics. The <thm> section is edited through the API today (PATCH /api/project/thm)." },
+  { id: "thm", title: "THM", module: thmTab, shown: thmTab.shown },
 ];
 
 /** The keys of the page, shown by "?" (the overlay lists exactly this table). */
@@ -97,9 +99,20 @@ ctx.refresh = async () => {
   ctx.project = await ctx.api.get("/api/project");
   ctx.api.rev = ctx.project.rev;
   drawHeader();
+  await showTabs();
   await evaluate();
   await draw();
 };
+
+/** Hide the link of every tab whose `shown(ctx)` says the project has nothing for it. */
+async function showTabs() {
+  await Promise.all(TABS.filter((t) => t.shown).map(async (t) => {
+    let on = true;
+    try { on = await t.shown(ctx); } catch { /* a failed read shows the tab */ }
+    const link = ctx.tabBar.querySelector(`a.tab[data-tab="${t.id}"]`);
+    if (link) link.hidden = !on;
+  }));
+}
 
 async function evaluate() {
   ctx.chi2Box.textContent = "χ² …";
@@ -286,6 +299,7 @@ async function start() {
     throw e;
   }
   drawHeader();
+  await showTabs();
   const engine = ctx.describe.package?.engine || {};
   ctx.status(`AZURE2 ${engine.version || ""} (${engine.git || ""}) · pyazr ${ctx.describe.package?.pyazr || ""}`);
   window.addEventListener("hashchange", () => { draw(); });

@@ -200,6 +200,11 @@ class Server:
         return call(fn, arguments, table="stopping")
 
     @staticmethod
+    def thm_keys():
+        from .thm import keys
+        return keys()
+
+    @staticmethod
     def session_functions():
         from .physics import session_rows
         return session_rows()
@@ -211,7 +216,8 @@ class Server:
         from .physics import session_answer, session_request
         row, kwargs, used, lines, texts = session_request(fn, arguments)
         out = self.session_request(row["op"], **kwargs)
-        answer = session_answer(fn, row, out, used, lines, texts, session_text(self.state.path))
+        own = {k: v for k, v in out.items() if k not in ("rev", "warnings")}  # what session_request adds
+        answer = session_answer(fn, row, own, used, lines, texts, session_text(self.state.path))
         return dict(answer, rev=out.get("rev"), warnings=out.get("warnings", []))
 
     # -- the session and the working vector x ---------------------------------------------------------------------
@@ -284,6 +290,7 @@ class Server:
             rev = self._ensure_built()
             return {"rev": rev, "pid": self.worker.pid(), "build_s": self.build_s, "options": self.session["options"],
                     "n_free": self.session["n_free"], "datasets": self.session["datasets"],
+                    "pairs": self.session["pairs"],
                     "parameters": self.session["parameters"],
                     "session_options": session_options(session=self.session)}
 

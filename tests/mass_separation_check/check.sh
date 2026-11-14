@@ -53,13 +53,13 @@ else bad "(a) consistent model: $(warnings plain) warning(s), chiSquared.out $(l
 
 model shifted 'if ($6 == 2) { $22 = sprintf("%.10f", $22 - 0.005); $23 = sprintf("%.10f", $23 - 0.005) }'
 w="$(grep -m1 "separation energies and masses disagree" "$WORK/shifted/run.log")"
-if [ "$(warnings shifted)" -eq 1 ] && echo "$w" | grep -q "pair 2 .*pair 1 .*(-5.0 keV)" && completed shifted; then
+if [ "$(warnings shifted)" -eq 1 ] && grep -q "pair 2 .*pair 1 .*(-5.0 keV)" <<< "$w" && completed shifted; then
   ok "(b) S of pair 2 lowered by 5 keV: one warning (-5.0 keV), run completes"
 else bad "(b) 5 keV shift: $(warnings shifted) warning(s): ${w:0:200}"; fi
 
 model bare 'if ($6 == 1) { $18 = "1.00727646688" }'
 w="$(grep -m1 "separation energies and masses disagree" "$WORK/bare/run.log")"
-if echo "$w" | grep -q "(-511.0 keV).*1 electron mass"; then ok "(c) bare-proton mass among atomic masses: -511.0 keV with the electron-mass hint"
+if grep -q "(-511.0 keV).*1 electron mass" <<< "$w"; then ok "(c) bare-proton mass among atomic masses: -511.0 keV with the electron-mass hint"
 else bad "(c) bare proton: ${w:0:300}"; fi
 
 model massnum '$18 = sprintf("%d", $18 + 0.5); $19 = sprintf("%d", $19 + 0.5)'

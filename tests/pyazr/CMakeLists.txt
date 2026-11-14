@@ -36,9 +36,8 @@ add_test(NAME pyazr_physical_norm
                  ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
 set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A channel radius set with Session.set_channel_radius survives every later rebuild of the session
-# (another pair's radius, a nuclear-potential change, a mode switch); before 2026-11-02 each rebuild
-# re-read the .azr with only its own call's radius.  The wrapper checks the read-back radius.
+# A channel radius is a Project edit and a new session: the radii Project.set_pair writes are the session's, in
+# either order of the edits, and a scan over radii in one process gives every radius its own model.
 add_test(NAME pyazr_radius_override
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
@@ -57,9 +56,8 @@ add_test(NAME pyazr_api_model_value
                  ${CMAKE_CURRENT_SOURCE_DIR}/api_model_value_test.py)
 set_tests_properties(pyazr_api_model_value PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A rebuild (set_channel_radius, a potential change) keeps no Coulomb memo of the old radius, reads no
-# unchanged input file and prints the setup Notes once per session (before 2026-11-04: ~96 kB per new
-# radius, every file re-read, every Note reprinted; the 3H+d free-radius MCMC reached 239 GB).
+# Sessions of a radius scan in one process keep no Coulomb memo, read no unchanged input file again (the
+# process's input-file cache) and each print their setup Notes once (a free-radius MCMC once reached 239 GB).
 add_test(NAME pyazr_rebuild_resources
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_resources_test.py)
@@ -99,7 +97,7 @@ add_test(NAME pyazr_ec_final_state
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_final_state_test.py)
 set_tests_properties(pyazr_ec_final_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# write_output_files must produce the same files the binary does.
+# write_outputs must produce the same files the binary does.
 add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_files_test.py)
@@ -209,7 +207,7 @@ set_tests_properties(pyazr_thm_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THR
                      TIMEOUT 600)
 
 # vertex=constant: the S_c(E_lowest) memo follows the channel radius across
-# sessions in one process and after set_channel_radius on a live session.
+# sessions in one process, one after the other and alive at once.
 add_test(NAME pyazr_thm_vertex_memo_sessions
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_memo_sessions_test.py)
@@ -226,7 +224,7 @@ add_test(NAME pyazr_save_fit_norms
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_norms_test.py)
 set_tests_properties(pyazr_save_fit_norms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# write_output_files returns the project's own output directory.
+# write_outputs returns the project's own output directory.
 add_test(NAME pyazr_output_dir
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_dir_test.py)
@@ -550,7 +548,7 @@ add_test(NAME pyazr_hybrid_per_pair
 set_tests_properties(pyazr_hybrid_per_pair PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The hybrid potential as a format-3 record: its Coulomb radius against an independent integration (DOP853, R_C =
-# 5 fm), set_nuclear_potential(coulomb_radius=...) equal to the record, save_fit writing the record.
+# 5 fm), a Project edit of coulomb_radius equal to the record, save_fit keeping the record.
 add_test(NAME pyazr_potential_record
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/potential_record_test.py)
@@ -604,7 +602,7 @@ set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 # Project keeps a file's own layout (the lossless document): unedited round trips of every
 # project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
 # One mass table (docs/upgrade/project.md section 5, step 5): the engine's THM nuclei carry the nuclear masses of
-# pyazr/data/mass_1.mas20, the file pyazr.masses reads.
+# pyazr/data/mass_1.mas20, the file pyazr.sources.masses reads.
 add_test(NAME pyazr_thm_nuclide_masses
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_nuclide_masses_test.py)
@@ -627,7 +625,7 @@ add_test(NAME pyazr_coulomb_memo_transform
                  ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_memo_transform_test.py)
 set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# pyazr.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
+# pyazr.sources.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
 # engine's (m1 + m2 - M) c^2, and masses.fill_masses (Project.set_pair) rewrites only a pair's masses and S (2026-10-29).
 add_test(NAME pyazr_masses
          COMMAND ${Python3_EXECUTABLE}
@@ -837,7 +835,7 @@ add_test(NAME pyazr_project
 set_tests_properties(pyazr_project PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # save_fit of a format-3 project with norms="fitted" (the fitted nuisances written into their records), a changed
-# potential of a format-1/2 project refused with the conversion command, set_nuclear_potential's matching radius and step.
+# potential of a format-1/2 project refused with the conversion command, a record's matching radius and step.
 add_test(NAME pyazr_save_fit_format3
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_format3_test.py)
@@ -913,8 +911,8 @@ add_test(NAME pyazr_describe
                  ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
 set_tests_properties(pyazr_describe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
-# objective, gradient and nuisance term equal a fresh session's at the same radius.
+# The nuisance priors belong to the session's model: a session of a project edited to another radius, made after
+# another session evaluated its objective, gives the nuisance term 1 at the start, and the same numbers twice.
 add_test(NAME pyazr_rebuild_nuisance
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
@@ -929,9 +927,10 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # results_test: the Results payload against the program's AZUREOut_* and chiSquared.out (T1, T2, T3);
 # engine_jobs_test: the engine's fitters and MINOS as jobs against Session.fit_with_engine (T3), a stop on T2.
 # sampler_bands_test: emcee and the bands as jobs on a two-parameter copy of T3 against the Laplace approximation
-# (about 30 s).
+# (about 30 s).  thm_routes_test: the THM tab's routes on T2 and a THM copy of 18O_p_a_thm against the session's calls
+# and the program, the refusals on T1.
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
-        ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py)
+        ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py ui/thm_routes_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

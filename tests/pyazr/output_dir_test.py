@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""write_output_files reports the directory the engine wrote to.
+"""write_outputs reports the directory the engine wrote to.
 
 A project names its output directory in ``<config>`` (second line, relative
-to the run's working directory unless absolute).  write_output_files used to
+to the run's working directory unless absolute).  write_outputs used to
 return ``cwd/output`` whatever that line said, so a project writing to
 ``results/`` got a path to a directory that was empty or did not exist.
 Checked on tests/hybrid_potential (three elastic segments, seconds):
@@ -14,7 +14,7 @@ Checked on tests/hybrid_potential (three elastic segments, seconds):
   3. With an absolute directory elsewhere: likewise.
   4. The usual ``output/``: unchanged, ``cwd/output``.
   5. ``set_config(output_dir=<dir>)`` without a trailing "/" and a directory that does not exist: the engine reads
-     it as ``<dir>/`` and write_output_files creates it (the files used to land beside it as ``<dir>chiSquared.out``).
+     it as ``<dir>/`` and write_outputs creates it (the files used to land beside it as ``<dir>chiSquared.out``).
 
 Needs the compiled engine for 2-4; skips them cleanly.
 
@@ -74,8 +74,8 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(azr, cwd=work) as m:
         check("output_dir is cwd/results", m.output_dir == os.path.join(work, "results"),
               m.output_dir)
-        got = m.write_output_files()
-    check("write_output_files returns it", got == os.path.join(work, "results"), got)
+        got = m.write_outputs()
+    check("write_outputs returns it", got == os.path.join(work, "results"), got)
     check("the files are there", "chiSquared.out" in outfiles(got), outfiles(got))
     check("and not in output/", outfiles(os.path.join(work, "output")) == [],
           outfiles(os.path.join(work, "output")))
@@ -90,8 +90,8 @@ with tempfile.TemporaryDirectory() as tmp:
     m0.set_config(output_dir=elsewhere + "/")
     m0.save()
     with Session(os.path.join(work, AZR), cwd=work) as m:
-        got = m.write_output_files()
-    check("write_output_files returns the absolute directory",
+        got = m.write_outputs()
+    check("write_outputs returns the absolute directory",
           os.path.normpath(got) == os.path.normpath(elsewhere), got)
     check("the files are there", "chiSquared.out" in outfiles(elsewhere), outfiles(elsewhere))
     check("and not in output/", outfiles(os.path.join(work, "output")) == [])
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
     m0.set_config(output_dir=fresh)
     m0.save()
     with Session(os.path.join(work, AZR), cwd=work) as m:
-        got = m.write_output_files()
+        got = m.write_outputs()
     check("the directory is created and the files are in it",
           os.path.normpath(got) == os.path.normpath(fresh) and "chiSquared.out" in outfiles(fresh), outfiles(fresh))
     check("no file named after the directory beside it",
@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "usual")
     fresh_copy(work)
     with Session(os.path.join(work, AZR), cwd=work) as m:
-        got = m.write_output_files()
+        got = m.write_outputs()
     check("cwd/output, as before", got == os.path.join(work, "output"), got)
     check("the files are there", "chiSquared.out" in outfiles(got))
 

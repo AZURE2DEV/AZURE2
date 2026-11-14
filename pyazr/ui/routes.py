@@ -181,16 +181,39 @@ ROUTES = (
           "The session's channel functions of a pair (key) at c.m. energies e_cm (MeV): F, Fp, G, Gp, P, S, delta_hs, "
           f"open; l, radius (fm, 0: the channel radius), J; at most {MAX_ELEMENTS} energies per request.",
           args=("pair:int", "e_cm"), kwargs=("l:int", "radius:float", "J:float")),
+    Route("POST", "/api/session/thm_experiments", S, "engine.Engine.thm_experiments",
+          "Every THM experiment as a chi-squared evaluation at x profiles it (entries given over the working x): by "
+          "name, its data sets, background, points, chi2, status, norm, background coefficients, covariance, sigma "
+          "and the coherent background's parameters.", kwargs=("x",)),
+    Route("POST", "/api/session/thm_background", S, "engine.Engine.thm_background",
+          "The profiled norm and background of one THM experiment at x, with their covariance.",
+          args=("experiment",), kwargs=("x",)),
+    Route("POST", "/api/session/thm_lineshape", S, "engine.Engine.thm_lineshape",
+          "The Coulomb line shape of a THM experiment (lineshape=on) at c.m. energies (MeV) of x + A, the level "
+          f"poles of x: per exit pair zeta, eta_sb and per level |N_C|^2; at most {MAX_ELEMENTS} energies.",
+          args=("experiment", "energies"), kwargs=("x",)),
+    Route("POST", "/api/session/thm_vertex", S, "engine.Engine.thm_vertex",
+          "The THM entrance vertex of an experiment at c.m. energies (MeV) of x + A: per channel and level "
+          f"<|M_l|^2> over the spectator window and at p_s = 0, the window's nodes, reached; at most {MAX_ELEMENTS} "
+          "energies.", args=("experiment", "energies"), kwargs=("x",)),
+    Route("POST", "/api/session/thm_distortion", S, "engine.Engine.thm_distortion",
+          "The distortion factor R(E) of a THM experiment at c.m. energies (MeV) of x + A, with |M|^2, |M_PW|^2 and "
+          f"the spectator-F channel; at most {MAX_ELEMENTS} energies.", args=("experiment", "energies")),
+    Route("GET", "/api/thm/keys", V, "server.Server.thm_keys",
+          "The keys of <thm> (the options, an experiment's) as record kinds of a schema: value type, choices, unit, "
+          "doc (pyazr/ui/thm.py KEYS: the engine describes them by its grammar only)."),
     Route("GET", "/api/session/functions", V, "server.Server.session_functions",
-          "The session's functions as rows of the shape of /api/physics (pyazr/ui/physics.py SESSION_ROWS: the "
-          "session's methods have no table in the binding)."),
+          "The session's functions as rows of the shape of /api/physics (pyazr/ui/physics.py SESSION_ROWS and the THM "
+          "diagnostics of pyazr/ui/thm.py: the session's methods have no table in the binding); a row with `tab` is "
+          "drawn by that tab."),
     Route("POST", "/api/session/functions/{fn}", V, "server.Server.session_function_call",
           "A session function on {\"arguments\": {...}} (one value each, the axis a list or {from, to, points, "
           "spacing}) in the session worker, answered as /api/physics/{fn} answers (returns, units, status, its words, "
-          "the arguments as used, the Python text).", args=("fn",), spread="arguments",
-          serves=("engine.Engine.channel_functions",)),
+          "the arguments as used, the Python text; a THM call's facts and tables).", args=("fn",), spread="arguments",
+          serves=("engine.Engine.channel_functions", "engine.Engine.thm_experiments", "engine.Engine.thm_background",
+                  "engine.Engine.thm_lineshape", "engine.Engine.thm_vertex", "engine.Engine.thm_distortion")),
     Route("POST", "/api/outputs", V, "server.Server.outputs",
-          "Write the program's output files at the working x (pyazr's write_output_files) and copy them into the "
+          "Write the program's output files at the working x (pyazr's write_outputs) and copy them into the "
           "project's output directory (<config> output_dir): the files written.", kwargs=("rev",),
           serves=("engine.Engine.outputs",)),
     Route("GET", "/api/outputs", V, "server.Server.outputs_list",

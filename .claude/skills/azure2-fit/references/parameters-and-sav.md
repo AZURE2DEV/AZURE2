@@ -34,7 +34,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   vals = {t[0]: float(t[1]) for t in (l.split() for l in open(sav))
           if len(t) >= 2 and not t[0].startswith("#") and t[0] != "parametrization"}
   ```
-- `pyazr.bands.best_fit_params` raises "has N parameters but the model has M" on an old-format `.sav` in data mode.
+- `pyazr.bands.best_fit_params(s, path)` reads by name too: a row the file lacks keeps the session's value.
 
 ## Loading a parameter file in pyazr
 
@@ -46,9 +46,12 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   fixed values differ from the `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths
   were never updated). In one case 10 fixed widths off by up to 1.6 % gave χ² = 9925.03 against the CLI's 9868.04;
   with the whole file every `AZUREOut_*` line and `chiSquared.out` matched the CLI exactly.
-- `parameter_file=` matches names as the CLI does and puts the whole file into the engine; `bands.best_fit_params`
-  takes a file the same way. It does not change the free/fixed split (the CLI frees a parameter fixed at 0 that the
-  file sets nonzero) and refuses a file tagged with another basis; `s.parameters.read` refuses one too.
+- `parameter_file=` matches names as the CLI does and puts the whole file into the engine. `bands.best_fit_params(s,
+  path)` returns the file's fit vector without changing `s` (a second session made with `parameter_file=` reads it)
+  and raises `pyazr.ParameterError` when the file sets a fixed parameter to another value than `s` holds: then make
+  the session with `parameter_file=path`. `parameter_file=` does not change the free/fixed split (the CLI frees a
+  parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with another basis; `s.parameters.read`
+  refuses one too.
 - A session of the extrapolations (`pyazr.Session(path, extrapolations=True)`) is built from the `.azr`: open it with
   `parameter_file=path` as well.
 

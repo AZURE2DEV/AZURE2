@@ -82,16 +82,9 @@ def main() -> int:
         stale.unlink()
         print(f"removed stale {stale}")
 
-    with Session(str(out), extrapolations=True) as azr:  # a session for the extrapolations
+    # a session for the extrapolations, with the fit's parameter file (fixed values included) when given
+    with Session(str(out), extrapolations=True, parameter_file=args.params) as azr:
         x = np.asarray(azr.parameters.x0, float)
-        if args.params:
-            # param.sav has one line per parameter, fixed ones included, while
-            # the fit vector holds only the free ones -- so a length comparison
-            # never matches and would silently leave x at the .azr's values.
-            # best_fit_params does the mapping (and the extrapolation-mode
-            # case) properly.
-            from pyazr.bands import best_fit_params
-            x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         grid = azr.evaluate(x).data[0]          # the first extrapolation
         e = grid.energies

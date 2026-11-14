@@ -53,7 +53,7 @@ xs() { block "$1" "$2" | awk 'NF >= 5 { printf "%.12e %.12e %.12e\n", $1, $3, $(
 # maxrel A B -> largest relative difference of the third columns (and a check that energies and angles agree)
 maxrel() {
   paste "$1" "$2" | awk '
-    { if ($1 != $4 || $2 != $5) { print "grid"; exit }
+    { if (e) next; if ($1 != $4 || $2 != $5) { print "grid"; e = 1; next }
       d = $3 - $6; if (d < 0) d = -d; m = $6 < 0 ? -$6 : $6; if (m < 1e-300) m = 1e-300
       r = d / m; if (r > w) w = r; n++ }
     END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
@@ -128,7 +128,7 @@ gradcheck() {  # NAME ENV...
   local nrows worst
   nrows="$(wc -l < "$WORK/$name.rows" | tr -d ' ')"
   if [ "$nrows" -lt 5 ]; then
-    bad "(c) $name: gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/$name/run.log" | head -5; return
+    bad "(c) $name: gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/$name/run.log" | sed -n '1,5p'; return
   fi
   worst="$(awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a; g[NR] = $2; f[NR] = $3; j[NR] = $4 }
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e

@@ -337,7 +337,7 @@ With a ``<scatteringLengths>`` block the totals line ends with
 parts of one term of the objective, "model data".
 The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
-``write_output_files`` carries all three evaluated at the parameters it was
+``write_outputs`` carries all three evaluated at the parameters it was
 asked for (before October 2026 the API left them at zero or stale).
 
 modelData.out

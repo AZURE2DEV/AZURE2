@@ -329,7 +329,7 @@ def in_process(argv):
 
 def case_import_ensdf():
     import socket
-    from pyazr import nds
+    from pyazr.sources import nds
     page = json.load(open(ENSDF_PAGE))
 
     def web(url, params=None, timeout=60):

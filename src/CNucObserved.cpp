@@ -1,5 +1,6 @@
-// CNuc: the observed quantities of the current fit values, and one fit value set with what derives from it, for the
-// model data (ModelData.cpp), which compare observed widths and energies with literature values inside a fit.
+// CNuc: the observed quantities of the current fit values (a table), and one fit value set with what derives
+// from it, for the model data (ModelData.cpp), which compare observed widths and energies with literature values
+// inside a fit.
 #include <exception>
 #include <vector>
 
@@ -9,26 +10,34 @@
 #include "Config.h"
 #include "JGroup.h"
 
-bool CNuc::ObservedOfFitValues(const Config &configure) {
-  // TransformToBrune sets the bound-state normalization N_f^-1/2 of the formal basis from the Brune amplitudes; a
-  // calculation reads the one FillCompoundFromParams set, so it is put back.  The other slots written (transform,
-  // observed, external amplitude, W) are read only by the output and by ObservedWidths itself.
+ObservedLevelTable CNuc::EmptyObservedTable() const {
+  std::vector<int> numLevels, numChannels;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    numLevels.push_back(this->GetJGroup(j)->NumLevels());
+    numChannels.push_back(this->GetJGroup(j)->NumChannels());
+  }
+  return ObservedLevelTable(numLevels, numChannels);
+}
+
+std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &configure) {
+  // In Park's basis TransformToBrune recomputes the shift functions, which set the bound-state normalizations
+  // N_f^-1/2 with Park's J; a calculation reads the ones its own evaluation set, so they are put back.
   std::vector<double> sqrtNF;
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
       sqrtNF.push_back(this->Group(j)->GetLevel(la)->GetSqrtNFFactor());
-  bool ok = true;
+  std::optional<ObservedLevelTable> table = this->EmptyObservedTable();
   try {
-    this->TransformToBrune(configure, false);
-    this->ObservedWidths(configure);
+    this->TransformToBrune(configure, Messages::kQuiet, *table);
+    this->ObservedWidths(configure, *table);
   } catch (const std::exception &) {
-    ok = false;
+    table.reset();
   }
   std::size_t k = 0;
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
       this->Group(j)->GetLevel(la)->SetSqrtNFFactor(sqrtNF[k++]);
-  return ok;
+  return table;
 }
 
 void CNuc::SetFitLevelParameter(int j, int la, int ch, double value) {

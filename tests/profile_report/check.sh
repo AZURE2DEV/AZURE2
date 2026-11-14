@@ -44,7 +44,7 @@ r="$(reports "$WORK/calc/err.log")"
 first="$(echo "$r" | sed -n 1p)"; second="$(echo "$r" | sed -n 2p)"
 case "$first" in "set-up: "*"E-dependent values"*) ok "(a) menu 1: the set-up's report holds the energy-dependent values" ;;
   *) bad "(a) menu 1: first report '$first'" ;; esac
-case "$second" in "calculation: evaluation,points,"*) echo "$second" | grep -q "E-dependent" \
+case "$second" in "calculation: evaluation,points,"*) grep -q "E-dependent" <<< "$second" \
     && bad "(a) menu 1: the calculation's report holds energy-dependent values" \
     || ok "(a) menu 1: a 'calculation' report with the evaluation's stages only" ;;
   *) bad "(a) menu 1: second report '$second'" ;; esac
@@ -53,9 +53,9 @@ run fit '2\n\n\n7\n' AZURE_PROFILE=1
 r="$(reports "$WORK/fit/err.log")"
 n="$(echo "$r" | grep -c '^evaluation: ')"
 case "$(echo "$r" | sed -n 1p)" in "set-up: "*"E-dependent values"*)
-  [ "$n" -ge 1 ] && ! echo "$r" | grep '^evaluation: ' | grep -q "E-dependent" \
+  [ "$n" -ge 1 ] && ! grep -q "E-dependent" <<< "$(grep '^evaluation: ' <<< "$r")" \
     && ok "(b) menu 2: the set-up first, $n evaluation report(s) without the set-up's stages" \
-    || bad "(b) menu 2: $n evaluation report(s); $(echo "$r" | grep '^evaluation: ' | head -1)" ;;
+    || bad "(b) menu 2: $n evaluation report(s); $(echo "$r" | grep '^evaluation: ' | sed -n 1p)" ;;
   *) bad "(b) menu 2: first report '$(echo "$r" | sed -n 1p)'" ;; esac
 
 run plain '1\n\n\n7\n'

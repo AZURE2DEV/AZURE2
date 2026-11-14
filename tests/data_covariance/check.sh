@@ -58,7 +58,7 @@ segchi() { awk -F, '$1 ~ /^[0-9]+$/ { print $1, $2 }' "$WORK/$1/output/chiSquare
 run plain plain 1 ""
 run diag diag 1 ""
 if [ ! -s "$WORK/diag/output/covariance.out" ]; then
-  bad "diagonal covariance: no covariance.out"; grep -i "error" "$WORK/diag/run.log" | head -3
+  bad "diagonal covariance: no covariance.out"; grep -i "error" "$WORK/diag/run.log" | sed -n '1,3p'
 else
   worst="$(join <(segchi plain) <(segchi diag) | awk '{ d = $2 - $3; if (d < 0) d = -d; s = $2 < 0 ? -$2 : $2; if (s < 1) s = 1
                                                        if (d / s > w) w = d / s; n++ } END { printf "%.1e %d", w, n }')"
@@ -74,7 +74,7 @@ fi
 for m in dense rel; do
   run "$m" "$m" 1 ""
   if [ ! -s "$WORK/$m/output/covariance.out" ]; then
-    bad "$m: no covariance.out"; grep -i "error" "$WORK/$m/run.log" | head -3
+    bad "$m: no covariance.out"; grep -i "error" "$WORK/$m/run.log" | sed -n '1,3p'
     continue
   fi
   if [ -z "$PYTHON" ]; then
@@ -92,7 +92,7 @@ done
 if [ -s "$WORK/rel/output/covarianceModel.out" ] && [ ! -e "$WORK/dense/output/covarianceModel.out" ]; then
   ok "relvector run writes the frozen model to covarianceModel.out (the absolute one does not)"
 else
-  bad "covarianceModel.out: rel $(ls "$WORK/rel/output/covarianceModel.out" 2>&1 | head -1), dense $(ls "$WORK/dense/output/covarianceModel.out" 2>&1 | head -1)"
+  bad "covarianceModel.out: rel $(ls "$WORK/rel/output/covarianceModel.out" 2>&1 | sed -n 1p), dense $(ls "$WORK/dense/output/covarianceModel.out" 2>&1 | sed -n 1p)"
 fi
 
 # ---- (d) gradients ----------------------------------------------------------------------------------
@@ -107,7 +107,7 @@ for m in dense rel; do
   nrows="$(wc -l < "$WORK/g_$m.rows" | tr -d ' ')"
   kinds="$(awk '/^\[grad-check\] idx / { print $4 }' "$WORK/g_$m/run.log" | sort -u | tr '\n' ' ')"
   if [ "$nrows" -lt 20 ]; then
-    bad "$m: gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/g_$m/run.log" | head -5
+    bad "$m: gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/g_$m/run.log" | sed -n '1,5p'
     continue
   fi
   worst="$(awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a; g[NR] = $2; f[NR] = $3; j[NR] = $4 }

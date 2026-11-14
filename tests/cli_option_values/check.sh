@@ -39,21 +39,21 @@ probe() {
 refused() {
   local name="$1" text="$2"; shift 2
   probe "$@"
-  if [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q "^ERROR: .*$text" && printf '%s\n' "$out" | grep -q "Syntax: AZURE2" &&
-     ! printf '%s\n' "$out" | grep -q "Could not open"; then
-    ok "$name: refused, exit 2 ($(printf '%s\n' "$out" | grep -m1 '^ERROR'))"
+  if [ "$rc" = 2 ] && grep -q "^ERROR: .*$text" <<< "$out" && grep -q "Syntax: AZURE2" <<< "$out" &&
+     ! grep -q "Could not open" <<< "$out"; then
+    ok "$name: refused, exit 2 ($(grep -m1 '^ERROR' <<< "$out"))"
   else
-    bad "$name: exit $rc, $(printf '%s\n' "$out" | head -3 | tr '\n' ' ')"
+    bad "$name: exit $rc, $(printf '%s\n' "$out" | sed -n '1,3p' | tr '\n' ' ')"
   fi
 }
 # accepted NAME ENV ARGS...: no ERROR, the run goes on to the missing project (exit 255)
 accepted() {
   local name="$1"; shift
   probe "$@"
-  if [ "$rc" = 255 ] && ! printf '%s\n' "$out" | grep -q "^ERROR" && printf '%s\n' "$out" | grep -q "Could not open"; then
+  if [ "$rc" = 255 ] && ! grep -q "^ERROR" <<< "$out" && grep -q "Could not open" <<< "$out"; then
     ok "$name: accepted"
   else
-    bad "$name: exit $rc, $(printf '%s\n' "$out" | head -3 | tr '\n' ' ')"
+    bad "$name: exit $rc, $(printf '%s\n' "$out" | sed -n '1,3p' | tr '\n' ' ')"
   fi
 }
 

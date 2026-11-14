@@ -186,7 +186,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
   compound()->CalcShiftFunctions(configure());
-  compound()->TransformOut(configure());
+  const ObservedLevelTable observed = compound()->TransformOut(configure());
 
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
@@ -198,7 +198,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     if (!par.IsFixed()) rwa_.push_back(par.Value());
   }
 
-  all_physical_ = compound()->GetTransformParams(configure());
+  all_physical_ = compound()->GetTransformParams(observed);
   data()->Data().Abundances().AppendTo(all_rwa_, all_physical_);
   // Add missing parameters
   for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
@@ -733,6 +733,15 @@ double robust_stod(const std::string &str) {
 }
 
 // After every step: the caller's progress callbacks, and every 10 steps the output files of the best walker.
+ObservedLevelTable AZURECalcMCMC::StartObservedLevels() const {
+  // As the set-up of the parameter vectors transforms the start vector (FillCompoundFromParams, CalcShiftFunctions,
+  // TransformOut), on a copy.
+  std::unique_ptr<CNuc> start(compound()->Clone());
+  start->FillCompoundFromParams(all_rwa_);
+  start->CalcShiftFunctions(configure());
+  return start->TransformOut(configure());
+}
+
 void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps) const {
   if (iterationCallback_) {
     // The values come from RecordStep(), which has just recorded this
@@ -826,10 +835,8 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
 
             localData->WriteOutputFiles(configure(), localResults, true);
 
-            if (!run.useRWA) {
-              localCompound->TransformOut(configure());
-            }
-            WriteParametersOut(*localCompound, configure());
+            WriteParametersOut(*localCompound, run.useRWA ? StartObservedLevels() : localCompound->TransformOut(configure()),
+                               configure());
 
             // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav
             if (!rwaFullParams.empty() && rwaFullParams.size() == paramNames_.size()) {

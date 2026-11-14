@@ -1,9 +1,9 @@
 """EXFOR ratios to a Coulomb cross section as format-3 quantities (docs/upgrade/data_kinds.md sections 3.2, 4.3).
 
-The rules ``pyazr.nds.ExforData.format3_quantity`` and ``to_dataset`` follow: which EXFOR quantity codes are a ratio to
-Rutherford or Mott, when such an entry is refused, the format-3 label of its reaction and the text of its ``dataset``
-record.  Plain functions of an ``ExforData`` (its ``reaction``, ``dataset_id``, ``target``, ``projectile`` and
-``za``); no numbers are converted here.  Standard library only (``nds.py`` loads this file by its path).
+The rules ``pyazr.sources.nds.ExforData.format3_quantity`` and ``to_dataset`` follow: which EXFOR quantity codes are a
+ratio to Rutherford or Mott, when such an entry is refused, the format-3 label of its reaction and the text of its
+``dataset`` record.  Plain functions of an ``ExforData`` (its ``reaction``, ``dataset_id``, ``target``, ``projectile``
+and ``za``); no numbers are converted here.  Standard library only (``nds.py`` loads this file by its path).
 """
 import re
 

@@ -26,8 +26,9 @@ void RunReactionRate(ProgramRun &run) {
                             configure.rateParams.entrancePair, configure.rateParams.exitPair);
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
-  if (compound->ObservedWidthsAt(configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*compound, configure);
+  if (const std::optional<ObservedLevelTable> observed =
+          compound->ObservedWidthsAt(configure, run.params.GetMinuitParams().Params()))
+    WarnLargeRadiativeWidths(*compound, *observed, configure);
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM)
     compound->CalcShiftFunctions(configure);
   if (configure.rateParams.useFile)
@@ -58,15 +59,16 @@ int AZUREMain::operator()() {
   }
 
   configure().outStream << "Performing final parameter transformation..." << std::endl;
+  ObservedLevelTable observed;
   try {
-    compound()->TransformOut(configure());
+    observed = compound()->TransformOut(configure());
   } catch (GSLException e) {
     configure().outStream << e.what() << std::endl;
     configure().outStream << "Problem with output transformation.  Aborting."
                           << std::endl;
     return -1;
   }
-  WriteParametersOut(*compound(), configure());
+  WriteParametersOut(*compound(), observed, configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

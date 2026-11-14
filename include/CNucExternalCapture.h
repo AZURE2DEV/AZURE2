@@ -1,6 +1,7 @@
 #ifndef CNUCEXTERNALCAPTURE_H
 #define CNUCEXTERNALCAPTURE_H
 
+#include "ObservedLevelTable.h"
 #include <utility>
 #include <vector>
 
@@ -66,12 +67,15 @@ complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChann
                                const ExternalCaptureInputs &in, const Config &configure,
                                ExternalCaptureSlopes *slopes = nullptr);
 
-/*!
- * gamma^ext of the photon channel `channel` of level `level` in `group` (ExternalReducedWidthAt): the level's energy
- * and amplitudes are its input values (initial) or its transform slots (Brune values of the fit parameters), the
- * final state's likewise, with its stored N_f^(-1/2).
- */
-complex ExternalReducedWidth(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel, bool initial,
-                             const Config &configure);
+/// gamma^ext of the photon channel `channel` of level `level` in `group` (ExternalReducedWidthAt) at the input
+/// values: the level's and the final state's input energy and amplitudes, with the final state's stored N_f^(-1/2)
+/// (CNuc::TransformIn).
+complex ExternalReducedWidthOfInputs(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel,
+                                     const Config &configure);
+
+/// gamma^ext of the photon channel `channel` of level la of J-group j (1-based) at the Brune (Park) values of
+/// `table` (CNuc::TransformOut): the level's and the final state's energy, amplitudes and N_f^(-1/2) of the table.
+complex ExternalReducedWidthOfTable(CNuc &compound, const ObservedLevelTable &table, int j, int la,
+                                    const AChannel *channel, const Config &configure);
 
 #endif

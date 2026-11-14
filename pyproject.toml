@@ -21,12 +21,10 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 
-# What "import pyazr" needs.  mpmath and scipy are imported by Python formulas (pyazr.transform, pyazr.widths)
-# that are being replaced by bound engine functions; both go from this list when the last of those formulas goes.
+# What "import pyazr" needs: numpy (python -X importtime and sys.modules after the import: neither mpmath nor scipy
+# is imported; no module of the package imports mpmath).
 dependencies = [
     "numpy>=1.24",
-    "mpmath>=1.2",
-    "scipy>=1.7",
 ]
 
 # The version is read from pyazr/__init__.py (__version__) so it is stated in exactly one place.
@@ -39,11 +37,13 @@ Source = "https://github.com/rdeboer1/AZURE2"
 
 [project.optional-dependencies]
 # What the worked examples in pyazr/examples/ need, beyond the core.
-examples = ["matplotlib", "emcee", "multiprocess"]
+# scipy: the recipes fit_scipy.py and fit_zeus.py.
+examples = ["matplotlib", "emcee", "multiprocess", "scipy>=1.7"]
 zeus = ["zeus-mcmc"]
-# The web UI's server (python -m pyazr.ui project.azr); httpx for its tests and for scripts that use the API.
-web = ["fastapi", "uvicorn", "httpx"]
-all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
+# The web UI's server (python -m pyazr.ui project.azr); httpx for its tests and for scripts that use the API; scipy for
+# its fit job scipy_lbfgsb (pyazr/ui/jobs.py).
+web = ["fastapi", "uvicorn", "httpx", "scipy>=1.7"]
+all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc", "scipy>=1.7"]
 
 [project.scripts]
 # The command line (pyazr/cli.py; also python -m pyazr).  The program AZURE2 is installed beside it from the

@@ -270,7 +270,7 @@ refuse() {  # refuse LABEL CODE MD [SED]: the run stops with the code in an ERRO
   printf '%b' "$3" >> "$dir/m.azr"
   (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
   if grep -q "^ERROR: m.azr:[0-9]*: wg[.A-Za-z_]*: error $2: datum 'wg'" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1 ($2)"
-  else bad "not refused: $1 ($2)"; grep -i "error" "$dir/run.log" | head -3; fi
+  else bad "not refused: $1 ($2)"; grep -i "error" "$dir/run.log" | sed -n '1,3p'; fi
 }
 wg() { printf '<modelData>\\ndatum wg\\n    quantity resonance_strength\\n    level %s\\n    J %s\\n    reaction %s\\n    value 2.6 keV\\n    error 0.1 keV\\n%s</modelData>\\n' "$1" "$2" "$3" "${4:-}"; }
 refuse "wrong J^pi for the level ID" E_LEVEL_JPI "$(wg 5 2+ '15N(p,a)12C')"

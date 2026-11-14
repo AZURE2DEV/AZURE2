@@ -46,7 +46,7 @@ grep -q "WARNING: the calculation failed at segment 1 .*injected failure" "$WORK
   && ok "failed point: the run prints the warning" || bad "failed point: no warning in the log"
 t="$(total fail)"
 case "$t" in nan|-nan) ok "failed point: total chi2 is nan";; *) bad "failed point: total chi2 '$t' (expected nan)";; esac
-out="$(ls "$WORK/fail/output/"AZUREOut_*.out 2>/dev/null | head -1)"
+out="$(ls "$WORK/fail/output/"AZUREOut_*.out 2>/dev/null | sed -n 1p)"
 n="$(awk '$4 ~ /nan/ { n++ } END { print n + 0 }' "$out" 2>/dev/null)"
 [ "$n" = 1 ] && ok "failed point: one nan point in the output file" || bad "failed point: $n nan points in '$out'"
 

@@ -62,7 +62,7 @@ LEVEL="J^pi=0+, E=0.0000 MeV (J-group 1, level 1): J = -"
 refused() {  # NAME
   local d="$WORK/$1"
   grep -qF "$WARN" "$d/log" && grep -qF "$LEVEL" "$d/log" &&
-    ok "$1: start reported, the level named ($(grep -F "$LEVEL" "$d/log" | head -1 | sed 's/^ *//'))" ||
+    ok "$1: start reported, the level named ($(grep -F "$LEVEL" "$d/log" | sed -n 1p | sed 's/^ *//'))" ||
     bad "$1: no warning naming the level with J <= 0"
   grep -q "MCMC not started" "$d/log" && ok "$1: refused (no walker inside the support)" ||
     bad "$1: not refused"

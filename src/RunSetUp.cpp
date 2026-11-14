@@ -154,8 +154,9 @@ int SetUpObjective(ProgramRun &run) {
 
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
-  if (run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*run.compound, run.configure);
+  if (const std::optional<ObservedLevelTable> observed =
+          run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params()))
+    WarnLargeRadiativeWidths(*run.compound, *observed, run.configure);
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
   // in the first evaluation's report.

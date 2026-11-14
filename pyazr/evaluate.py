@@ -26,7 +26,7 @@ class EvaluatedData:
       [d.rows]``; one row per point, whitened where a data covariance joins points).  With a covariance joining data
       sets only the sum over the group has a meaning: ``chi2`` splits it as ``chiSquared.out`` does,
       ``sum(r[d.rows]**2)`` by the whitened rows; both add up to the group's chi-squared.
-    - In extrapolation mode (the session's ``<segmentsTest>`` grids) there are no data: every chi-squared field,
+    - In a session of the extrapolations (their grids) there are no data: every chi-squared field,
       ``norm``, ``values``, ``errors``, ``residuals`` and ``rows`` are ``None``; the arrays come from the engine's
       forward pass, and ``extra`` holds ``sfactor_conversion`` and, for an angular distribution, ``legendre``.
     - ``energies`` (MeV, c.m., after the energy shift), ``angles`` (deg, c.m.), ``excitation_energies`` (MeV),
@@ -114,8 +114,8 @@ class Evaluation:
     - ``data``: one :class:`EvaluatedData` per active data set, in the engine's order.
     - ``model_data``: the ``<modelData>`` rows (:class:`pyazr.model_data.ModelDatum`).
     - ``log_prob``: ``Objective.log_prob(x)``; ``excluded``: the point is outside the engine's sampler's support.
-    - ``has_data``: False for an evaluation of the extrapolations (a session in extrapolation mode): ``data`` are the
-      extrapolations, and ``objective``, ``chi2``, ``log_prob``, ``excluded`` are ``None``, ``terms`` is empty.
+    - ``has_data``: False for an evaluation of the extrapolations (``Session(file, extrapolations=True)``): ``data`` are
+      the extrapolations, and ``objective``, ``chi2``, ``log_prob``, ``excluded`` are ``None``, ``terms`` is empty.
     """
 
     BUILT_BY = "Session.evaluate(x)"
@@ -196,9 +196,9 @@ def _legendre_rows(flat):
 
 
 def _forward_pass(engine, x):
-    """The extrapolations at x from the engine's forward pass (what ``AZUREOut_*`` of extrapolation mode prints):
-    per grid the model value, c.m. energy, angle and excitation energy of each point, its S-factor conversion and,
-    for an angular distribution, its Legendre coefficients.  The engine's objective evaluation needs the data and
+    """The extrapolations at x from the engine's forward pass (what ``AZUREOut_*`` of a run of the extrapolations
+    prints): per grid the model value, c.m. energy, angle and excitation energy of each point, its S-factor conversion
+    and, for an angular distribution, its Legendre coefficients.  The engine's objective evaluation needs the data and
     is not run."""
     n = int(engine.update_segments_rwa(x))
     data = []
@@ -217,9 +217,9 @@ def _forward_pass(engine, x):
 
 def evaluate(session, x=None):
     """One engine evaluation of ``session`` (a :class:`pyazr.Session`) at the free vector ``x`` (default its start,
-    ``parameters.x0``): an :class:`Evaluation`.  In extrapolation mode its data sets are the extrapolations (a vector of
-    the data's layout is taken for its free R-matrix block, as the session's other calls take it) and it has no
-    chi-squared."""
+    ``parameters.x0``): an :class:`Evaluation`.  In a session of the extrapolations its data sets are the extrapolations
+    (a vector of the data's layout is taken for its free R-matrix block, as the session's other calls take it) and it
+    has no chi-squared."""
     has_data = session.mode == "data"
     with session_lock(session):
         x = np.asarray(session.parameters.x0 if x is None else x, float).ravel()

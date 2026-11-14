@@ -199,8 +199,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
         to->SetFitE(from->GetFitE());
         for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
       }
-    g->TransformOut(configure);
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
   }
   const auto t1 = std::chrono::steady_clock::now();
 

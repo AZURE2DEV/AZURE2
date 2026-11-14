@@ -83,7 +83,7 @@ for m in highl plain; do mkdir -p "$WORK/$m/output" "$WORK/$m/checks"; cp -r "$B
 awk -v extra="$HIGHL" '{ sub(/\r$/, "") } /^<\/levels>$/ { print extra } { print }' "$BASE13/13N.azr" > "$WORK/highl/t.azr"
 sed 's/\r$//' "$BASE13/13N.azr" > "$WORK/plain/t.azr"
 run highl; run plain
-if grep -q "WARNING: channel l = 11 (J = 10.5, pair 1) exceeds 10" "$WORK/highl/run.log" && [ -f "$WORK/highl/output/chiSquared.out" ]; then ok "(c) a p + 12C channel with l = 11 is flagged: $(grep -o 'WARNING: channel l = 11[^:]*' "$WORK/highl/run.log" | head -1), and the run completes"; else bad "(c) no warning for the l = 11 channel (or the run failed)"; grep -i "warning\|error" "$WORK/highl/run.log" | head -3; fi
+if grep -q "WARNING: channel l = 11 (J = 10.5, pair 1) exceeds 10" "$WORK/highl/run.log" && [ -f "$WORK/highl/output/chiSquared.out" ]; then ok "(c) a p + 12C channel with l = 11 is flagged: $(grep -o 'WARNING: channel l = 11[^:]*' "$WORK/highl/run.log" | sed -n 1p), and the run completes"; else bad "(c) no warning for the l = 11 channel (or the run failed)"; grep -i "warning\|error" "$WORK/highl/run.log" | sed -n '1,3p'; fi
 if ! grep -q "WARNING: channel l =" "$WORK/plain/run.log" && [ -f "$WORK/plain/output/chiSquared.out" ]; then ok "(d) the unmodified 13N prints no such warning"; else bad "(d) the unmodified 13N printed a channel-l warning or failed"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi

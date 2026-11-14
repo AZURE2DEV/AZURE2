@@ -69,8 +69,8 @@ run() {
 moddiff() {
   paste -d' ' <(tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }') \
               <(tr -d '\r' < "$WORK/$2/output/$OUT" | awk 'NF > 4 { print $1, $4 }') |
-    awk '{ if ($1 != $3) { print "ENERGY"; exit 1 } d = ($4 - $2) / $2; if (d < 0) d = -d; if (d > m) m = d; n++ }
-         END { printf "%.2e %d", m, n }'
+    awk '{ if (e) next; if ($1 != $3) { print "ENERGY"; e = 1; next } d = ($4 - $2) / $2; if (d < 0) d = -d; if (d > m) m = d; n++ }
+         END { printf "%.2e %d", m, n; exit e }'
 }
 # Largest relative difference of |M|^2, |M_PW|^2 and R of the distortion_point rows.
 rowdiff() {
@@ -140,7 +140,7 @@ if ran r_band && ran d_band; then
       || bad "R window against Simpson: $r"
     # DW: the model at the lowest and highest point, weight (kappa^2 + q^2)^-2,
     # q of each direction from its dw_vertex_point rows (MeV/c).
-    kappa="$(tr -d '\r' < "$WORK/d_band/output/thm_experiments.out" | awk '/^# k_aA/ { for (i = 1; i <= NF; i++) if ($i == "kappa") { print $(i + 2); exit } }')"
+    kappa="$(tr -d '\r' < "$WORK/d_band/output/thm_experiments.out" | awk '!f && /^# k_aA/ { for (i = 1; i <= NF; i++) if ($i == "kappa") { print $(i + 2); f = 1; break } }')"
     for j in $(seq 0 $NS); do
       qs="$(tr -d '\r' < "$WORK/d_s$j/output/thm_experiments.out" | awk '$1 == "dw_vertex_point" && $5 == 0 { printf "%s %s ", $2, $3 }')"
       tr -d '\r' < "$WORK/d_s$j/output/$OUT" | awk -v j="$j" -v qs="$qs" 'NF > 4 { print j, $1, $4, qs }'

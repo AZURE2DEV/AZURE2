@@ -83,22 +83,22 @@ class SessionPhysics:
 
     @engine_call
     def wigner_widths(self, params=None, eps=1e-4):
-        """``{free_index: Gamma_W}`` in eV -- the GUI's Wigner width per channel.
+        """``{free_index: Gamma_W}`` in eV: the engine's transformation of a probe vector, scaled by the Wigner limit.
 
-        ``Gamma_W = 2 P_l(E_r) gamma^2_W`` is what the AZURE2 GUI shows next to
-        each particle channel, and ``theta^2 = Gamma_c / Gamma_W``.  It needs
-        the penetrability at the level energy, which the API does not expose, so
-        this asks AZURE2 for it: every reduced-width amplitude is set to a tiny
-        ``eps`` and the model transformed, which makes the level-shift
-        denominator 1 and the J-group level mixing vanish to O(eps^2), leaving
-        ``Gamma_c(eps) = 2 P_c eps^2``.  One extra transform, evaluated with
-        AZURE2's own radii, boundary conditions and Coulomb functions.
+        What the number is: the fit vector ``params`` (default ``parameters.x0``) with every *free* particle
+        reduced-width amplitude set to ``eps`` and every free photon amplitude to 0 is given to :meth:`transform`
+        (the engine's transformation, what the program writes into ``<levels>``); a channel's result is
+        ``Gamma_W = |Gamma_c(probe)| / eps^2 * gamma_W^2`` with ``gamma_W^2`` the row's ``wigner_limit``.  The
+        fixed widths keep their values and the level energies are those of ``params``.  Only free particle channels
+        open at the level's energy appear (a closed channel has an ANC, not a width).
 
-        Only *free* channels appear: the transform returns non-fixed parameters
-        only.  Closed (sub-threshold) channels are omitted -- there
-        ``P_l = 0`` and AZURE2 reports an ANC rather than a width.  Level
-        energies are taken from ``params`` (default: the current
-        ``parameters.x0``), so the limits sit at the fitted resonance energies.
+        Where it is the single-channel ``2 P_l(E) gamma_W^2`` of the AZURE2 GUI (theta^2 = Gamma_c / Gamma_W): when
+        the probe makes the level's shift denominator 1 and leaves no mixing between the levels of a J-group, that is
+        in the Brune basis for a level whose particle widths are all free -- T1 and 13N agree with ``2 P gamma_W^2``
+        (P from :meth:`channel_functions` at the level's energy) to 5e-9.  Where it is not: a level with fixed
+        nonzero widths keeps their shift terms in the denominator (T2, Brune: the probe is 0.80-0.99 of ``2 P
+        gamma_W^2``), and where the levels of a J-group mix through the probe (the formal basis, closed channels) it
+        can differ by orders of magnitude (T2 formal up to 8e3, 17O from 0.05 to 1e4).
         """
         x = np.asarray(self.parameters.x0 if params is None else params, float)
         probe = x.copy()
@@ -151,7 +151,10 @@ class SessionPhysics:
         """Every channel's width made dimensionless -- a :class:`WidthTable`.
 
         Particle channels get the Wigner limit and ``theta^2 = Gamma/Gamma_W``
-        (plus ``theta^2_formal = gamma^2/gamma^2_W``); photon channels get the
+        (plus ``theta^2_formal = gamma^2/gamma^2_W``), with ``Gamma_W`` from
+        :meth:`wigner_widths` (the engine's transformation of a probe vector;
+        not the single-channel ``2 P gamma_W^2`` where a level has fixed widths
+        or the levels of a J-group mix: see there); photon channels get the
         Weisskopf single-particle estimate and the strength in W.u.  ``params``
         is a fit vector -- pass a fit result to report
         the fitted widths, or leave it out for the ``.azr``'s own values.

@@ -131,14 +131,14 @@ fi
 sed -e 's|    kind           infinite|    kind           layer\n    areal_density  1e18 atoms/cm2 fixed|' \
   "$HERE/models/yield_story.azr" > "$WORK/story/layer.azr"  # beside its data: --describe reads them from there
 msg="$("$AZURE2_BIN" --describe "$WORK/story/layer.azr" 2>&1)"
-if echo "$msg" | grep -q "yield per incident particle on the layer"; then
+if grep -q "yield per incident particle on the layer" <<< "$msg"; then
   ok "a yield on a target layer is built (the layer kernel; its limits: tests/layer_yield)"
 else
   bad "a yield on a target layer: $msg"
 fi
 grep -v '^    charge_state' "$HERE/models/yield_story.azr" > "$WORK/noq.azr"
 msg="$("$AZURE2_BIN" --validate "$WORK/noq.azr" 2>&1)"
-if echo "$msg" | grep -q "E_FIELD_REQUIRED" && echo "$msg" | grep -q "charge_state"; then
+if grep -q "E_FIELD_REQUIRED" <<< "$msg" && grep -q "charge_state" <<< "$msg"; then
   ok "a yield per uC without charge_state is refused (E_FIELD_REQUIRED)"
 else
   bad "the charge-state refusal: $msg"
