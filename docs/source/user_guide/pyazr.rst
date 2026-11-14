@@ -113,6 +113,7 @@ otherwise look up in the sources:
                            # (type, values, default, unit, grammar, doc), the rows the engine's parser reads
    k["nuclides"]           # the built-in nuclei of a THM experiment (beam=18O): Z, A, nuclear mass (u)
    k["optical_potentials"] # the global optical potentials (opticalAA=kd03): projectiles, reference, ranges
+   k["parameter_settings"] # a <parameterSettings> row (a prior or limits on a level parameter): fields, units
    s = pyazr.Session("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
                            # parameters (name, kind, unit, value, free), options in effect, output directory,
@@ -176,14 +177,16 @@ quotes the engine's ERROR lines and whose message holds every line the engine wr
 
 A library call is quiet: it prints nothing on standard output.  The engine writes what it does (the progress bars of
 a rate, the external-capture integrals it recomputes, a stale cache it does not use) on the process's standard
-output; during the set-up of a session and during a rate, pyazr points that output at a temporary file and hands the
-lines to Python's logger ``pyazr.engine`` (``pyazr/engine_text.py``): ERROR and WARNING lines at level WARNING (shown
-on standard error by Python's default handler), the others at INFO.  To see them all::
+output; during every call of a session (its set-up included) and during a rate, pyazr points that output at a
+temporary file and hands the lines to Python's logger ``pyazr.engine`` (``pyazr/engine_text.py``): ERROR and WARNING
+lines at level WARNING (shown on standard error by Python's default handler), the others at INFO.  The calls of an
+``Objective`` (a fit's or a sampler's every step) are not held.  To see them all::
 
    import logging
    logging.basicConfig(level=logging.INFO)
 
-While that redirection is on, whatever any thread of the process writes on descriptor 1 goes the same way.
+Python's own ``print`` is shown as before (also in a fit's ``progress`` callback): only what C code writes on
+descriptor 1 while a call is inside is held.
 
 Documented zeros stay zeros: ``channel_functions`` below threshold (E <= 0) gives the shift function alone, and an
 energy at which the Coulomb routine fails gives zeros; ``whittaker_wave`` gives ``W`` 0 or inf outside the double
@@ -547,6 +550,24 @@ the project unchanged, and the lines an edit does not touch keep their bytes.  N
    path = p.save("_variant.azr")                                      # the original stays as it was
    with p.session() as m:                                             # a calculation of the edited project
        print(m.evaluate().chi2)
+
+A prior or limits on a level parameter are an edit too (rows of ``<parameterSettings>``, which the engine applies to
+a free parameter in a fit, a sampler and the objective)::
+
+   p.set_parameter_setting("3/2- 3.5032", prior=(3.50, 0.01))          # the energy: prior centre, sigma (MeV)
+   p.set_parameter_setting("3/2- 3.5032", (1, 1, 0.5), limits=(1e3, 1e5))   # a channel's width: limits (eV)
+   p.parameter_settings()                                             # the rows, with the level and channel
+   p.set_parameter_setting("3/2- 3.5032", (1, 1, 0.5))                # both None: the row removed
+
+A session of the saved project has the prior as the objective's term ``nuisance priors`` and the limits as the
+parameter's ``bounds`` (converted to the fit's amplitude).  A channel's numbers are in the convention its row states
+(eV, fm^-1/2 for an ANC, MeV^1/2 for an amplitude).  A fixed parameter, an inactive level, a channel the level has
+not, a sigma that is not > 0 and limits out of order are refused.  The rows name levels by the engine's numbers
+(``Level 3 Energy (MeV)``: the parameter ``energy_3``), which follow the active levels: after adding, removing or
+switching off a level, ``parameter_settings()`` shows what each row names now.
+
+An edit that would leave a phase-shift data set or extrapolation without its partial wave (no active level with that
+J and a channel of its entrance pair with that l and s) is refused as the engine would refuse the project's session.
 
 A level is named by its label (``"3/2- 3.5032"``, as ``levels()`` gives it), by ``(J^pi, E_x)``
 within 1 keV, or by the ``ProjectLevel`` itself; ``levels()`` gives each level's rows, its compound

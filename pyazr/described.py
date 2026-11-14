@@ -328,10 +328,19 @@ def _build_kinds():
             "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
             "objects": objects, "thm": engine.thm_keys(), "config": _config_kind(engine),
             "pairs": _pairs_kind(), "description": _description_kind(),
+            "parameter_settings": _parameter_settings_kind(),
             "nuclides": {n: {"Z": z, "A": a, "mass": m} for n, z, a, m in engine.thm_nuclides()},
             "optical_potentials": {g["name"]: {"projectiles": g["projectiles"], "reference": g["reference"],
                                                "a_range": list(g["a_range"]), "e_range": list(g["e_range"])}
                                    for g in engine.thm_global_opticals()}}
+
+
+def _parameter_settings_kind():
+    """The fields of a <parameterSettings> row as Project reads and writes it (``kinds()["parameter_settings"]``):
+    ``fields`` (title, unit, doc of each field of :class:`pyazr.parameter_settings.ParameterSetting`) and ``columns``
+    (the columns after a row's label, in the engine's order)."""
+    from .parameter_settings import COLUMNS, FIELDS
+    return {"fields": {k: dict(v) for k, v in FIELDS.items()}, "columns": list(COLUMNS)}
 
 
 # How a kind of <config> entry of the engine's table (config_table()) is shown as a field of the schema's value types.

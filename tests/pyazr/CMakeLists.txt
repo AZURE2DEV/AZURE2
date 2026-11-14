@@ -1157,3 +1157,17 @@ add_test(NAME pyazr_library_calls
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/library_calls_test.py)
 set_tests_properties(pyazr_library_calls PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A Project edit that leaves a phase-shift data set or extrapolation without its partial wave is refused with its
+# three parts (the engine's set-up check, made at the edit), in agreement with the engine on T3.
+add_test(NAME pyazr_project_phase_shift
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_phase_shift_test.py)
+set_tests_properties(pyazr_project_phase_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A prior or a limit on a level parameter as a Project edit (<parameterSettings>): the session's objective holds the
+# prior, the parameter's bounds the limits; the rows read back; replaced, removed; refusals with their three parts.
+add_test(NAME pyazr_parameter_settings
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_settings_test.py)
+set_tests_properties(pyazr_parameter_settings PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
