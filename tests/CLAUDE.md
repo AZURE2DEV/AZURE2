@@ -64,6 +64,14 @@ case.
   `tools/check_doc_names.py` lists those that do not (it needs the build:
   `AZURE2_BIN`, `PYTHONPATH`, `PYAZR_ENGINE_DIR`; not a consistency check,
   since the pages show other programs' options too).
+- A `check.sh` starts a run with a command and its named options, e.g.
+  `"$AZURE2_BIN" fit --parameter-file=start.sav project.azr < /dev/null`
+  (`docs/source/reference/command_line.rst`, "Commands"; `AZURE2 --help`).
+  A command reads nothing from standard input, and a missing answer is
+  refused (exit 2) instead of taking the next line of a script.  The piped
+  menu answers (`printf '2\nn\n\n\n' | AZURE2 --no-readline ...`) of the
+  older tests still work; `tests/cli_eof` and `tests/cli_commands` check the
+  menu itself and that a command gives the menu's outputs.
 - Keep fixtures small: trim data files to the points the test needs. Keep
   every file under 1 MB.
 - pyazr tests print `skip:` and exit 77 when `pyazr`/`_azure2` cannot be

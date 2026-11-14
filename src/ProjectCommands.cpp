@@ -16,6 +16,7 @@
 #include "Config.h"
 #include "Predictions.h"
 #include "ProjectOptions.h"
+#include "RunRequest.h"
 #include "TargetStopping.h"
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/Describe.h"
@@ -262,11 +263,13 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   std::string described =
       WithOptions(json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record), json,
                   options);
-  // --json: the threads and the switches that can move a number with their sources, beside the options
+  // --json: the threads and the switches that can move a number with their sources, beside the options; the program's
+  // commands and their options (include/RunRequest.h)
   const std::size_t close = described.rfind('}');
   if (json && close != std::string::npos)
     described.insert(close, ",\n \"threads\": " + azure2::ThreadsJson(threads) + ",\n \"switches\": " +
-                                azure2::support::NumberSwitchesJson(environment) + "\n");
+                                azure2::support::NumberSwitchesJson(environment) + ",\n \"commands\": " +
+                                RunCommandsJson() + "\n");
   std::cout << described << std::flush;
   if (json) std::cout << std::endl;
   // the stopping of each target from the library: its source (text form only), or the refusal

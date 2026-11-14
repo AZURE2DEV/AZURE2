@@ -2,6 +2,72 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands`) — the program takes commands (first milestone)
+
+**Done**: `AZURE2 <command> [options] FILE` with the commands `calculate`, `fit`, `extrapolate`, `minos`, `rate`,
+`mcmc` (in a build with the sampler); the menu still runs without a command, its prompts, order and texts unchanged.
+One table of the questions of a run (`include/RunRequest.h`, `src/RunRequest.cpp`: `RunCommands()`,
+`MakeQuestions()`, `RunRules()`) is read by the command line's reader (`ReadRunCommand`), the menu (`RunMenu`,
+`src/RunMenu.cpp`), `--help` (`RunCommandsHelp`) and `--describe --json` (member `commands`, `RunCommandsJson`).
+One walk of the table turns the answers into the `Config` (`PrepareRun`, `src/RunPreparation.cpp`): with the menu it
+asks each question as it reaches it, so the menu's prompts and the project's messages (the external-capture check)
+keep their order; with a command the request is complete. The code after it in `main` does not know the reader.
+Moved out of `src/AZURE2.cpp` (1607 -> 958 lines): `inputEnded`, `readAnswer`, `readAnswerOrDefault`,
+`askYesNo`, `getInputLine`, `commandShell` (to `src/RunMenu.cpp`, the first five verbatim; the menu's lines now from
+the command table), `promptBandOptions`, `processCommand`, `getParameterFile`, `getTemperatureFile`, `getRateParams`,
+`getMCMCParams`, `getExternalCaptureFile` (replaced by the table's rows and `RunMenu::Ask`), `SectionText`,
+`readSegmentFile`, `checkExternalCapture` (to `src/RunPreparation.cpp`, the last verbatim), `struct SegPairs`,
+`struct MCMCParams` (into `RunRequest`).
+
+Inventory: every question the program asks (blank = the answer of an empty line; the menu asks again after an
+answer out of range unless said otherwise).
+
+| Mode | Prompt | Type, allowed | Blank | Sets | Option |
+|---|---|---|---|---|---|
+| all | `azure2:` (menu 1-7; 1-6 without the sampler) | whole number | asked again | the mode bits (`SelectCalculation`) | the command |
+| 4 | `Allowed Chi-Squared Variance:` | number >= 0 | asked again | `chiVariance` | `--delta-chi2=X` (required) |
+| 2, 3, 4 | `Calculate cross-section uncertainty band? (y/n)` | y/n (yes, 1, t, true / no, 0, f, false); a bad answer from a pipe stops (exit 1) | no | `CALCULATE_COVARIANCE_BAND` | `--covariance-band` (also `calculate`; without a command it answers the menu, as before) |
+| 2, 4 after a yes | `Scale covariance to reduced chi-squared = 1? (y/n)` | y/n | no | `SCALE_COVARIANCE_BY_CHI2` | `--scale-covariance` (refused without `--covariance-band`) |
+| all | `External Parameter File (leave blank for new file):` | readable file, relative to the project | none | `USE_PREVIOUS_PARAMETERS`, `paramfile` | `--parameter-file=FILE` |
+| 5 | `Reaction Rate Entrance Pair:` | whole number, not 0 | asked again | `rateParams.entrancePair` | `--rate-entrance=N` (required) |
+| 5 | `Reaction Rate Exit Pair:` | whole number >= -1, not 0; not the entrance (else both asked again) | asked again | `rateParams.exitPair` | `--rate-exit=N` (required) |
+| 5 | `Use temperatures from file (yes/no):` | yes or no in full | asked again | `rateParams.useFile` | which of the next options is given |
+| 5 file | `Temperature File Name:` | readable file | asked again | `rateParams.temperatureFile` | `--temperature-file=FILE` |
+| 5 range | `Reaction Rate Min Temp [GK]:`, `Max Temp`, `Temp Step` | numbers >= 0 | asked again | `rateParams.minTemp`, `maxTemp`, `tempStep` (-1 with a file) | `--temperature-min=T`, `--temperature-max=T`, `--temperature-step=T` |
+| all but 5, the run has external capture | `External Capture Amplitude File (leave blank for new file):` | readable file; read, not rewritten (`intEC.dat` is written only when the amplitudes are computed) | none | `USE_PREVIOUS_INTEGRALS`, `integralsfile` | `--capture-amplitudes=FILE` (not needed: a notice, ignored) |
+| 6 | `Number of Walkers (2-1000):` | whole number 2-1000 | asked again | sampler | `--walkers=N` (required) |
+| 6 | `Number of Steps (100-10000000):` | whole number 100-1e7 | asked again | sampler | `--steps=N` (required) |
+| 6 | `Initial Parameter Spread % (0.001-50) [default=5]:` | number in (0, 50] | 5 | sampler | `--parameter-spread=P` |
+| 6 | `Level Energy Spread keV (0.001-1) [default=1]:` | number in (0, 1] | 1 | sampler | `--energy-spread=E` |
+| 6 | `Number of Threads (1 or more):` | whole number >= 1 | asked again | sampler | `--sampler-threads=N` (required) |
+| 6 | `Use Reduced Width Amplitudes (yes/no):` | yes or no in full | asked again | sampler | `--basis=rwa\|physical` (required) |
+| 6 | `Overwrite existing samples.mcmc? (yes/no) [default=no]:` | yes or no | no | sampler | `--overwrite-samples` |
+
+No burn-in or thinning question exists (the sampler has none). At end of input a required answer stops the run
+(exit 1), an optional one takes its blank answer.
+
+**Verified** (build `work/b-commands`, 0 warnings): `tests/cli_commands` (new: by command = by menu for calculate,
+extrapolate with band, fit with band and scaling, minos, calculate from a parameter file, rate with a file and with
+a range to the total capture, mcmc in both bases; the refusals with exit 2; help, JSON and the manual agree;
+shown failing with the command line's defaults left unset and with the parameter file dropped from the shared
+path), `tests/cli_help`, `tests/cli_eof` (the menu at end of input, with and without readline). Evidence runs
+(`work/commands/compare.sh`: base build by menu, this build by menu, this build by command, fresh copies): every
+file identical and the same exit status for calculate and extrapolate on T1, T2, T3, 13N; fit on T1, T2, 13N and
+identical_pp_res; minos on identical_pp_res and T1; 13N reading its `intEC.dat` by `--capture-amplitudes`; rate on
+p12C (file, range to the total capture), n12C and T1; mcmc on 13N_fast in both bases. The base and this build's menu
+logs are identical but for timed progress bars (and, with two threads, the fit's `Iteration:` lines, whose
+numbering depends on the threads; with one thread identical); the command's log lacks only the menu and prompts.
+All projects in the three bases (by menu) against `tab-t67-1`: 887 / 851 / 887 identical (tag
+`tab-commands-1`); the eight fits (`fits_vs_base2.sh`) identical to the base build; `ctest -LE slow` (one
+thread) 265 of 266 before `pyazr_cli` was told that the program's `commands` member is not pyazr's; then
+`scripts/check.sh --quick` 266 of 266, and `cli_commands` (now registered in ctest, `tests/upgrade/CMakeLists.txt`)
+passes. No consistency check added (number 57 not taken).
+
+**Open**: the second milestone (the tests, examples, skills and pages on the commands; the menu and readline
+removed). The options file (`--options-file`, `AZURE_OPTIONS_FILE`) can still hold `--covariance-band` or
+`--scale-covariance`, which then apply to any command as they did to the menu; any other command option there is
+refused.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — pairs and THM columns; what a fit returns
 
 **Done** (`web_ui.md` section 11.10; findings 10 and 11 closed for the page):
