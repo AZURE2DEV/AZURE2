@@ -75,13 +75,13 @@ if have_engine:
             if len(t) == 5 and t[0].isdigit():
                 expected[int(t[0])] = float(t[1])
         with Session(azr, cwd=work) as mdl:
-            norms = mdl.parameters.norms
+            norms = mdl.parameters.of_kind("norm")
             check("two norm parameters (segments 1, 2): the layout is the ungrouped one",
                   [p.segment_key for p in norms] == [1, 2], [(p.name, p.segment_key) for p in norms])
             free = [p for p in norms if not p.fixed]
             check("only the leader's is free", [p.segment_key for p in free] == [1], [(p.segment_key, p.fixed) for p in norms])
             idx = free[0].free_index
-            x0 = np.asarray(mdl.params_rwa, float)
+            x0 = np.asarray(mdl.parameters.x0, float)
             c = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float)
             check("segment chi2 = the CLI's at the shared 1.2 (expected/chiSquared.out)",
                   all(abs(c[k - 1] - expected[k]) < 1e-5 * max(1.0, expected[k]) for k in expected),

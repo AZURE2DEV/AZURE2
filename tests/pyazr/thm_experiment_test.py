@@ -207,7 +207,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("2. the engine: shared norm and linear background")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         check("six free parameters", x.size == 6, x.size)
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -248,7 +248,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("3. derivatives through the profile (norm + linear background)")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         chi2 = s.evaluate(x).chi2
         r, J = s.objective().residuals_and_jacobian(x)
         check("objective().residuals_and_jacobian: residuals == residuals()", np.max(np.abs(r - s.objective().residuals(x))) == 0.0)
@@ -277,7 +277,7 @@ with tempfile.TemporaryDirectory() as tmp:
     plain_dir = project("plain")
     one_dir = project("one", [("A", [1], dict(background="none")), ("B", [2], dict(background="none"))])
     with Session(os.path.join(plain_dir, "run.azr"), cwd=plain_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         r0, J0 = s.objective().residuals_and_jacobian(x)
     with Session(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         r1, J1 = s.objective().residuals_and_jacobian(x)

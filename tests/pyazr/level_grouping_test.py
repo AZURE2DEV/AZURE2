@@ -60,8 +60,8 @@ for project, azr in CASES:
         check(f"{project}: the same {len(m0.levels())} levels from the interleaved lines", signature(m0) == signature(m1),
               f"{len(m0.levels())} vs {len(m1.levels())} levels")
         s0, s1 = Session(orig, cwd=d), Session(rev, cwd=d)
-        check(f"{project}: the engine reads the same parameters", sorted(np.asarray(s0.params_rwa).round(12)) ==
-              sorted(np.asarray(s1.params_rwa).round(12)), "")
+        check(f"{project}: the engine reads the same parameters", sorted(np.asarray(s0.parameters.x0).round(12)) ==
+              sorted(np.asarray(s1.parameters.x0).round(12)), "")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

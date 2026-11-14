@@ -93,7 +93,7 @@ def main():
             return d, azr
 
         def chi2(m):
-            return m.evaluate(np.asarray(m.params_rwa, float)).chi2
+            return m.evaluate(np.asarray(m.parameters.x0, float)).chi2
 
         R_STAR = 4.37
         d_ref, azr_ref = project("ref", radius=R_STAR)

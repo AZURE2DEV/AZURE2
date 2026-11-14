@@ -183,12 +183,16 @@ try:
         sd = s.describe()
         json_clean("Session.describe()", sd)
         check("Session.describe(): one entry per parameter", len(sd["parameters"]) == len(s.parameters))
-        check("Session.describe(): the free ones are params_rwa's",
-              [p["x"] for p in sd["parameters"] if p["free"]] == [float(v) for v in s.params_rwa])
+        check("Session.describe(): the parameters are the records of Session.parameters",
+              sd["parameters"] == json.loads(json.dumps([dict(p.to_dict(), bounds=[b if abs(b) != float("inf") else None
+                                                                                   for b in p.bounds])
+                                                         for p in s.parameters], default=float)))
+        check("Session.describe(): the free ones start at parameters.x0",
+              [p["start"] for p in sd["parameters"] if not p["fixed"]] == [float(v) for v in s.parameters.x0])
         check("Session.describe(): every parameter's unit is its kind's",
               all(p["unit"] == k["parameters"][p["kind"]]["unit"] for p in sd["parameters"]))
         check("Session.describe(): pairs and levels", len(sd["pairs"]) == len(s.pairs)
-              and len(sd["levels"]) == len(s.physical_levels()))
+              and len(sd["levels"]) == len(s.parameters.of_kind("energy")))
         rc, out = cli("--describe", "T1.azr", "--json", cwd=t1)
         names = [x["name"] for x in json.loads(out)["datasets"]]
         check("Session.describe(): the data sets of AZURE2 --describe", [x["name"] for x in sd["datasets"]] == names,

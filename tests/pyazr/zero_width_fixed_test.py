@@ -57,7 +57,7 @@ def worker(project, brune, ignore, out):
             res["fixed"] = sorted(p.name for p in a.parameters if p.kind == "width" and p.fixed)
             if project == "beam_profile_kernel" and brune == "0":
                 try:  # every parameter, physical, into the rows they come from
-                    a.save_fit(os.path.join(work, "snapshot.azr"), np.array(a.params_rwa, float), param_sav=False,
+                    a.save_fit(os.path.join(work, "snapshot.azr"), np.array(a.parameters.x0, float), param_sav=False,
                                verify=False)
                     res["save_fit"] = "ok"
                 except Exception as err:

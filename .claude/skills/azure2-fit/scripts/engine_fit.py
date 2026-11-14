@@ -55,9 +55,7 @@ def main(argv=None):
             print(f"engine_fit: unknown method {m!r}; the engine's fitters: {', '.join(known)}", file=sys.stderr)
             return 2
     try:
-        s = pyazr.Session(a.project)
-        if a.sav:
-            s.load_sav(a.sav)
+        s = pyazr.Session(a.project, parameter_file=a.sav)
         x0 = None
         if a.x_json:
             with open(a.x_json) as fh:

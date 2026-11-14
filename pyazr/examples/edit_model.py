@@ -103,7 +103,7 @@ def main() -> int:
     print(f"\nwrote edited model to {out}")
 
     with Session(str(out), cwd=str(here)) as azr:
-        x = np.asarray(azr.params_rwa, float)
+        x = np.asarray(azr.parameters.x0, float)
         chi2 = azr.evaluate(x).chi2
         npts = sum(len(e) for e in azr.energies)
         print(f"fresh session on the edited file: {azr.nsegments} segments, "

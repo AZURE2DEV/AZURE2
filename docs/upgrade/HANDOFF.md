@@ -2,6 +2,85 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page's sampler and bands
+
+**Done** (`web_ui.md` section 11.7).
+- The sampler as a job (`sample/emcee`, `pyazr/ui/jobs.py`): emcee on `Objective.log_prob` in one process, walkers
+  around the start point inside the fit's limits (a start outside refused naming the parameter), settings walkers,
+  steps, spread (the new setting type `number`), thin, seed, discard; progress per stored step (step, acceptance,
+  running τ); Stop between steps; the chain to `output/chain_<id>.npy` of the project with a JSON summary; the page
+  gets mean, sd, quantiles, τ, effective draws, split R-hat and the draws' covariance; a sampler started from a
+  sampler job continues its chain. State `finished` for a job that ran all its steps.
+- The bands as jobs: `bands/covariance` (linear at a fit's best point, `pyazr.bands.uncertainty_bands` through the
+  adapter's `linear_sigma`) and `bands/draws` (16/50/84 % of the model over draws of a chain, `models_at`); every
+  data set and extrapolation, in the engine's unit and as an S factor where offered. A job started from a job gets
+  that job's record as its source (`takes`: the result key it needs, 422 without); `follows` may name any method
+  of a kind. The Results tab draws the newest band job's band (flag "band", the source in the head, edges in the
+  CSV); the Fit tab shows the chain's summary and a band job's pointer.
+- Tests: `tests/pyazr/ui/sampler_bands_test.py` (new, ctest `pyazr_ui_sampler_bands`, 31 s), two node tests; each
+  rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread on T3 with two free parameters (`work/uifit2/walk_sampler.py`): chain sd over
+Laplace sd 0.9989 and 1.0011 (a grid of the posterior gives the Laplace values to 3e-5); band from 1000 draws over
+the linear band, median 0.994 over 333 points, all within 10 %. Bands and a short chain also run on T2 (THM,
+nuisances). All UI tests (routes, static, node, api, server, jobs, engine_jobs, sampler_bands, results) and the
+browser smoke test pass; the consistency test passes. Not run: sphinx (not installed in the environment).
+
+**Open.** The linear band spans the level parameters only (`pyazr.bands`), the band from draws every free
+parameter: they differ where nuisances are free. A killed sampler's chain is on disk but cannot be continued from
+the page (no result). The Results tab draws the band around the band job's start point, the model at the working x.
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page runs the engine's fitters and MINOS
+
+**Done** (`web_ui.md` section 11.6).
+- The Fit tab's job table has a fit row per row of the engine's fitter table (`pyazr.kinds()["fitters"]`, made by
+  `engine_rows` in `pyazr/ui/jobs.py`; the program's default MIGRAD first and the form's default), with the
+  fitter's doc and facts (switch, covariance, MINOS can follow), settings `max_calls` and, where allowed, `minos`;
+  a MINOS job after each fitter that allows it. The job runs `Session.fit_with_engine` in its worker (the adapter's
+  `fit_with_engine` in `pyazr/ui/engine.py`) with the job's progress (stage, LM's damping, calls counted on through
+  HESSE and MINOS) and stop request (a thread of the worker reads it, so it reaches a running evaluation). The
+  result: the engine's status in its words, errors as `param.sav` has them, covariance and correlation, MINOS
+  intervals; Accept and Undo as for the recipes. `SESSION_NOT_SERVED` no longer lists `fit_with_engine`.
+- The page: facts under the method and in the job table, further progress numbers by name, where errors come from.
+- Tests: `tests/pyazr/ui/engine_jobs_test.py` (new, ctest `pyazr_ui_engine_jobs`, 14 s), the generated rows in
+  `routes_consistency_test.py`, two node tests; each rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread (`work/uifit2/walk_engine.py`): every engine fitter on T3 and T2 ends at the
+objective of `fit_with_engine` (bit for bit) and of the program (12 digits; T2's plain MIGRAD has no switch);
+a stop on T2 answered in 0.2 s with one record after the request; Accept then the χ² as written within 3e-15
+relative of the job's; Undo restores the start χ² exactly. `routes_consistency`, `jobs`, `engine_jobs`, `node`,
+`static` and the browser smoke test (T1 converged, T2 stopped) pass; the consistency test passes. Not run: ctest
+through a build of this tree, the projects against the reference (no engine file changed).
+
+**Open.** The sampler and the bands (next on this branch). The fitter table has no column saying which fitters honour
+a call limit (`max_calls` is offered on every engine row); the engine gives no validity per MINOS interval.
+
+## 2026-11-14 (agent, rehearsal 63) — the skills ported to the one parameter vector
+
+**Done.** Every skill file under `.claude/skills/` uses the names of pyazr's one fit vector and one parameter table
+(the migration table at the end of `docs/source/user_guide/pyazr.rst`). Scripts: the nine `--sav` paths open the
+session with `Session(file, parameter_file=path)` (every value of the file, fixed ones included, as `load_sav` did,
+so the numbers stay); the eight `--params` options keep their flag and store it as `parameter_file` (the checker read
+`a.params` as the removed `s.params`; these already used `s.parameters.read`). Prose: `transform_rwa` and
+`transform_all_rwa` became `s.transform(x)`, `load_sav` and `full_rwa_from_sav` the `parameter_file=` session or
+`s.parameters.read`, the frozen probes `P.put(...)` on `of_level(...).of_kind("width").free`, `physical_levels()` the
+energy rows, `input_is_rwa` `width_is_amplitude`, `LevelKey` `level_label` or `(jgroup, level)`, the example
+`coulomb_functions.py` `channel_functions.py`; the old-format note says that `parameter_file=` now warns
+(`W_PARAMETER_FILE_NAMES`) and `parameters.read` stays silent.
+
+**Verified.** `tools/check_skills.py` 0 errors; the ten skill self-tests, `check_skills`, `check_skills_unit` and
+`repo_consistency` pass on the build of rehearsal 63; every changed prose call was run once on a copy of
+`tests/upgrade/T2`; no self-test passes `--sav` or `--params`, so four of those paths were run by hand on T2
+(`chi2_report`, `dump_residuals`, `fisher`, `thm_inspect`), the others not.
+
+**Lost.** Nothing a skill needed: no script wrote a parameter file. `Parameters.write` writes every row (a fixed one
+at its start), so a file can no longer be updated in place keeping its other columns.
+
+**Left for the later port** (untouched): `data_mode` / `extrap_mode`, `pyazr.nds`, `pyazr.masses`,
+`write_output_files`, `set_channel_radius`, `set_nuclear_potential`, `dimensionless_widths`, `wigner_widths`, the
+`Pair` / `LevelScheme` imports. The note in `azure2-fit/references/parameters-and-sav.md` that
+`bands.best_fit_params` raises on an old-format file in data mode was not re-checked (it reads by name now).
+
 ## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
 
 **Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the
@@ -245,6 +324,68 @@ the band byte for byte against the base build (outputs and standard output, prog
 **Open.** The web UI's job for `fit_with_engine` (`web_ui.md` section 12, finding 20); progress and stop of the band
 and of a session build; `Config::stopFlag` in the set-up loops; the at-limit report after MIGRAD names the start
 values (as before); `--use-nlopt`'s usage line says BOBYQA, the code runs SBPLX (`src/AZURE2.cpp`, not touched).
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-vector`) — pyazr: one parameter vector and one table
+
+**Done.**  Every call of a session takes the fit vector `x`; its start is `Session.parameters.x0`; physical values are
+`Session.transform(x)`.  Gone (no alias): `params_rwa`, `params`, `fixed_params`, `n_rmatrix`, `refresh_parameters`,
+`refresh_pairs`, `physical_levels`, `level_free_width_indices`, `without_level`, `only_level`, `norm_indices`,
+`shift_indices`, `energy_indices`, `transform_rwa`, `transform_all_rwa`, `transform_physical`, `read_sav`,
+`read_sav_basis`, `full_rwa_from_sav`, `load_sav`, `update_rwa_params_from_sav`, `update_sav_from_rwa_params`,
+`coulomb_functions`; `ParameterSet` (its twelve views, `fixed`, `indices`, `values`, `wigner_limits`, `by_level`,
+`by_physical_level`), `LevelKey`, the one-argument `put(x, values)` / `take(x)`, the five old field names
+(`prior_nominal`, `input_is_rwa`, `density_max`, `doppler_max`, `sample`).
+- `Session.transform(x)`: one physical value per row of `parameters` (the binding's `transform_all_rwa` of the full
+  vector; the rows after its block as in `x`, as `AZUREAPI::SetParamsAllRWA` builds them).
+- `Session(file, parameter_file=path)` (`pyazr/parameter_file.py`): the session takes every value of the file, fixed
+  ones included, when it is made and after a mode switch or rebuild (what `load_sav` did, by the engine's name rule);
+  not a `<config>` key (`session_options.NOT_OPTIONS`); in `options` so a worker rebuilds the same model; `save_fit`'s
+  check does not pass it on.  `bands.best_fit_params` makes the session take the file (private
+  `_take_parameter_file`).  `Parameters.read` / `write` are the free-vector files.
+- `describe()["parameters"]` is the records (`Parameter.to_dict()`, infinite bounds `None`); `levels` come from the
+  energy rows.  The web UI's adapter builds its page rows (`x`, `physical_value`, `free`, `x0`) from them, as before.
+- `session.py` 1621 -> 721 lines (its size row dropped): `save_fit` and the snapshot check moved into `snapshot.py`
+  (`save_fit(session, ...)`; the method is a thin `engine_call`), `wigner_widths`, `dimensionless_widths`,
+  `mass_number`, `scattering_lengths`, `park_norms`, `model_gradients`, `ec_integrals`, `ScatteringLength` into
+  `session_physics.py`.  `session_checks.fit_vector` checks a vector's length.
+- The binding's two messages of a wrong vector name `Session.parameters.x0` (`api/src/pybind_api.cpp`, strings only).
+- Ported: 23 binding tests' docstrings say they use `Session._engine` (by script, `work/pysess3/engine_doc.py`); tests,
+  examples, scripts by script (`work/pysess3/port3.py`: 194 `params_rwa`, 23 views, 27 `coulomb_functions` with
+  their keys, 15 field names, 12 `transform_rwa`, 4 `n_rmatrix`) and by hand (`hand3.py` and edits); the example
+  `coulomb_functions.py` is `channel_functions.py`; `deactivate_level.py`, `decompose_cross_section.py` select levels
+  by `level_label` and `Parameters.put`; the page's prior column reads `prior_centre` (`fitting.js`: it read the old
+  name, which the server never sent, so the column was empty).  Pages: `pyazr.rst` (the section "The fit vector and
+  the parameter table" replaces two; the kinds table, which was broken, is a list-table; "Parameter and output
+  files"; 25 rows of the migration table), `api.rst`, `gamma_decay.rst`, `output_files.rst`, `hybrid_potential.rst`,
+  `conventions.rst`, `spin_orbit_potential.rst`, `README.md`, `pyazr/CLAUDE.md`, `pyazr3.md`; the class scheme
+  (`ParameterSet` -> `Parameters`, regenerated, looked at).  The skills are left to the agents rewriting them.
+
+**Measured** (`work/pysess3/measure_transform.py`, at x0 x (1 + 1e-3 cos k)): `transform(x)[free][:n]` equals the
+binding's `transform_rwa(x)` and `transform(x)[:m]` its `transform_all_rwa(full, include_fixed=True)`, bit for bit,
+on T1, T2, T2 Park, T3, 13N, 15N_p_a; the tail equals `x`'s; `parameters.x0` equals `params_values_rwa()` and the
+records' `start`.
+
+**Tests whose assertions changed in more than names** (no tolerance changed): `sav_readers` (the old layout read by
+`Parameters.read` and by a session with `parameter_file=`; the write-back is `Parameters.write`, which writes every
+row, not the file's other columns), `sav_fixed_params` (sessions with `parameter_file=` in place of `load_sav`),
+`extrap_layout` (the caller-set vector part is gone: no settable vector; it checks x0 after the round trip),
+`physical_norm` (the "level block only" length check is now "the tail is x's"), `fixed_width_roundtrip` (check 3:
+one value per parameter), `describe` (the parameters equal the records), `physics_table` (the comparison with
+`coulomb_functions` is gone), `errors` (`without_level`'s wrong call is `of_level`'s; `update_sav_from_rwa_params`'s
+is gone), `thm_park` (the physical values compared on the R-matrix block, as before), `thm_profiled` and
+`thm_coherent_background` (free norms / shifts from the table), `parameter_kinds` (the alias check reads the field).
+
+**Verified** (build `work/b-pysess3`, 0 warnings): the consistency test; `ctest -R pyazr_ -LE slow -E
+pyazr_session_isolation -j1` (each test sets OMP 2, so -j1 keeps 2 threads): 128 of 130, then `pyazr_ui_node` fixed
+(its fixture named `prior_nominal`) and passing alone; `pyazr_objective_object` fails as on the start commit (its
+bound assertion; fixed on e3528379); T1, T2, T3, 13N x 3 bases with this build's program against `b-trial57`: 12 of 12
+identical.  On the merge of e3528379 (commit aec3ab3c): `ctest -LE slow -j1` without the four tests that need more
+than two threads (`pyazr_session_isolation`, `pyazr_park_gradient`, `pyazr_parallel_points`, `gsl_quiet`): 250 of 250;
+all projects x 3 bases (tag `tab-pysess3-1`) against `tab-t60-1` and `tab-t57-1`: Brune 887, formal 851, Park 887
+files, all identical.  Not run: the slow tests; those four tests.
+
+**Open**: the Python physics (`transform.py`, `widths.py`, `wigner_widths`, `dimensionless_widths`), `pyazr.system`,
+the mode switch and the session's edits; the libraries; unused bindings (`transform_rwa`, `coulomb_functions`, ... of
+`_azure2.Session` are still bound).
 
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the raw handle is `Session._engine`
 

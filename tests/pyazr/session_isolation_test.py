@@ -71,7 +71,7 @@ def worker(tmp, sequence):
     out = []
     for label in sequence:
         with Session(stage(tmp, PROJECTS[label] + ("-r" if label in RADIUS else ""))) as s:
-            x = np.asarray(s.params_rwa, float)
+            x = np.asarray(s.parameters.x0, float)
             parts = [np.concatenate([np.asarray(v, float).ravel() for v in [d.model for d in s.evaluate(x).data]]),
                      np.asarray(np.array([d.chi2 for d in s.evaluate(x).data]), float)]
             chi2, grad = s.objective().value_and_grad(x)

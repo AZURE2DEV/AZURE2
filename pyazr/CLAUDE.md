@@ -20,7 +20,11 @@ public names are a contract.
   from `Session.pair_records()`).  The field names, units and kinds are one table of the binding
   (`api/src/pybind_records.cpp`, `pyazr.kinds()["parameter_fields"]`, `["pair_fields"]`): never type a field name, a
   column position or a numeric kind code in Python; a new field is a row there.  The fit vector `x` is the only
-  vector (`x0`, `put`, `take`, `read`, `write`); `print(parameters.table())` shows what each row is.
+  vector of every call (`x0`, `put`, `take`, `read`, `write`; a selection is `of_kind`, `of_level`, `free`);
+  `print(parameters.table())` shows what each row is.  Physical values are `Session.transform(x)` (one per row, the
+  engine's transformation); `Session.describe()["parameters"]` is the same records as plain data.  A parameter file
+  with its fixed values is taken when the session is made (`Session(file, parameter_file=path)`,
+  `parameter_file.py`); no call sets a vector inside a live session.
 - Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
   `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
   which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are

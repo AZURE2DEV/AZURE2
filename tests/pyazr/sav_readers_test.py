@@ -10,16 +10,18 @@ an 8Be+alpha rate came out exactly 2x that way.  Pinned here on
 tests/identical_pp_res:
 
   * an old-layout file (no .shift.sqrt rows, no tag, one width nudged): the nudged
-    width is read, every missing row keeps the session's value, and
-    bands.best_fit_params returns a vector of the free-parameter length;
-  * update_sav_from_rwa_params writes rows back by name, appends the free
-    parameters the file lacks and keeps the tag line;
+    width is read (Parameters.read, Session(parameter_file=)), every missing row
+    keeps the session's value, and bands.best_fit_params returns a vector of the
+    free-parameter length;
+  * Parameters.write writes the tag line first and every parameter by name;
   * a new-layout file (tag first) reads every value; a `parametrization` row
     without the '#' (files of 2026-10-06) is skipped the same way;
   * a file with no name in common with the model is refused.
 
 Needs numpy and the compiled engine; exits 77 (skipped) without them.
 Run from anywhere:  python3 tests/pyazr/sav_readers_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -43,6 +45,7 @@ try:
     import numpy as np
     from pyazr import Session
     from pyazr.bands import best_fit_params
+    from pyazr.parameters import read_parameter_file
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -57,51 +60,49 @@ with tempfile.TemporaryDirectory() as tmp:
     sav = os.path.join(work, "output", "param.sav")
 
     with Session(azr) as m:
-        names = [p.name for p in m.parameters]
+        P = m.parameters
+        names = P.names
         allrwa = np.asarray(m._engine.params_all_rwa(), float)
-        fixed = np.asarray(m.fixed_params, float).round().astype(bool)
-        widths = [p for p in m.parameters if p.kind == "width" and not p.fixed]
+        x0 = P.x0
+        nfree = x0.size
+        widths = P.of_kind("width").free
         target = widths[0]
         nudged = allrwa[target.index] * 1.05
 
         # --- old layout: no .shift.sqrt rows, no tag, one width nudged
         with open(sav, "w") as fh:
-            for p in m.parameters:
+            for p in P:
                 if p.name.endswith(".shift.sqrt"):
                     continue
                 v = nudged if p.index == target.index else allrwa[p.index]
                 fh.write(f"{p.name:>28s} {v: .7e} {0.0: .7e}\n")
         nsqrt = sum(1 for n in names if n.endswith(".shift.sqrt"))
         check("the old-layout file is shorter than the model", nsqrt > 0, f"{nsqrt} sqrt rows")
-        full = m.full_rwa_from_sav(sav)
-        check("nudged width read from the old-layout file", np.isclose(full[target.index], nudged))
-        others = [i for i in range(allrwa.size) if i != target.index]
-        check("every other value unchanged (missing rows keep the session's)",
-              np.allclose(full[others], allrwa[others]))
-        m.update_rwa_params_from_sav()
-        check("update_rwa_params_from_sav gives the free vector",
-              len(m.params_rwa) == int((~fixed).sum()) and np.isclose(
-                  m.params_rwa[target.free_index], nudged))
+        x = P.read(sav)
+        check("nudged width read from the old-layout file", np.isclose(x[target.free_index], nudged))
+        others = [i for i in range(nfree) if i != target.free_index]
+        check("every other value unchanged (missing rows keep the start)", np.allclose(x[others], x0[others]))
+        with Session(azr, parameter_file=sav) as f:
+            full = np.asarray(f._engine.params_all_rwa(), float)
+            rest = [i for i in range(allrwa.size) if i != target.index]
+            check("a session made with the file holds it (missing rows keep the project's)",
+                  np.isclose(full[target.index], nudged) and np.allclose(full[rest], allrwa[rest]))
+            check("its x0 is the file's free vector",
+                  f.parameters.x0.size == nfree and np.isclose(f.parameters.x0[target.free_index], nudged))
         bf = best_fit_params(m, sav)
         check("bands.best_fit_params accepts the old layout",
-              bf.size == int((~fixed).sum()) and np.isclose(bf[target.free_index], nudged))
+              bf.size == nfree and np.isclose(bf[target.free_index], nudged))
 
-        # --- write-back by name appends the missing free rows and keeps a tag
-        with open(sav) as fh:
-            body = fh.read()
-        with open(sav, "w") as fh:
-            fh.write(f"{'#parametrization':>28s} {1.0: .7e} {0.0: .7e}\n" + body)
-        best = np.asarray(m.params_rwa, float)
+        # --- the file written by name: the tag first, every parameter, the values of x
+        best = P.x0
         best[target.free_index] = allrwa[target.index] * 1.10
-        m.update_sav_from_rwa_params(best)
         new = os.path.join(work, "output", "param.sav.new")
+        P.write(new, best)
         lines = [l.split() for l in open(new) if l.split()]
-        check("write-back keeps the tag line first", lines[0][0] == "#parametrization")
-        written = m.read_sav(new)
-        free_names = [p.name for p in m.parameters if not p.fixed]
-        check("write-back lists every free parameter (missing ones appended)",
-              all(n in written for n in free_names))
-        check("write-back updated the nudged width by name",
+        check("the written file has the tag line first", lines[0][0] == "#parametrization")
+        written = read_parameter_file(new)[1]
+        check("the written file lists every parameter", all(n in written for n in names))
+        check("the written file holds x's value of the nudged width",
               np.isclose(written[target.name], allrwa[target.index] * 1.10))
         check("numpy.loadtxt sees only parameter rows", np.loadtxt(new, usecols=(1,)).size == len(lines) - 1)
 
@@ -109,19 +110,25 @@ with tempfile.TemporaryDirectory() as tmp:
         for tagname in ("#parametrization", "parametrization"):
             with open(sav, "w") as fh:
                 fh.write(f"{tagname:>28s} {1.0: .7e} {0.0: .7e}\n")
-                for p in m.parameters:
+                for p in P:
                     fh.write(f"{p.name:>28s} {allrwa[p.index]: .7e} {0.0: .7e}\n")
-            full = m.full_rwa_from_sav(sav)
-            check(f"a file tagged '{tagname}' reads every value", np.allclose(full, allrwa))
+            basis, values = read_parameter_file(sav)
+            check(f"a file tagged '{tagname}' reads every value",
+                  basis == 1 and np.allclose([values[n] for n in names], allrwa))
 
         # --- a foreign file is refused
         with open(sav, "w") as fh:
             fh.write("foo_1 1.0 0.0\nbar_2 2.0 0.0\n")
         try:
-            m.full_rwa_from_sav(sav)
-            check("a file with no matching names is refused", False, "no error raised")
+            P.read(sav)
+            check("a file with no matching names is refused (Parameters.read)", False, "no error raised")
         except ValueError:
-            check("a file with no matching names is refused", True)
+            check("a file with no matching names is refused (Parameters.read)", True)
+        try:
+            Session(azr, parameter_file=sav).close()
+            check("a file with no matching names is refused (parameter_file=)", False, "no error raised")
+        except ValueError:
+            check("a file with no matching names is refused (parameter_file=)", True)
 
 print()
 if failures:

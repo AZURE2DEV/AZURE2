@@ -15,12 +15,13 @@ and its proton width free.  The proton width amplitude is scaled by 1.5; then
   1. save_fit writes a snapshot that reloads with the same chi2 (rel 1e-9)
      and the same amplitude for the fixed width (rel 1e-9);
   2. the fixed width in the snapshot is the physical value the fit had,
-     transform_all_rwa(..., include_fixed=True), not the one read in (which
-     it differs from by several per cent here);
-  3. transform_all_rwa without include_fixed still returns the free
-     R-matrix parameters only.
+     Session.transform(x), not the one read in (which it differs from by
+     several per cent here);
+  3. Session.transform(x) gives one value per parameter, fixed ones included.
 
 Run from anywhere:  python3 tests/pyazr/fixed_width_roundtrip_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -90,25 +91,22 @@ with tempfile.TemporaryDirectory() as tmp:
         k = names.index(fixed_name)
         check("the alpha width is fixed and the proton width free",
               ps[k].fixed and "width_2_1" in free, [(p.name, p.fixed) for p in ps[4:8]])
-        x = np.asarray(m.params_rwa, float).copy()
+        x = np.asarray(m.parameters.x0, float).copy()
         x[free.index("width_2_1")] *= 1.5
         chi2 = m.evaluate(x).chi2
         allx = m._all_rwa(x)
-        phys_all = np.asarray(m.transform_all_rwa(allx, include_fixed=True), float)
-        phys_free = np.asarray(m.transform_all_rwa(allx), float)
-        read_in = float(np.asarray(m.transform_all_rwa(
-            np.asarray(m._engine.params_all_rwa(), float), include_fixed=True))[k])
-        check("3. transform_all_rwa returns the free R-matrix parameters by default",
-              phys_free.size == m.n_rmatrix, (phys_free.size, m.n_rmatrix))
+        phys_all = m.transform(x)
+        read_in = float(m.transform(ps.x0)[k])
+        check("3. transform gives one value per parameter, fixed ones included",
+              phys_all.size == len(ps) and phys_all[ps.free_mask].size == len(free), (phys_all.size, len(ps)))
         print(f"  {fixed_name}: {read_in:.6g} eV as read, {phys_all[k]:.6g} eV "
               f"with width_2_1 x 1.5 (fixed amplitude {allx[k]:.6g})")
         saved, _ = m.save_fit(os.path.join(work, "saved.azr"), x)
 
     with Session(saved) as s:
-        chi2_back = s.evaluate(np.asarray(s.params_rwa, float)).chi2
+        chi2_back = s.evaluate(np.asarray(s.parameters.x0, float)).chi2
         amp_back = float(np.asarray(s._engine.params_all_rwa(), float)[k])
-        written = float(np.asarray(s.transform_all_rwa(
-            np.asarray(s._engine.params_all_rwa(), float), include_fixed=True))[k])
+        written = float(s.transform(s.parameters.x0)[k])
     print(f"  chi2 {chi2:.10g} before save_fit, {chi2_back:.10g} reloaded")
     check("1. the snapshot reloads with the fit's chi2 (rel 1e-9)",
           rel(chi2_back, chi2) < 1e-9, f"{chi2_back} vs {chi2}")

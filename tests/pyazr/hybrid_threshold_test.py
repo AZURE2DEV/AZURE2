@@ -7,7 +7,7 @@ DecayingSolution, HybridBoundShift); above it rho H'/H of the outgoing one.  Bui
 threshold from the undistorted Whittaker function, so S of tests/hybrid_potential (p + 12C, Woods-Saxon 20 / 3.6 /
 0.6 MeV, fm, a_c = 3.6 fm) jumped at E = 0 by 1.07 (l = 0), 0.92 (l = 1), 0.75 (l = 2) (work/so-note/threshold.py).
 
-Checks through `Session.coulomb_functions` (S at the channel radius, E <= 0 included), pair 1, l = 0-2:
+Checks through `Session.channel_functions` (S at the channel radius, E <= 0 included), pair 1, l = 0-2:
   (1) |S(E) - S(0)| <= 1e-3 for |E| <= 1e-3 MeV, on both sides and in the closed band (eta > 100, E < 8e-5 MeV,
       where S = 2 S(0) - S(-E)); dS/dE is about 0.3-0.8 MeV^-1 there, so 1e-3 MeV moves S by < 1e-3;
   (2) S(-1.94351 MeV) (the 13N ground state) against the independent DOP853 integration
@@ -58,12 +58,12 @@ try:
     A = Session(os.path.join(work, "hybrid_potential.azr"), cwd=work)
     near = np.array([-1e-3, -1e-4, -1e-5, -1e-7, 0.0, 1e-7, 1e-5, 5e-5, 1e-4, 1e-3])
     for L in (0, 1, 2):
-        S = A.coulomb_functions(1, near, L=L)["S"]
+        S = A.channel_functions(1, near, l=L)["S"]
         s0 = S[near == 0.0][0]
         jump = float(np.max(np.abs(S - s0)))
         check(f"l = {L}: S continuous through threshold (max |S(E) - S(0)| {jump:.1e} for |E| <= 1 keV, S(0) {s0:.5f})",
               jump <= 1e-3, f"{jump:.3e} > 1e-3")
-        gs = A.coulomb_functions(1, np.array([-1.94351]), L=L)["S"][0]
+        gs = A.channel_functions(1, np.array([-1.94351]), l=L)["S"][0]
         d = abs(gs - ref[("S", L, -1.94351)])
         check(f"l = {L}: S(-1.94351 MeV) = {gs:.8f} against DOP853 to {d:.1e}", d <= 1e-6, f"{d:.3e} > 1e-6")
 except Exception as e:  # pragma: no cover

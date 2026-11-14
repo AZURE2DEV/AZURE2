@@ -91,7 +91,7 @@ for project, azr, hybrid in CASES:
         check(f"{project}: converted to format 3", rep["ok"] and _azure2.project_format(open(f3, "rb").read()) == 3)
         a = Session(os.path.join(d, azr), cwd=d)
         b = Session(f3, cwd=d)
-        x = np.asarray(a.params_rwa, float)
+        x = np.asarray(a.parameters.x0, float)
         ca, cb = a.evaluate(x).chi2, b.evaluate(x).chi2
         check(f"{project}: the conversion's chi2 = the tree's project's ({ca:.10g})",
               abs(ca - cb) <= 1e-12 * max(1.0, abs(ca)), f"{ca} vs {cb}")

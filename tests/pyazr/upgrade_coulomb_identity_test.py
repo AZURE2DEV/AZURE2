@@ -81,13 +81,13 @@ def channel(project, pair_key, m1, m2, z1, z2, a):
 def _channel(work, project, pair_key, m1, m2, z1, z2, a, mu, energies, worst):
     with Session(up.project_copy(project, work), data_mode=False) as m:
         for l in range(5):
-            cf = m.coulomb_functions(pair_key, energies, L=l)
+            cf = m.channel_functions(pair_key, energies, l=l)
             for i, e in enumerate(energies):
                 k = np.sqrt(2.0 * mu * e) / HBARC
                 rho = k * a
                 eta = z1 * z2 * ALPHA * np.sqrt(mu / (2.0 * e))
                 F, dF, G, dG = mp_functions(l, eta, rho)
-                got = (cf["F"][i], cf["dF"][i], cf["G"][i], cf["dG"][i])
+                got = (cf["F"][i], cf["Fp"][i], cf["G"][i], cf["Gp"][i])
                 for n_, (x, y) in enumerate(zip(got, (F, dF, G, dG))):
                     key = "Fsmall" if (z1 * z2 == 0 and l >= 3 and n_ < 2) else "F"
                     worst[key] = max(worst[key], abs(x - y) / abs(y))

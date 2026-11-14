@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory() as work:
         for e in E_KEV:
             f.write(f"{e:g} 0 1 1\n")
     with Session(os.path.join(work, "m.azr"), cwd=work) as m:
-        model = np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.params_rwa, float)).data]])
+        model = np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.parameters.x0, float)).data]])
 with open(os.path.join(HERE, "models", "data", "yield_curve.dat"), "w") as f:
     f.write("# E_lab(keV) unused Y(counts/uC) dY: synthetic, the model of yield_story.azr x (1 + 0.04 sin(2.3 i)), "
             "4 % errors (make_story.py)\n")

@@ -331,8 +331,8 @@ try:
             free.set_channel(lv2, c.pair, c.l, c.s, fixed=False)
     run = free.save(os.path.join(work, "run.azr"))
     with Session(run, cwd=work) as s:
-        x0 = np.asarray(s.params_rwa, float)
-        phys = np.asarray(s.transform_rwa(x0), float)
+        x0 = np.asarray(s.parameters.x0, float)
+        phys = np.asarray(s.transform(x0)[s.parameters.free_mask], float)
         rm = [p for p in s.parameters if not p.fixed and p.free_index is not None
               and p.kind in ("energy", "width")]
         labels = {ma.parameter_label(p, s.pairs): float(phys[p.free_index]) for p in rm}
@@ -345,7 +345,7 @@ try:
     out, written, skipped = ma.write_averaged_azr(run, os.path.join(work, "re.azr"), labels)
     check("all written", not skipped and len(written) == len(labels))
     with Session(out, cwd=work) as s2:
-        chi = s2.evaluate(np.asarray(s2.params_rwa, float)).chi2
+        chi = s2.evaluate(np.asarray(s2.parameters.x0, float)).chi2
     check("the session's own values give back its chi2", close(chi, x0chi, 1e-6),
           f"{chi} vs {x0chi}")
 finally:

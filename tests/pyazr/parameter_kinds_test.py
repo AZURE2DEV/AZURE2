@@ -20,6 +20,8 @@ project format 3, whose parameter names are made from the records' names, docs/u
 Needs the compiled engine; without it exits 77 (ctest: Skipped).
 
 Run from anywhere:  python3 tests/pyazr/parameter_kinds_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import importlib.util
 import os
@@ -136,8 +138,8 @@ def check_project(label, path, cwd, want_kinds):
         check(f"{label}: Parameter.kind is the record's key",
               [p.kind for p in params] == [r["kind"] for r in records])
         ab = [(p, r) for p, r in zip(params, records) if r["kind"] == "abundance"]
-        check(f"{label}: Parameter.sample is the record's sample name",
-              all(p.sample == r["sample_name"] for p, r in ab))
+        check(f"{label}: Parameter.sample_name is the record's sample name",
+              all(p.sample_name == r["sample_name"] for p, r in ab))
         cb = [(p, r) for p, r in zip(params, records) if r["kind"] == "cbkg"]
         check(f"{label}: cbkg Parameter.thm_* are the record's",
               all((p.thm_experiment, p.thm_jpi, p.thm_exit_key, p.thm_channels, p.thm_term) ==

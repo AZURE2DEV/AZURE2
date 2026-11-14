@@ -12,7 +12,7 @@ The tools are `scripts/lsq_fit.py` (least squares on the rows and Jacobian, stag
 ```python
 s = pyazr.Session("model.azr")
 print(s.describe())               # pairs, levels, data sets, parameters, options in effect
-print(s.parameters.table())       # one row per parameter: name, kind, unit, value, free, bounds, owner
+print(s.parameters.table())       # one row per parameter: name, kind, unit, start, free, bounds, owner
 f = s.objective()
 f.names, f.x0, f.bounds           # the free vector: names, start, the fit's limits (-inf/inf where none)
 print(s.evaluate(f.x0).table())   # objective, terms, one line per data set
@@ -44,7 +44,7 @@ r, J = f.residuals_and_jacobian(x)   # rows with sum(r**2) == f(x), and dr/dx
   (a prior row keeps its derivative).
 - `f.log_prob(x)` is −f(x)/2, −∞ outside the fit's limits and where Park's J < 0: the program's sampler's rule.
 - **Only the fit vector is an input.** Every call takes the free vector of the basis the session fits in; physical
-  values for a report come from `s.transform_rwa(x)` or the saved project.
+  values for a report come from `s.transform(x)` or the saved project.
 - **Threads.** Evaluations spread over `OMP_NUM_THREADS`; with several worker processes keep processes × threads
   within the cores you hold. A session cannot be pickled: one session per worker process
   (`pyazr/examples/fit_emcee.py`).

@@ -49,15 +49,15 @@ correlated (one p + p test: parabolic errors 0.4 % against 1.3 % in Brune).
 - **J_λ must stay positive.** A Park set with J_λ ≤ 0 has no R-matrix meaning (one channel: Γ < 2P/(dS/dE)). The
   objective adds Σ(J_λ/10⁻³)² over J_λ < 0 (`Total-Park-Chi-Squared` in `chiSquared.out`), MCMC rejects such points, and
   a run ending there prints `**WARNING: Park norm J = ... is not positive`. pyazr: `m.park_norms(x)` (one J per level,
-  `physical_levels()` order), `m.evaluate(x).terms["Park J > 0"]`. Levels that saturate in Brune (amplitudes of 10²–10³
-  MeV^½) appear in Park as J_λ → 0.
+  in the order of `m.parameters.of_kind("energy")`), `m.evaluate(x).terms["Park J > 0"]`. Levels that saturate in
+  Brune (amplitudes of 10²–10³ MeV^½) appear in Park as J_λ → 0.
 - **Do not expect a different minimum.** The p + p test reaches χ² 99.6121 (Park) and 99.6123 (Brune), widths equal
   to 2 × 10⁻⁵. Near J_λ → 0 the Park form loses precision by cancellation (8 × 10⁻⁷ at the worst point of one
   ¹⁷O model).
 - **Gradient checks resolve about 10⁻⁵ in Park, 10⁻⁷ in Brune**: dS/dE in the level matrix is differentiated
   numerically. This is expected, not a defect.
 - Park (`--use-park`, pyazr `use_park=True`) implies Brune and excludes RMC. Physical widths of a Park vector:
-  `Session(file, use_park=True).transform_rwa(x)`. Park-mode MCMC and covariance bands share Brune's code paths and
+  `Session(file, use_park=True).transform(x)`. Park-mode MCMC and covariance bands share Brune's code paths and
   are not separately tested.
 - **Check a change of basis by numbers**: `scripts/basis_compare.py model.azr` evaluates the project's values in the
   three bases; the models agree to rounding (T1: 1.5e-13 Park, 1.9e-12 standard) or the engine refuses the standard

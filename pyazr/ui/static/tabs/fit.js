@@ -8,7 +8,7 @@
 // or after a second with its progress); a reload finds it again in GET /api/jobs.
 
 import { pathOf } from "../api.js";
-import { filterParameters, isFinal, jobToShow, kindsOf, matrixCsv, matrixRows, parameterRows,
+import { chainRows, filterParameters, isFinal, jobToShow, kindsOf, matrixCsv, matrixRows, parameterRows,
   shownColumns } from "../fitting.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, download, h, section } from "../ui.js";
@@ -54,6 +54,8 @@ export async function render(ctx, el, args) {
   el.appendChild(params ? parametersSection(ctx, params, x, job, records, view)
     : section("Parameters", h("div.warn-box", {}, `The parameter table needs the session of the current text: `
       + `${refused?.what || ""}`)));
+  if (job?.result?.quantiles) el.appendChild(chainSection(job));
+  if (job?.result?.bands) el.appendChild(bandsSection(job));
   const fitted = job?.result?.covariance;
   if (fitted) el.appendChild(matricesSection(job));
   if (job && !isFinal(job.state)) follow(ctx, job, right);
@@ -180,6 +182,35 @@ function xEditor(ctx, r) {
   return input;
 }
 
+/** A sampler's summary: per parameter mean, sd, quantiles, autocorrelation time, effective draws, split R-hat (no
+ * draw: the chain is in its file). */
+function chainSection(job) {
+  const r = job.result;
+  const q = (p, doc) => ({ key: `q${p}`, title: `${p} %`, numeric: true, digits: 8, doc });
+  const t = renderTable(document, { rows: chainRows(r), rowKey: (row) => row.name, withFilter: false,
+    label: "chain summary", caption: `The chain of job ${job.id} after its burn-in of ${r.discard} stored steps: `
+      + `${r.draws_used} draws of ${r.walkers} walkers (the server's summary)`,
+    columns: [{ key: "name", title: "parameter" }, { key: "mean", title: "mean", numeric: true, digits: 8 },
+      { key: "sd", title: "sd", numeric: true, digits: 4, doc: "the standard deviation of the draws" },
+      q("2.5", "the 2.5th percentile"), q("16", "the 16th percentile"), q("50", "the median"),
+      q("84", "the 84th percentile"), q("97.5", "the 97.5th percentile"),
+      { key: "tau", title: "τ", numeric: true, digits: 4, doc: "emcee's integrated autocorrelation time, in stored "
+        + "steps; a chain shorter than about 50 τ is not quoted" },
+      { key: "n_eff", title: "effective draws", numeric: true, digits: 4, doc: "draws over τ" },
+      { key: "rhat", title: "split R̂", numeric: true, digits: 5, doc: "every walker's series cut in two halves "
+        + "taken as chains (Gelman et al.); near 1 is necessary, not sufficient, for an ensemble" }] });
+  return section("Chain", t.element, h("p.hint", {}, `The chain: ${r.chain} (stored steps × walkers × parameters, `
+    + `numpy); the summary beside it: ${r.summary}. Acceptance ${formatNumber(r.acceptance, 3)}. `
+    + "A sampler job started from this job's best point continues the chain."));
+}
+
+/** A band job's result: where it is drawn. */
+function bandsSection(job) {
+  const b = job.result.bands;
+  return section("Bands", h("p", {}, `${b.how}. ${b.sets.length} data sets and extrapolations; the Results tab draws `
+    + "the band of the newest band job of each.", " ", h("a", { href: "#/results" }, "→ Results")));
+}
+
 /** The covariance and the correlation of a fit (the recipe's, by name), each as a table and as CSV. */
 function matricesSection(job) {
   const r = job.result;
@@ -192,7 +223,7 @@ function matricesSection(job) {
       () => download(`${name}_${job.id}.csv`, matrixCsv(m))));
   };
   const details = h("details.matrices", {}, h("summary", {}, `Covariance and correlation (${r.covariance.names.length}`
-    + ` free parameters, from ${r.errors ? "HESSE" : "the recipe"})`),
+    + ` free parameters, from ${r.errors_from || "the recipe"})`),
   one("correlation", r.correlation, 3, "correlation"), one("covariance", r.covariance, 4, "covariance"));
   return section("Covariance", details);
 }

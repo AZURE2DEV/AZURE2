@@ -39,12 +39,12 @@ AZR = os.path.join(PROJECT, "hybrid_potential.azr")
 def chi2(model):
     """Chi-squared at the model's *current* parameters.
 
-    Always re-read ``params_rwa`` rather than caching it across a potential
+    Always re-read ``parameters.x0`` rather than caching it across a potential
     change: the potential moves the penetrabilities and shift functions, which
     are what map physical widths to reduced-width amplitudes, so the vector is
     re-derived by the rebuild.
     """
-    return model.evaluate(np.asarray(model.params_rwa, float)).chi2
+    return model.evaluate(np.asarray(model.parameters.x0, float)).chi2
 
 
 with Session(AZR, cwd=PROJECT) as m:
@@ -100,13 +100,13 @@ with Session(AZR, cwd=PROJECT) as m:
     print("\nthe parameter vector is re-derived -- re-read it")
     print("-" * 62)
     m.clear_nuclear_potential(0)                       # back to no potential
-    stale = np.asarray(m.params_rwa, float)            # captured *before*
+    stale = np.asarray(m.parameters.x0, float)            # captured *before*
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True,
                             V0=20.0, R=3.6, a=0.6)
     with_stale = m.evaluate(stale).chi2
     with_fresh = chi2(m)
     print(f"  reusing the pre-change vector : {with_stale:.3f}   <- wrong")
-    print(f"  re-reading params_rwa         : {with_fresh:.3f}   <- right")
+    print(f"  re-reading parameters.x0      : {with_fresh:.3f}   <- right")
     print("\n  The two differ because a reduced-width amplitude means something")
     print("  different once the penetrabilities have moved.  Same caveat as a")
     print("  channel-radius change, and the same fix: re-read, then refit.")

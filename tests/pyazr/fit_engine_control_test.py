@@ -75,7 +75,7 @@ def main():
         except ValueError as e:
             check("MINOS after lm is refused", "MINOS" in str(e), str(e))
 
-        x0 = np.array(s.params_rwa, float)
+        x0 = s.parameters.x0
         before = s.evaluate(x0)
 
         # (b) progress records

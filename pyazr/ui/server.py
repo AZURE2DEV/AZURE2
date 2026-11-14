@@ -332,26 +332,36 @@ class Server:
         return job_table()
 
     def jobs_list(self):
-        bulky = ("best", "trace", "log")  # GET /api/jobs/{id} serves them
-        return [{k: v for k, v in j.view().items() if k not in bulky} for j in self.jobs.jobs.values()]
+        bulky = ("best", "trace", "log")  # GET /api/jobs/{id} serves them, and a result's bands
+        out = []
+        for j in self.jobs.jobs.values():
+            record = {k: v for k, v in j.view().items() if k not in bulky}
+            if (record.get("result") or {}).get("bands"):
+                record["result"] = dict(record["result"], bands="GET /api/jobs/{id}")
+            out.append(record)
+        return out
 
     def job_start(self, kind, method, settings=None, x0=None, rev=None):
         """Start a job on the current text from ``x0``: omitted, the working x; ``"text"``, the text's x0;
-        ``{"job": id}``, that job's best point (its checkpoint); a {name: value} dict, those entries over the
-        working x."""
+        ``{"job": id}``, that job's best point (its checkpoint), and that job's record handed to the new job as its
+        source (a covariance to propagate, a chain to continue); a {name: value} dict, those entries over the working
+        x.  Files a job writes (a chain) go to the project's output directory."""
         if rev is not None:
             self.state.check_rev(rev)
+        source = None
         with self.worker.lock:
             with self.state.lock:
                 text, rev = self.state.project.text, self.state.rev
+                products = os.path.join(self.state.directory, self.state.project.config().get("output_dir") or "")
             if isinstance(x0, dict) and set(x0) == {"job"}:
+                source = {k: v for k, v in self.jobs.get(x0["job"]).view().items() if k not in ("trace", "log")}
                 x0 = self.jobs.best_x(x0["job"])
             elif x0 is None and self.worker.built_from == text:
                 x0 = dict(self.x)
             elif x0 == "text":
                 x0 = None
             return self.jobs.start(kind, method, settings, x0, rev, self.state.session_text(text),
-                                   self.state.directory, self.state.session_file)
+                                   self.state.directory, self.state.session_file, source=source, products=products)
 
     def job_get(self, job_id, wait=None):
         """A job's record, its trace and the last lines of its log; with ``wait`` (s), once its state changes or

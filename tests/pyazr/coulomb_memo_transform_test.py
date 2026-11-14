@@ -3,14 +3,14 @@
 
 CNuc::TransformOut works at the LEVEL energies -- penetrabilities and shift functions there, and the external part
 of every radiative width, an external-capture radial integral at the level energy.  A fit or a sampler moves those
-energies at every call, so the (l, radius, energy) entries it stored never recurred: each transform_rwa added ~5,000
+energies at every call, so the (l, radius, energy) entries it stored never recurred: each Session.transform added ~5,000
 entries per worker for good in the 12C(a,g) MCMC chains of 2026-10-26 (--fix-gamma-total calls it once or more per
 log-probability), ~4 GB per worker after 17,000 evaluations.  The transform now runs inside a
 CoulFuncCache::TransientScope; since docs/upgrade/coulomb.md there is no Coulomb memo at all (the entry count is 0,
 so (1) holds trivially; (2) and (3) keep their meaning).
 
 Checks on tests/13N (12C + p with external capture), Brune and Park:
-  (1) 20 transform_rwa calls at level energies moved by ~1 keV leave the memo's entry count unchanged;
+  (1) 20 Session.transform calls at level energies moved by ~1 keV leave the memo's entry count unchanged;
   (2) the transform is a pure function of the parameters: the first point evaluated again gives the same vector
       bit for bit, and so does a fresh session (nothing depends on what the memo held);
   (3) the objective at those points is unchanged by the transforms in between (bit for bit).
@@ -51,7 +51,7 @@ try:
         shutil.copy(os.path.join(SRC, "13N.azr"), os.path.join(d, "13N.azr"))
         kw = dict(use_park=True) if mode == "park" else {}  # Park implies Brune on
         M = Session(os.path.join(d, "13N.azr"), cwd=d, **kw)
-        x0 = np.asarray(M.params_rwa, float).copy()
+        x0 = np.asarray(M.parameters.x0, float).copy()
         kinds = {p.free_index: p.kind for p in M.parameters if p.free_index is not None and not p.fixed}
         energy = np.array([kinds.get(i) == "energy" for i in range(x0.size)])
         rng = np.random.default_rng(7)
@@ -61,21 +61,21 @@ try:
             x[energy] += 1e-3 * rng.standard_normal(energy.sum())
             X.append(x)
         o_before = M.objective()(X[0])
-        first = np.asarray(M.transform_rwa(X[0]), float)
+        first = np.asarray(M.transform(X[0])[M.parameters.free_mask], float)
         e0 = M.cache_stats()["entries"]
         for x in X[1:]:
-            M.transform_rwa(x)
+            M.transform(x)[M.parameters.free_mask]
         grown = M.cache_stats()["entries"] - e0
         check(f"{mode}: 19 transforms at moved level energies add no memo entries ({energy.sum()} free energies)",
               grown == 0, f"+{grown} entries")
-        again = np.asarray(M.transform_rwa(X[0]), float)
+        again = np.asarray(M.transform(X[0])[M.parameters.free_mask], float)
         check(f"{mode}: the transform repeats bit for bit", np.array_equal(first, again),
               f"max |d| {np.max(np.abs(first - again)):.3e}")
         check(f"{mode}: the objective is unchanged by the transforms in between",
               M.objective()(X[0]) == o_before, f"{M.objective()(X[0])!r} vs {o_before!r}")
         del M
         F = Session(os.path.join(d, "13N.azr"), cwd=d, **kw)
-        check(f"{mode}: a fresh session gives the same transform", np.array_equal(np.asarray(F.transform_rwa(X[0]), float), first))
+        check(f"{mode}: a fresh session gives the same transform", np.array_equal(np.asarray(F.transform(X[0])[F.parameters.free_mask], float), first))
         del F
 finally:
     shutil.rmtree(work, ignore_errors=True)

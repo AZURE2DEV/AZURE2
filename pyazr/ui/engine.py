@@ -23,26 +23,19 @@ from pyazr.locking import session_lock
 # The methods of pyazr.Session the UI does not call, by reason (the route-table consistency test,
 # tests/pyazr/ui/routes_consistency_test.py, requires every public method to be called here or listed here).
 SESSION_NOT_SERVED = {
-    "the sensitivities of the model values (uncertainty bands, not a route of this step)": "model_gradients",
-    "physical values only through transform (pyazr3.md decision 10)":
-        "transform_physical transform_rwa physical_levels wigner_widths dimensionless_widths park_norms "
-        "scattering_lengths",
-    "parameter-vector files: Parameters.read/write of pyazr 3.0, not a route of this step":
-        "read_sav load_sav full_rwa_from_sav read_sav_basis update_rwa_params_from_sav update_sav_from_rwa_params",
-    "per-kind index views: the parameter table carries kind and free index":
-        "level_free_width_indices without_level only_level norm_indices shift_indices energy_indices",
+    "the sensitivities of the model values: the band jobs use them through pyazr.bands.uncertainty_bands":
+        "model_gradients",
+    "dimensionless widths and level quantities, not a route of this step":
+        "wigner_widths dimensionless_widths park_norms scattering_lengths",
     "session edits: edits of the Project and a new session (pyazr3.md decision 11)":
-        "set_channel_radius refresh_parameters refresh_pairs configure recalculate_external_capture "
+        "set_channel_radius configure recalculate_external_capture "
         "refreeze_covariance set_nuclear_potential clear_nuclear_potential nuclear_potential nuclear_potentials "
         "potential_records",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
         "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
-        "datasets n_rmatrix cache_stats output_dir",
-    "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
-    "the engine's own fitters: the Fit tab's job for them is a later step (web_ui.md 12, finding 20)":
-        "fit_with_engine",
+        "datasets cache_stats output_dir",
 }
 
 
@@ -95,7 +88,7 @@ class Engine:
     def _describe(self):
         """The session: its options and where each came from, free-vector length, data sets (in the engine's order) and parameters."""
         s = self.s
-        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.params_rwa),
+        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.parameters.x0),
                 "datasets": self._datasets(),
                 "parameters": self._parameters()}
 
@@ -106,9 +99,15 @@ class Engine:
         """One row per parameter of the engine (fixed and free), the session's own description (``describe()``): name,
         kind, unit, whether it is free and its index in x, ``x`` (fit basis), ``physical_value``, bounds, owner
         fields; ``x0`` is ``x`` of a free parameter."""
-        rows = self.s.describe()["parameters"]
-        for r in rows:
-            r["x0"] = r["x"] if r["free"] else None
+        common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
+        rows = []
+        for p in self.s.describe()["parameters"]:  # the session's records
+            row = {"name": p["name"], "kind": p["kind"], "unit": p["unit"], "x": p["start"],
+                   "physical_value": p["value"], "free": not p["fixed"], "free_index": p["free_index"],
+                   "bounds": p["bounds"]}
+            row.update((k, v) for k, v in p.items() if k not in common and v is not None)
+            row["x0"] = row["x"] if row["free"] else None
+            rows.append(row)
         return rows
 
     def _free_names(self):
@@ -250,11 +249,10 @@ class Engine:
         return self.names.index(name)
 
     def transform(self, x):
-        """Physical values (MeV, eV, fm^-1/2; norms and shifts as they are) of every parameter at x, by name."""
+        """Physical values (MeV, eV, fm^-1/2; norms and shifts as they are) of every parameter at x, by name
+        (``Session.transform``)."""
         s = self.s
-        full = s._all_rwa(np.asarray(x, float))
-        values = np.asarray(s.transform_all_rwa(full, include_fixed=True), float)
-        return {p.name: float(values[i]) for i, p in enumerate(s.parameters) if i < values.size}
+        return {p.name: float(v) for p, v in zip(s.parameters, s.transform(np.asarray(x, float)))}
 
     def channel_functions(self, pair, e_cm, l=0, radius=0.0, J=None):
         """The session's channel functions of ``pair`` at c.m. energies ``e_cm`` (MeV; a number or a list): F, Fp, G,
@@ -283,12 +281,119 @@ def session_text(path):
     return f"session = pyazr.Session({path!r})  # the saved file; the page evaluates the working text"
 
 
-def open_objective(file, cwd):
-    """For a job: ``(value_and_grad(x) -> (f, g), x0, names of x)`` of a new session of ``file`` (its
-    :class:`pyazr.Objective`)."""
+# -- for a job's worker (pyazr/ui/jobs.py): its own session, the objective, the engine's fitters -----------------
+
+def open_for_job(file, cwd):
+    """For a job: ``(adapter, x0, names of x)`` of a new session of ``file`` (the adapter's ``s`` is the session)."""
     e = Engine()
     e.open(file, cwd)
-    return e.s.objective().value_and_grad, np.asarray(e.s.params_rwa, float), e._free_names()
+    return e, e.s.parameters.x0, e._free_names()
+
+
+def objective_of(e):
+    """The session's :class:`pyazr.Objective` (``value_and_grad``, ``log_prob``, ``bounds``, ``names``)."""
+    return e.s.objective()
+
+
+def fit_with_engine(e, method, minos, x0, max_calls, progress, stop):
+    """The engine's fitter ``method`` (a row of ``pyazr.kinds()["fitters"]``) on the session from ``x0``
+    (``Session.fit_with_engine``): ``progress`` gets each progress record (a dict), ``stop`` (a threading.Event) ends
+    the fit at its best point.  Plain data: the end point by name, the objective there, the engine's status and
+    words, EDM (None where the fitter has none), calls, errors, covariance and MINOS intervals by name where the
+    fitter gives them (None otherwise), the fitter's log."""
+    r = e.s.fit_with_engine(method, minos=bool(minos), x0=np.asarray(x0, float), max_calls=max_calls,
+                            progress=progress, stop=stop)
+    names = list(r.names)
+    covariance = None if r.covariance is None else np.asarray(r.covariance, float)
+    return {"method": r.method, "x": dict(zip(names, np.asarray(r.x, float).tolist())),
+            "objective": float(r.objective), "status": r.status, "converged": bool(r.converged),
+            "edm": float(r.edm) if np.isfinite(r.edm) else None, "calls": int(r.calls), "names": names,
+            "covariance": None if covariance is None else covariance.tolist(),
+            "errors": None if r.errors is None else dict(zip(names, np.asarray(r.errors, float).tolist())),
+            "minos": {n: [float(lo), float(hi)] for n, (lo, hi) in r.minos.items()},
+            "covariance_from_hesse": bool(r.covariance_from_hesse),
+            "fell_back_to_migrad": bool(r.fell_back_to_migrad), "log": r.log}
+
+
+def band_points(e, x):
+    """Where a band is drawn: every active data set, then every active extrapolation, each with its name, c.m.
+    energy (MeV), excitation energy (MeV), c.m. angle (deg), the model at x (the engine's unit), and the S-factor
+    conversion of each point where the S factor is offered (None otherwise), in the order of the Results payload."""
+    x = np.asarray(x, float)
+    ev = e.s.evaluate(x)
+    out = {"datasets": [_band_entry(e, info, d) for info, d in zip(e.info, ev.data)], "extrapolations": []}
+    infos = [e._extrapolation_info(x_) for x_ in e.s.extrapolations if x_.active]
+    if infos:
+        e.s.extrap_mode()
+        try:
+            out["extrapolations"] = [_band_entry(e, info, d) for info, d in zip(infos, e.s.evaluate(x).data)]
+        finally:
+            e.s.data_mode()
+    return out
+
+
+def _band_entry(e, info, d):
+    conv = d.extra["sfactor_conversion"] if e._has_s_factor(info) else None
+    return {"name": info["name"], "e_cm": _plain(d.energies), "e_x": _plain(d.excitation_energies),
+            "angle_cm": _plain(d.angles), "model": _plain(d.model), "conv": None if conv is None else _plain(conv)}
+
+
+def models_at(e, xs, progress):
+    """The model of every active data set and extrapolation at each free vector of ``xs`` (rows): ``(data sets,
+    extrapolations)``, each a list of arrays of shape (len(xs), points); ``progress(k, objective or None, x)`` after
+    each evaluation (the objective in data mode; extrapolations have none)."""
+    xs = np.asarray(xs, float)
+    data = []
+    for k, x in enumerate(xs):
+        ev = e.s.evaluate(x)
+        if not data:
+            data = [np.empty((len(xs), len(d.model))) for d in ev.data]
+        for i, d in enumerate(ev.data):
+            data[i][k] = d.model
+        progress(k + 1, ev.objective, x)
+    grids = []
+    if any(x_.active for x_ in e.s.extrapolations):
+        e.s.extrap_mode()
+        try:
+            for k, x in enumerate(xs):
+                ev = e.s.evaluate(x)
+                if not grids:
+                    grids = [np.empty((len(xs), len(d.model))) for d in ev.data]
+                for i, d in enumerate(ev.data):
+                    grids[i][k] = d.model
+                progress(len(xs) + k + 1, None, x)
+        finally:
+            e.s.data_mode()
+    return data, grids
+
+
+def linear_sigma(e, x, covariance, names):
+    """The 1-sigma of the model of every active data set and extrapolation at x from a fit's covariance over the free
+    vector ``names`` (``pyazr.bands.uncertainty_bands``: sigma^2 = g^T C g with the engine's sensitivities g, over
+    the columns a band spans, ``pyazr.bands.rmatrix_columns``: the nuisances do not enter).  ``(data sets,
+    extrapolations)``: lists of arrays in the order of :func:`band_points`."""
+    from pyazr import bands
+    free = e._free_names()
+    if list(names) != free:
+        raise errors.ParameterError(f"the covariance is over {len(names)} parameters ({errors.listed(names)}), the "
+                                    f"session's free vector over {len(free)} ({errors.listed(free)}): a band needs "
+                                    "the fit of the same project text")
+    x = np.asarray(x, float)
+    cols = bands.rmatrix_columns(e.s)
+    block = np.asarray(covariance, float)[np.ix_(cols, cols)]
+    n_data = sum(1 for d in e.s.datasets if d.active)
+    data = bands.uncertainty_bands(e.s, segments=list(range(n_data)), params=x, covariance=block)
+    out_data = [data[key].sigma for key in sorted(data, key=lambda k: data[k].segment)]
+    out_grids = []
+    if any(x_.active for x_ in e.s.extrapolations):
+        e.s.extrap_mode()
+        try:
+            n_grids = sum(1 for x_ in e.s.extrapolations if x_.active)
+            grids = bands.uncertainty_bands(e.s, segments=list(range(n_grids)), params=x[cols], covariance=block)
+            out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
+        finally:
+            e.s.data_mode()
+    return out_data, out_grids
 
 
 def _read_chi_squared(path):

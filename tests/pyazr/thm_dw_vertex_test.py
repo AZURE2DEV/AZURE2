@@ -172,7 +172,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("2. the engine against the CLI")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
@@ -217,7 +217,7 @@ with tempfile.TemporaryDirectory() as tmp:
                           ("dw", f"experiment[A] {KIN} {extra} vertexModel=dw")):
             d = project(f"nf_{tag}_{name}", blk, fold=False)
             with Session(os.path.join(d, "run.azr"), cwd=d) as s:
-                x = np.asarray(s.params_rwa, float)
+                x = np.asarray(s.parameters.x0, float)
                 model[name] = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
                 ecm = np.concatenate([np.asarray(v) for v in s.energies])
                 vert[name] = s.thm_vertex("A", ecm, params=x)["channels"][0]["levels"][0]["M2"]

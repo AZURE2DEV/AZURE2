@@ -38,7 +38,7 @@ def worker(work, model, out):
     import numpy as np
     from pyazr import Session
     with Session(os.path.join(work, model + ".azr"), cwd=work) as a:
-        v = np.asarray(a.evaluate(np.array(a.params_rwa, float)).data[0].model, float)
+        v = np.asarray(a.evaluate(np.array(a.parameters.x0, float)).data[0].model, float)
     json.dump([None if not np.isfinite(x) else float(x) for x in v], open(out, "w"))
 
 

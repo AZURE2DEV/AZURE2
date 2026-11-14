@@ -50,9 +50,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     import pyazr
     try:
-        with pyazr.Session(a.project) as s:
-            if a.sav:
-                s.load_sav(a.sav)
+        with pyazr.Session(a.project, parameter_file=a.sav) as s:
             x = s.objective().x0
             if a.x_json:
                 with open(a.x_json) as fh:

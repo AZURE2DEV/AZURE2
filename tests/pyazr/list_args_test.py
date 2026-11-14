@@ -15,6 +15,8 @@ Checks, on ``tests/identical_pp_res``: every array-taking call gives the same
 result for a list, an int32 array and a float64 array.
 
 Run from anywhere:  python3 tests/pyazr/list_args_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import sys
@@ -44,7 +46,7 @@ def main():
         print(f"pyazr engine module not built ({e}); nothing to test")
         return 0
     with Session(AZR, cwd=PROJECT, use_brune=True) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         xa = np.asarray(s._engine.params_all_rwa(), float)
         print(f"{os.path.basename(AZR)}: {x.size} free of {xa.size} parameters")
         forms = {"list": list, "int-ish list": lambda v: [float(f"{t:.6g}") for t in v],
@@ -62,9 +64,9 @@ def main():
         s._engine.set_params_all_rwa(list(xa))
         check("set_params_all_rwa from a list", True)
         check("update_segments_all_rwa from a list", s._engine.update_segments_all_rwa(list(xa)) >= 0)
-        phys = np.asarray(s.transform_rwa(x), float)
-        check("transform_rwa from a list",
-              np.allclose(np.asarray(s.transform_rwa(xl), float), phys))
+        phys = np.asarray(s.transform(x)[s.parameters.free_mask], float)
+        check("Session.transform from a list",
+              np.allclose(np.asarray(s.transform(xl)[s.parameters.free_mask], float), phys))
         cp = float(s._engine.calculate_chi2_physical(list(phys)))
         check("calculate_chi2_physical from a list", abs(cp - ref) <= 1e-6 * abs(ref), f"{cp} vs {ref}")
         g = np.asarray(s._engine.calculate_chi2_grad_rwa(xl), float)

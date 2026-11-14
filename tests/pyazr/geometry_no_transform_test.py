@@ -2,7 +2,7 @@
 """The energies and angles of an evaluation come with no observed-to-formal transformation.
 
 Point energies and angles do not depend on the R-matrix parameters, but
-the methods that returned them once took the physical path, so a caller handing them ``params_rwa`` (an easy slip: every
+the methods that returned them once took the physical path, so a caller handing them ``parameters.x0`` (an easy slip: every
 other call takes it) had each amplitude read as a width or ANC.  With a
 sub-threshold ANC channel that prints "Denominator less than zero while
 transforming ... input 0.118102 fm^(-1/2)" (the 17O cross-check), which the
@@ -11,9 +11,9 @@ examples/o17_guardo2017_fit (1- level 7.6 keV below the n + 17O threshold,
 ANC channel; an extrapolation record added here), in data and extrapolation
 mode:
 
-  1. control: the physical path fed params_rwa still prints the warning
+  1. control: the physical path fed parameters.x0 still prints the warning
      (so the check below can see it);
-  2. evaluate(params_rwa) and evaluate() print nothing, and the energies,
+  2. evaluate(parameters.x0) and evaluate() print nothing, and the energies,
      excitation energies and angles of their data sets agree exactly (a
      physical vector is no input of the session's calls).
 
@@ -21,6 +21,8 @@ The engine prints on the process's stdout, so the session runs in a child
 process.  Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/geometry_no_transform_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -59,10 +61,10 @@ s = Session(sys.argv[2])
 if sys.argv[4] == "extrap":
     s.extrap_mode()
 if sys.argv[3] == "control":
-    s._engine.update_segments(np.asarray(s.params_rwa, float))
+    s._engine.update_segments(np.asarray(s.parameters.x0, float))
 else:
     same = True
-    a, c = s.evaluate(s.params_rwa).data, s.evaluate().data
+    a, c = s.evaluate(s.parameters.x0).data, s.evaluate().data
     for field in ("energies", "excitation_energies", "angles"):
         same &= all(np.array_equal(getattr(x, field), getattr(z, field)) for x, z in zip(a, c))
         same &= sum(len(getattr(x, field)) for x in a) > 0
@@ -96,7 +98,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"{mode} mode")
         ctl = child("control", mode)
         geo = child("geometry", mode)
-        check("control: the physical path fed params_rwa warns",
+        check("control: the physical path fed parameters.x0 warns",
               ctl is not None and "Denominator less than zero" in ctl, (ctl or "")[-300:])
         check("energies, excitation energies, angles: no warning",
               geo is not None and "Denominator" not in geo, (geo or "")[-300:])

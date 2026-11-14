@@ -335,11 +335,7 @@ def main():
                          np.array_equal(ph.shift(*args), cf["S"]))
                 row_test("hard_sphere_phase", f"pair {pair.key}, l = {l}: = -(the session's delta_hs) to 1e-15 abs",
                          np.all(np.abs(ph.hard_sphere_phase(*args) + cf["delta_hs"]) <= 1e-15))
-                old = s.coulomb_functions(pair.key, energies, L=l)
-                check(f"channel_functions = coulomb_functions (renamed keys) on pair {pair.key}, l = {l}",
-                      all(np.array_equal(cf[a], old[b]) for a, b in (("F", "F"), ("Fp", "dF"), ("G", "G"),
-                                                                     ("Gp", "dG"), ("P", "P"), ("S", "S"))))
-            for p in s.parameters.widths:
+            for p in s.parameters.of_kind("width"):
                 if p.wigner_limit and p.pair == pair.number:
                     row_test("wigner_limit", f"pair {pair.key}: = the engine's Parameter.wigner_limit bit for bit",
                              ph.wigner_limit(pair.M1, pair.M2, pair.channel_radius) == p.wigner_limit,

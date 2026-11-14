@@ -156,9 +156,7 @@ def main(argv=None):
         return 2
     try:
         if a.x_json or a.sav:
-            with pyazr.Session(base_path) as s:
-                if a.sav:
-                    s.load_sav(a.sav)
+            with pyazr.Session(base_path, parameter_file=a.sav) as s:
                 x = s.objective().x0
                 if a.x_json:
                     with open(a.x_json) as fh:

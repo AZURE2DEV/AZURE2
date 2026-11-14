@@ -87,7 +87,8 @@ def widths_report(session, x):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr")
-    ap.add_argument("--params", help="parameter file (param.sav), by name; default: the project's values")
+    ap.add_argument("--params", dest="parameter_file",
+                    help="parameter file (param.sav), by name; default: the project's values")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--max-theta2", type=float, default=1.0)
     ap.add_argument("--max-wu", type=float, default=100.0)
@@ -103,7 +104,7 @@ def main(argv=None):
         print(f"error: {err}", file=sys.stderr)
         return 2
     with s:
-        x = s.parameters.read(a.params) if a.params else s.parameters.x0
+        x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
         channels, levels = widths_report(s, x)
     flags = []
     fmt = lambda v, f: "-" if v is None else format(v, f)

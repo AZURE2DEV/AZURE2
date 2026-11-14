@@ -14,7 +14,7 @@ The model is ``tests/beta_delayed_alpha/16N.azr``: 16N -> 16O* + beta, three
 negative beta amplitude, and the model's own spectrum as data (chi2 ~ 0).
 
 Checks, in the Brune, Park and standard parametrizations:
-  * transform_rwa carries the sign of every beta amplitude (Brune: identity);
+  * Session.transform carries the sign of every beta amplitude (Brune: identity);
   * a save_fit snapshot re-reads to the same chi-squared;
   * flipping that sign changes the chi-squared, so the two checks above
     are not vacuous;
@@ -22,6 +22,8 @@ Checks, in the Brune, Park and standard parametrizations:
     whose level energies moved re-reads to the same chi-squared.
 
 Run from anywhere:  python3 tests/pyazr/beta_sign_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import sys
@@ -60,8 +62,8 @@ for label, opts in MODES:
     sav = os.path.splitext(snap)[0] + ".sav"
     try:
         with Session(AZR, cwd=PROJECT, **COMMON, **opts) as m:
-            x = np.asarray(m.params_rwa, float)
-            ph = np.asarray(m.transform_rwa(x), float)
+            x = np.asarray(m.parameters.x0, float)
+            ph = np.asarray(m.transform(x)[m.parameters.free_mask], float)
             beta = [p for p in m.parameters
                     if not p.fixed and p.kind == "width"
                     and p.radiation_type in ("F", "G")]
@@ -90,7 +92,7 @@ for label, opts in MODES:
                   chi2_flipped > chi2 + 1.0, f"{chi2:.4g} vs {chi2_flipped:.4g}")
             m.save_fit(snap, x=x, param_sav=True, verify=True)
         with Session(snap, cwd=PROJECT, **COMMON, **opts) as back:
-            xb = np.asarray(back.params_rwa, float)
+            xb = np.asarray(back.parameters.x0, float)
             chi2_back = back.evaluate(xb).chi2
         # Brune and Park read the file's amplitudes back exactly; the standard
         # parametrization inverts its transform iteratively (energies to
@@ -131,7 +133,7 @@ try:
     assert line in text
     open(variant, "w").write(text.replace(line, line.replace(" 1 0 374277", " 1 1 374277")))
     with Session(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
-        x = np.asarray(m.params_rwa, float).copy()
+        x = np.asarray(m.parameters.x0, float).copy()
         fixed_alpha = [p for p in m.parameters
                        if p.fixed and p.kind == "width" and p.radiation_type == "P"
                        and abs((p.level_energy or 0) - 9.5822148) < 1e-6]
@@ -145,7 +147,7 @@ try:
         all_before = np.asarray(m._engine.params_all_rwa(), float).copy()
         m.save_fit(snap, x=x, param_sav=False, verify=True)
     with Session(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
-        xb = np.asarray(back.params_rwa, float)
+        xb = np.asarray(back.parameters.x0, float)
         chi2_back = back.evaluate(xb).chi2
         all_after = np.asarray(back._engine.params_all_rwa(), float)
         fixed_i = [i for i, p in enumerate(back.parameters) if p.fixed and p.kind == "width"]

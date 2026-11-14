@@ -23,6 +23,8 @@
   outputs; help(pyazr) names objective and evaluate.
 
 Run: python3 tests/pyazr/evaluation_test.py   (AZURE2_BIN: the program; ctest gives it)
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -141,7 +143,7 @@ with tempfile.TemporaryDirectory() as tmp:
         program, proc = run_program(copy_project(name, os.path.join(tmp, name + "_cli")))
         rows, totals = chi_squared_file(program)
         s = Session(copy_project(name, os.path.join(tmp, name + "_api")))
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         ev = s.evaluate(x)
         check(f"{name}: one data set per row of chiSquared.out ({len(ev.data)})", len(rows) == len(ev.data),
               f"{len(rows)} rows")
@@ -215,7 +217,7 @@ with tempfile.TemporaryDirectory() as tmp:
     shutil.copytree(os.path.join(TESTS, "upgrade", "T1"), work)
     os.makedirs(os.path.join(work, "output"), exist_ok=True)
     with Session(os.path.join(work, "T1.azr"), data_mode=False) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         ev = s.evaluate(x)
         n = int(s._engine.update_segments_rwa(x))  # the engine's forward pass, through the binding
         same = n == len(ev.data) and all(
@@ -234,7 +236,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.symlink(os.path.join(TESTS, "13N", "data"), os.path.join(work, "data"))
     shutil.copy(os.path.join(TESTS, "13N", "13N.azr"), work)
     with Session(os.path.join(work, "13N.azr")) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         s.objective()(x)
         s.evaluate(x)  # both paths warm
 

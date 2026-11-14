@@ -16,7 +16,7 @@ NPROCS, NSTEPS = 8, 2000
 # this module and constructs its own, under "fork" each inherits a copy.  The
 # engine is not thread-safe, so process-level parallelism is the only kind.
 azr = Session("13N.azr")
-best = np.asarray(azr.params_rwa, float)
+best = np.asarray(azr.parameters.x0, float)
 ndim = len(best)
 nwalkers = 2 * ndim
 

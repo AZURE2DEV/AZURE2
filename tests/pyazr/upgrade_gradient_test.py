@@ -55,7 +55,7 @@ def gradient_check(project, azr_name):
     try:
         up.project_copy(project, work)
         with Session(os.path.join(work, azr_name + ".azr")) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             chi2, grad = m.objective().value_and_grad(x)
             chi2_ref = m.objective()(x)
             fd = np.empty_like(x)

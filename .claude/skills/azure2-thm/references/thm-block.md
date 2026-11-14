@@ -25,7 +25,7 @@ output (`CNuc::GetTransformParams` returns the amplitude unchanged), so a fit wr
 
 ```python
 ch.gamma_is_rwa            # AzrChannel: is this channel's gamma an amplitude?
-w.input_is_rwa             # Parameter: the same, from the live API
+w.width_is_amplitude       # Parameter: the same, from the live API
 p.binding_energy           # pair: THM binding energy B_xs (MeV), 0 if not THM
 ```
 

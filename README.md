@@ -281,20 +281,20 @@ energies = azr.energies
 cross    = azr.cross
 
 # Evaluate the model at the free vector (the fit vector): every number from one evaluation.
-ev = azr.evaluate(azr.params_rwa)
+ev = azr.evaluate(azr.parameters.x0)
 fit = [d.model for d in ev.data]       # the model of each data set
 print(ev.chi2, ev.terms)               # the data chi-squared and each term of the objective
 f = azr.objective()                    # the objective for a minimiser: f(x), f.value_and_grad(x), f.residuals(x)
 
 # Inspect the fit parameters with full physics metadata.
 print(azr.parameters.table())          # readable overview
-for w in azr.parameters.widths.free:   # free reduced-width amplitudes
+for w in azr.parameters.of_kind("width").free:   # free reduced-width amplitudes
     print(w.name, "J^pi", w.jpi, "L", w.L, "S", w.S)
 
 azr.close()
 ```
 
-The `parameters` view returns a `ParameterSet` of `Parameter` objects, each
+The `parameters` view returns a `Parameters` table of `Parameter` objects, each
 carrying what the parameter *is* — for R-matrix parameters the level it belongs
 to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 `radiation_type`) — plus filtered views (`.free`, `.energies`, `.widths`,

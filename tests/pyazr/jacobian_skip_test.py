@@ -62,7 +62,7 @@ try:
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
     a = Session(make_model(work), cwd=work)
-    x = np.array(a.params_rwa, float)
+    x = np.array(a.parameters.x0, float)
     free = [p for p in a.parameters if not p.fixed]
     sh = [i for i, p in enumerate(free) if p.kind == "shift"]
     check("model has two free shifts", len(sh) == 2, f"{len(sh)}")

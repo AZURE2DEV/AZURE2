@@ -97,7 +97,7 @@ try:
         check("7Be*+p 1-: complex", values[(2, "1-")].a0.imag < -1e-3, values[(2, "1-")])
 
         fit = Session(os.path.join(work, "be7p_fit.azr"))
-        x = np.asarray(fit.params_rwa, float)
+        x = np.asarray(fit.parameters.x0, float)
         ev = fit.evaluate(x)
         pen = ev.terms["model data"]
         # CODATA 2018 constants since 2026-11-05 (were 48.3471155 and 275.3872387 with the CODATA 2006 ones)

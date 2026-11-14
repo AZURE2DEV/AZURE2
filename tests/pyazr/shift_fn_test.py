@@ -101,7 +101,7 @@ if have_engine:
             if len(t) == 5 and t[0].isdigit():
                 expected[int(t[0])] = float(t[1])
         with Session(azr, cwd=work) as mdl:
-            fn = mdl.parameters.fn_shifts
+            fn = mdl.parameters.of_kind("shift_fn")
             check("three shift_fn parameters (data sets 2, 3, 5)", [p.segment_key for p in fn] == [2, 3, 5],
                   [(p.name, p.segment_key) for p in fn])
             check("named <energy_scale>.a0, fn_term 0",
@@ -112,9 +112,9 @@ if have_engine:
             check("only segment 5's is free, at 0.005", [p.segment_key for p in free] == [5]
                   and abs(free[0].value - 0.005) < 1e-12, [(p.segment_key, p.value) for p in free])
             check("listed after every sqrt(E) coefficient",
-                  min(p.index for p in fn) > max(p.index for p in mdl.parameters.sqrt_shifts))
+                  min(p.index for p in fn) > max(p.index for p in mdl.parameters.of_kind("shift_sqrt")))
             idx = free[0].free_index
-            x0 = np.asarray(mdl.params_rwa, float)
+            x0 = np.asarray(mdl.parameters.x0, float)
             c = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float)
             check("segment chi2 = the CLI's (expected/chiSquared.out)",
                   all(abs(c[k - 1] - expected[k]) < 1e-5 * max(1.0, expected[k]) for k in expected),

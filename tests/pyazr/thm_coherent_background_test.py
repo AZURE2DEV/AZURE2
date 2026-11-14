@@ -187,17 +187,17 @@ with tempfile.TemporaryDirectory() as tmp:
     # are neither (they were taken for both by a substring test).
     named = project("named", "experiment[normshift] cbackground=1/2+:2=0.3,-0.2")
     with Session(os.path.join(named, "run.azr"), cwd=named) as s:
-        cbi = [p.free_index for p in s.parameters.cbkg]
-        norms = {int(round(i)) for i in s.norm_indices()}
-        shifts = {int(round(i)) for i in s.shift_indices()}
-        check("cbkg of experiment[normshift]: not norm_indices / shift_indices",
+        cbi = [p.free_index for p in s.parameters.of_kind("cbkg")]
+        norms = {p.free_index for p in s.parameters.of_kind("norm").free}
+        shifts = {p.free_index for p in s.parameters.of_kind("shift").free}
+        check("cbkg of experiment[normshift]: not the free norms / shifts",
               len(cbi) == 2 and not set(cbi) & norms and not set(cbi) & shifts,
               f"cbkg {cbi} norms {sorted(norms)} shifts {sorted(shifts)}")
 
     print("2. the engine: parameters, chi2, report, zero background")
     names = ["cbkg_E_1/2+_2_1/2,0,1/2,1_" + p for p in ("re0", "im0", "re1", "im1")]
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        cb = s.parameters.cbkg
+        cb = s.parameters.of_kind("cbkg")
         check("four cbkg parameters, last, in order", [p.name for p in cb] == names and
               [p.index for p in cb] == list(range(len(s.parameters) - 4, len(s.parameters))),
               [p.name for p in cb])
@@ -205,7 +205,7 @@ with tempfile.TemporaryDirectory() as tmp:
               [p.value for p in cb] == [0.3, -0.2, 0.05, 0.1] and
               all(p.jpi == "0.5+" and p.L == 0 and p.S == 0.5 and p.pair == 2 for p in cb),
               [str(p) for p in cb])
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         check("ten free parameters", x.size == 10, x.size)
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
@@ -252,7 +252,7 @@ with tempfile.TemporaryDirectory() as tmp:
           fit.thm()["experiments"]["E"]["cbackground"] == "1/2+:2:1/2,0,1/2,1:linear=0.31,-0.19,0.04,0.12",
           fit.thm()["experiments"]["E"])
     with Session(path, cwd=py_dir) as s:
-        y = np.asarray(s.params_rwa, float)
+        y = np.asarray(s.parameters.x0, float)
         check("reloaded: same parameter vector", np.allclose(y, xs, rtol=1e-12, atol=0), f"{y} vs {xs}")
         check("reloaded: same chi2", rel(s.evaluate(y).chi2, chi_s) < 1e-9)
 
@@ -260,11 +260,11 @@ with tempfile.TemporaryDirectory() as tmp:
                                "cbackground=1/2+:2:linear=0f,0f,0f,0f")
     none_dir = project("none", "experiment[E] background=linear")
     with Session(os.path.join(none_dir, "run.azr"), cwd=none_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         r0, J0 = s.objective().residuals_and_jacobian(x)
     with Session(os.path.join(zero_dir, "run.azr"), cwd=zero_dir) as s:
         check("fixed zero background: no free cbkg parameter",
-              len(s.parameters.cbkg) == 4 and all(p.fixed for p in s.parameters.cbkg))
+              len(s.parameters.of_kind("cbkg")) == 4 and all(p.fixed for p in s.parameters.of_kind("cbkg")))
         r1, J1 = s.objective().residuals_and_jacobian(x)
     check("fixed zero background: residuals bit for bit", np.array_equal(r0, r1))
     check("fixed zero background: Jacobian bit for bit", np.array_equal(J0, J1))
