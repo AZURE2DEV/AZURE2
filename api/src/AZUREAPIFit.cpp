@@ -65,7 +65,7 @@ AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
   EngineFit fit;
   data()->SetFit(true);
   try {
-    fit.result = row->run(objective, params, control);
+    fit.result = RunFitter(*row, objective, params, control);
     if (row->minos && !fit.result.fellBackToMigrad && fit.result.status != "stopped") {
       // The error analysis reports its evaluations and obeys the stop request as the fit does.
       bool stopped = false;
@@ -87,6 +87,7 @@ AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
         fit.result.covariance.clear();
         fit.result.covarianceFromHesse = false;
         fit.result.minos.clear();
+        fit.result.minosValidity.clear();
       }
     }
   } catch (...) {

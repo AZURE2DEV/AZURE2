@@ -371,7 +371,9 @@ Available Options
        derivatives.
    * - ``--max-calls=N``
      - Stop a MIGRAD or NLopt fit after about N function calls (MIGRAD checks
-       the limit between its steps, so it overshoots a little).  Default: no
+       the limit between its steps, so it overshoots a little); the fit ends at
+       the lowest objective it evaluated.  LM and GSL-LM ignore the limit and
+       say so (a ``Note:`` line, ``call_limit N (--max-calls) ignored``).  Default: no
        limit, MIGRAD's EDM criterion ends the fit.  ``0`` also means no limit.
        How the fit ended is printed and written to ``fitStatus.out``.  Before
        2026-10-31 the limit was a fixed 50,000 and reaching it was silent.
@@ -388,14 +390,18 @@ Available Options
        1000; anything else stops the run (exit 2).
    * - ``--use-lm``
      - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
-       falls back to MIGRAD.
+       falls back to MIGRAD.  Ignores ``--max-calls`` and says so.
    * - ``--use-gsl-lm``
      - Fit with the GSL trust-region least-squares minimizer with geodesic
-       acceleration (analytic Jacobian); falls back to MIGRAD.
+       acceleration (analytic Jacobian); falls back to MIGRAD.  Ignores
+       ``--max-calls`` and says so.
    * - ``--use-nlopt``
      - Fit with NLopt's Subplex (SBPLX) instead of Minuit2.  Only in builds
-       configured with ``-DUSE_NLOPT=ON``.  The fitters and their switches:
-       :doc:`../user_guide/fitting`, "The Engine's Fitters".
+       configured with ``-DUSE_NLOPT=ON``; a build without NLopt refuses the
+       switch (exit 2) and names the switches it has.  The fitters and their
+       switches: :doc:`../user_guide/fitting`, "The Engine's Fitters"; the
+       usage text (``--help``) lists the fitters of the build from that
+       table.
    * - ``--covariance-band``
      - Write the cross-section uncertainty band from the parameter covariance.
        Without the flag, calculate and fit runs ask for it interactively; with

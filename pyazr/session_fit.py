@@ -36,12 +36,20 @@ class EngineFitResult:
     there from one engine evaluation, the number the program prints as ``Total Chi-Squared``; ``status`` how the fitter
     ended (``converged``, ``call_limit``, ``invalid``, ``stopped``, ``no_decrease``, ``iteration_limit``,
     ``failed_<reason>``; NLopt: ``converged_<reason>``); ``converged`` whether it reached a minimum by its criterion;
+    ``outcome`` the same in the words every fitter shares (``converged``, ``call_limit``, ``iteration_limit``,
+    ``stopped``, ``invalid``, ``failed``; ``fitStatus.out``'s ``status``); ``x`` and ``objective`` are the lowest
+    objective the fitter reached: a MIGRAD that stops at its call limit ends at the lowest objective it evaluated
+    (a notice says so when that is not Minuit2's last state);
     ``edm`` MIGRAD's estimated distance to the minimum (NaN for the other fitters); ``calls`` the evaluations of the
     objective (LM, GSL-LM: residual passes); ``covariance`` of the free parameters (HESSE after MIGRAD,
     (J^T J + priors)^-1 after LM and GSL-LM; None without one, e.g. NLopt or a stopped fit), ``errors`` the errors
     the program writes into param.sav (the square roots of the diagonal after LM and GSL-LM; Minuit's parabolic errors
     after MIGRAD, which differ from them for a parameter with limits); ``minos`` name -> (lower, upper) when MINOS ran;
-    ``log`` the fitter's lines.
+    ``minos_valid`` name -> {"lower": side, "upper": side} beside it, each side Minuit2's verdict as a dict: ``valid``
+    (the crossing was found), ``at_limit`` (the scan reached the parameter's limit), ``call_limit`` (it ran out of
+    calls), ``new_minimum`` (it found a lower point: the fit was not at its minimum); ``notices`` what the caller
+    should know, one sentence each (a fallback to another fitter, a setting the fitter ignored such as ``max_calls``
+    on LM, the best point kept at a call limit); ``log`` the fitter's lines.
     """
     method: str
     x: np.ndarray
@@ -57,6 +65,9 @@ class EngineFitResult:
     x_full: np.ndarray = field(repr=False, default=None)
     covariance_from_hesse: bool = False
     fell_back_to_migrad: bool = False
+    outcome: str = ""
+    minos_valid: Dict[str, Dict[str, Dict[str, bool]]] = field(default_factory=dict)
+    notices: List[str] = field(default_factory=list)
     log: str = field(repr=False, default="")
 
 
@@ -102,7 +113,9 @@ class SessionFit:
             given; here the method is the one named.
         minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); MIGRAD rows only.
         x0 : the start fit vector (default ``parameters.x0``).
-        max_calls : MIGRAD's and NLopt's call limit (``--max-calls``); None: no limit.
+        max_calls : the call limit (``--max-calls``) of a fitter that honours one (``call_limit`` of its row in
+            ``pyazr.kinds()["fitters"]``: MIGRAD, NLopt); the others ignore it and say so in ``notices``.  None: no
+            limit.
         progress : called with a dict per progress record, from the engine's threads with the GIL taken: ``fitter``,
             ``stage`` ("fit", then "hesse" and "minos" for the error analysis after a MIGRAD row; each stage counts its
             calls and its best from the start), ``kind`` ("evaluation" or "iteration"), ``evaluation``, ``iteration``, ``calls``, ``objective``, ``best``,
@@ -159,15 +172,18 @@ class SessionFit:
         errors_full = np.asarray(out["errors_full"], float)
         if covariance is not None and errors_full.size == fixed.size:
             errors = errors_full[~fixed]
-        intervals = {}
+        intervals, valid = {}, {}
         if out["minos"]:
             free_positions = np.flatnonzero(~fixed)
             for k, f in enumerate(free_positions):
                 if f < len(out["minos"]):
                     intervals[names[k]] = tuple(float(v) for v in out["minos"][f])
+                if f < len(out["minos_validity"]):
+                    valid[names[k]] = {side: dict(flags) for side, flags in out["minos_validity"][f].items()}
         return EngineFitResult(method=out["method"], x=np.asarray(x, float), objective=float(out["objective"]),
                                status=out["status"], converged=bool(out["converged"]), edm=float(out["edm"]),
                                calls=int(out["calls"]), covariance=covariance, errors=errors, minos=intervals,
                                names=names, x_full=x_full,
                                covariance_from_hesse=bool(out["covariance_from_hesse"]),
-                               fell_back_to_migrad=bool(out["fell_back_to_migrad"]), log=out["log"])
+                               fell_back_to_migrad=bool(out["fell_back_to_migrad"]), outcome=out["outcome"],
+                               minos_valid=valid, notices=list(out["notices"]), log=out["log"])

@@ -53,6 +53,13 @@ void ProgramProgress::Print(const FitProgress &record) {
     out_.flush();
     return;
   }
+  // MINOS's evaluations (RunMinos under a FitEvaluations of stage "minos"): every 10th, counted from MINOS's start.
+  if (std::string(record.stage) == "minos") {
+    if (record.calls % 10 == 0)
+      out_ << "\r\tMINOS evaluation: " << std::setw(6) << record.calls << " Chi-Squared: " << record.objective;
+    out_.flush();
+    return;
+  }
   // An evaluation: every 10th of the run outside MINOS.
   if (record.errorAnalysis || record.evaluation == 0) return;
   if (record.evaluation % 10 == 0)
@@ -119,20 +126,29 @@ void CaptureMinuitCovariance(ProgramRun &run, const std::vector<double> &covData
 
 namespace {
 
-// fitStatus.out: how the minimizer ended, for scripts and for anyone who reads only the output files.
-void WriteFitStatus(const Config &configure, const FitResult &result, const FitControl &control) {
-  if (result.statusMinimizer.empty()) return;
+// fitStatus.out: how the fit ended, for scripts and for anyone who reads only the output files.  Every fitter, the
+// same keys: the fitter asked and the one that ran (rows of Fitters()), the outcome in the shared words (FitOutcome),
+// the fitter's own status word, EDM and its goal ("none" for a fitter without them), calls, the call limit.
+void WriteFitStatus(const Config &configure, const FitterRow &fitter, const FitResult &result,
+                    const FitControl &control) {
   std::ofstream out(configure.OpenPath(configure.outputdir + "fitStatus.out").c_str());
   if (!out) return;
+  const FitterRow &ran = FitterThatRan(fitter, result);
   const unsigned int noCallLimit = 1000000000u;
-  const std::string callLimitText = control.maxCalls > 0
-                                        ? std::to_string(std::min(control.maxCalls, noCallLimit)) + control.callLimitSource
-                                        : std::string("none");
-  out << "minimizer   " << result.statusMinimizer << std::endl
-      << "status      " << result.status << std::endl
-      << "valid       " << (result.statusValid ? 1 : 0) << std::endl;
-  if (result.edmGoal > 0.0) out << "edm         " << result.edm << std::endl << "edm_goal    " << result.edmGoal << std::endl;
-  out << "calls       " << result.calls << std::endl << "call_limit  " << callLimitText << std::endl;
+  std::string callLimitText = "none";
+  if (control.maxCalls > 0)
+    callLimitText = std::to_string(std::min(control.maxCalls, noCallLimit)) + control.callLimitSource +
+                    (ran.callLimit ? "" : " ignored");
+  out << "minimizer      " << ran.name << std::endl
+      << "fitter         " << fitter.name << std::endl
+      << "status         " << FitOutcome(result) << std::endl
+      << "fitter_status  " << result.status << std::endl
+      << "valid          " << (result.converged ? 1 : 0) << std::endl;
+  if (result.edmGoal > 0.0)
+    out << "edm            " << result.edm << std::endl << "edm_goal       " << result.edmGoal << std::endl;
+  else
+    out << "edm            none" << std::endl << "edm_goal       none" << std::endl;
+  out << "calls          " << result.calls << std::endl << "call_limit     " << callLimitText << std::endl;
 }
 
 // covariance_matrix.out of a MINOS run: the parameters, Minuit's covariance and correlation matrices.
@@ -145,8 +161,7 @@ void WriteCovarianceMatrixFile(const Config &configure, AZUREParams &params, con
     std::cout << "Could not save " << configure.outputdir.c_str() << "covariance_matrix.out file." << std::endl;
     return;
   }
-  // Write header information
-  params.GetMinuitParams() = min.UserParameters();
+  // Write header information (params hold the fit's end point: AdoptMigradEndPoint)
   out << "Parameter List" << std::endl << std::endl;
   for (int i = 0; i < (int)params.GetMinuitParams().Params().size(); i++) {
     out << std::setw(20) << params.GetMinuitParams().GetName(i) << " (" << std::setw(3) << i << ")" << std::scientific
@@ -205,7 +220,7 @@ void WriteCovarianceMatrixFile(const Config &configure, AZUREParams &params, con
 }
 
 // The error analysis of a MIGRAD row: HESSE for the band (falling back to MIGRAD's matrix), then MINOS with its files.
-void MigradErrorAnalysis(ProgramRun &run, FitResult &result, const AZUREParams &start) {
+void MigradErrorAnalysis(ProgramRun &run, FitResult &result, const AZUREParams &start, const FitControl &control) {
   const Config &configure = run.configure;
   ROOT::Minuit2::FunctionMinimum &min = *result.minimum;
   // MIGRAD's error matrix is approximate; refine it with HESSE for the band,
@@ -231,10 +246,13 @@ void MigradErrorAnalysis(ProgramRun &run, FitResult &result, const AZUREParams &
   if (configure.paramMask & Config::PERFORM_ERROR_ANALYSIS) {
     configure.outStream << std::endl
                         << "Performing parameter error analysis with Up=" << configure.chiVariance << "." << std::endl;
-    RunMinos(*run.objective, run.params, configure.chiVariance, result, configure.outStream);
+    {
+      FitEvaluations evaluations(*run.objective, control, result.fitter.c_str(), "minos");
+      RunMinos(*run.objective, run.params, configure.chiVariance, result, configure.outStream);
+    }
+    // The fit's end point with Minuit's errors, for the files and the program's parameters.
+    AdoptMigradEndPoint(run.params, result);
     WriteCovarianceMatrixFile(configure, run.params, min);
-    // ECS this line added to set the azure variables to the minimised fit parameters
-    run.params.GetMinuitParams() = min.UserParameters();
     run.params.WriteParameterErrors(result.minos, configure);
   }
 }
@@ -261,15 +279,15 @@ void RunFitStage(ProgramRun &run, const ProgramProgress &progress) {
   const FitterRow &fitter = FitterOfConfig(configure);
   const FitControl control = progress.Control(configure);
   const AZUREParams start = run.params;
-  FitResult result = fitter.run(*run.objective, run.params, control);
-  WriteFitStatus(configure, result, control);
+  FitResult result = RunFitter(fitter, *run.objective, run.params, control);
+  WriteFitStatus(configure, fitter, result, control);
 
   if (result.fellBackToMigrad) {
     // A least-squares row without its analytic Jacobian ran MIGRAD: its matrix for the band, no HESSE, no MINOS.
     CaptureMinuitCovariance(run, result.minimum->UserCovariance().Data(), run.params);
   } else if (fitter.minos) {
-    MigradErrorAnalysis(run, result, start);
-    run.params.GetMinuitParams() = result.minimum->UserParameters();
+    MigradErrorAnalysis(run, result, start, control);
+    AdoptMigradEndPoint(run.params, result);
   } else if (fitter.residualRows) {
     if ((configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) && !result.leastSquaresBand.empty()) {
       run.bandCov = result.leastSquaresBand;

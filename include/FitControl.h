@@ -56,7 +56,8 @@ struct EvaluationObserver {
 
 /// The controls of one fit (FitterRow::run).
 struct FitControl {
-  unsigned int maxCalls = 0;                 ///< MIGRAD's and NLopt's call limit; 0: none (10^9 for Minuit2)
+  unsigned int maxCalls = 0;                 ///< the call limit of a fitter that honours one (FitterRow::callLimit);
+                                             ///< 0: none
   std::string callLimitSource;               ///< appended to the limit in messages: " (--max-calls)" in the program
   int refreezePasses = 0;                    ///< MIGRAD reruns with a re-frozen relvector data covariance
   FitProgressSink progress;                  ///< every progress record; may be empty
@@ -65,13 +66,29 @@ struct FitControl {
   std::ostream *log = nullptr;               ///< the fitter's printed lines (the program: standard output)
 };
 
+/// One side of a MINOS interval as Minuit2's MinosError reports it (MnCross).
+struct MinosSide {
+  bool valid = false;       ///< the crossing of objective minimum + Up was found
+  bool atLimit = false;     ///< the scan reached the parameter's limit before the crossing
+  bool callLimit = false;   ///< the scan ran out of calls
+  bool newMinimum = false;  ///< the scan found a point below the minimum: the fit was not at its minimum
+};
+
+/// The validity of one parameter's MINOS interval; both sides default (invalid) for a fixed parameter.
+struct MinosValidity {
+  MinosSide lower;
+  MinosSide upper;
+};
+
 /// How a fit ended (FitterRow::run) and what its error analysis added (FitErrors.h).
 struct FitResult {
-  std::string fitter;                 ///< the row's name
-  std::vector<double> x;              ///< full parameter vector at the end (fit basis, Minuit order)
+  std::string fitter;                 ///< the row's name (the one asked; fellBackToMigrad says MIGRAD ran)
+  std::vector<double> x;              ///< full parameter vector at the end (fit basis, Minuit order): the lowest
+                                      ///< objective the fitter reached (at a call limit: the lowest it evaluated)
   double objective = std::numeric_limits<double>::quiet_NaN();  ///< the fitter's value of the objective at x
-  std::string status;                 ///< converged, call_limit, invalid, stopped, failed_<reason>
-  bool converged = false;
+  std::string status;                 ///< the fitter's words: converged, call_limit, invalid, stopped, no_decrease,
+                                      ///< iteration_limit, converged_<reason> (NLopt), failed_<reason>; FitOutcome
+  bool converged = false;             ///< a minimum by the fitter's own criterion
   double edm = std::numeric_limits<double>::quiet_NaN();      ///< MIGRAD's estimated distance to the minimum
   double edmGoal = std::numeric_limits<double>::quiet_NaN();  ///< MIGRAD's EDM goal (0.002 x tolerance x Up)
   long calls = 0;                     ///< objective evaluations (MIGRAD, NLopt); LM, GSL-LM: residual passes
@@ -79,13 +96,17 @@ struct FitResult {
   std::vector<double> covariance;     ///< covariance over freeIndices, row-major; empty: none
   bool covarianceFromHesse = false;   ///< MIGRAD's matrix refined by HESSE (RunHesse)
   std::vector<std::pair<double, double>> minos;  ///< MINOS (lower, upper) per full index, (0, 0) for fixed; RunMinos
+  std::vector<MinosValidity> minosValidity;      ///< per full index, beside minos; RunMinos
   std::vector<double> errors;         ///< per full index, the errors param.sav gets (Minuit's, or sqrt diag of LM's)
-  // What the program writes of a fit (src/ProgramFit.cpp):
-  std::string statusMinimizer;        ///< fitStatus.out's minimizer ("MIGRAD", "NLopt"); empty: no fitStatus.out
-  bool statusValid = false;           ///< fitStatus.out's valid
+  std::vector<std::string> notices;   ///< what the caller should know of this fit, one sentence each: a fallback to
+                                      ///< another fitter, a setting the fitter ignored, a best point kept at a limit
   bool fellBackToMigrad = false;      ///< LM, GSL-LM: no analytic Jacobian, MIGRAD (numerical) ran instead
   std::shared_ptr<ROOT::Minuit2::FunctionMinimum> minimum;  ///< MIGRAD's state, for HESSE and MINOS
   BandCovariance leastSquaresBand;    ///< LM, GSL-LM: the band block of (J^T J + priors)^-1; empty: none
 };
+
+/// The outcome of `result` in the words every fitter shares (fitStatus.out's status): converged (FitResult::converged),
+/// call_limit, iteration_limit, stopped, invalid, or failed (any failed_<reason>).
+std::string FitOutcome(const FitResult &result);
 
 #endif
