@@ -90,7 +90,7 @@ int AZUREAPI::Initialize() {
   // Initialize caches for performance
   InitializeECAmplitudeCache(configure());
 
-  configure().paramMask |= Config::USE_EXTERNAL_CAPTURE;
+  configure_.paramMask |= Config::USE_EXTERNAL_CAPTURE;
 
   std::string file;
   if (configure().paramMask & Config::CALCULATE_WITH_DATA)
@@ -100,11 +100,11 @@ int AZUREAPI::Initialize() {
 
   std::ifstream in(configure().OpenPath(file).c_str());
   if (!in)
-    configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+    configure_.paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
   else
-    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
-  configure().integralsfile = file;
+  configure_.integralsfile = file;
 
   // Initialize EC Integral caching system
 
@@ -474,9 +474,9 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
 }
 
 bool AZUREAPI::CalculateExternalCapture() {
-  configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+  configure_.paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
   data()->CalculateECAmplitudes(compound(), configure());
-  configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+  configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   return true;
 }
@@ -558,12 +558,12 @@ void AZUREAPI::UpdateNorms() {
 
 // Set AZURE2 to calculate data points
 void AZUREAPI::SetData() {
-  configure().paramMask |= Config::CALCULATE_WITH_DATA;
+  configure_.paramMask |= Config::CALCULATE_WITH_DATA;
 }
 
 // Set AZURE2 to calculate extrapolations
 void AZUREAPI::SetExtrap() {
-  configure().paramMask &= ~Config::CALCULATE_WITH_DATA;
+  configure_.paramMask &= ~Config::CALCULATE_WITH_DATA;
 }
 
 // Set the channel radius of one particle pair (1-based) and rebuild.
@@ -671,13 +671,13 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
     }
     if (data()->Data().NumSegments() == 0) return std::nullopt;
 
-    configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+    configure_.paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
     RequestCaptureAyTerms(structure, *data(), requests);
     return requests;
   };
   CompoundSetUp setUp = SetUpCompoundSystem(configure(), dataSetUp, radii);
   if (setUp.refusal == CompoundSetUp::Refusal::kFinish) {
-    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     configure().outStream << setUp.finishError << std::endl;
   }
   if (setUp.refusal != CompoundSetUp::Refusal::kNone) return false;
@@ -685,12 +685,12 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   *state_ = std::move(setUp.state);
   *inputs_ = std::move(setUp.inputs);
   if (data()->Initialize(compound(), configure()) == -1) {
-    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;
   }
   results_ = azure2::Results();  // as after the first Initialize
   data()->SizeResults(results_);
-  configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+  configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   // Without this the client keeps the pre-change parameter vector, names,
   // fixed flags and Wigner limits -- silently mismatched with the new model.

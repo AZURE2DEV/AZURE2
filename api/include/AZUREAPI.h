@@ -115,9 +115,10 @@ class AZUREAPI {
   std::pair<double, double> GetParameterBounds(int index);
 
   /*!
-   * Returns a reference to the Config structure.
+   * The session's Config, to read.  The session's own set-up and mode switches write it through configure_
+   * (Initialize, RebuildImpl, SetData, SetExtrap, CalculateExternalCapture).
    */
-  Config &configure() const { return configure_; };
+  const Config &configure() const { return configure_; };
   /*!
    * Returns a pointer to the WorkingCopy object.
    */
