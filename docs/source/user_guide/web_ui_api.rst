@@ -87,6 +87,15 @@ What the server keeps
   (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET
   /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc): the engine's table of
   the keys its parser reads, ``pyazr.kinds()["thm"]``.
+- **Files and references**: ``GET /api/files`` lists the project directory's files (``path`` relative to the
+  project, as a record's field names it; ``size``; ``kind``: ``project``, ``table`` with ``columns``, ``text``,
+  ``binary``; not ``output/``, ``checks/`` or hidden files, never outside the root); ``GET
+  /api/files/<path>?rows=`` gives a file's first rows.  ``GET /api/project/records/<name>/preview?field=&value=`` is
+  what the engine makes of the record with one field set (a data file, say) on a copy of the project: its
+  description (``rows_read``, ``rows_kept``, ``kept_E_lab_MeV``, ...) or the refusal; the project is not changed.
+  ``GET /api/project/references`` lists every reference of a record to another (``record``, ``field``, ``name``,
+  ``epoch``; ``Project.references``).  ``GET /api/kinds`` carries the words of a pair's fields (``pairs``:
+  ``fields``, ``partner_fields``, ``arguments``, ``kinds``) and of a data set's description (``description``).
 - Routes that need a pyazr call that does not exist yet (the level matrix, ...) answer 501 naming that call.
 - ``GET /api/covariance/{name}``, ``POST /api/covariance/build``, ``POST /api/covariance/write`` serve the covariance
   builder (``pyazr.covariance``; the write is one history entry with its file); ``GET /api/rate/grids`` the rate's

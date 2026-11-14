@@ -469,6 +469,26 @@ of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).
 
+A **column of a list** of the page comes from a table, never from the tab:
+the lists of the Data tab (``pyazr/ui/static/lists.js``) show, per record
+kind, the fields its records set with the schema's ``title`` (a new field is a
+column with no line of the page; a field marked rare stays in the form), or,
+for a kind the engine describes, the entries of
+``pyazr.project.DESCRIPTION_FIELDS`` marked ``list`` (``kinds()["description"]``:
+one row there for a new entry of ``describe``); the list of pairs shows
+``ProjectPair.FIELDS`` marked ``list`` (``pyazr/nuclear_part.py``, a new
+field of a pair is one row with its title and unit; the pair form takes
+``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). A **control** of a form
+is the row of its value type in ``WIDGETS`` (``pyazr/ui/static/forms.js``):
+a ``path`` offers the project folder's files (``GET /api/files``) and is
+previewed under the field (``tabs/records.js`` ``filePreview``, ``GET
+/api/project/records/{name}/preview``), a ``reference`` offers the records and
+"new …", a ``number_list`` a box per number. A **kind of job** the Fit tab's
+first view offers is a kind of ``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``).
+A **view of the first view** is a row of ``FIRST_VIEW`` (``layout.js``); a
+row with ``when`` is shown under the condition of that name (``CONDITIONS``
+in ``app.js``).
+
 Other tables
 ------------
 

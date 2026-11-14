@@ -45,7 +45,8 @@ The first view and the expert's
 
 The page opens in its **first view**: the tabs follow the old setup program's path and words, **Project**,
 **Particle Pairs**, **Levels and Channels**, **Segments** (Segments From Data, Segments Without Data, Model
-data), **Experimental Effects** (targets, beams, detectors), **Fit** and **Plot**.  Each screen holds what its task
+data), **Experimental Effects** (targets, beams, detectors), **Fit**, **Plot** and **Reaction Rate**; a project
+with THM content also shows **Physics** and **THM** (after Plot).  Each screen holds what its task
 needs: a field the engine's table marks as rarely set (the source, EXFOR and DOI of a data set, its pair keys,
 THM experiment, reference cross section, UPOS, a target's phase, Doppler broadening or screening, ...) waits under
 **More fields** unless the record sets it, and every field's meaning is written under its title.  The Project tab
@@ -53,7 +54,8 @@ says what to do next (add the pairs, then the levels, then the data, then Calcul
 the session's options, the history and the project's text are one click away under **More**.
 
 Tick **expert** (top right; the key ``e``) for the expert's view: the tabs Project, Nucleus, Data, Fit, Results,
-Physics and THM with every field, as before.  The choice is kept in this browser; ``?depth=expert`` or
+Physics, THM and Rate with every field, as before.  The page opens in the first view unless you switched to the
+expert's yourself: that choice is kept in this browser; ``?depth=expert`` or
 ``?depth=first`` in an address opens one view in that depth.  The two depths show the same project: every
 address means the same thing in both.
 
@@ -75,15 +77,24 @@ number and says what it refuses.
 the level, untick a channel's **fixed** and type its width (Enter sends it).
 
 *Add a data set with its file and a normalisation.*  **Segments** › **+ new**: the reaction, the quantity, the
-unit, the data file (the first rows of the file are shown once it is set), the columns, the normalisation (a value
-of its own with a mode and a prior, or a shared one) › **Apply**.
+unit, the data file (chosen among the project folder's files, or typed; its first rows are shown under the field,
+and for a data set that exists what the engine reads of it: the rows read and kept and their energy range, or the
+engine's refusal), the columns, the normalisation (a value of its own with a mode and a prior, or a shared one) ›
+**Apply**.
 
 *Add a target effect.*  **Experimental Effects** › **+ new**: a target (its kind, the active nucleus, the
 composition, the areal density, stopping and straggling), a beam or a detector › **Apply**; then **Segments** ›
-the data set › **Target** (or Beam, Detector) › **Apply**.
+the data set › **Target** (or Beam, Detector) › **Apply**.  The choice of a target, beam, detector or shared
+normalization also offers **new …**, which opens the form of a new record of that kind.
 
 *Run a fit and look at it.*  **Fit** › the method › **Run**; follow its progress; **Accept into project** ›
-**Calculate**: every data set against the new model, with what the fit changed.
+**Calculate**: every data set against the new model, with what the fit changed.  The first view offers fits; MINOS,
+the sampler and the bands are under **More: …** in the job form (the expert's view offers every kind).  MINOS's
+parameters are ticked among the free parameters (none ticked: every one).
+
+*Calculate a reaction rate.*  **Reaction Rate** › the entrance and exit pairs, the temperatures › **Calculate**: the
+rate against T9, the Gamow window and the table (CSV, STARLIB, REACLIB); the parameters, the band, a comparison file
+and the libraries' labels are under **More**.
 
 *Give a data set a covariance.*  **Segments** › the data set › **Covariance file**: a file of the project folder
 (``data_formats.rst``, covariance files) › **Apply**.
@@ -98,7 +109,8 @@ program and of pyazr, the reference every publication that uses AZURE2's results
 *Physical Review C* **81**, 045805 (2010)) and the link to this documentation.  The page's colours are the icon's:
 its blue is the accent, its red marks an error and its green a success, and each of these states also carries a
 symbol (✕, ⚠, ✓), so that nobody has to tell red from green.  The line at the bottom shows the engine's last
-message.  The keys are listed by ``?``: ``1`` … ``7`` switch tabs, Ctrl+Z and Ctrl+Shift+Z undo and redo,
+message.  The keys are listed by ``?``: ``1`` … ``9`` switch to the tabs as the bar shows them, Ctrl+Z and
+Ctrl+Shift+Z undo and redo,
 ``/`` filters the current table, the arrow keys and Enter move through a table, Ctrl+Enter applies a form, Esc
 reverts it, ``t`` switches between the system's theme, light and dark.  Each view has its own address
 (``#/data/s02_diff090``), so a link or a reload brings you back to it.
@@ -114,7 +126,9 @@ session's options (Brune, Park, the Coulomb table and the others) with the value
 the history of edits; the project's text, read-only, with **Replace text** for an edit of the whole; the engine's
 version, build and data files.
 
-**Nucleus.**  The particle pairs: choose a row to edit its radius, masses, separation energy, excitations and THM
+**Nucleus.**  The particle pairs, in the old program's columns (light and heavy particle by name, their J^π and
+masses, the excitation and separation energies, the channel radius, the pair type): choose a row to edit its
+radius, masses, separation energy, excitations and THM
 binding energy B (the fields are those the server's pair edit takes), or to remove it with **Remove pair** (refused
 while a level has a channel of the pair, in the engine's words; then **Remove pair … and its channels** removes
 those channel rows too, and with them their fit parameters).  **+ pair** adds one: its kind (particle, photon,
@@ -130,7 +144,10 @@ channel, or an amplitude in MeV^1/2 where the row says so; ticking the amplitude
 records are edited with the same forms as the records of the Data tab.
 
 **Data.**  The records of every section of the project file, one group per section (data sets, targets,
-extrapolations, model data); the list shows the program's χ² per data set, its points and normalization.  Choosing
+extrapolations, model data), one list per kind of record under its name: a data set by its reaction, observable,
+data file, energy range, angle window, points, whether it is active, its normalization (the value in use, fitted or
+fixed, the shared record it comes from) and the program's χ²; a target, beam, detector, shared normalization or
+energy scale by the fields it sets, headed by their names, and the data sets that use it.  Choosing
 a record opens its form, generated from the engine's schema, with the engine's description of the record beside it
 and the engine's messages under the fields they concern; **Apply** (Ctrl+Enter) sends only the fields you changed.
 A data set also shows the first rows of its data file and a preview plot of the data (points with errors) and the
