@@ -15,7 +15,7 @@ namespace azure2 {
 TaskScratch::TaskScratch() = default;
 TaskScratch::~TaskScratch() = default;
 
-AMatrixFunc &TaskScratch::PointSolver(const CNuc *compound, const LevelState &state, const Config &configure) {
+AMatrixFunc &TaskScratch::PointSolver(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
   if (!point_) {
     point_.reset(new AMatrixFunc(compound, state, configure));
     point_->ShareChannelMemo(&channel_);
@@ -24,7 +24,7 @@ AMatrixFunc &TaskScratch::PointSolver(const CNuc *compound, const LevelState &st
   return *point_;
 }
 
-THMMatrixFunc &TaskScratch::PointThmSolver(const CNuc *compound, const LevelState &state, const Config &configure) {
+THMMatrixFunc &TaskScratch::PointThmSolver(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
   if (!pointThm_) {
     pointThm_.reset(new THMMatrixFunc(compound, state, configure));
     pointThm_->ShareChannelMemo(&channel_);
@@ -33,7 +33,7 @@ THMMatrixFunc &TaskScratch::PointThmSolver(const CNuc *compound, const LevelStat
   return *pointThm_;
 }
 
-AMatrixFunc &TaskScratch::GradientSolver(const CNuc *compound, const LevelState &state, const Config &configure) {
+AMatrixFunc &TaskScratch::GradientSolver(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
   if (!gradient_) {
     gradient_.reset(new AMatrixFunc(compound, state, configure));
     gradient_->ShareChannelMemo(&channel_);
@@ -42,7 +42,7 @@ AMatrixFunc &TaskScratch::GradientSolver(const CNuc *compound, const LevelState 
   return *gradient_;
 }
 
-THMMatrixFunc &TaskScratch::GradientThmSolver(const CNuc *compound, const LevelState &state, const Config &configure) {
+THMMatrixFunc &TaskScratch::GradientThmSolver(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
   if (!gradientThm_) {
     gradientThm_.reset(new THMMatrixFunc(compound, state, configure));
     gradientThm_->ShareChannelMemo(&channel_);

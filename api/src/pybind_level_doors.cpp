@@ -1,7 +1,7 @@
 // The two doors of the level parameters for pyazr.endf (docs/upgrade/endf.md section 8.2): one J^pi block of
 // particle channels, given by plain pair records and numbers, converted by the engine's own functions of
 // physics/LevelParameters.h with the engine's channel functions (ChannelFunc, WhitFunc on PPair objects built from
-// the records, as CNuc::Fill builds them).
+// the records, as CompoundSystem::Fill builds them).
 //
 //   formal_levels_of_block    the block's levels in the project's basis (Brune or Park amplitudes, or the observed
 //                             widths and ANCs) -> the formal levels with the engine's B_c = S_c(E_1)
@@ -179,7 +179,7 @@ Block MakeBlock(const py::list &pair_records, int two_J, int parity, const std::
 }
 
 /// The engine's channel functions of a particle channel at a level energy E (MeV, E_x), as the engine's adapter
-/// ChannelFunctionsFromCNuc (src/CNucLevelParameters.cpp) forms them: E_c = (E - S) - e; S, dS/dE; P above threshold,
+/// EngineChannelFunctions (src/EngineChannelFunctions.cpp) forms them: E_c = (E - S) - e; S, dS/dE; P above threshold,
 /// mu a / (hbar^2 W^2) below it, 0 at threshold.
 phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
   const Block *b = &blk;

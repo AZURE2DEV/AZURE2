@@ -9,7 +9,7 @@
 #include <string>
 
 #include "AngCoeff.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "PathwayTable.h"
 #include "PPair.h"
 #include "PolarizationFunc.h"
@@ -204,7 +204,7 @@ const SiteObservableRow kSiteObservables[5] = {
     {SiteObservable::kHoes, "half-off-shell cross section", nullptr, nullptr, 1, nullptr, nullptr},
 };
 
-RecordCapacity RecordCapacityOf(const CNuc &compound) {
+RecordCapacity RecordCapacityOf(const CompoundSystem &compound) {
   RecordCapacity c;
   c.orders = 1;
   const azure2::PathwayTable &pathways = compound.Pathways();

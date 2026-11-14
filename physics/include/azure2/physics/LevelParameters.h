@@ -19,8 +19,8 @@ namespace physics {
  * docs/upgrade/level_parameters.md.  Every function works on one J^pi block b of a System; the System gives the
  * channels' partitions, spins and thresholds and is not modified.
  *
- * Basis conversions (called by CNuc::TransformIn, CNuc::CalcBoundaryConditions, CNuc::TransformOut; reproducing
- * CNuc::ConvertAmplitudeBasis):
+ * Basis conversions (called by CompoundSystem::TransformIn, CompoundSystem::CalcBoundaryConditions, CompoundSystem::TransformOut; reproducing
+ * CompoundSystem::ConvertAmplitudeBasis):
  *   amplitudes_from_observed   observed widths (eV), ANCs (fm^-1/2), amplitudes -> Brune or Park amplitudes
  *   observed_from_amplitudes   the inverse
  *   boundary_values            B_c of the formal basis
@@ -36,7 +36,7 @@ namespace physics {
  *
  * The channel functions are an input: physics/ has no Coulomb functions yet (channel_functions waits for
  * pycoulomb), so the caller supplies S_c, dS_c/dE and the width factor P_c at any energy through ChannelFunctions.
- * The engine's adapter (src/CNucLevelParameters.cpp) supplies them from ChannelFunc and WhitFunc.
+ * The engine's adapter (src/EngineChannelFunctions.cpp) supplies them from ChannelFunc and WhitFunc.
  */
 
 /// Channel functions of one block channel at one level energy, supplied by the caller.
@@ -46,7 +46,7 @@ struct ChannelValues {
   ///  - particle channel below threshold (E_c < 0): mu a_c / (hbar^2 W_l(2 kappa a_c)^2) (MeV^-1 fm^-1), so that
   ///    an ANC C (fm^-1/2) gives gamma^2 = C^2 / (2 P) at first order (conventions.rst Eq. conv-brune);
   ///  - photon channel: (E_gamma / hbar c)^(2L+1) (fm^-(2L+1)), or 1 with --use-rmc; for a static moment
-  ///    (static_moment true) the engine's factor (CNuc.cpp, "Static moments" in conventions.rst);
+  ///    (static_moment true) the engine's factor (LevelTransforms.cpp, "Static moments" in conventions.rst);
   ///  - beta channel: 1 (not used).
   double P = 0.0;
   double S = 0.0;      ///< shift function S_c(E_c) (dimensionless), particle channels
@@ -84,7 +84,7 @@ struct ProjectLevels {
 };
 
 
-/// External-capture amplitude of one (level, photon channel), supplied by the caller (CNuc::CalcExternalWidth).
+/// External-capture amplitude of one (level, photon channel), supplied by the caller (ExternalWidthsOfInputs).
 struct ExternalWidth {
   bool present = false;
   std::complex<double> value{0.0, 0.0};
@@ -125,7 +125,7 @@ struct BasisAmplitudes {
 };
 
 /*!
- * Observed widths and ANCs -> Brune (basis Brune) or Park (basis Park) amplitudes (CNuc.cpp, TransformIn, first
+ * Observed widths and ANCs -> Brune (basis Brune) or Park (basis Park) amplitudes (LevelTransforms.cpp, TransformIn, first
  * loop).  columns label the value columns; each must have a block channel with the same partition, kind and l from
  * which the channel functions are taken (any channel spin: P_c, S_c depend on (alpha, l) only).
  */
@@ -182,7 +182,7 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
                                     const ChannelFunctions &cf);
 
 /// Photon channels: total amplitude -> internal one, gamma_int = sign(gamma) (gamma^2 - Im^2)^1/2 - Re of the
-/// external amplitude (CNuc.cpp, TransformIn, second loop).  ext has the layout of gamma; entries not present are
+/// external amplitude (LevelTransforms.cpp, TransformIn, second loop).  ext has the layout of gamma; entries not present are
 /// left alone: the --ignore-externals mask is applied by the caller, which leaves a masked channel's entry absent
 /// (external_capture.md section 3).
 /// exceeded, if given, receives the index (lambda * n_c + k) of every entry where |Im| exceeded the total amplitude.
@@ -215,7 +215,7 @@ struct LevelSet {
 };
 
 /*!
- * Brune -> formal with constant B (CNuc.cpp, TransformIn, second loop), by generalized_symmetric_eigen.  Level lambda
+ * Brune -> formal with constant B (LevelTransforms.cpp, TransformIn, second loop), by generalized_symmetric_eigen.  Level lambda
  * keeps its position: it receives the eigenvalue of the rank of its Brune energy, and the orientation of its Brune
  * level: of the two signs of the eigenvector, the one whose component on the level's own Brune state is positive.  So
  * the result does not depend on the eigensolver, the formal amplitudes keep the input signs where levels mix weakly,
@@ -227,7 +227,7 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf);
 
 struct FormalToBruneOptions {
-  double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
+  double energy_tolerance_MeV = 1e-6;  ///< the engine's (CompoundSystem::TransformOut)
   /// Converged when the step is <= max(energy_tolerance_MeV, relative_tolerance |E|); 0: the absolute test alone.
   double relative_tolerance = 0.0;
   int max_iterations = 1000;           ///< the engine's
@@ -242,7 +242,7 @@ struct FormalToBruneOptions {
   bool bracket = true;
 };
 
-/// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
+/// Formal -> Brune by the engine's iteration (CompoundSystem::TransformOut): per level, B_c moved to S_c(E) and the matrix
 /// E - sum_c (S_c - B_c) gamma gamma rediagonalized (symmetric_eigen) until the level's energy moves by <= the
 /// tolerance.  A level that does not converge is the root of E - e(E), found by bisection (level_parameters.md
 /// section 10); if no root is bracketed, it keeps its formal values, with a warning, as in the engine (with

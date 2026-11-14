@@ -1,5 +1,5 @@
-// The checks of a compound nucleus and their messages (CNucChecks.h).  Reads the nucleus through const access only.
-#include "CNucChecks.h"
+// The checks of a compound nucleus and their messages (CompoundSystemChecks.h).  Reads the nucleus through const access only.
+#include "CompoundSystemChecks.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +13,7 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
 #include "JGroup.h"
@@ -30,7 +30,7 @@
  * rule, (-1)^(L+S) = -1, asked for (3S1 instead of 1S0 in p+p), so an old model is stopped here with the reason rather
  * than silently re-interpreted.  For spin-0 pairs such a channel only draws a warning (WarnForbiddenSpinlessChannels).
  */
-int RefuseForbiddenIdenticalChannels(const CNuc &compound, const Config &configure) {
+int RefuseForbiddenIdenticalChannels(const CompoundSystem &compound, const Config &configure) {
   int bad = 0;
   for (int j = 1; j <= compound.NumJGroups(); j++) {
     const JGroup *jg = compound.GetJGroup(j);
@@ -61,9 +61,9 @@ int RefuseForbiddenIdenticalChannels(const CNuc &compound, const Config &configu
 /*!
  * Bose/Fermi symmetry requires L+S even (for bosons the same as (-1)^(L+S) == +1).  Such channels still contribute to
  * the calculation, but the result does not respect identical-particle symmetry.  Only spin-0 pairs get this far: for a
- * pair with spin CNuc::Fill has refused the model (RefuseForbiddenIdenticalChannels).
+ * pair with spin CompoundSystem::Fill has refused the model (RefuseForbiddenIdenticalChannels).
  */
-void WarnForbiddenSpinlessChannels(const CNuc &compound, const Config &configure) {
+void WarnForbiddenSpinlessChannels(const CompoundSystem &compound, const Config &configure) {
   for (int j = 1; j <= compound.NumJGroups(); j++) {
     const JGroup *jg = compound.GetJGroup(j);
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -94,7 +94,7 @@ void WarnForbiddenSpinlessChannels(const CNuc &compound, const Config &configure
  * terms (l + l' > maxLOrder) that are silently dropped from every differential cross section (angle-integrated values
  * are complete).  Said once per such channel (checklist t3-24).
  */
-void WarnTruncatedLegendreOrders(const CNuc &compound, const Config &configure) {
+void WarnTruncatedLegendreOrders(const CompoundSystem &compound, const Config &configure) {
   for (int j = 1; j <= compound.NumJGroups(); j++) {
     const JGroup *jg = compound.GetJGroup(j);
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -117,7 +117,7 @@ void WarnTruncatedLegendreOrders(const CNuc &compound, const Config &configure) 
  * mass number.  A mismatch within 5 keV of a multiple of the electron mass gets a hint: atomic and nuclear (or
  * bare-proton) masses mixed.  Nothing in the calculation changes.
  */
-int WarnMassSeparationMismatch(const CNuc &compound, const Config &configure) {
+int WarnMassSeparationMismatch(const CompoundSystem &compound, const Config &configure) {
   const double me = azure2::physics::kElectronMass_MeV;
   const int kMaxListed = 3;
   // A pair whose masses are mass numbers (both integers, other than 12C's exact 12) carries no Q value: it is
@@ -190,7 +190,7 @@ int WarnMassSeparationMismatch(const CNuc &compound, const Config &configure) {
  * width and are skipped; levels with no open particle channel are not checked.  One warning lists every flagged
  * level, worst first.
  */
-void WarnLargeRadiativeWidths(const CNuc &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure) {
+void WarnLargeRadiativeWidths(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure) {
   namespace phys = azure2::physics;
   const double warningRatio = 0.1;
   struct FlaggedLevel {

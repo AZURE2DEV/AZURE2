@@ -23,7 +23,7 @@
 #include "ALevel.h"
 #include "AZUREAPI.h"
 #include "ApparatusParameters.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
@@ -53,7 +53,7 @@ struct ParameterView {
   const AZUREAPI *api;
   int index;  // among all parameters
   const ParameterRecord *record;
-  const CNuc *nuc;
+  const CompoundSystem *nuc;
   const DataSet *data;
   const JGroup *group = nullptr;          // level kinds, cbkg
   const ALevel *level = nullptr;          // level kinds
@@ -340,71 +340,71 @@ struct PairField {
   const char *name;
   const char *unit;
   const char *doc;
-  py::object (*read)(const CNuc &, const WorkingCopy &, const PPair &, int number);
+  py::object (*read)(const CompoundSystem &, const WorkingCopy &, const PPair &, int number);
 };
 
 const std::vector<PairField> &PairFields() {
   static const std::vector<PairField> fields = {
       {"number", "", "the engine's pair number, from 1 (Parameter.pair)",
-       [](const CNuc &, const WorkingCopy &, const PPair &, int p) -> py::object { return py::int_(p); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &, int p) -> py::object { return py::int_(p); }},
       {"key", "", "the pair's key in <levels> (engine messages and isospin.out name pairs by key)",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPairKey()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPairKey()); }},
       {"pair_kind", "", "particle, photon (gamma + the final level) or beta (a beta decay)",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::str(q.GetPType() == 0 ? "particle" : q.GetPType() == 10 ? "photon" : "beta");
        }},
       {"ptype", "", "the pair type as <levels> writes it: 0 particle, 10 photon, 20 beta",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPType()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPType()); }},
       {"is_entrance", "", "an entrance pair of the calculation: of an active data set (of an active extrapolation in a "
                           "session of the extrapolations), set when the session is built",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::bool_(q.IsEntrance()); }},
-      {"J1", "", "the light particle's spin", [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::bool_(q.IsEntrance()); }},
+      {"J1", "", "the light particle's spin", [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetJ(1));
        }},
       {"parity1", "", "its parity, +1 or -1",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(1)); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(1)); }},
       {"Z1", "", "its charge number",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(1)); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(1)); }},
       {"M1", "u", "its mass",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetM(1));
        }},
-      {"J2", "", "the heavy particle's spin", [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+      {"J2", "", "the heavy particle's spin", [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetJ(2));
        }},
       {"parity2", "", "its parity, +1 or -1",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(2)); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPi(2)); }},
       {"Z2", "", "its charge number",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(2)); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetZ(2)); }},
       {"M2", "u", "its mass",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetM(2));
        }},
       {"sep_energy", "MeV", "the separation energy: the threshold is sep_energy + excitation",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetSepE()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetSepE()); }},
       {"excitation", "MeV", "the pair's excitation energy, light plus heavy particle",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetExE()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetExE()); }},
       {"light_excitation", "MeV", "the light particle's excitation energy (column 32 of <levels>; 0 for gamma, beta)",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetLightExE());
        }},
       {"channel_radius", "fm", "the channel radius",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetChRad()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetChRad()); }},
       {"i1i2factor", "", "1 / ((2 J1 + 1)(2 J2 + 1)), the statistical factor's denominator of an entrance pair",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetI1I2Factor());
        }},
       {"nucleus_Z", "", "the compound nucleus the pair forms: its charge number",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetNucleusZ()); }},
-      {"nucleus_A", "", "its mass number", [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetNucleusZ()); }},
+      {"nucleus_A", "", "its mass number", [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::int_(q.GetNucleusA());
        }},
       {"abundance", "", "that nucleus's abundance in the default sample (1 without <abundances>)",
-       [](const CNuc &, const WorkingCopy &data, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &data, const PPair &q, int) -> py::object {
          return py::float_(data.Abundance(data.Data().Abundances().Default(), q.GetNucleus()));
        }},
       {"binding_energy", "MeV", "the THM binding energy of the pair's composite projectile, 0 for other pairs",
-       [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetBindingEnergy());
        }},
   };
@@ -436,7 +436,7 @@ py::list ParameterRecordDicts(const AZUREAPI &api) {
 }
 
 py::list PairRecordDicts(const AZUREAPI &api) {
-  const CNuc &nuc = *api.compound();
+  const CompoundSystem &nuc = *api.compound();
   const WorkingCopy &data = *api.data();
   py::list out;
   for (int p = 1; p <= nuc.NumPairs(); ++p) {

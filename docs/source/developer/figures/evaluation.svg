@@ -269,20 +269,20 @@
 <polygon fill="black" stroke="black" points="806.19,-111 800.19,-115 794.19,-111 800.19,-107 806.19,-111"/>
 <polygon fill="black" stroke="black" points="865.14,-114.5 875.14,-111 865.14,-107.5 865.14,-114.5"/>
 </g>
-<!-- n_CNuc -->
+<!-- n_CompoundSystem -->
 <g id="node19" class="node">
-<title>n_CNuc</title>
+<title>n_CompoundSystem</title>
 <polygon fill="white" stroke="black" points="1010,-72 871,-72 871,-4 1010,-4 1010,-72"/>
 <polygon fill="none" stroke="black" points="1014,-76 867,-76 867,0 1014,0 1014,-76"/>
-<text text-anchor="start" x="922" y="-58.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNuc</text>
+<text text-anchor="start" x="880" y="-58.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CompoundSystem</text>
 <text text-anchor="start" x="877" y="-46.4" font-family="Helvetica" font-size="12.00">the compound nuclei as</text>
 <text text-anchor="start" x="902.5" y="-34.4" font-family="Helvetica" font-size="12.00">set up, shared</text>
 <text text-anchor="start" x="893.5" y="-22.4" font-family="Helvetica" font-size="12.00">constant by every</text>
 <text text-anchor="start" x="912.5" y="-10.4" font-family="Helvetica" font-size="12.00">evaluation</text>
 </g>
-<!-- n_AMatrixFunc&#45;&gt;n_CNuc -->
+<!-- n_AMatrixFunc&#45;&gt;n_CompoundSystem -->
 <g id="edge16" class="edge">
-<title>n_AMatrixFunc&#45;&gt;n_CNuc</title>
+<title>n_AMatrixFunc&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M794.19,-89C814,-82.05 836.2,-74.25 857.17,-66.89"/>
 <polygon fill="black" stroke="black" points="866.71,-63.55 858.76,-71.1 861.99,-65.2 857.27,-66.86 857.27,-66.86 857.27,-66.86 861.99,-65.2 855.78,-62.61 866.71,-63.55 866.71,-63.55"/>
 </g>
@@ -310,9 +310,9 @@
 <text text-anchor="start" x="710" y="-28.4" font-family="Helvetica" font-size="12.00">route (a</text>
 <text text-anchor="start" x="688" y="-16.4" font-family="Helvetica" font-size="12.00">GenMatrixFunc)</text>
 </g>
-<!-- n_RMatrixFunc&#45;&gt;n_CNuc -->
+<!-- n_RMatrixFunc&#45;&gt;n_CompoundSystem -->
 <g id="edge18" class="edge">
-<title>n_RMatrixFunc&#45;&gt;n_CNuc</title>
+<title>n_RMatrixFunc&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M786.15,-38C807.74,-38 833.02,-38 856.76,-38"/>
 <polygon fill="black" stroke="black" points="866.83,-38 856.83,-42.5 861.83,-38 856.83,-38 856.83,-38 856.83,-38 861.83,-38 856.83,-33.5 866.83,-38 866.83,-38"/>
 <text text-anchor="middle" x="848" y="-41.4" font-family="Helvetica" font-size="12.00"> nc</text>

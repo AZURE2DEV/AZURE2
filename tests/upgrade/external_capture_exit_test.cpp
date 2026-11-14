@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ProjectSetup.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
   Config cfg(sink);
   cfg.configfile = file.filename().string();
   cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   if (cfg.ReadConfigFile() < 0) {

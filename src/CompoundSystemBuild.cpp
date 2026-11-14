@@ -7,7 +7,7 @@
 #include <set>
 #include <map>
 #include <tuple>
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "RunScratch.h"
 #include "RunDiagnostics.h"
 #include "azure2/physics/Constants.h"
@@ -20,12 +20,12 @@
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "ChannelFunc.h"
-#include "CNucLevelParameters.h"
-#include "CNucSystem.h"
-#include "CNucChecks.h"
-#include "CNucPathways.h"
-#include "CNucReport.h"
-#include "CNucTransformMessages.h"
+#include "EngineChannelFunctions.h"
+#include "SystemOfCompound.h"
+#include "CompoundSystemChecks.h"
+#include "CompoundSystemPathways.h"
+#include "LevelReport.h"
+#include "LevelInputMessages.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
@@ -36,7 +36,7 @@
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
 #include "NFIntegral.h"
-#include "CNucExternalCapture.h"
+#include "ExternalCaptureAmplitudes.h"
 #include "ShftFunc.h"
 #include "azure2/io/LevelGrouping.h"
 #include "azure2/physics/ObservableCoupling.h"
@@ -53,7 +53,7 @@ int Twice(double j) { return (int)std::lround(2.0 * j); }
  * Returns true if a specified pair key exists in the PPair vector, otherwise returns false.
  */
 
-bool CNuc::IsPairKey(int key) const {
+bool CompoundSystem::IsPairKey(int key) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
@@ -63,7 +63,7 @@ bool CNuc::IsPairKey(int key) const {
   return b;
 }
 
-std::vector<int> CNuc::CapturePairKeys(int entranceKey) const {
+std::vector<int> CompoundSystem::CapturePairKeys(int entranceKey) const {
   std::vector<int> keys;
   const PPair *entrance = GetPairFromKey(entranceKey);
   if (!entrance) return keys;
@@ -73,7 +73,7 @@ std::vector<int> CNuc::CapturePairKeys(int entranceKey) const {
   return keys;
 }
 
-std::string CNuc::RatePairsProblem(int entranceKey, int exitKey) const {
+std::string CompoundSystem::RatePairsProblem(int entranceKey, int exitKey) const {
   const PPair *entrance = GetPairFromKey(entranceKey);
   if (!entrance) return "Reaction rate entrance pair " + std::to_string(entranceKey) + " does not exist in compound nucleus.";
   if (entrance->GetPType() != 0)
@@ -93,7 +93,7 @@ std::string CNuc::RatePairsProblem(int entranceKey, int exitKey) const {
  * Returns the number of particle pairs in the PPair vector.
  */
 
-int CNuc::NumPairs() const {
+int CompoundSystem::NumPairs() const {
   return pairs_.size();
 }
 
@@ -101,7 +101,7 @@ int CNuc::NumPairs() const {
  * Returns the number of \f$ J^\pi \f$ groups in the JGroup vector.
  */
 
-int CNuc::NumJGroups() const {
+int CompoundSystem::NumJGroups() const {
   return jgroups_.size();
 }
 
@@ -110,7 +110,7 @@ int CNuc::NumJGroups() const {
  * the vector is returned.  Otherwise, the function returns 0.
  */
 
-int CNuc::IsPair(PPair pair) {
+int CompoundSystem::IsPair(PPair pair) {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
@@ -128,7 +128,7 @@ int CNuc::IsPair(PPair pair) {
  * is returned.  Otherwise, the function returns 0.
  */
 
-int CNuc::IsJGroup(JGroup jGroup) const {
+int CompoundSystem::IsJGroup(JGroup jGroup) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumJGroups()) {
@@ -149,21 +149,21 @@ int CNuc::IsJGroup(JGroup jGroup) const {
  * The compound nuclei of the project, one per distinct (Z, A) the pairs form.
  */
 
-int CNuc::NumNuclei() const {
+int CompoundSystem::NumNuclei() const {
   return nuclei_.size();
 }
 
-const CompoundNucleus *CNuc::GetNucleus(int nucleusNum) const {
+const CompoundNucleus *CompoundSystem::GetNucleus(int nucleusNum) const {
   return &nuclei_[nucleusNum - 1];
 }
 
-std::string CNuc::NucleusLabel(int nucleusNum) const {
+std::string CompoundSystem::NucleusLabel(int nucleusNum) const {
   std::ostringstream out;
   out << "Z=" << nuclei_[nucleusNum - 1].Z << " A=" << nuclei_[nucleusNum - 1].A;
   return out.str();
 }
 
-int CNuc::FindOrAddNucleus(int z, int a) {
+int CompoundSystem::FindOrAddNucleus(int z, int a) {
   for (unsigned int i = 0; i < nuclei_.size(); i++)
     if (nuclei_[i].Z == z && nuclei_[i].A == a) return i + 1;
   CompoundNucleus nucleus;
@@ -180,7 +180,7 @@ int CNuc::FindOrAddNucleus(int z, int a) {
  * If the pair exists, the position in the vector is returned.  Otherwise, the function returns 0.
  */
 
-int CNuc::GetPairNumFromKey(int key) const {
+int CompoundSystem::GetPairNumFromKey(int key) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
@@ -198,7 +198,7 @@ int CNuc::GetPairNumFromKey(int key) const {
  * input files.  Returns -1 if the files could not be read, and 0 if the files were read successfully.
  */
 
-int CNuc::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, const std::map<int, double> &radii) {
+int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, const std::map<int, double> &radii) {
   inputs = LevelInputs();
   if (configure.relativistic && configure.useHybridMethod) {
     // The hybrid potential acts in a Schrodinger equation between a_c and the matching radius: no relativistic form.
@@ -449,7 +449,7 @@ int CNuc::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, 
  * levels) is what includeAllJPi=0 gives.
  */
 
-int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
+int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
   int added = 0;
   for (int aa = 1; aa <= this->NumPairs(); aa++) {
     PPair *pair = this->Pair(aa);
@@ -504,7 +504,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
  * experiment::ExternalCaptureFinalStates on the <levels> `rows`, as the validation decides them.
  */
 
-int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
+int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
                                const std::vector<azure2::io::LevelRow> &rows) {
   std::vector<int> ecKeys;
   for (const auto &ec : ecPairs) ecKeys.push_back(this->Pair(ec.first)->GetPairKey());
@@ -579,10 +579,10 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
 /*!
  * Initializes the compound nucleus object.  This includes calculating the boundary conditions, transforming from
  * physical to formal parameters, creating and sorting all reaction pathways, and calculating angular interference
- * contributions and coefficients.  A CNuc object can only be initialized for use AFTER it is filled.
+ * contributions and coefficients.  A CompoundSystem object can only be initialized for use AFTER it is filled.
  */
 
-void CNuc::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs) {
+void CompoundSystem::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs) {
   WarnForbiddenSpinlessChannels(*this, configure);
 
   // Calculate Boundary Conditions
@@ -622,7 +622,7 @@ void CNuc::Initialize(const Config &configure, LevelState &state, LevelInputs &i
  * Adds a particle pair to the PPair vector.
  */
 
-void CNuc::AddPair(PPair pPair) {
+void CompoundSystem::AddPair(PPair pPair) {
   pPair.SetNucleus(this->FindOrAddNucleus(pPair.GetNucleusZ(), pPair.GetNucleusA()));
   pairs_.push_back(pPair);
 }
@@ -631,7 +631,7 @@ void CNuc::AddPair(PPair pPair) {
  * Adds a \f$ J^\pi \f$ group to the JGroup vector.
  */
 
-void CNuc::AddJGroup(JGroup jGroup) {
+void CompoundSystem::AddJGroup(JGroup jGroup) {
   jgroups_.push_back(jGroup);
 }
 
@@ -642,22 +642,22 @@ namespace phys = azure2::physics;
  * amplitudes of the levels become Brune's (or Park's) reduced width amplitudes, the external-capture amplitude is
  * subtracted from the photon channels, and, with the Brune parametrization off, the levels become formal ones.  The
  * arithmetic is physics/ level_parameters' (docs/upgrade/level_parameters.md sections 2-4), with the engine's channel
- * functions (ChannelFunctionsFromCNuc); the formal parameters take B_c at the lowest level of a group, and each formal
+ * functions (EngineChannelFunctions); the formal parameters take B_c at the lowest level of a group, and each formal
  * level the orientation of its Brune level (HANDOFF decision 10, cnuc_split.md section 7).  This function words the
  * warnings and keeps the bound-state normalization of external capture.
  */
 
-bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &inputs) const {
+bool CompoundSystem::TransformIn(const Config &configure, LevelState &state, LevelInputs &inputs) const {
   inputs.StartTransformation();
   // Park (2021): the fit parameter is the observed reduced width amplitude, Gamma = 2 P gamma^2 (Eqs. 31-33), so the
   // factor that turns an observed width into Brune's reduced width is not applied; its J (Eq. 28) must stay positive.
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
-    const CNucSystem &structure = this->SystemStructure();
+    const SystemOfCompound &structure = this->SystemStructure();
     const phys::System &system = structure.system;
-    const CNucSystemMap &map = structure.map;
-    const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, map, configure);
+    const SystemOfCompoundMap &map = structure.map;
+    const phys::ChannelFunctions cf = EngineChannelFunctions(*this, map, configure);
 
     // 1. Observed widths, ANCs and amplitudes -> Brune or Park amplitudes (Eqs. 2.1-2.3).
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
@@ -665,7 +665,7 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
       const JGroup *theJGroup = this->GetJGroup(j);
       const std::vector<int> &levels = map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
-      const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, inputs, map, b);
+      const phys::ProjectLevels in = ProjectLevelsOfInputs(*this, inputs, map, b);
       const phys::BasisAmplitudes amp = phys::amplitudes_from_observed(
           system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
@@ -704,7 +704,7 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
         E.push_back(inputs.E(j, la));
         for (std::size_t k = 0; k < nc; k++) gamma.push_back(inputs.Gamma(j, la, (int)k + 1));
       }
-      const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, state, inputs, map, b, configure);
+      const std::vector<phys::ExternalWidth> ext = ExternalWidthsOfInputs(*this, state, inputs, map, b, configure);
       std::vector<std::string> warnings;
       std::vector<std::size_t> exceeded;
       phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
@@ -768,14 +768,14 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
  * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
 
-void CNuc::CalcBoundaryConditions(const Config &configure, const LevelInputs &inputs) {
+void CompoundSystem::CalcBoundaryConditions(const Config &configure, const LevelInputs &inputs) {
   // B_c = S_c(E of the group's lowest R-matrix level) for every particle channel; a non-particle channel copies channel
   // 1's value (it never enters the level matrix); a group without R-matrix levels gets 0, where B_c drops out of the
   // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1; HANDOFF decision 10).
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
-    const CNucSystem &structure = this->SystemStructure();
-    const azure2::physics::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
+    const SystemOfCompound &structure = this->SystemStructure();
+    const azure2::physics::ChannelFunctions cf = EngineChannelFunctions(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       JGroup *theJGroup = this->Group(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
@@ -809,7 +809,7 @@ void CNuc::CalcBoundaryConditions(const Config &configure, const LevelInputs &in
  * Performs the final parameter transformations from formal to physical parameters.
  */
 
-ObservedLevelTable CNuc::TransformOut(const Config &configure, LevelState &state, const LevelInputs &inputs) const {
+ObservedLevelTable CompoundSystem::TransformOut(const Config &configure, LevelState &state, const LevelInputs &inputs) const {
   ObservedLevelTable table = this->EmptyObservedTable();
   this->TransformToBrune(configure, Messages::kPrint, state, inputs, table);
   this->ObservedWidths(configure, state, table);
@@ -822,7 +822,7 @@ ObservedLevelTable CNuc::TransformOut(const Config &configure, LevelState &state
  * for levels that do not convert.
  */
 
-void CNuc::TransformToBrune(const Config &configure, Messages messages, LevelState &state, const LevelInputs &inputs,
+void CompoundSystem::TransformToBrune(const Config &configure, Messages messages, LevelState &state, const LevelInputs &inputs,
                             ObservedLevelTable &table) const {
   // Park (2021): the fit parameters already are the observed reduced width
   // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
@@ -850,8 +850,8 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, LevelSta
     // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
     // the fit values.  A level not in the R-matrix keeps its values.
     const phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
-    const CNucSystem &structure = this->SystemStructure();
-    const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
+    const SystemOfCompound &structure = this->SystemStructure();
+    const phys::ChannelFunctions cf = EngineChannelFunctions(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       const int j = structure.map.groupOfBlock[b];
       const JGroup *theJGroup = this->GetJGroup(j);
@@ -884,12 +884,12 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, LevelSta
  * observed_levels.  Sets the external amplitude, W and the reported value with its kind in `table`.
  */
 
-void CNuc::ObservedWidths(const Config &configure, const LevelState &state, ObservedLevelTable &table) const {
+void CompoundSystem::ObservedWidths(const Config &configure, const LevelState &state, ObservedLevelTable &table) const {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool external = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE);
   const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
-  const CNucSystem &all = this->SystemAllGroups();
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, all.map, configure);
+  const SystemOfCompound &all = this->SystemAllGroups();
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, all.map, configure);
   for (std::size_t b = 0; b < all.system.num_blocks(); b++) {
     const int j = all.map.groupOfBlock[b];
     const JGroup *theJGroup = this->GetJGroup(j);
@@ -937,7 +937,7 @@ void CNuc::ObservedWidths(const Config &configure, const LevelState &state, Obse
  * TransformToBrune in Park's basis recomputes the shift functions and the bound-state normalizations.
  */
 
-std::optional<ObservedLevelTable> CNuc::ObservedWidthsAt(const Config &configure, const vector_r &params, LevelState &state,
+std::optional<ObservedLevelTable> CompoundSystem::ObservedWidthsAt(const Config &configure, const vector_r &params, LevelState &state,
                                                        const LevelInputs &inputs) const {
   this->FillCompoundFromParams(params, state);
   ObservedLevelTable table = this->EmptyObservedTable();
@@ -956,15 +956,15 @@ std::optional<ObservedLevelTable> CNuc::ObservedWidthsAt(const Config &configure
  * Returns a pointer to the particle pair specified by a position in the PPair vector.
  */
 
-PPair *CNuc::Pair(int pairNum) {
+PPair *CompoundSystem::Pair(int pairNum) {
   return &pairs_[pairNum - 1];
 }
 
-const PPair *CNuc::GetPair(int pairNum) const {
+const PPair *CompoundSystem::GetPair(int pairNum) const {
   return &pairs_[pairNum - 1];
 }
 
-const PPair *CNuc::GetPairFromKey(int key) const {
+const PPair *CompoundSystem::GetPairFromKey(int key) const {
   const int num = GetPairNumFromKey(key);
   return num > 0 ? GetPair(num) : nullptr;
 }
@@ -973,10 +973,10 @@ const PPair *CNuc::GetPairFromKey(int key) const {
  * Returns a pointer to the \f$ J^\pi \f$ group specified by a position in the JGroup vector.
  */
 
-JGroup *CNuc::Group(int jGroupNum) {
+JGroup *CompoundSystem::Group(int jGroupNum) {
   return &jgroups_[jGroupNum - 1];
 }
 
-const JGroup *CNuc::GetJGroup(int jGroupNum) const {
+const JGroup *CompoundSystem::GetJGroup(int jGroupNum) const {
   return &jgroups_[jGroupNum - 1];
 }

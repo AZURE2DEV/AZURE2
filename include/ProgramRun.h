@@ -15,7 +15,7 @@
 #include "ParameterLimitsManager.h"
 #include "WorkingData.h"
 
-class CNuc;
+class CompoundSystem;
 class Config;
 class PriorCovariance;
 class WorkingCopy;
@@ -42,10 +42,10 @@ class ProgramProgress {
 };
 
 struct ProgramRun {
-  ProgramRun(const Config &configure, CNuc *compound, WorkingCopy *&data) :
+  ProgramRun(const Config &configure, CompoundSystem *compound, WorkingCopy *&data) :
     configure(configure), compound(compound), data(data) {}
   const Config &configure;
-  CNuc *compound;  ///< AZUREMain's: written by the set-up (SetUpRun) only, read as constant after it
+  CompoundSystem *compound;  ///< AZUREMain's: written by the set-up (SetUpRun) only, read as constant after it
   WorkingCopy *&data;  ///< AZUREMain's: replaced when an adaptive extrapolation grid is refined
   // The run's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the evaluations on the
   // run's data (the calculation, the final evaluation), the band and the rate, and read by the outputs.

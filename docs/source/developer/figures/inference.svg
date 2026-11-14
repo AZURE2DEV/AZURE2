@@ -34,19 +34,19 @@
 <polygon fill="black" stroke="black" points="386.91,-390.04 380.25,-387.29 380.22,-380.08 386.88,-382.83 386.91,-390.04"/>
 <polygon fill="black" stroke="black" points="667.91,-528.86 677.76,-524.96 667.62,-521.87 667.91,-528.86"/>
 </g>
-<!-- n_CNuc -->
+<!-- n_CompoundSystem -->
 <g id="node3" class="node">
-<title>n_CNuc</title>
+<title>n_CompoundSystem</title>
 <polygon fill="white" stroke="black" points="1446,-448 1307,-448 1307,-392 1446,-392 1446,-448"/>
 <polygon fill="none" stroke="black" points="1450,-452 1303,-452 1303,-388 1450,-388 1450,-452"/>
-<text text-anchor="start" x="1358" y="-434.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNuc</text>
+<text text-anchor="start" x="1316" y="-434.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CompoundSystem</text>
 <text text-anchor="start" x="1313" y="-422.4" font-family="Helvetica" font-size="12.00">the compound nuclei as</text>
 <text text-anchor="start" x="1338.5" y="-410.4" font-family="Helvetica" font-size="12.00">set up, shared</text>
 <text text-anchor="start" x="1320" y="-398.4" font-family="Helvetica" font-size="12.00">constant by the pools</text>
 </g>
-<!-- n_AZURECalc&#45;&gt;n_CNuc -->
+<!-- n_AZURECalc&#45;&gt;n_CompoundSystem -->
 <g id="edge2" class="edge">
-<title>n_AZURECalc&#45;&gt;n_CNuc</title>
+<title>n_AZURECalc&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M346.97,-323.72C366.19,-303.98 394.55,-278.94 425,-266 474.37,-245.02 491.35,-253 545,-253 545,-253 545,-253 1204,-253 1275.99,-253 1329.07,-329.46 1355.88,-378.91"/>
 <polygon fill="black" stroke="black" points="1360.58,-387.8 1351.93,-381.06 1358.24,-383.38 1355.91,-378.96 1355.91,-378.96 1355.91,-378.96 1358.24,-383.38 1359.89,-376.86 1360.58,-387.8 1360.58,-387.8"/>
 </g>
@@ -241,9 +241,9 @@
 <polygon fill="black" stroke="black" points="1124.83,-783.54 1121.25,-789.81 1114.1,-788.92 1117.67,-782.65 1124.83,-783.54"/>
 <polygon fill="black" stroke="black" points="1306.89,-696.28 1314.26,-688.67 1303.75,-690.02 1306.89,-696.28"/>
 </g>
-<!-- n_ObjectiveContext&#45;&gt;n_CNuc -->
+<!-- n_ObjectiveContext&#45;&gt;n_CompoundSystem -->
 <g id="edge10" class="edge">
-<title>n_ObjectiveContext&#45;&gt;n_CNuc</title>
+<title>n_ObjectiveContext&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M1265.43,-448.88C1274.42,-446.52 1283.8,-444.06 1293.12,-441.62"/>
 <polygon fill="black" stroke="black" points="1302.8,-439.08 1294.27,-445.97 1297.96,-440.35 1293.13,-441.61 1293.13,-441.61 1293.13,-441.61 1297.96,-440.35 1291.98,-437.26 1302.8,-439.08 1302.8,-439.08"/>
 </g>
@@ -457,9 +457,9 @@
 <polygon fill="black" stroke="black" points="336.35,-691.02 337.33,-698.16 331.11,-701.81 330.13,-694.66 336.35,-691.02"/>
 <polygon fill="black" stroke="black" points="721.4,-552.8 725.54,-543.05 716.22,-548.09 721.4,-552.8"/>
 </g>
-<!-- n_AZURECalcMCMC&#45;&gt;n_CNuc -->
+<!-- n_AZURECalcMCMC&#45;&gt;n_CompoundSystem -->
 <g id="edge23" class="edge">
-<title>n_AZURECalcMCMC&#45;&gt;n_CNuc</title>
+<title>n_AZURECalcMCMC&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M322.07,-701.74C323.6,-645.67 336.26,-498.63 425,-435 459.94,-409.94 1068.01,-415.74 1292.83,-418.77"/>
 <polygon fill="black" stroke="black" points="1302.92,-418.9 1292.86,-423.27 1297.92,-418.83 1292.92,-418.77 1292.92,-418.77 1292.92,-418.77 1297.92,-418.83 1292.98,-414.27 1302.92,-418.9 1302.92,-418.9"/>
 </g>

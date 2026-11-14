@@ -7,9 +7,9 @@
 #include <string>
 
 #include "AdaptiveExtrapolation.h"
-#include "CNuc.h"
-#include "CNucChecks.h"
-#include "CNucReport.h"
+#include "CompoundSystem.h"
+#include "CompoundSystemChecks.h"
+#include "LevelReport.h"
 #include "CaptureAyRequests.h"
 #include "ProjectSetup.h"
 #include "Config.h"
@@ -63,7 +63,7 @@ int SetUpRun(ProgramRun &run) {
       }
       RequestExtrapolationEntrances(*run.compound, run.configure);
     }
-    // The capture-A_y terms the data sets need are built with the pathway table (CNuc::Initialize below).
+    // The capture-A_y terms the data sets need are built with the pathway table (CompoundSystem::Initialize below).
     RequestCaptureAyTerms(*run.compound, *run.data);
     // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it after
     // the refinement below, on the refined grid.

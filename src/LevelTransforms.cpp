@@ -1,16 +1,16 @@
-// CNuc: the observed quantities of the current fit values (a table), and one fit value set with what derives
+// CompoundSystem: the observed quantities of the current fit values (a table), and one fit value set with what derives
 // from it, for the model data (ModelData.cpp), which compare observed widths and energies with literature values
 // inside a fit.
 #include <exception>
 #include <vector>
 
 #include "ALevel.h"
-#include "CNuc.h"
-#include "CNucExternalCapture.h"
+#include "CompoundSystem.h"
+#include "ExternalCaptureAmplitudes.h"
 #include "Config.h"
 #include "JGroup.h"
 
-ObservedLevelTable CNuc::EmptyObservedTable() const {
+ObservedLevelTable CompoundSystem::EmptyObservedTable() const {
   std::vector<int> numLevels, numChannels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     numLevels.push_back(this->GetJGroup(j)->NumLevels());
@@ -19,7 +19,7 @@ ObservedLevelTable CNuc::EmptyObservedTable() const {
   return ObservedLevelTable(numLevels, numChannels);
 }
 
-std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &configure, LevelState &state,
+std::optional<ObservedLevelTable> CompoundSystem::ObservedOfFitValues(const Config &configure, LevelState &state,
                                                           const LevelInputs &inputs) const {
   // In Park's basis TransformToBrune recomputes the shift functions, which set the bound-state normalizations
   // N_f^-1/2 with Park's J; a calculation reads the ones its own evaluation set, so they are put back.
@@ -41,7 +41,7 @@ std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &config
   return table;
 }
 
-void CNuc::SetFitLevelParameter(LevelState &state, const LevelParameterLayout::Slot &slot, double value) const {
+void CompoundSystem::SetFitLevelParameter(LevelState &state, const LevelParameterLayout::Slot &slot, double value) const {
   const int j = slot.group, la = slot.level;
   const JGroup *group = this->GetJGroup(j);
   const ALevel *level = group->GetLevel(la);

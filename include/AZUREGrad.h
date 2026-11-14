@@ -8,7 +8,7 @@
 #include <tuple>
 #include <functional>
 
-class CNuc;
+class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class WorkingCopy;
@@ -29,7 +29,7 @@ class ParamIndexMap;
  * the full derivation and phase structure.
  *
  * Phase 0 provides the parameter-index map: a faithful mirror of the flat
- * ordering produced by CNuc::FillCompoundFromParams / WorkingCopy::FillNormsFromParams
+ * ordering produced by CompoundSystem::FillCompoundFromParams / WorkingCopy::FillNormsFromParams
  * / WorkingCopy::FillEnergyShiftsFromParams, so that gradient components computed in
  * "physics" coordinates (jGroup, level, channel) can be scattered into the same
  * flat vector the sampler perturbs.
@@ -138,7 +138,7 @@ class ParamIndexMap {
   int EIndexFlat(int jGroup, int level) const { return eFlat_[jGroup - 1][level - 1]; }
   int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
 
-  friend ParamIndexMap BuildParamIndexMap(const CNuc *, WorkingCopy *, const std::vector<bool> &);
+  friend ParamIndexMap BuildParamIndexMap(const CompoundSystem *, WorkingCopy *, const std::vector<bool> &);
   friend void AppendApparatusParams(ParamIndexMap &, WorkingCopy *, int &);
 
  private:
@@ -223,14 +223,14 @@ struct GradAccum {
   const FreeLevelMask *mask = nullptr;
   /// The compound whose evaluation fills the accumulator (Init): Scatter pulls the cotangents of its gamma_decay
   /// records' photon amplitudes back to the records' numbers (GammaDecaySet::PullBack).  Not owned.
-  const CNuc *source = nullptr;
+  const CompoundSystem *source = nullptr;
   /// The levels of that evaluation (the fills of the gamma_decay records PullBack reads).  Not owned.
   const LevelState *sourceState = nullptr;
   /// Contributions to the full vector by index, added as they are (a term in the parameters alone: T11).
   std::vector<std::pair<int, double>> direct;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
-  void Init(const CNuc *compound, const LevelState &state);
+  void Init(const CompoundSystem *compound, const LevelState &state);
   /// Reset all accumulators to zero (without reallocating).
   void Zero();
   /// Add another accumulator (same compound dimensions) into this one.  Used to
@@ -273,12 +273,12 @@ struct GradAccum {
 /*!
  * \brief Build the parameter-index map by mirroring the fill routines.
  *
- * \param compound  the CNuc whose levels/channels define the R-matrix params.
+ * \param compound  the CompoundSystem whose levels/channels define the R-matrix params.
  * \param data      the WorkingCopy whose segments define norm/energy-shift params.
  * \param fixed     the per-full-index fixed mask (same as AZUREAPI::fixed_).
  *                  If empty, all parameters are treated as non-fixed.
  */
-ParamIndexMap BuildParamIndexMap(const CNuc *compound, WorkingCopy *data,
+ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, WorkingCopy *data,
                                  const std::vector<bool> &fixed);
 
 /*!
@@ -287,19 +287,19 @@ ParamIndexMap BuildParamIndexMap(const CNuc *compound, WorkingCopy *data,
  *
  * Returns a table indexed [j-1][la-1][ch-1] holding dS_ch/dE_level evaluated at
  * the level energy, for particle ('P') channels (zero otherwise).  Mirrors the
- * bound/unbound branch of CNuc::CalcShiftFunctions, using ShftFunc (Whittaker,
+ * bound/unbound branch of CompoundSystem::CalcShiftFunctions, using ShftFunc (Whittaker,
  * bound) or CoulFunc::PEShift_dE (unbound).  These depend only on level energies
  * and channel radii, so they are computed once per gradient evaluation and
  * reused across all data points.  See PLAN.md Phase 6.
  */
-vector_matrix_r BuildShiftDerivTable(const CNuc *compound, const LevelState &state, const Config &configure);
+vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const LevelState &state, const Config &configure);
 
 /*!
  * \brief Gradient of Park's J > 0 wall (the objective's term T6) with respect to the level energies and
  * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
  * has J < 0; a no-op outside the Park formalism.
  */
-void AddParkPenaltyGradient(const CNuc *compound, const LevelState &state, const Config &configure, GradAccum &accum);
+void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, GradAccum &accum);
 /// Gradient of the isotopic-abundance priors and sum-to-one penalty (the objective's term T7), into the accumulator.
 void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
@@ -325,7 +325,7 @@ struct ThmAdjointContext;
 using FitBarFn = std::function<double(const Segment *, int, int, double)>;
 
 /// `hoes`: the THM data are taken in the same pass (azure2::ThmThroughEnergyTasks, ThmCotangents.h); null: left out.
-bool AccumulateEGammaGradient(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool AccumulateEGammaGradient(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -353,7 +353,7 @@ bool AccumulateEGammaGradient(const CNuc *compound, const LevelState &state, Wor
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
  * the profiled norm (see ComputeTHMRows).
  */
-bool ComputeResidualJacobian(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeResidualJacobian(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -388,7 +388,7 @@ struct ShiftColumnCount {
  * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
  * analytic gradient shares.
  */
-ShiftColumnCount FillShiftColumns(const CNuc *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
@@ -403,7 +403,7 @@ ShiftColumnCount FillShiftColumns(const CNuc *compound, LevelState &state, const
  *        (HOES) points are left zero for the caller to fill (the adjoint
  *        differentiates the T-matrix observable, not the HOES one).
  */
-bool ComputeModelGradients(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeModelGradients(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<Unit *, vector_r> &gradByPoint,
@@ -470,7 +470,7 @@ struct THMRows {
  * THM-only chi^2; a profiled norm has no column), the energy-shift columns (the fold on fixed nodes is differenced, as
  * for every folded data set, ShiftedFold.h question 5), and AZURE2_THM_FD=1 (the reference path).
  */
-std::vector<THMRows> ComputeTHMRows(const CNuc *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
+std::vector<THMRows> ComputeTHMRows(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

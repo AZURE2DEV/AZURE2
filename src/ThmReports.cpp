@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
 #include "WorkingCopy.h"
@@ -182,7 +182,7 @@ void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Res
   }
 }
 
-bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, const CNuc *compound, const LevelState &state,
+bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, const CompoundSystem *compound, const LevelState &state,
                               const Config &configure, ThmLineshapeReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -308,7 +308,7 @@ bool WorkingCopy::ThmDistortionTable(const std::string &name, const std::vector<
   return true;
 }
 
-bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<double> &energies, const CNuc *compound, const LevelState &state,
+bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<double> &energies, const CompoundSystem *compound, const LevelState &state,
                            const Config &configure, ThmVertexReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)

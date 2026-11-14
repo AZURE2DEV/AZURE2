@@ -6,7 +6,7 @@
 #include "AZUREParams.h"
 #include "ParameterLimitsManager.h"
 
-PosteriorSupport PosteriorSupport::OfFit(const Config &configure, const CNuc *compound, const LevelState &state,
+PosteriorSupport PosteriorSupport::OfFit(const Config &configure, const CompoundSystem *compound, const LevelState &state,
                                          const LevelInputs &inputs, WorkingCopy *data,
                                          AZUREParams &params) {
   {

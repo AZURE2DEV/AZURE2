@@ -7,7 +7,7 @@
 
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Objective.h"
 #include "ParameterKind.h"

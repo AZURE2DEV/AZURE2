@@ -18,7 +18,7 @@
 
 class Config;
 class WorkingCopy;
-class CNuc;
+class CompoundSystem;
 class ParameterLimitsManager;
 
 /// The level states of a fitter's evaluations, owned by whoever runs the fitter (the program's run, a sweep of an
@@ -42,7 +42,7 @@ struct FitterStates {
 class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
  public:
   /*!
-   * The AZURECalc object is created with reference to an WorkingCopy and CNuc object.
+   * The AZURECalc object is created with reference to an WorkingCopy and CompoundSystem object.
    *. The runtime configurations are also passed through a Config structure.
    */
   /*!
@@ -52,7 +52,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * evaluations run on pooled working copies, each with a buffer of its own (WorkingData), and on pooled copies of
    * `state` held in the caller's `states`.  The compound is shared and constant; the caller outlives this object.
    */
-  AZURECalc(WorkingCopy *data, azure2::Results &results, const CNuc *compound, LevelState &state,
+  AZURECalc(WorkingCopy *data, azure2::Results &results, const CompoundSystem *compound, LevelState &state,
             const LevelInputs &inputs, FitterStates &states, const Config &configure,
             ParameterLimitsManager *limitsManager = nullptr) :
     configure_(configure),
@@ -130,7 +130,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
-  void DumpNonFinite(const vector_r &p, double chi, const CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const;
+  void DumpNonFinite(const vector_r &p, double chi, const CompoundSystem *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -219,9 +219,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   WorkingCopy *data() const { return data_; };
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   /// The caller's level inputs (the labels of the parameters read them).
   const LevelInputs &inputs() const { return inputs_; }
 
@@ -272,7 +272,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   LevelState &state_;          ///< the caller's level state: those evaluations' state, the seed of the pooled ones
   const LevelInputs &inputs_;  ///< the caller's level inputs
   FitterStates &states_;       ///< the caller's: the pooled states and the output state
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
   mutable std::vector<bool> fixedMask_;  ///< see FixedMask()

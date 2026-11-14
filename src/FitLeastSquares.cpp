@@ -18,7 +18,7 @@
 #include <gsl/gsl_vector.h>
 
 #include "AZURECalc.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
 #include "CovarianceBand.h"

@@ -20,7 +20,7 @@
 
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelPass.h"
 #include "Results.h"
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = argv[1];
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
     compound.FillCompoundFromParams(p, state);
     data.FillNormsFromParams(p);
     data.FillEnergyShiftsFromParams(p, results, &compound, &state, &inputs, &cfg);
-    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
     azure2::EvaluateModel(data, &compound, state, cfg, results, azure2::LeafValues::Calculate);
   };
   evaluate(p0);

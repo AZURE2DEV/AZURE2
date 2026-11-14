@@ -13,8 +13,8 @@
 #include "ECAmplitudeCache.h"
 
 #include "Config.h"
-#include "CNuc.h"
-#include "CNucReport.h"
+#include "CompoundSystem.h"
+#include "LevelReport.h"
 #include "CaptureAyRequests.h"
 #include "ProjectSetup.h"
 #include "PPair.h"
@@ -61,7 +61,7 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(WorkingCopy &data, const std::vector<const Segment *> &segments, const CNuc *lc,
+static bool PrecalculateAll(WorkingCopy &data, const std::vector<const Segment *> &segments, const CompoundSystem *lc,
                             const LevelState &state, const Config &cfg, azure2::Results &results) {
   return data.CalculatePointsInParallel(segments, lc, state, cfg, results) == 0;
 }
@@ -315,7 +315,7 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
 // of its base point, its c.m. energy and angle, S-factor conversion and excitation energy.  A point whose
 // calculation fails is NaN (Unit::MarkFailed), and the arrays keep one entry per point.  Without data: the arrays
 // are emptied.
-int AZUREAPI::ReportSegments(const CNuc *localCompound, WorkingCopy *localData) {
+int AZUREAPI::ReportSegments(const CompoundSystem *localCompound, WorkingCopy *localData) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();
   calculatedAngles_.clear();
@@ -369,7 +369,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     }
   }
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -407,7 +407,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     }
   }
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -431,7 +431,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
   }
   vector_r params_ = all_rwa_;
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -452,7 +452,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
     params[i] = p[i];
   }
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -491,7 +491,7 @@ int AZUREAPI::UpdateData() {
   dataConv_.clear();
   dataExcitationEnergies_.clear();
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -534,7 +534,7 @@ void AZUREAPI::UpdateNorms() {
   norms_.clear();
   normsErrors_.clear();
 
-  const CNuc *localCompound = NULL;
+  const CompoundSystem *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -593,7 +593,7 @@ bool AZUREAPI::WriteOutputFiles() {
   // chi2 path stores them there, the API's CalculateChi2RWA does not (pyazr adds those terms in Python), so
   // through pyazr the file carried 0 or stale values (audit 2026-10-25, item 30).  Evaluate them at the current
   // parameters before writing.
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   if (localCompound) {
     const vector_r none;
     ObjectiveContext context{localCompound, state(), inputs(), data(), results(), none, configure()};
@@ -640,7 +640,7 @@ bool AZUREAPI::Rebuild() {
 }
 
 // Shared body of SetRadius and Rebuild.  Every radius override of the session
-// goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
+// goes to CompoundSystem::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
 // The one place compound_ and data_ are replaced (Initialize, RebuildImpl): with them goes everything derived from
 // them and built lazily (the nuisance priors' manager and its parameter list), so it is built again for the new model.
@@ -648,7 +648,7 @@ void AZUREAPI::ReplaceModel() {
   delete compound_;
   delete data_;
   data_ = new WorkingCopy();
-  compound_ = new CNuc();
+  compound_ = new CompoundSystem();
   *state_ = LevelState();  // in place: a manager made later refers to the session's levels
   *inputs_ = LevelInputs();
   nuisance_.reset();
@@ -703,7 +703,7 @@ vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) cons
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i]) params_[i] = rwaParams[k++];
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   localCompound->FillCompoundFromParams(params_, state());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
   vector_r out;
@@ -730,7 +730,7 @@ static vector_r MapPackedToFull(const vector_r &packed, const vector_r &all_rwa,
 }
 
 void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
@@ -740,7 +740,7 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
 
 // The data term of AZURECalc::operator(), on the filled canonical objects.
 double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   if (res) res->clear();
   double chiSquared = 0.0;
@@ -852,7 +852,7 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
   vector_r params_ = all_rwa_;
   for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i] && k < (int)rwaParams.size()) params_[i] = rwaParams[k++];
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   localCompound->FillCompoundFromParams(params_, state());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
   vector_r out;
@@ -877,7 +877,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled below from these parameters) instead of cloning.
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   WorkingCopy *localData = data();
 
   AZUREParams params;
@@ -919,7 +919,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // Only one API request runs at a time, so operate on the canonical
   // compound/data in place (like UpdateSegments) rather than cloning; every
   // entry point re-fills from its own parameters before use.
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
@@ -1167,7 +1167,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
 
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
@@ -1305,7 +1305,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
 
   // Same preparation as CalculateResidualJacobianRWA: one request at a time, so
   // the canonical compound/data are re-filled in place from these parameters.
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
@@ -1493,7 +1493,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
 
           ECIntegral theECIntegral(finalPair, configure());
           // The final state's capture energy, as the engine's integrals use it (ALevel::GetECEnergy, set by
-          // CNuc::SetUpECFinalBlocks): in the formal basis GetE() is the formal energy, not that one.
+          // CompoundSystem::SetUpECFinalBlocks): in the formal basis GetE() is the formal energy, not that one.
           double levelEnergy = ecLevel->GetECEnergy();
           for (int i = 0; i < nE; ++i) {
             double inEnergy = energies[i] + entrancePair->GetSepE() + entrancePair->GetExE();

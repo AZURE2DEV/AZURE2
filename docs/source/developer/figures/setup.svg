@@ -99,21 +99,21 @@
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M160.02,-954.94C184.18,-951.57 214.38,-947.35 244.65,-943.12"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="245.48,-946.54 254.9,-941.69 244.51,-939.6 245.48,-946.54"/>
 </g>
-<!-- n_CNuc -->
+<!-- n_CompoundSystem -->
 <g id="node7" class="node">
-<title>n_CNuc</title>
+<title>n_CompoundSystem</title>
 <polygon fill="white" stroke="black" points="452,-581 313,-581 313,-501 452,-501 452,-581"/>
 <polygon fill="none" stroke="black" points="456,-585 309,-585 309,-497 456,-497 456,-585"/>
-<text text-anchor="start" x="364" y="-567.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNuc</text>
+<text text-anchor="start" x="322" y="-567.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CompoundSystem</text>
 <text text-anchor="start" x="319" y="-555.4" font-family="Helvetica" font-size="12.00">compound nuclei as set</text>
 <text text-anchor="start" x="332" y="-543.4" font-family="Helvetica" font-size="12.00">up: pairs, J groups,</text>
 <text text-anchor="start" x="338.5" y="-531.4" font-family="Helvetica" font-size="12.00">levels (read&#45;only</text>
 <text text-anchor="start" x="341" y="-519.4" font-family="Helvetica" font-size="12.00">after set&#45;up, not</text>
 <text text-anchor="start" x="362.5" y="-507.4" font-family="Helvetica" font-size="12.00">copied)</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_azure2__io__LevelSection -->
+<!-- n_CompoundSystem&#45;&gt;n_azure2__io__LevelSection -->
 <g id="edge6" class="edge">
-<title>n_CNuc&#45;&gt;n_azure2__io__LevelSection</title>
+<title>n_CompoundSystem&#45;&gt;n_azure2__io__LevelSection</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M399.7,-585.19C438.04,-689.68 531.25,-943.39 533,-945 538.05,-949.65 543.72,-953.63 549.76,-957.04"/>
 <polygon fill="black" stroke="black" points="558.85,-961.64 547.9,-961.14 554.39,-959.38 549.93,-957.13 549.93,-957.13 549.93,-957.13 554.39,-959.38 551.96,-953.11 558.85,-961.64 558.85,-961.64"/>
 </g>
@@ -127,9 +127,9 @@
 <text text-anchor="start" x="589.5" y="-804.4" font-family="Helvetica" font-size="12.00">masses, spins, radius,</text>
 <text text-anchor="start" x="639" y="-792.4" font-family="Helvetica" font-size="12.00">key</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_PPair -->
+<!-- n_CompoundSystem&#45;&gt;n_PPair -->
 <g id="edge7" class="edge">
-<title>n_CNuc&#45;&gt;n_PPair</title>
+<title>n_CompoundSystem&#45;&gt;n_PPair</title>
 <path fill="none" stroke="black" d="M405.58,-596.44C429.47,-649.67 472.43,-728.77 533,-776 543.9,-784.5 556.79,-791.14 569.91,-796.32"/>
 <polygon fill="black" stroke="black" points="405.46,-596.15 399.38,-592.27 400.63,-585.16 406.71,-589.05 405.46,-596.15"/>
 <polygon fill="black" stroke="black" points="568.89,-799.67 579.49,-799.84 571.31,-793.1 568.89,-799.67"/>
@@ -143,9 +143,9 @@
 <text text-anchor="start" x="600" y="-739.4" font-family="Helvetica" font-size="12.00">one J^pi group: its</text>
 <text text-anchor="start" x="595" y="-727.4" font-family="Helvetica" font-size="12.00">channels and levels</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_JGroup -->
+<!-- n_CompoundSystem&#45;&gt;n_JGroup -->
 <g id="edge8" class="edge">
-<title>n_CNuc&#45;&gt;n_JGroup</title>
+<title>n_CompoundSystem&#45;&gt;n_JGroup</title>
 <path fill="none" stroke="black" d="M418.28,-594.95C445.28,-632.69 485.95,-681.44 533,-711 545.64,-718.94 560.27,-724.95 574.77,-729.48"/>
 <polygon fill="black" stroke="black" points="418.28,-594.94 411.55,-592.33 411.38,-585.12 418.1,-587.73 418.28,-594.94"/>
 <polygon fill="black" stroke="black" points="574.17,-732.95 584.75,-732.39 576.13,-726.23 574.17,-732.95"/>
@@ -160,9 +160,9 @@
 <text text-anchor="start" x="602.5" y="-654.4" font-family="Helvetica" font-size="12.00">basis: E, gamma,</text>
 <text text-anchor="start" x="602.5" y="-642.4" font-family="Helvetica" font-size="12.00">records&#39; numbers</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_LevelInputs -->
+<!-- n_CompoundSystem&#45;&gt;n_LevelInputs -->
 <g id="edge12" class="edge">
-<title>n_CNuc&#45;&gt;n_LevelInputs</title>
+<title>n_CompoundSystem&#45;&gt;n_LevelInputs</title>
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M451.14,-585.19C476.25,-600.53 505.35,-617.1 533,-630 546.26,-636.18 560.75,-641.96 574.83,-647.09"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="573.9,-650.47 584.5,-650.53 576.25,-643.88 573.9,-650.47"/>
 </g>
@@ -177,9 +177,9 @@
 <text text-anchor="start" x="625.5" y="-561.4" font-family="Helvetica" font-size="12.00">N_f, fills,</text>
 <text text-anchor="start" x="593" y="-549.4" font-family="Helvetica" font-size="12.00">projectors, zero flags</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_LevelState -->
+<!-- n_CompoundSystem&#45;&gt;n_LevelState -->
 <g id="edge11" class="edge">
-<title>n_CNuc&#45;&gt;n_LevelState</title>
+<title>n_CompoundSystem&#45;&gt;n_LevelState</title>
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M456.34,-552.59C493.87,-558.56 539.44,-565.81 576.67,-571.73"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="576.51,-575.25 586.94,-573.36 577.61,-568.34 576.51,-575.25"/>
 </g>
@@ -193,9 +193,9 @@
 <text text-anchor="start" x="587.5" y="-488.4" font-family="Helvetica" font-size="12.00">energy and amplitudes</text>
 <text text-anchor="start" x="608.5" y="-476.4" font-family="Helvetica" font-size="12.00">sit in the vector</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_LevelParameterLayout -->
+<!-- n_CompoundSystem&#45;&gt;n_LevelParameterLayout -->
 <g id="edge13" class="edge">
-<title>n_CNuc&#45;&gt;n_LevelParameterLayout</title>
+<title>n_CompoundSystem&#45;&gt;n_LevelParameterLayout</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M456.34,-529.14C486.77,-524.18 522.48,-518.36 554.76,-513.11"/>
 <polygon fill="black" stroke="black" points="564.65,-511.49 555.51,-517.54 559.72,-512.3 554.78,-513.1 554.78,-513.1 554.78,-513.1 559.72,-512.3 554.06,-508.66 564.65,-511.49 564.65,-511.49"/>
 </g>
@@ -209,27 +209,27 @@
 <text text-anchor="start" x="613" y="-403.4" font-family="Helvetica" font-size="12.00">vector, for the</text>
 <text text-anchor="start" x="629.5" y="-391.4" font-family="Helvetica" font-size="12.00">reports</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_ObservedLevelTable -->
+<!-- n_CompoundSystem&#45;&gt;n_ObservedLevelTable -->
 <g id="edge14" class="edge">
-<title>n_CNuc&#45;&gt;n_ObservedLevelTable</title>
+<title>n_CompoundSystem&#45;&gt;n_ObservedLevelTable</title>
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M456.14,-498.76C480.21,-485.54 507.4,-471.44 533,-460 543.69,-455.22 555.13,-450.59 566.48,-446.26"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="567.84,-449.49 575.98,-442.71 565.39,-442.94 567.84,-449.49"/>
 </g>
-<!-- n_CNucSystem -->
+<!-- n_SystemOfCompound -->
 <g id="node16" class="node">
-<title>n_CNucSystem</title>
-<polygon fill="white" stroke="black" points="712.5,-368 584.5,-368 584.5,-312 712.5,-312 712.5,-368"/>
-<polygon fill="none" stroke="black" points="716.5,-372 580.5,-372 580.5,-308 716.5,-308 716.5,-372"/>
-<text text-anchor="start" x="606" y="-354.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNucSystem</text>
+<title>n_SystemOfCompound</title>
+<polygon fill="white" stroke="black" points="723,-368 574,-368 574,-312 723,-312 723,-368"/>
+<polygon fill="none" stroke="black" points="727,-372 570,-372 570,-308 727,-308 727,-372"/>
+<text text-anchor="start" x="580" y="-354.8" font-family="Helvetica" font-weight="bold" font-size="14.00">SystemOfCompound</text>
 <text text-anchor="start" x="590.5" y="-342.4" font-family="Helvetica" font-size="12.00">the physics System of</text>
-<text text-anchor="start" x="593" y="-330.4" font-family="Helvetica" font-size="12.00">a CNuc and its index</text>
-<text text-anchor="start" x="636.5" y="-318.4" font-family="Helvetica" font-size="12.00">map</text>
+<text text-anchor="start" x="583.5" y="-330.4" font-family="Helvetica" font-size="12.00">a compound system and</text>
+<text text-anchor="start" x="613.5" y="-318.4" font-family="Helvetica" font-size="12.00">its index map</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_CNucSystem -->
+<!-- n_CompoundSystem&#45;&gt;n_SystemOfCompound -->
 <g id="edge15" class="edge">
-<title>n_CNuc&#45;&gt;n_CNucSystem</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M414.42,-496.78C441.83,-460.55 484.88,-410.31 533,-379 544.54,-371.49 557.69,-365.27 570.85,-360.16"/>
-<polygon fill="black" stroke="black" points="580.42,-356.65 572.59,-364.32 575.73,-358.37 571.04,-360.1 571.04,-360.1 571.04,-360.1 575.73,-358.37 569.48,-355.87 580.42,-356.65 580.42,-356.65"/>
+<title>n_CompoundSystem&#45;&gt;n_SystemOfCompound</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M414.42,-496.78C441.83,-460.55 484.88,-410.31 533,-379 541.54,-373.44 550.95,-368.59 560.6,-364.38"/>
+<polygon fill="black" stroke="black" points="569.9,-360.54 562.38,-368.52 565.28,-362.45 560.66,-364.36 560.66,-364.36 560.66,-364.36 565.28,-362.45 558.94,-360.2 569.9,-360.54 569.9,-360.54"/>
 </g>
 <!-- n_azure2__PathwayTable -->
 <g id="node18" class="node">
@@ -240,9 +240,9 @@
 <text text-anchor="start" x="589" y="-265.4" font-family="Helvetica" font-size="12.00">reaction pathways and</text>
 <text text-anchor="start" x="600" y="-253.4" font-family="Helvetica" font-size="12.00">interference terms</text>
 </g>
-<!-- n_CNuc&#45;&gt;n_azure2__PathwayTable -->
+<!-- n_CompoundSystem&#45;&gt;n_azure2__PathwayTable -->
 <g id="edge17" class="edge">
-<title>n_CNuc&#45;&gt;n_azure2__PathwayTable</title>
+<title>n_CompoundSystem&#45;&gt;n_azure2__PathwayTable</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M399.4,-496.79C421.17,-442.57 465.43,-351.63 533,-301 540.54,-295.35 549.03,-290.7 557.89,-286.87"/>
 <polygon fill="black" stroke="black" points="567.24,-283.16 559.6,-291.03 562.59,-285.01 557.94,-286.85 557.94,-286.85 557.94,-286.85 562.59,-285.01 556.29,-282.66 567.24,-283.16 567.24,-283.16"/>
 </g>
@@ -289,12 +289,12 @@
 <text text-anchor="start" x="852.5" y="-336.4" font-family="Helvetica" font-size="12.00">partitions, channels</text>
 <text text-anchor="start" x="863.5" y="-324.4" font-family="Helvetica" font-size="12.00">and J^pi blocks</text>
 </g>
-<!-- n_CNucSystem&#45;&gt;n_azure2__physics__System -->
+<!-- n_SystemOfCompound&#45;&gt;n_azure2__physics__System -->
 <g id="edge16" class="edge">
-<title>n_CNucSystem&#45;&gt;n_azure2__physics__System</title>
-<path fill="none" stroke="black" d="M728.83,-340C752.53,-340 778.83,-340 803.69,-340"/>
-<polygon fill="black" stroke="black" points="728.7,-340 722.7,-344 716.7,-340 722.7,-336 728.7,-340"/>
-<polygon fill="black" stroke="black" points="803.87,-343.5 813.87,-340 803.87,-336.5 803.87,-343.5"/>
+<title>n_SystemOfCompound&#45;&gt;n_azure2__physics__System</title>
+<path fill="none" stroke="black" d="M739.3,-340C760.16,-340 782.5,-340 803.78,-340"/>
+<polygon fill="black" stroke="black" points="739.24,-340 733.24,-344 727.24,-340 733.24,-336 739.24,-340"/>
+<polygon fill="black" stroke="black" points="803.8,-343.5 813.8,-340 803.8,-336.5 803.8,-343.5"/>
 </g>
 <!-- n_DataSet -->
 <g id="node19" class="node">
@@ -373,9 +373,9 @@
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M119.68,-329.16C156.61,-426.34 294.07,-747.46 533,-853 555.1,-862.76 678.09,-871.02 776.49,-876.2"/>
 <polygon fill="black" stroke="black" points="786.53,-876.72 776.31,-880.69 781.54,-876.46 776.55,-876.2 776.55,-876.2 776.55,-876.2 781.54,-876.46 776.78,-871.71 786.53,-876.72 786.53,-876.72"/>
 </g>
-<!-- n_WorkingCopy&#45;&gt;n_CNuc -->
+<!-- n_WorkingCopy&#45;&gt;n_CompoundSystem -->
 <g id="edge19" class="edge">
-<title>n_WorkingCopy&#45;&gt;n_CNuc</title>
+<title>n_WorkingCopy&#45;&gt;n_CompoundSystem</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M141.23,-329C185.94,-368.44 268.2,-441.03 323.87,-490.15"/>
 <polygon fill="black" stroke="black" points="331.54,-496.92 321.07,-493.68 327.8,-493.61 324.05,-490.31 324.05,-490.31 324.05,-490.31 327.8,-493.61 327.02,-486.93 331.54,-496.92 331.54,-496.92"/>
 <text text-anchor="middle" x="236" y="-416.4" font-family="Helvetica" font-size="12.00"> nc</text>

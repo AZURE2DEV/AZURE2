@@ -21,14 +21,14 @@ class Config;
  * of the parameters and their errors.
  */
 
-class CNuc;
+class CompoundSystem;
 
 class AZUREParams {
  public:
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
   const ROOT::Minuit2::MnUserParameters &GetMinuitParams() const { return params_; }
   /// Append a parameter (value and Minuit step in the unit of its kind, ParamKindTable()) with its record.  The
-  /// creation sites (CNuc::FillMnParams, WorkingCopy::FillMnParams) are the only callers: the record is written where the
+  /// creation sites (CompoundSystem::FillMnParams, WorkingCopy::FillMnParams) are the only callers: the record is written where the
   /// parameter is made, the one place that knows what it is.
   void Add(const std::string &name, double value, double step, ParameterRecord record);
   /// What parameter i (0-based, full vector) is; throws std::logic_error if the vector holds a parameter added
@@ -59,7 +59,7 @@ class AZUREParams {
   /// the file was written in the other alternative one (Brune <-> Park), and
   /// say so.  False when no conversion exists (standard <-> alternative, or a
   /// Park level with J <= 0), after printing why.
-  bool ReconcileBasis(const CNuc *, const Config &);
+  bool ReconcileBasis(const CompoundSystem *, const Config &);
   /// The basis a run writes, from its runtime options.
   static int BasisForConfig(const Config &);
   static const char *BasisName(int);

@@ -1,8 +1,8 @@
 // The levels' input values (include/LevelInputs.h) and what an evaluation writes (include/LevelState.h).
-//  (a) After CNuc::Fill the input values are the <levels> rows' (ALevel::FileE, FileGamma, FileZeroWidth), but for a
+//  (a) After CompoundSystem::Fill the input values are the <levels> rows' (ALevel::FileE, FileGamma, FileZeroWidth), but for a
 //      gamma_decay record's photon channels, which hold the partial widths of the record's file numbers; the record
 //      numbers are the file's; nothing is transformed yet.
-//  (b) After CNuc::Initialize the transformation has run (no error) and written the input values only: every level's
+//  (b) After CompoundSystem::Initialize the transformation has run (no error) and written the input values only: every level's
 //      <levels> values are those of a compound only filled.  In the formal basis a level of several in a group moves
 //      its input energy.
 //  (c) A physical vector (FillCompoundFromParamsPhysical) is written into the input values at the layout's slots.
@@ -21,7 +21,7 @@
 #include <Minuit2/MnUserParameters.h>
 
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "GammaDecayMap.h"
@@ -43,7 +43,7 @@ void Check(bool ok, const std::string &what) {
 struct Loaded {
   std::ostringstream sink;
   Config cfg{sink};
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
 };
@@ -70,7 +70,7 @@ void OnProject(const std::string &file, bool brune) {
     Check(!brune, tag + ": cannot load");
     return;
   }
-  const CNuc &cn = filled->compound;
+  const CompoundSystem &cn = filled->compound;
   const LevelInputs &in = filled->inputs;
   const GammaDecaySet &records = cn.GetGammaDecays();
   // (a)
@@ -93,7 +93,7 @@ void OnProject(const std::string &file, bool brune) {
       }
     }
   // (b)
-  const CNuc &ci = initialized->compound;
+  const CompoundSystem &ci = initialized->compound;
   Check(initialized->inputs.TransformedIn() && initialized->inputs.TransformError().empty(), tag + ": transformed, no error");
   bool moved = false;
   for (int j = 1; j <= ci.NumJGroups(); j++)
@@ -120,7 +120,7 @@ void OnProject(const std::string &file, bool brune) {
   if (!records.Empty()) Check(initialized->inputs.GammaDecayNumbers() == records.NumbersAt(v), tag + ": physical numbers");
   // (d) on a compound initialized from the file
   std::unique_ptr<Loaded> fresh = Load(file, brune, true);
-  CNuc &cf = fresh->compound;
+  CompoundSystem &cf = fresh->compound;
   AZUREParams params;
   cf.FillMnParams(params, fresh->state, fresh->inputs, &fresh->cfg);
   const vector_r start = params.GetMinuitParams().Params();

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-class CNuc;
+class CompoundSystem;
 class LevelState;
 class Config;
 class PPair;
@@ -46,7 +46,7 @@ Coefficients FormulaCoefficients(const PPair *pair);
 /// One s-wave channel spin of a particle pair.
 struct Channel {
   int pairKey = 0;     ///< pair key as written in the .azr
-  int pairNum = 0;     ///< position in CNuc
+  int pairNum = 0;     ///< position in CompoundSystem
   double s = 0.0;      ///< channel spin = J for l = 0
   int parity = 1;      ///< pi1 pi2
   int jGroup = 0;      ///< J-group holding the channel, 0 if none
@@ -55,7 +55,7 @@ struct Channel {
 };
 
 /// Every allowed s-wave channel spin of a particle pair (identical pairs: s even only).
-std::vector<Channel> Channels(const CNuc *compound, int pairKey);
+std::vector<Channel> Channels(const CompoundSystem *compound, int pairKey);
 
 /// Value of one channel: a0 (fm, complex if a channel is open at the threshold) and M.
 struct Value {
@@ -65,15 +65,15 @@ struct Value {
 };
 
 /// Evaluate one channel with the compound's current parameters (Brune and Park need
-/// CNuc::CalcShiftFunctions first, as for any calculation).
-Value Evaluate(const CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch);
+/// CompoundSystem::CalcShiftFunctions first, as for any calculation).
+Value Evaluate(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Channel &ch);
 
 /*!
  * Accumulate Re(conj(aBar) d a0/d parameters) into accum (level energies and widths), exactly.
  * Returns false when the level-matrix adjoint does not support the configuration (RMC formalism,
  * levels left out of the R-matrix); the caller then differentiates numerically.
  */
-bool Adjoint(const CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
+bool Adjoint(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv);
 
 /// A measured scattering length: a <modelData> datum of quantity scattering_length (ModelData.cpp).
@@ -92,20 +92,20 @@ struct Constraint {
 
 /// The channel spin(s) and weights of a constraint from its pair key and s (s < 0: the coherent combination), as the
 /// <modelData> reader (ModelData.cpp) resolves them.  "" or the reason it cannot be.
-std::string ResolveConstraint(const CNuc *compound, Constraint &c);
+std::string ResolveConstraint(const CompoundSystem *compound, Constraint &c);
 
 /// Model value of a constraint (fm).
-complex ConstraintValue(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c);
+complex ConstraintValue(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c);
 
 /// Residuals of one constraint, appended to r: (Re a - value)/sigma and (Im a - imValue)/imSigma for each
 /// nonzero sigma; none when it is inactive.
-void ConstraintResiduals(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r);
+void ConstraintResiduals(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r);
 
 /*!
  * Gradient of one constraint's chi2 (row = -1) or of its row-th residual (0: the first of Re, Im that it has) into
  * accum.  Returns false where Adjoint does.
  */
-bool ConstraintGradient(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
+bool ConstraintGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
                         const vector_matrix_r *shiftDeriv, int row);
 
 /// Number of residual rows of one constraint (0, 1 or 2).
@@ -113,7 +113,7 @@ int NumResiduals(const Constraint &c);
 
 /// Table of every particle pair's s-wave scattering lengths, as written to scatteringLengths.out (measured ones are
 /// <modelData> data: ModelData::Report).
-std::string Report(const CNuc *compound, const LevelState &state, const Config &configure);
+std::string Report(const CompoundSystem *compound, const LevelState &state, const Config &configure);
 
 }  // namespace ScatteringLength
 

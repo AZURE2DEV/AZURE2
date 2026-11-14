@@ -50,7 +50,7 @@
 #include "ProjectSetup.h"
 #include "AZURECalcMCMC.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "Objective.h"
@@ -95,7 +95,7 @@ bool replaceAll(std::string &text, const std::string &from, const std::string &t
 struct Model {
   std::ostringstream log;  // the engine's messages for this model (not checked), one stream per thread
   Config cfg;
-  CNuc *compound = nullptr;
+  CompoundSystem *compound = nullptr;
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
@@ -113,7 +113,7 @@ struct Model {
     mkdir(outdir.c_str(), 0755);
     cfg.outputdir = outdir + "/";
     if (!ok) return;
-    compound = new CNuc();
+    compound = new CompoundSystem();
     data = new WorkingCopy();
     if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) {
       ok = false;

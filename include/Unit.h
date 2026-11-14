@@ -16,7 +16,7 @@ class Unit : public Site {
  public:
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   /// `data`: the data set that holds the point (its target effect may carry Q coefficients), null outside one.
-  void Initialize(WorkingCopy *data, const CNuc *, const Config &);
+  void Initialize(WorkingCopy *data, const CompoundSystem *, const Config &);
   /// Take the energies, c.m. angle and c.m. bin edges of the point's row from its segment's frame
   /// (Segment::ConvertToCM, experiment::ConvertRow).
   void SetFrame(const azure2::experiment::FrameRow &row);
@@ -99,9 +99,9 @@ class Unit : public Site {
   /// by `data`, the data set that holds the point (its target effects give the fold).  One solve at the point's energy,
   /// or one per sub-point (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data
   /// set (no target effect: a reaction-rate point).
-  void Calculate(WorkingCopy *data, const CNuc *, const LevelState &state, const Config &configure, azure2::Results &results);
+  void Calculate(WorkingCopy *data, const CompoundSystem *, const LevelState &state, const Config &configure, azure2::Results &results);
   /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
-  void PrepareSubPoints(WorkingCopy *data, const CNuc *, const Config &configure);
+  void PrepareSubPoints(WorkingCopy *data, const CompoundSystem *, const Config &configure);
   /// The task of the data set's calculation plan that calculates this point (CalculationPlan.h; -1: none, as for a
   /// sub-point or a point outside a data set).  Set when the plan is built (WorkingCopy::BuildPlan).
   int PlanTask() const { return plan_task_; }
@@ -111,24 +111,24 @@ class Unit : public Site {
   Site &OwnSite() { return *this; }
   const Site &OwnSite() const { return *this; }
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
-  void CalcLegendreP(WorkingCopy *data, int maxL, const CNuc *, const TargetEffect *);
+  void CalcLegendreP(WorkingCopy *data, int maxL, const CompoundSystem *, const TargetEffect *);
   /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
   /// Legendre rows, or per slot where they depend on the energy, f_C per slot for elastic scattering; with `labFrame`,
   /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot, NaN at a slot where the lab angle is
   /// beyond the kinematic maximum: a fold that reads it is a failed point, FoldPoint).
-  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, const CNuc *, const TargetEffect *,
+  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, const CompoundSystem *, const TargetEffect *,
                             const azure2::experiment::FrameRule *labFrame) const;
   /// The factor of a fold read through a lab-frame row set (RowSet.h): the point's own dOmega_lab/dOmega_cm as its
   /// frame holds it (SetFrame; 1 for a ratio), so that the fold, a lab value, is the c.m. value the point's comparison
   /// divides by the same Jacobian.  1 for every other point.
   double LabFoldFactor() const { return (RowSetOf() && RowSetOf()->labFrame) ? frame_jacobian_ : 1.0; }
-  void CalcEDependentValues(WorkingCopy *data, const CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
-  void ChannelKeys(WorkingCopy *data, const CNuc *, std::vector<ChannelTable::Key> &);
-  void CalcCoulombAmplitude(WorkingCopy *data, const CNuc *);
-  void CalculateECAmplitudes(WorkingCopy *data, const CNuc *, const Config &, const ChannelTable *table = nullptr);
+  void CalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr);
+  void ChannelKeys(WorkingCopy *data, const CompoundSystem *, std::vector<ChannelTable::Key> &);
+  void CalcCoulombAmplitude(WorkingCopy *data, const CompoundSystem *);
+  void CalculateECAmplitudes(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelTable *table = nullptr);
   /// Site::RecalcEDependentValues for the point and, when the point's own values were not current, each slot
   /// emptied and recomputed at its present energy (rows and Coulomb amplitude).
-  void RecalcEDependentValues(WorkingCopy *data, const CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
+  void RecalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr);
   /// Make `sub` a sub-point of this point (WorkingCopy::AddSubPoint places it): it shares the term's settings and the
   /// point's screening.
   void MakeSubPoint(Site &sub) const;

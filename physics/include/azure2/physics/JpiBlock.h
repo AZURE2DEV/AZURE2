@@ -26,12 +26,12 @@ namespace physics {
  *
  *  - Angular momenta are stored doubled (two_J), as integers, so that half-integer values are exact and the
  *    angular-coupling code to come (6j and Clebsch-Gordan coefficients) needs no floating-point comparison.
- *  - The boundary value B_c lives in the block, not in System::channels(): today's engine (CNuc::
+ *  - The boundary value B_c lives in the block, not in System::channels(): today's engine (CompoundSystem::
  *    CalcBoundaryConditions) sets B_c = S_c(E_1) at the first level of each J^pi group, so the same channel
  *    (alpha, l, s) has a different B_c in each block.  A System channel holds what does not depend on J^pi.
  *  - gamma is one contiguous row-major array (level-major): one level's amplitudes to all channels of the block are
  *    adjacent, which is the order in which the level matrix and the reduced-width-amplitude vectors are built.
- *  - Indices are 0-based throughout physics/ (the engine's CNuc counts from 1).
+ *  - Indices are 0-based throughout physics/ (the engine's CompoundSystem counts from 1).
  *  - What E and gamma mean (formal, Brune or Park parameters) is stated once, by System::basis().
  *
  * A block may have no levels (n_l = 0): a hard-sphere block, whose channels scatter through their hard-sphere phases

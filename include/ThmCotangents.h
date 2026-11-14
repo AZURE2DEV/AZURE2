@@ -6,7 +6,7 @@
 
 #include "GradEnergyTasks.h"
 
-class CNuc;
+class CompoundSystem;
 class LevelState;
 class Config;
 struct ThmAdjointContext;
@@ -40,7 +40,7 @@ bool ThmThroughEnergyTasks(const WorkingCopy &data, const Config &config);
 
 /// The context of the HOES adjoint for the scalar pass (BuildThmAdjointContext at the compound as filled, shiftDeriv
 /// its Brune table or null) where ThmThroughEnergyTasks holds and `data` has THM data; null otherwise.
-std::unique_ptr<ThmAdjointContext> ThmGradientContext(const CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config,
+std::unique_ptr<ThmAdjointContext> ThmGradientContext(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config,
                                                       const vector_matrix_r *shiftDeriv);
 
 /// The cotangents d chi^2/d m (above) of the points of `points` that belong to THM data sets, into fitBar (the same

@@ -19,7 +19,7 @@ struct Prediction;
 }  // namespace azure2
 
 class WorkingCopy;
-class CNuc;
+class CompoundSystem;
 class Config;
 struct ThmWeightTable;
 class ThmDistortion;
@@ -123,7 +123,7 @@ class Segment {
   int GetExitKey() const;
   /// Read the data file and keep the rows inside the energy and angle ranges (the segment's measurement), one point
   /// per row of the working copy `data` (set-up), converted from the lab frame where needed.
-  int Fill(const CNuc *, WorkingCopy *, const Config &);
+  int Fill(const CompoundSystem *, WorkingCopy *, const Config &);
   /// What the segment measured: its rows (shared, never written after set-up), their provenance, its prediction.
   const azure2::experiment::Measurement &GetMeasurement() const { return *measurement_; }
   bool HasMeasurement() const { return measurement_ != nullptr; }
@@ -391,10 +391,10 @@ class Segment {
   const ThmCoherentBackground *GetThmCoherent() const { return thmCoherent_.get(); }
   /// Re-apply the current energy shift of the segment's state in `data` to every point of every term, undoing the
   /// previous one.
-  void UpdatePointEnergiesWithShift(WorkingCopy &data, const CNuc *theCNuc, const Config *configure) const;
+  void UpdatePointEnergiesWithShift(WorkingCopy &data, const CompoundSystem *compound, const Config *configure) const;
   /// The same for point i (0-based) of term t: the unit of parallel re-energising (it writes that point and the slots
   /// it writes only).  A folded point on the shared mesh moves alone: its nodes stay (ShiftedFold.h).
-  void UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const CNuc *theCNuc, const Config *configure) const;
+  void UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const CompoundSystem *compound, const Config *configure) const;
   /// Change the exit pair key.
   void SetExitKey(WorkingCopy &data, int);
   /// Change the entrance pair key, for this segment and every point in it.
@@ -500,15 +500,15 @@ class Segment {
   /// them: the RATIO data value is dimensionless and Segment::Fill skips the
   /// cross-section conversion).  Before 2026-10-27 the denominator's factor was
   /// computed with the BASE segment's pairs (audit item 15).
-  double RatioTermFrameFactor(int t, Unit *point, const CNuc *cnuc) const;
+  double RatioTermFrameFactor(int t, Unit *point, const CompoundSystem *compound) const;
 
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
   /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
   /// point record the rows it used; CommitShiftTable, single-threaded after the loop, turns those rows into the table
   /// of the present state (the shift values, bitwise), replacing the oldest; nothing writes a stored table.
-  void BeginShiftRefill(WorkingCopy &data, int t, const CNuc *, const Config &) const;
-  void CommitShiftTable(WorkingCopy &data, int t, const CNuc *, const Config &) const;
+  void BeginShiftRefill(WorkingCopy &data, int t, const CompoundSystem *, const Config &) const;
+  void CommitShiftTable(WorkingCopy &data, int t, const CompoundSystem *, const Config &) const;
   static constexpr std::size_t kShiftTables = 3;
 
  private:

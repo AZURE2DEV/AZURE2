@@ -19,7 +19,7 @@
 
 class Config;
 class WorkingCopy;
-class CNuc;
+class CompoundSystem;
 class Unit;
 struct GradAccum;
 class ParamIndexMap;
@@ -36,13 +36,13 @@ class ParamIndexMap;
 class AZUREAPI {
  public:
   /*!
-   * The AZUREAPI object is created with reference to an WorkingCopy and CNuc object.
+   * The AZUREAPI object is created with reference to an WorkingCopy and CompoundSystem object.
    *. The runtime configurations are also passed through a Config structure.
    */
   // Defined in the .cpp (Config is incomplete here).
   AZUREAPI(Config &configure);
 
-  // Defined in the .cpp: WorkingCopy and CNuc are incomplete here, and deleting an
+  // Defined in the .cpp: WorkingCopy and CompoundSystem are incomplete here, and deleting an
   // incomplete type is undefined.
   ~AZUREAPI();
 
@@ -126,9 +126,9 @@ class AZUREAPI {
   /// it (docs/upgrade/data_model.md S3).
   azure2::Results &results() const { return results_; }
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   /// The session's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the session's
   /// evaluations and transformations.  Held through pointers, as the compound and the data are, because the const
   /// evaluations write them (as they write results()).
@@ -276,7 +276,7 @@ class AZUREAPI {
   /*!
    * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
    * R-matrix level at the given non-fixed RWA parameters, in the order of
-   * CNuc::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
+   * CompoundSystem::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
    * formalism.  A fit must keep them positive; CalculateChi2RWA adds
    * Park's wall (the objective's term T6) for any that are not.
    */
@@ -493,7 +493,7 @@ class AZUREAPI {
  private:
   /// The arrays of UpdateSegments* (the model value of every point, its E1 / E2 parts, frame and coefficients) for
   /// the hand-over already made into the session's compound and data.  Returns the number of segments reported.
-  int ReportSegments(const CNuc *localCompound, WorkingCopy *localData);
+  int ReportSegments(const CompoundSystem *localCompound, WorkingCopy *localData);
   /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
   /// without the parameters of the prior covariance (D3).
   double NuisanceChi2(const vector_r &full) const;
@@ -560,7 +560,7 @@ class AZUREAPI {
   // Configuration
   Config &configure_;
   WorkingCopy *data_;
-  CNuc *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
+  CompoundSystem *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
   std::unique_ptr<LevelState> state_;
   std::unique_ptr<LevelInputs> inputs_;
   // The results of this session's evaluations (results()); mutable as data_ is: the const evaluations write both.

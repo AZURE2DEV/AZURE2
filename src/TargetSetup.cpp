@@ -20,7 +20,7 @@
 #include "CalculationPlan.h"
 #include "MeshSlots.h"
 #include "ShiftedFold.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "TargetLayer.h"
 #include "WorkingCopy.h"
@@ -84,12 +84,12 @@ namespace {
 // Does this segment need external-capture amplitudes at its sub-points?  They are
 // integrals computed once at initialization (CalculateECAmplitudes), so its grid
 // cannot be re-placed.
-bool SegmentNeedsEC(const TermRef &segment, const CNuc *theCNuc, const Config &configure) {
+bool SegmentNeedsEC(const TermRef &segment, const CompoundSystem *compound, const Config &configure) {
   if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return false;
-  const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
-  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-      const ALevel *level = theCNuc->GetJGroup(j)->GetLevel(la);
+  const int ir = compound->GetPairNumFromKey(segment.GetExitKey());
+  for (int j = 1; j <= compound->NumJGroups(); j++)
+    for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
+      const ALevel *level = compound->GetJGroup(j)->GetLevel(la);
       if (level->IsECLevel() && level->GetECPairNum() == ir) return true;
     }
   return false;
@@ -105,7 +105,7 @@ bool SegmentNeedsEC(const TermRef &segment, const CNuc *theCNuc, const Config &c
  * the session started from (natural neon refit1: 25,773.96 from the start file,
  * 25,776.08 from the fitted one, same parameters).  Here the grid is laid out
  * again for the current parameters: the fit values are converted to observed
- * energies and widths, as a saved file would hold them (CNuc::TransformOut on a
+ * energies and widths, as a saved file would hold them (CompoundSystem::TransformOut on a
  * private copy of the compound nucleus), and fed to the same generator with the
  * same window, so the grid of a parameter set is the one a session started from
  * its saved file would place.  Only points whose grid changed get new
@@ -120,10 +120,10 @@ bool SegmentNeedsEC(const TermRef &segment, const CNuc *theCNuc, const Config &c
  * otherwise the point gets the new grid, so the grid depends on the current
  * parameters alone (docs/upgrade/fit_threads.md).
  */
-int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &state, const LevelInputs &inputs,
+int WorkingCopy::ReplaceSubPointGrids(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs,
                                       const Config &configure, const std::vector<TermRef> &shiftActive,
                                       std::vector<int> &replacedTasks) {
-  if (!theCNuc) return 0;
+  if (!compound) return 0;
   // Without grid replacement (--no-grid-replacement) the anchors stay; the supports of shifted points still follow
   // their shifts (ShiftedFold.h, question 2), which their folds need.
   const bool replaceGrids = configure.replaceSubPointGrids;
@@ -159,7 +159,7 @@ int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &sta
     // External capture: grids are not re-placed for a moved level (the set-up's integrals are kept), but the blocks of
     // a shifted point whose support moved are: their new sites take their capture amplitudes at their energies from the
     // tables, as a shifted site always has (Site::GetECAmplitudeWithShift).
-    const bool ec = SegmentNeedsEC(seg, theCNuc, configure);
+    const bool ec = SegmentNeedsEC(seg, compound, configure);
     if (ec && !supportMoved) {
       if (configure.FirstTime("EC grids not re-placed"))
         configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
@@ -195,9 +195,9 @@ int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &sta
       gridLevels_.inputs = std::make_unique<LevelInputs>(inputs);
     }
     LevelState &g = *gridLevels_.state;
-    theCNuc->CopyFitEnergiesAndAmplitudes(state, g);
-    theCNuc->FillCompoundFromParamsPhysical(
-        theCNuc->GetTransformParams(g, theCNuc->TransformOut(configure, g, *gridLevels_.inputs)), g,
+    compound->CopyFitEnergiesAndAmplitudes(state, g);
+    compound->FillCompoundFromParamsPhysical(
+        compound->GetTransformParams(g, compound->TransformOut(configure, g, *gridLevels_.inputs)), g,
         *gridLevels_.inputs);
   }
   const auto t1 = std::chrono::steady_clock::now();
@@ -212,7 +212,7 @@ int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &sta
   std::vector<char> meshMoved(meshes.size(), 0);
   std::size_t supportsMoved = 0;
   for (size_t m = 0; m < meshes.size(); m++) {
-    newAnchors[m] = replaceGrids ? MeshAnchorsOf(theCNuc, *gridLevels_.inputs, meshes[m], true) : meshAnchors_[m];
+    newAnchors[m] = replaceGrids ? MeshAnchorsOf(compound, *gridLevels_.inputs, meshes[m], true) : meshAnchors_[m];
     const bool anchorsMoved = !SameAnchors(newAnchors[m], meshAnchors_[m]);
     if (!anchorsMoved && movedSupports[m].empty()) continue;
     meshMoved[m] = 1;
@@ -275,12 +275,12 @@ int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &sta
       auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
                                 [](const Unit::EDependentShare &x, double v) { return x.energy < v; });
       if (o != old.end() && sub.AdoptEDependentValues(*o)) {
-        sub.CalcCoulombAmplitude(this, theCNuc);  // depends on the angle; cheap
+        sub.CalcCoulombAmplitude(this, compound);  // depends on the angle; cheap
         reused++;
       } else {
-        sub.CalcLegendreP(this, configure.maxLOrder, theCNuc, qEffect);
-        sub.CalcEDependentValues(this, theCNuc, configure);
-        sub.CalcCoulombAmplitude(this, theCNuc);
+        sub.CalcLegendreP(this, configure.maxLOrder, compound, qEffect);
+        sub.CalcEDependentValues(this, compound, configure);
+        sub.CalcCoulombAmplitude(this, compound);
       }
       target->MakeSubPoint(sub);
       fresh.push_back(std::move(sub));
@@ -399,7 +399,7 @@ int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &sta
   return changed.load();
 }
 
-int WorkingCopy::SetUpTargetEffects(const Config &configure, const CNuc *compound, const LevelInputs &inputs,
+int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSystem *compound, const LevelInputs &inputs,
                               const azure2::experiment::SpecList<azure2::experiment::TargetEffectSpec> &specs) {
   int activeLines = 0;
   for (const auto &item : specs.items) {

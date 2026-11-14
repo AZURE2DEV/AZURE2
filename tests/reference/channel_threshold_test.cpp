@@ -2,7 +2,7 @@
  * The shared threshold helper ChannelFunc (include/ChannelFunc.h): shift
  * function S, penetrability P and dS/dE of a particle channel at a channel
  * energy at, just below and just above threshold, as a level energy sitting
- * there asks for them (CNuc boundary conditions, shift functions and parameter
+ * there asks for them (CompoundSystem boundary conditions, shift functions and parameter
  * transformations, the THM vertex, the external-capture entrance phase).
  *
  * For p+7Li, 6Li+d, 12C+12C (charged, eta ~ 1e3-1e4 at 1e-9 MeV) and 17O+n

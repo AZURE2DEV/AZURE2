@@ -34,7 +34,7 @@
 #include "azure2/io/ProjectFormat.h"
 #include "azure2/io/Document.h"
 #include "AZUREAPI.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ParameterKind.h"
 #include "CommandLineValues.h"
 #include "Config.h"
@@ -44,7 +44,7 @@
 #include "pybind_notices.h"
 #include "ProjectOptions.h"
 #include "ReactionRate.h"
-#include "CNucChecks.h"
+#include "CompoundSystemChecks.h"
 #include <optional>
 #include "azure2/io/ConfigSection.h"
 
@@ -240,7 +240,7 @@ class Session {
   // -- hybrid nuclear potential, per particle pair ---------------------------
   //
   // The session's Config holds one setting per pair (the project's potential records) and a default for the pairs
-  // that name none; CNuc::Fill gives each pair its potential when the session is made.
+  // that name none; CompoundSystem::Fill gives each pair its potential when the session is made.
   // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit, matching_radius, step) for the given pair, resolved against the default.
   py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
 

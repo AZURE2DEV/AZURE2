@@ -1,6 +1,6 @@
-// The pathway table of a CNuc (PathwayTable.h, docs/upgrade/cnuc_split.md section 11): its inputs taken from the
-// loaded compound, its build in CNuc::Initialize, and its handle.
-#include "CNucPathways.h"
+// The pathway table of a CompoundSystem (PathwayTable.h, docs/upgrade/cnuc_split.md section 11): its inputs taken from the
+// loaded compound, its build in CompoundSystem::Initialize, and its handle.
+#include "CompoundSystemPathways.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -8,20 +8,20 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
-#include "CNucSystem.h"
+#include "CompoundSystem.h"
+#include "SystemOfCompound.h"
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
 
 namespace {
 
-//! 2j as an integer (CNuc.cpp's Twice).
+//! 2j as an integer (CompoundSystemBuild.cpp's Twice).
 int Twice(double j) { return (int)std::lround(2.0 * j); }
 
 }  // namespace
 
-std::vector<azure2::PathwayFinalState> ECFinalStates(const CNuc &c) {
+std::vector<azure2::PathwayFinalState> ECFinalStates(const CompoundSystem &c) {
   std::vector<azure2::PathwayFinalState> out;
   for (int j = 1; j <= c.NumJGroups(); j++) {
     const JGroup *theFinalJGroup = c.GetJGroup(j);
@@ -48,19 +48,19 @@ std::vector<azure2::PathwayFinalState> ECFinalStates(const CNuc &c) {
 }
 
 
-const azure2::PathwayTable &CNuc::Pathways() const {
-  if (!pathways_) throw std::logic_error("CNuc::Pathways: the compound nucleus has not been initialized");
+const azure2::PathwayTable &CompoundSystem::Pathways() const {
+  if (!pathways_) throw std::logic_error("CompoundSystem::Pathways: the compound nucleus has not been initialized");
   return *pathways_;
 }
 
-void CNuc::RequestCaptureAy(int entrancePair, int exitPair) {
+void CompoundSystem::RequestCaptureAy(int entrancePair, int exitPair) {
   const std::pair<int, int> request(entrancePair, exitPair);
   for (const std::pair<int, int> &r : captureAyRequests_)
     if (r == request) return;
   captureAyRequests_.push_back(request);
 }
 
-void CNuc::RequestEntrance(int pair) {
+void CompoundSystem::RequestEntrance(int pair) {
   for (int r : entranceRequests_)
     if (r == pair) return;
   entranceRequests_.push_back(pair);
@@ -72,7 +72,7 @@ void CNuc::RequestEntrance(int pair) {
  * and the capture-A_y requests.  Run by Initialize after the input transformation; nothing writes the table
  * afterwards.
  */
-void CNuc::BuildPathways(const Config &configure) {
+void CompoundSystem::BuildPathways(const Config &configure) {
   for (int pair : entranceRequests_) pairs_[pair - 1].SetEntrance();
   azure2::PathwayTableOptions options;
   options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;

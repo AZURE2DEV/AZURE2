@@ -391,7 +391,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   } else {
     // <(l s_f)J_f||L||(l s_i)J_i> is diagonal in the channel spin: L acts on the orbital part only, so the
     // orbital term exists for s_f = s_i alone.  Before 2026-10-26 it was also added on the spin-flip pathways
-    // (s_f != s_i, which CNuc::SortPathways builds for M1), where only g1 S1 + g2 S2 can act.  tests/ec_m1_exact
+    // (s_f != s_i, which CompoundSystem::SortPathways builds for M1), where only g1 S1 + g2 S2 can act.  tests/ec_m1_exact
     // cases (n), (o).
     complex orbitalTerm(0.0, 0.0);
     if (fabs(theFinalSValue - theInitialSValue) < 1e-6)

@@ -854,7 +854,7 @@ void NameParameters(Context &c) {
 
 // ---------------------------------------------------------------- final states of external capture (FinalStates.h)
 
-// The refusals of the set-up's external capture (CNuc::ParseExternalCapture takes them from the same rule): the final
+// The refusals of the set-up's external capture (CompoundSystem::ParseExternalCapture takes them from the same rule): the final
 // state of a photon pair with external capture is one level of <levels>; a pair that an active data set or
 // extrapolation exits into is refused without one (the set-up only warns about a pair nothing exits into); two levels
 // within 1 keV, or a level that is an earlier pair's final state, are refused in any case.  External capture is taken

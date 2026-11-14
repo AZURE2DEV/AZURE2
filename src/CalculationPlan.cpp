@@ -15,7 +15,7 @@
 #endif
 
 #include "AMatrixFunc.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "NodeTable.h"
 #include "Profile.h"

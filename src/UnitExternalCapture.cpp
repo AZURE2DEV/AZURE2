@@ -9,7 +9,7 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelFunc.h"
 #include "ChannelTable.h"
 #include "Config.h"
@@ -25,7 +25,7 @@
 #include "PPair.h"
 #include "PathwayTable.h"
 
-static complex ECPathwayAmplitude(const CNuc *, const Config &, int entrancePair, const azure2::EntrancePathways &,
+static complex ECPathwayAmplitude(const CompoundSystem *, const Config &, int entrancePair, const azure2::EntrancePathways &,
                                   const azure2::SpinGroupRow &, const azure2::ExternalRow &, double levelEnergy,
                                   double cmEnergy, const ChannelTable *table = nullptr);
 
@@ -45,7 +45,7 @@ complex Site::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * evaluated at its new energy, from the same tables as every other amplitude,
  * and the result is kept until the energy moves again.  The final level's
  * energy is the one the point's own amplitudes were computed with: the energy
- * of the set-up (ALevel::GetECEnergy, written once by CNuc::Initialize), which a
+ * of the set-up (ALevel::GetECEnergy, written once by CompoundSystem::Initialize), which a
  * fit or an MCMC that moves the level does not change, so shifted and unshifted
  * segments stay consistent and the memo holds no history of the copy
  * (tests/upgrade/history_test.cpp, project ec).
@@ -54,7 +54,7 @@ complex Site::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
  * its ends, as before the tables.
  */
-complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CNuc *theCNuc, const Config &configure) const {
+complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CompoundSystem *compound, const Config &configure) const {
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
 
@@ -69,13 +69,13 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CNuc
     ShiftedECAmplitude &memo = ec_shifted_[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
-    const int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
-    const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
+    const int aa = compound->GetPairNumFromKey(this->GetEntranceKey());
+    const azure2::EntrancePathways &P = compound->Pathways().Entrance(aa);
     const azure2::SpinGroupRow &group =
-        P.Group(ExternalCaptureExit(*theCNuc, aa, theCNuc->GetPairNumFromKey(this->GetExitKey()), segment_key_), kGroupNum);
+        P.Group(ExternalCaptureExit(*compound, aa, compound->GetPairNumFromKey(this->GetExitKey()), segment_key_), kGroupNum);
     const azure2::ExternalRow &pathway = P.External(group, ecMGroupNum);
-    const double levelEnergy = theCNuc->GetJGroup(pathway.final_group)->GetLevel(pathway.final_level)->GetECEnergy();
-    memo.amplitude = ECPathwayAmplitude(theCNuc, configure, aa, P, group, pathway, levelEnergy, currentEnergy);
+    const double levelEnergy = compound->GetJGroup(pathway.final_group)->GetLevel(pathway.final_level)->GetECEnergy();
+    memo.amplitude = ECPathwayAmplitude(compound, configure, aa, P, group, pathway, levelEnergy, currentEnergy);
     memo.energy = currentEnergy;
     memo.valid = true;
     return memo.amplitude;
@@ -108,11 +108,11 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CNuc
  * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
  * GetECAmplitudeWithShift at a shifted one.
  */
-static complex ECPathwayAmplitude(const CNuc *theCNuc, const Config &configure, int entrance,
+static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &configure, int entrance,
                                   const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
                                   const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
                                   const ChannelTable *table) {
-  const PPair *entrancePair = theCNuc->GetPair(entrance);
+  const PPair *entrancePair = compound->GetPair(entrance);
   const int j = pathway.final_group;
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
@@ -143,15 +143,15 @@ static complex ECPathwayAmplitude(const CNuc *theCNuc, const Config &configure, 
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, pathway.mult + 0.5);
 
-  const AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
-  const PPair *theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
+  const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
+  const PPair *theFinalPair = compound->GetPair(theFinalChannel->GetPairNum());
   int theInitialLValue;
   double theInitialSValue;
   if (pathway.channel_capture) {
     // the exit channel of the internal pathway the capture passes through
     const azure2::InternalRow &through = P.internal[pathway.cc_row];
-    theInitialLValue = theCNuc->GetJGroup(through.group)->GetChannel(through.chp)->GetL();
-    theInitialSValue = theCNuc->GetJGroup(through.group)->GetChannel(through.chp)->GetS();
+    theInitialLValue = compound->GetJGroup(through.group)->GetChannel(through.chp)->GetL();
+    theInitialSValue = compound->GetJGroup(through.group)->GetChannel(through.chp)->GetS();
   } else {
     theInitialLValue = pathway.l;
     theInitialSValue = group.s;
@@ -161,14 +161,14 @@ static complex ECPathwayAmplitude(const CNuc *theCNuc, const Config &configure, 
   if (configure.useECTable) {
     integrals = ECTable::Integral(theFinalPair, configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
-                                  pathway.J, theCNuc->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
+                                  pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
                                   inEnergy, levelEnergy, pathway.channel_capture, table,
                                   theFinalChannel->GetPairNum());
   } else {
     ECIntegral theECIntegral(theFinalPair, configure);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
                               theInitialSValue, theFinalChannel->GetS(),
-                              pathway.J, theCNuc->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
+                              pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
                               inEnergy, levelEnergy, pathway.channel_capture);
   }
 
@@ -182,22 +182,22 @@ static complex ECPathwayAmplitude(const CNuc *theCNuc, const Config &configure, 
  * entrance and exit pairs.
  */
 
-void Site::CalculateECAmplitudes(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
-  int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
-  if (theCNuc->GetPair(aa)->GetPType() == 20) return;
-  if (theCNuc->GetPair(aa)->IsEntrance()) {
-    const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
-    for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-      for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-        if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-          const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-          int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
+void Site::CalculateECAmplitudes(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelTable *table) {
+  int aa = compound->GetPairNumFromKey(this->GetEntranceKey());
+  if (compound->GetPair(aa)->GetPType() == 20) return;
+  if (compound->GetPair(aa)->IsEntrance()) {
+    const azure2::EntrancePathways &P = compound->Pathways().Entrance(aa);
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
+        if (compound->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
+          const ALevel *ecLevel = compound->GetJGroup(j)->GetLevel(la);
+          int ir = compound->GetPairNumFromKey(this->GetExitKey());
           if (ecLevel->GetECPairNum() == ir) {
-            const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment_key_);
+            const azure2::ExitRow &exit = ExternalCaptureExit(*compound, aa, ir, segment_key_);
             for (int k = 1; k <= exit.num_groups; k++) {
               const azure2::SpinGroupRow &group = P.Group(exit, k);
               for (int ecm = 1; ecm <= group.num_external; ecm++) {
-                complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, aa, P, group, P.External(group, ecm),
+                complex ecAmplitude = ECPathwayAmplitude(compound, configure, aa, P, group, P.External(group, ecm),
                                                          ecLevel->GetECEnergy(), this->GetCMEnergy(), table);
                 this->AddECAmplitude(k, ecm, ecAmplitude, configure);
               }

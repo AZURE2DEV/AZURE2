@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-class CNuc;
+class CompoundSystem;
 namespace azure2 {
 struct Results;
 struct EntrancePathways;
@@ -129,13 +129,13 @@ class GenMatrixFunc {
   double GetRk(double, double, double, double, int);
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
-  /// The refusal of a capture-A_y point whose terms were not requested at set-up (CNuc::RequestCaptureAy).
+  /// The refusal of a capture-A_y point whose terms were not requested at set-up (CompoundSystem::RequestCaptureAy).
   std::string CaptureAyNotBuiltMessage(const Site *point) const;
 
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual const CNuc *compound() const = 0;
+  virtual const CompoundSystem *compound() const = 0;
   /// The levels at the evaluated parameter vector (LevelState.h), held by the evaluation that made this object.
   virtual const LevelState &state() const = 0;
   /*!

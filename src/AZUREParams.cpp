@@ -4,7 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include "Config.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "azure2/experiment/Build.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/ParameterFileNames.h"
@@ -242,7 +242,7 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
     configure.outStream << "Could not save param.errors file." << std::endl;
 }
 
-bool AZUREParams::ReconcileBasis(const CNuc *compound, const Config &configure) {
+bool AZUREParams::ReconcileBasis(const CompoundSystem *compound, const Config &configure) {
   const int mode = BasisForConfig(configure);
   int tag = basisTag_;
   if (tag == kBasisUnknown) {

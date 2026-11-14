@@ -3,7 +3,7 @@
 
 #include <string>
 
-class CNuc;
+class CompoundSystem;
 class LevelInputs;
 class WorkingCopy;
 class JGroup;
@@ -37,7 +37,7 @@ std::string Nuclide(int z, double mass);
 
 /*! Particle pair by 1-based pair number: "d+t".  Photon pairs give "gamma". */
 /// Particle pair as text, e.g. "p + 7Li".
-std::string Pair(const CNuc *compound, int pairNum);
+std::string Pair(const CompoundSystem *compound, int pairNum);
 
 /*! e.g. "J^pi=3/2+, E=16.9285 MeV (J-group 1, level 1)". */
 /// Level as text, with its \f$J^\pi\f$, its energy (MeV; the input energy of `inputs`) and position -- the form the
@@ -46,26 +46,26 @@ std::string Level(const JGroup *jgroup, double energy, int jgroupIndex, int leve
 
 /*! e.g. "channel 2: d+t, L=0, S=3/2", or "channel 5: E1 gamma to n+4He". */
 /// Channel as text, with its pair, l and s.
-std::string Channel(const CNuc *compound, const JGroup *jgroup, int channelIndex);
+std::string Channel(const CompoundSystem *compound, const JGroup *jgroup, int channelIndex);
 
 /*! Level and channel together, for a width; the level's input energy in `inputs`. */
-std::string LevelAndChannel(const CNuc *compound, const LevelInputs &inputs, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex);
+std::string LevelAndChannel(const CompoundSystem *compound, const LevelInputs &inputs, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex);
 
 /*!
  * Describe the fit parameter at \p minuitIndex (0-based, in the order
- * CNuc::FillMnParams then WorkingCopy::FillMnParams add them).  \p data may be null,
+ * CompoundSystem::FillMnParams then WorkingCopy::FillMnParams add them).  \p data may be null,
  * in which case only the R-matrix parameters are described.
  *
  * Returns an empty string if the index is out of range, so callers can fall
  * back to the raw Minuit name.
  */
-std::string Parameter(const CNuc *compound, const LevelInputs &inputs, WorkingCopy *data, int minuitIndex);
+std::string Parameter(const CompoundSystem *compound, const LevelInputs &inputs, WorkingCopy *data, int minuitIndex);
 
 /*!
  * Total number of parameters the walk covers; matches the size of the Minuit
  * parameter list built from the same compound nucleus and data.
  */
-int NumParameters(const CNuc *compound, WorkingCopy *data);
+int NumParameters(const CompoundSystem *compound, WorkingCopy *data);
 
 }  // namespace AZURELabel
 

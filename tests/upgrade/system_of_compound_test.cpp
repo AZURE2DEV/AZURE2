@@ -1,10 +1,10 @@
-// The physics/ System built from today's CNuc (src/CNucSystem.cpp), on the upgrade test projects T1, T2 and T3.
+// The physics/ System built from today's CompoundSystem (src/SystemOfCompound.cpp), on the upgrade test projects T1, T2 and T3.
 //
 // For each project, in each level-parameter basis (Brune, the default; Park; formal), the compound nucleus is loaded
-// as the engine loads it (Config::ReadConfigFile, CNuc::Fill, CNuc::Initialize, with external capture on as in
+// as the engine loads it (Config::ReadConfigFile, CompoundSystem::Fill, CompoundSystem::Initialize, with external capture on as in
 // pyazr) and the System is built from it.  Checked:
 //
-//  1. every number of the System against the CNuc accessor it was taken from, with exact (==) equality: the nuclei
+//  1. every number of the System against the CompoundSystem accessor it was taken from, with exact (==) equality: the nuclei
 //     (Z, A); per partition Z, M, J, pi, g, e_light, e_heavy, S and the kind and nucleus; per channel the pair, the
 //     radiation type, l, s and the radius; per block 2J, pi, nucleus, B_c, E_lambda and gamma_{lambda c};
 //  2. completeness: every J^pi group in the R-matrix is one block and every R-matrix level of it one block level,
@@ -14,12 +14,12 @@
 //     pair keys in order of first appearance, the number of channels, and per block 2J, pi, the channels as
 //     (pair key, kind, l, 2s) and, in the Brune and Park bases (where the level energies are the observed ones), the
 //     level energies E_x of the file;
-//  4. that the adapter refuses a CNuc whose level parameters are still the input widths (Fill without Initialize).
+//  4. that the adapter refuses a CompoundSystem whose level parameters are still the input widths (Fill without Initialize).
 //
-// A wrong accessor, an off-by-one between CNuc's 1-based and the System's 0-based indices, a transposed gamma
+// A wrong accessor, an off-by-one between CompoundSystem's 1-based and the System's 0-based indices, a transposed gamma
 // layout, a channel attached to the wrong block or a level dropped fails (1) to (3).
 //
-//   system_from_cnuc_test <T1.azr> <T2.azr> <T3.azr>      (ctest: physics_system_from_cnuc)
+//   system_of_compound_test <T1.azr> <T2.azr> <T3.azr>      (ctest: physics_system_of_compound)
 #include <cstdio>
 #include <iostream>
 #include <set>
@@ -30,8 +30,8 @@
 #include <vector>
 
 #include "AZUREParams.h"
-#include "CNuc.h"
-#include "CNucSystem.h"
+#include "CompoundSystem.h"
+#include "SystemOfCompound.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 
@@ -50,12 +50,12 @@ void check(const std::string &name, bool ok, const std::string &detail = "") {
 }
 
 template <class A, class B>
-void same(const std::string &name, const A &system, const B &cnuc) {
+void same(const std::string &name, const A &system, const B &compound) {
   compared++;
-  if (!(system == cnuc)) {
+  if (!(system == compound)) {
     std::ostringstream s;
     s.precision(17);
-    s << "System " << system << ", CNuc " << cnuc;
+    s << "System " << system << ", CompoundSystem " << compound;
     check(name, false, s.str());
   }
 }
@@ -135,7 +135,7 @@ const char *BasisName(Basis b) { return b == Basis::Brune ? "Brune" : b == Basis
 struct Loaded {
   std::ostringstream sink;
   Config cfg;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   Loaded() : cfg(sink) {}
@@ -162,12 +162,12 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     check(tag + ": load", false, m.sink.str());
     return;
   }
-  CNuc &cn = m.compound;
+  CompoundSystem &cn = m.compound;
   const long before = compared;
   const int failuresBefore = failures;
-  CNucSystem built = BuildSystemFromCNuc(cn, m.inputs, m.cfg);
+  SystemOfCompound built = BuildSystemOfCompound(cn, m.inputs, m.cfg);
   const phys::System &sys = built.system;
-  const CNucSystemMap &map = built.map;
+  const SystemOfCompoundMap &map = built.map;
 
   // basis
   const int b = AZUREParams::BasisForConfig(m.cfg);
@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "usage: %s T1.azr T2.azr T3.azr\n", argv[0]);
     return 2;
   }
-  std::printf("System from CNuc, every number against the CNuc accessor (exact) and the structure against the file\n");
+  std::printf("System from CompoundSystem, every number against the CompoundSystem accessor (exact) and the structure against the file\n");
   for (int t = 0; t < 3; t++)
     for (Basis basis : {Basis::Brune, Basis::Park, Basis::Formal}) {
       try {
@@ -309,13 +309,13 @@ int main(int argc, char **argv) {
     bool threw = false;
     if (Load(m, argv[1], Basis::Brune, false)) {
       try {
-        BuildSystemFromCNuc(m.compound, m.inputs, m.cfg);
+        BuildSystemOfCompound(m.compound, m.inputs, m.cfg);
       } catch (const std::runtime_error &) {
         threw = true;
       }
     }
-    check("T1 before CNuc::Initialize (widths still in eV) is refused", threw);
-    if (threw) std::printf("  ok    T1 before CNuc::Initialize (widths still in eV) is refused\n");
+    check("T1 before CompoundSystem::Initialize (widths still in eV) is refused", threw);
+    if (threw) std::printf("  ok    T1 before CompoundSystem::Initialize (widths still in eV) is refused\n");
   }
 
   std::printf("%s: %ld numbers compared, %d failure(s)\n", failures ? "FAIL" : "PASS", compared, failures);

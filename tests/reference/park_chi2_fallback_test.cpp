@@ -61,7 +61,7 @@
 #include "ProjectSetup.h"
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "WorkingCopy.h"
@@ -174,7 +174,7 @@ bool writeCaptureProject(const std::string &source, const std::string &target) {
 
 struct Model {
   Config cfg;
-  CNuc *compound = nullptr;
+  CompoundSystem *compound = nullptr;
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
@@ -196,7 +196,7 @@ struct Model {
   }
   bool Load() {
     if (cfg.ReadConfigFile() < 0) return false;
-    compound = new CNuc();
+    compound = new CompoundSystem();
     data = new WorkingCopy();
     if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) return false;
     RequestDataEntrances(*compound, cfg);
@@ -211,7 +211,7 @@ struct Model {
 // Whether the analytic energy/width adjoint applies at p (AZURECalc::Gradient
 // falls back to finite differences of Chi2Value where it does not).
 bool AdjointApplies(Model &m, const vector_r &p) {
-  const CNuc *lc = m.compound;
+  const CompoundSystem *lc = m.compound;
   LevelState ls(m.state);  // a copy, as a fit's evaluation takes one
   WorkingCopy *ld = m.data->Clone();
   lc->FillCompoundFromParams(p, ls);

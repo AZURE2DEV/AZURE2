@@ -10,7 +10,7 @@
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/io/LevelRows.h"
 
-class CNuc;
+class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class Config;
@@ -29,11 +29,11 @@ struct GradAccum;
  * scattering length with an imaginary part.
  * A scattering length is evaluated by ScatteringLength (exact gradient through the level-matrix adjoint).  A level
  * quantity (resonance strength, energy, widths, branching ratio, ANC) is evaluated from the observed energies and
- * widths of the current fit values (CNuc::ObservedOfFitValues, the quantities parameters.out reports), never the
+ * widths of the current fit values (CompoundSystem::ObservedOfFitValues, the quantities parameters.out reports), never the
  * formal ones (data_kinds.md section 4.7); its gradient is a central difference over the level parameters it depends
  * on (ModelData.cpp, kEnergyStep, kAmplitudeStep).
  *
- * Setup state: read once by CNuc::Fill (ModelData::Read), immutable afterwards, shared by the working copies.
+ * Setup state: read once by CompoundSystem::Fill (ModelData::Read), immutable afterwards, shared by the working copies.
  */
 struct ModelDataRow {
   /// True: a measured scattering length, `constraint`; false: a level quantity of `datum`.
@@ -57,14 +57,14 @@ namespace ModelData {
 /// Read the model data of the project: the <scatteringLengths> and <modelData> sections, against the levels and
 /// pairs of <levels> (the tables of its `rows`, LevelTablesOfRows; the level indices are `compound`'s, which is filled
 /// from the same rows).  Prints the warnings; nullptr (with every error printed) on an error.
-std::shared_ptr<const ModelDataSet> Read(const CNuc &compound, const Config &configure,
+std::shared_ptr<const ModelDataSet> Read(const CompoundSystem &compound, const Config &configure,
                                          const std::vector<azure2::io::LevelRow> &rows);
 
 /// The residual rows at the compound's current fit values, appended to r in row order.
-void Residuals(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r);
+void Residuals(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r);
 
 /// The chi-squared of the rows, sum r_k^2 in row order (0 without rows).
-double Chi2(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
+double Chi2(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 /*!
  * d chi2 / d(E, gamma) of the level parameters into accum: the scattering lengths exactly, through the level-matrix
@@ -73,15 +73,15 @@ double Chi2(const CNuc *compound, LevelState &state, const LevelInputs &inputs, 
  * those with a packed column in pmap.  False where the adjoint does not support the configuration (the caller then
  * differentiates numerically).
  */
-bool Gradient(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool Gradient(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
               const vector_matrix_r *shiftDeriv, GradAccum &accum);
 
 /*!
  * The residual rows with their Jacobian rows over nCols packed columns (pmap's), appended to residuals and jac.
- * Brune and Park: the shift functions are brought up to date first (CNuc::CalcShiftFunctions).  False, with the rows
+ * Brune and Park: the shift functions are brought up to date first (CompoundSystem::CalcShiftFunctions).  False, with the rows
  * appended so far, where Gradient would return false.
  */
-bool AppendRows(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool AppendRows(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
                 const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals, vector_r &jac);
 
 /// One <modelData> datum at the current fit values: model value (Re and Im for a scattering length) and residuals.
@@ -94,11 +94,11 @@ struct Value {
   double chi2 = 0.0;       ///< the datum's share of the term
 };
 /// Every datum of the <modelData> section, in file order.
-std::vector<Value> SectionValues(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
+std::vector<Value> SectionValues(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 /// The table of modelData.out and of the run log: one line per datum (name, quantity, model value, datum, error in
 /// the unit written, residual, chi2), and the total.  Empty without a <modelData> section.
-std::string Report(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
+std::string Report(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 }  // namespace ModelData
 

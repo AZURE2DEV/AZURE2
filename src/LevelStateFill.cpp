@@ -4,15 +4,15 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelFunc.h"
-#include "CNucExternalCapture.h"
+#include "ExternalCaptureAmplitudes.h"
 #include "Config.h"
 #include "CoulFunc.h"
 #include "RunScratch.h"
 #include "ShftFunc.h"
 
-// The members of CNuc that write its LevelState at a parameter vector: the fit values, the shift functions and what
+// The members of CompoundSystem that write its LevelState at a parameter vector: the fit values, the shift functions and what
 // follows from them.
 
 /*!
@@ -20,7 +20,7 @@
  * shift functions (CalcShiftFunctions).
  */
 
-void CNuc::FillCompoundFromParams(const vector_r &params, LevelState &state) const {
+void CompoundSystem::FillCompoundFromParams(const vector_r &params, LevelState &state) const {
   // GammaDecayMap.h: the records' numbers become amplitudes; what the map computed is the state's.
   const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, state, params);
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
@@ -55,7 +55,7 @@ void CNuc::FillCompoundFromParams(const vector_r &params, LevelState &state) con
  * them through the run's exact-argument memo (RunScratch::shiftDerivatives).
  */
 
-void CNuc::CalcShiftFunctions(const Config &configure, LevelState &state, ShiftOrders orders) const {
+void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &state, ShiftOrders orders) const {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   struct Derivative {
     int j, la;
@@ -228,7 +228,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, LevelState &state, ShiftO
  * The fit energies and amplitudes of `from`, nothing derived from them.
  */
 
-void CNuc::CopyFitEnergiesAndAmplitudes(const LevelState &from, LevelState &to) const {
+void CompoundSystem::CopyFitEnergiesAndAmplitudes(const LevelState &from, LevelState &to) const {
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
       to.SetE(j, la, from.E(j, la));

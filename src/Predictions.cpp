@@ -6,7 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -17,7 +17,7 @@ namespace azure2 {
 
 namespace {
 
-int NucleusOf(const CNuc &compound, int entranceKey) {
+int NucleusOf(const CompoundSystem &compound, int entranceKey) {
   if (!compound.IsPairKey(entranceKey)) return 0;
   return compound.GetPair(compound.GetPairNumFromKey(entranceKey))->GetNucleus();
 }
@@ -47,7 +47,7 @@ void AppendLines(WorkingCopy &data, const char *what, const std::vector<std::str
 
 }  // namespace
 
-experiment::PredictionSetup PredictionSetupOf(const Segment &segment, const CNuc &compound) {
+experiment::PredictionSetup PredictionSetupOf(const Segment &segment, const CompoundSystem &compound) {
   experiment::PredictionSetup s;
   s.reaction = segment.GetReaction();
   s.absolute = segment.IsCoefficientAbsolute();
@@ -98,7 +98,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     lines.push_back("project: cannot be read");
     return lines;
   }
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;
   LevelInputs inputs;
   if (compound.Fill(configure, state, inputs) == -1 || compound.NumPairs() == 0) {
@@ -119,7 +119,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
 
 }  // namespace azure2
 
-bool WorkingCopy::BuildPredictions(const CNuc *compound, const Config &configure) {
+bool WorkingCopy::BuildPredictions(const CompoundSystem *compound, const Config &configure) {
   for (int s = 1; s <= this->Draft().NumSegments(); s++) {
     Segment *segment = this->Draft().GetSegment(s);
     try {
