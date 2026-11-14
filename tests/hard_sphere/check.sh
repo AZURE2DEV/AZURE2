@@ -44,7 +44,7 @@ maxrel() {
               r = d / m; if (r > worst) worst = r; rows++ }
     END { if (rows == 0) print "nan"; else printf "%.3e\n", worst }'
 }
-same() { awk -v r="$1" 'BEGIN { exit !(r + 0 <= 1e-10) }'; }
+same() { awk -v r="$1" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= 1e-10) }'; }
 
 # Both models write the same grid: elastic p+12C, 1-3 MeV, differential 60-160 deg and angle-integrated.
 grep -q '^extrapolation ' "$HERE/models/no_dummies.azr" || { bad "extrapolations missing"; exit 1; }

@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-tests-cannot-fail`) — comparisons of the tests that could not fail
+
+**Done.** A comparison whose failure cannot reach the caller, in `tests/*/check.sh`, `tests/lib/`, `tests/run_tests.sh`
+and `tests/pyazr/`, by kind:
+
+- *A mark followed by a number* (an awk program prints `grid`/`x` from its body, then a number from `END`; the caller
+  reads both lines, or `+ 0` reads the mark as 0): `models()` of `thm_park`, `cmp_out` of `extrap_sav_segments`,
+  `maxrel()` of `sum_lab_frame` and `upos_pair_index`, `ratio_dev()` of `ratio_frame` (a moved grid passed),
+  `moddiff()` of `thm_spectator_angles` and `compare()` of `ec_e1m1_phase` (failed only because awk compared the mark
+  as text). Each prints the mark alone; `le()` of `sum_lab_frame` / `upos_pair_index` takes numbers only.
+- *An upper bound on a value that is not tested to be a number* (an empty value, a mark, `nan` or `-nan` passes:
+  `"" < "1e-06"` as text, `"grid" + 0 = 0`): 149 awk programs in 74 scripts get `v ~ /^ *[-+]?\.?[0-9]/ && ...`;
+  the relative-difference helpers `rel()` of `mcmc_physical_norm` and `reldev()` of `shift_subpoint_angle` print `x`
+  for a non-number (they printed 0 for two empty inputs).
+- *A loop or a comparison that compared nothing or not the grid*: `level_at_threshold` (no files gave 0) and
+  `total_optical`'s `maxrel` (energies and row counts not compared) now print a mark.
+- *A tolerance that compares as text*: `tests/run_tests.sh` refuses a `tolerance` (or `TOL`) that is not a number
+  (`2e-2#why` passed every error).
+- *A stale call*: `extrap_sav_segments` (c) used the removed `data_mode=` and failed whenever pyazr was importable
+  (skipped otherwise); now `extrapolations=True`.
+- *Printed, not asserted* (pyazr): `physics_table_test.py`'s `formula()` checks each Python formula against its row
+  to 1e-12 (the largest seen is 1.6e-14).
+
+Check 56 of `tests/consistency/repo_consistency_test.py` (`tests/consistency/comparison_scan.py`) finds the first two
+kinds; the rule is in `tests/CLAUDE.md` and `docs/source/developer/contributing.rst`.
+
+**Verified.** The four known helpers and `ratio_frame` each fail on an injected moved energy (a wrapper of the base
+binary that edits one output file, `work/testsweep/inject/`) and pass without it; the 149 rewritten bounds, run alone
+with the value empty, `grid`, `nan` and `-nan`: the old programs passed 217 of 596 such values (114 places), the new
+none (`work/testsweep/tools/demo_bounds.py`); check 56 fails on an injected script (both kinds) and finds 159 places
+on the start commit, none after; every changed `check.sh` passes against `work/b-trial66`.
+
+**Left.** Arithmetic on `-v` values that is then compared (e.g. `d = a - b` with both empty is 0) outside the two
+helpers above is not scanned; "want" values computed from shell numbers likewise.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the Fit tab's loose ends
 
 **Done** (`docs/upgrade/web_ui.md` sections 11.6 and 11.7, the departures updated):

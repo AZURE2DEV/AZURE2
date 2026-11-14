@@ -116,7 +116,7 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    printf "%.2e", w / m }' "$WORK/g_$tag.rows")"
-  if awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w + 0 <= t + 0) }'; then
+  if awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= t + 0) }'; then
     ok "$tag: analytic and Jacobian-path gradients agree with finite differences for $nrows parameters (worst $worst of the largest)"
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest (> $tol); $summary"

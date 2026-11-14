@@ -46,7 +46,7 @@ trap '[ -n "${KEEP_WORK:-}" ] || rm -rf "$WORK"' EXIT  # KEEP_WORK=1 keeps the r
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(a != "" && d <= t * m) }'; }
+close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(b ~ /^ *[-+]?\.?[0-9]/ && a != "" && d <= t * m) }'; }
 check() {  # check LABEL VALUE REFERENCE TOL
   if close "$2" "$3" "$4"; then ok "$1: $2 (reference $3)"; else bad "$1: ${2:-missing}, reference $3 (rel. tol. $4)"; fi
 }
@@ -171,11 +171,11 @@ for b in "" --use-park; do
   worst="$(awk '/\[grad-check\] idx/ && $4 != "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/grad$b/grad.log")"
   wE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { m = 0; for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/grad$b/gradE.log")"
   kinds="$(awk '/\[grad-check\] idx/ { print $4 }' "$WORK/grad$b/grad.log" | sort -u | tr '\n' ' ')"
-  if [ "$rows" -ge 7 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }' && [ "$kinds" = "energy gamma radiative " ]; then
+  if [ "$rows" -ge 7 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-6) }' && [ "$kinds" = "energy gamma radiative " ]; then
     ok "${b:---use-brune}: $rows parameters ($kinds), gradient and Jacobian paths, largest rel. difference $worst"
   else bad "${b:---use-brune}: $rows parameters ($kinds), largest rel. difference $worst (limit 1e-6)"; fi
   # the energy: the photon amplitudes' share is 5e-4 of its gradient here (Gamma_gamma held while E moves)
-  if awk -v w="$wE" 'BEGIN { exit !(w > 0 && w < 1e-5) }'; then ok "${b:---use-brune}: level energy, rel. difference $wE"
+  if awk -v w="$wE" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w > 0 && w < 1e-5) }'; then ok "${b:---use-brune}: level energy, rel. difference $wE"
   else bad "${b:---use-brune}: level energy, rel. difference ${wE:-missing} (limit 1e-5)"; fi
 done
 
@@ -205,7 +205,7 @@ for start in 0 0.3; do
   line="$(grep '\[grad-check\] idx' "$WORK/sad$start/grad.log" | sed -n 1p)"
   rel="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
   an="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "analytic") print $(k + 1) }')"
-  if [ -n "$line" ] && awk -v r="$rel" -v a="$an" 'BEGIN { exit !(r < 1e-6 && a != 0) }'; then
+  if [ -n "$line" ] && awk -v r="$rel" -v a="$an" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < 1e-6 && a != 0) }'; then
     ok "delta = $start: d chi^2 / d delta $an, gradient and Jacobian paths against central differences, rel. $rel"
   else bad "delta = $start: d chi^2 / d delta ${an:-missing}, rel. ${rel:-missing} (limit 1e-6)"; fi
 done
@@ -228,11 +228,11 @@ else bad "the fit pulled below the bounds failed or wrote NaN"; fi
 grep -q 'note: the branching to g+15O\[6.8594\] is at its bound 0' "$WORK/zero/output/parameters.out" \
   && ok "b(6.8594) ends at its bound 0, with the note" || bad "b(6.8594) not at its bound, or no note"
 r="$(awk '/g\+15O\[5.183\]: b = / { sub(/;.*/, ""); print $4; exit }' "$WORK/zero/output/parameters.out")"
-if awk -v r="$r" 'BEGIN { exit !(r != "" && r < 2e-3 && r > -2e-3) }'; then ok "the remainder ends at 0 (within the wall's 1e-3): $r"
+if awk -v r="$r" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r != "" && r < 2e-3 && r > -2e-3) }'; then ok "the remainder ends at 0 (within the wall's 1e-3): $r"
 else bad "the remainder is ${r:-missing}, not at 0"; fi
 
 sum="$(awk '$1 ~ /^level5\.branching\./ { s += $2 } END { printf "%.6f", s }' "$WORK/zero/output/param.sav")"
-if awk -v s="$sum" 'BEGIN { exit !(s > 0.99 && s < 1.002) }'; then ok "the wall holds the explicit branchings' sum at 1: $sum"
+if awk -v s="$sum" 'BEGIN { exit !(s ~ /^ *[-+]?\.?[0-9]/ && s > 0.99 && s < 1.002) }'; then ok "the wall holds the explicit branchings' sum at 1: $sum"
 else bad "the explicit branchings sum to ${sum:-missing}, not 1 (no wall?)"; fi
 
 echo "-- (h) external capture on the record's channels: ground state and 6.1763 MeV by E1, 6.7931 MeV by M1"
@@ -320,10 +320,10 @@ for pt in "" 2 3; do
   wE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/gec$pt/gradE.log")"
   # the ANCs: idx 1 (ground state, J1 L1 ch1) and the 6.1763 MeV level (J3 L1 ch1, ch2)
   ancs="$(grep -c '\[grad-check\] idx [0-9]* gamma J[13] L1 ' "$WORK/gec$pt/grad.log")"
-  if [ "$rows" -ge 10 ] && [ "$ancs" -eq 3 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+  if [ "$rows" -ge 10 ] && [ "$ancs" -eq 3 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-6) }'; then
     ok "point ${pt:-1}: $rows parameters (3 ANCs of the final states), gradient and Jacobian paths, largest rel. difference $worst"
   else bad "point ${pt:-1}: $rows parameters, $ancs ANCs, largest rel. difference $worst (limit 1e-6)"; fi
-  if awk -v w="$wE" 'BEGIN { exit !(w > 0 && w < 1e-5) }'; then ok "point ${pt:-1}: level energy, rel. difference $wE"
+  if awk -v w="$wE" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w > 0 && w < 1e-5) }'; then ok "point ${pt:-1}: level energy, rel. difference $wE"
   else bad "point ${pt:-1}: level energy, rel. difference ${wE:-missing} (limit 1e-5)"; fi
 done
 
@@ -467,7 +467,7 @@ rows="$(grep -c '\[grad-check\] idx' "$WORK/ef/grad.log")"
 ef_line="$(grep '\[grad-check\] idx [0-9]* energy J3 L1 ' "$WORK/ef/grad.log")"
 wEf="$(echo "$ef_line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
 worst="$(awk '/\[grad-check\] idx/ { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/ef/grad.log")"
-if [ -n "$ef_line" ] && [ "$rows" -ge 8 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+if [ -n "$ef_line" ] && [ "$rows" -ge 8 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-6) }'; then
   ok "$rows parameters, the 6.1763 MeV state's energy among them (rel. $wEf), largest rel. difference $worst"
 else bad "$rows parameters, the final state's energy row '${ef_line:-missing}', largest rel. difference $worst (limit 1e-6)"; fi
 

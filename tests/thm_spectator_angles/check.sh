@@ -70,7 +70,7 @@ moddiff() {
   paste -d' ' <(tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }') \
               <(tr -d '\r' < "$WORK/$2/output/$OUT" | awk 'NF > 4 { print $1, $4 }') |
     awk '{ if (e) next; if ($1 != $3) { print "ENERGY"; e = 1; next } d = ($4 - $2) / $2; if (d < 0) d = -d; if (d > m) m = d; n++ }
-         END { printf "%.2e %d", m, n; exit e }'
+         END { if (e) exit 1; printf "%.2e %d", m, n }'
 }
 # Largest relative difference of |M|^2, |M_PW|^2 and R of the distortion_point rows.
 rowdiff() {
@@ -79,7 +79,7 @@ rowdiff() {
     awk '{ for (i = 1; i <= 3; i++) { d = ($(i + 3) - $i) / $i; if (d < 0) d = -d; if (d > m) m = d } n++ }
          END { printf "%.2e %d", m, n }'
 }
-small() { awk -v v="${1% *}" -v n="${1#* }" -v t="$2" -v k="${3:-3}" 'BEGIN { exit !(n >= k && v < t) }'; }
+small() { awk -v v="${1% *}" -v n="${1#* }" -v t="$2" -v k="${3:-3}" 'BEGIN { exit !(v ~ /^ *[-+]?\.?[0-9]/ && n >= k && v < t) }'; }
 NOFOLD="$THM_NOFOLD"
 L="experiment[A] $KIN"
 

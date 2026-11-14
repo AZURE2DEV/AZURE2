@@ -57,10 +57,10 @@ compare() {
   [ "$n" -eq 21 ] || { bad "$label: the run wrote $n points, expected 21"; tail -3 "$WORK/$1_$2/run.log"; return; }
   local worst; worst="$(awk -v col="$col" '
     NR == FNR { if ($0 !~ /^#/) { key = sprintf("%.4f %.1f", $1, $2); t[key] = $col; e = sprintf("%.4f", $1); v = $col < 0 ? -$col : $col; if (v > big[e]) big[e] = v } next }
-    { key = sprintf("%.4f %.1f", $1, $2); if (!(key in t)) { print "missing"; exit 2 }
+    { key = sprintf("%.4f %.1f", $1, $2); if (!(key in t)) { print "missing"; miss = 1; exit 2 }
       e = sprintf("%.4f", $1); d = ($3 - t[key]) / big[e]; if (d < 0) d = -d; if (d > m) m = d }
-    END { printf "%.3e", m }' "$exp" "$fit")"
-  if [ -n "$worst" ] && awk -v m="$worst" -v tol="$TOL" 'BEGIN { exit !(m <= tol) }'; then ok "$label: AZURE2 = truth at all 21 points (largest difference $worst of the row maximum)"; else bad "$label: largest difference '$worst' of the row maximum (tolerance $TOL)"; paste "$fit" <(awk '!/^#/' "$exp") | awk -v col="$col" '{ printf "    E %s theta %s: AZURE2 %s truth %s\n", $1, $2, $3, $(3 + col) }' | sed -n '1,7p'; fi
+    END { if (miss) exit 2; printf "%.3e", m }' "$exp" "$fit")"
+  if [ -n "$worst" ] && awk -v m="$worst" -v tol="$TOL" 'BEGIN { exit !(m ~ /^ *[-+]?\.?[0-9]/ && m <= tol) }'; then ok "$label: AZURE2 = truth at all 21 points (largest difference $worst of the row maximum)"; else bad "$label: largest difference '$worst' of the row maximum (tolerance $TOL)"; paste "$fit" <(awk '!/^#/' "$exp") | awk -v col="$col" '{ printf "    E %s theta %s: AZURE2 %s truth %s\n", $1, $2, $3, $(3 + col) }' | sed -n '1,7p'; fi
 }
 
 for case in s p; do

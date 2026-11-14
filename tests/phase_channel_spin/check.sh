@@ -92,8 +92,8 @@ if [ "$n" -eq 35 ]; then ok "the single-spin models wrote the 35 phase shifts"; 
 
 d1="$(maxdiff "$WORK/full1.ph" "$WORK/only1.ph")"; d2="$(maxdiff "$WORK/full2.ph" "$WORK/only2.ph")"
 n1="$(wc -l < "$WORK/full1.ph" | tr -d ' ')"; n2="$(wc -l < "$WORK/full2.ph" | tr -d ' ')"
-if [ "$n1" -eq 35 ] && awk -v d="$d1" 'BEGIN { exit !(d <= 1e-9) }'; then ok "(a) s = 1 on the full model == the s = 1 wave alone ($d1 deg)"; else bad "(a) s = 1 differs from the s = 1 wave alone by $d1 deg ($n1 phases; expected <= 1e-9)"; tail -2 "$WORK/full1/run.log"; fi
-if [ "$n2" -eq 35 ] && awk -v d="$d2" 'BEGIN { exit !(d <= 1e-9) }'; then ok "(b) s = 2 on the full model == the s = 2 wave alone ($d2 deg)"; else bad "(b) s = 2 differs from the s = 2 wave alone by $d2 deg ($n2 phases; expected <= 1e-9)"; fi
+if [ "$n1" -eq 35 ] && awk -v d="$d1" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-9) }'; then ok "(a) s = 1 on the full model == the s = 1 wave alone ($d1 deg)"; else bad "(a) s = 1 differs from the s = 1 wave alone by $d1 deg ($n1 phases; expected <= 1e-9)"; tail -2 "$WORK/full1/run.log"; fi
+if [ "$n2" -eq 35 ] && awk -v d="$d2" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-9) }'; then ok "(b) s = 2 on the full model == the s = 2 wave alone ($d2 deg)"; else bad "(b) s = 2 differs from the s = 2 wave alone by $d2 deg ($n2 phases; expected <= 1e-9)"; fi
 d12="$(maxdiff "$WORK/only1.ph" "$WORK/only2.ph")"
 if awk -v d="$d12" 'BEGIN { exit !(d > 1.0) }'; then ok "(c) the two waves differ by up to $d12 deg, so (a) and (b) have teeth"; else bad "(c) the two waves differ by only $d12 deg"; fi
 if [ ! -f "$WORK/nospin/output/chiSquared.out" ] && grep -q "E_FIELD_REQUIRED: dataset 'p11': field 's' is missing" "$WORK/nospin/run.log"; then ok "(d) a phase-shift data set without its channel spin is refused (E_FIELD_REQUIRED)"; else bad "(d) the phase-shift data set without 's' was not refused"; grep -i "error" "$WORK/nospin/run.log" | sed -n '1,2p'; fi

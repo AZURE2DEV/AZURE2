@@ -44,7 +44,7 @@ maxrel() {
 ratiostat() {
   paste "$1" "$2" | awk 'NF >= 8 { n = NF / 2; if ($(n + 4) > 0) print $4 / $(n + 4) }' | sort -g | awk '{ v[NR] = $1 } END { printf "%.7f %.7f %.7f\n", v[1], v[int((NR + 1) / 2)], v[NR] }'
 }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= t) }'; }
 within() { awk -v x="$1" -v c="$2" -v t="$3" 'BEGIN { d = x - c; if (d < 0) d = -d; exit !(d <= t) }'; }
 
 for m in bare fixed legacy_cm_const legacy_cm_E lab_const lab_E tgt tgt_fixed tgt_legacy_const tgt_lab_const tgt_straggle; do run "$m" || exit 1; done

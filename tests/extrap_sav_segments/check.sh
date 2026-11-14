@@ -52,9 +52,9 @@ grep -q "Reading User Parameter File" "$WORK/sav/run.log" || bad "the .sav was n
 # energies identical; the values to 1e-6 (the file carries the level parameters with 7 digits)
 cmp_out="$(paste <(awk 'NF >= 4 { print $1, $4 }' "$f") <(awk 'NF >= 4 { print $1, $4 }' "$g") | awk '
   { if (e) next; if ($1 != $3) { print "GRID"; e = 1; next } d = $2 - $4; if (d < 0) d = -d; m = $4 < 0 ? -$4 : $4; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
-  END { printf "%.2e %d", w, n }')"
+  END { if (!e) printf "%.2e %d", w, n }')"
 if [ "$cmp_out" = "GRID" ]; then bad "(a) the .sav moved the extrapolation grid: $(first "$f") vs $(first "$g")"
-elif awk -v w="${cmp_out%% *}" 'BEGIN { exit !(w + 0 <= 1e-6) }'; then ok "(a) the grid is unchanged with x1.shift.offset = 0.01 in the file (first energy $(first "$g" | cut -d' ' -f1) MeV; values to ${cmp_out%% *}, ${cmp_out##* } points)"
+elif awk -v w="${cmp_out%% *}" -v n="${cmp_out##* }" 'BEGIN { exit !(w ~ /^[0-9.]+e[-+][0-9]+$/ && n + 0 > 0 && w + 0 <= 1e-6) }'; then ok "(a) the grid is unchanged with x1.shift.offset = 0.01 in the file (first energy $(first "$g" | cut -d' ' -f1) MeV; values to ${cmp_out%% *}, ${cmp_out##* } points)"
 else bad "(a) values differ by ${cmp_out%% *} with the .sav"; fi
 if grep -q "segment_\* entries of shift.sav (data-segment normalizations and energy shifts) are not applied" "$WORK/sav/run.log"; then ok "(a) the run log says the segment_* entries were skipped"; else bad "(a) no note about the skipped entries"; fi
 
@@ -85,15 +85,15 @@ if [ -n "$PY" ] && (cd /tmp && PYTHONPATH="$ROOT" "$PY" -c "import pyazr._azure2
   out="$(cd "$WORK/py" && PYTHONPATH="$ROOT" "$PY" - <<'EOF' 2>&1
 import numpy as np
 from pyazr import Session
-with Session("t.azr", cwd=".", data_mode=False) as m:
+with Session("t.azr", cwd=".", extrapolations=True) as m:
     e0 = np.asarray(m.evaluate(m.parameters.x0).data[0].energies, float)
-with Session("t.azr", cwd=".", data_mode=False, parameter_file="shift.sav") as m:
+with Session("t.azr", cwd=".", extrapolations=True, parameter_file="shift.sav") as m:
     e1 = np.asarray(m.evaluate(m.parameters.x0).data[0].energies, float)
 print("MAXDIFF", np.max(np.abs(e1 - e0)))
 EOF
 )"
   d="$(echo "$out" | awk '/^MAXDIFF/ { print $2 }')"
-  if [ -n "$d" ] && awk -v d="$d" 'BEGIN { exit !(d + 0 < 1e-12) }'; then ok "(c) pyazr parameter_file= in extrapolation mode leaves the grid alone (max |dE| $d)"; else bad "(c) pyazr parameter_file= in extrapolation mode: $(echo "$out" | tail -3)"; fi
+  if [ -n "$d" ] && awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d + 0 < 1e-12) }'; then ok "(c) pyazr parameter_file= in extrapolation mode leaves the grid alone (max |dE| $d)"; else bad "(c) pyazr parameter_file= in extrapolation mode: $(echo "$out" | tail -3)"; fi
 else
   echo "  skip  (c) pyazr extension not importable"
 fi

@@ -104,12 +104,12 @@ if ran b_pw && ran b_dw; then
       e = $8 - g12; if (e < 0) e = -e; if (e / s > w) w = e / s
       e = $9; if (e < 0) e = -e; if (e / s > w) w = e / s
       n++ } END { printf "%d %.2e", n, w }')"
-  awk -v n="${r% *}" -v w="${r#* }" 'BEGIN { exit !(n >= 3 && w < 1e-8) }' \
+  awk -v n="${r% *}" -v w="${r#* }" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n >= 3 && w < 1e-8) }' \
     && ok "Gram entries == plane-wave vertex at rho = p a: ${r% *} rows, worst ${r#* } of the largest" \
     || bad "plane-wave Gram entries: $r"
   r="$(ratios b_dw b_pw | awk 'NR == 1 { lo = $2; hi = $2 } { if ($2 < lo) lo = $2; if ($2 > hi) hi = $2; n++ } END { printf "%d %.5f %.5f", n, lo, hi }')"
   set -- $r
-  awk -v lo="$2" -v hi="$3" 'BEGIN { exit !(lo > 0.95 && hi < 1.05) }' \
+  awk -v lo="$2" -v hi="$3" 'BEGIN { exit !(hi ~ /^ *[-+]?\.?[0-9]/ && lo > 0.95 && hi < 1.05) }' \
     && ok "model dw(plane)/pw = $2 to $3 at $1 points (p = |k_aA - alpha k_sF| instead of p(q = 0))" \
     || bad "dw(plane)/pw = $r"
   grep -q '^distortion_point' "$WORK/b_dw/output/thm_experiments.out" && bad "R(E) rows with vertexModel=dw" \

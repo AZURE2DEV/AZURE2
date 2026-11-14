@@ -43,7 +43,7 @@ res=$(awk -v pk="$pk" -v pe="$pe" -v bg="$bg" 'NF >= 4 && $4 > m { m = $4; e = $
   END { d1 = (m - pk) / pk; if (d1 < 0) d1 = -d1; d2 = e - pe; if (d2 < 0) d2 = -d2; d3 = (s / n - bg) / bg; if (d3 < 0) d3 = -d3;
         printf "%.1e %.1e %.1e", d1, d2, d3 }' "$WORK/bare/$OUT")
 set -- $res
-if awk -v a="$1" -v b="$2" -v c="$3" 'BEGIN { exit !(a <= 1e-4 && b <= 2e-5 && c <= 1e-4) }'; then ok "(b) bare resonance unchanged (peak $1, position $2 MeV, background $3)"
+if awk -v a="$1" -v b="$2" -v c="$3" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && b ~ /^ *[-+]?\.?[0-9]/ && c ~ /^ *[-+]?\.?[0-9]/ && a <= 1e-4 && b <= 2e-5 && c <= 1e-4) }'; then ok "(b) bare resonance unchanged (peak $1, position $2 MeV, background $3)"
 else bad "(b) bare resonance moved (peak $1, position $2 MeV, background $3)"; fi
 # (a) convolved points against the full-Gaussian truth
 worst=$(paste <(grep -v '^#' "$HERE/expected/truth.dat") <(awk 'NF >= 4 { print $4 }' "$WORK/conv/$OUT") | awk '
@@ -51,6 +51,6 @@ worst=$(paste <(grep -v '^#' "$HERE/expected/truth.dat") <(awk 'NF >= 4 { print 
   END { printf "WORST %s %.2e\n", wk, w }')
 echo "$worst" | grep -v WORST | sed 's/^/        /' | paste -sd' ' | fold -w 110 | sed 's/^/        /'
 w=$(echo "$worst" | awk '/^WORST/ { print $3 }'); wk=$(echo "$worst" | awk '/^WORST/ { print $2 }')
-if awk -v w="$w" 'BEGIN { exit !(w <= 2e-3) }'; then ok "(a) convolved points within 2e-3 of the full-Gaussian truth (worst $w at k=$wk)"
+if awk -v w="$w" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w <= 2e-3) }'; then ok "(a) convolved points within 2e-3 of the full-Gaussian truth (worst $w at k=$wk)"
 else bad "(a) convolved points off the full-Gaussian truth: worst $w at k=$wk (> 2e-3)"; fi
 if [ "$failures" -eq 0 ]; then echo "convolution_window: PASS"; else echo "convolution_window: FAIL ($failures)"; exit 1; fi

@@ -46,7 +46,7 @@ CB="$(awk -v eps="$EPS" 'BEGIN { pi = 3.141592653589793; hbarc = 197.3269804; al
   e2 = alpha * hbarc * 1.0e-13; f = 14.0031 / (1.00783 + 14.0031); z1 = 1; z2 = 7;
   printf "%.6f", sqrt(1000.0 * f * 4.0 * pi * z1 * z1 * z2 * e2 * e2 / eps) }')"
 echo "  Bohr coefficient for p + 14N, epsilon = $EPS MeV cm^2: c_B = $CB keV^1/2 (c.m.)"
-if awk -v c="$CB" 'BEGIN { exit !(c > 0.2 && c < 0.6) }'; then ok "c_B is in the 0.2 - 0.6 keV^1/2 range expected for light ions"; else bad "c_B = $CB is outside 0.2 - 0.6"; fi
+if awk -v c="$CB" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c > 0.2 && c < 0.6) }'; then ok "c_B is in the 0.2 - 0.6 keV^1/2 range expected for light ions"; else bad "c_B = $CB is outside 0.2 - 0.6"; fi
 
 # make_model NAME STRAGGLING-FLAG COEFFICIENT: the resonance project with one target (a layer of DENS atoms/cm2 with the
 # constant stopping cross section EPS, straggling none / Bohr (flag 1, coefficient 0) / the coefficient) and a 0.1 keV
@@ -83,7 +83,7 @@ n="$(wc -l < "$WORK/bohr.yields" | tr -d ' ')"
 if [ "$n" -eq 16 ]; then ok "the three runs wrote 16 yields each (two segments of eight points)"; else bad "bohr run wrote $n yields, expected 16"; tail -3 "$WORK/bohr/run.log"; fi
 
 r="$(maxrel "$WORK/bohr.yields" "$WORK/coef.yields")"
-if awk -v r="$r" 'BEGIN { exit !(r <= 1e-6) }'; then ok "(b) == (c): coefficient 0 gives Bohr's width, equal to the explicit c_B = $CB to $r"; else bad "(b) coefficient 0 differs from the explicit Bohr coefficient c_B = $CB by $r (expected <= 1e-6)"; paste "$WORK/bohr.yields" "$WORK/coef.yields" | sed -n '1,8p'; fi
+if awk -v r="$r" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r <= 1e-6) }'; then ok "(b) == (c): coefficient 0 gives Bohr's width, equal to the explicit c_B = $CB to $r"; else bad "(b) coefficient 0 differs from the explicit Bohr coefficient c_B = $CB by $r (expected <= 1e-6)"; paste "$WORK/bohr.yields" "$WORK/coef.yields" | sed -n '1,8p'; fi
 r="$(maxrel "$WORK/bohr.yields" "$WORK/off.yields")"
 if awk -v r="$r" 'BEGIN { exit !(r > 1e-3) }'; then ok "(b) != (a): Bohr straggling moves the yield on the edge by up to $r"; else bad "(b) coefficient 0 is within $r of straggling off: no straggling applied"; fi
 echo "  E_cm [MeV], yield off / Bohr / c_B on the rising edge (segment 1):"

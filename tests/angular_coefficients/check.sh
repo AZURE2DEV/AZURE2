@@ -55,7 +55,7 @@ run extrap 3 "--use-brune"
 run data 1 "--use-brune"
 if [ -s "$WORK/data/output/chiSquared.out" ]; then
   chi="$(grep "Total-Chi" "$WORK/data/output/chiSquared.out" | awk '{print $2}')"
-  if awk -v c="$chi" 'BEGIN { exit !(c + 0 <= 1e-8) }'; then ok "(c) both coefficient data segments: total chi2 $chi"; else bad "(c) total chi2 $chi (expected ~0)"; grep -i "error" "$WORK/data/run.log" | sed -n '1,3p'; fi
+  if awk -v c="$chi" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c + 0 <= 1e-8) }'; then ok "(c) both coefficient data segments: total chi2 $chi"; else bad "(c) total chi2 $chi (expected ~0)"; grep -i "error" "$WORK/data/run.log" | sed -n '1,3p'; fi
   "$PYTHON" "$HERE/verify.py" data "$WORK/data" "$WORK/datafiles" || failures=$((failures + 1))
 else
   bad "(c) the data run wrote no chiSquared.out"; grep -i "error" "$WORK/data/run.log" | sed -n '1,5p'
@@ -87,7 +87,7 @@ else
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    printf "%.2e", w / m }' "$WORK/grad.rows")"
-  if awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-5) }'; then
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }'; then
     ok "(f) adjoint and Jacobian-path gradients = finite differences, $nrows parameters, worst $worst of the largest"
   else
     bad "(f) gradient vs finite differences, worst $worst of the largest (> 1e-5)"

@@ -72,7 +72,7 @@ else
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    printf "%.2e", w / m }' "$WORK/grad.rows")"
-  if awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-5) }'; then
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }'; then
     ok "(d) adjoint and Jacobian-path gradients = finite differences, $nrows parameters, worst $worst of the largest"
   else
     bad "(d) gradient vs finite differences, worst $worst of the largest (> 1e-5)"

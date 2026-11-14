@@ -64,7 +64,7 @@ for mode in numeric gradient; do
   edm="$(field $mode edm)"; goal="$(field $mode edm_goal)"
   if [ "$(field $mode status)" = converged ] && [ "$(field $mode valid)" = 1 ] && \
      [ "$(field $mode call_limit)" = none ] && [ -n "$edm" ] && \
-     awk -v e="$edm" -v g="$goal" 'BEGIN { exit !(e >= 0 && e < g) }'; then
+     awk -v e="$edm" -v g="$goal" 'BEGIN { exit !(e ~ /^ *[-+]?\.?[0-9]/ && e >= 0 && e < g) }'; then
     ok "$mode: fitStatus.out status converged, valid 1, no call limit, EDM $edm < $goal"
   else
     bad "$mode: fitStatus.out status '$(field $mode status)' valid '$(field $mode valid)' limit '$(field $mode call_limit)' EDM '$edm' goal '$goal'"

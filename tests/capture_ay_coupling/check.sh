@@ -67,7 +67,7 @@ if [ -f "$HERE/../13N_capture_ay/expected/chiSquared.out" ]; then
   (cd "$WORK/13N" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
   exp="$(awk -F, 'NR > 1 && $1 + 0 == 2 { gsub(/ /, "", $2); print $2 }' "$HERE/../13N_capture_ay/expected/chiSquared.out")"
   got="$(awk -F, 'NR > 1 && $1 + 0 == 2 { gsub(/ /, "", $2); print $2 }' "$WORK/13N/output/chiSquared.out" 2>/dev/null)"
-  if [ -n "$got" ] && awk -v a="$got" -v b="$exp" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d <= 1e-3 * (b < 0 ? -b : b) + 1e-9) }'; then
+  if [ -n "$got" ] && awk -v a="$got" -v b="$exp" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-3 * (b < 0 ? -b : b) + 1e-9) }'; then
     ok "(c) 13N_capture_ay (spin-0 target) unchanged: A_y segment chi2 $got (expected $exp)"
   else
     bad "(c) 13N_capture_ay A_y segment chi2 $got vs expected $exp"

@@ -101,14 +101,14 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
     if [ "$d" = lines ]; then bad "$tag: $(basename "$f") differs in shape between the routes"; continue; fi
     if awk -v d="$d" -v w="$worst" 'BEGIN { exit !(d + 0 > w + 0) }'; then worst="$d"; worstfile="$(basename "$f")"; fi
   done
-  if awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-10) }'; then
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }'; then
     ok "$tag: outputs ($n files) agree with the level route (worst $worst of the column scale${worstfile:+, $worstfile})"
   else
     bad "$tag: outputs differ from the level route by $worst of the column scale in $worstfile"
   fi
   # the bilinear forms themselves, at every channel-space solve (AZURE_CHANNEL_VERIFY)
   v="$(awk '/^\[channel-verify\]/ { for (i = 1; i <= NF; i++) if ($i == "route") v = $(i + 1) } END { print v + 0 }' "$WORK/c_$tag/run.log")"
-  if awk -v v="$v" 'BEGIN { exit !(v + 0 <= 1e-11) }'; then
+  if awk -v v="$v" 'BEGIN { exit !(v ~ /^ *[-+]?\.?[0-9]/ && v + 0 <= 1e-11) }'; then
     ok "$tag: bilinear forms G^T A G agree with the level matrix to $v of the largest"
   else
     bad "$tag: bilinear forms differ from the level matrix by $v of the largest"
@@ -152,7 +152,7 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    printf "%.2e", w / m }' "$WORK/g_$tag.rows")"
-  if awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w + 0 <= t + 0) }'; then
+  if awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= t + 0) }'; then
     ok "$tag: analytic and Jacobian-path gradients agree with finite differences for $nrows parameters (worst $worst of the largest)"
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest (> $tol)"
@@ -167,7 +167,7 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
                 d = $2 - la[$1]; if (d < 0) d = -d; if (d > w) w = d
                 if ($4 != "-" && lj[$1] != "-") { e = $4 - lj[$1]; if (e < 0) e = -e; if (e > w) w = e }; n++ }
               END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }' "$WORK/gl_$tag.rows" "$WORK/g_$tag.rows")"
-  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
+  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[1] ~ /^ *[-+]?\.?[0-9]/ && x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
     ok "$tag: channel-space gradient = level-space gradient (${same% *} of the largest, ${same#* } parameters)"
   else
     bad "$tag: channel-space vs level-space gradient: $same"
@@ -243,7 +243,7 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole par
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    if (m > 0) printf "%.2e", w / m; else print "nan" }' "$WORK/dg_$tag.rows")"
   tol=1e-5; [ "$tag" = park ] && tol=1e-4
-  if [ "$nrows" -ge 10 ] && awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w + 0 <= t + 0 && w != "nan") }'; then
+  if [ "$nrows" -ge 10 ] && awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= t + 0 && w != "nan") }'; then
     ok "$tag: gradients with the constraints and U_e = finite differences for $nrows parameters (worst $worst of the largest)"
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest ($nrows parameters)"
@@ -251,7 +251,7 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole par
   # d chi2 / d U_e on its own scale: the Jacobian rows of the angular distribution carry it too
   scr="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] idx .* screening / { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0; n++ }
               END { if (n) printf "%.2e", m; else print "missing" }' "$WORK/dg_$tag/run.log")"
-  if awk -v s="$scr" -v t="$tol" 'BEGIN { exit !(s != "missing" && s + 0 <= t + 0) }'; then
+  if awk -v s="$scr" -v t="$tol" 'BEGIN { exit !(s ~ /^ *[-+]?\.?[0-9]/ && s != "missing" && s + 0 <= t + 0) }'; then
     ok "$tag: d chi2/d U_e, adjoint and Jacobian paths = finite differences (rel $scr)"
   else
     bad "$tag: d chi2/d U_e vs finite differences: $scr"
@@ -261,7 +261,7 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole par
                 d = $2 - la[$1]; if (d < 0) d = -d; if (d > w) w = d
                 if ($4 != "-" && lj[$1] != "-") { e = $4 - lj[$1]; if (e < 0) e = -e; if (e > w) w = e }; n++ }
               END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }' "$WORK/dgl_$tag.rows" "$WORK/dg_$tag.rows")"
-  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
+  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[1] ~ /^ *[-+]?\.?[0-9]/ && x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
     ok "$tag: channel-space gradient = level-space gradient (${same% *} of the largest)"
   else
     bad "$tag: channel-space vs level-space gradient: $same"

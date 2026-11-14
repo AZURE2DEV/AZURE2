@@ -65,7 +65,7 @@ if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
                     d = s / (b * f) - 1; if (d < 0) d = -d; if (d > w) w = d }
       else { d = s / b - 1; if (d < 0) d = -d; if (d > u) u = d } }
     END { printf "%.3e %.3e %d\n", w, u, r }')"
-  if awk -v w="$worst" 'BEGIN { exit !(w < 1e-9) }'; then ok "segments 6, 7: screened/bare = exp(pi eta U_e/E) (worst $worst, $nrow rows)"
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-9) }'; then ok "segments 6, 7: screened/bare = exp(pi eta U_e/E) (worst $worst, $nrow rows)"
   else bad "segments 6, 7: screened/bare differs from exp(pi eta U_e/E) by $worst"; fi
   if awk -v u="$unscr" 'BEGIN { exit !(u == 0) }'; then ok "segment 8 (no screening) unchanged"
   else bad "segment 8 changed by $unscr"; fi
@@ -77,7 +77,7 @@ fi
 run conv "$HERE/conv.azr" 1 "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
 if [ -s "$(out conv)" ]; then
   d="$(paste "$(out scr)" "$(out conv)" | awk 'NF >= 8 { m = NF / 2; x = $(m + 4) / $4 - 1; if (x < 0) x = -x; if (x > w) w = x } END { printf "%.3e", w }')"
-  if awk -v d="$d" 'BEGIN { exit !(d < 1e-5) }'; then ok "screening inside a 1e-6 MeV beam spread = plain screening (max rel diff $d)"
+  if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d < 1e-5) }'; then ok "screening inside a 1e-6 MeV beam spread = plain screening (max rel diff $d)"
   else bad "screening inside a 1e-6 MeV beam spread differs from plain screening by $d"; fi
 else
   bad "conv: no output"; tail -5 "$WORK/conv/run.log"
@@ -89,7 +89,7 @@ line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed 
 if grep -q "screening 0/1;.*screening 0/1" <<< "$line"; then ok "d chi2/d U_e: analytic = finite differences, adjoint and Jacobian paths"
 else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/run.log"; fi
 rel="$(sed -n 's/.*screening J-1.*analytic \([^ ]*\) *fd \([^ ]*\) *rel \([^ ]*\).*/\3/p' "$WORK/grad/run.log" | sed -n 1p)"
-if [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-6) }'; then ok "U_e gradient: relative difference $rel"
+if [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < 1e-6) }'; then ok "U_e gradient: relative difference $rel"
 else bad "U_e gradient: relative difference ${rel:-missing}"; fi
 
 # ---- 4. fits ----------------------------------------------------------------------------
@@ -127,7 +127,7 @@ if [ -s "$(out scr)" ]; then
   ue="$(par fit_prior tgt_targetInt3.screening)"
   sc="$(sed -n 's/.*Total-Screening-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit_prior/output/chiSquared.out" | sed -n 1p)"
   if [ -n "$ue" ] && [ -n "$sc" ] && awk -v u="$ue" -v s="$sc" 'BEGIN { p = ((u - 300) / 50)^2; d = s - p; if (d < 0) d = -d
-         exit !(u > 300 && u < 1000 && d <= 1e-4 * (p + 1)) }'; then
+         exit !(u ~ /^ *[-+]?\.?[0-9]/ && u > 300 && u < 1000 && d <= 1e-4 * (p + 1)) }'; then
     ok "prior 300 +- 50 eV pulls U_e to $ue eV; Total-Screening-Chi-Squared $sc = ((U_e - 300)/50)^2"
   else bad "prior fit: U_e ${ue:-missing}, Total-Screening-Chi-Squared ${sc:-missing}"; fi
 else

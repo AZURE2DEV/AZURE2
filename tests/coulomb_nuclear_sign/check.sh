@@ -51,7 +51,7 @@ for route in true false; do
     nexp="$(grep -vc '^#' "$HERE/expected/dsdo.dat")"
     if [ "$n" != "$nexp" ] || [ "$nbad" != 0 ] || [ "$ngrid" != 0 ]; then
       bad "$tag: grid differs from expected ($n rows vs $nexp, $nbad malformed, $ngrid energy/angle mismatches)"
-    elif awk -v w="$worst" -v t="$TOL" 'BEGIN { exit !(w + 0 <= t + 0) }'; then
+    elif awk -v w="$worst" -v t="$TOL" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= t + 0) }'; then
       ok "$tag: $n points, max rel diff $worst"
     else
       bad "$tag: max rel diff $worst > $TOL"

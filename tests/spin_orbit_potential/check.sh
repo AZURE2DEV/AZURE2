@@ -87,7 +87,7 @@ awk '/^\[grad-check\] idx / { a = f = ""
 n="$(wc -l < "$WORK/rows" | tr -d ' ')"
 fd="$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a; d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d }
            END { if (m > 0) printf "%.2e", w / m; else print "nan" }' "$WORK/rows")"
-if [ "$n" -ge 5 ] && awk -v w="$fd" 'BEGIN { exit !(w + 0 <= 1e-5) }'; then
+if [ "$n" -ge 5 ] && awk -v w="$fd" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }'; then
   ok "gradient = finite differences for $n parameters ($fd of the largest)"
 else
   bad "gradient vs finite differences: $n parameters, $fd of the largest"

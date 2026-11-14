@@ -49,12 +49,12 @@ for b in 0 1 2; do
   name=$(echo "total E1-only E2-only" | cut -d' ' -f$((b + 1)))
   rel="$(paste snap.txt calc.txt | awk -v b="$b" '$1 == b { d = $3 - $6; if (d < 0) d = -d; m = ($6 < 0 ? -$6 : $6);
          r = (m > 0 ? d / m : d); if (r > w) w = r } END { printf "%.2e", w }')"
-  if awk -v r="$rel" 'BEGIN { exit !(r + 0 <= 1e-5) }'; then ok "(a) $name: snapshot = calculation at param.mcmc (max rel $rel)"
+  if awk -v r="$rel" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= 1e-5) }'; then ok "(a) $name: snapshot = calculation at param.mcmc (max rel $rel)"
   else bad "(a) $name: snapshot differs from the calculation at param.mcmc (max rel $rel)"; fi
 done
 ratio="$(awk '$1 == 0 { t[$2] = $3 } $1 == 2 { e[$2] = $3 } END { m = 0; for (k in e) if (t[k] != 0) { r = e[k] / t[k];
           if (r < 0) r = -r; if (r > m) m = r } printf "%.2e", m }' snap.txt)"
-if awk -v r="$ratio" 'BEGIN { exit !(r + 0 < 0.5) }'; then ok "(b) the E2-only block is not the total (max E2/total $ratio)"
+if awk -v r="$ratio" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 < 0.5) }'; then ok "(b) the E2-only block is not the total (max E2/total $ratio)"
 else bad "(b) the E2-only block looks like the total (max E2/total $ratio)"; fi
 [ $fail -eq 0 ] && echo "mcmc_snapshot_components: PASS" || echo "mcmc_snapshot_components: FAIL"
 exit $fail

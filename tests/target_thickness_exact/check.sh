@@ -108,9 +108,9 @@ for e in $ENERGIES; do
   tol=0.005; [ "$e" = "0.320" ] && tol=0.01
   rel="$(awk -v a="$y" -v b="$tx" 'BEGIN { printf "%.4f", (b > 0) ? a / b - 1 : 9 }')"
   rf="$(awk -v a="$tf" -v b="$tx" 'BEGIN { printf "%.4f", (b > 0) ? a / b - 1 : 9 }')"
-  if awk -v r="$rel" -v t="$tol" 'BEGIN { exit !(r < t && r > -t) }'; then ok "(a) E_lab = $e MeV: yield $y vs exact truth $tx ($rel; the first-order window would give $rf)"; else bad "(a) E_lab = $e MeV: yield $y vs exact truth $tx ($rel, tolerance $tol; the first-order window gives $rf)"; fi
+  if awk -v r="$rel" -v t="$tol" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < t && r > -t) }'; then ok "(a) E_lab = $e MeV: yield $y vs exact truth $tx ($rel; the first-order window would give $rf)"; else bad "(a) E_lab = $e MeV: yield $y vs exact truth $tx ($rel, tolerance $tol; the first-order window gives $rf)"; fi
   if [ "$e" != "0.320" ]; then
-    if awk -v r="$rf" 'BEGIN { exit !(r < -0.03) }'; then teeth=$((teeth + 1)); else bad "(b) E_lab = $e MeV: the first-order window is only $rf off the exact one, expected below -3 %"; fi
+    if awk -v r="$rf" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < -0.03) }'; then teeth=$((teeth + 1)); else bad "(b) E_lab = $e MeV: the first-order window is only $rf off the exact one, expected below -3 %"; fi
   fi
 done
 [ "$teeth" -eq 4 ] && ok "(b) the first-order window is more than 3 % below the exact one at the four background points"

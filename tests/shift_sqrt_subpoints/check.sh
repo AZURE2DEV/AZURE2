@@ -42,7 +42,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/shift_sqrt_subpoints.XXXXXX")"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= t + 0) }'; }
 
 run() {  # MODEL [REFINE]: the run lands in $WORK/MODEL, or $WORK/MODEL.xREFINE under AZURE_REFINE_QUADRATURE=REFINE
   local model="$1" refine="${2:-}" dir="$WORK/$1"

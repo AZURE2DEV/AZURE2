@@ -63,7 +63,7 @@ for r in 8 4; do
       if (m > 0 && d / m > w) w = d / m; else if (m == 0 && d > 0) w = 1 }
     END { printf "%.2e %d", w, k }')
   read -r worst count <<< "$rel"
-  if [ "${count:-0}" -ge 10 ] && awk -v w="$worst" 'BEGIN { exit !(w <= 1e-9) }'; then
+  if [ "${count:-0}" -ge 10 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w <= 1e-9) }'; then
     ok "--$ext R=$r: formal and Brune capture agree, largest relative difference $worst over $count energies"
   else
     bad "--$ext R=$r: formal and Brune capture differ by $worst (relative) over $count energies"

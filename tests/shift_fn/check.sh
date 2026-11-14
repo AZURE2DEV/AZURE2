@@ -42,7 +42,7 @@ total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>
 field() { awk -v f="$2" '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == f) print $(i+1) }' "$1/output/chiSquared.out" 2>/dev/null; }
 par() { awk -v n="$2" '$1 == n { print $2 }' "$1/output/param.sav" 2>/dev/null; }
 par_file() { awk -v n="$2" '$1 == n { print $2 }' "$1" 2>/dev/null; }
-relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
+relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= t * m) }'; }
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < t) }'; }
 # Largest relative difference between the model columns (4) of two data sets' blocks in AZUREOut_aa=1_R=1.out
 # (blocks are separated by blank lines, in the order of the data sets).
@@ -152,8 +152,8 @@ for t in plain target; do
   # 0.0079115 = 0.004 + 0.003*sqrt(1.7) to 7 digits; data set 3 is checked to 1e-6 only.
   if run "sqrt_$t" 1 ""; then
     d12="$(blockdiff "$WORK/sqrt_$t" 1 2)"; d13="$(blockdiff "$WORK/sqrt_$t" 1 3)"
-    if awk -v d="$d12" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "$t: a0*sqrt(x) = the sqrt term, model values to $d12"; else bad "$t: a0*sqrt(x) vs the sqrt term differ by $d12"; fi
-    if awk -v d="$d13" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-6) }'; then ok "$t: centred form agrees ($d13)"; else bad "$t: centred form differs by $d13"; fi
+    if awk -v d="$d12" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "$t: a0*sqrt(x) = the sqrt term, model values to $d12"; else bad "$t: a0*sqrt(x) vs the sqrt term differ by $d12"; fi
+    if awk -v d="$d13" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-6) }'; then ok "$t: centred form agrees ($d13)"; else bad "$t: centred form differs by $d13"; fi
     s1="$(seg "$WORK/sqrt_$t" 1)"
     if ! relclose "$s1" 24 1e-3; then ok "$t: the shift is really applied (chi2 $s1, unshifted 24)"; else bad "$t: chi2 $s1 = the unshifted 24"; fi
   fi
@@ -168,7 +168,7 @@ mk x15 0 "$(scale s1 'a0*x^1.5' '' 'a0 0.003 fixed'
             ds xs_40_x15_preshifted xs_40_x15_preshifted.dat 40)"
 if run x15 1 ""; then
   d="$(blockdiff "$WORK/x15" 1 2)"
-  if awk -v d="$d" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-8) }'; then ok "a0*x^1.5 = pre-shifted data ($d)"; else bad "a0*x^1.5 vs pre-shifted data: $d"; fi
+  if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-8) }'; then ok "a0*x^1.5 = pre-shifted data ($d)"; else bad "a0*x^1.5 vs pre-shifted data: $d"; fi
 fi
 
 # ---- 3. a second data set of a scale uses its function --------------------------
@@ -179,7 +179,7 @@ mk follower 0 "$(scale G 'a0*x' '0.001 MeV fixed' 'a0 0.003 fixed'
                  ds xs_90_2 xs_90.dat 90 'shift          H')"
 if run follower 1 ""; then
   d="$(blockdiff "$WORK/follower" 2 3)"
-  if awk -v d="$d" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "second data set = the same function given in its own record ($d)"; else bad "second data set vs own record: $d"; fi
+  if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "second data set = the same function given in its own record ($d)"; else bad "second data set vs own record: $d"; fi
   if grep -q "shift function on segment #1 (group 'G', segments #1 2)" "$WORK/follower/run.log"; then ok "function and group noted in the log"; else bad "no shift-function note in the log"; fi
 fi
 
@@ -200,7 +200,7 @@ fit_linear() {  # NAME FLAGS [CHI2: strict (chi2 < 1e-3 required, default) | inf
   if absclose "$a" -0.004 1e-5 && absclose "$a0" 0.006 1e-5; then ok "$1: a = $a, a0 = $a0 (truth -0.004, 0.006)"; else bad "$1: a = $a, a0 = $a0, expected -0.004, 0.006"; fi
   if [ "${3:-strict}" = info ]; then
     echo "  info  $1: chi2 $t (not checked: a and a0 above decide)"
-  elif awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
+  elif awk -v t="$t" 'BEGIN { exit !(t ~ /^ *[-+]?\.?[0-9]/ && t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
   f="$(field "$dir" Total-Shift-Chi-Squared:)"
   if [ -n "$f" ]; then ok "$1: chiSquared.out reports Total-Shift-Chi-Squared ($f)"; else bad "$1: no Total-Shift-Chi-Squared"; fi
   if grep -q "^# 1,1 2,a0\*(x-1)," "$dir/output/shifts.out"; then ok "$1: shifts.out has the function line"; else bad "$1: no function line in shifts.out"; fi
@@ -217,7 +217,7 @@ mk gradcheck 1 "$(scale G 'a0*(x-1)+a1*(x-1)^2' '0.001 MeV fit prior 0 1' 'a0 0.
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > adjoint.log 2>&1)
 nchk="$(grep -c 'shift-grad-check' "$WORK/gradcheck/adjoint.log")"
 worst="$(grep -o 'reldiff=[-0-9.e+]*' "$WORK/gradcheck/adjoint.log" | cut -d= -f2 | sort -g | tail -1)"
-if [ "$nchk" -ge 3 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 < 1e-6) }'; then ok "adjoint path: group-local shift columns = full differences ($nchk checks, worst $worst)"
+if [ "$nchk" -ge 3 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 < 1e-6) }'; then ok "adjoint path: group-local shift columns = full differences ($nchk checks, worst $worst)"
 else bad "adjoint-path shift gradient check: $nchk checks, worst reldiff '$worst'"; fi
 # Jacobian path (the --use-gradient default): AZURE_GRAD_CHECK compares every free
 # component (here a, a0, a1) with a finite difference of the whole chi2.
