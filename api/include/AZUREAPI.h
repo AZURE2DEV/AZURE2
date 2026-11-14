@@ -128,7 +128,12 @@ class AZUREAPI {
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const { return compound_; };
+  const CNuc *compound() const { return compound_; };
+  /// The session's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the session's
+  /// evaluations and transformations.  Held through pointers, as the compound and the data are, because the const
+  /// evaluations write them (as they write results()).
+  LevelState &state() const { return *state_; }
+  LevelInputs &inputs() const { return *inputs_; }
   /*!
    * Returns a pointer to the parameter values object.
    */
@@ -488,7 +493,7 @@ class AZUREAPI {
  private:
   /// The arrays of UpdateSegments* (the model value of every point, its E1 / E2 parts, frame and coefficients) for
   /// the hand-over already made into the session's compound and data.  Returns the number of segments reported.
-  int ReportSegments(CNuc *localCompound, WorkingCopy *localData);
+  int ReportSegments(const CNuc *localCompound, WorkingCopy *localData);
   /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
   /// without the parameters of the prior covariance (D3).
   double NuisanceChi2(const vector_r &full) const;
@@ -555,7 +560,9 @@ class AZUREAPI {
   // Configuration
   Config &configure_;
   WorkingCopy *data_;
-  CNuc *compound_;
+  CNuc *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
+  std::unique_ptr<LevelState> state_;
+  std::unique_ptr<LevelInputs> inputs_;
   // The results of this session's evaluations (results()); mutable as data_ is: the const evaluations write both.
   mutable azure2::Results results_;
 

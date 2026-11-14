@@ -331,7 +331,7 @@ double Site::GetTargetThickness() const {
  * to calculate all energy dependent quantities that do no rely on the R-Matrix fit parameters.
  */
 
-void Unit::Initialize(WorkingCopy *data, CNuc *compound, const Config &configure) {
+void Unit::Initialize(WorkingCopy *data, const CNuc *compound, const Config &configure) {
   this->CalcEDependentValues(data, compound, configure);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
@@ -558,13 +558,13 @@ void Site::NoResultRecord(const azure2::Results &r) const {
       "caller's UsePrivateRecord is missing");
 }
 
-void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
+void Unit::CalcLegendreP(WorkingCopy *data, int maxL, const CNuc *theCNuc, const TargetEffect *targetEffect) {
   Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
 }
 
-azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *theCNuc,
+azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, const CNuc *theCNuc,
                                 const TargetEffect *targetEffect, const azure2::experiment::FrameRule *labFrame) const {
   azure2::RowSet set;
   set.kind = Observable();
@@ -630,25 +630,25 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   return set;
 }
 
-void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+void Unit::CalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   Site::CalcEDependentValues(data, theCNuc, configure, rows);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, rows);
 }
 
-void Unit::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
+void Unit::ChannelKeys(WorkingCopy *data, const CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
   Site::ChannelKeys(data, theCNuc, keys);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys);
 }
 
-void Unit::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
+void Unit::CalcCoulombAmplitude(WorkingCopy *data, const CNuc *theCNuc) {
   Site::CalcCoulombAmplitude(data, theCNuc);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcCoulombAmplitude(data, theCNuc);
 }
 
-void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+void Unit::CalculateECAmplitudes(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   Site::CalculateECAmplitudes(data, theCNuc, configure, table);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
@@ -657,7 +657,7 @@ void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
 // The slots are emptied before any is refilled: a slot keeps the storage of its rows (Site::ClearEDependentRows).
 // An energy shift moves each slot and recomputes it on its own (Segment::UpdatePointEnergyWithShift), so it calls
 // this on the point's own site only.
-void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+void Unit::RecalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   if (EDependentCurrent()) return;
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->ClearEDependentRows();

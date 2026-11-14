@@ -45,8 +45,8 @@ CNuc	PPair	owns	setup		CNuc::pairs_ (std::vector<PPair>)
 CNuc	JGroup	owns	setup		CNuc::jgroups_ (std::vector<JGroup>)
 JGroup	AChannel	owns	setup		JGroup::channels_ (std::vector<AChannel>)
 JGroup	ALevel	owns	setup		JGroup::levels_ (std::vector<ALevel>)
-CNuc	LevelState	owns	setup		CNuc::levelState_ (LevelState), the default owner's: CNuc::State() hands it to the readers, which take it as an argument
-CNuc	LevelInputs	owns	setup		CNuc::levelInputs_ (LevelInputs), made by CNuc::Fill, the default owner's: CNuc::Inputs() hands it to TransformIn, FillMnParams and the readers
+CNuc	LevelState	makes	setup		CNuc::Fill(const Config &, LevelState &, LevelInputs &, ...) shapes the caller's; Initialize, the fills and the transformations write the state they are given
+CNuc	LevelInputs	makes	setup		CNuc::Fill makes the caller's from the <levels> rows; TransformIn and FillCompoundFromParamsPhysical write the inputs they are given
 CNuc	LevelParameterLayout	reads	setup	const	CNuc::parameterLayout_ (shared_ptr<const LevelParameterLayout>), made once in CNuc::Fill; read by every walk of the level block through CNuc::ParameterLayout()
 CNuc	ObservedLevelTable	makes	setup		CNuc::TransformOut(const Config &) returns it; WriteParametersOut, LevelValue, WarnLargeRadiativeWidths read it
 CNuc	CNucSystem	reads	setup	const	CNuc::systemStructure_, systemAllGroups_ (shared_ptr<const CNucSystem>), made once by BuildSystemFromCNuc(const CNuc &, ...) in CNuc::Fill
@@ -74,14 +74,20 @@ azure2::Results	azure2::TaskScratch	owns	evaluation		Results::scratch (TaskScrat
 azure2::TaskScratch	AMatrixFunc	owns	evaluation		TaskScratch::point_, gradient_ (std::unique_ptr<AMatrixFunc>)
 azure2::TaskScratch	THMMatrixFunc	owns	evaluation		TaskScratch::pointThm_, gradientThm_ (std::unique_ptr<THMMatrixFunc>)
 AMatrixFunc	LevelMatrixSolver	owns	evaluation		AMatrixFunc::solvers_ (std::vector<LevelMatrixSolver>)
-AMatrixFunc	CNuc	reads	evaluation	nonconst	AMatrixFunc::compound_ (CNuc *)
+AMatrixFunc	CNuc	reads	evaluation	const	AMatrixFunc::compound_ (const CNuc *)
+AMatrixFunc	LevelState	reads	evaluation	const	AMatrixFunc(const CNuc *, const LevelState &, const Config &): the state it is solved at (GenMatrixFunc::state())
 RMatrixFunc	CNuc	reads	evaluation	nonconst	RMatrixFunc(CNuc *, const Config &), made per energy task in SolveAtOneEnergy (src/EnergyPass.cpp)
 AZURECalc	WorkingData	owns	inference		AZURECalc::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
-AZURECalc	CNuc	owns	inference		AZURECalc::cnuc_pool_ (std::stack<std::unique_ptr<CNuc>>)
+AZURECalc	CNuc	reads	inference	const	AZURECalc::compound_ (const CNuc *): the caller's, which outlives it
+AZURECalc	FitterStates	reads	inference	nonconst	AZURECalc::states_ (FitterStates &): the caller's pooled states, taken by GetPooledState
+AZURECalc	LevelState	reads	inference	nonconst	AZURECalc::state_ (LevelState &): the caller's, written by an evaluation on the data set itself, copied into the pool
+FitterStates	StatePool	owns	inference		FitterStates::idle (StatePool<LevelState>)
+StatePool	LevelState	owns	inference		StatePool::idle_ (std::stack<std::unique_ptr<Values>>), Values = LevelState or WalkerLevels
 WorkingData	WorkingCopy	owns	inference		WorkingData::data (std::unique_ptr<WorkingCopy>)
 WorkingData	azure2::Results	owns	inference		WorkingData::results
 AZURECalc	ObjectiveContext	makes	inference		AZURECalc::operator(): ObjectiveContext context{...}
-ObjectiveContext	CNuc	reads	inference	nonconst	ObjectiveContext::compound (CNuc *)
+ObjectiveContext	CNuc	reads	inference	const	ObjectiveContext::compound (const CNuc *)
+ObjectiveContext	LevelState	reads	inference	nonconst	ObjectiveContext::state (LevelState &): the evaluation's
 ObjectiveContext	WorkingCopy	reads	inference	nonconst	ObjectiveContext::data (WorkingCopy *)
 ObjectiveContext	azure2::Results	reads	inference	nonconst	ObjectiveContext::results (Results &: the terms store their totals)
 Objective	ObjectiveTerm	owns	inference		Objective::terms_ (std::vector<std::unique_ptr<ObjectiveTerm>>)
@@ -93,7 +99,10 @@ ParameterRecord	ParamKindRow	reads	inference	const	ParameterRecord::Row() (const
 AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(CNuc *, WorkingCopy *, ...) in AZURECalc::GradientBy
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
-AZURECalcMCMC	CNuc	owns	inference		AZURECalcMCMC::cnuc_pool_ (std::stack<std::unique_ptr<CNuc>>)
+AZURECalcMCMC	CNuc	reads	inference	const	AZURECalcMCMC::compound_ (const CNuc *): the caller's, which outlives it
+AZURECalcMCMC	WalkerLevels	owns	inference		AZURECalcMCMC::levels_ (WalkerLevels): the sampler's own, the seed of the walkers' copies
+AZURECalcMCMC	StatePool	reads	inference	nonconst	AZURECalcMCMC::pool_ (StatePool<WalkerLevels> &): the caller's, taken by GetPooledLevels
+WalkerLevels	LevelState	owns	inference		WalkerLevels::state (LevelState)
 AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
 PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
@@ -103,10 +112,14 @@ AZUREMain	CNuc	owns	frontends		AZUREMain::compound_ (new CNuc in the constructor
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
 AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
 ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
+ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by CNuc::Fill and Initialize in SetUpRun
+ProgramRun	LevelInputs	owns	frontends		ProgramRun::inputs (LevelInputs): the run's
 ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
 AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
 AZUREAPI	CNuc	owns	frontends		AZUREAPI::compound_ (new CNuc in AZUREAPI::ReplaceModel, called by Initialize)
+AZUREAPI	LevelState	owns	frontends		AZUREAPI::state_ (std::unique_ptr<LevelState>): the session's, made by CNuc::Fill and Initialize
+AZUREAPI	LevelInputs	owns	frontends		AZUREAPI::inputs_ (std::unique_ptr<LevelInputs>): the session's
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)
 _azure2::Session	Config	owns	frontends		Session::config_ (new Config in the constructor, api/src/pybind_api.cpp)
 _azure2::Session	AZUREAPI	owns	frontends		Session::api_ (new AZUREAPI(*config_))

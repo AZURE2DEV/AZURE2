@@ -34,7 +34,7 @@ AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
 
   // The parameter vector as the program makes it (limits, fixed flags), at the session's values.
   AZUREParams params;
-  compound()->FillMnParams(params, &configure());
+  compound()->FillMnParams(params, state(), inputs(), &configure());
   data()->FillMnParams(params);
   ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   for (size_t i = 0, k = 0; i < all_rwa_.size() && i < mp.Params().size(); i++) {
@@ -44,11 +44,12 @@ AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
     mp.SetValue(i, value);
   }
   // <parameterSettings> as the program applies it at its start (limits; nuisance priors in the objective).
-  ParameterLimitsManager limits(&configure(), compound(), data(), &params);
+  ParameterLimitsManager limits(&configure(), compound(), state(), inputs(), data(), &params);
   limits.ReadParameterSettings();
   limits.ApplyAllParameterSettings(params);
 
-  AZURECalc objective(data(), results(), compound(), configure(), &limits);
+  FitterStates states;  // the fit's pooled level states, copies of the session's
+  AZURECalc objective(data(), results(), compound(), state(), inputs(), states, configure(), &limits);
   objective.SetErrorDef(1.0);
   std::vector<bool> fixedMask(mp.Params().size());
   for (size_t i = 0; i < fixedMask.size(); i++) fixedMask[i] = mp.Parameter(i).IsFixed();

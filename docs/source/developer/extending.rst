@@ -128,7 +128,7 @@ energy and the amplitudes:
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
    vector), read by ``CNuc::FillMnParams`` as the start value; its observed
    value in ``GetTransformParams``. What an evaluation reads of the input
-   (the zero-width flags, the input energy the THM line shape reads) is
+   (the zero-width flags) is
    written into the ``LevelState`` where the input is read (``Fill``,
    ``TransformIn``, the fill from an observed vector), so that the
    evaluation reads the state alone. ``ALevel`` holds only what the
@@ -141,6 +141,21 @@ energy and the amplitudes:
    ``tests/upgrade/level_inputs_test.cpp`` (the input values and what a fill
    leaves in the state) and the objective's gradient against finite
    differences.
+
+An owner of the levels
+----------------------
+
+Something that evaluates the model on levels of its own (a second sampler, a
+scan, a new front end) holds the compound as ``const CNuc *`` (or ``const
+CNuc &``) of the run or session that set it up and outlives it, and its own
+``LevelState`` (with a ``LevelInputs`` if it transforms from the observed
+basis), copied from its caller's: ``LevelState state(callerState)``. It
+passes the compound, the state and the inputs to the fills and the readers.
+If evaluations of it run at the same time from ``const`` methods, the idle
+copies are a ``StatePool`` (``include/StatePool.h``) of its caller, lent as
+the ``Results`` are (``FitterStates`` of ``AZURECalc``,
+``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
+changes: the owner's own file, and its test.
 
 A term of the objective
 -----------------------

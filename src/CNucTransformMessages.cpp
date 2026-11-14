@@ -16,14 +16,11 @@
 namespace phys = azure2::physics;
 
 namespace {
-// AZURELabel takes non-const pointers (include/ParameterLabel.h); it only reads them.
 std::string LevelLabel(const CNuc &compound, const LevelInputs &inputs, int j, int la) {
-  const JGroup *group = const_cast<CNuc &>(compound).GetJGroup(j);
-  return AZURELabel::Level(group, inputs.E(j, la), j, la);
+  return AZURELabel::Level(compound.GetJGroup(j), inputs.E(j, la), j, la);
 }
 std::string ChannelLabel(const CNuc &compound, int j, int ch) {
-  CNuc &c = const_cast<CNuc &>(compound);
-  return AZURELabel::Channel(&c, c.GetJGroup(j), ch);
+  return AZURELabel::Channel(&compound, compound.GetJGroup(j), ch);
 }
 }  // namespace
 

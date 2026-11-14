@@ -23,7 +23,7 @@
 int SetUpRun(ProgramRun &run) {
   // Fill compound nucleus from nucfile
   run.configure.outStream << "Filling Compound Nucleus..." << std::endl;
-  if (run.compound->Fill(run.configure) == -1) {
+  if (run.compound->Fill(run.configure, run.state, run.inputs) == -1) {
     run.configure.outStream << "Could not fill compound nucleus from file."
                           << std::endl;
     return -1;
@@ -32,7 +32,7 @@ int SetUpRun(ProgramRun &run) {
     return -1;
   }
   if ((run.configure.screenCheckMask | run.configure.fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*run.compound, run.compound->Inputs(), run.configure);
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*run.compound, run.inputs, run.configure);
 
   // An extrapolation run whose project has an adaptive grid refines it once the parameters are known (below).
   run.refinesAdaptiveGrids =
@@ -45,7 +45,7 @@ int SetUpRun(ProgramRun &run) {
     //   center of mass conversions, s-factor conversions, etc.
     run.configure.outStream << "Filling Data Structures..." << std::endl;
     if (run.configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (const int filled = run.data->Fill(run.configure, run.compound); filled != 0) {
+      if (const int filled = run.data->Fill(run.configure, run.compound, run.inputs); filled != 0) {
         if (filled != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (run.data->Data().NumSegments() == 0 && run.compound->GetModelData().NumResiduals() == 0) {  // model data alone run
@@ -54,7 +54,7 @@ int SetUpRun(ProgramRun &run) {
       }
       RequestDataEntrances(*run.compound, run.configure);
     } else {
-      if (const int made = run.data->MakePoints(run.configure, run.compound); made != 0) {
+      if (const int made = run.data->MakePoints(run.configure, run.compound, run.inputs); made != 0) {
         if (made != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (run.data->Data().NumSegments() == 0) {
@@ -84,7 +84,7 @@ int SetUpRun(ProgramRun &run) {
 
   // Initialize compound nucleus object
   try {
-    run.compound->Initialize(run.configure);
+    run.compound->Initialize(run.configure, run.state, run.inputs);
   } catch (GSLException e) {
     run.configure.outStream << e.what() << std::endl;
     run.configure.outStream << std::endl
@@ -93,7 +93,7 @@ int SetUpRun(ProgramRun &run) {
   }
 
   // Create new parameters for minuit, fill them from compound nucleus object and data file.
-  run.compound->FillMnParams(run.params, &run.configure);
+  run.compound->FillMnParams(run.params, run.state, run.inputs, &run.configure);
   run.data->FillMnParams(run.params);
   if (run.configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     run.configure.outStream << "Reading User Parameter File..." << std::endl;
@@ -103,7 +103,7 @@ int SetUpRun(ProgramRun &run) {
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
   // is computed on them (AdaptiveExtrapolation.h).
   if (run.refinesAdaptiveGrids) {
-    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound, run.compound->MutableState(), run.compound->Inputs(), run.params.GetMinuitParams().Params());
+    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound, run.state, run.inputs, run.params.GetMinuitParams().Params());
     if (!refined) return -1;
     delete run.data;
     run.data = refined.release();
@@ -148,21 +148,21 @@ int SetUpObjective(ProgramRun &run) {
 
   // Create ParameterLimitsManager and apply settings
   run.configure.outStream << "Applying parameter settings with Parameter Manager..." << std::endl;
-  run.limits.reset(new ParameterLimitsManager(&run.configure, run.compound, run.data, &run.params));
+  run.limits.reset(new ParameterLimitsManager(&run.configure, run.compound, run.state, run.inputs, run.data, &run.params));
   run.limits->ReadParameterSettings();
   run.limits->ApplyAllParameterSettings(run.params);
 
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed =
-          run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*run.compound, run.compound->Inputs(), *observed, run.configure);
+          run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params(), run.state, run.inputs))
+    WarnLargeRadiativeWidths(*run.compound, run.inputs, *observed, run.configure);
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
   // in the first evaluation's report.
   AZUREProfile::Report(run.configure.profile, std::cerr, "set-up");
   // The objective: the chi^2 of the data, the priors and the constraints (Objective.h), on the run's data.
-  run.objective.reset(new AZURECalc(run.data, run.results, run.compound, run.configure, run.limits.get()));
+  run.objective.reset(new AZURECalc(run.data, run.results, run.compound, run.state, run.inputs, run.fitterStates, run.configure, run.limits.get()));
   // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
   if (run.priorCov && run.priorCov->Size() > 0) {
     const std::vector<std::string> replaced = ReplaceDiagonalPriors(run.compound, run.data, *run.priorCov);

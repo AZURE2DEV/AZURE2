@@ -61,13 +61,15 @@ void OnProject(const std::string &file) {
   cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(cfg);
   CNuc compound;
-  if (compound.Fill(cfg) == -1) {
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
+  if (compound.Fill(cfg, state, inputs) == -1) {
     Check(false, file + ": Fill failed");
     return;
   }
   const LevelParameterLayout &layout = compound.ParameterLayout();
   AZUREParams params;
-  compound.FillMnParams(params, &cfg);
+  compound.FillMnParams(params, state, inputs, &cfg);
   const ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   // The format's order written out here, independently of the layout: the slots and the names FillMnParams gives.
   int index = 0, levelNumber = 1;

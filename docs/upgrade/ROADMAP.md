@@ -213,19 +213,22 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       the copies) is read by every walk of the block (the fills, the start vector, the observed vector, the basis
       conversion, the index map, the labels, the `gamma_decay` slots, the model data's columns) (`cnuc_split.md`
       §12.3, step 4 as built, first part).
-- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, zero-width flags, the `gamma_decay`
-      numbers, the transformation's end), held by `CNuc` (`CNuc::Inputs()`); `ALevel` holds its `<levels>` values
+- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, the `gamma_decay` numbers, the
+      transformation's end; the zero-width flags moved on to `LevelState` in the next item), held then by `CNuc`
+      (`CNuc::Inputs()`, now each owner's); `ALevel` holds its `<levels>` values
       only and nothing of it is written after set-up.  The `gamma_decay` fills and the formal-basis capture-mask
       projectors are the `LevelState`'s: a fill writes the state and nothing else of `CNuc` (`cnuc_split.md` §12.3,
       step 4 as built, second part).
 - [x] The readers take the state they read: every reader of an evaluation's values takes its `LevelState`, every reader
       of the input values its `LevelInputs`; `CNuc`'s fills and transformations are `const` and write the state they
-      are given; the zero-width flags and the input energies an evaluation reads are the state's (`cnuc_split.md`
-      §12.3, step 4 as built, third part).
-- [ ] The owners (fitter, sampler, rate,
-      sub-point grids, bands, adaptive extrapolation, limits, binding) hold the compound shared and constant with their
-      own `LevelState` (and `LevelInputs` where they transform); pools of `LevelState`; `Clone` deleted (`cnuc_split.md`
-      §12.3, step 4, what remains).
+      are given; the zero-width flags an evaluation reads are the state's (`cnuc_split.md` §12.3, step 4 as built,
+      third part; the THM line shape's ground-state test reads the level's file energy since the fourth part).
+- [x] The owners hold their own levels: the run and the session (`CNuc::Fill` and `Initialize` write the state and
+      inputs they are given), the fitter (the caller's state, copies of it in the caller's `FitterStates`), the sampler
+      (`WalkerLevels`, a `StatePool` of the caller), the rate, the limits, the sub-point grids (`GridLevels`), the band
+      and the adaptive extrapolation (the run's state) hold the compound as `const CNuc *`; `Clone`, `State()`,
+      `Inputs()`, `MutableState()` and the one-argument fills are deleted; `CNuc` holds nothing written after set-up
+      and cannot be copied (`cnuc_split.md` §12.3, step 4 as built, fourth part).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

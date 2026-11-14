@@ -160,14 +160,14 @@ void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
  * and hard sphere phase shfits.
  */
 
-double Site::CompoundEnergy(CNuc *theCNuc) {
+double Site::CompoundEnergy(const CNuc *theCNuc) {
   const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
   if (entrancePair->GetPType() == 20) return this->GetCMEnergy() + exitPair->GetSepE() + exitPair->GetExE();
   return this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
 }
 
-void Site::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
+void Site::ChannelKeys(WorkingCopy *data, const CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
   // The walk of CalcEDependentValues: the blocks of the entrance pair's compound nucleus, their particle channels,
   // E_c by the same expression; the exact threshold of a scattering length is not a row.
   const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
@@ -187,7 +187,7 @@ void Site::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTabl
   }
 }
 
-void Site::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+void Site::CalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kEDependent);
   const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -428,7 +428,7 @@ void Site::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void Site::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+void Site::RecalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
   // evaluation whenever external capture was in use (Coulomb and Whittaker
@@ -621,7 +621,7 @@ void Site::CoulombAmplitudesAt(const PPair *entrancePair, double energy, double 
   direct = calpha;
 }
 
-void Site::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
+void Site::CalcCoulombAmplitude(WorkingCopy *data, const CNuc *theCNuc) {
   // A slot without an angle has no Coulomb amplitude: its readers hold theirs (RowSet.h).
   if (is_sub_point_ && AngleFree()) return;
   if (this->GetEntranceKey() == this->GetExitKey()) {

@@ -348,7 +348,7 @@ double Objective::Chi2(const ObjectiveContext &c) const {
   return chi2;
 }
 
-std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc) {
+std::vector<std::string> ReplaceDiagonalPriors(const CNuc *compound, WorkingCopy *data, const PriorCovariance &pc) {
   std::vector<std::string> replaced;
   const ParamIndexMap pmap = BuildParamIndexMap(compound, data, std::vector<bool>());
   // The flags are settings of the data set: one revision of it (WorkingCopy::ReviseDataSet) for all of them.
@@ -427,7 +427,7 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
   return replaced;
 }
 
-void AppendModelRows(CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+void AppendModelRows(const CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
     residuals.push_back(r);

@@ -39,17 +39,17 @@ int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &confi
   return read;
 }
 
-int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
+int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs) {
   if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
   if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
   // Every refusal of the set-up prints its ERROR line before it returns: that line ends the run (WorkingCopy.h).
-  return this->Fill(configure, theCNuc, configure.project->built.data) == 0 ? 0 : kFillRefused;
+  return this->Fill(configure, theCNuc, inputs, configure.project->built.data) == 0 ? 0 : kFillRefused;
 }
 
-int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc) {
+int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs) {
   if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
   ReportUnreadDataFiles(configure, false);
-  return this->MakePoints(configure, theCNuc, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
+  return this->MakePoints(configure, theCNuc, inputs, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
 }
 
 

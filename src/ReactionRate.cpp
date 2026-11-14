@@ -4,6 +4,7 @@
 #include "ReactionRate.h"
 #include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
+#include "CNucChecks.h"
 #include <iomanip>
 #include <iostream>
 #include <math.h>
@@ -33,7 +34,7 @@ static const double kRateEnergyHigh = 50.0;
 
 // The exit keys whose cross sections make up the rate: the exit key itself, or for -1 (total radiative
 // capture) every capture pair of the entrance pair's compound nucleus (CNuc::CapturePairKeys).
-static std::vector<int> RateExitKeys(CNuc *compound, int entranceKey, int exitKey) {
+static std::vector<int> RateExitKeys(const CNuc *compound, int entranceKey, int exitKey) {
   if (exitKey == -1) return compound->CapturePairKeys(entranceKey);
   return std::vector<int>(1, exitKey);
 }
@@ -43,7 +44,8 @@ struct gsl_reactionrate_params {
     configure(config) {};
   const Config &configure;
   double temperature;
-  CNuc *compound;
+  const CNuc *compound;
+  const LevelState *state;  ///< the thread's copy of the rate's levels
   int entranceKey;
   std::vector<int> exitKeys;
 };
@@ -54,7 +56,7 @@ struct gsl_reactionrate_params {
 // request (n + 12C at T9 = 0.1, the same on the spline and the direct path).
 double gsl_reactionrate_integrand(double u, void *p) {
   struct gsl_reactionrate_params *params = (struct gsl_reactionrate_params *)p;
-  CNuc *compound = params->compound;
+  const CNuc *compound = params->compound;
   const Config &configure = params->configure;
   double temperature = params->temperature;
   int entranceKey = params->entranceKey;
@@ -67,7 +69,7 @@ double gsl_reactionrate_integrand(double u, void *p) {
       azure2::Results results;  // the point's own result record
       point->UsePrivateRecord(results);
       point->Initialize(nullptr, compound, configure);
-      point->Calculate(nullptr, compound, compound->State(), configure, results);
+      point->Calculate(nullptr, compound, *params->state, configure, results);
       double sigma = point->GetFitCrossSection(results);
       delete point;
       if (std::isfinite(sigma) && sigma > 0.0) crossSection += sigma;
@@ -100,19 +102,22 @@ static const double kRateEpsRel = 1e-7;
  * resolved and dropped out of the rate.
  */
 static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
+RateResonances(const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+               int entranceKey) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.entranceKey = entranceKey;
   try {
-    std::unique_ptr<CNuc> g(compound->Clone());  // the copy holds the compound's fit values (CNuc::State)
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->State(), g->TransformOut(configure)));
+    LevelState g(state);  // copies that hold the rate's fit values
+    LevelInputs gi(inputs);
+    compound->FillCompoundFromParamsPhysical(compound->GetTransformParams(g, compound->TransformOut(configure, g, gi)), g,
+                                             gi);
     gc.inputWidthsArePhysical = true;
-    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, g.get(), g->Inputs());
+    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, gi);
   } catch (const std::exception &e) {
     configure.outStream << "\tWarning: could not transform the parameters to observed values for the "
                            "rate grid (" << e.what() << "); using the input level values." << std::endl;
     gc.inputWidthsArePhysical = false;
-    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, compound->Inputs());
+    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, inputs);
   }
 }
 
@@ -122,13 +127,14 @@ RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
  * across its width) so the adaptive integrator is guaranteed to resolve narrow
  * resonances instead of stepping over them.  Returns at least {E_LOW, E_HIGH}.
  */
-std::vector<double> gsl_reactionrate_breakpoints(CNuc *compound, const Config &configure, int entranceKey) {
+std::vector<double> gsl_reactionrate_breakpoints(const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+                                                 const Config &configure, int entranceKey) {
   std::vector<double> pts;
   pts.push_back(kRateEnergyLow);
   pts.push_back(kRateEnergyHigh);
 
   std::vector<AdaptiveIntegrationGrid::ResonanceInfo> resonances =
-      RateResonances(compound, configure, entranceKey);
+      RateResonances(compound, state, inputs, configure, entranceKey);
 
   // For each resonance, bracket the peak tightly so a Gauss-Kronrod panel is
   // forced right onto it, regardless of interference-driven shape changes.
@@ -155,12 +161,14 @@ std::vector<double> gsl_reactionrate_breakpoints(CNuc *compound, const Config &c
   return unique;
 }
 
-double gsl_reactionrate_integration(double temperature, CNuc *compound, const Config &configure,
+double gsl_reactionrate_integration(double temperature, const CNuc *compound, const LevelState &state,
+                                    const Config &configure,
                                     int entranceKey, int exitKey,
                                     const std::vector<double> &breakpoints) {
   struct gsl_reactionrate_params params(configure);
   params.temperature = temperature;
   params.compound = compound;
+  params.state = &state;
   params.entranceKey = entranceKey;
   params.exitKeys = RateExitKeys(compound, entranceKey, exitKey);
 
@@ -222,7 +230,8 @@ void PrintRateProgress(std::ostream &os, int done, int total) {
 
 // Energy grid for sigma(E): a log backbone plus a resonance cluster per level.
 // Returns strictly increasing, unique energies (as gsl_spline_init needs).
-std::vector<double> BuildRateCrossSectionGrid(CNuc *compound, int entranceKey,
+std::vector<double> BuildRateCrossSectionGrid(const CNuc *compound, const LevelState &state,
+                                              const LevelInputs &inputs, int entranceKey,
                                               const Config &configure) {
   const double eLow = kRateEnergyLow;
   const double eHigh = kRateEnergyHigh;
@@ -236,7 +245,7 @@ std::vector<double> BuildRateCrossSectionGrid(CNuc *compound, int entranceKey,
     pts.push_back(std::pow(10.0, lgLo + (lgHi - lgLo) * (double)i / (double)nLog));
 
   std::vector<AdaptiveIntegrationGrid::ResonanceInfo> res =
-      RateResonances(compound, configure, entranceKey);
+      RateResonances(compound, state, inputs, configure, entranceKey);
 
   // sigma(E) has width Gamma_particle (non-RMC) or Gamma_total (RMC).
   bool rmc = (configure.paramMask & Config::USE_RMC_FORMALISM);
@@ -277,7 +286,7 @@ std::vector<double> BuildRateCrossSectionGrid(CNuc *compound, int entranceKey,
 // exit keys of RateExitKeys (one, or every capture pair for the total capture -1).
 // Returns NaN if the level matrix is singular here (e.g. exactly on a pole with
 // vanishing penetrability) or the result is not finite; the caller drops such points.
-double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure,
+double RateCrossSectionAt(double energy, const CNuc *compound, const LevelState &state, const Config &configure,
                           int entranceKey, int exitKey) {
   if (!(energy >= kRateEnergyLow && energy <= kRateEnergyHigh)) return 0.0;
   try {
@@ -287,7 +296,7 @@ double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure
       azure2::Results results;  // the point's own result record
       point.UsePrivateRecord(results);
       point.Initialize(nullptr, compound, configure);
-      point.Calculate(nullptr, compound, compound->State(), configure, results);
+      point.Calculate(nullptr, compound, state, configure, results);
       double sigma = point.GetFitCrossSection(results);
       if (!std::isfinite(sigma)) return std::numeric_limits<double>::quiet_NaN();
       total += sigma;
@@ -347,7 +356,7 @@ double IntegrateSplineRate(gsl_spline *spline, double eMin, double eMax,
 // Per-temperature quadrature: the fallback of the tabulated path for a grid with
 // fewer than three points of sigma > 0.
 void RunPerTemperatureRateCalculation(const std::vector<double> &temps,
-                                CNuc *compound, const Config &configure,
+                                const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                                 int entranceKey, int exitKey,
                                 std::vector<RateData> &outRates) {
   std::ostream &os = configure.outStream;
@@ -356,17 +365,17 @@ void RunPerTemperatureRateCalculation(const std::vector<double> &temps,
 
   os << "\t[                         ] 0%";
   os.flush();
-  std::vector<double> breakpoints = gsl_reactionrate_breakpoints(compound, configure, entranceKey);
+  std::vector<double> breakpoints = gsl_reactionrate_breakpoints(compound, state, inputs, configure, entranceKey);
 
   std::atomic<int> done(0);
   time_t startTime = time(NULL);
 #pragma omp parallel
   {
-    CNuc *localCompound = compound->Clone();
+    const LevelState localState(state);  // the thread's copy of the rate's levels
     const Config localConfigure = configure;
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < nT; ++i) {
-      double rate = gsl_reactionrate_integration(temps[i], localCompound, localConfigure,
+      double rate = gsl_reactionrate_integration(temps[i], compound, localState, localConfigure,
                                                  entranceKey, exitKey, breakpoints);
       outRates[i] = RateData(temps[i], rate);
       int d = ++done;
@@ -378,14 +387,13 @@ void RunPerTemperatureRateCalculation(const std::vector<double> &temps,
         }
       }
     }
-    delete localCompound;
   }
   os << "\r\t[*************************] 100%" << std::endl;
 }
 
 // Tabulate sigma(E) once, spline it, integrate every temperature against it.
 void RunTabulatedRateCalculation(const std::vector<double> &temps,
-                                 CNuc *compound, const Config &configure,
+                                 const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                                  int entranceKey, int exitKey,
                                  std::vector<RateData> &outRates) {
   std::ostream &os = configure.outStream;
@@ -393,7 +401,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   outRates.assign(nT, RateData(0.0, 0.0));
 
   // ---- Phase 1: temperature-independent cross section on the energy grid ----
-  std::vector<double> energies = BuildRateCrossSectionGrid(compound, entranceKey, configure);
+  std::vector<double> energies = BuildRateCrossSectionGrid(compound, state, inputs, entranceKey, configure);
   int nGrid = (int)energies.size();
   std::vector<double> sigma(nGrid, 0.0);
 
@@ -406,11 +414,11 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   time_t startTime = time(NULL);
 #pragma omp parallel
   {
-    CNuc *localCompound = compound->Clone();
+    const LevelState localState(state);  // the thread's copy of the rate's levels
     const Config localConfigure = configure;
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < nGrid; ++i) {
-      sigma[i] = RateCrossSectionAt(energies[i], localCompound, localConfigure,
+      sigma[i] = RateCrossSectionAt(energies[i], compound, localState, localConfigure,
                                     entranceKey, exitKey);
       int d = ++doneGrid;
 #pragma omp critical(rate_progress)
@@ -421,7 +429,6 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
         }
       }
     }
-    delete localCompound;
   }
   os << "\r\t[*************************] 100%" << std::endl;
 
@@ -506,7 +513,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   if (nSpline < 3) {
     os << "\tGrid too small for spline; using per-temperature integration."
        << std::endl;
-    RunPerTemperatureRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
+    RunPerTemperatureRateCalculation(temps, compound, state, inputs, configure, entranceKey, exitKey, outRates);
     return;
   }
 
@@ -546,7 +553,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
 
 /*! The rate at every temperature: the tabulated path (RunTabulatedRateCalculation). */
 void DispatchRateCalculation(const std::vector<double> &temps,
-                             CNuc *compound, const Config &configure,
+                             const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                              int entranceKey, int exitKey,
                              std::vector<RateData> &outRates) {
   // The rate is N_A <sigma v> of the physical cross section, which for an
@@ -562,16 +569,18 @@ void DispatchRateCalculation(const std::vector<double> &temps,
     configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
                         << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."
                         << std::endl;
-  RunTabulatedRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
+  RunTabulatedRateCalculation(temps, compound, state, inputs, configure, entranceKey, exitKey, outRates);
 }
 
 }  // namespace
 
-ReactionRate::ReactionRate(CNuc *compound, const vector_r &params,
-                           const Config &configure, int entranceKey, int exitKey) :
-  configure_(configure) {
+ReactionRate::ReactionRate(const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+                           const vector_r &params, const Config &configure, int entranceKey, int exitKey) :
+  inputs_(inputs),
+  configure_(configure),
+  state_(state) {
   compound_ = compound;
-  compound_->FillCompoundFromParams(params);
+  compound_->FillCompoundFromParams(params, state_);
   entrance_key_ = entranceKey;
   exit_key_ = exitKey;
   if (exitKey == -1) {
@@ -580,6 +589,11 @@ ReactionRate::ReactionRate(CNuc *compound, const vector_r &params,
     for (size_t i = 0; i < keys.size(); i++) configure_.outStream << (i ? ", " : " ") << keys[i];
     configure_.outStream << " of the entrance pair's compound nucleus." << std::endl;
   }
+  // Warn once if a level has a radiative width comparable to its particle width,
+  // where the R-Matrix treatment of capture breaks down.
+  if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_))
+    WarnLargeRadiativeWidths(*compound_, inputs_, *observed, configure);
+  if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound_->CalcShiftFunctions(configure, state_);
 }
 
 /*!
@@ -592,7 +606,7 @@ void ReactionRate::CalculateRates() {
   for (int i = 0; i < numSteps; ++i)
     temps[i] = configure().rateParams.minTemp + i * configure().rateParams.tempStep;
 
-  DispatchRateCalculation(temps, compound(), configure(), entranceKey(), exitKey(), rates_);
+  DispatchRateCalculation(temps, compound(), state_, inputs_, configure(), entranceKey(), exitKey(), rates_);
   std::sort(rates_.begin(), rates_.end());
 }
 
@@ -621,7 +635,7 @@ void ReactionRate::CalculateFileRates() {
   inFile.close();
 
   // Preserve the file ordering of the temperatures in the output.
-  DispatchRateCalculation(temps, compound(), configure(), entranceKey(), exitKey(), rates_);
+  DispatchRateCalculation(temps, compound(), state_, inputs_, configure(), entranceKey(), exitKey(), rates_);
 }
 
 void ReactionRate::WriteRates() {

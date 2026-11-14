@@ -51,11 +51,14 @@ The set-up objects, immutable
      task (``NodeState``, ``include/NodeTable.h``), the shared angular rows
      (``RowSet``), the ``ChannelTable``; all held as
      ``std::shared_ptr<const ...>`` or ``SharedTable``.
-   - The parts of ``CNuc`` that do not move with the parameters: the two
-     ``CNucSystem`` of the structure, the ``PathwayTable``, the model data,
-     the ``gamma_decay`` set (each a ``std::shared_ptr<const ...>`` that
-     ``CNuc::Clone`` shares), and the pairs, groups and channels, which are
-     copied but read through ``const`` pointers only after the set-up.
+   - ``CNuc``, the set-up of the compound nuclei: the pairs, groups, channels
+     and levels, the two ``CNucSystem`` of the structure, the
+     ``PathwayTable``, the model data, the ``gamma_decay`` set and the
+     parameter layout. ``Fill``, ``AddHardSphereGroups``,
+     ``ParseExternalCapture`` and ``Initialize`` write it; after them every
+     owner reads it through a ``const CNuc *`` (or ``const CNuc &``) whose
+     maker, the program's run or the session, outlives the owner. It holds no
+     value of an evaluation and cannot be copied.
 
 The per-evaluation objects
    - ``WorkingCopy`` (``include/WorkingCopy.h``): what an evaluation changes
@@ -66,8 +69,22 @@ The per-evaluation objects
      (``WorkingCopy::ThmCoherentValues``, handed to the HOES model), the points (``Unit``) and slots (``Site``) with
      their energies after a shift, the plan's positions. ``WorkingCopy::Clone``
      is a plain copy that shares the ``DataSet``.
-   - ``CNuc``: the levels at the present parameter vector (energies,
-     amplitudes, shift functions). ``CNuc::Clone`` copies it.
+   - ``LevelState`` (``include/LevelState.h``): the levels at the present
+     parameter vector (energies, amplitudes, shift functions, Park's
+     :math:`J`, the external-capture parts, the ``gamma_decay`` fills), and
+     ``LevelInputs`` (``include/LevelInputs.h``) where an owner transforms
+     from the observed basis. Each owner holds its own and hands it to the
+     readers (the compound first, then the state, then the inputs): the
+     program's run (``ProgramRun::state``, ``inputs``, made by
+     ``CNuc::Fill`` and ``Initialize``), the session (``AZUREAPI::state()``,
+     ``inputs()``), a fit's evaluations (copies of the caller's state in its
+     ``FitterStates``, ``include/AZURECalc.h``), the sampler (its own
+     ``WalkerLevels`` and a copy per walker and per snapshot), the reaction
+     rate (``ReactionRate::State``, a copy per thread), a limit's conversion
+     (``ParameterLimitsManager``), the sub-point grids
+     (``WorkingCopy::GridLevels``). A pool of idle copies is a
+     ``StatePool`` (``include/StatePool.h``) owned by the caller, as the
+     ``Results`` are.
    - ``azure2::Results`` (``include/Results.h``): the evaluation's buffer --
      one record per point and slot at an offset fixed by the layout
      (``WorkingCopy::LayoutResults``), the model values, the contracted
@@ -129,7 +146,7 @@ thread may write:
 - **The point pass** (``WorkingCopy::CalculatePointsInParallel``,
   ``src/EnergyPass.cpp``). The energy tasks run on a dynamic schedule; each
   writes the records of its own units and nothing else, and reads the
-  set-up's tables and the levels of the evaluation's ``CNuc``. The folds run
+  set-up's tables and the evaluation's ``LevelState``. The folds run
   after every energy task has finished; each writes the records of its own
   points. A task that throws marks its points failed (their value is NaN);
   the failure is collected after the pass, not in the middle of it. Under
@@ -140,8 +157,8 @@ thread may write:
 - **The gradient** (``src/AZUREGrad.cpp``, ``src/GradEnergyTasks.cpp``): the
   forward pass as above, then one adjoint pass per energy task.
 - **A fit's evaluations.** During a fit every evaluation of ``AZURECalc``
-  takes its own ``CNuc`` and ``WorkingData`` from the pools
-  (``AZURECalc::GetPooledCNuc``, ``GetPooledData``) and returns them after
+  takes its own ``LevelState`` and ``WorkingData`` from the pools
+  (``AZURECalc::GetPooledState``, ``GetPooledData``) and returns them after
   use, so evaluations that run at the same time never share one. An
   evaluation already inside a parallel region calculates its points serially
   (``CalculatePointsInParallel`` declines, the model pass calculates each
@@ -169,10 +186,9 @@ which must give the same bits as the pooled copy
 (:doc:`../reference/command_line`, "Environment switches").
 
 .. note:: **Planned.**
-   The pools and the remaining ``mutable`` members of ``AZURECalc``,
+   The remaining pools and ``mutable`` members of ``AZURECalc``,
    ``AZURECalcMCMC`` and ``AZUREAPI`` go to their owners (the fitter's
-   adapter, the run), and ``CNuc`` becomes an immutable ``CompoundSystem``
-   shared by every evaluation with a per-evaluation ``LevelState`` (today
-   the one each copy of ``CNuc`` holds, ``CNuc::State``, which it hands to
-   the readers as an argument); the
-   allow-list then keeps only its ``table:`` rows.
+   adapter, the run), as the pools of level states did (``StatePool``), and
+   ``CNuc``, set up once and shared constant by the owners of the
+   ``LevelState``, becomes the ``CompoundSystem``; the allow-list then keeps
+   only its ``table:`` rows.

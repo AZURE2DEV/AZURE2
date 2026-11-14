@@ -5,7 +5,9 @@ digraph frontends {
   n_RunRequest [label=<<b>RunRequest</b><br/><font point-size="12">the answers of a<br/>program run: its<br/>command and options</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain [label=<<b>AZUREMain</b><br/><font point-size="12">the program&#x27;s run: its<br/>stages in order</font>>, shape=box, style="filled", fillcolor="white"];
   n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read</font>>, shape=box, style="filled", fillcolor="white"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei and<br/>level parameters</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei as set<br/>up by the run or the<br/>session</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the run&#x27;s or the<br/>session&#x27;s levels at<br/>the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_LevelInputs [label=<<b>LevelInputs</b><br/><font point-size="12">the run&#x27;s or the<br/>session&#x27;s levels&#x27;<br/>input values</font>>, shape=box, style="filled", fillcolor="white"];
   n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">the data of one<br/>evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="12">Minuit&#x27;s function:<br/>chi^2, gradient</font>>, shape=box, style="filled", fillcolor="white"];
   n_ProgramRun [label=<<b>ProgramRun</b><br/><font point-size="12">one program run: what<br/>a stage hands to the<br/>next</font>>, shape=box, style="filled", fillcolor="white"];
@@ -34,10 +36,14 @@ digraph frontends {
   n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_ProgramRun [style=dotted, penwidth=1.6, arrowhead=empty];
   n_ProgramRun -> n_AZURECalc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ProgramRun -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ProgramRun -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_ProgramProgress -> n_AZURECalc [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREAPI -> n_AZURECalc [style=dotted, penwidth=1.6, arrowhead=empty];
   n_AZUREAPI -> n_Config [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREAPI -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREAPI -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREAPI -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREAPI -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n__azure2__Session -> n_Config [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n__azure2__Session -> n_AZUREAPI [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];

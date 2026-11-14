@@ -136,6 +136,8 @@ struct Loaded {
   std::ostringstream sink;
   Config cfg;
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   Loaded() : cfg(sink) {}
 };
 
@@ -148,8 +150,8 @@ bool Load(Loaded &m, const std::string &azr, Basis basis, bool initialize) {
   if (m.cfg.ReadConfigFile() < 0) return false;
   m.cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(m.cfg);
-  if (m.compound.Fill(m.cfg) == -1) return false;
-  if (initialize) m.compound.Initialize(m.cfg);
+  if (m.compound.Fill(m.cfg, m.state, m.inputs) == -1) return false;
+  if (initialize) m.compound.Initialize(m.cfg, m.state, m.inputs);
   return true;
 }
 
@@ -163,7 +165,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
   CNuc &cn = m.compound;
   const long before = compared;
   const int failuresBefore = failures;
-  CNucSystem built = BuildSystemFromCNuc(cn, cn.Inputs(), m.cfg);
+  CNucSystem built = BuildSystemFromCNuc(cn, m.inputs, m.cfg);
   const phys::System &sys = built.system;
   const CNucSystemMap &map = built.map;
 
@@ -240,7 +242,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     same(w + "gamma size", blk.gamma().size(), blk.num_levels() * blk.num_channels());
     for (int lam = 0; lam < (int)blk.num_levels() && lam < (int)rmLevels.size(); lam++) {
       same(w + "block level -> group level", map.levelOfBlockLevel[bl][lam], rmLevels[lam]);
-      const LevelInputs &in = cn.Inputs();
+      const LevelInputs &in = m.inputs;
       const int j = map.groupOfBlock[bl], la = rmLevels[lam];
       same(w + "E", blk.E(lam), in.E(j, la));
       for (int k = 0; k < (int)blk.num_channels(); k++) {
@@ -307,7 +309,7 @@ int main(int argc, char **argv) {
     bool threw = false;
     if (Load(m, argv[1], Basis::Brune, false)) {
       try {
-        BuildSystemFromCNuc(m.compound, m.compound.Inputs(), m.cfg);
+        BuildSystemFromCNuc(m.compound, m.inputs, m.cfg);
       } catch (const std::runtime_error &) {
         threw = true;
       }

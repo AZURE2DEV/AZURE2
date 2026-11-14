@@ -59,7 +59,7 @@ class AZUREParams {
   /// the file was written in the other alternative one (Brune <-> Park), and
   /// say so.  False when no conversion exists (standard <-> alternative, or a
   /// Park level with J <= 0), after printing why.
-  bool ReconcileBasis(CNuc *, const Config &);
+  bool ReconcileBasis(const CNuc *, const Config &);
   /// The basis a run writes, from its runtime options.
   static int BasisForConfig(const Config &);
   static const char *BasisName(int);

@@ -88,6 +88,9 @@ bool writeProject(const std::string &source, const std::string &target, const st
 struct Model {
   Config cfg;
   CNuc *compound = nullptr;
+  LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
+  LevelInputs inputs;
+  FitterStates fitterStates;
   WorkingCopy *data = nullptr;
   AZUREParams params;
   explicit Model(const std::string &azr) : cfg(std::cout) { cfg.configfile = azr; }
@@ -99,11 +102,11 @@ struct Model {
     if (cfg.ReadConfigFile() < 0) return false;
     compound = new CNuc();
     data = new WorkingCopy();
-    if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
+    if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) return false;
     RequestCaptureAyTerms(*compound, *data);
     RequestDataEntrances(*compound, cfg);
-    compound->Initialize(cfg);
-    compound->FillMnParams(params, &cfg);
+    compound->Initialize(cfg, state, inputs);
+    compound->FillMnParams(params, state, inputs, &cfg);
     data->FillMnParams(params);
     return data->Initialize(compound, cfg) != -1;
   }
@@ -138,7 +141,7 @@ void Density(const std::string &source, const std::string &n) {
   for (int i : freeIdx) p[i] = kStart + 0.97 * reach;
 
   azure2::Results results;
-  AZURECalc calc(m.data, results, m.compound, m.cfg);
+  AZURECalc calc(m.data, results, m.compound, m.state, m.inputs, m.fitterStates, m.cfg);
   calc.SetErrorDef(1.0);
   calc.SetFixedMask(fixed);
   m.data->SetFit(true);
