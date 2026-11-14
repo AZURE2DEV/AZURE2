@@ -274,6 +274,12 @@ The session's set-up, in readable form:
    print(s.datasets.table())      # per data set: record, file, reaction, E range
    print(s.pairs)                 # masses, charges, spins, separation energies
 
+The level scheme names each pair as the project does: by its key in ``<levels>`` and its kind (``particle``,
+``photon``, ``beta``), the numbers and words of ``Project.pairs()`` and of the page's list of pairs.  A channel's
+value is named by what its row holds: ``Gamma`` a partial width in eV, ``C`` the ANC in fm^-1/2 of a particle channel
+of a level below the pair's threshold, ``gamma`` a reduced-width amplitude in MeV^1/2 (a row flagged as one), ``B``
+the beta-feeding amplitude of a beta pair (``SchemeChannel.quantity``, ``SchemeChannel.VALUE_UNITS``).
+
 A pair prints as ``Pair(#7 key=8 ...)``: ``#7`` is the engine's internal pair number, which ``Parameter.pair``
 carries, and ``key=8`` the pair key of the ``.azr`` file, which the engine's messages and ``isospin.out`` use. The two
 differ whenever the file numbers its pairs in another order than the engine counts them, so match a parameter to a
