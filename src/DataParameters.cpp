@@ -447,8 +447,11 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   auto SegmentPosition = [this](SegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
   // The layout is the data set's; laid out again by a later call (pyazr) only if it moved (ReviseDataSet).
   struct Layout {
-    int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
+    int abundance, norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
   } layout;
+  // The isotopic abundances first, right after the level block CNuc::FillMnParams wrote (AbundanceSamples.h).
+  layout.abundance = (int)p.Params().size();
+  Data().Abundances().AddParameters(abundances_, params);
   layout.norm = (int)p.Params().size();
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
@@ -569,12 +572,13 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   layout.apparatus = Data().NumApparatusParams() == 0 ? -1 : (int)p.Params().size();
   AddApparatusParams(*this, params);
   const DataSet &d = Data();
-  if (d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
+  if (d.abundanceParamOffset_ != layout.abundance || d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
       d.energyShiftSqrtParamOffset_ != layout.shiftSqrt || d.energyShiftFnParamOffset_ != layout.shiftFn ||
       d.screeningParamOffset_ != layout.screening || d.densityParamOffset_ != layout.density ||
       d.dopplerParamOffset_ != layout.doppler || d.thicknessParamOffset_ != layout.thickness ||
       d.thmCoherentParamOffset_ != layout.thmCoherent || d.apparatusParamOffset_ != layout.apparatus)
     ReviseDataSet([&layout](DataSet &next) {
+      next.abundanceParamOffset_ = layout.abundance;
       next.normParamOffset_ = layout.norm;
       next.energyShiftParamOffset_ = layout.shift;
       next.energyShiftSqrtParamOffset_ = layout.shiftSqrt;

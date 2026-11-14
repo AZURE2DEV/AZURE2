@@ -57,6 +57,7 @@
 #include <vector>
 
 #include "AZURECalc.h"
+#include "Objective.h"
 #include "ProjectSetup.h"
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
@@ -263,7 +264,9 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
   const double value = calc.Chi2Value(p);
   m.compound->FillCompoundFromParams(p);
   m.compound->CalcShiftFunctions(m.cfg);
-  const double penalty = m.compound->ParkNormPenalty();
+  double penalty = 0.0;  // the objective's Park term alone
+  for (const auto &term : Objective::Engine().Terms())
+    if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.data, results, p, m.cfg}, penalty);
   check(label + ": starting point beyond the wall (Park penalty " + num(penalty) + ")", penalty > 1.0e3);
   check(label + ": Chi2Value = operator() (" + num(value) + " vs " + num(full) + ")",
         std::fabs(value - full) <= 1e-10 * std::fabs(full), "difference " + num(full - value));

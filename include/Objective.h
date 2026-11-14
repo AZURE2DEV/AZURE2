@@ -30,6 +30,10 @@
  *   T9     the model data (ModelData.h): measured scattering lengths;
  *   T10    the prior parameter covariance.
  */
+/// Scale of Park's J > 0 wall (T6): a level at J = -kParkNormScale costs one unit of chi-squared, so the wall is steep
+/// on the scale of J but smooth.
+constexpr double kParkNormScale = 1.0e-3;
+
 struct ObjectiveContext {
   CNuc *compound;
   WorkingCopy *data;
@@ -209,7 +213,7 @@ inline void ForEachApparatusPrior(WorkingCopy *data, const ParamIndexMap &pmap, 
 // Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
 // abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
 template <class F>
-inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
+inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->Data().NumSegments(); s++) {
     const Segment *seg = data->Data().GetSegment(s);
     int idx;
@@ -223,15 +227,15 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
   ForEachDopplerPrior(data, pmap, f);
   ForEachThicknessPrior(data, pmap, f);
   ForEachApparatusPrior(data, pmap, f);
-  if (compound->HasAbundanceBlock())
-    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
-      const int idx = pmap.AbundanceIndex(k);
-      if (idx < 0) continue;
-      int sample, nucleus;
-      compound->AbundanceOf(k, sample, nucleus);
-      const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
-      if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
-    }
+  const AbundanceSamples &samples = data->Data().Abundances();
+  for (int k = 1; k <= samples.NumParams(); k++) {
+    const int idx = pmap.AbundanceIndex(k);
+    if (idx < 0) continue;
+    int sample, nucleus;
+    samples.Of(k, sample, nucleus);
+    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
+    if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
+  }
 }
 
 /*!
@@ -247,8 +251,8 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
  * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
  * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
  */
-void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
-                     vector_r *jac);
+void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+                     vector_r &residuals, vector_r *jac);
 
 class PriorCovariance;
 std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc);

@@ -128,9 +128,9 @@ int NumParameters(CNuc *compound, WorkingCopy *data) {
       const JGroup *jgroup = compound->GetJGroup(j);
       n += jgroup->NumLevels() * (1 + jgroup->NumChannels());
     }
-    n += compound->NumAbundanceParams();
   }
   if (data) {
+    n += data->Data().Abundances().NumParams();  // isotopic abundances, right after the level block
     const std::vector<Segment> &segments = data->Data().GetSegments();
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
@@ -168,12 +168,13 @@ std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
         }
       }
     }
-    // then the isotopic abundances, one per (sample, nucleus) (CNuc::FillMnParams)
-    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+    // then the isotopic abundances, one per (sample, nucleus) (AbundanceSamples::AddParameters)
+    const int numAbundances = data ? data->Data().Abundances().NumParams() : 0;
+    for (int k = 1; k <= numAbundances; k++) {
       if (index == minuitIndex) {
         int sample, nucleus;
-        compound->AbundanceOf(k, sample, nucleus);
-        const std::string &name = compound->GetSample(sample)->name;
+        data->Data().Abundances().Of(k, sample, nucleus);
+        const std::string &name = data->Data().Abundances().Sample(sample).name;
         return "abundance of nucleus " + compound->NucleusLabel(nucleus) + (name.empty() ? "" : " in sample " + name);
       }
       index++;

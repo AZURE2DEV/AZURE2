@@ -70,7 +70,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
   // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): Park's wall,
   // the gamma_decay priors and wall, the abundance sums; then every diagonal prior and every nuisance prior.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
-  AppendModelRows(compound(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
+  AppendModelRows(compound(), *data(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
                   jacobianOut ? &jacobian : nullptr);
   auto priorRow = [&](int f, double nominal, double sigma) {
     residuals.push_back((full[f] - nominal) / sigma);
@@ -80,7 +80,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
     const int a = pmap.FullToPacked(f);
     if (a >= 0 && a < nCols) jacobian[base + (size_t)a] = 1.0 / sigma;
   };
-  ForEachDiagonalPrior(data(), compound(), pmap, [&](int f, double nominal, double sigma) {
+  ForEachDiagonalPrior(data(), pmap, [&](int f, double nominal, double sigma) {
     if (f >= 0 && f < (int)full.size()) priorRow(f, nominal, sigma);
   });
   for (int f = 0; f < (int)full.size(); f++) {

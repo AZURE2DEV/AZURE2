@@ -1682,6 +1682,39 @@ The six `SetEntrance` calls: `WorkingCopy.cpp` 4, `AZUREMain.cpp` 1, `AZUREAPI.c
 - Can run side by side with step 1 (different functions of `CNuc.cpp` and different lines of `AZUREAPI.cpp` and
   `WorkingCopy.cpp`; merge conflicts at most in includes).
 
+*Step 2 as built* (branch `feature/upgrade-5-cnuc-passengers`, start adfb0118). Measured first:
+
+- Calls outside `CNuc` that put the abundance block into a vector or read it back (the design did not count them):
+  17 at the start (`GetTransformParams` / `FillCompoundFromParamsPhysical`: `AZUREAPI.cpp` 7, `AZURECalcMCMC.cpp` 4,
+  `ParameterLimitsManager.cpp` 2, `SamplerSupport.cpp`, `AZURE2.cpp`, `TargetSetup.cpp`, `ReactionRate.cpp`); after:
+  one place, `AbundanceSamples` (`AddParameters`, `AppendTo`, `ReadFrom`).
+- THM coherent values: held twice at the start (`WorkingCopy`, `CNuc`; `THMMatrixFunc.cpp` read the `CNuc` copy at
+  two places); after: once, in the working copy.
+- `CNuc.cpp` / `CNuc.h` lines: 1,527 / 327 in the design, 1,526 / 350 at the start, 1,355 / 272 after.
+
+- The design missed that the abundances travel through both vectors (the fit's and the observed one). They have one
+  place now: `AbundanceSamples` (`include/AbundanceSamples.h`) holds the samples (names, the file's values, priors,
+  sum widths) and writes the block into the fit's vector (`AddParameters`, called by `WorkingCopy::FillMnParams`
+  first, at the position `CNuc::FillMnParams` gave it), into an observed vector (`AppendTo`: the block of the fit's
+  vector it was made from, called by the seven places that hand out an observed vector) and reads it from either
+  (`ReadFrom`, through `WorkingCopy::FillAbundancesFromVector`, called by `FillEnergyShiftsFromParams` and after a
+  compound is filled from an observed vector).  The other five callers of `GetTransformParams` round-trip the level
+  block only and read no abundance.
+- The samples are the `DataSet`'s (`DataSet::Abundances`, set by `WorkingCopy::SetAbundanceSamples` at the start of
+  the data set-up, `src/ProjectSetup.cpp`); the present values and the THM coherent values are the working copy's
+  (`AbundanceValues`, `ThmCoherentValues`).  The HOES model gets the coherent values as an argument
+  (`SolveAtOneEnergy`, `HoesCrossSection`, `ThmAdjointContext::coherentValues`).  `GradAccum`'s abundance array
+  grows with the ordinals added, as its screening array does (the compound no longer knows the count).
+- The comparison commit (2e17e299) kept the compound's copies and aborted wherever the two differed.  It found the
+  places where only the compound had been filled from a vector and something read the value later: the session's
+  `SetParamsAllRWA` and its three `Transform...` functions (read by the pair record's abundance), and the sampler's
+  reference test (`tests/reference/sampler_objective_test.cpp`).  These read the block into the working copy too.
+- The penalties are the bodies of their terms: `ParkTerm` (T6) computes the wall, `AbundanceTerm` (T7) the priors
+  and sums; `kParkNormScale` is a constant of `Objective.h`.
+- One visible change: the reader's messages of the `<abundances>` block (a row naming a nucleus no pair forms) print
+  at the data set-up, after "Filling Data Structures...", instead of in `CNuc::Fill`; a rate run (no data) no longer
+  reads the block.  No project of the tree prints one.
+
 **Step 2b. Defect 1 fixed (changes numbers; its own step).** (≈ 30 lines in `TargetSetup.cpp` and a test project.)
 The sub-point-grid copy takes the evaluation's N_f^½ and external-capture amplitudes with E and γ (§12.4, defect 1).
 The acceptance rule for a step that changes a number: per output file, the largest distance to the refined reference

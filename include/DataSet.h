@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "AbundanceSamples.h"
 #include "ApparatusParameters.h"
 #include "CalculationPlan.h"
 #include "DataCovariance.h"
@@ -100,7 +101,14 @@ class DataSet {
     return (n >= 1 && n <= (int)targetEffects_.size()) ? &targetEffects_[n - 1] : nullptr;
   }
 
+  // ---- the samples of the <abundances> block (the targets' isotopic abundances; AbundanceSamples.h)
+  const AbundanceSamples &Abundances() const { return abundances_; }
+  /// The prior covariance replaces the prior of (sample, nucleus), both 1-based (ReplaceDiagonalPriors).
+  void ReplaceAbundancePrior(int sample, int nucleus) { abundances_.ReplacePrior(sample, nucleus); }
+
   // ---- the parameter layout (WorkingCopy::FillMnParams)
+  /// The first abundance parameter: right after the level block.
+  int GetAbundanceParamOffset() const { return abundanceParamOffset_; }
   int GetNormParamOffset() const { return normParamOffset_; }
   int GetEnergyShiftParamOffset() const { return energyShiftParamOffset_; }
   int GetEnergyShiftSqrtParamOffset() const { return energyShiftSqrtParamOffset_; }
@@ -208,6 +216,8 @@ class DataSet {
   /// leaf's key depends on its project alone and no two leaves share one (data_model.md section 1.3, H10).
   int nextComponentKey_ = -1000;
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;
+  AbundanceSamples abundances_;
+  int abundanceParamOffset_ = 0;
   int normParamOffset_ = 0;
   int energyShiftParamOffset_ = 0;
   int energyShiftSqrtParamOffset_ = 0;

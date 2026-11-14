@@ -77,7 +77,12 @@ set-up they are reached through ``const`` pointers only (``GetPair``,
 of a ``CNuc``, built once by ``CNuc::Fill`` and shared by the copies, and the
 ``PathwayTable`` is built from it once. ``WorkingCopy`` builds the
 ``DataSet`` (segments, target effects) from the ``DatasetSpec`` rows while it
-is set up and then holds it as ``std::shared_ptr<const DataSet>``.
+is set up and then holds it as ``std::shared_ptr<const DataSet>``. The
+targets' isotopic abundances are the data's too: the samples of the
+``<abundances>`` block are an ``AbundanceSamples`` of the ``DataSet``, their
+present values a vector of the working copy, and ``AbundanceSamples`` is the
+one place that writes the abundance block into a parameter vector and reads it
+back (fit's and observed vector alike).
 
 Evaluation
 ----------

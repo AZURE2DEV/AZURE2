@@ -34,13 +34,11 @@
 #include <omp.h>
 #endif
 
-void WorkingCopy::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
+void WorkingCopy::FillThmCoherentFromParams(const vector_r &p) {
   if (set_->thmCoherentParams_.empty() || set_->thmCoherentParamOffset_ < 0) return;
   const size_t n = set_->thmCoherentParams_.size();
   if (p.size() < (size_t)set_->thmCoherentParamOffset_ + n) return;
-  std::vector<double> v(n);
-  for (size_t k = 0; k < n; k++) v[k] = thmCoherentValues_[k] = p[set_->thmCoherentParamOffset_ + k];
-  if (theCNuc) theCNuc->SetThmCoherentValues(v);
+  for (size_t k = 0; k < n; k++) thmCoherentValues_[k] = p[set_->thmCoherentParamOffset_ + k];
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +640,6 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
     std::vector<double> v;
     for (const ThmCoherentParam &par : Draft().thmCoherentParams_) v.push_back(par.value);
     thmCoherentValues_ = v;
-    theCNuc->SetThmCoherentValues(v);
   }
   return 0;
 }
