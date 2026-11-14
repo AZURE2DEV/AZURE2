@@ -317,6 +317,7 @@ def rebase_paths(project, path, base, home):
     project.path = os.path.join(new, os.path.basename(path))
     if os.path.normpath(old) == os.path.normpath(new):
         return
+    refuse_moved_covariance(project, old, new)
 
     def moved(value):
         return value if os.path.isabs(value) else os.path.relpath(os.path.join(old, value), new)
@@ -338,6 +339,32 @@ def rebase_paths(project, path, base, home):
             if "table:" in value:
                 head, file = value.split("table:", 1)
                 project.set_thm_experiment(name, **{key: f"{head}table:{moved(file)}"})
+
+def refuse_moved_covariance(project, old, new):
+    """Refuse (before anything is rewritten) a snapshot read from ``new`` when a data set's covariance file names its
+    data files by relative paths: the engine reads those names from the project's working directory, so from ``new``
+    they name other files, and the snapshot would need a second copy of the covariance file.  The names come from the
+    engine's reader of the file (``_azure2.covariance_file_names``).  A covariance file is the only file of a project
+    that names other files (a prior covariance names parameters; THM, reference and weight tables hold numbers)."""
+    import os
+    from .described import _engine
+    from .errors import ParameterError
+    for record in project.records().values():
+        file = record.get("covariance") if record.record_kind == "dataset" else None
+        if not isinstance(file, str) or not file:
+            continue
+        names = _engine().covariance_file_names(file, old)
+        relative = [n for n in names if not os.path.isabs(n)]
+        if not relative:
+            continue
+        what = (f"save_fit to {new}: data set {record.record_name!r} has the covariance file {file}, which names its "
+                f"data files relative to the project's directory ({', '.join(relative[:3])}"
+                f"{', ...' if len(relative) > 3 else ''}); read from {new} they name other files")
+        allowed = (f"a snapshot whose paths are read from the project's own directory {old}: a path there, or "
+                   f"relative_to={old!r} for a text the caller reads with that directory (as the web page's server)")
+        fix = f"call save_fit with a path in {old}"
+        raise ParameterError(f"{what}.  Allowed: {allowed}.  To go on: {fix}.", what=what, allowed=allowed, fix=fix)
+
 
 def place_level_values(project, parameters, pairs, want):
     """Write the level parameters of ``parameters`` (:class:`pyazr.Parameter`) at the values ``want`` (indexed by

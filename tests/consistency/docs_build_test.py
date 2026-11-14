@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """The published pages build as the workflow builds them (.github/workflows/docs.yml): ``sphinx-build -W
 --keep-going -b html docs/source``, where a warning is an error (a broken reference, a page outside every toctree,
-text that reStructuredText reads as markup).  Without Sphinx and the two packages of docs/requirements.txt: prints
+text that reStructuredText reads as markup); and nitpicky (``-n``): a ``:py:`` reference (``:class:``, ``:meth:``,
+...) needs a target that exists.  The pages have no API reference of pyazr, so a name of pyazr is written as a
+literal (``pyazr.Project``).  Without Sphinx and the two packages of docs/requirements.txt: prints
 ``skip: ...`` and exits 77.
 """
 import importlib.util
@@ -20,7 +22,7 @@ def main():
         print(f"skip: {', '.join(missing)} not installed (pip install -r docs/requirements.txt)")
         return 77
     with tempfile.TemporaryDirectory() as out:
-        run = subprocess.run([sys.executable, "-m", "sphinx", "-W", "--keep-going", "-q", "-b", "html",
+        run = subprocess.run([sys.executable, "-m", "sphinx", "-W", "-n", "--keep-going", "-q", "-b", "html",
                               "-d", os.path.join(out, "doctrees"), os.path.join(ROOT, "docs", "source"),
                               os.path.join(out, "html")], capture_output=True, text=True)
         pages = sum(name.endswith(".html") for _, _, names in os.walk(os.path.join(out, "html")) for name in names)

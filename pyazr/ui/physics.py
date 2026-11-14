@@ -15,6 +15,12 @@ wait for the session worker (a build or an evaluation can hold it for seconds); 
 the GIL (``_azure2.physics_evaluate``), so other requests are served meanwhile.  The work of one request is bounded:
 at most :data:`MAX_ELEMENTS` elements of the broadcast arguments, about 1 s for the Coulomb functions (coulsm, 45 us
 per element) and 5 s for ``shift_derivative`` (five evaluations per element).
+
+The session's functions (``channel_functions`` and the THM diagnostics) are pyazr's rows
+(``Session.describe()["functions"]``): their arguments, their returned fields and where each sits in the answer.  The
+page keeps only its own part of each (:data:`PAGE`: the tab, the group, the bound of one request, the status words,
+the fields left off the first plot); :func:`answer_parts` walks the session's answer by the row, so that a new
+diagnostic of the session needs no line here.
 """
 import copy
 
@@ -27,42 +33,28 @@ MAX_ELEMENTS = 20000
 TEXT_KINDS = ("text", "experiment")
 SPACINGS = {"linear": "np.linspace", "log": "np.geomspace", "integer": "np.arange"}
 
-# The session's functions as rows of the shape of the physics table (pyazr.kinds()["physics"]): the session's methods
-# have no table in the binding (web_ui.md section 12), so the row of each is written here from its docstring (the THM
-# diagnostics in pyazr/ui/thm.py, THM_ROWS).  `op` is the adapter's operation (pyazr.ui.engine.Engine) that answers
-# it; `broadcast` False: one value per argument, the axis an array; `tab` (where given) the tab that draws the row
-# instead of the Physics tab; `status_words` the words of each status code.  A pair argument takes a key of the
-# project's pairs (GET /api/project/pairs), an experiment argument the name of a THM experiment (GET
-# /api/project/thm).
+# An argument's fields the page reads, where a row does not give them.
 ARG = {"unit": "", "lower": None, "upper": None, "lower_open": False, "upper_open": False, "choices": [],
-        "default": None, "example": None, "sweep": None}
-SESSION_ROWS = {
-    "channel_functions": {
-        "name": "channel_functions", "group": "this project", "op": "channel_functions", "broadcast": False,
-        "summary": "The session's channel functions of a pair: Coulomb functions, P, S and the hard-sphere phase.",
-        "doc": "As the session computes them (pyazr Session.channel_functions): the Coulomb table when one is in use "
-               "(about 1e-7 from the exact routine of the physics functions), GSL with use_gsl_coul, the hybrid "
-               "model's Numerov solution for a pair with a nuclear potential.  Where the channel is closed (E <= 0, "
-               "or the functions undefined there) the status is -2: F, G, P and delta_hs are 0 and S is the "
-               "closed-channel shift function at the channel radius.",
-        "library": "pyazr: Session.channel_functions (the session's)", "axis": "e_cm",
-        "arguments": [
-            dict(ARG, name="pair", kind="pair", doc="particle pair key of <levels>", domain="a pair of the project"),
-            dict(ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,
-                 example=0.0, sweep={"lower": 0.0, "upper": 10.0, "spacing": "linear"}),
-            dict(ARG, name="radius", kind="real", unit="fm", doc="evaluation radius; 0: the pair's channel radius",
-                 domain="finite >= 0", lower=0.0, default=0.0, sweep={"lower": 1.0, "upper": 10.0,
-                                                                      "spacing": "linear"}),
-            dict(ARG, name="e_cm", kind="real", unit="MeV", doc="c.m. energy of the pair", domain="finite",
-                 example=1.0, sweep={"lower": 0.01, "upper": 10.0, "spacing": "log"}),
-        ],
-        "returns": [{"name": n, "unit": u, "doc": d} for n, u, d in (
-            ("F", "", "regular Coulomb function"), ("Fp", "", "dF/drho"), ("G", "", "irregular Coulomb function"),
-            ("Gp", "", "dG/drho"), ("P", "", "penetrability"), ("S", "", "shift function"),
-            ("delta_hs", "rad", "hard-sphere phase shift"))],
-    },
+       "default": None, "example": None, "sweep": None}
+# The kind of the argument the server fills itself: the fit vector of a row that depends on it (``at_x``), the
+# working x of the page.
+FIT_VECTOR_KIND = "vector"
+NOT_FINITE = {"-1": "not a finite number at this energy"}
+
+# The page's own part of each of the session's functions; the rows themselves are pyazr's
+# (``Session.describe()["functions"]``, :mod:`pyazr.session_functions`): arguments, returned fields with their units,
+# where each sits in the answer and which fields label a line.  Per row: ``tab`` (the tab that draws it; none: the
+# Physics tab), ``group`` (its group in the Physics tab's list), ``max_elements`` (the energies one request may ask
+# for, where one costs more than a physics function's), ``axis_field`` (the returned field that repeats the axis;
+# default: the field named as the axis argument), ``status`` (the returned field whose False marks an element with
+# the code, and the words of the code; without one an element not finite in every field is -1), ``hidden`` (fields
+# left off the first plot), ``tables`` (a function that makes the tables of an answer without an axis).  A row of
+# pyazr's table not named here is drawn by the Physics tab with the defaults (:data:`PAGE_DEFAULTS`).
+PAGE_DEFAULTS = {"tab": None, "group": "this project", "max_elements": MAX_ELEMENTS, "axis_field": None,
+                 "status": (None, -1, NOT_FINITE["-1"]), "hidden": (), "tables": None}
+PAGE = {
+    "channel_functions": {"status": ("open", -2, "closed channel (E <= 0 or the functions undefined there)")},
 }
-SESSION_STATUS = {0: "computed", -2: "closed channel (E <= 0 or the functions undefined there)"}
 
 
 def check_size(shape, what, fix, bound=MAX_ELEMENTS):
@@ -130,7 +122,8 @@ def prepare(fn, row, arguments):
     fix = (f"GET /api/physics (or /api/stopping) gives the row of {fn}; send {{\"arguments\": {{name: value, list or axis "
            f"{{from, to, points, spacing}}}}}}")
     unknown = [k for k in arguments if k not in names]
-    missing = [a["name"] for a in row["arguments"] if a["default"] is None and a["name"] not in arguments]
+    missing = [a["name"] for a in row["arguments"]
+               if a.get("required", a["default"] is None) and a["name"] not in arguments]
     if unknown or missing:
         what = "; ".join(x for x in (f"unknown argument(s) {unknown}" if unknown else "",
                                      f"missing argument(s) {missing}" if missing else "") if x)
@@ -263,22 +256,61 @@ def call(fn, arguments, table="physics"):
     return answer
 
 
-def _session_tables():
-    """The tables of the session's functions: (rows, the function that makes a row's answer from the adapter's)."""
+def _pages():
+    """The page's part of every session function (:data:`PAGE` and the THM tab's rows, pyazr/ui/thm.py)."""
     from . import thm
-    return ((SESSION_ROWS, _channel_answer), (thm.THM_ROWS, thm.answer))
+    return {**PAGE, **thm.PAGE}
+
+
+def _pyazr_rows():
+    from pyazr.session_functions import session_functions
+    return session_functions()
+
+
+def _top_level(r):
+    """A returned field that is a key of the answer itself (not under a list or an experiment's name)."""
+    return r["path"] == r["name"]
+
+
+def _is_fact(r, arguments):
+    return _top_level(r) and r["shape"] in ("scalar", "text") and r["name"] not in arguments
+
+
+def page_row(name, row, page=None):
+    """The row the page draws (the shape of a physics row) from pyazr's row of a session function: its arguments but
+    the fit vector (the server gives the working x), each marked required where the session's method has no default;
+    its returned fields on the axis (``returns``: name, unit, doc, ``lines`` where one field runs over channels or
+    levels, ``shown`` False for a field left off the first plot), its scalars (``facts``), and the page's fields."""
+    from .engine import required_arguments
+    page = dict(PAGE_DEFAULTS, **(page if page is not None else _pages().get(name, {})))
+    required = required_arguments(name)
+    arguments = [dict(ARG, **a, required=a["name"] in required) for a in row["arguments"]
+                 if a["kind"] != FIT_VECTOR_KIND]
+    names = {a["name"] for a in row["arguments"]}
+    skipped = {page["axis_field"] or row["axis"], page["status"][0]}
+    returns = []
+    for r in row["returns"]:
+        if r["shape"] != "axis" or r["name"] in skipped:
+            continue
+        field = {"name": r["name"], "unit": r["unit"], "doc": r["doc"]}
+        if r.get("lines"):
+            field["lines"] = dict(r["lines"])
+        if r["name"] in page["hidden"]:
+            field["shown"] = False
+        returns.append(field)
+    facts = [{"name": r["name"], "unit": r["unit"], "doc": r["doc"]} for r in row["returns"] if _is_fact(r, names)]
+    code, words = page["status"][1], page["status"][2]
+    return dict(row, arguments=arguments, returns=returns, facts=facts, group=page["group"], tab=page["tab"],
+                max_elements=page["max_elements"], status_words={"0": "computed", str(code): words})
 
 
 def session_rows():
-    """The rows of the session's functions (:data:`SESSION_ROWS` and the THM diagnostics), a fresh copy."""
-    rows = {}
-    for table, _ in _session_tables():
-        rows.update(copy.deepcopy(table))
-    return rows
+    """The rows of the session's functions as the page draws them (:func:`page_row` of each of pyazr's rows)."""
+    return {name: page_row(name, row) for name, row in _pyazr_rows().items()}
 
 
 def session_request(fn, arguments):
-    """Check a request of a session function: (row, keyword arguments for the adapter's operation, the arguments as
+    """Check a request of a session function: (row, keyword arguments for the session's method, the arguments as
     used, the Python lines, the call's keyword texts)."""
     rows = session_rows()
     if fn not in rows:
@@ -298,21 +330,93 @@ def session_request(fn, arguments):
     return row, kwargs, used, lines, texts
 
 
-def _channel_answer(fn, row, out):
-    """The parts of the answer of ``channel_functions`` from the adapter's (dict of lists with ``open``)."""
-    return {"returns": {r["name"]: out[r["name"]] for r in row["returns"]},
-            "status": [0 if o else -2 for o in np.ravel(out["open"])]}
+def _chains(out, over):
+    """The elements a field's lines run over (``lines.over`` of its row, as ``exits[].levels[]`` or
+    ``{experiment}``), each as the chain of objects from the answer down to the element (the element last)."""
+    chains = [[out]]
+    for part in over.split("."):
+        step = []
+        for chain in chains:
+            node = chain[-1]
+            if part.startswith("{"):
+                step += [chain + [dict(v, **{part[1:-1]: k})] for k, v in node.items()]
+            else:
+                step += [chain + [v] for v in node.get(part[:-2], [])]
+        chains = step
+    return chains
+
+
+def _label(chain, names, units):
+    """The label of one line: each labelling field (``lines.label``) with its value and unit, from the element up."""
+    parts = []
+    for n in names:
+        v = next((c[n] for c in reversed(chain) if isinstance(c, dict) and n in c), None)
+        if v is None:
+            continue
+        text = f"{v:.6g}" if isinstance(v, float) else str(v)
+        parts.append(f"{n} {text}" + (f" {units[n]}" if units.get(n) else ""))
+    return ", ".join(parts)
+
+
+def _finite_status(fields, n, code):
+    """0 where every field (and every line of it) is finite at an element, ``code`` elsewhere."""
+    ok = np.ones(n, bool)
+    for v in fields.values():
+        a = np.asarray(v, float).reshape(-1, n)
+        ok &= np.isfinite(a).all(axis=0)
+    return [0 if o else code for o in ok]
+
+
+def answer_parts(fn, row, out, n, page=None):
+    """The parts of the answer of a session function from the session's answer ``out`` (plain data), walked by
+    pyazr's row ``row``: the fields on the axis (``returns``; a field under a list one line per element, labelled by
+    its row's ``lines.label``), ``lines``, the status of each of the ``n`` elements of the axis, the call's scalars
+    (``facts``) and, for a row without an axis, the page's ``tables``."""
+    page = dict(PAGE_DEFAULTS, **(page if page is not None else _pages().get(fn, {})))
+    names = {a["name"] for a in row["arguments"]}
+    units = {r["name"]: r["unit"] for r in row["returns"]}
+    skipped = {page["axis_field"] or row["axis"], page["status"][0]}
+    returns, lines = {}, {}
+    for r in row["returns"]:
+        if r["shape"] != "axis" or r["name"] in skipped:
+            continue
+        if r.get("lines"):
+            chains = [c for c in _chains(out, r["lines"]["over"]) if r["name"] in c[-1]]
+            if chains:
+                returns[r["name"]] = [c[-1][r["name"]] for c in chains]
+                lines[r["name"]] = [_label(c, r["lines"]["label"], units) for c in chains]
+        elif r["path"] in out:
+            returns[r["name"]] = out[r["path"]]
+    parts = {"returns": returns,
+             "facts": [{"name": r["name"], "unit": r["unit"], "doc": r["doc"], "value": out[r["path"]]}
+                       for r in row["returns"] if _is_fact(r, names) and r["path"] in out]}
+    if lines:
+        parts["lines"] = lines
+    field, code, _ = page["status"]
+    if not row["axis"]:
+        parts["status"] = []
+    elif field:
+        parts["status"] = [0 if v else code for v in np.ravel(out[field])]
+    else:
+        parts["status"] = _finite_status(returns, n, code)
+    if page["tables"]:
+        made = page["tables"](row, out)
+        parts["tables"] = made["tables"]
+        parts["facts"] += made.get("facts", [])
+    if not parts["facts"]:
+        del parts["facts"]
+    return parts
 
 
 def session_answer(fn, row, out, used, lines, texts, opening):
-    """The answer of a session function from the adapter's ``out``, in the shape of :func:`call`'s: the returned
-    fields (a field over several channels or levels with its ``lines``), units, the status per element and its
-    words, the arguments as used, and the Python text (``opening``: the line that opens a session,
-    ``engine.session_text``); a THM call's answer adds its ``facts`` and ``tables``."""
-    make = next(m for table, m in _session_tables() if fn in table)
-    parts = make(fn, row, out)
+    """The answer of a session function from the session's answer ``out``, in the shape of :func:`call`'s: the
+    returned fields (a field over several channels or levels with its ``lines``), units, the status per element and
+    its words, the arguments as used, the call's facts and tables, and the Python text (``opening``: the line that
+    opens a session, ``engine.session_text``)."""
+    n = len(used[row["axis"]]) if row["axis"] else 0
+    parts = answer_parts(fn, _pyazr_rows()[fn], out, n)
     status = parts["status"]
-    words = {**SESSION_STATUS, **{int(k): v for k, v in row.get("status_words", {}).items()}}
+    words = {int(k): v for k, v in row["status_words"].items()}
     note = ["# the page evaluates at its working x: params=x (the free vector) gives another point"] \
         if row.get("at_x") else []
     python = "\n".join(["import numpy as np", "import pyazr", "", opening, *lines, *note,

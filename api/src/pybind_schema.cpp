@@ -3,7 +3,7 @@
 // quantity or unit itself; it reads them from here.  And what a project's data sets predict, as AZURE2
 // --print-predictions prints it (src/Predictions.cpp).  And the extrapolation grids of section 3.8 (pyazr/grids.py): a
 // grid's text read by the table's parser and built by experiment's ReadGridValues, the adaptive refinement RefineGrid
-// on a Python model.
+// on a Python model.  And the data files a data covariance file names (its one reader, ReadCovarianceFile).
 
 #include <pybind11/pybind11.h>
 
@@ -13,6 +13,7 @@
 
 #include "Predictions.h"
 #include "azure2/experiment/AdaptiveGrid.h"
+#include "azure2/experiment/CovarianceFile.h"
 #include "azure2/experiment/Grids.h"
 #include "azure2/experiment/Parsers.h"
 #include "azure2/experiment/Schema.h"
@@ -94,4 +95,21 @@ void BindSchema(py::module_ &m) {
       },
       py::arg("start"), py::arg("model"), py::arg("tolerance"), py::arg("max_points"),
       "The adaptive refinement of an extrapolation grid (experiment::RefineGrid) on a Python model; pyazr.refine_grid.");
+  m.def(
+      "covariance_file_names",
+      [](const std::string &path, const std::string &directory) {
+        namespace ex = azure2::experiment;
+        ex::CovarianceFileAccess access;
+        access.resolve = [&directory](const std::string &name) {
+          return name.empty() || name[0] == '/' || directory.empty() ? name : directory + "/" + name;
+        };
+        std::string why;
+        const std::shared_ptr<ex::CovarianceFile> f = ex::ReadCovarianceFile(path, access, why);
+        if (!f) throw py::value_error(why);
+        return f->files;
+      },
+      py::arg("path"), py::arg("directory"),
+      "The data files the data covariance file `path` names in its header, as written (experiment::ReadCovarianceFile, "
+      "the engine's one reader), with every relative name -- the file's and the data files' -- read from `directory` "
+      "(the project's working directory, as the engine reads them); ValueError with the reader's reason.");
 }

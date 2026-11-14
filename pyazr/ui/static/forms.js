@@ -48,6 +48,14 @@ const whole = (field, text, extra = {}) => ({
   compose: (v) => (v.text ?? "").trim(),
 });
 
+/** Suggestions of a free-text field: the names of every list of `ctx.choices` ({grammar token: names}) whose token its
+ * grammar names (a nucleus of a THM key from pyazr.kinds()["nuclides"], a global optical potential from
+ * ["optical_potentials"]): offered, never checked (the engine reads the text). */
+export function suggestionsOf(field, ctx) {
+  const grammar = String(field.grammar || "");
+  return Object.entries(ctx.choices || {}).filter(([token]) => grammar.includes(token)).flatMap(([, names]) => names);
+}
+
 /** Names of the project's records of the given kinds (for references). */
 function recordNames(ctx, kinds) {
   return (ctx.records || []).filter((r) => (kinds || []).includes(r.kind)).map((r) => r.name);
@@ -105,7 +113,7 @@ export const WIDGETS = {
   },
   name: (f, t) => whole(f, t),
   path: (f, t) => whole(f, t, { path: true }),
-  text: (f, t) => whole(f, t),
+  text: (f, t, ctx) => whole(f, t, { list: suggestionsOf(f, ctx) }),
   formula: (f, t) => whole(f, t, { mono: true }),
   spin: (f, t, ctx) => whole(f, t, { list: ctx.spins || [] }),
   spin_parity: (f, t, ctx) => whole(f, t, { list: ctx.spinParities || [] }),

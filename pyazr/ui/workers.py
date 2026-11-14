@@ -19,7 +19,7 @@ import threading
 import time
 import warnings
 
-from .errors import Busy, WorkerCrashed, WorkerError, describe_exception
+from .errors import Busy, WorkerCrashed, WorkerError, describe_exception, parts_of
 
 
 # -- the compute budget -------------------------------------------------------------------------------------------
@@ -200,7 +200,7 @@ class SessionWorker:
             raise
         self.warnings = answer.get("warnings", [])
         if not answer["ok"]:
-            raise WorkerError(answer["classes"], answer["message"], answer.get("diagnostics"))
+            raise WorkerError(answer["classes"], answer["message"], answer.get("diagnostics"), answer.get("parts"))
         return answer["result"]
 
     def pid(self):
@@ -275,7 +275,8 @@ def serve_session(channel):
                 answer = {"ok": True, "result": result}
             except Exception as e:  # noqa: BLE001  -- the server maps the classes to an HTTP status
                 classes, text, diagnostics = describe_exception(e)
-                answer = {"ok": False, "classes": classes, "message": text, "diagnostics": diagnostics}
+                answer = {"ok": False, "classes": classes, "message": text, "diagnostics": diagnostics,
+                          "parts": parts_of(e)}
         # the engine's notices (pyazr.EngineWarning) and pyazr's other warnings of this request, for the client
         answer["warnings"] = [{"category": w.category.__name__, "message": str(w.message)} for w in caught]
         channel.send(answer)

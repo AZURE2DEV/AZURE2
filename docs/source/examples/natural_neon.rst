@@ -348,7 +348,7 @@ prior) and the vary flag 1:
 AZURE2 calculates each point at :math:`E + \Delta E`. The fit gives
 :math:`\Delta E = -1.84` keV, so Hinterberger's energy scale reads
 1.84 keV high against the Junghans scale. The value is in
-``natural_neon_fit.sav`` as ``segment_3_energy_shift``. Like a
+``natural_neon_fit.sav`` as ``Hinterberger_20Ne_ntot.shift.offset``. Like a
 normalization, a parameter file sets a shift's value but not whether it is
 fitted; the segment line decides that.
 

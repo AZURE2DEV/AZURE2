@@ -3,12 +3,14 @@
 items of 2026-11-14):
 
   (a) Session.save_fit to another directory writes a project that opens there and gives the fit's chi-squared (its
-      data paths rewritten relative to the new directory);
+      data paths rewritten relative to the new directory); (a') a project whose data covariance file names its data
+      files relative to the project's directory (T2) is refused there before anything is written, with the three
+      parts, and written in the project's own directory;
   (b) `python -m pyazr --help` runs without the engine module (exit 0, the usage), and `import pyazr` without it
       still raises the ImportError that says how to build it;
   (c) `pyazr ui FILE --json` prints its URL document and keeps serving (it exited with status 2 at once: uvicorn's
       log set-up asked the captured standard output whether it is a terminal); an interrupt ends it with status 0;
-  (d) ChannelWidth.jpi is the engine's J^pi text ("1/2+", not "0.5+");
+  (d) ChannelWidth.jpi, Parameter.jpi and ScatteringLength.jpi are the engine's J^pi text ("1/2+", not "0.5+");
   (e) a pair record's is_entrance: on T1 the proton pair is an entrance, the photon pairs are not.
 The message of Project.set_pair(1, radius=-1) (the value and what to give) is a case of errors_test.py.
 
@@ -69,6 +71,34 @@ try:
     text = open(path).read()
     check("its data files are named from there (../../T1/data/...)", "../../T1/data/" in text)
 
+    print("(a') save_fit to another directory of a project whose covariance file names data files (T2)")
+    T2 = os.path.join(ROOT, "tests", "upgrade", "T2", "T2.azr")
+    d2 = os.path.join(tmp, "T2")
+    shutil.copytree(os.path.dirname(T2), d2, ignore=shutil.ignore_patterns("output*", "checks*"))
+    t2 = os.path.join(d2, "T2.azr")
+    snap = os.path.join(tmp, "elsewhere", "t2", "snap.azr")
+    os.makedirs(os.path.dirname(snap))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pyazr.Session(t2) as s:
+            try:
+                s.save_fit(snap, param_sav=True)
+                check("refused before anything is written", False, "no exception")
+            except pyazr.ParameterError as e:
+                parts = [e.what, e.allowed, e.fix]
+                check("refused with its three parts (what, allowed, fix), each in the message",
+                      all(parts) and all(q in str(e) for q in parts), f"{parts}")
+                check("the refusal names the covariance file's data files and the project's directory",
+                      "data/" in e.what and d2 in e.fix, str(e)[:300])
+            check("nothing is left in the other directory", os.listdir(os.path.dirname(snap)) == [],
+                  str(os.listdir(os.path.dirname(snap))))
+            chi2 = s.evaluate().chi2
+            kept, _ = s.save_fit(os.path.join(d2, "snap.azr"))
+        with pyazr.Session(kept) as s2:
+            again = s2.evaluate().chi2
+        check(f"in the project's own directory it is written and reopens with the fit's chi2 ({again!r})",
+              abs(again - chi2) <= 1e-9 * abs(chi2), f"{again} vs {chi2}")
+
     print("(b) the command line's help without the engine")
     env = {k: v for k, v in os.environ.items() if k != "PYAZR_ENGINE_DIR"}
     env["PYTHONPATH"] = ROOT
@@ -128,6 +158,12 @@ try:
             jpis = {r.jpi for r in rows}
             check(f"ChannelWidth.jpi as the engine writes J^pi ({sorted(jpis)})",
                   jpis and all("/" in j or "." not in j for j in jpis) and "1/2+" in jpis, str(jpis))
+            pjpis = {q.jpi for q in s.parameters if q.jpi is not None}
+            check(f"Parameter.jpi as the engine writes J^pi, the text of ChannelWidth.jpi ({sorted(pjpis)})",
+                  pjpis and all("." not in j for j in pjpis) and "1/2+" in pjpis and jpis <= pjpis, str(pjpis))
+            sl = {v.jpi for v in s.scattering_lengths()}
+            check(f"ScatteringLength.jpi as the engine writes J^pi ({sorted(sl)})",
+                  sl and all("." not in j for j in sl), str(sl))
             entrance = {r["key"]: r["is_entrance"] for r in s.pairs.records()} if hasattr(s.pairs, "records") else \
                 {q.key: q.is_entrance for q in s.pairs}
             check("is_entrance: the proton pair yes, the photon pairs no", entrance == {1: True, 2: False, 3: False},

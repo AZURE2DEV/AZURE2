@@ -216,12 +216,13 @@ class Server:
         return session_rows()
 
     def session_function_call(self, fn, **arguments):
-        """A session function (``physics.SESSION_ROWS``) on the session of the current text, answered in the shape of
-        a physics function's answer, with the Python text that opens a session on the project's file."""
+        """A session function (pyazr's rows, ``Session.describe()["functions"]``) on the session of the current text
+        at the working x, answered in the shape of a physics function's answer, with the Python text that opens a
+        session on the project's file."""
         from .engine import session_text
         from .physics import session_answer, session_request
         row, kwargs, used, lines, texts = session_request(fn, arguments)
-        out = self.session_request(row["op"], **kwargs)
+        out = self.session_request("session_function", fn=fn, arguments=kwargs)
         own = {k: v for k, v in out.items() if k not in ("rev", "warnings")}  # what session_request adds
         answer = session_answer(fn, row, own, used, lines, texts, session_text(self.state.path))
         return dict(answer, rev=out.get("rev"), warnings=out.get("warnings", []))

@@ -9,8 +9,9 @@
      exactly; a new experiment with the data sets that join it, its removal refused while they name it;
   3. a project without THM content (T1): GET /api/project/thm is null, the diagnostics answer with a refusal
      (what / allowed / fix), never a 500;
-  4. the key table (pyazr/ui/thm.py KEYS) has a row for every key of an experiment line the engine reads (the list
-     its refusal of an unknown key names), and each diagnostic row has the physics rows' fields.
+  4. the keys served (GET /api/thm/keys) are the engine's table (pyazr.kinds()["thm"]), a key added to it is served
+     with no line of the page; each diagnostic row is pyazr's row (Session.describe()["functions"]) with the physics
+     rows' fields, and a diagnostic added to pyazr's table is drawn with no line of the page.
 
 Run: python3 tests/pyazr/ui/thm_routes_test.py (needs fastapi, httpx, the engine; AZURE2_BIN for the program).
 """
@@ -149,7 +150,8 @@ def test_t2_diagnostics_equal_the_session(t2):
     check_diagnostics(t2, "LC09", ["thm_vertex"])
     r = t2.post("/api/session/functions/thm_lineshape", json={"arguments": {"experiment": "LC09",
                                                                              "energies": E_AXIS}})
-    assert r.status_code == 422 and "line shape" in r.json()["what"], r.text  # the engine's refusal, its words
+    # the engine's refusal, its words: a message of the engine's own text has no parts (what, allowed, fix are None)
+    assert r.status_code == 422 and "line shape" in r.json()["message"], r.text
 
 
 def test_distortion_lineshape_and_coherent_background_equal_the_session(o18):
@@ -230,44 +232,96 @@ def test_no_thm_content_refuses(tmp_path):
     with make_client(copy_project("T1", tmp_path)) as client:
         assert client.get("/api/project/thm").json() is None
         assert call(client, "thm_experiments")["tables"][0]["rows"] == []
+        # a refusal of pyazr in the session worker carries its parts (e.what, e.allowed, e.fix) as the body's fields
+        import pyazr
+        client.post("/api/evaluate")
+        s = direct_session(client)
+        try:
+            with pytest.raises(pyazr.Error) as direct:
+                s.thm_background("LC09")
+        finally:
+            s.close()
+        body = client.post("/api/session/functions/thm_background", json={"arguments": {"experiment": "LC09"}}).json()
+        e = direct.value
+        assert e.what and (body["what"], body["allowed"], body["fix"], body["message"]) == (
+            e.what, e.allowed, e.fix, str(e).strip("'\"")), body
         for fn in ("thm_background", "thm_vertex", "thm_lineshape", "thm_distortion"):
             r = client.post(f"/api/session/functions/{fn}", json={"arguments": {"experiment": "LC09",
                                                                                  "energies": E_AXIS}})
-            assert 400 <= r.status_code < 500 and r.json()["what"], (fn, r.status_code, r.text)
+            assert 400 <= r.status_code < 500 and r.json()["message"], (fn, r.status_code, r.text)
             r = client.post(f"/api/session/functions/{fn}", json={"arguments": {"energies": E_AXIS}})
-            assert r.status_code == 422 and "experiment" in r.json()["what"], (fn, r.text)
+            body = r.json()
+            assert r.status_code == 422 and "experiment" in body["what"], (fn, r.text)
+            assert body["allowed"] and body["fix"], (fn, r.text)
 
 
 # -- 4. the tables -----------------------------------------------------------------------------------------------
 
-def test_key_table_has_every_key_the_engine_reads(t2):
-    from pyazr import Project
-    from pyazr.ui.thm import KEYS
-    p = Project.open(t2.path)
-    with pytest.raises(ValueError) as refused:
-        p.set_thm_experiment("LC09", no_such_key="1")
-    named = re.search(r"\(keys: ([^)]*)\)", str(refused.value))
-    assert named, str(refused.value)
-    engine = [k.strip() for k in named.group(1).split(",")]
-    assert sorted(engine) == sorted(KEYS["experiment"]["fields"]), "a key of the engine without a row, or a row more"
+def test_keys_are_the_engines_table(t2, monkeypatch):
+    import pyazr
     served = t2.get("/api/thm/keys").json()
-    assert served == KEYS
+    assert served == pyazr.kinds()["thm"]
     for kind in served.values():
         for key, field in kind["fields"].items():
             assert field["type"] in ("enum", "number", "integer", "text"), key
             assert field["type"] != "enum" or field.get("values"), key
+    # a key the engine's table gains (here: pyazr's answer with one row more) is served with no line of the page
+    table = pyazr.kinds()
+    table["thm"]["experiment"]["fields"]["newKey"] = {"type": "number", "doc": "a key added", "required": False}
+    monkeypatch.setattr(pyazr, "kinds", lambda: table)
+    assert t2.get("/api/thm/keys").json()["experiment"]["fields"]["newKey"]["doc"] == "a key added"
 
 
-def test_diagnostic_rows_have_the_physics_rows_fields(t2):
+def test_diagnostic_rows_are_pyazrs_rows(t2):
+    from pyazr.session_functions import session_functions
     rows = t2.get("/api/session/functions").json()
     physics = next(iter(t2.get("/api/physics").json().values()))
+    pyazr_rows = session_functions()
+    assert sorted(rows) == sorted(pyazr_rows)
     thm = {n: r for n, r in rows.items() if r.get("tab") == "thm"}
     assert sorted(thm) == ["thm_background", "thm_distortion", "thm_experiments", "thm_lineshape", "thm_vertex"]
-    for name, row in thm.items():
+    for name, row in rows.items():
         assert set(row) >= set(physics), name
         assert all(r["name"] and "unit" in r for r in row["returns"]), name
         if row["axis"]:
             assert next(a for a in row["arguments"] if a["name"] == row["axis"])["sweep"], name
+        mine = pyazr_rows[name]
+        assert (row["summary"], row["doc"], row["axis"]) == (mine["summary"], mine["doc"], mine["axis"]), name
+        # every argument of pyazr's row but the fit vector (the server gives the working x), with its own fields
+        assert [a["name"] for a in row["arguments"]] == [a["name"] for a in mine["arguments"] if a["name"] != "params"]
+        for a in row["arguments"]:
+            assert {k: a[k] for k in next(m for m in mine["arguments"] if m["name"] == a["name"])} == next(
+                m for m in mine["arguments"] if m["name"] == a["name"]), (name, a["name"])
+        units = {r["name"]: r["unit"] for r in mine["returns"]}
+        assert all(units[r["name"]] == r["unit"] for r in row["returns"]), name
+    assert next(a for a in rows["channel_functions"]["arguments"] if a["name"] == "J")["required"] is False
+    assert next(a for a in rows["thm_vertex"]["arguments"] if a["name"] == "experiment")["required"] is True
+
+
+def test_a_new_diagnostic_needs_no_line_of_the_page(t2, monkeypatch):
+    """A row added to pyazr's table (here a copy of thm_vertex under a new name, its method on the session class) is
+    listed by the Physics tab and answered with the numbers of the call it makes."""
+    import pyazr
+    import pyazr.session_functions as sf
+    rows = sf.session_functions()
+    monkeypatch.setattr(pyazr.Session, "thm_vertex_copy", pyazr.Session.thm_vertex, raising=False)
+    new = dict(rows["thm_vertex"], name="thm_vertex_copy", library="pyazr: Session.thm_vertex_copy")
+    monkeypatch.setitem(sf.SESSION_FUNCTIONS, "thm_vertex_copy", new)
+    served = t2.get("/api/session/functions").json()["thm_vertex_copy"]
+    assert served["tab"] is None and served["group"] == "this project"
+    a = call(t2, "thm_vertex", experiment="LC09", energies=E_AXIS)
+    # the worker is another process: its session class gains the method by the row's name only there, so the
+    # answer is made here from the session's own answer, walked by the new row
+    from pyazr.ui.physics import answer_parts
+    s = direct_session(t2)
+    try:
+        out = plain(s.thm_vertex("LC09", ENERGIES, np.array(s.parameters.x0)))
+    finally:
+        s.close()
+    parts = answer_parts("thm_vertex_copy", new, out, len(ENERGIES))
+    assert parts["returns"]["M2"] == a["returns"]["M2"] and parts["lines"]["M2"] == a["lines"]["M2"]
+    assert len(parts["status"]) == len(ENERGIES)  # the default rule: -1 where a field is not finite
+    assert {f["name"]: f["value"] for f in parts["facts"]} == {f["name"]: f["value"] for f in a["facts"]}
 
 
 if __name__ == "__main__":

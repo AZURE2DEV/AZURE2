@@ -1,13 +1,13 @@
 """Errors of the web UI's API: pyazr's exceptions and the server's own refusals as HTTP statuses (docs/upgrade/web_ui.md
 section 4.3).
 
-Every refusal is a JSON body with ``error`` (the class name), ``message`` (the whole text) and the three parts of pyazr
-3.0's messages as fields: ``what`` (what was wrong), ``allowed`` (what is allowed), ``fix`` (which call shows or fixes
-it); a :class:`pyazr.FormatError` adds the engine's ``diagnostics``. Today's pyazr exceptions carry one text, not the
-three parts as attributes (web_ui.md finding 9): ``what`` is that text and ``allowed`` / ``fix`` stay empty unless the
-engine's diagnostics give them. :func:`status_of` is the one place that maps a class to a status, by class name, so that
-an exception raised in a worker process (which reaches the server as the names of its class and bases, most derived
-first, and its message) maps as one raised in the server.
+Every refusal is a JSON body with ``error`` (the class name), ``message`` (the whole text) and the three parts of
+pyazr's messages as fields: ``what`` (what was wrong), ``allowed`` (what is allowed), ``fix`` (which call shows or
+fixes it), read from ``e.what``, ``e.allowed``, ``e.fix`` of a :class:`pyazr.Error` (None where the message is not
+built from parts, as the engine's own text: the page then shows ``message``); a :class:`pyazr.FormatError` adds the
+engine's ``diagnostics``.  The server takes no message apart.  :func:`status_of` is the one place that maps a class to
+a status, by class name, so that an exception raised in a worker process (which reaches the server as the names of
+its class and bases, most derived first, its message and its parts) maps as one raised in the server.
 """
 
 # The HTTP status of an exception: the first row of this table that names the exception's class or one of its bases
@@ -80,12 +80,13 @@ class WorkerCrashed(UIError):
 
 
 class WorkerError(Exception):
-    """An exception raised inside a worker process, re-raised in the server: the class name, message and
-    diagnostics travel, the class does not."""
+    """An exception raised inside a worker process, re-raised in the server: the class name, message, diagnostics
+    and the parts of the message (``what``, ``allowed``, ``fix``) travel, the class does not."""
 
-    def __init__(self, classes, message, diagnostics=None):
+    def __init__(self, classes, message, diagnostics=None, parts=None):
         super().__init__(message)
         self.classes, self.diagnostics = list(classes), diagnostics
+        self.parts = dict(parts or {})
         self.cls = self.classes[0]
 
 
@@ -106,6 +107,17 @@ def class_names(e):
 def describe_exception(e):
     """(class names, message, diagnostics or None) of an exception, for the pipe of a worker."""
     return class_names(e), _message(e), _diagnostics(e)
+
+
+PARTS = ("what", "allowed", "fix")
+
+
+def parts_of(e):
+    """The parts of the message of ``e`` as pyazr's errors carry them (``e.what``, ``e.allowed``, ``e.fix``; None
+    for an exception that has none)."""
+    if isinstance(e, WorkerError):
+        return {k: e.parts.get(k) for k in PARTS}
+    return {k: getattr(e, k, None) for k in PARTS}
 
 
 def _message(e):
@@ -130,12 +142,7 @@ def to_http(e):
     else:
         classes, message, diagnostics = describe_exception(e)
     status = status_of(classes)
-    # pyazr's exceptions carry the three parts of a message as one text (no attributes): what holds the whole text
-    body = {"error": classes[0], "classes": classes, "message": message, "what": message, "allowed": None,
-            "fix": None}
+    body = {"error": classes[0], "classes": classes, "message": message, **parts_of(e)}
     if diagnostics:
         body["diagnostics"] = diagnostics
-        firsts = [d for d in diagnostics if d.get("severity") == "error"] or diagnostics
-        body["allowed"] = firsts[0].get("allowed")
-        body["fix"] = firsts[0].get("fix")
     return status, body

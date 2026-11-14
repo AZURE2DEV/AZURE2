@@ -181,3 +181,20 @@ test("followers of any method of a kind, offered only with what they take; the s
     assert.deepEqual(rows[0], { name: "a", mean: 3, sd: 1, "q2.5": 1, q16: 2, q50: 3, q84: 4, "q97.5": 5, tau: 20,
       n_eff: 100, rhat: 1.01 });
   });
+
+test("MINOS validity: per side the flags the engine set, one word for iminuit's; the outcome and invalid sides", () => {
+  const engine = { lower: -0.1, upper: 0.2, valid: false, sides: {
+    lower: { valid: true, at_limit: false, call_limit: false, new_minimum: false },
+    upper: { valid: false, at_limit: true, call_limit: false, new_minimum: false } } };
+  assert.equal(f.minosValidity(engine), "− valid; + at_limit");
+  const both = { ...engine, sides: { lower: engine.sides.lower, upper: engine.sides.lower } };
+  assert.equal(f.minosValidity(both), "valid");
+  assert.equal(f.minosValidity({ lower: -1, upper: 1, valid: false }), "not valid");
+  assert.equal(f.minosValidity(null), null);
+  const rows = f.parameterRows([{ name: "a", free: true, x: 1 }], { job: { result: { minos: { a: engine } } } });
+  assert.equal(rows[0].minos_valid, "− valid; + at_limit");
+  assert.ok(f.shownColumns(rows).some((c) => c.key === "minos_valid"));
+  const v = f.resultView({ state: "ended", result: { outcome: "call_limit", minos: { a: engine } } });
+  assert.equal(v.outcome, "call_limit");
+  assert.deepEqual(v.minosInvalid, ["a"]);
+});

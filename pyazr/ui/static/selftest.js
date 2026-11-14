@@ -2,7 +2,8 @@
 // (a level, a data set's form and plot, the plot's table, a new record's form), records every script error,
 // unhandled rejection, console error and failed request, and writes the result as JSON into
 // <pre id="selftest-result" data-done="1">.  tests/pyazr/ui/smoke_test.py reads it from Chrome's dumped document.
-// "#selftest?theme=dark" runs it in the dark theme; "#selftest?edit=1" also edits a width and undoes it.
+// "#selftest?theme=dark" runs it in the dark theme; "#selftest?edit=1" also edits a width and undoes it, and adds a
+// pair with the Nucleus tab's form, removes it with its button and undoes both.
 
 import { LAYOUT } from "./layout.js";
 import { fitCheck } from "./selftestfit.js";
@@ -36,13 +37,14 @@ export function selftest(ctx, tabs, draw) {
   const join = (route) => (route.includes("?") ? `${route}&${extra.slice(1)}` : `${route}${extra}`);
   const steps = [];
   const edit = {};
+  const pair = {};
   let fit = {};
 
   async function run() {
     while (!ctx.project || !ctx.schema) await new Promise((r) => setTimeout(r, 20));
     const t0 = performance.now();
     await ctx.refresh();
-    const routes = ["#/project", "#/nucleus"];
+    const routes = ["#/project", "#/nucleus", "#/nucleus/pair/+new", "#/nucleus/level/+new"];
     const levels = await ctx.api.get("/api/project/levels");
     if (levels.length) routes.push(`#/nucleus/level/${encodeURIComponent(levels[0].label)}`);
     const records = await ctx.api.get("/api/project/records");
@@ -79,6 +81,7 @@ export function selftest(ctx, tabs, draw) {
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
+    if (/[?&]edit=1/.test(extra)) await pairAddRemove();
     if (/[?&]fit=1/.test(extra)) fit = await fitCheck(ctx, draw, join);
     return Math.round(performance.now() - t0);
   }
@@ -111,13 +114,60 @@ export function selftest(ctx, tabs, draw) {
     Object.assign(edit, { chi2_back: ctx.evaluation?.chi2, rev_back: ctx.project.rev });
   }
 
+  /** "#selftest?edit=1": a pair copied from the first one (its partners, S, radius) typed into the "+ pair" form
+   * and added with its button, then removed with "Remove pair", then both undone with the Undo button; records the
+   * pairs' count and the χ² at each step in `pair`. */
+  async function pairAddRemove() {
+    const until = async (test) => {
+      for (let i = 0; i < 600 && !test(); i += 1) await new Promise((r) => setTimeout(r, 50));
+      return test();
+    };
+    const visit = async (route) => {
+      location.hash = join(route);
+      await new Promise((r) => setTimeout(r, 0));
+      await draw();
+    };
+    const pairs = await ctx.api.get("/api/project/pairs");
+    const first = pairs[0];
+    if (!first || first.kind !== 0) { pair.skipped = "no particle pair to copy"; return; }
+    Object.assign(pair, { before: pairs.length, chi2_before: ctx.evaluation?.chi2, rev_before: ctx.project.rev });
+    await visit("#/nucleus/pair/+new");
+    const type = (label, value) => {
+      const input = document.querySelector(`.new-pair input[aria-label="${label}"]`);
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    // a copy of the first pair would make the data sets' reactions ambiguous: the heavy partner's charge differs
+    type("light J", first.two_j_light / 2); type("light parity", first.light_parity); type("light Z", first.light[0]);
+    type("light mass", first.light_mass); type("heavy J", first.two_j_heavy / 2);
+    type("heavy parity", first.heavy_parity); type("heavy Z", first.heavy[0] + 1); type("heavy mass", first.heavy_mass);
+    type("separation energy (MeV)", first.separation_energy + 5); type("radius (fm)", first.radius);
+    document.querySelector('button[data-action="add-pair"]').click();
+    pair.added = await until(() => ctx.statusLine.textContent.startsWith("add a pair: done"));
+    pair.status_added = ctx.statusLine.textContent;
+    const after = await ctx.api.get("/api/project/pairs");
+    Object.assign(pair, { after_add: after.length, chi2_added: ctx.evaluation?.chi2 });
+    const key = after.find((q) => !pairs.some((o) => o.key === q.key))?.key;
+    await visit(`#/nucleus/pair/${key}`);
+    document.querySelector('button[data-action="remove-pair"]').click();
+    pair.removed = await until(() => ctx.statusLine.textContent.startsWith(`remove pair ${key}: done`));
+    pair.after_remove = (await ctx.api.get("/api/project/pairs")).length;
+    ctx.undoButton.click();
+    await until(() => ctx.statusLine.textContent.startsWith("undo: done"));
+    ctx.statusLine.textContent = "";
+    ctx.undoButton.click();
+    pair.undone = await until(() => ctx.statusLine.textContent.startsWith("undo: done"));
+    Object.assign(pair, { after_undo: (await ctx.api.get("/api/project/pairs")).length,
+      chi2_back: ctx.evaluation?.chi2, rev_back: ctx.project.rev });
+  }
+
   run().then((ms) => finish(ms), (e) => { errors.push(`self-test: ${e?.stack || e}`); finish(null); });
 
   function finish(ms) {
     const out = document.createElement("pre");
     out.id = "selftest-result";
     out.textContent = JSON.stringify({ done: true, ms, plotly: typeof globalThis.Plotly === "object",
-      errors, failed: ctx.api.failures, steps, edit, fit, chi2: ctx.evaluation?.chi2 ?? null,
+      errors, failed: ctx.api.failures, steps, edit, pair, fit, chi2: ctx.evaluation?.chi2 ?? null,
       evaluation_refused: ctx.evalError?.what ?? null }, null, 1);
     out.dataset.done = "1";
     out.style.display = "none";

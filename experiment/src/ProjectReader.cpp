@@ -66,9 +66,11 @@ void CheckThmOldLists(const io::Document &doc, std::vector<Diagnostic> &out) {
     d.hasFound = true;
     d.found = key + "=";
     d.message = l.experiment ? "<thm> experiment[" + l.name + "]: segments= is the old member list; in format 3 a data set "
-                                   "joins the experiment with its field '" + field + "'"
+                                   "joins the experiment with its field '" + field + "'; remove segments= and set "
+                                   "that field (AZURE2 --convert does it for an older project)"
                              : "<thm> " + key + "= is the old weight list; in format 3 the data set or extrapolation names "
-                                   "its weight table with its field '" + field + "'";
+                                   "its weight table with its field '" + field + "'; remove the line and set that "
+                                   "field (AZURE2 --convert does it for an older project)";
     out.push_back(d);
   }
 }
@@ -98,7 +100,8 @@ void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &va
       d.allowed.assign(names.begin(), names.end());
       d.allowed.push_back("global");
       d.message = "<thm> has no experiment[" + f.value.word + "] line" +
-                  (names.empty() ? std::string(" (it has no experiment)") : "");
+                  (names.empty() ? std::string(" (it has no experiment)") : "") +
+                  "; name an experiment of <thm> or global, or add the line experiment[" + f.value.word + "] ...";
       out.push_back(d);
     }
   }

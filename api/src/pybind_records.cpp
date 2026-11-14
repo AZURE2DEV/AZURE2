@@ -166,6 +166,11 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object { return py::float_(v.group->GetJ()); }},
       {"parity", "", kLevel | Kinds({ParamKind::ThmCoherent}), false, "the J group's parity, +1 or -1",
        [](const ParameterView &v) -> py::object { return py::int_(v.group->GetPi()); }},
+      {"jpi", "", kLevel | Kinds({ParamKind::ThmCoherent}), false,
+       "the J group's J^pi as the engine writes it (experiment::JpiText): \"1/2+\", \"2-\"",
+       [](const ParameterView &v) -> py::object {
+         return py::str(azure2::experiment::JpiText((int)std::lround(2.0 * v.group->GetJ()), v.group->GetPi()));
+       }},
       {"level", "", kLevel, false, "the level within its J group, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->level); }},
       {"level_number", "", kLevel, false, "the level counted over all J groups, from 1 (param files, energy_<n>)",

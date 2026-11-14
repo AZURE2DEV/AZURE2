@@ -7,7 +7,8 @@
      serve the route);
   3. every public name of pyazr.Project is served by a row or listed, with its reason, in PROJECT_NOT_SERVED;
   4. every public operation of the adapter is a route or a call the server makes itself; every public method of
-     pyazr.Session is called by the adapter or listed, with its reason, in engine.SESSION_NOT_SERVED; no other
+     pyazr.Session is called by the adapter, a row of the session's function table (served by
+     /api/session/functions/{fn}) or listed, with its reason, in engine.SESSION_NOT_SERVED; no other
      file of pyazr/ui makes or imports a Session or calls its methods through the class (the route rows may name
      a call of it as text);
   5. the app serves exactly the rows (method and path), and the OpenAPI document lists every one of them;
@@ -86,7 +87,10 @@ def test_adapter_and_session_covered():
         adapter = f.read()
     listed = {n for names in SESSION_NOT_SERVED.values() for n in names.split()}
     public = {n for n in dir(pyazr.Session) if not n.startswith("_") and n.upper() != n}
-    left = sorted(n for n in public - listed if not re.search(rf"\.{n}\b", adapter))
+    from pyazr.session_functions import session_functions
+    functions = set(session_functions())  # each one called by Engine.session_function by its row's name
+    assert functions <= public, f"rows of the session's function table with no method: {sorted(functions - public)}"
+    left = sorted(n for n in public - listed - functions if not re.search(rf"\.{n}\b", adapter))
     assert not left, f"public names of pyazr.Session neither called by the adapter nor listed: {left}"
     assert not sorted(listed - public), f"SESSION_NOT_SERVED names what Session does not have: {sorted(listed - public)}"
     for path in glob.glob(os.path.join(UI, "*.py")):
@@ -150,8 +154,7 @@ def test_engine_rows_are_the_engine_fitter_table():
 
 # Words of the engine's tables that occur in pyazr/ui as something else: argument names of Project.add_level and
 # Project.set_channel ("energy", "width"), a column of the program's chiSquared.out ("norm"), keys of a THM
-# experiment line ("beam", "target"; pyazr/ui/thm.py KEYS) and of the answer of Session.thm_experiments ("sigma",
-# "cbkg").
+# experiment line ("beam", "target") and of the answer of Session.thm_experiments ("sigma", "cbkg").
 NOT_KINDS = {"energy", "width", "norm", "beam", "target", "sigma", "cbkg"}
 
 

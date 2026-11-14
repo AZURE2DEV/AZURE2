@@ -8,8 +8,8 @@
 # fit says how MIGRAD ended, on the screen and in output/fitStatus.out.  Checked on tests/identical_pp_res (p+p, a few
 # seconds):
 #
-#   1. --max-calls=20: "MIGRAD did NOT converge: stopped at the call limit", fitStatus.out status call_limit,
-#      valid 0, and param.sav still written;
+#   1. --max-calls=20: "MIGRAD did NOT converge: stopped at the call limit", the outputs named the lowest point
+#      evaluated, fitStatus.out status call_limit, valid 0, and param.sav still written;
 #   2. no option: "MIGRAD converged", status converged, valid 1, call_limit none, EDM below its goal;
 #   3. the same with --use-gradient (the other MIGRAD call);
 #   4. a malformed --max-calls is refused with an error (exit 2) and no fit is run (before November 2026: a warning,
@@ -52,6 +52,11 @@ fit limit --max-calls=20
 if grep -q "WARNING: MIGRAD did NOT converge: stopped at the call limit" "$WORK/limit/run.log"; then
   ok "--max-calls=20: the run says MIGRAD stopped at the call limit"
 else bad "--max-calls=20: no call-limit warning in the log"; fi
+# the warning names the point written as the notice after it does: the lowest point evaluated, not the last one
+if grep -q "outputs written are the lowest point it evaluated, not a minimum" "$WORK/limit/run.log" && \
+   ! grep -q "outputs written are its last point" "$WORK/limit/run.log"; then
+  ok "--max-calls=20: the warning says the outputs are the lowest point evaluated"
+else bad "--max-calls=20: the warning does not say the outputs are the lowest point evaluated"; fi
 [ "$(field limit status)" = call_limit ] && [ "$(field limit valid)" = 0 ] && \
   [ "$(field limit call_limit)" = "20 (--max-calls)" ] \
   && ok "--max-calls=20: fitStatus.out status call_limit, valid 0, limit 20" \

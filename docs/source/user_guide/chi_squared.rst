@@ -113,30 +113,26 @@ above (which also scales its width, :math:`n_s^{\text{nom}}\epsilon_s/100`).
 A fit leaves the column alone and writes the fitted normalizations to
 ``param.sav`` and ``normalizations.out``, so the prior stays where it was put.
 Anything that copies fitted values into the column moves the prior with
-them -- unless the centre is held explicitly. A row
+them -- unless the centre is held explicitly. A data set's ``norm`` and
+``shift`` fields (:doc:`../reference/format3`) hold the start value and the
+prior's centre apart:
 
 .. code-block:: text
 
-   <parameterSettings>
+   dataset s03
    ...
-   segment_3_norm prior_centre 1
-   segment_3_energy_shift prior_centre 0
-   </parameterSettings>
+   norm           0.995 fit prior 1 15%
+   shift          offset 0.002 MeV fit prior 0 0.003
 
-centres the prior of segment 3's normalization on 1 (and of its energy shift
-on 0), whatever the Data Norm. (Energy Shift) column holds; the column is then
-only the start value. (The energy-shift prior is centred on 0 anyway since
-25 October 2026, see below; on this branch an explicit
-``segment_N_energy_shift prior_centre c`` row moves that centre to *c*.) ``3`` is the segment key, the line's position in
-``<segmentsData>`` counting inactive lines, as in ``segment_3_norm`` of
-``param.sav``. A normalization centre must be positive. A row for a
-``<segmentsData>`` line that is not active is reported and ignored; a row
-whose name is not ``segment_N_norm`` or ``segment_N_energy_shift`` of a line
-of the file (a typo, a key beyond the last line) stops the run, since a prior
-that is silently not applied gives a wrong fit. Without a row nothing changes: a file
-that has none behaves exactly as before, and AZURE2 versions without the
-feature skip these three-token rows (the other ``<parameterSettings>`` rows
-have 9, 12 or 14) and centre the prior on the column.
+starts the fit of data set ``s03``'s normalization at 0.995 and centres its
+prior on 1 (and starts its energy shift at 2 keV with the prior centred on 0);
+the parameters are ``s03.norm`` and ``s03.shift.offset`` in ``param.sav``. (The
+energy-shift prior is centred on 0 unless the field gives another centre, see
+below.) A normalization centre must be positive (``E_PRIOR_CENTRE``). The
+prior-centre rows of an older file's ``<parameterSettings>`` are folded into
+these fields by ``AZURE2 --convert``, which refuses a row that names no line
+(a typo, a key beyond the last line), since a prior that is silently not
+applied gives a wrong fit.
 
 With an explicit centre a file can carry the fitted normalizations *and* the
 experimental priors, so that run on its own it is the best fit (data and
@@ -186,9 +182,9 @@ this time with an absolute rather than a percentage error:
    \left(\frac{\Delta E_s}{\delta(\Delta E_s)}\right)^2
 
 measured from **zero**, i.e. from no shift: the value of :math:`\Delta E_s` in
-the input file is only where the fit starts. (On this branch an explicit
-``segment_N_energy_shift prior_centre c`` row, above, measures the constant
-term from *c* instead.) A segment whose :math:`\sqrt{E}`
+the input file is only where the fit starts. (A centre in the ``shift`` field,
+``shift offset <start> MeV fit prior <c> <width>`` above, measures the
+constant term from *c* instead.) A segment whose :math:`\sqrt{E}`
 shift coefficient :math:`b_s` is free (the ``sqrtshift`` block, see
 :doc:`segments`) adds the same kind of term, :math:`(b_s/\delta b_s)^2`, with
 :math:`\delta b_s` in MeV\ :sup:`1/2`, and so does each free parameter
@@ -349,8 +345,8 @@ command line and pyazr use it too. Removing the line switches it off.
 symmetric :math:`n \times n` **covariance** in the same order::
 
     #parametrization 1
-    # widths of the 2- and 3- levels and the normalization of segment 4, from fit A
-    width_2_1 width_3_1 segment_4_norm
+    # widths of the 2- and 3- levels and the normalization of data set s04, from fit A
+    width_2_1 width_3_1 s04.norm
     0.8206 0.8080 1.05
     5.0e-5 -2.1e-5 0
     -2.1e-5 2.1e-5 0

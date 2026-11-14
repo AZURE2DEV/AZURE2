@@ -352,8 +352,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
       parser's table (`src/ThmKeys.cpp`, `kinds()["thm"]`); the session's diagnostics described as rows
       (`Session.describe()["functions"]`); the three parts of an error as attributes; the built-in nuclei and the
-      global optical potentials in `kinds()`; five small defects (2026-11-14).  The page is ported to them by a later
-      step.
+      global optical potentials in `kinds()`; five small defects (2026-11-14).  The page reads the `<thm>` keys, the
+      session's diagnostics, the error parts and the two lists from them (2026-11-14, `web_ui.md` section 11.9); the
+      Nucleus tab adds and removes pairs, edits B and the amplitude flag, and makes a new level from the allowed
+      channels; the Fit tab shows a fit's outcome, notices and MINOS validity per side (section 11.10).
 - [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
       key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
       provisional `SESSION_OPTIONS` gone (2026-11-13).
@@ -369,5 +371,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       test lines, from `4bf7aa06:gui/` and `tests/gui/`).
 - [x] `gui/`, `tests/gui/`, `BUILD_GUI`/`USE_QWT`/`BUILD_MACOS_BUNDLE`, Qt/Qwt in CMake, CI, Docker and build scripts
       removed (decision 3, 2026-11-07; branch `feature/upgrade-remove-qt`); `--no-gui` kept, accepted and ignored.
-- [ ] Remove `numcmc/`, readline menus, the GSL fitter (`external/erya`: removed in Phase 5, branch `stopping-wire`).
+- [x] The program takes commands: `AZURE2 calculate|fit|extrapolate|minos|rate|mcmc [options] FILE`, every menu
+      question a named option of one table (`src/RunRequest.cpp`) that the menu, `--help` and `--describe` read; the
+      menu still runs without a command (pyazr3.md decision 3 (a); `tests/cli_commands`).
+- [ ] The tests, examples, skills and pages on the commands; the readline menus removed.
+- [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
+      `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

@@ -108,10 +108,11 @@ def case_describe():
     check("describe T2: the data sets", result and len(result["datasets"]) > 0, result)
     if BIN:
         pcode, out = program("--describe", T2, "--json")
-        # the program's document also has the settings of its run and machine (threads, switches), which a pyazr
-        # description does not have (docs/upgrade/pyazr3.md section 4, item 9)
-        described = {k: v for k, v in json.loads(out).items() if k not in ("threads", "switches")} if pcode == 0 else None
-        check("describe T2 --json equals AZURE2 --describe T2 --json (without the run's threads and switches)",
+        # the program's document also has the settings of its run and machine (threads, switches) and the program's
+        # commands, which a pyazr description does not have (docs/upgrade/pyazr3.md section 4, item 9)
+        described = ({k: v for k, v in json.loads(out).items() if k not in ("threads", "switches", "commands")}
+                     if pcode == 0 else None)
+        check("describe T2 --json equals AZURE2 --describe T2 --json (without the run's threads, switches, commands)",
               described == result)
     code, doc, _ = run("describe", T2, "--record", "s01_int_thin", "--json")
     result = ok_doc("describe --record", code, doc, "describe")

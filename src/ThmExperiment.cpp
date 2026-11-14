@@ -216,7 +216,8 @@ std::string ThmResolveReaction(const ThmNuclide &b, const ThmNuclide &t, const T
         << " does not give the entrance pair of its segments (Z,A) = (" << Z[0] << "," << A[0] << ") + (" << Z[1]
         << "," << A[1]
         << "): one of beam/target must be a nucleus of the pair and the other the second nucleus plus the "
-           "spectator.";
+           "spectator; write beam, target and spectator of the experiment so (or give the data sets the pair of the "
+           "reaction).";
     return why.str();
   }
   const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
@@ -242,11 +243,19 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     std::string where = "experiment[" + x.name + "]: ";
     auto has = [&](const char *key) { return std::find(x.keys.begin(), x.keys.end(), key) != x.keys.end(); };
     // the members: the data sets that name the experiment (ReadFormat3ThmSection; an experiment without one is left out)
-    if (x.segments.empty()) return where + "no data set in use names it (thm " + x.name + ")";
+    if (x.segments.empty())
+      return where + "no data set in use names it (thm " + x.name + "); an experiment has the active data sets whose "
+                     "field thm names it: give a data set the field 'thm " + x.name + "', or remove the experiment";
     int kin = has("beam") + has("target") + has("spectator") + has("Ebeam");
-    if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
+    std::string missing;  // the kinematic keys not given
+    for (const char *key : {"beam", "target", "spectator", "Ebeam"})
+      if (!has(key)) missing += (missing.empty() ? "" : ", ") + std::string(key) + "=";
+    if (kin != 0 && kin != 4)
+      return where + "beam, target, spectator and Ebeam go together (all four or none); give " + missing +
+             " or remove the others";
     if (x.lineshape && kin != 4)
-      return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+      return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam; give " +
+             missing + " or set lineshape=off";
     // N_C carries (E_lambda - E - i Gamma/2)^(-i zeta): its energy unit is a
     // common phase only while every term of the amplitude carries it.  The
     // background c(E) does not, and zeta varies with E, so the model would
@@ -255,32 +264,37 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     if (x.lineshape && !x.cbackground.empty())
       return where + "lineshape=on and cbackground= cannot be combined: the Coulomb line shape N_C multiplies "
                      "the level amplitudes only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) depends on the "
-                     "energy unit unless every term of the amplitude carries it";
+                     "energy unit unless every term of the amplitude carries it; remove cbackground= or set "
+                     "lineshape=off";
     if (x.psKind != ThmExperiment::PS_DELTA && kin != 4)
       return where + "a ps window (ps=hulthen|gauss|table) needs the kinematics of the reaction: beam, target, "
-                     "spectator and Ebeam (mu_sx and the spectator momenta reached at each energy)";
+                     "spectator and Ebeam (mu_sx and the spectator momenta reached at each energy); give " + missing +
+             " or set ps=delta";
     if (has("psNodes") && x.psKind == ThmExperiment::PS_DELTA)
-      return where + "psNodes= needs a ps window (ps=hulthen|gauss|table)";
+      return where + "psNodes= needs a ps window (ps=hulthen|gauss|table); give the window or remove psNodes=";
     const bool computed = x.distortion == ThmExperiment::DIST_COULOMB || x.distortion == ThmExperiment::DIST_OPTICAL;
     if (computed && kin != 4)
       return where + "distortion=" + (x.distortion == ThmExperiment::DIST_COULOMB ? "coulomb" : "optical") +
-             " needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+             " needs the kinematics of the reaction: beam, target, spectator and Ebeam; give " + missing +
+             " or set distortion=none";
     if ((has("opticalAA") || has("opticalSF")) && x.distortion != ThmExperiment::DIST_OPTICAL)
-      return where + "opticalAA= and opticalSF= need distortion=optical";
+      return where + "opticalAA= and opticalSF= need distortion=optical; set it, or remove them";
     for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
       if (has(key) && !computed)
-        return where + key + "= needs distortion=coulomb or distortion=optical";
+        return where + key + "= needs distortion=coulomb or distortion=optical; set one, or remove " + key + "=";
     if (x.vertexDW) {
       if (!computed)
         return where + "vertexModel=dw builds the vertex from the distorted waves of a + A and s + F: it needs "
-                       "distortion=coulomb or distortion=optical (and the kinematics)";
+                       "distortion=coulomb or distortion=optical (and the kinematics); set one, or vertexModel=pw";
       for (const char *key : {"distortionRef", "distortionRatio"})
         if (has(key))
           return where + key + "= belongs to the distortion factor R(E), which vertexModel=dw replaces (R is "
-                               "not applied; the DW vertex carries the energy dependence)";
+                               "not applied; the DW vertex carries the energy dependence); remove " + key +
+                 "= or set vertexModel=pw";
       if (x.hasTheta)
         return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
-                       "source has every m_l about p_xA, which the fixed-angle sum does not carry";
+                       "source has every m_l about p_xA, which the fixed-angle sum does not carry; remove theta= or "
+                       "set vertexModel=pw";
     }
     // The acceptance (docs "Experimental acceptance"): at fixed E the
     // spectator direction fixes |p_s|, so ps= (a |p_s| cut with the momentum
@@ -291,20 +305,23 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     const bool window = x.angleWindow || x.psKind != ThmExperiment::PS_DELTA;
     if (window && has("spectatorAngle"))
       return where + std::string(x.angleWindow ? "spectatorAngle= (one direction) and spectatorAngles= (a window) "
-                                                 "exclude each other"
+                                                 "exclude each other; keep one of them"
                                                : "spectatorAngle= (one direction) and a ps window exclude each "
                                                  "other: the window accepts every direction whose |p_s| lies in "
-                                                 "it (write spectatorAngles=cm:t-t for one direction with the cut)");
+                                                 "it; write spectatorAngles=cm:t-t for one direction with the cut");
     if (x.angleWindow) {
       if (!computed && x.psKind == ThmExperiment::PS_DELTA)
         return where + "spectatorAngles= averages over the accepted spectator directions the plane-wave vertex "
                        "(with the momentum distribution of ps=hulthen|gauss|table), or R(E) and the DW vertex "
-                       "(distortion=coulomb|optical); with neither it has nothing to average";
+                       "(distortion=coulomb|optical); with neither it has nothing to average: give one, or remove "
+                       "spectatorAngles=";
       if (has("psNodes"))
         return where + "with spectatorAngles= the nodes are spectatorAngleNodes= (per c.m. interval); psNodes= "
-                       "is the node count of a ps window without spectatorAngles=";
+                       "is the node count of a ps window without spectatorAngles=: write spectatorAngleNodes= "
+                       "instead";
     } else if (has("spectatorAngleNodes"))
-      return where + "spectatorAngleNodes= needs a spectator-direction window (spectatorAngles=)";
+      return where + "spectatorAngleNodes= needs a spectator-direction window (spectatorAngles=); give the window, "
+                     "or remove spectatorAngleNodes=";
     // The momentum distribution once: a ps window averages the model with the
     // event weight |phi(p_s)|^2 d cos(theta_cm) of data divided by |phi|^2; R with
     // distortionRatio=dw is |M|^2 itself, which carries |phi(q(E))|^2 again.
@@ -317,7 +334,8 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
       auto it = owner.find(k);
       if (it != owner.end()) {
         std::ostringstream why;
-        why << where << "segment " << k << " is already in experiment[" << it->second << "]";
+        why << where << "segment " << k << " is already in experiment[" << it->second
+            << "]: a data set belongs to one experiment, the one its field thm names; name one";
         return why.str();
       }
       owner[k] = x.name;
@@ -329,12 +347,13 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
 std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey) {
   if (coherentL)
     return "vertexModel=dw sums the entrance partial waves (and their projections) incoherently, as the "
-           "angle-integrated observable requires; entranceL=coherent cannot be combined with it.";
+           "angle-integrated observable requires; entranceL=coherent cannot be combined with it: remove "
+           "entranceL=coherent or set vertexModel=pw.";
   if (spectatorEnergy != 0.0) {
     std::ostringstream why;
     why << "with vertexModel=dw the spectator kinematics come from Ebeam and the spectator direction; "
            "spectatorEnergy for entrance pair "
-        << pairKey << " must be 0.";
+        << pairKey << " must be 0: remove spectatorEnergy[" << pairKey << "]= or set it to 0.";
     return why.str();
   }
   return "";
@@ -348,7 +367,8 @@ std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experim
     if (x.vertexDW)
       return where + "vertexModel=dw is the surface term of the DWBA vertex; its external part (the three-body "
                      "remnant outside the channel radius, whose plane-wave limit is the Coulomb term C_l) is not "
-                     "computed, so it cannot be combined with coulombIntegral=1.";
+                     "computed, so it cannot be combined with coulombIntegral=1: set coulombIntegral=0, or "
+                     "vertexModel=pw.";
     const bool distortedAA = x.distortion == ThmExperiment::DIST_COULOMB ||
                              (x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalAA.kind != 0);
     if (distortedAA)
@@ -370,7 +390,9 @@ std::string ReadThmAngleTable(const std::string &path, std::vector<double> &thet
   theta.clear();
   w.clear();
   std::ifstream in(path.c_str());
-  if (!in) return "cannot read the angle table '" + path + "'";
+  if (!in)
+    return "cannot read the angle table '" + path + "' (relative to the project's directory); give the path of a "
+           "readable file";
   std::string line;
   int lineNumber = 0;
   double total = 0.0;
@@ -385,16 +407,17 @@ std::string ReadThmAngleTable(const std::string &path, std::vector<double> &thet
     std::ostringstream where;
     where << "'" << path << "' line " << lineNumber << ": ";
     if (!(ls >> tv >> wv) || (ls >> extra))
-      return where.str() + "expected two numbers, the angle (deg) and the acceptance";
+      return where.str() + "expected two numbers, the angle (deg) and the acceptance; correct the line";
     if (!std::isfinite(tv) || !std::isfinite(wv) || tv < 0.0 || tv > 180.0 || wv < 0.0)
-      return where.str() + "the angle must be 0-180 deg and the acceptance finite and >= 0";
-    if (!theta.empty() && !(tv > theta.back())) return where.str() + "the angles must be strictly increasing";
+      return where.str() + "the angle must be 0-180 deg and the acceptance finite and >= 0; correct the line";
+    if (!theta.empty() && !(tv > theta.back()))
+      return where.str() + "the angles must be strictly increasing; sort the rows by angle";
     theta.push_back(tv);
     w.push_back(wv);
     total += wv;
   }
-  if (theta.size() < 2) return "'" + path + "' needs at least two rows (angle acceptance)";
-  if (!(total > 0.0)) return "'" + path + "': every acceptance is zero";
+  if (theta.size() < 2) return "'" + path + "' needs at least two rows (angle acceptance); add the rows";
+  if (!(total > 0.0)) return "'" + path + "': every acceptance is zero; give an acceptance > 0 on some row";
   return "";
 }
 
@@ -402,7 +425,9 @@ std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std:
   p.clear();
   w.clear();
   std::ifstream in(path.c_str());
-  if (!in) return "cannot read the ps table '" + path + "'";
+  if (!in)
+    return "cannot read the ps table '" + path + "' (relative to the project's directory); give the path of a "
+           "readable file";
   std::string line;
   int lineNumber = 0;
   double total = 0.0;
@@ -416,16 +441,17 @@ std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std:
     std::string extra;
     std::ostringstream where;
     where << "'" << path << "' line " << lineNumber << ": ";
-    if (!(ls >> pv >> wv) || (ls >> extra)) return where.str() + "expected two numbers, p_s (MeV/c) and |phi(p_s)|^2";
+    if (!(ls >> pv >> wv) || (ls >> extra))
+      return where.str() + "expected two numbers, p_s (MeV/c) and |phi(p_s)|^2; correct the line";
     if (!std::isfinite(pv) || !std::isfinite(wv) || pv < 0.0 || wv < 0.0)
-      return where.str() + "p_s and |phi|^2 must be finite and >= 0";
-    if (!p.empty() && !(pv > p.back())) return where.str() + "p_s must be strictly increasing";
+      return where.str() + "p_s and |phi|^2 must be finite and >= 0; correct the line";
+    if (!p.empty() && !(pv > p.back())) return where.str() + "p_s must be strictly increasing; sort the rows by p_s";
     p.push_back(pv);
     w.push_back(wv);
     total += wv;
   }
-  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s |phi|^2)";
-  if (!(total > 0.0)) return "'" + path + "': |phi|^2 is zero in every row";
+  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s |phi|^2); add the rows";
+  if (!(total > 0.0)) return "'" + path + "': |phi|^2 is zero in every row; give |phi|^2 > 0 on some row";
   return "";
 }
 

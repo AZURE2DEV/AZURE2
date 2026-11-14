@@ -807,8 +807,8 @@ citation under every plot, in the CSV and in the Python text, their values those
 
 `pip install .` in a checkout now builds the engine (scikit-build-core runs the CMake files) and installs pyazr with
 its module `_azure2`, the commands `pyazr` and `AZURE2`, the mass table and the web page; `pip wheel .` writes the
-wheel. Before, pip installed a package without its engine. The wheel's program has no readline (its menus read
-plain lines). The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
+wheel. Before, pip installed a package without its engine. The wheel's program has no readline: its menu reads
+plain lines, and its commands read nothing from standard input. The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
 (arm64, x86-64) with cibuildwheel, by hand or on a pull request that changes the packaging, and keeps them as the
 run's artifacts: it publishes nothing. What the owner must do to publish:
 
@@ -823,6 +823,33 @@ run's artifacts: it publishes nothing. What the owner must do to publish:
   The wheel carries their notice among its licence files, and `pyazr.describe()` and `pyazr stopping` print the
   citation. Whether that suffices for redistribution on PyPI is yours to confirm with the terms in
   `stopping/data/srim/README.md`.
+
+## Commands instead of the menu
+
+The program takes a command and named options: `AZURE2 <command> [options] FILE`. A command runs one calculation,
+reads nothing from standard input and needs no readline; a missing or wrong option is refused with exit status 2
+and a message that says what is wrong, what the command takes and how to fix it. `AZURE2 --help` lists the commands
+and options; `AZURE2 --describe FILE --json` gives them as data. Without a command the menu still runs as before;
+the menus go once the tests use the commands (your decision 3 (a) of `pyazr3.md`). What a user types instead of the
+menu:
+
+| Menu answers (piped) | Command line |
+|---|---|
+| `1`, parameter file blank | `AZURE2 calculate FILE` |
+| `1`, `fit.sav` | `AZURE2 calculate --parameter-file=fit.sav FILE` |
+| `2`, band `n`, blank | `AZURE2 fit FILE` |
+| `2`, band `y`, scale `y`, `fit.sav` | `AZURE2 fit --covariance-band --scale-covariance --parameter-file=fit.sav FILE` |
+| `3`, band `n`, `param.sav` | `AZURE2 extrapolate --parameter-file=param.sav FILE` |
+| `4`, variance `1`, band `n` | `AZURE2 minos --delta-chi2=1 FILE` |
+| external capture file `intEC.dat` | `--capture-amplitudes=intEC.dat` (any command but `rate`) |
+| `5`, blank, `1`, `2`, `yes`, `temps.dat` | `AZURE2 rate --rate-entrance=1 --rate-exit=2 --temperature-file=temps.dat FILE` |
+| `5`, blank, `1`, `-1`, `no`, `0.01`, `2`, `0.01` | `AZURE2 rate --rate-entrance=1 --rate-exit=-1 --temperature-min=0.01 --temperature-max=2 --temperature-step=0.01 FILE` |
+| `6`, blank, blank, `24`, `1000`, blank, blank, `4`, `yes`, `yes` | `AZURE2 mcmc --walkers=24 --steps=1000 --sampler-threads=4 --basis=rwa --overwrite-samples FILE` |
+
+The file names are relative to the project file's directory, as at the menu's prompts. A run by command writes the
+same files as the run by menu with the same answers (`tests/cli_commands`, and the runs of every command on T1, T2,
+T3, 13N and the rate and sampler projects). A new command or a new question is one row of the table in
+`src/RunRequest.cpp` and its line where the answer goes (`src/RunPreparation.cpp`).
 
 ## For the maintainers to decide
 

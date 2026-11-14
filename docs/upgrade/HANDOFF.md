@@ -2,6 +2,274 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands`) — the program takes commands (first milestone)
+
+**Done**: `AZURE2 <command> [options] FILE` with the commands `calculate`, `fit`, `extrapolate`, `minos`, `rate`,
+`mcmc` (in a build with the sampler); the menu still runs without a command, its prompts, order and texts unchanged.
+One table of the questions of a run (`include/RunRequest.h`, `src/RunRequest.cpp`: `RunCommands()`,
+`MakeQuestions()`, `RunRules()`) is read by the command line's reader (`ReadRunCommand`), the menu (`RunMenu`,
+`src/RunMenu.cpp`), `--help` (`RunCommandsHelp`) and `--describe --json` (member `commands`, `RunCommandsJson`).
+One walk of the table turns the answers into the `Config` (`PrepareRun`, `src/RunPreparation.cpp`): with the menu it
+asks each question as it reaches it, so the menu's prompts and the project's messages (the external-capture check)
+keep their order; with a command the request is complete. The code after it in `main` does not know the reader.
+Moved out of `src/AZURE2.cpp` (1607 -> 958 lines): `inputEnded`, `readAnswer`, `readAnswerOrDefault`,
+`askYesNo`, `getInputLine`, `commandShell` (to `src/RunMenu.cpp`, the first five verbatim; the menu's lines now from
+the command table), `promptBandOptions`, `processCommand`, `getParameterFile`, `getTemperatureFile`, `getRateParams`,
+`getMCMCParams`, `getExternalCaptureFile` (replaced by the table's rows and `RunMenu::Ask`), `SectionText`,
+`readSegmentFile`, `checkExternalCapture` (to `src/RunPreparation.cpp`, the last verbatim), `struct SegPairs`,
+`struct MCMCParams` (into `RunRequest`).
+
+Inventory: every question the program asks (blank = the answer of an empty line; the menu asks again after an
+answer out of range unless said otherwise).
+
+| Mode | Prompt | Type, allowed | Blank | Sets | Option |
+|---|---|---|---|---|---|
+| all | `azure2:` (menu 1-7; 1-6 without the sampler) | whole number | asked again | the mode bits (`SelectCalculation`) | the command |
+| 4 | `Allowed Chi-Squared Variance:` | number >= 0 | asked again | `chiVariance` | `--delta-chi2=X` (required) |
+| 2, 3, 4 | `Calculate cross-section uncertainty band? (y/n)` | y/n (yes, 1, t, true / no, 0, f, false); a bad answer from a pipe stops (exit 1) | no | `CALCULATE_COVARIANCE_BAND` | `--covariance-band` (also `calculate`; without a command it answers the menu, as before) |
+| 2, 4 after a yes | `Scale covariance to reduced chi-squared = 1? (y/n)` | y/n | no | `SCALE_COVARIANCE_BY_CHI2` | `--scale-covariance` (refused without `--covariance-band`) |
+| all | `External Parameter File (leave blank for new file):` | readable file, relative to the project | none | `USE_PREVIOUS_PARAMETERS`, `paramfile` | `--parameter-file=FILE` |
+| 5 | `Reaction Rate Entrance Pair:` | whole number, not 0 | asked again | `rateParams.entrancePair` | `--rate-entrance=N` (required) |
+| 5 | `Reaction Rate Exit Pair:` | whole number >= -1, not 0; not the entrance (else both asked again) | asked again | `rateParams.exitPair` | `--rate-exit=N` (required) |
+| 5 | `Use temperatures from file (yes/no):` | yes or no in full | asked again | `rateParams.useFile` | which of the next options is given |
+| 5 file | `Temperature File Name:` | readable file | asked again | `rateParams.temperatureFile` | `--temperature-file=FILE` |
+| 5 range | `Reaction Rate Min Temp [GK]:`, `Max Temp`, `Temp Step` | numbers >= 0 | asked again | `rateParams.minTemp`, `maxTemp`, `tempStep` (-1 with a file) | `--temperature-min=T`, `--temperature-max=T`, `--temperature-step=T` |
+| all but 5, the run has external capture | `External Capture Amplitude File (leave blank for new file):` | readable file; read, not rewritten (`intEC.dat` is written only when the amplitudes are computed) | none | `USE_PREVIOUS_INTEGRALS`, `integralsfile` | `--capture-amplitudes=FILE` (not needed: a notice, ignored) |
+| 6 | `Number of Walkers (2-1000):` | whole number 2-1000 | asked again | sampler | `--walkers=N` (required) |
+| 6 | `Number of Steps (100-10000000):` | whole number 100-1e7 | asked again | sampler | `--steps=N` (required) |
+| 6 | `Initial Parameter Spread % (0.001-50) [default=5]:` | number in (0, 50] | 5 | sampler | `--parameter-spread=P` |
+| 6 | `Level Energy Spread keV (0.001-1) [default=1]:` | number in (0, 1] | 1 | sampler | `--energy-spread=E` |
+| 6 | `Number of Threads (1 or more):` | whole number >= 1 | asked again | sampler | `--sampler-threads=N` (required) |
+| 6 | `Use Reduced Width Amplitudes (yes/no):` | yes or no in full | asked again | sampler | `--basis=rwa\|physical` (required) |
+| 6 | `Overwrite existing samples.mcmc? (yes/no) [default=no]:` | yes or no | no | sampler | `--overwrite-samples` |
+
+No burn-in or thinning question exists (the sampler has none). At end of input a required answer stops the run
+(exit 1), an optional one takes its blank answer.
+
+**Verified** (build `work/b-commands`, 0 warnings): `tests/cli_commands` (new: by command = by menu for calculate,
+extrapolate with band, fit with band and scaling, minos, calculate from a parameter file, rate with a file and with
+a range to the total capture, mcmc in both bases; the refusals with exit 2; help, JSON and the manual agree;
+shown failing with the command line's defaults left unset and with the parameter file dropped from the shared
+path), `tests/cli_help`, `tests/cli_eof` (the menu at end of input, with and without readline). Evidence runs
+(`work/commands/compare.sh`: base build by menu, this build by menu, this build by command, fresh copies): every
+file identical and the same exit status for calculate and extrapolate on T1, T2, T3, 13N; fit on T1, T2, 13N and
+identical_pp_res; minos on identical_pp_res and T1; 13N reading its `intEC.dat` by `--capture-amplitudes`; rate on
+p12C (file, range to the total capture), n12C and T1; mcmc on 13N_fast in both bases. The base and this build's menu
+logs are identical but for timed progress bars (and, with two threads, the fit's `Iteration:` lines, whose
+numbering depends on the threads; with one thread identical); the command's log lacks only the menu and prompts.
+All projects in the three bases (by menu) against `tab-t67-1`: 887 / 851 / 887 identical (tag
+`tab-commands-1`); the eight fits (`fits_vs_base2.sh`) identical to the base build; `ctest -LE slow` (one
+thread) 265 of 266 before `pyazr_cli` was told that the program's `commands` member is not pyazr's; then
+`scripts/check.sh --quick` 266 of 266, and `cli_commands` (now registered in ctest, `tests/upgrade/CMakeLists.txt`)
+passes. No consistency check added (number 57 not taken).
+
+**Open**: the second milestone (the tests, examples, skills and pages on the commands; the menu and readline
+removed). The options file (`--options-file`, `AZURE_OPTIONS_FILE`) can still hold `--covariance-band` or
+`--scale-covariance`, which then apply to any command as they did to the menu; any other command option there is
+refused.
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — pairs and THM columns; what a fit returns
+
+**Done** (`web_ui.md` section 11.10; findings 10 and 11 closed for the page):
+
+- Nucleus tab: **+ pair** (`add_pair`), a pair's edit form from the route's arguments (B among them), **Remove pair**
+  and, after its refusal, **Remove pair … and its channels**; the amplitude flag per channel; **+ level** with the
+  channels of `GET /api/project/allowed_channels` (new route; `allowed_channels` left `PROJECT_NOT_SERVED`).  The THM
+  tab's channels link to the Nucleus tab.
+- Fit tab: an engine fit's `outcome`, the engine's `notices` and MINOS validity per side (`sides`) in the job's
+  result and on the page (an outcome box, a MINOS warning, the column MINOS validity); the fitter rows' facts add
+  "honours a call limit" and "falls back to"; the fallback fitter's name is the table's (`FALLBACK_FITTER` gone).
+
+**Verified**: `tests/pyazr/ui/nucleus_routes_test.py` (new: texts equal to the direct `Project` calls; T2's B edit's
+objective equal to a session's), `engine_jobs_test.py` (outcome, notices, sides, the T2 call limit of 40), node tests,
+the smoke test with the self-test adding and removing a pair with the buttons on T1 and T2; on T2 over HTTP and
+headless Chrome a call limit of 40 drawn as a warning (`call_limit`) and a free fit as converged
+(`work/uiport/fitlimit.py`).  A key added to `src/ThmKeys.cpp` (in this build only, removed after) was served and
+drawn as a form field of the experiment with no line of the page changed (`work/uiport/demokey.py`).
+
+**Open**: the job's state line says "ended without convergence" in the colour of a finished job; the job's call
+count (327 with `max_calls` 40 on T2) counts HESSE's calls after the fit; the routes `/api/evaluate/grid`,
+`/api/data/{name}/grid`, `/kernel` and `level_matrix` stay `missing` (not looked at).
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — the page reads pyazr's tables
+
+**Done** (`web_ui.md` section 11.9; findings 9, 24, 27, 28 closed):
+
+- `<thm>` keys: `pyazr/ui/thm.py` `keys()` is `pyazr.kinds()["thm"]`; the page's table `KEYS` and its test are gone.
+- The session's functions: `GET /api/session/functions` serves pyazr's rows (`Session.describe()["functions"]`)
+  through `physics.page_row` (the fit vector left out, `required` from the method's signature); a call goes to
+  `Engine.session_function` by the row's name; `physics.answer_parts` walks the answer by the rows' `path` and
+  `lines`.  `SESSION_ROWS`, `THM_ROWS` and the shaping of `ANSWERS` are gone; `PAGE` (in `physics.py`, `thm.py`)
+  keeps the tab, group, bound, status field and words, hidden fields and the two table answers.
+- Errors: the body's `what`, `allowed`, `fix` are `e.what`, `e.allowed`, `e.fix` (carried from the worker); null
+  for the engine's own texts (the page shows `message`).
+- The THM key forms offer `kinds()["nuclides"]` and `["optical_potentials"]` by name.
+
+**Verified**: the JSON of the 60 session-function answers and 36 raw THM answers before and after on T1, T2, two THM
+copies of `tests/18O_p_a_thm`, `examples/f19_pag_thm`, `examples/o18_lacognata2010` (`work/uiport/capture.py`,
+`compare.py`): every array, status, table and fact value identical, the raw routes identical; the labels, the facts'
+order and the arguments as used differ (listed in 11.9).  `tests/pyazr/ui` whole (16 files; the smoke test with
+headless Chrome), `tests/pyazr/thm_keys_test.py`, the consistency test, `docs_build` (55 pages); the HTTP walk on
+T1, T2, T3, 13N (`work/uiport/walk/walk.py`, a copy of the director's walk66: the χ² equal to the expected values, a
+fit and a band job each, a radius edit and Undo restoring the χ² exactly, the function routes).  Five injected
+errors each failed their test (README of `tests/pyazr/ui`).
+
+**Open**: the pairs and the THM columns in the Nucleus tab, what a fit returns in the Fit tab (the next commit).
+
+## 2026-11-14 (agent, branch `feature/upgrade-7-small-repairs-3`) — ten small repairs
+
+**Done** (each shown on the start commit 6bfae502 with `work/b-trial69`, then fixed and tested):
+
+1. `pyazr_ec_relativistic` parsed `Objective(...)` as a float (start: `ValueError: could not convert string to
+   float: "Objective(14 free parameters ...)"`); it reads `Session.evaluate().objective`; passes. The slow tests:
+   table below.
+2. The call-limit warning said "outputs written are its last point" before the notice "the end point is the lowest
+   objective it evaluated"; it says "the lowest point it evaluated" (an invalid minimum: "its end point").
+   `tests/fit_call_limit` checks it (fails on `work/b-trial69`).
+3. THM set-up refusals: the checks of an experiment (`CheckThmExperiments`), `CheckThmDwVertexOptions`,
+   `CheckThmCoulombConsistency` (one of its two had its way on), `ThmResolveReaction`, the angle and ps table
+   readers, the block edits, the experiment line's reader (its own refusals, plus every key's value refusal from
+   the key table), three of `ThmNorm` and the format-3 diagnostics E_THM_RELATIVISTIC (2),
+   E_THM_COVARIANCE, E_THM_EXPERIMENT_UNKNOWN, E_THM_OLD_LIST (2), E_THM_HYBRID_POTENTIAL stated the rule and
+   not the way on; each now names it (the kinematic keys missing, what to remove or set). A key's value refusal
+   stays the key table's text plus one sentence for every key (`pyazr.kinds()["thm"]`). Left as they were: the
+   refusals that depend on the data at one energy (`ThmDistortion`: no energy left for the spectator, below the
+   s + F barrier, a direction not reached, a zero amplitude, a global potential outside its range; `ThmDwVertex`,
+   `ThmLineshape`: a source that vanishes, a window out of reach): the way on is the data's (drop points, Ebeam),
+   two of them already say "check Ebeam". `tests/reference/thm_refusals_test` (20 cases; 20 fail on the old
+   sources, run with the three old files compiled in).
+4. `segment_<N>_*` names: data_formats.rst (3), chi_squared.rst (5, the prior-centre rows rewritten as the norm and
+   shift fields' `prior <centre> <width>`), fitting.rst (3), segments.rst (7), and also natural_neon.rst and
+   mcmc.rst (1 each); only the converter's map in data_formats.rst and the old-name examples of command_line.rst and
+   older_projects.rst name them now. `tools/check_doc_names.py`: 0 names (it does not read parameter names).
+5. E_STOPPING_DATA's row names `--srim-data-dir=DIR` and `AZURE2_SRIM_DATA_DIR`; schema and format3.rst
+   regenerated. `experiment_diagnostics` checks the row (fails with the old row: shown).
+6. `Parameter.jpi` read `['0.5+', '0.5-', '1.5-', '2.5+']` on T1 where `ChannelWidth.jpi` read `['1/2+', ...]`;
+   it is a field of the engine's record table (`experiment::JpiText`) now, and `ScatteringLength.jpi` and
+   modelavg's level names use the binding `jpi_text` instead of their own rule. Readers ported: the cbkg test, the
+   width table's fallback; the page (`nucleus.js`) already reads `ProjectLevel.jpi`; skills and examples read
+   `ProjectLevel.jpi` or `ChannelWidth.jpi` (no change). Migration row in `pyazr3.md` section 2.3.
+7. The 51 `:py:` references without a target are literals; `docs_build_test.py` builds with `-n` (a reference to a
+   name that does not exist fails it: shown).
+8. Engine functions without a caller: table below (`work/repair3/uncalled.py`).
+9. Edit refusals: `experiment::EditRefusal {what, allowed, fix}` in `LevelEdit` and `AllowedChannelList`;
+   `FindLevel` fills one; the binding raises a ValueError with the three attributes; `_engine_call` gives them to
+   `FormatError`. Start: `set_pair(1, radius=-1)` gave `what/allowed/fix` None and "pair 1: pair 1: the channel
+   radius ..."; now "pair 1: the channel radius -1 fm is out of range: it is a number > 0 (fm); give a positive
+   channel radius" with the three parts. `errors_test` (7 refusals).
+10. `save_fit` of T2 into another directory: refused by `rebase_paths` before anything is rewritten
+   (`ParameterError`, three parts), the names read by the engine's covariance reader (binding
+   `covariance_file_names`); written in the project's own directory (chi2 equal). Rewriting the rows would need a
+   second copy of the covariance file, so it is refused, not made to work. Other files that name files: none (a
+   prior covariance names parameters; THM ps, angle and weight tables, a reference table hold numbers).
+   `small_defects` (a').
+
+**Slow tests** (build of commit 3dcca27c in `work/b-repair3-slow`, one at a time, OMP 2): all pass:
+`pyazr_channel_order` 106 s, `pyazr_objective` 18 s, `pyazr_inactive_lines` 57 s, `pyazr_park_gradient` 26 s,
+`pyazr_shared_state` 26 s, `pyazr_concurrent_sessions` 785 s, `pyazr_ec_relativistic` 22 s,
+`pyazr_formal_brune_iteration` 17 s, `pyazr_rmatrix_pole` 12 s, `pyazr_fit_recipes` 134 s, `pyazr_fit_with_engine`
+849 s, `pyazr_wheel` 301 s; alone at four threads: `pyazr_parallel_points` 68 s,
+`pyazr_upgrade_thread_independence` 36 s. The skills have no slow self-test. Only `pyazr_ec_relativistic`
+failed before (its own fault, repaired above); no failure is the engine's.
+
+**Engine functions without a caller outside their own files** (public members of `AZUREAPI` and `CNuc`;
+`api/include/` holds only `AZUREAPI.h`). Counted by name: a file of the C++ trees other than the header and the
+class's own `AZUREAPI*.cpp` / `CNuc*.cpp` containing `name(` or `::name` is a caller, so a name another class shares
+counts as called (the list is a lower bound). Binding: the `.def` whose body (or the binding's wrapper it names)
+calls the function; "via X" is a helper of that binding file taking the API object (records,
+evaluation, model data, fit: bindings pyazr uses). "pyazr calls it": the Python name appears as `.name` or a
+quoted name under `pyazr/` ("yes": the binding's name).
+
+| function | header:line | calls in own .cpp | binding (Python name) | pyazr calls it |
+|---|---|---|---|---|
+| AZUREAPI::UpdateData | AZUREAPI.h:45 | 0 | update_data | yes |
+| AZUREAPI::UpdateSegmentsRWA | AZUREAPI.h:49 | 0 | update_segments_rwa | yes |
+| AZUREAPI::UpdateSegmentsAllRWA | AZUREAPI.h:51 | 0 | update_segments_all_rwa | no |
+| AZUREAPI::CalculateExternalCapture | AZUREAPI.h:53 | 0 | calculate_external_capture | yes |
+| AZUREAPI::UpdateParameters | AZUREAPI.h:55 | 2 | none | no |
+| AZUREAPI::SetParamsAllRWA | AZUREAPI.h:58 | 0 | set_params_all_rwa | yes |
+| AZUREAPI::UpdateNorms | AZUREAPI.h:60 | 0 | norms | no |
+| AZUREAPI::SetData | AZUREAPI.h:62 | 0 | none | no |
+| AZUREAPI::SetRadius | AZUREAPI.h:71 | 0 | none | no |
+| AZUREAPI::RadiusOverrides | AZUREAPI.h:73 | 0 | none | no |
+| AZUREAPI::Rebuild | AZUREAPI.h:75 | 0 | none | no |
+| AZUREAPI::GetNormalizationIndices | AZUREAPI.h:79 | 0 | none | no |
+| AZUREAPI::GetEnergyShiftIndices | AZUREAPI.h:81 | 0 | none | no |
+| AZUREAPI::GetParameterRecords | AZUREAPI.h:84 | 0 | via pybind_records.cpp | no |
+| AZUREAPI::GetParameterBounds | AZUREAPI.h:89 | 0 | via pybind_records.cpp | no |
+| AZUREAPI::results | AZUREAPI.h:97 | 49 | via pybind_evaluation.cpp | no |
+| AZUREAPI::params_values | AZUREAPI.h:101 | 0 | params_values | no |
+| AZUREAPI::params_values_rwa | AZUREAPI.h:103 | 0 | params_values_rwa | yes |
+| AZUREAPI::params_names | AZUREAPI.h:105 | 0 | params_names | yes |
+| AZUREAPI::params_all | AZUREAPI.h:107 | 0 | via pybind_records.cpp | no |
+| AZUREAPI::params_all_rwa | AZUREAPI.h:109 | 0 | params_all_rwa | yes |
+| AZUREAPI::params_fixed | AZUREAPI.h:111 | 0 | params_fixed | yes |
+| AZUREAPI::data_energies | AZUREAPI.h:113 | 0 | data_energies | yes |
+| AZUREAPI::data_angles | AZUREAPI.h:115 | 0 | data_angles | yes |
+| AZUREAPI::data_segments | AZUREAPI.h:117 | 0 | data_segments | yes |
+| AZUREAPI::data_segments_errors | AZUREAPI.h:119 | 0 | data_segments_errors | yes |
+| AZUREAPI::calculated_segments | AZUREAPI.h:121 | 0 | calculated_segments | yes |
+| AZUREAPI::calculated_segments_e1 | AZUREAPI.h:123 | 0 | calculated_segments_e1 | no |
+| AZUREAPI::calculated_segments_e2 | AZUREAPI.h:125 | 0 | calculated_segments_e2 | no |
+| AZUREAPI::calculated_energies | AZUREAPI.h:127 | 0 | calculated_energies | yes |
+| AZUREAPI::calculated_angles | AZUREAPI.h:129 | 0 | calculated_angles | yes |
+| AZUREAPI::calculated_angular_dists | AZUREAPI.h:132 | 0 | calculated_angular_dists | yes |
+| AZUREAPI::data_excitation_energies | AZUREAPI.h:134 | 0 | data_excitation_energies | yes |
+| AZUREAPI::calculated_excitation_energies | AZUREAPI.h:136 | 0 | calculated_excitation_energies | yes |
+| AZUREAPI::norms_errors | AZUREAPI.h:140 | 0 | none | no |
+| AZUREAPI::data_conv | AZUREAPI.h:142 | 0 | data_conv | yes |
+| AZUREAPI::calculated_conv | AZUREAPI.h:144 | 0 | calculated_conv | yes |
+| AZUREAPI::TransformAllRWAParameters | AZUREAPI.h:146 | 0 | transform_all_rwa | yes |
+| AZUREAPI::CalculateChi2RWA | AZUREAPI.h:149 | 3 | calculate_chi2_rwa | yes |
+| AZUREAPI::CalculateChi2Physical | AZUREAPI.h:152 | 0 | calculate_chi2_physical | no |
+| AZUREAPI::CalculateScatteringLengthsRWA | AZUREAPI.h:157 | 0 | scattering_lengths_rwa | yes |
+| AZUREAPI::ModelDataRWA | AZUREAPI.h:168 | 0 | via pybind_model_data.cpp | no |
+| AZUREAPI::ParkNorms | AZUREAPI.h:171 | 0 | park_norms | yes |
+| AZUREAPI::PriorCovarianceResidualsRWA | AZUREAPI.h:177 | 0 | prior_covariance_residuals | yes |
+| AZUREAPI::PriorCovarianceNames | AZUREAPI.h:179 | 0 | prior_covariance_names | yes |
+| AZUREAPI::CalculateChi2GradRWA | AZUREAPI.h:182 | 1 | calculate_chi2_grad_rwa | no |
+| AZUREAPI::CalculateObjectiveRWA | AZUREAPI.h:185 | 2 | calculate_objective_rwa, objective_terms_rwa | both |
+| AZUREAPI::CalculateObjectiveGradRWA | AZUREAPI.h:188 | 0 | calculate_objective_grad_rwa | yes |
+| AZUREAPI::ObjectiveTermNames | AZUREAPI.h:190 | 0 | objective_term_names, objective_terms_rwa | both |
+| AZUREAPI::EvaluateObjectiveRWA | AZUREAPI.h:200 | 0 | via pybind_evaluation.cpp | no |
+| AZUREAPI::ObjectiveRowsRWA | AZUREAPI.h:202 | 0 | via pybind_evaluation.cpp | no |
+| AZUREAPI::OutsideSamplerSupport | AZUREAPI.h:206 | 2 | none | no |
+| AZUREAPI::LogProbabilityRWA | AZUREAPI.h:209 | 0 | via pybind_evaluation.cpp | no |
+| AZUREAPI::CalculateResidualsRWA | AZUREAPI.h:215 | 0 | calculate_residuals_rwa | no |
+| AZUREAPI::GetCurrentNorms | AZUREAPI.h:218 | 0 | none | no |
+| AZUREAPI::GetThmExperiments | AZUREAPI.h:221 | 0 | thm_experiments | yes |
+| AZUREAPI::GetThmVertex | AZUREAPI.h:228 | 0 | thm_vertex | yes |
+| AZUREAPI::CalculateModelGradientsRWA | AZUREAPI.h:234 | 0 | calculate_model_gradients_rwa | yes |
+| AZUREAPI::GetCoulombFunctions | AZUREAPI.h:237 | 0 | coulomb_functions | yes |
+| AZUREAPI::GetECIntegrals | AZUREAPI.h:240 | 0 | ec_integrals | yes |
+| AZUREAPI::FitWithEngine | AZUREAPI.h:259 | 0 | via pybind_fit.cpp | no |
+| AZUREAPI::GetCacheStats | AZUREAPI.h:262 | 0 | cache_stats | yes |
+| CNuc::BuildPathways | CNuc.h:125 | 1 | none | no |
+| CNuc::TransformError | CNuc.h:143 | 1 | none | no |
+
+**Verified**: build 0 warnings (`work/b-repair3`); all projects in the three bases against `tab-t69-1`
+(tag `tab-repair3-1`): Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical (no `run.log` moved: no
+reference project meets a reworded message); `OMP_NUM_THREADS=1 ctest -LE slow`: 273 of 273; `docs_build` (with
+`-n`) 55 pages; `tools/check_skills.py` exit 0; `tools/check_doc_names.py` 0 names; the slow tests above. Each
+item's test shown failing on the old state (items 1, 2, 5, 6, 9, 10 with `work/b-trial69` or the start commit's
+pyazr; 3 with the three old sources compiled into the test; 5 with the old row compiled; 7 with an injected
+reference).
+
+**Open**:
+
+- `save_fit(path, relative_to=D)` into another directory writes T2's snapshot, but as a file it opens only from D's
+  layout: its `priorCovariance` and data paths are relative to D while the engine reads a file's paths from the
+  file's own directory (by design for the web page's text; not changed).
+- The THM refusals that depend on the data at one energy (listed above) still say only what is wrong there.
+- The functions of the table above: for the PI or the next branch (AZUREAPI's `SetData`, `SetRadius`,
+  `RadiusOverrides`, `Rebuild`, `GetNormalizationIndices`, `GetEnergyShiftIndices`, `norms_errors`,
+  `GetCurrentNorms` have no caller and no binding; `CNuc::BuildPathways`, `TransformError`, AZUREAPI's
+  `UpdateParameters`, `OutsideSamplerSupport` are called only inside their own files and could be private).
+- Every commit changes `AZURE2_GIT_VERSION`, a define on every target: each build after a commit compiles the whole
+  tree (about 40 min at two jobs).
+
+## 2026-11-14 (director, 13:05) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
+
 ## 2026-11-14 (director, 13:10) — merged: one layout of the level block of the parameter vector
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 70 (a true merge of the rehearsal branch; its tree
