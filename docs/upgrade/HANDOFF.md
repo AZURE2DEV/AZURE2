@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-design`) — ENDF for the evaluators: design and spike
+
+**Done**: `docs/upgrade/endf.md` (no code in the tree): the format from ENDF-102 (2023, cited by printed page); the
+mapping of a project to MF=2/MT=151 LRF=7 (KRM=4; `use_rmc` to KRM=3) and back, quantity by quantity, with the
+engine function of each conversion; what MF=1, 3, 6, 12, 32, 33 take from the engine; which charged-particle
+evaluations of ENDF/B-VIII.1 carry LRF=7 (one file read: 3He + 4He, LRF=7 KRM=4, LRP=2; the others not checked);
+the checking codes (CHECKR, FIZCON, PSYCHE, INTER, STANEF; PREPRO) from their manuals and sources; `pyazr.endf`, two
+engine doors, the page's screens and routes; ten decisions for the PI; six stages with sizes. One ROADMAP row.
+
+**Verified how** (scripts and outputs in `work/endf/`, base build `work/b-trial71`, one thread): T1 and T2 written as
+LRF=7 and read back into the engine: Delta chi^2 -0.031 / -0.69 with 7-digit numbers, +0.17 / +4.4 with the E form,
+-1.2e-5 / +4.4e-4 with the widest form; T1 with S_p from the file's masses +710. The ENDF/B-VIII.1 3He + 4He MF=2,
+its boundary changed to the engine's, reproduces its own MF=3/MT=600 to 1.1e-6 above 7.2 MeV; read with c.m. widths,
+off by up to 143 %. Not run: any checking code (none installed; nothing installed or built), RECENT, MF=3/6/32
+writing, KRL=1.
+
+**Open**: the PI's decisions of `endf.md` section 11 (photon channels out of MF=2, number form, LRP, KRL=1, no
+program command, GNDS later, a library extract as test data, own parser, AME separation energies, MF=32 from a
+formal-basis HESSE); then stage 1.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-inputs`) — the level inputs out; a fill writes the state
 
 **A mergeable half** of the copies' step: the level inputs (`LevelInputs`) and what a fill writes beside the levels
