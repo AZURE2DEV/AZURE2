@@ -49,7 +49,7 @@ run() {
   cp -r "$HERE/data" "$d/"
   cp "$HERE/18O_p_a_thm.azr" "$d/run.azr"
   [ -z "$2" ] || printf '<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
 }
 
 # compare NAME -> prints "rms pkrms max inband N" (empty on a malformed output)
@@ -106,7 +106,7 @@ awk '$1 == "dataset" { ds = $2 } /^<\/data>/ { ds = "" }
      /^<\/targets>/ { print "beam beam_band"; print "    spread         0.017952 MeV lab" }
      { print }' "$WORK/split/run.azr" > "$WORK/split/run.azr.tmp" && mv "$WORK/split/run.azr.tmp" "$WORK/split/run.azr"
 (cd "$WORK/split" && rm -rf output && mkdir output &&
-   printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+   $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
 if [ "$(grep -c '^beam beam_' "$WORK/split/run.azr")" -eq 2 ] && [ -s "$WORK/split/output/chiSquared.out" ] &&
    same "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" &&
    same "$WORK/default/output/AZUREOut_aa=1_R=2.out" "$WORK/split/output/AZUREOut_aa=1_R=2.out"; then
@@ -144,7 +144,7 @@ awk '$1 == "dataset" { ds = $2 }
      /^<\/targets>/ { print "target tgt_thick"; print "    kind           layer"; print "    active         18O"
                       print "    areal_density  1e+21 atoms/cm2 fixed"; print "    stopping       formula \"a0/sqrt(x)\" a0=1e-14 MeV*cm2/atom" }
      { print }' "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
-(cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log)
+(cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log)
 if grep -q "E_FIELD_NOT_APPLICABLE: dataset 'lc723_thm_points', field 'target' does not belong here: .* only when thm is not given" "$d/log" &&
    [ ! -f "$d/output/chiSquared.out" ]; then
   echo "  ok    a target on a THM data set refused"
@@ -173,7 +173,7 @@ for v in idle idle_undefined plain; do
        ds == "lc723_thm_points" && $1 == "thm" { print "    active         no"; if (V != "plain") { print "    thm            A"; next } }
        { print }' V="$v" "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
   [ "$v" != idle ] || printf '<thm>\nexperiment[A] background=linear\n</thm>\n' >> "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
 done
 if grep -q "WARNING: <thm> experiment\[A\] has no data set in use; ignored." "$WORK/idle/log" &&
    [ -s "$WORK/plain/output/chiSquared.out" ] &&

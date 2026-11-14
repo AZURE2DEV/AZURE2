@@ -58,7 +58,7 @@ model() {
   awk -v old="$SEG3" -v new="$2" '{ sub(/\r$/, "") } index($0, old) == 1 { print new; next } { print }' "$OLD13" > "$WORK/$1/old.azr"
   convert "$1"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 900 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$BASE/expected/chiSquared.out")"
 
@@ -78,7 +78,7 @@ tmodel() {  # NAME TEST-LINE
   awk -v line="$2" '{ sub(/\r$/, "") } /^<segmentsTest>$/ { print; print line; skip = 1; next } /^<\/segmentsTest>$/ { skip = 0 } !skip { print }' "$OLDNE" > "$WORK/$1/old.azr"
   convert "$1"
 }
-trun() { (cd "$WORK/$1" && printf '3\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+trun() { (cd "$WORK/$1" && run_limited 900 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1); }
 tmodel tbare "1 2 2 0.5 1.0 0.1 0 0 0 0"
 tmodel tplain "1 2 2 0.5 1.0 0.1 0 0 0 0 sample 1"
 tmodel tkeys "1 2 2 0.5 1.0 0.1 0 0 0 0 sqrtshift 0 0 0 shiftgroup G sample 1"

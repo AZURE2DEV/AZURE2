@@ -114,7 +114,7 @@ confirm `Reading User Parameter File...` in the log (`Creating New param.par Fil
 ignored).
 
 ```bash
-printf '2\nn\nparam.sav\n\n7\n' | "$AZURE2_BINARY" --no-gui --no-readline --use-brune --use-gradient model.azr
+"$AZURE2_BINARY" fit --parameter-file=param.sav --no-gui --use-brune --use-gradient model.azr
 ```
 
 **The same fitters from Python.** `s.fit_with_engine(method)` runs the program's fitter on a session (methods:

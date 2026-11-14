@@ -62,9 +62,7 @@ mk() {
     { print }' "$HERE/shift_groups.azr" > "$dir/t.azr"
 }
 run() {  # NAME MODE EXTRA_FLAGS
-  local input
-  if [ "$2" = 1 ]; then input='1\n\n\n7\n'; else input='2\n\n\n\n7\n'; fi
-  (cd "$WORK/$1" && printf "$input" | "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$1" && "$AZURE2_BIN" "$2" $3 --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$WORK/$1/output/chiSquared.out" ]; then
     bad "$1: no chiSquared.out"; tail -15 "$WORK/$1/run.log"; return 1
   fi
@@ -77,7 +75,7 @@ mk group 0 "$(printf 'energy_scale G\n    offset         0.004 MeV fixed\n\n'
 mk direct 0 "$(ds xs_40 xs_40.dat 40 'shift          offset 0.004 MeV fixed'
                ds xs_90 xs_90.dat 90 'shift          offset 0.004 MeV fixed')"
 mk plain 0 "$(ds xs_40 xs_40.dat 40; ds xs_90 xs_90.dat 90)"
-if run group 1 "" && run direct 1 "" && run plain 1 ""; then
+if run group calculate "" && run direct calculate "" && run plain calculate ""; then
   g1="$(seg "$WORK/group" 1)"; g2="$(seg "$WORK/group" 2)"; d1="$(seg "$WORK/direct" 1)"; d2="$(seg "$WORK/direct" 2)"; p2="$(seg "$WORK/plain" 2)"
   if relclose "$g1" "$d1" 1e-10; then ok "first data set has the record's shift (chi2 $g1 = $d1)"; else bad "first: grouped $g1 != direct $d1"; fi
   if relclose "$g2" "$d2" 1e-10; then ok "second data set has the record's shift (chi2 $g2 = $d2)"; else bad "second: grouped $g2 != direct $d2"; fi
@@ -93,7 +91,7 @@ FIT6="$(printf 'energy_scale F\n    offset         0 MeV fit prior 0 1\n\n'
         ds xs_90_off6 xs_90_off6.dat 90 'shift          F')"
 fit_common() {  # NAME EXTRA_FLAGS
   mk "$1" 1 "$FIT6"
-  run "$1" 2 "$2" || return
+  run "$1" fit "$2" || return
   local a1 a2 t dir="$WORK/$1"
   a1="$(par "$dir" F.offset)"; a2="$(par "$dir" 'F.offset[xs_90_off6]')"; t="$(total "$dir")"
   if absclose "$a1" -0.006 1e-5; then ok "$1: shared shift a = $a1 (truth -0.006)"; else bad "$1: shared shift a = $a1, expected -0.006"; fi
@@ -108,7 +106,7 @@ fit_common fit_analytic "--use-gradient"
 mk compromise 1 "$(printf 'energy_scale F\n    offset         0 MeV fit prior 0 1\n\n'
                    ds xs_40_off6 xs_40_off6.dat 40 'shift          F'
                    ds xs_90_off2 xs_90_off2.dat 90 'shift          F')"
-if run compromise 2 "--use-gradient"; then
+if run compromise fit "--use-gradient"; then
   a1="$(par "$WORK/compromise" F.offset)"; a2="$(par "$WORK/compromise" 'F.offset[xs_90_off2]')"
   if awk -v a="$a1" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a > -0.0059 && a < -0.0021) }' && relclose "$a2" "$a1" 1e-12; then
     ok "one shift for both, between the two truths (a = $a1; truths -0.006 / -0.002)"

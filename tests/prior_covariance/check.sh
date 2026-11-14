@@ -186,8 +186,8 @@ if [ -s "$WORK/c_none/output/param.par" ]; then
   setpar "$WORK/c_none/output/param.par" "$WORK/c_start.par" s1.norm=1 width_2_1=0.75 s1.shift.offset=0.002
   for d in c_prior c_none; do
     cp "$WORK/c_start.par" "$WORK/$d/start.par"
-    (cd "$WORK/$d" && printf '2\n\nstart.par\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-       run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+    (cd "$WORK/$d" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+       run_limited 600 "$AZURE2_BIN" fit --parameter-file=start.par --use-gradient --no-gui t.azr > run.log 2>&1)
     awk '{ sub(/\r$/, "") }
          /^\[grad-check\] idx / { a = f = j = ""
            for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }

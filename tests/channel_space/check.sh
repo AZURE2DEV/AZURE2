@@ -47,7 +47,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME MODE "FLAGS" [VAR=VALUE ...] -> a fresh copy of the project in $WORK/NAME, run there
 run() {
-  local name="$1" mode="$2" flags="$3"
+  local name="$1" command="$2" flags="$3"
   shift 3
   local dir="$WORK/$name"
   rm -rf "$dir"
@@ -56,7 +56,7 @@ run() {
   [ -n "${EXTRA_DATA:-}" ] && cp "$EXTRA_DATA" "$dir/data/"
   cp "${MODEL:-$HERE/channel_space.azr}" "$dir/t.azr"
   (cd "$dir" && for v in "$@"; do export "$v"; done &&
-   printf "$mode\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 
 # maxdiff A B -> largest |a - b| over the numeric fields of two files, relative to
@@ -87,8 +87,8 @@ profile_count() {  # NAME "counter label" -> the count AZURE_PROFILE reported la
 # ---- (a), (b) outputs, channel route against level route ---------------------------------------
 for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   tag="${mode%%:*}"; flags="${mode#*:}"
-  run "c_$tag" 1 "$flags" AZURE_PROFILE=1 AZURE_CHANNEL_VERIFY=1
-  run "l_$tag" 1 "$flags" AZURE_LEVEL_SPACE=1
+  run "c_$tag" calculate "$flags" AZURE_PROFILE=1 AZURE_CHANNEL_VERIFY=1
+  run "l_$tag" calculate "$flags" AZURE_LEVEL_SPACE=1
   n="$(ls "$WORK/c_$tag/output" | wc -l | tr -d ' ')"
   if [ "$n" -lt 4 ] || [ ! -s "$WORK/c_$tag/output/chiSquared.out" ]; then
     bad "$tag: calculation wrote no output ($n files)"; tail -5 "$WORK/c_$tag/run.log"; continue
@@ -132,7 +132,7 @@ rows() {
 gradcheck() {  # NAME "FLAGS" [VAR=VALUE ...]
   local name="$1" flags="$2"
   shift 2
-  run "$name" 2 "--use-gradient $flags" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+  run "$name" fit "--use-gradient $flags" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
     AZURE_GRAD_CHECK_H=1e-7 "$@"
   rows "$name" > "$WORK/$name.rows"
 }

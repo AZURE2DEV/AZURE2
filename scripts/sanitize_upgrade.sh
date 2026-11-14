@@ -121,7 +121,7 @@ if [ "$KIND" = thread ]; then
   san_env archer-selftest
   mkdir -p "$WORK/selftest/output" "$WORK/selftest/checks"
   cp -R "$REPO_ROOT/tests/upgrade/T3/T3.azr" "$REPO_ROOT/tests/upgrade/T3/data" "$WORK/selftest/"
-  (cd "$WORK/selftest" && printf '1\n\n\n7\n' | ARCHER_OPTIONS=verbose=1 "$BIN" --no-gui --no-readline \
+  (cd "$WORK/selftest" && ARCHER_OPTIONS=verbose=1 "$BIN" calculate --no-gui \
      --no-coulomb-table T3.azr > run.log 2>&1)
   grep -q "Archer detected OpenMP application" "$WORK/selftest/run.log" \
     || { tail -20 "$WORK/selftest/run.log" >&2; die "libarcher did not attach (OMP_TOOL_LIBRARIES=$ARCHER)"; }

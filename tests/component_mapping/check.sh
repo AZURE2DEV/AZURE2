@@ -92,26 +92,25 @@ model parts p.azr
   { bad "parts model not built"; exit 1; }
 
 run() {
-  local name="$1" model="$2" mode="$3"; shift 3
-  local dir="$WORK/$name" input
+  local name="$1" model="$2" command="$3"; shift 3
+  local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$REF/data" "$dir/data"
   cp "$WORK/$model" "$dir/t.azr"
-  if [ "$mode" = 3 ]; then input='3\n\n\n7\n'; else input='1\n\n\n7\n'; fi
   (cd "$dir" && for kv in "$@" AZURE_PROFILE=1; do export "$kv"; done &&
-     printf "$input" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+     run_limited 600 "$AZURE2_BIN" "$command" --no-gui t.azr > run.log 2>&1)
   if [ -z "$(ls "$dir/output" | grep -i 'AZUREOut')" ]; then bad "$name: no output written"; tail -15 "$dir/run.log"; return 1; fi
 }
 fills() { awk '/^\[profile\]   matrix fill/ { print $5 }' "$1/run.log"; }
 
-run comp  t.azr 1 X=0 || exit 1
-run parts p.azr 1 X=0 || exit 1
+run comp  t.azr calculate X=0 || exit 1
+run parts p.azr calculate X=0 || exit 1
 fc="$(fills "$WORK/comp")"; fp="$(fills "$WORK/parts")"
 if [ -n "$fc" ] && [ -n "$fp" ] && [ "$fc" -eq "$fp" ]; then ok "(b) data: level-matrix solutions $fc, as many as without the components"
 else bad "(b) data: level-matrix solutions '$fc' with the components, '$fp' without (must be equal)"; fi
 
-run xcomp  t.azr 3 X=0 || exit 1
-run xparts p.azr 3 X=0 || exit 1
+run xcomp  t.azr extrapolate X=0 || exit 1
+run xparts p.azr extrapolate X=0 || exit 1
 fc="$(fills "$WORK/xcomp")"; fp="$(fills "$WORK/xparts")"
 if [ -n "$fc" ] && [ -n "$fp" ] && [ "$fc" -eq "$fp" ]; then ok "(b) extrapolation: level-matrix solutions $fc, as many as its two terms alone"
 else bad "(b) extrapolation: level-matrix solutions '$fc' with the components, '$fp' without (must be equal)"; fi
@@ -134,7 +133,7 @@ fi
 # (d) the SUM elastic + 1000 x capture alone: no other extrapolation has the capture pair as its leading term
 awk '/^extrapolation cap1001$/ { skip = 1 } /^<\/extrapolations>$/ { skip = 0 } !skip' "$WORK/t.azr" > "$WORK/alone.azr"
 if [ "$(grep -c '^extrapolation ' "$WORK/alone.azr")" != 1 ]; then bad "(d) model not built"
-elif run xalone alone.azr 3 X=0; then
+elif run xalone alone.azr extrapolate X=0; then
   sum="$WORK/xalone/output/AZUREOut_aa=1_R=1.extrap"; el="$WORK/xparts/output/AZUREOut_aa=1_R=1.extrap"
   res="$(awk '{ sub(/\r$/, "") } NF < 4 { next }
               FILENAME == ARGV[1] { s[++n] = $4; e[n] = $1; next }
@@ -152,9 +151,9 @@ fi
 
 # (c) the gradient check of tests/13N on the composite model
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$REF/data" "$WORK/fit/data"; cp "$WORK/g.azr" "$WORK/fit/t.azr"
-run gcalc g.azr 1 X=0 || exit 1
-(cd "$WORK/fit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+run gcalc g.azr calculate X=0 || exit 1
+(cd "$WORK/fit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
 chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/fit/run.log")"
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/gcalc/output/chiSquared.out")"
 if [ -n "$chi" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then

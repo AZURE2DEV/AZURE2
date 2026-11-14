@@ -40,7 +40,7 @@ for m in neutron_pair_first photon_pair_first; do
   mkdir -p "$WORK/$m/output" "$WORK/$m/checks"
   cp -r "$HERE/models/data" "$WORK/$m/"
   cp "$HERE/models/$m.azr" "$WORK/$m/"
-  (cd "$WORK/$m" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$m.azr" > run.log 2>&1)
+  (cd "$WORK/$m" && $RUN "$AZURE2_BIN" calculate --no-gui "$m.azr" > run.log 2>&1)
   echo "$?" > "$WORK/$m/status"
 done
 A="$WORK/neutron_pair_first"

@@ -102,8 +102,8 @@ fi
 sed -e 's|^    norm           1 fit prior 1 3%$|&\n    beam           B\n    quadrature     points 60|' \
     -e 's|^<targets>$|&\nbeam B\n    spread         0.05 MeV lab|' "$HERE/models/aC_story.azr" > "$WORK/grad.azr"
 setup grad "$WORK/grad.azr"
-(cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 300 "$AZURE2_BIN" --use-gradient --no-gui \
-   --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit run_limited 300 "$AZURE2_BIN" fit --use-gradient --no-gui \
+   m.azr > run.log 2>&1)
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"

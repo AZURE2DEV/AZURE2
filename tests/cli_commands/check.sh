@@ -120,8 +120,8 @@ cp -R "$TESTS/upgrade/T1/T1.azr" "$TESTS/upgrade/T1/data" "$WORK/refuse/"
 # commands), a fix line, and no calculation
 refused() {
   local label="$1" want="$2" out st; shift 2
-  out="$(cd "$WORK/refuse" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" "$@" 2>&1 | tr -d '\r')"
-  st=$(cd "$WORK/refuse" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" "$@" > /dev/null 2>&1; echo $?)
+  out="$(cd "$WORK/refuse" && $RUN "$AZURE2_BIN" calculate "$@" 2>&1 | tr -d '\r')"
+  st=$(cd "$WORK/refuse" && $RUN "$AZURE2_BIN" calculate "$@" > /dev/null 2>&1; echo $?)
   if [ "$st" = 2 ] && grep -qF -- "ERROR: " <<< "$out" && grep -qF -- "$want" <<< "$out" &&
      grep -qE -- "( takes: |The commands)" <<< "$out" && [ "$(grep -c '^       ' <<< "$out")" -ge 2 ] &&
      ! grep -q "Calling AZURE2" <<< "$out"; then

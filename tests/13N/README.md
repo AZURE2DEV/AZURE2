@@ -118,7 +118,7 @@ s = re.sub(r'(<segmentsData>\n)(.*?)(</segmentsData>)',
 pathlib.Path("_ay_only.azr").write_text(s)
 ```
 
-Then `printf '2\n\nn\n\n' | AZURE2 --no-gui --no-readline _ay_only.azr`.
+Then `AZURE2 fit --no-gui _ay_only.azr`.
 
 This finds both resonances:
 

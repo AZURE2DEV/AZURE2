@@ -272,9 +272,9 @@ commands replace this.  The prompts come in this order:
 
 .. code-block:: bash
 
-   printf '1\nfit.sav\n\n7\n'   | AZURE2 --no-gui --no-readline project.azr   # calculate
-   printf '2\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # fit from fit.sav
-   printf '3\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # calculate without data
+   AZURE2 calculate --parameter-file=fit.sav --no-gui project.azr   # calculate
+   AZURE2 fit --parameter-file=fit.sav --no-gui project.azr   # fit from fit.sav
+   AZURE2 extrapolate --parameter-file=fit.sav --no-gui project.azr   # calculate without data
 
 A y/n question takes y, yes, 1, t, true or n, no, 0, f, false (any case); a
 blank line is "no".  Any other answer stops a piped run with an error and exit

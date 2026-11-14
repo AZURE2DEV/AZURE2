@@ -86,8 +86,8 @@ fi
 edited "$HERE/models/data.azr" "$WORK/grad.azr" sed -E 's/^(2\.5  -1  11\.05  1  1  [0-9]  [0-9]  [0-9]  3  1  )1 /\10 /' ||
   bad "edit: free widths"
 setup grad "$WORK/grad.azr"
-(cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" --use-gradient --no-gui \
-   --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" fit --use-gradient --no-gui \
+   m.azr > run.log 2>&1)
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"

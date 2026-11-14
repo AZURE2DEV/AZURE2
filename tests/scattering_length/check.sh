@@ -121,7 +121,7 @@ refuse() {  # refuse LABEL OLD NEW EXPECTED-TEXT TAG: the datum text OLD replace
   ln -s "$HERE/data" "$dir/data"
   "$PYTHON" -c 'import sys; t = open(sys.argv[1]).read(); o, n = sys.argv[2], sys.argv[3]; assert t.count(o) == 1, o
 sys.stdout.write(t.replace(o, n))' "$HERE/be7p_fit.azr" "$(printf "$2")" "$(printf "$3")" > "$dir/m.azr"
-  (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 120 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
   if grep -q "$4" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1"
   else bad "not refused: $1"; grep -i error "$dir/run.log" | sed -n '1,3p'; fi
 }

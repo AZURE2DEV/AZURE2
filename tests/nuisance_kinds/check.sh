@@ -41,7 +41,7 @@ run() {
   mkdir -p "$d/output" "$d/checks"
   cp -r "$2/data" "$d/"
   { tr -d '\r' < "$2/$3"; [ -z "$4" ] || printf '%b' "$4"; } > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > run.log 2>&1; echo $? > status)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > run.log 2>&1; echo $? > status)
   grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$d/run.log" | awk '{print $3}'
 }
 

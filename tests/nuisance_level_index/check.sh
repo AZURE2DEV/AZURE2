@@ -64,7 +64,7 @@ make_model() {
 # log_total <name> [flags...] : mode 1, prints the run log's total (data chi^2 + penalties)
 log_total() {
   local name="$1"; shift
-  (cd "$WORK/$name" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" "$@" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$name" && run_limited 600 "$AZURE2_BIN" calculate "$@" --no-gui t.azr > run.log 2>&1)
   awk '{ sub(/\r$/, "") } /^Total Chi-Squared:/ { v = $3 } END { print v }' "$WORK/$name/run.log"
 }
 near() { awk -v a="$1" -v b="$2" -v tol="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d <= tol) }'; }
@@ -107,8 +107,8 @@ else
   bad "(e) prior on the gamma width width_3_2 at its own value: total '$te', expected $want"; tail -3 "$WORK/e/run.log"
 fi
 
-(cd "$WORK/a" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > fit.log 2>&1)
+(cd "$WORK/a" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > fit.log 2>&1)
 status=$?
 # With a nuisance prior the analytic Gauss-Newton seed is off and MIGRAD takes numerical steps before its first
 # gradient call, so the check runs at some later point of the fit, not at the start: only the agreement is tested.

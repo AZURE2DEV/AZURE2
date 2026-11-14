@@ -54,7 +54,7 @@ make_variant() {
 # run NAME [INTEGRALS-FILE]: mode 1; the second prompt is the parameter file (blank), the third the integrals file
 run() {
   local dir="$WORK/$1" ec="${2:-}"
-  (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline 13N.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" calculate ${ec:+--capture-amplitudes="$ec"} --no-gui 13N.azr > run.log 2>&1)
 }
 chi2() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 rel() { awk -v a="$1" -v b="$2" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; printf "%.3e", d }'; }

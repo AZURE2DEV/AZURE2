@@ -13,7 +13,7 @@ the ``.azr`` from the command line or with ``pyazr``. The THM options are descri
 .. code-block:: bash
 
    cd examples/<name>
-   printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline <name>.azr
+   AZURE2 calculate --no-gui <name>.azr
 
 (menu 1, calculate with data; blank answers take the parameters and the
 external-capture integrals from the project; 7 exits). The number given is

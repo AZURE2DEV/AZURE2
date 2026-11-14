@@ -161,12 +161,12 @@ for b in "" --use-park; do
   project "grad$b" "$WORK/record_free.azr"
   run "grad$b" 1 $b  # param.par: the index of the record's first number
   i="$(awk '$1 == "level5.total_width" { print NR - 2; exit }' "$WORK/grad$b/output/param.par")"
-  (cd "$WORK/grad$b" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_IDX="$((i - 2))-$((i + 7))" \
-     run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient $b p.azr > grad.log 2>&1)
+  (cd "$WORK/grad$b" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_IDX="$((i - 2))-$((i + 7))" \
+     run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient $b p.azr > grad.log 2>&1)
   # the energy with the step 1e-8 (|x| + 1): the default 1e-6 is 8.5 eV in E_x, a truncation error of 1.5e-3 across
   # the 1 keV resonance (the same with partial widths)
-  (cd "$WORK/grad$b" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_H=1e-8 AZURE_GRAD_CHECK_IDX="$((i - 3))" \
-     run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient $b p.azr > gradE.log 2>&1)
+  (cd "$WORK/grad$b" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_H=1e-8 AZURE_GRAD_CHECK_IDX="$((i - 3))" \
+     run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient $b p.azr > gradE.log 2>&1)
   rows="$(grep -c '\[grad-check\] idx' "$WORK/grad$b/grad.log")"
   worst="$(awk '/\[grad-check\] idx/ && $4 != "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/grad$b/grad.log")"
   wE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { m = 0; for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/grad$b/gradE.log")"
@@ -201,7 +201,7 @@ echo "-- (g) a mixing ratio fitted from 0 to an angular distribution (models/sig
 for start in 0 0.3; do
   edited "$WORK/sad.azr" "$WORK/sad$start.azr" sed "s/^\(    mixing       g+15O\[5.183\]\) 0.5 fixed$/\1 $start fit/" || bad "mixing start $start"
   project "sad$start" "$WORK/sad$start.azr"
-  (cd "$WORK/sad$start" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+  (cd "$WORK/sad$start" && AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient p.azr > grad.log 2>&1)
   line="$(grep '\[grad-check\] idx' "$WORK/sad$start/grad.log" | sed -n 1p)"
   rel="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
   an="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "analytic") print $(k + 1) }')"
@@ -311,10 +311,10 @@ edited "$WORK/record_ec_free3.azr" "$WORK/record_ec_free3.azr" sed -e '/^<\/gamm
 grep -qx 2 <<< "$(grep -c '^gamma_decay level[56]$' "$WORK/record_ec_free3.azr")" || bad "the second record: not two records in one section"
 for pt in "" 2 3; do
   project "gec$pt" "$WORK/record_ec_free$pt.azr"
-  (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+  (cd "$WORK/gec$pt" && AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient p.azr > grad.log 2>&1)
   iE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { print $3; exit }' "$WORK/gec$pt/grad.log")"
-  (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_H=1e-8 AZURE_GRAD_CHECK_IDX="${iE:-0}" \
-     run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > gradE.log 2>&1)
+  (cd "$WORK/gec$pt" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_H=1e-8 AZURE_GRAD_CHECK_IDX="${iE:-0}" \
+     run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient p.azr > gradE.log 2>&1)
   rows="$(grep -c '\[grad-check\] idx' "$WORK/gec$pt/grad.log")"
   worst="$(awk '/\[grad-check\] idx/ && $4 != "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/gec$pt/grad.log")"
   wE="$(awk '/\[grad-check\] idx/ && $4 == "energy" { for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }' "$WORK/gec$pt/gradE.log")"
@@ -401,8 +401,8 @@ for v in partial record; do
   done
   cp "$WORK/nr_$v.azr" "$WORK/nr_rate_$v/p.azr"
   cp "$WORK/nr_${v}_fit.azr" "$WORK/nr_fit_$v/p.azr"
-  (cd "$WORK/nr_rate_$v" && printf '5\n\n1\n-1\nyes\ntemperatures.dat\n' | AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
-  (cd "$WORK/nr_fit_$v" && printf '2\n\n\n' | AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+  (cd "$WORK/nr_rate_$v" && AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" rate --rate-entrance=1 --rate-exit=-1 --temperature-file=temperatures.dat --no-gui p.azr > run.log 2>&1)
+  (cd "$WORK/nr_fit_$v" && AZR_DEBUG_GRID=1 run_limited 900 "$AZURE2_BIN" fit --no-gui p.azr > run.log 2>&1)
 done
 for k in rate fit; do
   gp="$(grep 'level E=7.556700: input widths' "$WORK/nr_${k}_partial/run.log" | sort -u)"
@@ -437,7 +437,7 @@ check "a limit (0.03, 0.035) eV on Gamma_gamma: the fit ends at it" "$(sav limq 
 # the vector must reach the engine.  Physical-parameter MCMC with the record's numbers free: the likelihood moves with
 # them, param.mcmc carries the best walker's numbers, and its -2 ln L is the chi^2 of a calculation at them.
 project mcmc "$M/record.azr"
-(cd "$WORK/mcmc" && printf '6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n' | OMP_NUM_THREADS=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+(cd "$WORK/mcmc" && OMP_NUM_THREADS=1 run_limited 900 "$AZURE2_BIN" mcmc --walkers=4 --steps=100 --parameter-spread=0.5 --sampler-threads=1 --basis=physical --overwrite-samples --no-gui p.azr > run.log 2>&1)
 if grep -q "Parameter mode: Physical" "$WORK/mcmc/run.log" && [ -s "$WORK/mcmc/output/samples.mcmc" ]; then
   spread="$(awk -F, 'NR > 1 { if (a == "" || $4 < a) a = $4; if (b == "" || $4 > b) b = $4 } END { printf "%.6g", b - a }' "$WORK/mcmc/output/samples.mcmc")"
   awk -v s="$spread" 'BEGIN { exit !(s > 0.1) }' && ok "MCMC (observed parameters): ln L moves with the record's numbers (spread $spread)" \
@@ -447,7 +447,7 @@ if grep -q "Parameter mode: Physical" "$WORK/mcmc/run.log" && [ -s "$WORK/mcmc/o
   check "param.mcmc carries the best walker's Gamma_gamma" "$(awk '$1 == "level5.total_width" { print $2 }' "$WORK/mcmc/output/param.mcmc")" "$g0" 1e-6
   mkdir -p "$WORK/mcmc_calc/output" "$WORK/mcmc_calc/checks"; ln -s "$M/data" "$WORK/mcmc_calc/data"
   cp "$M/record.azr" "$WORK/mcmc_calc/p.azr"; cp "$WORK/mcmc/output/param.mcmc" "$WORK/mcmc_calc/best.par"
-  (cd "$WORK/mcmc_calc" && printf '1\nbest.par\n\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline p.azr > run.log 2>&1)
+  (cd "$WORK/mcmc_calc" && run_limited 900 "$AZURE2_BIN" calculate --parameter-file=best.par --no-gui p.azr > run.log 2>&1)
   check "-2 ln L of that walker is the chi^2 of a calculation at its parameters" "$(chi2 mcmc_calc)" \
     "$(awk -v l="$logL" 'BEGIN { printf "%.10g", -2 * l }')" 1e-4
 else bad "the observed-parameter MCMC did not run"; fi
@@ -462,7 +462,7 @@ edited "$WORK/partial_ec.azr" "$WORK/pec_alpha.azr" alpha || bad "the second pai
 "$PY" "$M/make_record.py" "$WORK/pec_alpha.azr" "$WORK/rec_alpha.azr" 5 5.183 fit
 edited "$WORK/rec_alpha.azr" "$WORK/rec_ef.azr" efree || bad "the free final-state energy"
 project ef "$WORK/rec_ef.azr"
-(cd "$WORK/ef" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
+(cd "$WORK/ef" && AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient p.azr > grad.log 2>&1)
 rows="$(grep -c '\[grad-check\] idx' "$WORK/ef/grad.log")"
 ef_line="$(grep '\[grad-check\] idx [0-9]* energy J3 L1 ' "$WORK/ef/grad.log")"
 wEf="$(echo "$ef_line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"

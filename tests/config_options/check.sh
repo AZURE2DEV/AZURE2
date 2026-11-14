@@ -45,7 +45,7 @@ run() {
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$T1/data" "$dir/data"
   cp "$proj" "$dir/T1.azr"
-  (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$@" T1.azr > run.log 2>&1)
+  (cd "$dir" && "$AZURE2_BIN" calculate --no-gui "$@" T1.azr > run.log 2>&1)
   rc=$?
 }
 same() { diff -r "$WORK/$1/output" "$WORK/$2/output" > /dev/null 2>&1; }

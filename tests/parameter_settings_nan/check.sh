@@ -39,7 +39,7 @@ model() {
   cp -r "$BASE/data" "$WORK/$1/"
   awk -v old="$LINE" -v tok="$2" '{ sub(/\r$/, "") } $0 == old { $(NF - 3) = tok } { print }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 900 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$BASE/expected/chiSquared.out")"
 

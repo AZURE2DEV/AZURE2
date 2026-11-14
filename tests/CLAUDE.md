@@ -69,7 +69,7 @@ case.
   (`docs/source/reference/command_line.rst`, "Commands"; `AZURE2 --help`).
   A command reads nothing from standard input, and a missing answer is
   refused (exit 2) instead of taking the next line of a script.  The piped
-  menu answers (`printf '2\nn\n\n\n' | AZURE2 --no-readline ...`) of the
+  menu answers (`AZURE2 fit ...`) of the
   older tests still work; `tests/cli_eof` and `tests/cli_commands` check the
   menu itself and that a command gives the menu's outputs.
 - Keep fixtures small: trim data files to the points the test needs. Keep

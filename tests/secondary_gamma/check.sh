@@ -36,19 +36,19 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run BIN DIR MODEL MODE [FLAGS] [ENV...] -> $WORK/DIR
 run() {
-  local bin="$1" dir="$WORK/$2" model="$3" mode="$4" flags="${5:-}"
+  local bin="$1" dir="$WORK/$2" model="$3" command="$4" flags="${5:-}"
   shift 5 2> /dev/null || shift $#
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
   cp -r "$HERE/models/data" "$dir/"
   # shellcheck disable=SC2086
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$mode\n\n\n7\n" | run_limited 300 "$bin" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 300 "$bin" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 
 MODELS="spin2_plus spin2_minus spin2_zero spin2_multil mixing twolevel"
 for m in $MODELS; do
-  run "$AZURE2_BIN" "$m" "$m" 1 ""
+  run "$AZURE2_BIN" "$m" "$m" calculate ""
   ls "$WORK/$m/output/"AZUREOut_* > /dev/null 2>&1 || { bad "$m: no output"; tail -15 "$WORK/$m/run.log"; }
 done
 
@@ -60,7 +60,7 @@ else
 fi
 
 # ---- (d) gradients ---------------------------------------------------------------------------------------------
-run "$AZURE2_BIN" grad grad 2 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
+run "$AZURE2_BIN" grad grad fit "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
 awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
        print idx, a, f, j }' "$WORK/grad/run.log" | sort -n > "$WORK/grad.rows"
@@ -82,7 +82,7 @@ fi
 # ---- (e) non-UPOS segments byte-identical to a reference build ----------------------------------------------
 if [ -n "$REF_BIN" ]; then
   for m in spin2_plus spin2_multil mixing; do
-    run "$REF_BIN" "ref_$m" "$m" 1 ""
+    run "$REF_BIN" "ref_$m" "$m" calculate ""
     f="$(basename "$(ls "$WORK/$m/output/"AZUREOut_* | sed -n 1p)")"
     if [ "$(tail -n +14 "$WORK/$m/output/$f" | tr -d '\r')" = "$(tail -n +14 "$WORK/ref_$m/output/$f" | tr -d '\r')" ]; then  # no cmp on the Windows runners
       ok "(e) $m: angle-integrated and particle angular distribution byte-identical to the reference build"

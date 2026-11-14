@@ -33,7 +33,7 @@ run() {
   cp "$HERE/../sum_lab_frame/models/sum_data.azr" "$dir/"
   cp "$HERE/../sum_lab_frame/models/data/"* "$dir/data/"
   for e in 5.95 6.05 6.15 6.25 6.35; do echo "$e 90 1.0 0.01"; done > "$dir/data/sum.dat"
-  (cd "$dir" && printf '1\n\n\n7\n' | env "$@" "$AZURE2_BIN" --no-gui --no-readline sum_data.azr > run.log 2>&1)
+  (cd "$dir" && env "$@" "$AZURE2_BIN" calculate --no-gui sum_data.azr > run.log 2>&1)
 }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
 

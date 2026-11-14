@@ -42,7 +42,7 @@ extrapolation p7Li
     unit           b
     energies       range 1.0 2.0 MeV lab step 0.25"
 awk '/^<extrapolations>$/ { print; print ENVIRON["RECS"]; skip = 1; next } /^<\/extrapolations>$/ { skip = 0 } !skip { print }' "$LI/7Li_p_ay.azr" > "$WORK/m.azr"
-(cd "$WORK" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+(cd "$WORK" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui m.azr > run.log 2>&1)
 # column 1 = E_cm, column 2 = E_x: check E_x - E_cm against S + E*
 colcheck() {  # FILE EXPECTED-OFFSET LABEL
   local f="$1" want="$2" label="$3"

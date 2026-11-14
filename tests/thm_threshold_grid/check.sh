@@ -43,7 +43,7 @@ grid() {
   awk -v f="$4" 'BEGIN { for (i = 0; i <= 300; i++) printf "%.10e 0.0 1.0 0.1\n", i * 0.001 * f }' \
     > "$d/data/grid.dat"
   sed "s#$3#data/grid.dat#" "$HERE/../$2/$2.azr" > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   local out
   out="$(ls "$d"/output/AZUREOut_*.out 2>/dev/null | sed -n 1p)"
   if [ -z "$out" ]; then

@@ -54,8 +54,7 @@ refused() {
   # the validator's and Build's refusals by --describe (data files relative to the working directory); the set-up's by
   # a calculation (menu 1) of a copy of FILE beside the data (a run reads them relative to the project file)
   cp "$WORK/$4" "$WORK/calc/$4"
-  msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; printf '1\n\n\n7\n' |
-         $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline "$4" 2>&1)"
+  msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; $(guard_command 120) "$AZURE2_BIN" calculate --no-gui "$4" 2>&1)"
   if grep -q "$2" <<< "$msg" && grep -q "$3" <<< "$msg"; then ok "$1 is refused ($2)"
   else bad "$1: no $2 ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 }

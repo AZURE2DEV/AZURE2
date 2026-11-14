@@ -32,7 +32,7 @@ mkdir -p "$WORK/base/output" "$WORK/base/checks"
 cp -R "$HERE/../$PROJ/data" "$WORK/base/data"
 cp "$HERE/../$PROJ/$PROJ.azr" "$WORK/base/"
 # A parameter file to point at: the param.par a mode-1 run writes.
-(cd "$WORK/base" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$PROJ.azr" > mode1.log 2>&1)
+(cd "$WORK/base" && "$AZURE2_BIN" calculate --no-gui "$PROJ.azr" > mode1.log 2>&1)
 [ -s "$WORK/base/output/param.par" ] && cp "$WORK/base/output/param.par" "$WORK/fit.par" \
   || bad "mode 1 wrote no param.par (see the log)"
 

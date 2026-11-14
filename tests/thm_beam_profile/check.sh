@@ -41,7 +41,7 @@ project() {
        { if (w != "") printf "%s %s %s %s %.9f %.9f\n", $1, $2, $3, $4, $1 - 1e-6, $1 + 1e-6
          else print }' "$SRC/data/thm_lc2008_hoes_bkgsub.dat" > "$d/data/thm_lc2008_hoes_bkgsub.dat"
   edited "$SRC/o18_lacognata2008.azr" "$d/run.azr" awk "$2" || { echo "  FAIL  $1: the edit of the records hit nothing"; exit 1; }
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   [ -s "$d/output/$OUT" ] || { echo "  FAIL  $1: no $OUT"; tail -5 "$d/log" | sed 's/^/        /'; exit 1; }
 }
 

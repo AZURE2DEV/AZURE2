@@ -59,7 +59,7 @@ run() {
   cp -r "$SRC/data" "$d/"
   if [ -n "${3:-}" ]; then awk "$3" "$SRC/18O_p_a_thm.azr" > "$d/run.azr"; else cp "$SRC/18O_p_a_thm.azr" "$d/run.azr"; fi
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
 # Byte-identical files, without cmp (not in every MSYS2 image); \r stripped.
@@ -131,7 +131,7 @@ for s in 1 2; do
 done
 run bkg "experiment[A] background=linear"
 cp "$WORK/syn/"*.dat "$WORK/bkg/data/"
-(cd "$WORK/bkg" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+(cd "$WORK/bkg" && rm -rf output && mkdir output && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
 X="$WORK/bkg/output/thm_experiments.out"
 en="$(field "$X" norm)"; b0="$(field "$X" b0)"; b1="$(field "$X" b1)"; echi="$(field "$X" chi2)"
 near "$en" "$(awk -v s="$S_TRUE" 'BEGIN { printf "%.17e", 1 / s }')" 1e-8 && ok "n = 1/s recovered: $en" || bad "n $en, want 1/$S_TRUE"
@@ -145,7 +145,7 @@ awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-8) }' && ok "
 # The background is not a shift of the data: without it the same data do not fit.
 run nobkg "experiment[A]"
 cp "$WORK/syn/"*.dat "$WORK/nobkg/data/"
-(cd "$WORK/nobkg" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+(cd "$WORK/nobkg" && rm -rf output && mkdir output && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
 awk -v c="$(field "$WORK/nobkg/output/thm_experiments.out" chi2)" 'BEGIN { exit !(c > 1) }' \
   && ok "without the background the same data give chi2 > 1" || bad "no-background chi2 is small"
 
@@ -162,7 +162,7 @@ bkgform() {  # bkgform NAME FORM A0 A1 A2: synthetic data, fit, and the recovere
   done
   run "$1" "experiment[A] background=$2"
   cp "$WORK/syn_$1/"*.dat "$WORK/$1/data/"
-  (cd "$WORK/$1" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$WORK/$1" && rm -rf output && mkdir output && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   local X="$WORK/$1/output/thm_experiments.out"
   near "$(field "$X" norm)" "$(awk -v s="$S_TRUE" 'BEGIN { printf "%.17e", 1 / s }')" 1e-8 \
     && near "$(field "$X" b0)" "$(awk -v s="$S_TRUE" -v a="$3" 'BEGIN { printf "%.17e", a / s }')" 1e-8 \

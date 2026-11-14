@@ -43,7 +43,7 @@ run() {   # run MODEL: extrapolate (mode 3) in $WORK/MODEL
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$1.azr" "$dir/t.azr"
   cp -r "$HERE/models/data" "$dir/"
-  (cd "$dir" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
 }
 
 echo "q_attenuation: $AZURE2_BIN"

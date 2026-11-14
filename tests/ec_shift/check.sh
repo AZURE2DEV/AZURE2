@@ -61,7 +61,7 @@ run() {
   ln -s "$SRC/data" "$dir/data"
   ln -s "$WORK/moved_$4" "$dir/moved" 2>/dev/null
   cp "$2" "$dir/t.azr"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" calculate $3 --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$dir/output/AZUREOut_aa=1_R=2.out" ]; then
     bad "$1: no output written"; tail -15 "$dir/run.log"; return 1
   fi
@@ -122,7 +122,7 @@ fit="$WORK/fit"
 mkdir -p "$fit/output" "$fit/checks"
 ln -s "$SRC/data" "$fit/data"
 cp "$WORK/shift_0.030.azr" "$fit/t.azr"
-(cd "$fit" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$fit" && AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
 st=$?
 if [ "$st" -eq 0 ] && grep -q "\[grad-check\]" "$fit/run.log"; then ok "fit of the shifted capture segments runs (first gradient checked)"
 else bad "fit of the shifted capture segments: exit $st"; tail -5 "$fit/run.log"; fi

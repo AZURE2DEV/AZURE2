@@ -37,7 +37,7 @@ for azr in *.azr; do
   [ -f "$azr" ] || continue
   rm -rf output checks; mkdir -p output checks
   # menu 1, then the prompts of the run answered with their defaults, then 7 (exit); MODE unquoted: "" is no flag
-  printf '1\n\n\n7\n' | OMP_NUM_THREADS=1 timeout 900 $BIN --no-gui --no-readline $MODE $azr 2>&1 | head -c 2000000 > run.log
+  OMP_NUM_THREADS=1 timeout 900 $BIN calculate --no-gui $MODE $azr 2>&1 | head -c 2000000 > run.log
   # the results of a file are replaced as a whole: a folder left by an earlier use of the tag would make mv refuse
   # output/ and checks/ and keep the old files beside the new run.log
   if ! { rm -rf "$R/$azr" && mkdir -p "$R/$azr" && mv output checks run.log "$R/$azr/"; }; then

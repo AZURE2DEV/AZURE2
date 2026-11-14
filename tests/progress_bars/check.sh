@@ -56,7 +56,7 @@ PYEOF
 run() {
   local d="$WORK/$1"
   mkdir -p "$d/output" "$d/checks"; ln -s "$SRC/data" "$d/data"; cp "$WORK/$2.azr" "$d/t.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | OMP_NUM_THREADS="$3" run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" && OMP_NUM_THREADS="$3" run_limited 900 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 }
 chi2() { grep -h 'Total Chi-Squared' "$WORK/$1/run.log" | tail -1 | awk '{ print $NF }'; }
 

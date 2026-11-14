@@ -268,7 +268,7 @@ refuse() {  # refuse LABEL CODE MD [SED]: the run stops with the code in an ERRO
   ln -s "$T2/data" "$dir/data"
   sed "${4:-}" "$T2/T2_true.azr" > "$dir/m.azr"
   printf '%b' "$3" >> "$dir/m.azr"
-  (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 120 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
   if grep -q "^ERROR: m.azr:[0-9]*: wg[.A-Za-z_]*: error $2: datum 'wg'" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1 ($2)"
   else bad "not refused: $1 ($2)"; grep -i "error" "$dir/run.log" | sed -n '1,3p'; fi
 }

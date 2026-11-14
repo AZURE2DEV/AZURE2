@@ -64,7 +64,7 @@ make_model() {
     /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
     !skip { print }' "$BASE/natural_neon.azr" > "$WORK/$name/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 900 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 # yields NAME PAIR -> "E fit" rows of the data set with entrance = exit = PAIR
 yields() { awk '{ sub(/\r$/, "") } NF >= 5 { printf "%.10f %.12e\n", $1, $4 }' "$WORK/$1/output/AZUREOut_aa=$2_R=$2.out" 2> /dev/null; }
 maxrel() { paste "$1" "$2" | awk 'BEGIN { m = 0 } { if ($4 == 0) { if ($2 != 0) m = 1 } else { r = $2 / $4 - 1; if (r < 0) r = -r; if (r > m) m = r } } END { printf "%.3e", m }'; }

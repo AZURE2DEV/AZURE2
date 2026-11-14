@@ -52,7 +52,7 @@ python3 $S/rank_map.py resid.npz regions.txt fit_output/parameters.out fit.azr
 
 Check first that Σ r² of the dump equals the fit's data χ² (the script prints both; they differ only where a data
 covariance joins points, and then the ranking ignores the correlations). `parameters.out` is the program's output of
-a calculation of the fit (`printf '1\n\n\n7\n' | $AZURE2_BINARY --no-readline fit.azr`). On T3 with the 2⁻ level
+a calculation of the fit (`$AZURE2_BINARY calculate fit.azr`). On T3 with the 2⁻ level
 removed, the first region peaks at 18.962 MeV (truth 19.0006).
 
 How the ranking works:

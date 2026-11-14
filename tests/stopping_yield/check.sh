@@ -60,8 +60,7 @@ run() {
 # refused WHAT CODE TEXT NAME: --validate, or a calculation (the set-up's refusals), of $WORK/NAME/m.azr prints CODE
 refused() {
   local msg
-  msg="$(cd "$WORK/$4" && "$AZURE2_BIN" --validate m.azr 2>&1; printf '1\n\n\n7\n' |
-         $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline m.azr 2>&1)"
+  msg="$(cd "$WORK/$4" && "$AZURE2_BIN" --validate m.azr 2>&1; $(guard_command 120) "$AZURE2_BIN" calculate --no-gui m.azr 2>&1)"
   if grep -q "$2" <<< "$msg" && grep -q "$3" <<< "$msg"; then ok "$1 is refused ($2)"
   else bad "$1: no $2 ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 }
@@ -140,8 +139,7 @@ refused "two targets of one scale written differently" E_STOPPING_SCALE_CONFLICT
 refusal range "pass" 0.93
 refused "a table that does not reach the layer's back" E_STOPPING_RANGE "outside its range" range
 mkdir -p "$WORK/empty"
-msg="$(cd "$WORK/calc" && AZURE2_SRIM_DATA_DIR="$WORK/empty" "$AZURE2_BIN" --validate m.azr 2>&1; printf '1\n\n\n7\n' |
-       AZURE2_SRIM_DATA_DIR="$WORK/empty" $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline m.azr 2>&1)"
+msg="$(cd "$WORK/calc" && AZURE2_SRIM_DATA_DIR="$WORK/empty" "$AZURE2_BIN" --validate m.azr 2>&1; AZURE2_SRIM_DATA_DIR="$WORK/empty" $(guard_command 120) "$AZURE2_BIN" calculate --no-gui m.azr 2>&1)"
 if [ "$(echo "$msg" | grep -c E_STOPPING_DATA)" -ge 2 ]; then ok "no SRIM data (AZURE2_SRIM_DATA_DIR an empty directory): refused by --validate and the run (E_STOPPING_DATA)"
 else bad "no SRIM data: no E_STOPPING_DATA from both ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 

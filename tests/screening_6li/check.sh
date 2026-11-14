@@ -31,14 +31,12 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME AZR MODE FLAGS -> $WORK/NAME (mode 1 calculate, 2 fit)
 run() {
-  local name="$1" azr="$2" mode="$3" flags="$4"
+  local name="$1" azr="$2" command="$3" flags="$4"
   local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$HERE/data" "$dir/data"
   cp "$azr" "$dir/t.azr"
-  local input='1\n\n\n7\n'
-  [ "$mode" = 2 ] && input='2\nn\n\n\n'
-  (cd "$dir" && printf "$input" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=2_R=1.out"; }
 # Output files may end their lines with CR (Windows builds): strip it before reading fields.
@@ -54,8 +52,8 @@ CHI=(12.491650 2.952962 8.261932)          # the benchmark's chi2 at that minimu
 DUE=(65 98 231)                            # its Delta chi2 = 1 half-widths (eV); the fits must land within 5 % of them
 
 # ---- 1. the factor, point by point -------------------------------------------------------
-run bare "$HERE/bare.azr" 1 ""
-run scr "$HERE/scr.azr" 1 ""
+run bare "$HERE/bare.azr" calculate ""
+run scr "$HERE/scr.azr" calculate ""
 if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
   # Rows in segment order: metal (9), insulator (7), PdLi (7).  exp(pi eta Ue/E), eta of p + 6Li with AZURE2's
   # constants (Constants.h) and the pair's masses (1.00782, 6.0151).
@@ -86,7 +84,7 @@ done
 # ---- 3. the fits find it ------------------------------------------------------------------
 for flags in "" "--use-gradient"; do
   name="fit${flags:+_grad}"
-  run "$name" "$HERE/fit.azr" 2 "$flags"
+  run "$name" "$HERE/fit.azr" fit "$flags"
   got="$(for t in tgt_cruz_metal tgt_cruz_insulator tgt_cruz_pdli; do printf '%s ' "$(par "$name" "$t.screening")"; done)"
   read -r a b c <<< "$got"
   if near "$a" "${UE[0]}" "$(awk -v s="${DUE[0]}" 'BEGIN { print 0.05 * s }')" &&

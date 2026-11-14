@@ -46,7 +46,7 @@ setup() {
   cp "$SRC/17O.azr" "$d/run.azr"
 }
 run() {
-  (cd "$WORK/$1" && printf '1\n%s\n\n7\n' "${2:-}" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$WORK/$1" && $RUN "$AZURE2_BIN" calculate ${2:+--parameter-file="$2"} --no-gui run.azr > log 2>&1)
   [ -s "$WORK/$1/output/$OUT" ] || { echo "  FAIL  $1: no $OUT"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; exit 1; }
 }
 

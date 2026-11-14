@@ -58,7 +58,7 @@ run() {
   cp -r "$HERE/../$1/data" "$d/"
   cp "$HERE/../$1/$1.azr" "$d/run.azr"
   [ -z "$3" ] || thm_set "$d/run.azr" "$3" $(thm_datasets "$d/run.azr")
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
 out() { ls "$WORK/$1/output/" | grep '^AZUREOut_aa=' | sed -n 1p; }

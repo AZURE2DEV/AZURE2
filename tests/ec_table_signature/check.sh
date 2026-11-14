@@ -51,8 +51,7 @@ make_variant() {
 run() {
   local dir="$WORK/$1" table="$2" ec="${3:-}"
   shift 3
-  (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" |
-    AZURE2_COULOMB_TABLE="$table" run_limited 900 "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
+  (cd "$dir" && AZURE2_COULOMB_TABLE="$table" run_limited 900 "$AZURE2_BIN" calculate ${ec:+--capture-amplitudes="$ec"} --no-gui "$@" 13N.azr > run.log 2>&1)
 }
 SIGWARN="was computed for a different integration grid or different inputs"
 

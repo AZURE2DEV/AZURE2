@@ -416,7 +416,7 @@ directories:
 .. code-block:: console
 
    $ mkdir -p output checks
-   $ printf '1\nnatural_neon_fit.sav\n\n7\n' | AZURE2 --no-gui --no-readline natural_neon.azr
+   $ AZURE2 calculate --parameter-file=natural_neon_fit.sav --no-gui natural_neon.azr
 
 The first answer selects **Calculate Segments With Data**, the second reads
 the fitted parameters. In the GUI, open ``natural_neon.azr``, choose
@@ -531,7 +531,7 @@ the example is the natural sum on a 0.2 keV laboratory grid from 0.01 to
    .. code-block:: console
 
       $ awk '/<targetInt>/{f=1;print;next} /<\/targetInt>/{f=0} f{sub(/^1 /,"0 ")} {print}' natural_neon.azr > bare.azr
-      $ printf '3\nn\nnatural_neon_fit.sav\n\n7\n' | AZURE2 --no-gui --no-readline bare.azr
+      $ AZURE2 extrapolate --parameter-file=natural_neon_fit.sav --no-gui bare.azr
 
 .. figure:: natural_neon_decomposition.png
    :alt: The natural-neon total cross section split into the n+20Ne, n+22Ne

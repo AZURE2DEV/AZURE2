@@ -41,13 +41,13 @@ OUT=output/AZUREOut_aa=1_R=3.extrap
 
 run() {  # MODEL: mode 3 in $WORK/MODEL
   local dir="$WORK/$1"; mkdir -p "$dir/output" "$dir/checks"; cp "$HERE/models/$1.azr" "$dir/t.azr"
-  (cd "$dir" && printf '3\nn\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
   [ -s "$dir/$OUT" ] || { echo "  FAIL  $1: no output"; tail -5 "$dir/run.log"; echo "rectangular_resolution: FAIL"; exit 1; }
 }
 fit() {  # NAME DATA [SED]: a fit (menu 2, one thread) of models/fit.azr, edited by SED, with the data of DATA
   local dir="$WORK/$1"; mkdir -p "$dir/output" "$dir/checks"; cp -r "$2" "$dir/data"
   sed -e "${3:-s/^//}" "$HERE/models/fit.azr" > "$dir/t.azr"
-  (cd "$dir" && printf '2\nn\n\n\n7\n' | OMP_NUM_THREADS=1 run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && OMP_NUM_THREADS=1 run_limited 900 "$AZURE2_BIN" fit --no-gui t.azr > run.log 2>&1)
 }
 FAILS=0
 refused() {  # WHAT CODE SED: --validate of models/fit.azr edited by SED prints CODE
@@ -164,7 +164,7 @@ refused "a profiled width" E_MODE_NOT_ALLOWED "${W}width profiled/"
 dir="$WORK/target"; mkdir -p "$dir/output" "$dir/checks"; cp -r "$HERE/models/data" "$dir/"
 sed -e 's/^    detector       det_fit$/    detector       det_fit\n    target         T1/' "$HERE/models/fit.azr" |
   sed -e 's|^</targets>|target T1\n    kind           layer\n    active         16O\n    areal_density  1e17 atoms/cm2 fixed\n    stopping       formula "1e-15" eV*cm2/atom\n    straggling     none\n</targets>|' > "$dir/t.azr"
-msg="$(cd "$dir" && printf '1\n\n\n7\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr 2>&1)"
+msg="$(cd "$dir" && run_limited 120 "$AZURE2_BIN" calculate --no-gui t.azr 2>&1)"
 if grep -q "cannot be combined with a target" <<< "$msg"; then echo "  ok    (f) the fitted width beside a target is refused"
 else echo "  FAIL  (f) the fitted width beside a target: no refusal"; FAILS=$((FAILS + 1)); fi
 # ---- (g) the triangular resolution's base width, fitted

@@ -286,7 +286,7 @@ rmfit hands these to the evaluator:
   narrow or broad verdict;
 - error-bar corrections (record each in the readme with the formula, statistics before/after and file checksums).
 
-Review: `printf '1\n<reaction>.sav\n\n7\n' | $AZURE2_BINARY <flags> --no-readline <reaction>.azr` fills
+Review: `$AZURE2_BINARY calculate --parameter-file=<reaction>.sav <flags> <reaction>.azr` fills
 `output/` with the fit (the `.sav` carries the fitted norms); then make the figures from it (`azure2-plot`).
 
 ## 6. Diagnostics and benchmarks

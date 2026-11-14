@@ -113,7 +113,7 @@ run() {  # NAME MODE EXTRA_FLAGS [SAV]
 }
 fails_with() {  # NAME MESSAGE_FRAGMENT RECORDS
   mk "$1" 0 "$3"
-  (cd "$WORK/$1" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$1" && "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   if [ -s "$WORK/$1/output/chiSquared.out" ]; then bad "$1: ran, should have stopped"
   elif grep -qF "$2" "$WORK/$1/run.log"; then ok "$1: stops with \"$2\""
   else bad "$1: no \"$2\" in the log"; tail -5 "$WORK/$1/run.log"; fi
@@ -134,7 +134,7 @@ convert_refuses() {  # NAME MESSAGE_FRAGMENT SEGMENT_LINE...
   local where="the converter"
   if [ -f "$dir/t.azr" ]; then
     where="the run of the conversion"
-    (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr >> convert.log 2>&1)
+    (cd "$dir" && "$AZURE2_BIN" calculate --no-gui t.azr >> convert.log 2>&1)
   fi
   if [ -s "$dir/output/chiSquared.out" ]; then bad "$name: the conversion ran, the old engine refused it"
   elif grep -qF "$msg" "$dir/convert.log"; then ok "$name: refused by $where (\"$msg\")"
@@ -214,14 +214,14 @@ mk gradcheck 1 "$(scale G 'a0*(x-1)+a1*(x-1)^2' '0.001 MeV fit prior 0 1' 'a0 0.
                   ds xs_40_lin_mislabelled xs_40_lin_mislabelled.dat 40 'shift          G'
                   ds xs_90_lin_mislabelled xs_90_lin_mislabelled.dat 90 'shift          G')"
 # Adjoint path: each shift column against a full-dataset difference (AZURE_SHIFT_GRAD_CHECK).
-(cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > adjoint.log 2>&1)
+(cd "$WORK/gradcheck" && AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > adjoint.log 2>&1)
 nchk="$(grep -c 'shift-grad-check' "$WORK/gradcheck/adjoint.log")"
 worst="$(grep -o 'reldiff=[-0-9.e+]*' "$WORK/gradcheck/adjoint.log" | cut -d= -f2 | sort -g | tail -1)"
 if [ "$nchk" -ge 3 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 < 1e-6) }'; then ok "adjoint path: group-local shift columns = full differences ($nchk checks, worst $worst)"
 else bad "adjoint-path shift gradient check: $nchk checks, worst reldiff '$worst'"; fi
 # Jacobian path (the --use-gradient default): AZURE_GRAD_CHECK compares every free
 # component (here a, a0, a1) with a finite difference of the whole chi2.
-(cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > jacobian.log 2>&1)
+(cd "$WORK/gradcheck" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > jacobian.log 2>&1)
 if grep -q "Jacobian path: shift 0/1 shift_fn 0/2" "$WORK/gradcheck/jacobian.log"; then ok "Jacobian path: a, a0, a1 agree with finite differences ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/gradcheck/jacobian.log"))"
 else bad "Jacobian-path gradient check: $(grep 'components with relative' "$WORK/gradcheck/jacobian.log")"; fi
 
@@ -235,7 +235,7 @@ fails_with unused "declares a1 but never uses it" \
 fails_with no_effect "has no effect at this group's energies" \
   "$(scale G 'a0*0*x' '' 'a0 0 fit'; ds xs_40 xs_40.dat 40 'shift          G')"
 mk degenerate 0 "$(scale G 'a0+0*x' '0 MeV fit prior 0 0.01' 'a0 0 fit prior 0 0.01'; ds xs_40 xs_40.dat 40 'shift          G')"
-(cd "$WORK/degenerate" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/degenerate" && "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 if grep -q "WARNING: shift function on segment #1: its free terms cannot be told apart" "$WORK/degenerate/run.log"; then ok "a constant function next to a free a: degeneracy warning"
 else bad "no degeneracy warning for a0 + 0*x with a free"; fi
 convert_refuses follower_fn "but it is not the first segment of shift group 'G'" \

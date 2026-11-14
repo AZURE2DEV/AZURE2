@@ -125,20 +125,20 @@ run() {
   mkdir -p "$dir/output" "$dir/checks"
   [ -e "$dir/data" ] || ln -s "$(dirname "$2")/data" "$dir/data"
   cp "$2" "$dir/t.azr"
-  (cd "$dir" && printf "$3\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" "$3" --no-gui t.azr > run.log 2>&1)
 }
 M="$WORK/models"
 
 # (a) byte identity
-for mode in 1 3; do
-  run a_plain_$mode "$M/aC_heavy.azr" $mode
-  run a_zero_$mode "$M/aC_heavy0.azr" $mode
-  n="$(ls "$WORK/a_plain_$mode/output" | wc -l)"
-  if [ "$n" -lt 3 ]; then bad "(a) mode $mode: only $n output files"; continue; fi
-  if same_tree "$WORK/a_plain_$mode/output" "$WORK/a_zero_$mode/output" &&
-     samelog "$WORK/a_plain_$mode/run.log" "$WORK/a_zero_$mode/run.log"; then
-    ok "(a) alpha + 12C, mode $mode: column 32 = 0 gives byte-identical output ($n files) and log"
-  else bad "(a) alpha + 12C, mode $mode: output differs with an explicit column 32 = 0"; fi
+for command in calculate extrapolate; do
+  run a_plain_$command "$M/aC_heavy.azr" $command
+  run a_zero_$command "$M/aC_heavy0.azr" $command
+  n="$(ls "$WORK/a_plain_$command/output" | wc -l)"
+  if [ "$n" -lt 3 ]; then bad "(a) $command: only $n output files"; continue; fi
+  if same_tree "$WORK/a_plain_$command/output" "$WORK/a_zero_$command/output" &&
+     samelog "$WORK/a_plain_$command/run.log" "$WORK/a_zero_$command/run.log"; then
+    ok "(a) alpha + 12C, $command: column 32 = 0 gives byte-identical output ($n files) and log"
+  else bad "(a) alpha + 12C, $command: output differs with an explicit column 32 = 0"; fi
 done
 mkdir -p "$WORK/n13/data"
 cp "$HERE/../13N/data/"* "$WORK/n13/data/"
@@ -146,36 +146,36 @@ cp "$HERE/../13N/13N.azr" "$WORK/n13/13N.azr"
 awk '/^<\/levels>/ { inl = 0 } { if (inl && NF >= 31) print $0 " 0"; else print } /^<levels>/ { inl = 1 }' \
   "$WORK/n13/13N.azr" > "$WORK/n13/13N_zero.azr"
 if [ "$(awk 'NF == 32' "$WORK/n13/13N_zero.azr" | wc -l)" -lt 5 ]; then bad "(a) 13N: no 32-column lines written"; fi
-run n13_plain "$WORK/n13/13N.azr" 1
-run n13_zero "$WORK/n13/13N_zero.azr" 1
+run n13_plain "$WORK/n13/13N.azr" calculate
+run n13_zero "$WORK/n13/13N_zero.azr" calculate
 n="$(ls "$WORK/n13_plain/output" | wc -l)"
 if [ "$n" -ge 3 ] && [ -s "$WORK/n13_plain/output/chiSquared.out" ] &&
    same_tree "$WORK/n13_plain/output" "$WORK/n13_zero/output" &&
    samelog "$WORK/n13_plain/run.log" "$WORK/n13_zero/run.log"; then
-  ok "(a) tests/13N, mode 1: column 32 = 0 gives byte-identical output ($n files) and log"
-else bad "(a) tests/13N, mode 1: output differs with an explicit column 32 = 0 (or no output)"; fi
+  ok "(a) tests/13N, calculate: column 32 = 0 gives byte-identical output ($n files) and log"
+else bad "(a) tests/13N, calculate: output differs with an explicit column 32 = 0 (or no output)"; fi
 
 # (b) moving the excitation between the partners
-for mode in 1 3; do
-  run b_heavy_$mode "$M/aC_heavy.azr" $mode
-  run b_light_$mode "$M/aC_light.azr" $mode
-  read -r w nf nn <<< "$(an compare "$WORK/b_heavy_$mode/output" "$WORK/b_light_$mode/output" 'AZUREOut_*' chiSquared.out)"
+for command in calculate extrapolate; do
+  run b_heavy_$command "$M/aC_heavy.azr" $command
+  run b_light_$command "$M/aC_light.azr" $command
+  read -r w nf nn <<< "$(an compare "$WORK/b_heavy_$command/output" "$WORK/b_light_$command/output" 'AZUREOut_*' chiSquared.out)"
   if le "$w" 1e-10 && [ "${nf:-0}" -ge 1 ]; then
-    ok "(b) mode $mode: excitation on the light vs the heavy partner, max rel difference $w ($nf files, $nn numbers)"
-  else bad "(b) mode $mode: light vs heavy partner excitation differ, max rel '$w'"; fi
+    ok "(b) $command: excitation on the light vs the heavy partner, max rel difference $w ($nf files, $nn numbers)"
+  else bad "(b) $command: light vs heavy partner excitation differ, max rel '$w'"; fi
 done
 for seg in 'aa=1_R=2' 'aa=2_R=1' 'aa=1_R=1' 'aa=2_R=2'; do
   [ -s "$WORK/b_heavy_3/output/AZUREOut_$seg.extrap" ] || bad "(b) no AZUREOut_$seg.extrap"
 done
-run b_noex "$M/aC_light_noex.azr" 3
-run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" 3   # the same (a,a') extrapolations with the excitation on 12C
+run b_noex "$M/aC_light_noex.azr" extrapolate
+run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" extrapolate   # the same (a,a') extrapolations with the excitation on 12C
 read -r w rest <<< "$(an compare "$WORK/b_heavy_dsdo/output" "$WORK/b_noex/output" 'AZUREOut_aa=1_R=2.extrap')"
 if gt "$w" 0.01; then ok "(b) without column 32 the light version differs by up to $w: e1 is what moves the threshold"
 else bad "(b) without column 32 the light version differs by only '$w': the check does not discriminate"; fi
 
 # (c) mutual excitation, identical bosons
-run c_new "$M/cc_new.azr" 3
-run c_old "$M/cc_old.azr" 3
+run c_new "$M/cc_new.azr" extrapolate
+run c_old "$M/cc_old.azr" extrapolate
 read -r nbad ng nc <<< "$(an channels "$WORK/c_new/run.log" 1 2 4 4 1)"
 if [ "$nbad" = 0 ] && [ "${ng:-0}" -ge 10 ]; then
   ok "(c) e1 = e2: the $ng hard-sphere J^pi groups hold exactly the $nc channels with l + s even"
@@ -190,22 +190,22 @@ else bad "(c) e1 = e2: elastic cross section not symmetric about 90 deg: '$w'"; 
 read -r w np <<< "$(an symmetry "$WORK/c_old/output/AZUREOut_aa=1_R=1.extrap")"
 if gt "$w" 0.1; then ok "(c) old way: asymmetric by up to $w"
 else bad "(c) old way: asymmetry only '$w': the check does not discriminate"; fi
-run c_bad "$M/cc_bad.azr" 3
+run c_bad "$M/cc_bad.azr" extrapolate
 if grep -q "^ERROR: Identical-particle pair (Z=6, A=12, j=2) has a channel with J=4, L=2, S=3" "$WORK/c_bad/run.log" &&
    [ -z "$(ls "$WORK/c_bad/output")" ]; then ok "(c) e1 = e2: an l + s odd channel on a level is refused"
 else bad "(c) e1 = e2: the l + s odd channel was not refused"; fi
 
 # (d) refusals
-refused() {   # <name> <model> <message start> [mode, default 3]
-  run "$1" "$M/$2.azr" "${4:-3}"
+refused() {   # <name> <model> <message start> [command, default extrapolate]
+  run "$1" "$M/$2.azr" "${4:-extrapolate}"
   if grep -q "^ERROR: $3" "$WORK/$1/run.log" && [ -z "$(ls "$WORK/$1/output")" ]; then ok "(d) $2: ERROR, no output"
   else bad "(d) $2: not refused ('ERROR: $3' missing or output written)"; sed 's/^/        /' "$WORK/$1/run.log" | tail -5; fi
 }
 refused d_gamma bad_gamma "pair 3 is a gamma pair (type 10) but has a light-particle excitation energy"
 refused d_negative bad_negative "pair 2 has a negative light-particle excitation energy"
 refused d_mixed bad_mixed "pair 2 has two light-particle excitation energies"
-refused d_upos bad_upos "segment #3 (UPOS): exit pair 2 has an excited light particle" 1
-run d_upos_heavy "$M/upos_heavy.azr" 1
+refused d_upos bad_upos "segment #3 (UPOS): exit pair 2 has an excited light particle" calculate
+run d_upos_heavy "$M/upos_heavy.azr" calculate
 if [ -s "$WORK/d_upos_heavy/output/chiSquared.out" ] && ! grep -q "^ERROR" "$WORK/d_upos_heavy/run.log"; then
   ok "(d) the same UPOS segment with the excitation on the heavy partner runs"
 else bad "(d) the UPOS segment with the excitation on the heavy partner did not run"; fi

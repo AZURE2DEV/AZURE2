@@ -162,7 +162,7 @@ fails a check instead of stalling the suite. It is sourced by
 
    . "$REPO/tests/lib/guard.sh"
    RUN="$(guard_command 600)"
-   printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr
+   $RUN "$AZURE2_BIN" calculate --no-gui run.azr
 
 ``guard_command SECONDS`` gives GNU ``timeout``, Homebrew's ``gtimeout`` or,
 where neither exists, the shell watchdog ``run_guard``, so the limit holds on

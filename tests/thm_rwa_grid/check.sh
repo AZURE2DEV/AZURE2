@@ -36,7 +36,7 @@ run_with_points() {   # run_with_points N -> prints total chi2
   # the number of sub-points of the fold: "points" of the quadrature field (the data set's and the extrapolation's)
   awk -v n="$1" '$1 == "quadrature" { sub(/points [0-9]+/, "points " n) } { print }' "$azr" > "$d/run.azr"
   [ "$(grep -c "^ *quadrature  *points $1 " "$d/run.azr")" -ge 1 ] || { echo "  FAIL  no quadrature field set to $1 points" >&2; exit 1; }
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr >/dev/null 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr >/dev/null 2>&1)
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{print $2}'
 }
 

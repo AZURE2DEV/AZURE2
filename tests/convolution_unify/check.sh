@@ -31,7 +31,7 @@ run() {  # NAME -> $WORK/NAME/output/AZUREOut_aa=1_R=1.extrap
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$1.azr" "$dir/t.azr"
-  (cd "$dir" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$dir/output/AZUREOut_aa=1_R=1.extrap" ]; then bad "$1: no extrapolation written"; tail -8 "$dir/run.log"; return 1; fi
 }
 # maxrel A B -> largest relative difference of the cross-section column between two .extrap files
