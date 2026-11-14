@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-model-writer`) — ENDF: the start model and the writer
+
+**Done**: the engine's two level doors (`api/src/pybind_level_doors.cpp`, registered in `BindPhysics`:
+`formal_levels_of_block`, `observed_levels_of_block`, free functions of pair records and one block's numbers, the
+engine's `ChannelFunc`/`WhitFunc` and `physics/` level parameters); `pyazr/endf/resonances.py` (`LRF7` and its
+records, `Material.resonances()` with the refusals of `endf.md` 3.2), `pyazr/endf/model.py` (`to_project`,
+`from_session`), `pyazr/endf/writer.py` (`write`: MF=1, MF=2, MF=3 of the exits and capture, LRP=2, MF=2 checked
+against MF=3 before writing), `records.RecordWriter`; commands `pyazr endf to-project`, `pyazr endf write`; tests
+`pyazr_endf_model`, `pyazr_endf_write`, two `cli_test` cases; `endf.md` 13.3-13.6, the user page's three sections, the
+command-line page, the Developer Guide recipe, the class scheme rows, `FOR_THE_OWNER.md`, `ROADMAP.md`, the example
+`pyazr/examples/endf_start_model.py`.
+**Verified how**: build `work/b-endf3` 0 warnings; all projects in the three bases against `tab-t74-1` (tag
+`tab-endf3-1`): 887 / 851 / 887 identical; the doors equal a formal-basis session's levels and transform bit for bit
+(T1, T2, 13N); the library extract reproduces its MF=3/MT=600 to 1.13e-6; write then read T1 / T2: Delta chi^2
+-2.2e-4 / +6.2e-4; MF=3 written equals the engine at the data and between grid points to the grid's 1e-3; CHECKR,
+FIZCON, PSYCHE on the written files (findings in `endf.md` 13.6). **Open**: MF=6 of the writer (LAW=2 exits,
+LAW=5 elastic with MF=3/MT=2, MF=6/MT=102), IFG=0 and KRM=3 on reading; `ChannelFunctionsFromCNuc` could call the
+doors' particle channel functions (a reserved file).
+
 ## 2026-11-14 (page ENDF agent) — the ENDF tab: an evaluation over the data, the check of a file
 
 Branch `feature/upgrade-9-webui-endf`.  `web_ui.md` section 11.13, `endf.md` 13.3 (as built); user guide

@@ -508,9 +508,11 @@ py::list Describe() {
 }  // namespace
 
 void BindStopping(py::module_ &parent);  // pybind_stopping.cpp: stopping/, the submodule _azure2.stopping
+void BindLevelDoors(py::module_ &m);     // pybind_level_doors.cpp: one block's formal <-> observed levels (pyazr.endf)
 
 void BindPhysics(py::module_ &m) {
   BindStopping(m);
+  BindLevelDoors(m);
   m.def("physics_functions", &Describe,
         "The table of physics functions, one dict per row: name, summary, doc, library (the function called), axis "
         "(the argument a plot puts on its horizontal axis), group (its section of the table), arguments (name, unit, "

@@ -19,7 +19,7 @@ digraph libraries {
   n__azure2 [label=<<b>_azure2</b><br/><font point-size="12">the Python module<br/>(pybind11)</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr [label=<<b>pyazr</b><br/><font point-size="12">the Python package</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr_ui [label=<<b>pyazr.ui</b><br/><font point-size="12">the web UI&#x27;s server<br/>and page</font>>, shape=box, style="filled", fillcolor="white"];
-  n_pyazr_endf [label=<<b>pyazr.endf</b><br/><font point-size="12">ENDF-6 files: read,<br/>summarise, curves,<br/>format check, checking<br/>codes</font>>, shape=box, style="filled", fillcolor="white"];
+  n_pyazr_endf [label=<<b>pyazr.endf</b><br/><font point-size="12">ENDF-6 files: read,<br/>summarise, curves,<br/>format check, checking<br/>codes, start model,<br/>writer</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_physics_transfer -> n_azure2_physics [style=solid, arrowhead=normal];
   n_azure2_stopping -> n_azure2_physics [style=solid, arrowhead=normal];
   n_azure2_stopping -> n_azure2_support [style=solid, arrowhead=normal];

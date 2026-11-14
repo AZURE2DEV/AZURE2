@@ -563,6 +563,17 @@ change and how many digits a number loses; nothing is replaced unless asked. Mea
 7 digits, MF=2 included, and wrote two resonance energies of the library file 10 000 times too small (numbers
 written without a decimal point).
 
+An evaluation's resonance parameters start a project: `pyazr endf to-project FILE NEW.azr` reads MF=2 in the
+R-Matrix Limited format and writes a new project in the Brune basis, every level fixed, with a report of each
+conversion (the separation energy from AME2020, the file's masses against AME2020, each level's formal and Brune
+energy) and of what was not written; what AZURE2 cannot read is refused with what, allowed and fix. From the
+library's 3He + 4He file the engine reproduces the file's own 4He(3He,p)6Li to 1.1e-6. The other way, `pyazr endf
+write PROJECT NEW.endf` writes MF=1, MF=2 (particle channels in the formal basis, your decision: no photon channel)
+and MF=3 of every exit and of capture from the engine (LRP=2, with the check that MF=2 reproduces MF=3 before the
+file is written). MF=6 (angular distributions, the elastic channel) is not written yet and is listed in the file.
+The two conversions are the engine's own (two new functions of the binding); write then read gives T1 and T2 back
+with chi-squared changed by 2e-4 and 6e-4.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

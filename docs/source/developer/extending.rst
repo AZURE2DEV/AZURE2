@@ -389,6 +389,23 @@ the printed page of ENDF-102 (2023) in a comment. A section that can be read and
 5. A hand-written file of the section (``tests/pyazr/endf_testfiles.py`` writes it) and checks against hand values
    from the manual's equations in ``tests/pyazr/endf_read_test.py``.
 
+A section (MF/MT) of the ENDF writer
+------------------------------------
+
+``pyazr.endf.write`` (``pyazr/endf/writer.py``) writes what the engine computes; the module writes records only.
+
+1. The numbers: an engine quantity on the writer's grid (``_engine_grid``: one extrapolation per reaction in a
+   project of the session's nuclear part, refined by ``pyazr.refine_grid``), or a door of the binding when the
+   engine has no quantity for it (a new file of ``api/src/``, registered in ``BindPhysics``); never a formula in
+   Python.
+2. The records: a branch of ``write`` that fills ``sections[(MF, MT)]`` with a ``RecordWriter``
+   (``records.py``: CONT, LIST, TAB1, TAB2, TEXT), each record laid out as its page of ENDF-102 says (cite it).
+   The directory of MF=1 and the sequence numbers follow from ``sections``.
+3. Its line in ``NOT_WRITTEN`` goes; what the section still cannot carry is a line of ``Losses`` (``model.py``).
+4. Reading it back: the reader's ``read_*`` of the section (the recipe above); a check in
+   ``tests/pyazr/endf_write_test.py`` that the section read back equals the engine at points between the grid's,
+   and the own format check clean on the written file.
+
 A checking code of ``pyazr.endf``
 ---------------------------------
 

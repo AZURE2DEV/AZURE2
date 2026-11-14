@@ -263,6 +263,48 @@ Calls ``pyazr.endf.Material.curves``.
 - ``--mat``: the material (MAT) of a file that holds several (a whole number).
 - ``--json``: one JSON document on standard output.
 
+``endf to-project``
+-------------------
+
+An evaluation's resonance parameters as a new project: pairs, levels and channels, the conversions and what was not written.
+
+.. code-block:: text
+
+   python -m pyazr endf to-project FILE NEW [--separation-energy X] [--isotope N] [--range N] [--overwrite] [--mat N] [--json]
+
+Calls ``pyazr.endf.to_project``.
+
+- ``FILE``: an ENDF-6 file with MF=2/MT=151 in LRF=7 (R-Matrix Limited) (an existing file).
+- ``NEW``: the format-3 project to write (Brune basis, every level fixed) (a file to write, in an existing folder).
+- ``--separation-energy``: S of the incident pair, MeV (default: AME2020) (a number).
+- ``--isotope``: the isotope of MF=2 (0-based) (a whole number; default 0).
+- ``--range``: the energy range of the isotope (0-based) (a whole number; default 0).
+- ``--overwrite``: replace NEW if it exists (an option without a value).
+- ``--mat``: the material (MAT) of a file that holds several (a whole number).
+- ``--json``: one JSON document on standard output.
+
+``endf write``
+--------------
+
+The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 from the engine (LRP=2); what the file does not carry is listed.
+
+.. code-block:: text
+
+   python -m pyazr endf write PROJECT NEW [--header FILE] [--low X] [--high X] [--tolerance X] [--number-form CHOICE] [--overwrite] [--json]
+
+Calls ``pyazr.endf.write``.
+
+- ``PROJECT``: the project whose model is written (at its start values) (an existing format-3 project file (.azr)).
+- ``NEW``: the ENDF-6 file to write (a file to write, in an existing folder).
+- ``--header``: the MF=1 fields: {MAT, NLIB, NVER, LREL, NMOD, ALAB, EDATE, AUTH, REF, DDATE, RDATE, LIBRARY, TEXT}
+  (a JSON file holding one object).
+- ``--low``: lowest lab energy of the projectile, MeV (default: the data's) (a number).
+- ``--high``: highest lab energy of the projectile, MeV (default: the data's) (a number).
+- ``--tolerance``: relative tolerance of the engine's adaptive grid (a number; default 0.001).
+- ``--number-form``: how numbers are written (one of widest, classic, e; default widest).
+- ``--overwrite``: replace NEW if it exists (an option without a value).
+- ``--json``: one JSON document on standard output.
+
 ``endf check``
 --------------
 
