@@ -43,8 +43,13 @@ page, or open the printed URL again.  Several projects served on one machine kee
 What the page shows
 -------------------
 
-The header shows the project's name, whether it has unsaved edits, the revision, **Undo**, **Redo**, **Save**, and
-the total χ² of the current evaluation with its number of points.  The line at the bottom shows the engine's last
+The header carries the original program's icon (the red and green spheres with the blue "(A)"; it is also the
+browser tab's icon) and shows the project's name, whether it has unsaved edits, the revision, **Undo**, **Redo**,
+**Save**, and the total χ² of the current evaluation with its number of points.  **About** gives the version of the
+program and of pyazr, the reference every publication that uses AZURE2's results cites (R.E. Azuma et al.,
+*Physical Review C* **81**, 045805 (2010)) and the link to this documentation.  The page's colours are the icon's:
+its blue is the accent, its red marks an error and its green a success, and each of these states also carries a
+symbol (✕, ⚠, ✓), so that nobody has to tell red from green.  The line at the bottom shows the engine's last
 message.  The keys are listed by ``?``: ``1`` … ``7`` switch tabs, Ctrl+Z and Ctrl+Shift+Z undo and redo,
 ``/`` filters the current table, the arrow keys and Enter move through a table, Ctrl+Enter applies a form, Esc
 reverts it, ``t`` switches between the system's theme, light and dark.  Each view has its own address

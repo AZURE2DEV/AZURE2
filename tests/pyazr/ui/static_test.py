@@ -8,7 +8,10 @@
 - forms.js has a widget for every value type of the engine's schema (by name, in its one widget table);
 - no module of the page names a record kind, quantity or parameter kind of the engine outside the layout hints;
 - the page's own sources keep the repository's measures (lines of at most 120 columns, files of about 500 lines);
-  the vendored directory is the stated exception (minified third-party code).
+  the vendored directory is the stated exception (minified third-party code);
+- the page shows the original program's icon (the file of packaging/icons, served as a PNG, the tab's icon and the
+  header's), its colour tokens give every text at least 4.5:1 on its backgrounds in both themes, and its About box
+  cites what the documentation's front page cites.
 """
 import glob
 import hashlib
@@ -182,6 +185,8 @@ def test_quantity_axes_are_ones_the_plot_row_knows():
 
 def test_page_sources_keep_the_measures():
     for rel in page_sources():
+        if rel.endswith(".png"):
+            continue
         with open(os.path.join(STATIC, rel), encoding="utf-8") as f:
             lines = f.read().split("\n")
         long = [i + 1 for i, line in enumerate(lines) if len(line) > MAX_COLUMNS]
@@ -222,3 +227,85 @@ def test_file_head_is_bounded(tmp_path):
 
 if __name__ == "__main__":
     uitest.run(__file__)
+
+
+ICON = "azure2_icon.png"
+
+
+def test_icon_is_the_original_programs(tmp_path):
+    with open(os.path.join(STATIC, ICON), "rb") as a, open(os.path.join(uitest.ROOT, "packaging", "icons", ICON),
+                                                           "rb") as b:
+        assert a.read() == b.read(), "the page's icon is not packaging/icons/azure2_icon.png"
+    assert ICON in loaded_files(), "index.html does not name the icon (the browser tab's icon)"
+    with open(os.path.join(STATIC, "app.js")) as f:
+        assert f'src: "static/{ICON}"' in f.read(), "the header does not show the icon"
+    with make_client(copy_project("T1", tmp_path)) as client:
+        r = client.get(f"/static/{ICON}", headers=AUTH)
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png", r.headers
+
+
+def css_tokens(css):
+    """{theme: {token: colour}} of style.css: the light tokens of the first :root block, the dark ones of the
+    :root[data-theme="dark"] block; the dark block of the system's preference must be the same."""
+    def block(selector):
+        m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+        assert m, f"style.css has no block {selector}"
+        return dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", m.group(1)))
+    light, dark = block(":root"), block(':root[data-theme="dark"]')
+    assert block(':root:not([data-theme="light"])') == dark, "the two dark blocks of style.css differ"
+    return {"light": light, "dark": dark}
+
+
+def contrast(a, b):
+    """The WCAG 2 contrast ratio of two #rrggbb colours."""
+    def luminance(c):
+        rgb = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        lin = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((luminance(a), luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+# Every text token on every background a text is drawn on (style.css), and the pairs of a box: (text, background).
+TEXT_TOKENS = ["fg", "muted", "accent", "error", "warn", "ok"]
+BACKGROUNDS = ["bg", "panel", "accent-soft", "row-hover"]
+BOX_PAIRS = [("accent-fg", "accent"), ("fg", "error-bg"), ("muted", "error-bg"), ("error", "error-bg"),
+             ("fg", "warn-bg"), ("muted", "warn-bg"), ("warn", "warn-bg")]
+
+
+def test_text_tokens_have_contrast_in_both_themes():
+    with open(os.path.join(STATIC, "style.css")) as f:
+        themes = css_tokens(f.read())
+    low = []
+    for theme, t in themes.items():
+        pairs = [(a, b) for a in TEXT_TOKENS for b in BACKGROUNDS] + BOX_PAIRS
+        for a, b in pairs:
+            ratio = contrast(t[a], t[b])
+            if ratio < 4.5:
+                low.append(f"{theme}: --{a} {t[a]} on --{b} {t[b]}: {ratio:.2f}")
+    assert not low, "text below 4.5:1: " + "; ".join(low)
+
+
+def test_contrast_rule_bites():
+    """The check above fails on a pair that is too pale (the measure is not vacuous)."""
+    assert contrast("#777777", "#ffffff") < 4.5 < contrast("#004293", "#ffffff")
+
+
+def test_accent_is_the_icons_blue():
+    with open(os.path.join(STATIC, "style.css")) as f:
+        themes = css_tokens(f.read())
+    assert themes["light"]["accent"] == "#004293" and themes["light"]["error"] == "#990000", themes["light"]
+
+
+def test_about_cites_what_the_documentation_cites():
+    with open(os.path.join(uitest.ROOT, "docs", "source", "index.rst")) as f:
+        rst = f.read()
+    m = re.search(r"should cite:\s*\n\s*\n(.*?)\n\s*\n", rst, re.S)
+    assert m, "docs/source/index.rst: no citation found"
+    cited = re.sub(r"\s+", " ", re.sub(r"\*+", "", m.group(1))).strip().rstrip(".")
+    with open(os.path.join(STATIC, "app.js")) as f:
+        app = f.read()
+    m = re.search(r"citation: ((?:\"[^\"]*\"\s*\+?\s*)+),", app)
+    assert m, "app.js: no ABOUT.citation"
+    shown = "".join(re.findall(r'"([^"]*)"', m.group(1)))
+    assert shown == cited, (shown, cited)

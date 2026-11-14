@@ -43,6 +43,14 @@ export const KEYS = [
   ["?", "this list"],
 ];
 
+/** The About box: the program, the reference every publication that uses its results cites (as the documentation's
+ * front page gives it, docs/source/index.rst: tests/pyazr/ui/static_test.py compares the two) and the documentation. */
+export const ABOUT = {
+  citation: "R.E. Azuma, E. Uberseder, E.C. Simpson, C.R. Brune, H. Costantini, R.J. deBoer, J. Gorres, M. Heil, "
+    + "P.J. Leblanc, C. Ugalde, and M. Wiescher, Physical Review C 81, 045805 (2010)",
+  documentation: "https://azure2dev.github.io/AZURE2/",
+};
+
 /** A hash route: "#/data/s02_diff090?theme=dark" -> {tab, args: ["s02_diff090"], params: {theme: "dark"}}. */
 export function parseRoute(hash) {
   const [path, query = ""] = String(hash || "").replace(/^#\/?/, "").split("?");
@@ -193,9 +201,13 @@ function build() {
   ctx.chi2Box = h("span.chi2", { "aria-live": "polite" }, "χ² …");
   ctx.busy = h("span.busy", { "aria-hidden": "true" });
   ctx.themeButton = button("theme", "Switch the theme: system, light, dark (t)", cycleTheme, "quiet");
-  const header = h("header.top", {}, h("span.brand", {}, "AZURE2"), ctx.nameBox, ctx.unsavedBox, ctx.revBox,
+  const brand = h("span.brand", { title: "AZURE2: about the program" },
+    h("img", { src: "static/azure2_icon.png", alt: "", width: 22, height: 22 }), "AZURE2");
+  const header = h("header.top", {}, brand, ctx.nameBox, ctx.unsavedBox, ctx.revBox,
     ctx.undoButton, ctx.redoButton, button("Save", "Write the project to its file (Ctrl+S)", save), ctx.chi2Box,
-    ctx.busy, h("span.spacer"), ctx.themeButton, button("?", "The keys of the page (?)", toggleKeys, "quiet"));
+    ctx.busy, h("span.spacer"), ctx.themeButton,
+    button("About", "The program, its version and its reference", toggleAbout, "quiet"),
+    button("?", "The keys of the page (?)", toggleKeys, "quiet"));
   ctx.tabBar = h("nav.tabs", { role: "tablist", "aria-label": "tabs" });
   TABS.forEach((t, i) => {
     const a = h("a.tab", { href: `#/${t.id}`, role: "tab", title: `${t.title} (${i + 1})`, data: { tab: t.id } },
@@ -251,6 +263,28 @@ function toggleKeys() {
   box.focus();
 }
 
+/** The About box: name and version of the program and of pyazr, the reference to cite, the documentation. */
+function toggleAbout() {
+  const old = document.getElementById("about-overlay");
+  if (old) { old.remove(); return; }
+  const pkg = ctx.describe?.package || {};
+  const engine = pkg.engine || {};
+  const box = h("div.overlay", { id: "about-overlay", role: "dialog", "aria-label": "about", tabindex: "-1" },
+    h("div.overlay-box", {}, h("h2.brand", {}, h("img", { src: "static/azure2_icon.png", alt: "", width: 32,
+      height: 32 }), "AZURE2"),
+    h("p", {}, "A multi-level, multi-channel R-matrix code for nuclear reactions and scattering."),
+    h("dl.about", {},
+      h("dt", {}, "Version"), h("dd.mono", {}, `AZURE2 ${engine.version ?? ""} (${engine.git ?? ""}), pyazr `
+        + `${pkg.pyazr ?? ""}`),
+      h("dt", {}, "Cite"), h("dd", {}, ABOUT.citation),
+      h("dt", {}, "Documentation"), h("dd", {}, h("a", { href: ABOUT.documentation, target: "_blank",
+        rel: "noopener" }, ABOUT.documentation))),
+    button("Close", "Close (Esc)", toggleAbout)));
+  box.addEventListener("click", (e) => { if (e.target === box) toggleAbout(); });
+  document.body.appendChild(box);
+  box.focus();
+}
+
 function inTextBox(e) {
   const t = e.target;
   return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -260,6 +294,7 @@ function onKey(e) {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
   if (e.key === "Escape" && document.getElementById("keys-overlay")) { toggleKeys(); return; }
+  if (e.key === "Escape" && document.getElementById("about-overlay")) { toggleAbout(); return; }
   if (inTextBox(e)) return;
   const key = e.key.toLowerCase();
   if (mod && (key === "y" || (key === "z" && e.shiftKey))) { e.preventDefault(); redo(); }

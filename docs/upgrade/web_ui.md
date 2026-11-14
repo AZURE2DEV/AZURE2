@@ -818,6 +818,16 @@ page works without it: plots are replaced by their data table and CSV export, so
 action reachable by keyboard and listed in a `?` overlay; light and dark themes following the system, switchable;
 numbers right-aligned with units in the column head; the engine's own words for every description and message.
 
+**The original's face.** The header and the browser tab show the original program's icon
+(`pyazr/ui/static/azure2_icon.png`, byte-identical to `packaging/icons/azure2_icon.png`: consistency check 57).
+The colour tokens of `style.css` are built on the icon's measured colours: its blue `#004293` is the accent, its red
+`#990000` the error colour, its green `#04800d` (darkened to `#04720c` for 4.5:1 on every panel) the success colour;
+the dark theme uses lighter tints of the same hues (`#79aef0`, `#ff8f8a`, `#6fd27a`). A state is never said by its
+colour alone: the error, warning and success boxes and the status line carry ✕, ⚠ or ✓ beside it (CSS `::before`).
+`tests/pyazr/ui/static_test.py` computes the WCAG contrast of every text token on every background it is drawn on,
+in both themes, from the CSS (at least 4.5:1). **About** (header) gives the program's and pyazr's versions, the
+reference to cite (as `docs/source/index.rst` gives it; the test compares the two) and the documentation's address.
+
 **Plots and accessibility.** A colour-blind-safe palette (Okabe–Ito for up to 8 data sets, then markers vary as
 well as colours); every plot has "Export data (CSV)" with the exact numbers drawn and their units, SVG and PNG
 export from plotly, PDF through `pyazr.plot` (matplotlib, server side) for a paper figure; every plot's title and
