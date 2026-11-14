@@ -262,6 +262,28 @@ ROUTES = (
     Route("GET", "/api/rate/grids", V, "server.Server.rate_grids",
           "The named temperature grids of the rate (pyazr.rate.TEMPERATURE_GRIDS, GK) and the rate's units; the rate "
           "is the job rate/engine.", serves=("pyazr.rate.TEMPERATURE_GRIDS",)),
+    # -- ENDF-6 evaluations (pyazr.endf): the files, what one holds, its curves over the data, the checking codes; the
+    # check and the rewrite are the jobs endf_check and endf_standardize
+    Route("GET", "/api/endf/files", V, "server.Server.endf_files",
+          "The ENDF-6 files of the project folder (relative paths; files whose first lines read as ENDF-6 lines), "
+          "size and time written.", serves=("pyazr.endf.records.split_line",)),
+    Route("POST", "/api/endf/summary", V, "server.Server.endf_summary",
+          "What an ENDF-6 file inside the root holds: MAT, target, projectile, library, lab, date, authors, LRP, "
+          "EMAX, the sections in words, the text (pyazr.endf.read(path).summary()).", args=("path",),
+          serves=("pyazr.endf.read", "pyazr.endf.Summary.to_dict")),
+    Route("POST", "/api/endf/curves", V, "server.Server.endf_curves",
+          "The files' values at every data set's points at the working x, in the data set's quantity and unit "
+          "(Material.curves(data, session=s)), beside the datum times its normalization and the model, with the "
+          "ratios file / (n x datum) and file / model; where a file has nothing for a data set, the refusal's "
+          "what, allowed, fix.", args=("files",), serves=("engine.Engine.endf_curves", "pyazr.endf.Material.curves")),
+    Route("GET", "/api/endf/checkers", V, "server.Server.endf_checkers",
+          "The ENDF checking codes found (pyazr.endf.checkers(): name, path, family, kind, what it does, what it "
+          "does to numbers), every program pyazr knows, where they were looked for.",
+          serves=("pyazr.endf.checkers", "pyazr.endf.PROGRAMS")),
+    Route("POST", "/api/endf/accept", V, "server.Server.endf_accept",
+          "Keep the candidate of a finished endf_standardize job: at `to` (inside the root; none: beside the "
+          "original), an existing file replaced only with overwrite (Candidate.accept).", args=("job_id",),
+          kwargs=("to", "overwrite"), serves=("pyazr.endf.Candidate.accept",)),
     # -- jobs
     Route("GET", "/api/jobs/kinds", V, "server.Server.job_kinds",
           "The job table: kind, method, settings, the package or pyazr call each needs."),

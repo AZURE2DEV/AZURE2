@@ -515,7 +515,9 @@ class JobRow:
     (the page offers it beside that job's result; method None: any job of that kind), or a tuple of such pairs;
     ``takes`` the key of that job's result it needs (a covariance, a chain: the job is refused without one, and offered
     only beside a result that has it); ``facts`` what the page shows of it beside its doc (name -> value: the program's
-    switch, whether it gives a covariance, whether MINOS can follow).
+    switch, whether it gives a covariance, whether MINOS can follow); ``files`` the names of its settings that name a
+    file (the server refuses one outside its root before the job starts); ``session`` False for a job that needs no
+    session of the project (its worker builds none; x0 and the free names are empty).
     """
     kind: str
     method: str
@@ -527,6 +529,8 @@ class JobRow:
     follows: tuple = None
     takes: str = None
     facts: tuple = ()  # (name, value) pairs
+    files: tuple = ()
+    session: bool = True
 
     def defaults(self):
         return {s.name: s.default for s in self.settings}
@@ -629,10 +633,12 @@ def engine_rows(fitters):
 
 @lru_cache(maxsize=1)
 def job_rows():
-    """The whole job table: the engine's fit rows, the rows of :data:`JOBS`, the engine's MINOS rows."""
+    """The whole job table: the engine's fit rows, the rows of :data:`JOBS`, the ENDF rows
+    (:func:`pyazr.ui.evaluations.job_rows`), the engine's MINOS rows."""
     import pyazr
+    from .evaluations import job_rows as endf_rows
     fits, minos = engine_rows(pyazr.kinds()["fitters"])
-    return fits + JOBS + minos
+    return fits + JOBS + endf_rows() + minos
 
 
 def job_row(kind, method):
@@ -653,7 +659,7 @@ def job_table():
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": _follows(r.follows),
-                    "takes": r.takes, "facts": dict(r.facts)})
+                    "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session})
     return out
 
 
@@ -723,7 +729,8 @@ def listen_for_stop(channel, stop):
 
 
 def run_job(channel):
-    """A job worker: read the job's spec, build the session, run the row's function, report, write the checkpoint."""
+    """A job worker: read the job's spec, build the session (unless the row needs none), run the row's function,
+    report, write the checkpoint."""
     from .engine import objective_of, open_for_job
     spec = channel.receive()
     record = {"id": spec["id"], "kind": spec["kind"], "method": spec["method"], "text_rev": spec["rev"],
@@ -742,16 +749,19 @@ def run_job(channel):
 
     try:
         write_checkpoint(checkpoint, record)
+        row = job_row(spec["kind"], spec["method"])
         t0 = time.perf_counter()
-        session, x0, names = open_for_job(spec["session_file"], spec["cwd"])
+        session, x0, names, fg = None, [], [], None
+        if row.session:
+            session, x0, names = open_for_job(spec["session_file"], spec["cwd"])
+            fg = objective_of(session).value_and_grad
         channel.send({"event": "built", "build_s": time.perf_counter() - t0, "names": names})
-        if spec.get("x0"):
+        if spec.get("x0") and row.session:
             x0 = vector_from_names(spec["x0"], names, x0)
         record["state"] = "running"
         write_checkpoint(checkpoint, record)
-        row = job_row(spec["kind"], spec["method"])
-        tracker = Tracker(objective_of(session).value_and_grad, names, report=report, stop=stop, session=session,
-                          source=spec.get("source"), job_id=spec["id"], products=spec["products"])
+        tracker = Tracker(fg, names, report=report, stop=stop, session=session, source=spec.get("source"),
+                          job_id=spec["id"], products=spec["products"])
         try:
             status, message, extra = row.run(tracker, x0, spec["settings"], names)
         except StopRequested:

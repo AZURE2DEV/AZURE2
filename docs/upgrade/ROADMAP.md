@@ -404,8 +404,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).
       Stage 1 built (`pyazr/endf/`: read, summary, MF=3 and MF=6 LAW=2/LAW=5 curves at a data set's points, the
       module's own format check; `pyazr endf summary|curves`); stage 4 built (the checking codes found and run,
-      their reports read, candidates with their difference; `pyazr endf check|standardize`); next: the start model
-      from LRF=7 (stage 2, with the engine's door 2), then the writer.
+      their reports read, candidates with their difference; `pyazr endf check|standardize`); the page's screens
+      built (the ENDF tab: files over the data with ratios, Check and Correct as jobs, `web_ui.md` 11.13); next:
+      the start model from LRF=7 (stage 2, with the engine's door 2), then the writer.
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

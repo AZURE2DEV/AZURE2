@@ -277,3 +277,19 @@ table.settings-group caption { text-align: left; font-weight: 600; padding: 4px 
 table.settings-group th { text-align: left; font-weight: 500; width: 26%; vertical-align: top; padding: 4px 8px 4px 0; }
 table.settings-group td { vertical-align: top; padding: 4px 8px 4px 0; border-top: 1px solid var(--grid); }
 table.settings-group th { border-top: 1px solid var(--grid); }
+
+/* the ENDF tab: its two screens, a file's summary, the findings of a check, a raw report one click away */
+nav.subtabs { margin: 0 0 8px; }
+nav.subtabs a.active { font-weight: 600; color: var(--fg); text-decoration: none; }
+details.endf-file { margin: 4px 0 8px; }
+details.endf-file > summary, details.endf-codes > summary, details.endf-report > summary { cursor: pointer; }
+dl.endf-facts { display: grid; grid-template-columns: max-content 1fr; gap: 1px 12px; margin: 6px 0; }
+dl.endf-facts dt { color: var(--muted); }
+dl.endf-facts dd { margin: 0; }
+pre.endf-text { max-height: 320px; overflow: auto; background: var(--bg); padding: 4px 6px; font-size: 11px; }
+.endf-dataset { border-top: 1px solid var(--grid); padding-top: 6px; margin-top: 8px; }
+.endf-dataset h3, .endf-check-job h3 { font-size: 13px; margin: 8px 0 4px; }
+.endf-rewriter { margin: 4px 0; }
+span.severity.error { color: var(--error); font-weight: 600; }
+span.severity.warning { color: var(--warn); font-weight: 600; }
+span.severity.note { color: var(--muted); }

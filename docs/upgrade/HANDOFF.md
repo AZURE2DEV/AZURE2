@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (page ENDF agent) — the ENDF tab: an evaluation over the data, the check of a file
+
+Branch `feature/upgrade-9-webui-endf`.  `web_ui.md` section 11.13, `endf.md` 13.3 (as built); user guide
+`web_interface.rst` (ENDF evaluations), `web_ui_api.rst`, `endf.rst` (On the page).
+
+- **Server**: `pyazr/ui/evaluations.py` (the ENDF-6 files of the folder, summary, curves' answer with the two ratios,
+  the jobs `endf_check`/`codes` and `endf_standardize`/`program`, accept); routes `GET /api/endf/files`,
+  `POST /api/endf/summary`, `POST /api/endf/curves` (session op `Engine.endf_curves`), `GET /api/endf/checkers`,
+  `POST /api/endf/accept`; `JobRow.files` and `JobRow.session` (jobs that build no session); the two job rows are
+  made by `evaluations.job_rows()` and joined in `jobs.job_rows()` (`jobs.py` stays under the 1000-line limit).
+- **pyazr.endf**: `PROGRAMS` rows gain a fourth column, what the program does to numbers (`Checker.numbers`);
+  `MEANINGS` gains CHECKR's two LTP=15 messages.
+- **Page**: `tabs/endf.js` (#/endf, #/endf/check); lines in shared files: `app.js` (the import, the `TABS` row),
+  `style.css` (an ENDF block at the end), `selftest.js`, `smoke_test.py` (VIEWS, the ENDF files and stand-in codes).
+  The first-view row to add at the merge: `{ title: "ENDF", tab: "endf", hash: "#/endf" }`.
+- **Verified**: `tests/pyazr/ui/` whole, the new `endf_test.py` and `js/endf.test.mjs`, the smoke test with
+  screenshots, the docs build, `ctest -LE slow` (numbers in the report).  The real codes (outside the repository)
+  run through the routes on both test files.
+- **Open**: extrapolations get no curve; when `GET /api/files` merges, `evaluations.endf_files` becomes a filter over
+  it; the ENDF jobs appear in the Fit tab's job form and list as the rate job does.
+
 ## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
 
 Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page

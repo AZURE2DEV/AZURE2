@@ -1675,6 +1675,43 @@ and the two downloads beside the CSV.
 terms (the page's form comes from the row).  A new named temperature grid: a row of `TEMPERATURE_GRIDS` (the page
 lists it from `GET /api/rate/grids`).
 
+### 11.13 The ENDF tab: an evaluation over the data, the check of a file (2026-11-14)
+
+The PI: an easy way of checking the evaluations, and of checking that an ENDF file is correctly formatted with the
+ENDF tools.  The tab is named **ENDF** (id `endf`): the word an evaluator looks for, and both screens start from an
+ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one row of `FIRST_VIEW`
+(`{ title: "ENDF", tab: "endf", hash: "#/endf" }`), left to the merge.
+
+- **Over the data** (`#/endf?files=a.endf,d/b.endf`): the files of `GET /api/endf/files` with a box and a colour
+  each (and a typed path inside the root), what each holds (`POST /api/endf/summary` = `read(path).summary()`),
+  and per data set the plot of the data times its norm, the model and each file's values at the points, the ratio
+  plot below (file / data with the data's error, file / model), the sections and coverage under it; where a file
+  has nothing for a data set, its refusal (what, allowed, fix) in that place (`POST /api/endf/curves`, a session
+  operation `Engine.endf_curves`: `Material.curves(data, session=s)` for every data set at the working x).
+- **Where the shown files live** (section 5): in the route (`?files=`, `?file=`), not in the project text and not
+  in the server; the tab remembers the last list per project for the page's life (`ctx.endfShown`).
+- **Check and correct** (`#/endf/check?file=a.endf[&job=id]`): the codes of `GET /api/endf/checkers` (found or not,
+  what each does and does to numbers, how they are found); **Check** is the job `endf_check`/`codes`
+  (`pyazr.endf.check`): the own findings (line, MF, MT, message, page) apart from each code's (MF, MT, record, text,
+  `meaning`), the counts, the raw report in a `details`; **Correct** is the job `endf_standardize`/`program`
+  (`pyazr.endf.standardize`), the text of `PROGRAMS[program][3]` said before the run, `Candidate.diff()` as a table,
+  then **Keep as a new file** / **Replace** (asks a second time) through `POST /api/endf/accept`.
+- **Jobs without a session**: `JobRow.session = False` (the worker builds no session; x0 and names are empty) and
+  `JobRow.files` (settings naming a file: the server refuses a path outside the root, 403, before the job starts).
+- **Files**: `pyazr/ui/evaluations.py` (the listing `endf_files`, the only place that says what an ENDF-6 file is:
+  its first two lines read by `pyazr.endf.records.split_line`; when `GET /api/files` exists the listing becomes a
+  filter over it; its `job_rows()`, the two job rows, joined to the table by `jobs.job_rows`), `tabs/endf.js`,
+  five rows of `routes.py`, `Engine.endf_curves`, server
+  methods `endf_*`; lines in shared files: `app.js` (one import, one `TABS` row), `style.css` (a block at the end),
+  `selftest.js` (the ENDF views and Check pressed), `smoke_test.py` (two views, the ENDF files and the stand-in codes
+  in the server's environment).
+- **Extensibility**: a new checking code is a row of `PROGRAMS` (with its numbers text) and its deck in
+  `checkers.py`; a new quantity of `curves` is a branch of `pyazr.endf.curves`; neither changes a file of the page.
+
+**Tests**: `tests/pyazr/ui/endf_test.py` (the routes and jobs against the direct calls on T1 with the two test
+files and the stand-in codes; refusals; accept without and with overwrite), `js/endf.test.mjs` (the plots and rows
+from an answer), the self-test and two screenshots (`expert-endf`, `expert-endf-check`).
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:

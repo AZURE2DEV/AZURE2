@@ -1005,7 +1005,7 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # file and the field as one history entry) and the rate job against pyazr.covariance and pyazr.rate (T1).
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
         ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py ui/thm_routes_test.py
-        ui/nucleus_routes_test.py ui/utilities_test.py)
+        ui/nucleus_routes_test.py ui/utilities_test.py ui/endf_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

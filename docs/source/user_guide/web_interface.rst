@@ -221,6 +221,32 @@ window per temperature, a comparison table and the table as CSV (:doc:`reaction_
 of the Data tab opens the covariance builder (``#/covariance/<name>``): the data set's covariance from named parts,
 checked as the engine will read it, written and named on the data set as one edit (:doc:`covariance_builder`).
 
+ENDF evaluations
+----------------
+
+The **ENDF** tab (in the expert's view; ``#/endf``) puts an evaluated file beside the project, with
+``pyazr.endf`` (:doc:`endf`). It is named after the format because that is the word an evaluator searches for, and
+both of its screens start from an ENDF-6 file.
+
+- **Over the data** (``#/endf?files=a.endf,lib/b.endf``): the ENDF-6 files of the project folder (and two levels
+  below) with a box each; a path inside the project's root can be typed. Each file shown has a colour, and a line
+  that opens what it holds (MAT, target and projectile, library, lab, date, authors, LRP, EMAX, the sections in the
+  manual's words and the header text). For every data set, the files' values at its points in its quantity and unit
+  are drawn over the data (times its normalization) and the model at the working x, with the ratios of each file
+  to the data and to the model below; where a file has nothing for a data set (another reaction, a quantity an ENDF
+  file does not hold), its refusal says what, what is allowed and what to do, in the data set's place. Which files
+  are shown is part of the address, not of the project.
+- **Check and correct** (``#/endf/check?file=a.endf``): the checking codes pyazr knows, each found or not (found
+  through ``AZURE2_ENDF_UTILITIES``, ``AZURE2_PREPRO`` and ``PATH`` of the server), with what it does and what it
+  does to numbers. **Check** starts a job: pyazr's own format check (always; each finding with its line and the
+  page of ENDF-102), then each code ticked, on a copy, with a time limit; each code's findings are shown apart, with
+  the meaning pyazr gives a known message (the known false alarms: LRP=2 in the charged-particle files, PSYCHE's
+  "AP NOT IN RANGE" in R-Matrix Limited, CHECKR and LTP=15), the counts its report states and the raw report one
+  click away. **Correct** runs a code that rewrites (STANEF, FIXUP, DICTIN, ENDF2C) on a copy, after saying what it
+  does to numbers; the candidate's difference per section (unchanged, bookkeeping, form, numbers with the digits
+  lost, restructured) is shown, then **Keep as a new file** (beside the original unless named) or **Replace**, which
+  asks a second time. Neither changes the project text.
+
 Physics
 -------
 
