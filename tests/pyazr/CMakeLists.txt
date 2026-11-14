@@ -1158,3 +1158,32 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
+
+# The words and units of pyazr's answers (the defects the example scripts met): the level scheme's pairs by key and
+# kind, the units of the external-capture integrals, of an extrapolation's model values and of a gamma_decay
+# parameter.
+add_test(NAME pyazr_library_answers
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/library_answers_test.py)
+set_tests_properties(pyazr_library_answers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr's library calls: nothing on standard output (the engine's lines go to the logger pyazr.engine), the rate's
+# files in a temporary directory of its own, a refused set-up and a wrong fit vector with their three parts.
+add_test(NAME pyazr_library_calls
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/library_calls_test.py)
+set_tests_properties(pyazr_library_calls PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A Project edit that leaves a phase-shift data set or extrapolation without its partial wave is refused with its
+# three parts (the engine's set-up check, made at the edit), in agreement with the engine on T3.
+add_test(NAME pyazr_project_phase_shift
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_phase_shift_test.py)
+set_tests_properties(pyazr_project_phase_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A prior or a limit on a level parameter as a Project edit (<parameterSettings>): the session's objective holds the
+# prior, the parameter's bounds the limits; the rows read back; replaced, removed; refusals with their three parts.
+add_test(NAME pyazr_parameter_settings
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_settings_test.py)
+set_tests_properties(pyazr_parameter_settings PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

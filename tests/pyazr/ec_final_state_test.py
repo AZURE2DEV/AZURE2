@@ -63,15 +63,22 @@ def main():
         check("missing final state used by a segment: pyazr.Session raises",
               raised is not None and type(raised).__name__ == "AZURE2Error", repr(raised))
         # (3) missing level, no segment uses the pair: WARNING, runs, no hidden level
-        # the engine writes on the C-level stdout, which redirect_stdout does not see: capture file descriptor 1
-        cap = os.path.join(work, "unused_stdout.txt")
-        saved = os.dup(1); sys.stdout.flush()
-        fd = os.open(cap, os.O_WRONLY | os.O_CREAT | os.O_TRUNC); os.dup2(fd, 1); os.close(fd)
+        # the engine writes its lines on the C-level stdout, which pyazr hands to the logger pyazr.engine
+        # (pyazr/engine_text.py): collect them there
+        import logging
+        said = []
+
+        class Collect(logging.Handler):
+            def emit(self, record):
+                said.append(record.getMessage())
+        logger = logging.getLogger("pyazr.engine")
+        handler = Collect(level=logging.DEBUG)
+        logger.addHandler(handler)
         try:
             s = Session(stage("unused", work))
         finally:
-            sys.stdout.flush(); os.dup2(saved, 1); os.close(saved)
-        out = open(cap).read()
+            logger.removeHandler(handler)
+        out = "\n".join(said)
         check("unused capture pair: session opens", s is not None)
         check("unused capture pair: WARNING names the pair and the final state",
               "WARNING: external capture into pair 3 needs its final state" in out, out[-400:])

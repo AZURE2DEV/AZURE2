@@ -227,8 +227,9 @@ within the slots requested.
   `references/formalism.md`, `references/drop-dataset.md`.
 - Scripts: `scripts/lsq_fit.py`, `scripts/engine_fit.py`, `scripts/convert_sav_names.py` (old-format parameter
   names); `scripts/selftest.py` runs all three on T3 (5 s at one thread).
-- Examples: `pyazr/examples/edit_model.py`, `pyazr/examples/save_fit_to_azr.py`, `pyazr/examples/fit_scipy.py`,
-  `pyazr/examples/per_dataset_chi2.py`, `pyazr/examples/deactivate_level.py`.
+- Examples: `pyazr/examples/edit_model.py`, `pyazr/examples/fit_engine.py` (the fit, `save_fit` and the read-back),
+  `pyazr/examples/fit_scipy.py`, `pyazr/examples/per_dataset_chi2.py`, `pyazr/examples/decompose_cross_section.py`
+  (a level off or alone at run time).
 - Docs: `docs/source/user_guide/fitting.rst`, `docs/source/user_guide/chi_squared.rst`,
   `docs/source/user_guide/levels_channels.rst`, `docs/source/user_guide/pyazr.rst`,
   `docs/source/reference/output_files.rst`, `docs/source/reference/command_line.rst`.

@@ -148,5 +148,5 @@ of a correct model.
 
 Sphinx pages: `docs/source/user_guide/particle_pairs.rst`, `levels_channels.rst`, `segments.rst`,
 `project_from_python.rst`, `docs/source/reference/format3.rst`, `docs/source/examples/natural_neon.rst`. Examples:
-`pyazr/examples/exfor_fetch.py`, `edit_scheme.py`, `print_scheme.py`, `project_from_python.py`. Test projects to copy
+`pyazr/examples/exfor_fetch.py`, `edit_model.py`, `print_scheme.py`, `project_from_python.py`. Test projects to copy
 from: `tests/upgrade/T1` (capture and scattering), `tests/13N`, `tests/natural_neon`.

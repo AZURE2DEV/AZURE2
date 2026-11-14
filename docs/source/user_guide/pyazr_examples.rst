@@ -29,7 +29,8 @@ Build and edit a project
      - Read what the engine made of a project: pairs, levels, channels, widths, data sets.
      - ``print_scheme.py tests/upgrade/T1/T1.azr``
    * - ``edit_model.py``
-     - Remove, add and switch off levels; remove and add data sets; calculate the edited copy.
+     - Remove, add and switch off levels; remove and add data sets; a prior and limits on level parameters
+       (``<parameterSettings>``); calculate the edited copy.
      - ``edit_model.py tests/upgrade/T1/T1.azr --out DIR``
    * - ``exfor_fetch.py``
      - Fetch an EXFOR data set (or read a local copy), add it to a project, find its reference.

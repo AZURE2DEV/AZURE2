@@ -14,10 +14,12 @@ import os
 import re
 import warnings
 from collections import Counter
+from fractions import Fraction
 
 from .described import _engine as _engine_module
 from .errors import FormatError, MissingFile, ParameterKeyError, _diagnostic_text, close_names, listed
 from .nuclear_part import NuclearPart
+from .parameter_settings import ParameterSettings
 
 __all__ = ["Project", "Record", "Nuisance", "FormatError", "records_from_csv"]
 
@@ -211,7 +213,7 @@ DESCRIPTION_FIELDS = {
 }
 
 
-class Project(NuclearPart):
+class Project(NuclearPart, ParameterSettings):
     """A format-3 project as records (docs/upgrade/project_format3.md section 4.1).
 
     Open a file with :meth:`open`, or start from the nuclear part of one with :meth:`new`; read records with
@@ -428,10 +430,76 @@ class Project(NuclearPart):
         errors = [d for d in new if d["severity"] == "error"]
         if errors:
             raise FormatError(f"{what}:", errors)
+        waves = self._phase_shift_problems(doc)
+        if waves:
+            added = [v for k, v in waves.items() if k not in self._phase_shift_problems(self._doc)]
+            if added:
+                part, allowed, fix = added[0]
+                raise FormatError(f"{what}: {part}; allowed: {allowed}; {fix}", what=f"{what}: {part}",
+                                  allowed=allowed, fix=fix)
         for d in new:
             warnings.warn(f"{what}: {_diagnostic_text(d)}", stacklevel=3)
         self._doc = doc
         return new
+
+    # -- the partial wave of a phase shift -------------------------------------------------------------------------
+
+    def _phase_shift_problems(self, doc):
+        """``{(record name, what): (what, allowed, fix)}`` of the active phase-shift data sets and extrapolations of
+        ``doc`` whose partial wave the active levels do not carry: the check the engine makes when it sets a session
+        up (``src/WorkingCopy.cpp``: the channels of the entrance pair with the record's J and l, of type particle,
+        over the active levels; its s must be one of their channel spins, and without s there must be one), made here
+        so that the edit that breaks it is refused rather than the next session.  Empty when the project has no phase
+        shift, or has errors the validator reports (those refuse the edit already)."""
+        named = [(r, s["section"]) for s in self._sections(doc) for r in s["records"]
+                 if {_text(f["key"]) for f in r["fields"]} >= {"J", "l"}]
+        if not named:
+            return {}
+        refusal, _, description = _engine_module().describe_format3_text(doc.write(), self.path, True,
+                                                                         self.directory, "")
+        if refusal or not description:
+            return {}
+        try:
+            described = json.loads(description)
+        except ValueError:
+            return {}
+        entrance = {e["name"]: (kind, int(e["terms"][0]["entrance_pair"]))
+                    for kind in ("datasets", "extrapolations") for e in described.get(kind, [])
+                    if e.get("quantity") == "phase_shift" and e.get("active", True) and e.get("terms")}
+        if not entrance:
+            return {}
+        levels = [d for d in self._level_table(doc)["levels"] if d["active"]]
+        out = {}
+        for r, _ in named:
+            name = _text(r["name"])
+            if name not in entrance:
+                continue
+            fields = {_text(f["key"]): _text(f["value"]).split("#")[0].strip() for f in r["fields"]}
+            two_j, l = round(2 * float(Fraction(fields["J"]))), int(fields["l"])
+            two_s = round(2 * float(Fraction(fields["s"]))) if fields.get("s") else None
+            kind, pair = entrance[name]
+            spins = sorted({c["two_s"] for d in levels if d["two_j"] == two_j
+                            for c in d["channels"] if c["pair"] == pair and c["l"] == l})
+            wave = f"J = {fields['J']}, l = {l}" + (f", s = {fields['s']}" if two_s is not None else "")
+            record = f"{kind[:-1]} {name} (phase shift, {wave}, entrance pair {pair})"
+            spin_text = ", ".join(_half(t) for t in spins)
+            if not spins or (two_s is not None and two_s not in spins):
+                what = (f"{record}: no active level of J = {fields['J']} has a channel of pair {pair} with l = {l}"
+                        + (f" and s = {fields['s']}" if two_s is not None and spins else "")
+                        + (f" (its channel spins: {spin_text})" if spins else ""))
+                allowed = ("a phase shift names a partial wave (J, l, s) that an active level carries in its "
+                           "entrance pair; the engine refuses to set up the project otherwise")
+                fix = (f"keep or add an active level of that J with the channel (Project.set_level(..., active=True), "
+                       f"Project.add_level, Project.set_channel), or change {name}'s J, l, s or make it inactive "
+                       f"(Project.set({name!r}, active='no'))")
+            elif two_s is None and len(spins) > 1:
+                what = f"{record}: the active levels carry its (J, l) with channel spins {spin_text}"
+                allowed = "a phase shift belongs to one partial wave: with several channel spins it names its s"
+                fix = f"Project.set({name!r}, s=...) with one of {spin_text}"
+            else:
+                continue
+            out[(name, what)] = (what, allowed, fix)
+        return out
 
     @staticmethod
     def _new_diagnostics(before, after):
@@ -654,6 +722,11 @@ class Project(NuclearPart):
                 raise RuntimeError(f"{self.path}:{line}: the value {old!r} is not at column {col}")
             self._doc.replace_lines(line - 1, line, [b[:col - 1] + new + b[col - 1 + len(old):]])
         return list(missing)
+
+
+def _half(two):
+    """A spin given as twice its value, as text: 1 -> "1/2", 4 -> "2"."""
+    return f"{two // 2}" if two % 2 == 0 else f"{two}/2"
 
 
 def records_from_csv(path, kind="dataset", project=None):

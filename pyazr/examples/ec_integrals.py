@@ -7,8 +7,8 @@ external region straight into a bound state.  Its amplitude is a radial integral
     R^EC = C * int_{a_c}^{inf} dr r^L [F_l cos(phi_hs) + G_l sin(phi_hs)] W_{-eta,lf+1/2}(2 k_f r),
 
 one per (l_i, l_f, s_i, s_f, multipolarity, E/M) pathway the compound nucleus allows.
-``Session.ec_integrals(pair, E_cm)`` returns them as dicts (quantum numbers and the complex ``value`` per energy;
-the unit is not stated by the package, and neither is the final state: pathways to two final states with the same
+``Session.ec_integrals(pair, E_cm)`` returns them as dicts (quantum numbers, the complex ``value`` per energy and its
+``unit``, fm^(L+1); the final state is not part of the engine's answer: pathways to two final states with the same
 quantum numbers are told apart only by their position in the list, printed as #k).  The script prints the largest
 pathways at a few energies, the time of two identical requests, and with ``--plot FILE`` draws |R^EC| and its phase
 (matplotlib).
@@ -58,10 +58,10 @@ def main():
           f"first request {t1 - t0:.2f} s, second {t2 - t1:.2f} s")
     order = np.argsort([-np.max(np.abs(p["value"])) for p in paths])[:args.top]
     cols = np.linspace(0, len(energies) - 1, 4).astype(int)
-    print(f"\n{'pathway':<34}" + "".join(f"  |R| at {energies[k]:.2f} MeV" for k in cols))
+    print(f"\n{'pathway':<36} {'unit':<6}" + "".join(f"  |R| at {energies[k]:.2f} MeV" for k in cols))
     for k in order:
         p = paths[k]
-        print(f"#{k:<3d}{label(p):<30}" + "".join(f"  {abs(p['value'][c]):18.5g}" for c in cols))
+        print(f"#{k:<3d}{label(p):<32} {p['unit']:<6}" + "".join(f"  {abs(p['value'][c]):18.5g}" for c in cols))
 
     if args.plot:
         import matplotlib

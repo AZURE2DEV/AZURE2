@@ -7,6 +7,7 @@ hold copies the caller owns, and no session.
 """
 import numpy as np
 
+from . import session_checks
 from .model_data import ModelDatum
 from .locking import session_lock
 
@@ -224,6 +225,8 @@ def evaluate(session, x=None):
     with session_lock(session):
         x = np.asarray(session.parameters.x0 if x is None else x, float).ravel()
         if has_data:
+            x = session_checks.fit_vector(x, len(session.parameters.x0), "Session.evaluate",
+                                          lambda: session.parameters.free.names)
             raw = session._engine.evaluation_rwa(x)
         else:
             x = np.asarray(x, float).ravel()

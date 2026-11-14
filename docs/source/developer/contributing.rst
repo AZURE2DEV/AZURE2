@@ -116,6 +116,14 @@ Style
   dependencies. Every public name in ``pyazr.__all__`` has a docstring giving
   units and frames. Removing or renaming a public name requires a deprecation
   period.
+* pyazr's library calls: a refusal is a ``pyazr.Error`` whose message says what
+  was wrong, what is allowed and which call shows or fixes it, the three parts
+  also given as ``e.what``, ``e.allowed``, ``e.fix``; a call prints nothing on
+  standard output (the engine's lines go to the logger ``pyazr.engine``,
+  ``pyazr/engine_text.py``); a call writes only where its caller says (a path,
+  an output directory, ``cwd``) or into a temporary directory it removes or
+  returns, never beside the project unasked (a session writes into the output
+  directory its project names).
 * Versions: pyazr's version is ``__version__`` in ``pyazr/__init__.py``
   (semantic versioning). The engine's version is set in ``CMakeLists.txt`` and
   bumped when a release is tagged.

@@ -21,10 +21,13 @@ def session_lock(session):
 def engine_call(method):
     """Wrap a method of the session so that it holds the session's lock while it runs (``method.takes_lock`` is
     True on the wrapper: ``tests/pyazr/session_lock_test.py`` checks that every public member that enters the engine
-    has it)."""
+    has it), with the engine's standard output held off the caller's (:func:`pyazr.engine_text.held`: the engine's
+    lines go to the logger ``pyazr.engine``; Python's ``print`` is shown as before)."""
+    from . import engine_text
+
     @functools.wraps(method)
     def locked(self, *args, **kwargs):
-        with session_lock(self):
+        with session_lock(self), engine_text.held():
             return method(self, *args, **kwargs)
     locked.takes_lock = True
     return locked

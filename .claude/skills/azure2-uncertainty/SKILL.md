@@ -171,5 +171,5 @@ Reference: `docs/source/user_guide/chi_squared.rst`, "Prior parameter covariance
 - `references/data-covariance.md`, `references/sampling.md`.
 - Scripts: `fisher.py`, `write_covariance.py`, `profile_scan.py`, `nuts.py`, `sample_nuts.py`, `sample_emcee.py`,
   `mcmc_stats.py`, `draw_bands.py`; `scripts/selftest.py` runs them on T3 (52 s at one thread).
-- Examples: `pyazr/examples/uncertainty_band.py`, `sensitivities.py`, `fit_emcee.py`, `fit_zeus.py`,
-  `reaction_rate.py`.
+- Examples: `pyazr/examples/uncertainty_band.py`, `sensitivities.py`, `fit_emcee.py` (with priors and a rate per
+  sample), `reaction_rate.py`.

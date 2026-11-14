@@ -2,6 +2,77 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-pyazr-repairs`) — pyazr's library calls: the defects the examples met
+
+Each item measured on the start commit (`5884aa62`, engine of `work/b-pyfix`, copies of the projects, one thread),
+then repaired with a test that fails before (shown by running it with the old files of the commit before):
+
+- **Level scheme** (`pyazr/system/scheme.py`): T3 listed "2: photon" for its beta pair (key 4) and channels by the
+  engine's numbers; now pairs by key with the engine's `pair_kind` word (the numbers and words of `Project.pairs()`),
+  channel labels with key and kind, and the value named by what the row holds (Gamma eV, C fm^-1/2 for a level below
+  the pair's threshold, gamma MeV^1/2, B the beta-feeding amplitude): `tests/pyazr/library_answers_test.py` (a).
+- **ec_integrals**: each pathway now has `unit` "fm^(L+1)" (from the engine's use: T = C k^(L+1/2) x integral,
+  dimensionless; derived from the code, not measured); the final state needs the engine (below).  Test (b).
+- **Extrapolation units**: `evaluate(x).data[i].unit` was None in a session of the extrapolations; the description
+  of an extrapolation now carries `unit` and `engine_unit` (T1: b, deg, b/sr).  Test (c).
+- **radiative unit**: was "eV (total_width), 1 (branching, mixing)"; a record takes its part's unit from that text
+  (eV, 1, 1).  Test (d).
+- **Quiet** (`pyazr/engine_text.py`, `locking.engine_call`): measured, a session's set-up printed the engine's stale
+  cache WARNING and ERROR lines, `reaction_rate` 1.1-1.3 kB of progress bars, `endf.write` its sessions' WARNINGs,
+  `Session.parameters` and a fit the transformation's "**WARNING: Denominator"; every session call, the set-up and the
+  rate now point descriptor 1 at a temporary file and log the lines to `pyazr.engine` (WARNING/ERROR at WARNING, the
+  rest INFO); Python's `print` stays shown (`sys.stdout` moved to a copy of the real descriptor), also in a fit's
+  progress callback.  `Objective` calls are not held (hot path; none printed in the measurement).  The "Coulomb
+  table: ..." lines are the engine's `std::cerr`, not touched.  `tests/pyazr/library_calls_test.py` (a).
+- **Writes**: the rate wrote `output/cross_section_grid.dat` beside the project (or "could not write") and an empty
+  `intEC.extrap` over the project's cache; `trimmed_model` wrote its `.azr` beside the project and `output/bands/`;
+  `extrapolation_bands` left `output/bands/`; `tabulate` its `azr_tab_*` work directory (and left it when raising);
+  parallel `sensitivities` used `output/sensitivities/`.  Now: `RateSession` runs on a copy whose output directory is
+  a temporary one (removed on close); `trimmed_model` writes into the work directory it returns (temporary unless
+  `workdir=`); `extrapolation_bands` removes its own (new `workdir=` keyword keeps one of the caller's); `tabulate` and
+  the parallel workers use temporary directories.  The rule (pyazr's: save_fit, endf.write) is in the Developer Guide
+  (`contributing.rst`) and `pyazr/CLAUDE.md`.  Rates (T1 1->2, 1->-1), bands and tables bit for bit those of before;
+  2-process sensitivities equal to before.  Test (b), (e).
+- **Refusals**: `evaluate`'s and the Objective's `ParameterVectorError` (the engine's message only) are checked in
+  Python with what/allowed/fix (`session_checks.fit_vector`); a refused set-up (it said "check the output above")
+  quotes the engine's ERROR lines in `what` and its message; save_fit's refusals have parts.  Test (c), (d).
+- **Phase shift**: a Project edit that makes the levels of a phase shift's (J, l, s) inactive was accepted and the
+  session refused; `Project._apply` now repeats the engine's set-up rule (`src/WorkingCopy.cpp`) and refuses the edit
+  (data sets and extrapolations; only new problems): `tests/pyazr/project_phase_shift_test.py`, the engine agreeing on
+  each case.
+- **save_fit(relative_to=)**: not a defect (T1: written relative to the directory, reopened with that cwd, chi2 equal
+  to 1e-15); no `threads` argument of `Session` (needs the engine); the functions without a caller (a token count
+  over the repository's code): `cli.write_reference_page` (named by the docs, run by hand), `cli` `Catcher.isatty`
+  (asked by logging set-ups), `covariance._field_default`, `DescribedDatasets.by_reaction`,
+  `endf.model.particle_pairs_text` (another agent's), `parameters.record_fields`, `project.write_parameter_values`,
+  `LevelScheme.by_jpi`, `WidthTable.by_level` (named in pyazr.rst); none deleted.
+- **A prior or a limit on a level parameter** (`pyazr/parameter_settings.py`, mixed into `Project`):
+  `set_parameter_setting(level, channel=None, prior=, limits=)`, `parameter_settings()`, `kinds()
+  ["parameter_settings"]`; T1: the session's "nuisance priors" = 0.04 for a prior 3.5 +- 0.01 on E = 3.502, the
+  width's bounds the limits converted; refusals (fixed, inactive, unknown channel, sigma, order).  The engine has no
+  schema row for `<parameterSettings>` (the columns named once in `COLUMNS`).  `edit_model.py` shows it.
+  `tests/pyazr/parameter_settings_test.py`.
+- **A project without a nuclear-part file**: measured, `<config>\nformat=3\n</config>` with an empty `<levels>`
+  parses and validates, but the engine reads `<config>`'s eleven positional lines first (the session: "no <config>
+  block found"; `set_config`: "the <config> section is not complete"); it takes the engine's text of an empty
+  project (its positional defaults), which `config_table()` does not give.  Not built.
+- **Skills**: 9 names of removed examples in five pages replaced; check 58 also refuses a skill's page that names an
+  example that is not there (injected once: `fit_zeus.py` back in azure2-uncertainty, one failure; all nine on the
+  start commit).
+
+**Verified** (this branch, `work/b-pyfix`, 0 warnings): `OMP_NUM_THREADS=1 ctest -LE slow -j1` once on `e421d595`:
+289 of 293 passed; the 4 failures (`pyazr_rebuild_resources`, `pyazr_composite_terms`, `pyazr_config_options`: tests
+that read the engine's lines on standard output or compared refusal texts; `pyazr_ui_routes_consistency`: the two new
+Project names) were repaired and the 4 pass with `ec_final_state`, `errors`, `library_calls` (`d5d883ad`, `ae9c4f09`
+and the commit after).  `tests/pyazr/examples_test.py --all`: 31 run, 1 skipped (network), all ok.  `ctest -R skill`:
+12 of 12.  Slow tests run once on the way: `pyazr_concurrent_sessions` (set-up held), `pyazr_fit_with_engine` (every
+session call held): passed.  Consistency test and the pages' build after every commit.  Not run: the projects x 3
+bases comparison (no C++ changed), `scripts/check.sh --quick` as such (its parts were run).
+
+**Open** (the engine; `FOR_THE_OWNER.md`): the final state of an EC integral, the engine's text kept by the session,
+the rate's files, a session's threads, the units of `shift_fn` and `apparatus` parameters, a schema row for
+`<parameterSettings>`, the phase-shift check in the validator, an empty project from the engine.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: MF=6
 
 **Done** (`endf.md` 13.8, 13.9): `pyazr.endf.write` writes MF=6 from the engine on the one energy grid of MF=3:

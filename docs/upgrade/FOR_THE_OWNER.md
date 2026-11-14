@@ -911,6 +911,51 @@ no effect); `--no-readline`, which nearly every old script carries, is refused (
 The refusal says so: "Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads nothing from
 standard input.  Drop --no-readline and give the command: ...", exit status 2.
 
+## pyazr's library calls: the small findings that need the engine (2026-11-14)
+
+The example scripts showed defects of pyazr's calls; those that Python can repair are repaired (a call prints nothing
+on standard output, writes nothing beside the project, refuses with three parts; the level scheme's words, the
+units of the external-capture integrals, of an extrapolation and of a gamma_decay number; a prior or a limit on a
+level parameter as a `Project` edit).  What needs the engine, function by function:
+
+- **The final state of an external-capture integral.** `AZUREAPI::GetECIntegrals` (`api/src/AZUREAPI.cpp`) writes six
+  numbers per pathway (l_i, l_f, 2s_i, 2s_f, multipolarity, E/M); it knows the final state (`ecLevel`, its pair
+  `finalPair`) and does not pass it.  It should push the final pair's key and the EC level's (group, level), and
+  `Session.ec_integrals` would read them; today two pathways to two final states with the same quantum numbers are
+  told apart by their position only.
+- **The engine's text.** A session's `Config::outStream` is the binding's `NoticeBuffer` in front of `std::cout`
+  (`api/src/pybind_api.cpp`, `notices_{std::cout}`): every line that is not a held notice reaches the process's
+  standard output.  Python now points descriptor 1 at a temporary file during each session call and a rate
+  (`pyazr/engine_text.py`) and logs the lines; the engine-side repair is a `NoticeBuffer` over a buffer of the
+  session's with a `take_output()` beside `take_notices()`, after which the descriptor juggling can go.  The lines
+  met: the rate's progress bar and grid line (`src/ReactionRate.cpp`: `PrintRateProgress` and the
+  "Wrote cross section grid" line), the stale-cache WARNING and the "Segment #" progress of
+  `src/ExternalCaptureSetup.cpp`, the phase-shift ERROR of `WorkingCopy` (`src/WorkingCopy.cpp`), the
+  "**WARNING: Denominator less than zero" of `src/CNucTransformMessages.cpp` (also printed by
+  `Session.parameters` and a fit when a `<parameterSettings>` limit lies beyond what the transformation reaches).
+  The "Coulomb table: ..." lines go to `std::cerr` (`src/CoulombTable.cpp`, `src/RunDiagnostics.cpp`) at every set-up
+  and at the end of the process; a library would keep them for `describe()`.
+- **The rate's files.** `src/ReactionRate.cpp` writes `cross_section_grid.dat` into the output directory of the
+  project and its rate session wrote an empty `intEC.extrap` with its `.sig` over the project's cache.  pyazr's
+  `RateSession` now runs on a copy of the project whose output directory is a temporary one; a `RuntimeOptions`
+  field "no output files" (or an output directory of the session's) would make the copy unnecessary.
+- **Threads of a session.** `pyazr.Session` has no `threads` argument: a session uses the process's OpenMP threads
+  (`OMP_NUM_THREADS` before the import, or `omp_get_max_threads()`); the binding binds no `omp_set_num_threads` and
+  `RuntimeOptions` has no field for it.
+- **Units of two parameter kinds.** A `shift_fn` parameter's unit is the kind's text "as the shift function defines",
+  an `apparatus` parameter's "the row's (apparatusUnit)": the record (`api/src/pybind_records.cpp`) carries no unit
+  of its own row.  (A `radiative` parameter's unit is now taken from the kind's text by its part.)
+- **`<parameterSettings>` has no schema row.** Its columns are the reader's (`ParameterLimitsManager::
+  ReadParameterSettings`); pyazr names them once (`pyazr/parameter_settings.py`, `COLUMNS`).  Its rows name a level
+  by the engine's running number (`Level N Energy (MeV)`), which shifts when a level is added, removed or switched
+  off; a row by the parameter's name (`energy_N`) is read only for parameters other than a level's
+  (`SettingNameFor`), so the numbering cannot be avoided from Python.
+- **The phase-shift check at set-up only.** The engine refuses a phase-shift data set whose (J, l, s) no active level
+  carries when a session is set up (`src/WorkingCopy.cpp`); the validator does not check it, so `Project` repeats
+  the rule after each edit (`Project._phase_shift_problems`).  As a build check of the validator it would be one
+  implementation.  The validator's `E_FIELD_NOT_APPLICABLE` of a phase shift's J, l or s gives a message but no
+  `allowed` and no `fix`.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

@@ -25,8 +25,8 @@ except ImportError as err:                            # pragma: no cover
         "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
-from .errors import close_names, listed
-from . import session_checks, session_fit, session_options, session_physics, session_thm
+from .errors import AZURE2Error, close_names, listed
+from . import engine_text, session_checks, session_fit, session_options, session_physics, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
 from .parameters import Parameter, Parameters
@@ -181,12 +181,20 @@ class Session(
         # (pyazr.bands.sensitivities with nprocs > 1), and self.option_sources where each came from.
         given = {k: v for k, v in locals().items() if k in self._given_options}
         opts = session_options.runtime_options(_azure2, given, not extrapolations, coulomb_table, self.cwd)
-        self._sess = _azure2.Session(self.file, opts)
+        # the engine's text of the set-up goes to the logger pyazr.engine, not to standard output (pyazr.engine_text);
+        # a refused set-up quotes it in its error
+        said = []
+        try:
+            with engine_text.held() as said:
+                self._sess = _azure2.Session(self.file, opts)
+        except AZURE2Error as err:
+            raise session_checks.setup_refused(err, said, self.file) from None
         self.options, self.option_sources = session_options.in_use(self._sess, extrapolations, coulomb_table,
                                                                     self._parameter_file)
 
         self.mode = "extrap" if extrapolations else "data"  # what the session evaluates, fixed when it is made
-        self.configure()
+        with engine_text.held():
+            self.configure()
 
     def __del__(self):
         self.close()
