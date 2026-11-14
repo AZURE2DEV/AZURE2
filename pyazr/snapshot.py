@@ -143,8 +143,8 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
     if verify and norms == "fitted" and session.mode == "data":
         ev = session.evaluate(x)
         chi_want, pen_want = ev.chi2, ev.objective
-    check_options = {k: v for k, v in session.options.items() if k not in ("data_mode", "parameter_file")}
-    check_options["data_mode"] = session.mode == "data"
+    check_options = {k: v for k, v in session.options.items() if k not in ("extrapolations", "parameter_file")}
+    check_options["extrapolations"] = session.mode == "extrap"
     if close_session:
         session.close()
 

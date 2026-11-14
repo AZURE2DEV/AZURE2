@@ -78,11 +78,9 @@ def main():
     print(extrapolation_bands(AZR, grids=[grid], quantity="sfactor")[1])
 
     # ------------------------------------------------------------------
-    # 3.  Data and band from a single session.  Opening two sessions in
-    #     one interpreter is asking for trouble, so when a plot needs both the
-    #     measured points and the band, trim the model yourself, read the data
-    #     in data mode, then switch and call uncertainty_bands.  This is what
-    #     plot-capture.py and plot-angular.py do.
+    # 3.  Data and band from one trimmed model: trim the model yourself, read
+    #     the data from a session made for the data, then make one for the
+    #     extrapolations (extrapolations=True) and call uncertainty_bands.
     # ------------------------------------------------------------------
     tmp, workdir = trimmed_model(AZR, keys=[113])
     try:
@@ -92,8 +90,8 @@ def main():
             print(f"\n{len(capture)} 3He+4He capture datasets, "
                   f"{sum(len(m.energies[i]) for i in capture)} points")
 
-            m.extrap_mode()
-            # The trimmed file renumbers the grids it kept 1..N.
+        # The extrapolations: a session made for them.  The trimmed file renumbers the grids it kept 1..N.
+        with Session(tmp, cwd=os.path.dirname(os.path.abspath(AZR)) or ".", extrapolations=True) as m:
             print(uncertainty_bands(m, keys=[1], quantity="sfactor")[1])
     finally:
         os.remove(tmp)

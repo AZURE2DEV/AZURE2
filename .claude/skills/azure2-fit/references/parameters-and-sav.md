@@ -49,7 +49,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 - `parameter_file=` matches names as the CLI does and puts the whole file into the engine; `bands.best_fit_params`
   takes a file the same way. It does not change the free/fixed split (the CLI frees a parameter fixed at 0 that the
   file sets nonzero) and refuses a file tagged with another basis; `s.parameters.read` refuses one too.
-- A session of the extrapolations (`pyazr.Session(path, data_mode=False)`) is built from the `.azr`: open it with
+- A session of the extrapolations (`pyazr.Session(path, extrapolations=True)`) is built from the `.azr`: open it with
   `parameter_file=path` as well.
 
 ## Which physical level is `energy_<N>`?

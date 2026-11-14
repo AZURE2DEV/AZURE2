@@ -30,7 +30,11 @@ and the two differ by the level-shift derivative, because AZURE2 reports
 dS_c'/dE)``.  For narrow levels the denominator is ~1 and the two agree; for
 broad ones they can differ by tens of percent.  Prefer ``theta^2`` -- it is the
 number the GUI shows, one channel at a time.  Never divide by ``wigner_limit``
-twice: it is already a squared quantity.
+twice: it is already a squared quantity (:func:`pyazr.physics.wigner_limit` gives the same unit; a
+``hbar^2 / (mu a^2)`` unit is 2/3 of it).
+
+The Weisskopf estimate (:func:`weisskopf_width`) is the one formula of this module: the engine has no
+counterpart.  Every other number of the table is the engine's (``Session.transform``, the records).
 
 Getting the penetrability without a Coulomb-function implementation
 -------------------------------------------------------------------
@@ -82,24 +86,6 @@ def weisskopf_width(radiation_type, L, e_gamma, mass_number):
     if f is None or e_gamma is None or e_gamma <= 0:
         return None
     return f(float(mass_number), float(e_gamma))
-
-
-def teichmann_wigner(wigner_gamma2):
-    """The Teichmann-Wigner sum-rule unit ``3 hbar^2 / (2 mu a^2)``.
-
-    AZURE2's ``Parameter.wigner_limit`` (and :attr:`ChannelWidth.wigner_gamma2`)
-    already IS this unit, so the value is returned unchanged.  Before 2026-10-27
-    this multiplied by 1.5 again, giving ``2.25 hbar^2 / (mu a^2)`` and a
-    theta^2 too small by 1.5 (audit item 19).  For the other common convention,
-    ``hbar^2 / (mu a^2)``, use :func:`lane_thomas_wigner`.
-    """
-    return None if wigner_gamma2 is None else wigner_gamma2
-
-
-def lane_thomas_wigner(wigner_gamma2):
-    """The ``hbar^2 / (mu a^2)`` unit, 2/3 of AZURE2's ``3 hbar^2 / (2 mu a^2)``:
-    a theta^2 quoted against it is 1.5x LARGER than AZURE2's."""
-    return None if wigner_gamma2 is None else wigner_gamma2 / 1.5
 
 
 @dataclass

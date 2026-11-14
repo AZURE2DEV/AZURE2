@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory() as tmp:
         except ValueError:
             check(f"3. a grid with frame {frame!r} is refused", True)
 
-    with Session(path, data_mode=False) as m:
+    with Session(path, extrapolations=True) as m:
         e = [np.asarray(v, float) for v in [d.energies for d in m.evaluate().data]]
     print(f"  pair 1: M1 = {m1}, M2 = {m2}; c.m. energies per segment:")
     for k, v in enumerate(e, 1):

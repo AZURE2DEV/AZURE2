@@ -109,7 +109,7 @@ def main(argv=None):
     import pyazr
     opts = {k: option_value(v) for k, v in (o.split("=", 1) for o in a.option)}
     try:
-        with pyazr.Session(a.azr, data_mode=not a.extrapolations, **opts) as s:
+        with pyazr.Session(a.azr, extrapolations=a.extrapolations, **opts) as s:
             x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
             r = decompose(s, x, a.level, a.dataset, a.other, a.zero_bound)
     except (KeyError, pyazr.Error) as err:

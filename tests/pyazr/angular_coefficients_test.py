@@ -80,7 +80,7 @@ def main():
         os.makedirs(os.path.join(work, "ext", "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "ext", "checks"), exist_ok=True)
         shutil.copy(src, os.path.join(work, "ext", "m.azr"))
-        with Session(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
+        with Session(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), extrapolations=True) as m:
             coef = m.evaluate(m.parameters.x0).data[0].extra["legendre"]   # extrapolation 1: one array per energy
         n_e = len(coef)
         check("the legendre extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))

@@ -10,7 +10,7 @@ import functools
 import inspect
 
 #: The keywords of :class:`pyazr.Session` that are not options of the calculation (not project state).
-NOT_OPTIONS = ("self", "file", "cwd", "data_mode", "coulomb_table", "parameter_file")
+NOT_OPTIONS = ("self", "file", "cwd", "extrapolations", "coulomb_table", "parameter_file")
 
 
 def records_given(init):
@@ -36,11 +36,11 @@ def runtime_options(engine, given, data_mode, coulomb_table, cwd):
     return opts
 
 
-def in_use(sess, data_mode, coulomb_table, parameter_file=None):
-    """The options in effect, as ``(values, sources)``: ``values`` {keyword: value} with ``data_mode``,
+def in_use(sess, extrapolations, coulomb_table, parameter_file=None):
+    """The options in effect, as ``(values, sources)``: ``values`` {keyword: value} with ``extrapolations``,
     ``coulomb_table`` and ``parameter_file`` (what :attr:`pyazr.Session.options` holds: passed back as keywords they rebuild the same
     session), ``sources`` {keyword: "default" | "project" | "keyword"} of the options of the calculation."""
-    values = {"data_mode": bool(data_mode)}
+    values = {"extrapolations": bool(extrapolations)}
     sources = {}
     for name, (value, source) in sess.option_sources().items():
         values[name], sources[name] = bool(value), source

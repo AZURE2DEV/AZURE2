@@ -39,7 +39,7 @@ def check(name, ok, detail=""):
 try:
     import numpy as np
     import pyazr
-    from pyazr import _azure2, transform
+    from pyazr import _azure2
 except Exception as err:  # pragma: no cover
     print(f"skip: the engine module is not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -101,12 +101,6 @@ try:
     expect("Project[name] of a record it does not have", lambda: project["skowronski_luna_hpgX"],
            pyazr.ParameterKeyError, KeyError,
            ["'skowronski_luna_hpgX'", "did you mean", "Project.records()"])
-    expect("penetrability below threshold", lambda: transform.penetrability(0, 1, 6, 0.93, 4.0, -0.1),
-           pyazr.DomainError, ValueError, ["energy = -0.1", "> 0", "Session.channel_functions"])
-    expect("penetrability with L = -1", lambda: transform.penetrability(-1, 1, 6, 0.93, 4.0, 0.5),
-           pyazr.DomainZeroDivision, ZeroDivisionError, ["L = -1", "whole number >= 0", "help(pyazr.penetrability)"])
-    expect("whittaker below its domain", lambda: transform.whittaker(0, 1, 6, 0.93, 4.0, 0.0),
-           pyazr.DomainZeroDivision, ZeroDivisionError, ["binding_energy = 0.0", "> 0", "pyazr.whittaker"])
     expect("whittaker_wave with rho <= 0", lambda: pyazr.whittaker_wave(0, 1.0, [1.0, -1.0]),
            pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.physics.whittaker_wave)"])
     expect("penetrability below threshold", lambda: pyazr.physics.penetrability(0, 1, 6, 1.00728, 12.0, 5.0, -0.1),
