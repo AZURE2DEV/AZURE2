@@ -20,7 +20,7 @@
 #include <omp.h>
 #endif
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelTable.h"
 #include "Config.h"
 #include "PPair.h"
@@ -49,7 +49,7 @@ void CheckProject(const std::string &azr) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = azr;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1) {
@@ -108,7 +108,7 @@ void CheckProject(const std::string &azr) {
         fromPrevious->Computed() == fromPrevious->Size() - one->Size());
   // The same project with the first key's pair at another channel radius (the structure is fixed after set-up: a
   // radius is changed by filling the compound again with the override, as the API's SetRadius does).
-  CNuc moved;
+  CompoundSystem moved;
   LevelState movedState;  // the levels, as the run holds them
   LevelInputs movedInputs;
   moved.Fill(cfg, movedState, movedInputs, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});

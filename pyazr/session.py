@@ -397,7 +397,7 @@ class Session(
         eV (an ANC in fm^-1/2 for a closed channel, a channel entered as an amplitude as Brune's amplitude), every other
         kind as its fit value (``parameters.units``).
 
-        The engine's transformation (``CNuc::TransformOut``), as the program writes ``<levels>`` from a fit: a fixed
+        The engine's transformation (``CompoundSystem::TransformOut``), as the program writes ``<levels>`` from a fit: a fixed
         width holds its reduced-width amplitude, so its physical value follows the level's other widths through the
         Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE`` (under Park the amplitude is the observed width).  The
         inverse is not offered by the engine: a fit vector is made from ``parameters.x0`` (``Parameters.put``) or a

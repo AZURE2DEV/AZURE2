@@ -7,7 +7,7 @@
 #include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ChannelFunc.h"
 #include "CoulFunc.h"
@@ -331,7 +331,7 @@ double Site::GetTargetThickness() const {
  * to calculate all energy dependent quantities that do no rely on the R-Matrix fit parameters.
  */
 
-void Unit::Initialize(WorkingCopy *data, const CNuc *compound, const Config &configure) {
+void Unit::Initialize(WorkingCopy *data, const CompoundSystem *compound, const Config &configure) {
   this->CalcEDependentValues(data, compound, configure);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
@@ -558,13 +558,13 @@ void Site::NoResultRecord(const azure2::Results &r) const {
       "caller's UsePrivateRecord is missing");
 }
 
-void Unit::CalcLegendreP(WorkingCopy *data, int maxL, const CNuc *theCNuc, const TargetEffect *targetEffect) {
-  Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
+void Unit::CalcLegendreP(WorkingCopy *data, int maxL, const CompoundSystem *compound, const TargetEffect *targetEffect) {
+  Site::CalcLegendreP(data, maxL, compound, targetEffect);
   for (int i = 1; i <= NumSubPoints(); i++)
-    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
+    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, compound, targetEffect);
 }
 
-azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, const CNuc *theCNuc,
+azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, const CompoundSystem *compound,
                                 const TargetEffect *targetEffect, const azure2::experiment::FrameRule *labFrame) const {
   azure2::RowSet set;
   set.kind = Observable();
@@ -572,7 +572,7 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   set.count = count;
   set.valuesPerSlot = kSiteObservables[(int)set.kind].values;
   set.labFrame = labFrame != nullptr;
-  set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(theCNuc, targetEffect));
+  set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(compound, targetEffect));
   const int positions = set.perSlot ? count : 1;
   if (!set.labFrame) {
     set.angles.assign(1, GetCMAngle());
@@ -598,13 +598,13 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
     set.rowLength = (std::size_t)std::max(maxL + 1, 0);
     set.rows.resize(set.rowLength * (std::size_t)count);
     for (int k = 0; k < count; k++)
-      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, theCNuc, targetEffect,
+      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, compound, targetEffect,
                     set.rows.data() + (std::size_t)k * set.rowLength);
   }
   if (set.kind == SiteObservable::kAnalyzingPower) {
     // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)
-    const PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
-    const PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
+    const PPair *in = compound->GetPair(compound->GetPairNumFromKey(GetEntranceKey()));
+    const PPair *out = compound->GetPair(compound->GetPairNumFromKey(GetExitKey()));
     set.muMax = Polarization::MaxProjection(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2));
     set.p1.assign(set.rowLength * (std::size_t)positions, 0.0);
     vector_c table;
@@ -620,7 +620,7 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   if (set.kind == SiteObservable::kElastic ||
       (set.kind == SiteObservable::kAnalyzingPower && GetEntranceKey() == GetExitKey())) {
     // f_C depends on the energy: at the readers' angle and the energies of the slots
-    const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(GetEntranceKey()));
     set.coulomb.resize(2 * (std::size_t)count);
     bool spinDependent = false;
     for (int k = 0; k < count; k++)
@@ -630,42 +630,42 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   return set;
 }
 
-void Unit::CalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
-  Site::CalcEDependentValues(data, theCNuc, configure, rows);
+void Unit::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelRowSource *rows) {
+  Site::CalcEDependentValues(data, compound, configure, rows);
   for (int i = 1; i <= NumSubPoints(); i++)
-    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, rows);
+    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcEDependentValues(data, compound, configure, rows);
 }
 
-void Unit::ChannelKeys(WorkingCopy *data, const CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
-  Site::ChannelKeys(data, theCNuc, keys);
+void Unit::ChannelKeys(WorkingCopy *data, const CompoundSystem *compound, std::vector<ChannelTable::Key> &keys) {
+  Site::ChannelKeys(data, compound, keys);
   for (int i = 1; i <= NumSubPoints(); i++)
-    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys);
+    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->ChannelKeys(data, compound, keys);
 }
 
-void Unit::CalcCoulombAmplitude(WorkingCopy *data, const CNuc *theCNuc) {
-  Site::CalcCoulombAmplitude(data, theCNuc);
+void Unit::CalcCoulombAmplitude(WorkingCopy *data, const CompoundSystem *compound) {
+  Site::CalcCoulombAmplitude(data, compound);
   for (int i = 1; i <= NumSubPoints(); i++)
-    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcCoulombAmplitude(data, theCNuc);
+    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcCoulombAmplitude(data, compound);
 }
 
-void Unit::CalculateECAmplitudes(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
-  Site::CalculateECAmplitudes(data, theCNuc, configure, table);
+void Unit::CalculateECAmplitudes(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelTable *table) {
+  Site::CalculateECAmplitudes(data, compound, configure, table);
   for (int i = 1; i <= NumSubPoints(); i++)
-    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
+    if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalculateECAmplitudes(data, compound, configure, table);
 }
 
 // The slots are emptied before any is refilled: a slot keeps the storage of its rows (Site::ClearEDependentRows).
 // An energy shift moves each slot and recomputes it on its own (Segment::UpdatePointEnergyWithShift), so it calls
 // this on the point's own site only.
-void Unit::RecalcEDependentValues(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+void Unit::RecalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelRowSource *rows) {
   if (EDependentCurrent()) return;
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->ClearEDependentRows();
-  Site::RecalcEDependentValues(data, theCNuc, configure, rows);
+  Site::RecalcEDependentValues(data, compound, configure, rows);
   for (int i = 1; i <= NumSubPoints(); i++) {
     if (!data->WritesSlot(*this, i)) continue;
     Site &slot = *GetSubPoint(*data, i);
-    slot.CalcEDependentValues(data, theCNuc, configure, rows);
-    slot.CalcCoulombAmplitude(data, theCNuc);
+    slot.CalcEDependentValues(data, compound, configure, rows);
+    slot.CalcCoulombAmplitude(data, compound);
   }
 }

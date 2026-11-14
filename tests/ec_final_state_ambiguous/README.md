@@ -3,7 +3,7 @@
 An external-capture final state that matches more than one level is refused (audit 2026-10-25,
 03_rmatrix_core F9, checklist item 28).
 
-`CNuc::ParseExternalCapture` attaches a capture pair's final state to the level of the pair's J^pi
+`CompoundSystem::ParseExternalCapture` attaches a capture pair's final state to the level of the pair's J^pi
 group whose energy lies within 1 keV of the pair's excitation energy (`JGroup::IsLevel`, an
 energy-only match that returns the first fit). Since e239a12 two levels of one J^pi may sit within
 1 keV of each other (they carry different level IDs), so a pair's energy can match both: the first
@@ -27,7 +27,7 @@ The other way round: `tests/13N` with a copy of its gamma pair under a new key (
 capture data set into that pair.  Both pairs name the ground state.  `ParseExternalCapture` gave the level the
 second pair's capture parameters, and capture into pair 2 ran without its external part and without a message
 (1.95e-9 against 4.32e-9 at the first point).  Now it stops with an ERROR naming both pair keys and the level
-(`FinalStateOfAnotherPair`, `src/CNucExternalCapture.cpp`):
+(`FinalStateOfAnotherPair`, `src/ExternalCaptureAmplitudes.cpp`):
 
 - (d) the two-pair model writes the ERROR and no chiSquared.out;
 - (e) its format-3 conversion (`AZURE2 --convert ... --to 3`) converts and is refused the same way when run.

@@ -3,7 +3,7 @@
 #include "AZUREGrad.h"
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Unit.h"
 #include "JGroup.h"
@@ -46,7 +46,7 @@ Coefficients FormulaCoefficients(const PPair *pair) {
   return {-a * e2x / (x * x * k1s * k1s), 2.0 * a * e2x * i1s / (x * x * k1s)};
 }
 
-std::vector<Channel> Channels(const CNuc *compound, int pairKey) {
+std::vector<Channel> Channels(const CompoundSystem *compound, int pairKey) {
   std::vector<Channel> out;
   if (!compound->IsPairKey(pairKey)) return out;
   const int pairNum = compound->GetPairNumFromKey(pairKey);
@@ -81,7 +81,7 @@ std::vector<Channel> Channels(const CNuc *compound, int pairKey) {
 
 namespace {
 /// Fill and invert the level matrices at the pair's threshold.
-void ThresholdMatrices(const CNuc *compound, const LevelState &state, const Config &configure, Unit &point, AMatrixFunc &f) {
+void ThresholdMatrices(const CompoundSystem *compound, const LevelState &state, const Config &configure, Unit &point, AMatrixFunc &f) {
   point.OwnSite().CalcEDependentValues(nullptr, compound, configure, nullptr);
   f.ClearMatrices();
   f.FillMatrices(&point);
@@ -89,7 +89,7 @@ void ThresholdMatrices(const CNuc *compound, const LevelState &state, const Conf
 }
 }  // namespace
 
-Value Evaluate(const CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch) {
+Value Evaluate(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Channel &ch) {
   Value v;
   v.ch = ch;
   v.M = complex(0.0, 0.0);
@@ -104,7 +104,7 @@ Value Evaluate(const CNuc *compound, const LevelState &state, const Config &conf
   return v;
 }
 
-bool Adjoint(const CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
+bool Adjoint(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv) {
   if (!ch.hasLevels) return true;  // a0 does not depend on any parameter
   Unit point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
@@ -114,7 +114,7 @@ bool Adjoint(const CNuc *compound, const LevelState &state, const Config &config
   return f.BilinearAdjoint(&point, ch.jGroup, ch.channel, c.c1 * aBar, accum, shiftDeriv);
 }
 
-std::string ResolveConstraint(const CNuc *compound, Constraint &c) {
+std::string ResolveConstraint(const CompoundSystem *compound, Constraint &c) {
   if (!compound->IsPairKey(c.pairKey)) return "no particle pair with key " + std::to_string(c.pairKey);
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(c.pairKey));
   if (pair->GetPType() != 0) return "pair " + std::to_string(c.pairKey) + " is not a particle pair";
@@ -141,7 +141,7 @@ std::string ResolveConstraint(const CNuc *compound, Constraint &c) {
   return "";
 }
 
-complex ConstraintValue(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c) {
+complex ConstraintValue(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c) {
   complex a(0.0, 0.0);
   for (size_t t = 0; t < c.terms.size(); t++) a += c.weights[t] * Evaluate(compound, state, configure, c.terms[t]).a0;
   return a;
@@ -152,14 +152,14 @@ int NumResiduals(const Constraint &c) {
   return (c.sigma > 0.0 ? 1 : 0) + (c.imSigma > 0.0 ? 1 : 0);
 }
 
-void ConstraintResiduals(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r) {
+void ConstraintResiduals(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r) {
   if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return;
   complex a = ConstraintValue(compound, state, configure, c);
   if (c.sigma > 0.0) r.push_back((std::real(a) - c.value) / c.sigma);
   if (c.imSigma > 0.0) r.push_back((std::imag(a) - c.imValue) / c.imSigma);
 }
 
-bool ConstraintGradient(const CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
+bool ConstraintGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
                         const vector_matrix_r *shiftDeriv, int row) {
   if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return true;
   // d(chi2) = Re(conj(aBar) da):  aBar = 2 r_re/sigma + i 2 r_im/imSigma.  One residual row:
@@ -181,7 +181,7 @@ bool ConstraintGradient(const CNuc *compound, const LevelState &state, const Con
   return true;
 }
 
-std::string Report(const CNuc *compound, const LevelState &state, const Config &configure) {
+std::string Report(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
   std::ostringstream out;
   out << "s-wave scattering lengths at each particle pair's threshold" << std::endl
       << "(a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0; Paneru et al., "

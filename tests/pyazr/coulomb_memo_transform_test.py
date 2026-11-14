@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The transform to physical parameters leaves nothing in the Coulomb memo (2026-10-28).
 
-CNuc::TransformOut works at the LEVEL energies -- penetrabilities and shift functions there, and the external part
+CompoundSystem::TransformOut works at the LEVEL energies -- penetrabilities and shift functions there, and the external part
 of every radiative width, an external-capture radial integral at the level energy.  A fit or a sampler moves those
 energies at every call, so the (l, radius, energy) entries it stored never recurred: each Session.transform added ~5,000
 entries per worker for good in the 12C(a,g) MCMC chains of 2026-10-26 (--fix-gamma-total calls it once or more per

@@ -9,7 +9,7 @@ same cause).  Decays are appended in pair order and only for pairs that share J-
 the index equals the pair number only while every earlier pair has a decay from the entrance pair.  A pair of
 another compound nucleus listed first, a beta-delayed pair, or a pair whose J-groups are out of the R-matrix breaks
 that, and `j2f` becomes the spin of the wrong nucleus (audit item 10, fixed 2026-10-26: `GetPair(exitPairNum)`, as
-`CNuc::CalcAngularDists` already did).
+`CompoundSystem::CalcAngularDists` already did).
 
 `check.sh` prepends a p + 12C pair (key 1, one 1/2- level) to `tests/secondary_gamma/models/spin2_plus.azr`
 (alpha + 13C -> n + 16O(3-) with the E3 secondary gamma) and compares the three output blocks of the UPOS/particle

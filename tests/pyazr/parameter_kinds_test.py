@@ -58,7 +58,7 @@ except Exception as err:  # pragma: no cover
 
 def name_from_record(r, project):
     """The name format 3 gives a parameter, from its record and the project's records (experiment::ParameterNamesOf):
-    a level's as in CNuc::FillMnParams; a data set's own nuisance <data set>.<field>; a nuisance of a record shared by
+    a level's as in CompoundSystem::FillMnParams; a data set's own nuisance <data set>.<field>; a nuisance of a record shared by
     several data sets <record>.<field> for the first of them, <record>.<field>[<data set>] for the others; an
     abundance <sample>.isotope.<isotope>; a target effect <target>.<field>; a THM coherent background as
     ThmCoherentParamStem."""

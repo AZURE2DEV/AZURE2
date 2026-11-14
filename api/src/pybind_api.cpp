@@ -34,7 +34,7 @@
 #include "azure2/io/ProjectFormat.h"
 #include "azure2/io/Document.h"
 #include "AZUREAPI.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ParameterKind.h"
 #include "CommandLineValues.h"
 #include "Config.h"
@@ -44,7 +44,7 @@
 #include "pybind_notices.h"
 #include "ProjectOptions.h"
 #include "ReactionRate.h"
-#include "CNucChecks.h"
+#include "CompoundSystemChecks.h"
 #include <optional>
 #include "azure2/io/ConfigSection.h"
 
@@ -65,14 +65,14 @@ class ParameterVectorError : public AZURE2Error {
 };
 
 // pybind_records.cpp: the parameter and pair records with their named fields
-py::list ParameterRecordDicts(const AZUREAPI &api);
-py::list PairRecordDicts(const AZUREAPI &api);
+py::list ParameterRecordDicts(AZUREAPI &api);
+py::list PairRecordDicts(AZUREAPI &api);
 // pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
 py::list PointOutputFields();
-py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+py::dict EvaluationDict(AZUREAPI &api, const vector_r &free);
+py::dict ObjectiveRowsDict(AZUREAPI &api, const vector_r &free, bool withJacobian,
                            const std::vector<int> &skip);
-double LogProbability(const AZUREAPI &api, const vector_r &free);
+double LogProbability(AZUREAPI &api, const vector_r &free);
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
 // pybind_fit.cpp: the engine's fitters on the session (fit_with_engine), StopRequest, fitters()
 py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
@@ -146,7 +146,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 
 }  // namespace
 
-void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
+void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 class Session {
  public:
   // rateEntrance != 0: a reaction-rate session (the rate's pair keys; exit -1 the total radiative capture), set up as
@@ -240,7 +240,7 @@ class Session {
   // -- hybrid nuclear potential, per particle pair ---------------------------
   //
   // The session's Config holds one setting per pair (the project's potential records) and a default for the pairs
-  // that name none; CNuc::Fill gives each pair its potential when the session is made.
+  // that name none; CompoundSystem::Fill gives each pair its potential when the session is made.
   // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit, matching_radius, step) for the given pair, resolved against the default.
   py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
 

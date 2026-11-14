@@ -191,7 +191,8 @@ vector, the plan names units by index, a copy of the working copy is a plain cop
 2026-11-11): an immutable `DataSet` held as `shared_ptr<const DataSet>` and a small `WorkingCopy` apart; the unit
 is 480 bytes (was 608); the three class names and their files are deleted and consistency check 31 keeps them out.
 
-**`CNuc`, to finish** (`cnuc_split.md`): `src/CNuc.cpp` was 2,907 lines and is 1,774; printing, checks, messages, the
+**`CNuc`, to finish** (`cnuc_split.md`; the class is `CompoundSystem` now): `src/CNuc.cpp` was 2,907 lines and was
+1,774 here; printing, checks, messages, the
 level grammar, external-capture set-up and the bridge to `physics/` are files of their own; the pathway table is
 immutable, built at set-up and read by everything outside the data classes; the capture analyzing-power terms are
 built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
@@ -229,6 +230,18 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       and the adaptive extrapolation (the run's state) hold the compound as `const CNuc *`; `Clone`, `State()`,
       `Inputs()`, `MutableState()` and the one-argument fills are deleted; `CNuc` holds nothing written after set-up
       and cannot be copied (`cnuc_split.md` §12.3, step 4 as built, fourth part).
+- [x] The name: `CNuc` is `CompoundSystem` (`include/CompoundSystem.h`); its files are named by job
+      (`CompoundSystemBuild.cpp`, `CompoundSystem.cpp`, `LevelTransforms.cpp`, `ExternalCaptureFinalStates.cpp`,
+      `ExternalCaptureAmplitudes.cpp`, `LevelReport.cpp`, `CompoundSystemChecks.cpp`, `SystemOfCompound.cpp`,
+      `EngineChannelFunctions.cpp`, `LevelInputMessages.cpp`, `LevelStateFill.cpp`, `LevelParameterVector.cpp`);
+      consistency check 59 keeps `CNuc`, a `Clone()` of the compound and `cnuc_pool_` out of `src/`, `include/`,
+      `api/`. The session's methods that write its levels, data, `Results` or lazily read settings are not `const`
+      (four `mutable` rows of `allowed_state.tsv` gone). A particle channel's functions are one function
+      (`ParticleChannelValues`), called by the engine and the binding's level doors (`cnuc_split.md` §12.3, step 5 as
+      built).
+- [ ] One build: `BuildCompoundSystem` returning the finished `shared_ptr<const CompoundSystem>`. Not built: the data's
+      set-up reads the compound between `Fill` and `Initialize`, and the run's log prints the data's set-up between
+      the two (`cnuc_split.md` §12.3, step 5 as built; a decision of the director).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

@@ -17,7 +17,7 @@ Checks, on tests/13N/13N.azr with one normalization freed (5 % systematic error)
   2. no hysteresis: calculate_chi2_physical at the nominal vector gives the nominal value after a call
      with the moved norm, and calculate_chi2_rwa afterwards is unchanged;
   3. with a measured scattering length (a datum of <modelData>) the two bases still agree (the term is in both).
-(A vector the transform rejects now gives +inf instead of 0; CNuc::TransformIn only warns on a
+(A vector the transform rejects now gives +inf instead of 0; CompoundSystem::TransformIn only warns on a
 negative denominator, so no vector exercises that branch here.)
 
 Needs the compiled engine; skips cleanly without it.

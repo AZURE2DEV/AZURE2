@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "AZUREGrad.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
 #include "WorkingCopy.h"
@@ -35,7 +35,7 @@
 constexpr double kParkNormScale = 1.0e-3;
 
 struct ObjectiveContext {
-  const CNuc *compound;
+  const CompoundSystem *compound;
   /// The levels at the evaluated vector (the model data's finite differences write and restore them) and the
   /// levels' input values of the evaluation's owner.
   LevelState &state;
@@ -255,10 +255,10 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F
  * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
  * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
  */
-void AppendModelRows(const CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac);
 
 class PriorCovariance;
-std::vector<std::string> ReplaceDiagonalPriors(const CNuc *compound, WorkingCopy *data, const PriorCovariance &pc);
+std::vector<std::string> ReplaceDiagonalPriors(const CompoundSystem *compound, WorkingCopy *data, const PriorCovariance &pc);
 
 #endif

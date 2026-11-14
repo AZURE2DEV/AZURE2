@@ -9,7 +9,7 @@
 
 #include "AZURECalc.h"
 #include "WorkingCopy.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "AZUREParams.h"
 #include "Config.h"
 #include "FitEvaluations.h"

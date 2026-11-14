@@ -172,7 +172,7 @@ void ALevel::AddECConversionFactor(double conversionFactor) {
 
 /*!
  * The energy (MeV, E_x) with which this level enters external capture as a final state: its Brune energy at setup
- * (CNuc::SetUpECFinalBlocks), the input energy except in the formal basis.
+ * (CompoundSystem::SetUpECFinalBlocks), the input energy except in the formal basis.
  */
 
 double ALevel::GetECEnergy() const {

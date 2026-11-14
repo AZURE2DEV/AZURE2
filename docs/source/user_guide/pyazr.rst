@@ -189,7 +189,7 @@ start is ``s.parameters.x0``. Physical values are a transformation of ``x`` that
    s.objective()                # the objective: f(x), f.value_and_grad(x), f.residuals_and_jacobian(x)
    phys = s.transform(x)        # the physical value of every parameter (MeV, eV, ANCs), one per row of s.parameters
 
-``s.transform(x)`` is the engine's transformation (``CNuc::TransformOut``), the one the program uses to write
+``s.transform(x)`` is the engine's transformation (``CompoundSystem::TransformOut``), the one the program uses to write
 ``<levels>`` after a fit: a fixed width holds its reduced-width amplitude, so its physical value follows the level's
 other widths. The engine offers no inverse: a new ``x`` is made from ``x0`` (``put``) or from a parameter file
 (``read``).

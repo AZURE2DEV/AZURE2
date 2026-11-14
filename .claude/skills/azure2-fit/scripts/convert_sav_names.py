@@ -2,9 +2,9 @@
 """Rename an old-format AZURE2 parameter file (param.sav/.par/.fit) to the
 current parameter names, and optionally check the result against the model.
 
-Old builds (before the level parameters were renamed in CNuc::FillMnParams) named level parameters
+Old builds (before the level parameters were renamed in CompoundSystem::FillMnParams) named level parameters
     j=<J>_la=<L>_energy      and   j=<J>_la=<L>_ch=<C>_rwa
-Current builds (CNuc::FillMnParams) name them
+Current builds (CompoundSystem::FillMnParams) name them
     energy_<N>               and   width_<N>_<C>
 N counts levels in J-group order (j ascending, then la ascending -- the same
 double loop that wrote the old names); C is unchanged.  The values (level

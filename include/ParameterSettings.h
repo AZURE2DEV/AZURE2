@@ -6,11 +6,11 @@
 
 // Forward declarations
 class Config;
-class CNuc;
+class CompoundSystem;
 class WorkingCopy;
 
 // Function to apply parameter settings to Minuit parameter
 void ApplyParameterSettings(const std::string &paramName, ROOT::Minuit2::MnUserParameters &p,
-                            const Config *config = nullptr, const CNuc *compound = nullptr, WorkingCopy *data = nullptr);
+                            const Config *config = nullptr, const CompoundSystem *compound = nullptr, WorkingCopy *data = nullptr);
 
 #endif

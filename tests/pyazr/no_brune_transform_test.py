@@ -2,7 +2,7 @@
 """pyazr, standard formalism (use_brune=False) on a project with no standard-R-matrix equivalent: a clear error.
 
 tests/7Li_p_ay is a Brune fit whose 0+ background poles have partial widths up to 135 MeV; the transformation of its
-observed parameters to formal ones (CNuc::TransformIn, N a = E M a with M = 1 - sum gamma gamma' dS/dE) has no real
+observed parameters to formal ones (CompoundSystem::TransformIn, N a = E M a with M = 1 - sum gamma gamma' dS/dE) has no real
 solution because M is not positive definite (Brune, PRC 66, 044611).  Before 2026-11-01 GSL's failure went unnoticed
 and the session died at load with "RuntimeError: z is not finite in log_Gamma." (a crash, with a core dump, in the
 CLI).  Now opening the session raises AZURE2Error after the engine printed which J^pi group has no standard

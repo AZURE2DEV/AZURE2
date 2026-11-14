@@ -1,7 +1,7 @@
 // io::LevelRow and io::ReadLevelSection (LevelRows.h), the grammar of the <levels> section: (1) synthetic rows and
 // sections against hand values -- the optional columns told apart by their number, the halving of 2s and 2l, the
 // failures, blank lines, the end tag; (2) every <levels> section of the project files under the directories given
-// (tests/, examples/) against the engine's reader before it moved to io/ (NucLine and the loop of CNuc::Fill at
+// (tests/, examples/) against the engine's reader before it moved to io/ (NucLine and the loop of CompoundSystem::Fill at
 // a16f2a69, copied verbatim below): every field of every row bit for bit, and the same malformed / complete outcome.
 #include <cstdio>
 #include <cstring>
@@ -136,7 +136,7 @@ class OldNucLine {
   double e1_;
 };
 
-/// The loop of CNuc::Fill at a16f2a69 over a <levels> section, keeping its rows and how it ended.
+/// The loop of CompoundSystem::Fill at a16f2a69 over a <levels> section, keeping its rows and how it ended.
 struct OldSection {
   std::vector<OldNucLine> rows;
   bool malformed = false, complete = false;

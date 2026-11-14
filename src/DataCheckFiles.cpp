@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 
@@ -157,7 +157,7 @@ void WorkingCopy::PrintLegendreP(const Config &configure) {
  * Prints the values calculated by Unit::CalcEDependentValues for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::PrintEDependentValues(const Config &configure, const CNuc *theCNuc) {
+void WorkingCopy::PrintEDependentValues(const Config &configure, const CompoundSystem *compound) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_ENERGY_DEP) {
@@ -186,14 +186,14 @@ void WorkingCopy::PrintEDependentValues(const Config &configure, const CNuc *the
       const int s = row.first, p = row.second;
       const Segment &seg = Data().GetSegments()[s];
       Unit *pt = seg.GetPoint(*this, p + 1);
-      const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
+      const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(seg.GetEntranceKey()));
       double inEnergy = pt->GetCMEnergy() + entrancePair->GetSepE();
-      for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == entrancePair->GetNucleus()) {
-          const JGroup *theJGroup = theCNuc->GetJGroup(j);
+      for (int j = 1; j <= compound->NumJGroups(); j++) {
+        if (compound->GetJGroup(j)->IsInRMatrix() && compound->GetJGroup(j)->GetNucleus() == entrancePair->GetNucleus()) {
+          const JGroup *theJGroup = compound->GetJGroup(j);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             const AChannel *theChannel = theJGroup->GetChannel(ch);
-            const PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
+            const PPair *thePair = compound->GetPair(theChannel->GetPairNum());
             int lValue = theChannel->GetL();
             double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
             complex loElement = pt->GetLoElement(j, ch);
@@ -221,7 +221,7 @@ void WorkingCopy::PrintEDependentValues(const Config &configure, const CNuc *the
  * Prints the values calculated by Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::PrintCoulombAmplitude(const Config &configure, const CNuc *theCNuc) {
+void WorkingCopy::PrintCoulombAmplitude(const Config &configure, const CompoundSystem *compound) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_COUL_AMPLITUDES) {
@@ -249,7 +249,7 @@ void WorkingCopy::PrintCoulombAmplitude(const Config &configure, const CNuc *the
         for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
           out << std::setw(10) << segment - Data().GetSegments().begin() + 1
               << std::setw(10) << point - segment->GetPoints(*this).begin() + 1
-              << std::setw(10) << theCNuc->GetPairNumFromKey(segment->GetEntranceKey())
+              << std::setw(10) << compound->GetPairNumFromKey(segment->GetEntranceKey())
               << std::setw(15) << point->GetCMEnergy()
               << std::setw(15) << point->GetCMAngle()
               << std::setw(25) << point->GetCoulombAmplitude()

@@ -1,7 +1,7 @@
 #ifndef AZUREMAIN_H
 #define AZUREMAIN_H
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "WorkingCopy.h"
 
 /// The top-level AZURE function class
@@ -14,16 +14,16 @@
 class AZUREMain {
  public:
   /*!
-   * The AZUREMain function class is created using a Config structure.  New CNuc and WorkingCopy objects are created at initialization
+   * The AZUREMain function class is created using a Config structure.  New CompoundSystem and WorkingCopy objects are created at initialization
    * of an AZUREMain object.
    */
   AZUREMain(const Config &configure) :
     configure_(configure) {
-    compound_ = new CNuc;
+    compound_ = new CompoundSystem;
     data_ = new WorkingCopy;
   };
   /*!
-   * The CNuc and WorkingCopy objects are destroyed with the AZUREMain instance.
+   * The CompoundSystem and WorkingCopy objects are destroyed with the AZUREMain instance.
    */
   ~AZUREMain() {
     delete compound_;
@@ -39,9 +39,9 @@ class AZUREMain {
    */
   const Config &configure() const { return configure_; };
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   /*!
    * Returns a pointer to the WorkingCopy object.
    */
@@ -49,7 +49,7 @@ class AZUREMain {
 
  private:
   const Config &configure_;
-  CNuc *compound_;
+  CompoundSystem *compound_;
   WorkingCopy *data_;
 };
 

@@ -46,12 +46,12 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 
 ## 2. Free and fixed
 
-- **A width of exactly 0 is fixed, whatever its fix flag says.** `CNuc.cpp` adds every channel with a Minuit step of
-  0.1 × value and fixes it when the value is 0, so a channel written as `0` and not fixed stays at zero for the whole
-  fit, and a token seed of 10⁻¹² has a step of 10⁻¹³ and never moves either. Freeing a width is not enough: give it a
-  seed of plausible size. The symptom is a free-parameter count that does not change when a channel is freed (freeing
-  six E_x = 40 MeV capture background poles left a model at 366 free parameters; seeding them at 0.01 eV made it 372).
-  This holds for particle and photon channels and for `width=0` channels passed to `Project.add_level`.
+- **A width of exactly 0 is fixed, whatever its fix flag says.** `CompoundSystem::FillMnParams` adds every channel with
+  a Minuit step of 0.1 × value and fixes it when the value is 0, so a channel written as `0` and not fixed stays at zero
+  for the whole fit, and a token seed of 10⁻¹² has a step of 10⁻¹³ and never moves either. Freeing a width is not
+  enough: give it a seed of plausible size. The symptom is a free-parameter count that does not change when a channel is
+  freed (freeing six E_x = 40 MeV capture background poles left a model at 366 free parameters; seeding them at 0.01 eV
+  made it 372). This holds for particle and photon channels and for `width=0` channels passed to `Project.add_level`.
 - **An amplitude at exactly zero never moves under a gradient method** even when it is free and nonzero-seeded
   elsewhere: χ² depends on it through γ². Seed in units of the Wigner amplitude (0.01–0.05 γ_W), never as a physical
   width, and audit closed channels just above the levels (`references/pyazr-fitting.md`, "Traps").

@@ -5,7 +5,7 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
 #include "JGroup.h"
@@ -57,7 +57,7 @@ std::string Nuclide(int z, double mass) {
   return out.str();
 }
 
-std::string Pair(const CNuc *compound, int pairNum) {
+std::string Pair(const CompoundSystem *compound, int pairNum) {
   if (!compound || pairNum < 1 || pairNum > compound->NumPairs()) {
     std::ostringstream out;
     out << "pair " << pairNum;
@@ -91,7 +91,7 @@ std::string Level(const JGroup *jgroup, double energy, int jgroupIndex, int leve
   return out.str();
 }
 
-std::string Channel(const CNuc *compound, const JGroup *jgroup, int channelIndex) {
+std::string Channel(const CompoundSystem *compound, const JGroup *jgroup, int channelIndex) {
   std::ostringstream out;
   out << "channel " << channelIndex;
 
@@ -115,12 +115,12 @@ std::string Channel(const CNuc *compound, const JGroup *jgroup, int channelIndex
   return out.str();
 }
 
-std::string LevelAndChannel(const CNuc *compound, const LevelInputs &inputs, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex) {
+std::string LevelAndChannel(const CompoundSystem *compound, const LevelInputs &inputs, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex) {
   return Level(jgroup, inputs.E(jgroupIndex, levelIndex), jgroupIndex, levelIndex) + ", " +
       Channel(compound, jgroup, channelIndex);
 }
 
-int NumParameters(const CNuc *compound, WorkingCopy *data) {
+int NumParameters(const CompoundSystem *compound, WorkingCopy *data) {
   int n = 0;
   if (compound) n += compound->ParameterLayout().Size();
   if (data) {
@@ -140,7 +140,7 @@ int NumParameters(const CNuc *compound, WorkingCopy *data) {
   return n;
 }
 
-std::string Parameter(const CNuc *compound, const LevelInputs &inputs, WorkingCopy *data, int minuitIndex) {
+std::string Parameter(const CompoundSystem *compound, const LevelInputs &inputs, WorkingCopy *data, int minuitIndex) {
   if (minuitIndex < 0) return std::string();
 
   // The level block first, as the compound's layout places it.

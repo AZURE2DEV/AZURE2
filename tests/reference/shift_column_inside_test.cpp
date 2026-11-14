@@ -36,7 +36,7 @@
 #include "AZURECalc.h"
 #include "ProjectSetup.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "WorkingCopy.h"
@@ -87,7 +87,7 @@ bool writeProject(const std::string &source, const std::string &target, const st
 
 struct Model {
   Config cfg;
-  CNuc *compound = nullptr;
+  CompoundSystem *compound = nullptr;
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
@@ -100,7 +100,7 @@ struct Model {
   }
   bool Load() {
     if (cfg.ReadConfigFile() < 0) return false;
-    compound = new CNuc();
+    compound = new CompoundSystem();
     data = new WorkingCopy();
     if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) return false;
     RequestCaptureAyTerms(*compound, *data);

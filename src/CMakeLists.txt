@@ -1,14 +1,14 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
-ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp CNucLevelState.cpp ObservedLevelTable.cpp PathwayTable.cpp CNucPathways.cpp CaptureAyRequests.cpp AngCoeff.cpp
+ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
-WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp CNucParameterVector.cpp GammaDecayMap.cpp
+WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
-AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CNuc.cpp AbundanceSamples.cpp Equation.cpp
+AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp GradEnergyTasks.cpp ThmFunc.cpp
@@ -39,8 +39,8 @@ ShiftFrames.cpp
 ShiftedFold.cpp
 THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
-CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
-CNucTransformMessages.cpp ProjectSetup.cpp)
+SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
+LevelInputMessages.cpp ProjectSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
@@ -83,7 +83,7 @@ endif (BUILD_LIBRARY)
 # unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
 # hides the mistake, which is why the hand-written order looked fine.
 # azure2_physics (physics/) is below the engine: the engine may use it, never the reverse.  Only the
-# CNuc -> System adapter (CNucSystem.cpp) uses it so far.  azure2_physics_transfer (physics/transfer: distorted waves,
+# CompoundSystem -> System adapter (SystemOfCompound.cpp) uses it so far.  azure2_physics_transfer (physics/transfer: distorted waves,
 # bound states, the zero-range THM weight, the global optical sets) is what the THM distortions call.
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.

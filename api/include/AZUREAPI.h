@@ -19,7 +19,7 @@
 
 class Config;
 class WorkingCopy;
-class CNuc;
+class CompoundSystem;
 class Unit;
 struct GradAccum;
 class ParamIndexMap;
@@ -36,13 +36,13 @@ class ParamIndexMap;
 class AZUREAPI {
  public:
   /*!
-   * The AZUREAPI object is created with reference to an WorkingCopy and CNuc object.
+   * The AZUREAPI object is created with reference to an WorkingCopy and CompoundSystem object.
    *. The runtime configurations are also passed through a Config structure.
    */
   // Defined in the .cpp (Config is incomplete here).
   AZUREAPI(Config &configure);
 
-  // Defined in the .cpp: WorkingCopy and CNuc are incomplete here, and deleting an
+  // Defined in the .cpp: WorkingCopy and CompoundSystem are incomplete here, and deleting an
   // incomplete type is undefined.
   ~AZUREAPI();
 
@@ -112,7 +112,7 @@ class AZUREAPI {
   /// The fit's limits of each parameter (in the order of params_names()): (lower, upper) in the parameter's unit,
   /// -inf / +inf where it has none.  The limits the parameter is created with, then those of a <parameterSettings>
   /// block, as the program's fit and its sampler have them (ReadFitSettings; PosteriorSupport).
-  std::pair<double, double> GetParameterBounds(int index) const;
+  std::pair<double, double> GetParameterBounds(int index);
 
   /*!
    * Returns a reference to the Config structure.
@@ -121,19 +121,22 @@ class AZUREAPI {
   /*!
    * Returns a pointer to the WorkingCopy object.
    */
-  WorkingCopy *data() const { return data_; };
+  WorkingCopy *data() { return data_; };
+  const WorkingCopy *data() const { return data_; };
   /// The buffer every evaluation of this session writes and every array the session returns reads: the session owns
   /// it (docs/upgrade/data_model.md S3).
-  azure2::Results &results() const { return results_; }
+  azure2::Results &results() { return results_; }
+  const azure2::Results &results() const { return results_; }
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   /// The session's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the session's
-  /// evaluations and transformations.  Held through pointers, as the compound and the data are, because the const
-  /// evaluations write them (as they write results()).
-  LevelState &state() const { return *state_; }
-  LevelInputs &inputs() const { return *inputs_; }
+  /// evaluations and transformations, which are therefore not const; a const method reads them only.
+  LevelState &state() { return *state_; }
+  const LevelState &state() const { return *state_; }
+  LevelInputs &inputs() { return *inputs_; }
+  const LevelInputs &inputs() const { return *inputs_; }
   /*!
    * Returns a pointer to the parameter values object.
    */
@@ -240,17 +243,17 @@ class AZUREAPI {
    * widths (the Brune denominator 1 + sum gamma^2 dS/dE) and is only known
    * from the whole vector.
    */
-  vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false) const;
+  vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false);
 
   /*!
    * Calculate chi-squared from RWA parameters
    */
-  double CalculateChi2RWA(const vector_r &rwaParams) const;
+  double CalculateChi2RWA(const vector_r &rwaParams);
 
   /*!
    * Calculate chi-squared from physical parameters
    */
-  double CalculateChi2Physical(const vector_r &physicalParams) const;
+  double CalculateChi2Physical(const vector_r &physicalParams);
 
   /// Fields per channel in CalculateScatteringLengthsRWA's result.
   static constexpr int kScatLenFields = 6;
@@ -260,7 +263,7 @@ class AZUREAPI {
    * channel spin, parity, Re a0 (fm), Im a0 (fm), 1 if a level has the channel (else the hard-sphere
    * value, 0).  The measured ones of the <scatteringLengths> block are part of CalculateChi2RWA.
    */
-  vector_r CalculateScatteringLengthsRWA(const vector_r &rwaParams) const;
+  vector_r CalculateScatteringLengthsRWA(const vector_r &rwaParams);
 
   /// The model values of the <modelData> data at a free RWA vector (ModelData::SectionValues), one per datum in file
   /// order; values in the unit the datum is written in.  AZUREAPIModelData.cpp.
@@ -271,16 +274,16 @@ class AZUREAPI {
     double modelImag = 0.0, imag = 0.0, imagError = 0.0, residualImag = 0.0;
     double chi2 = 0.0;  ///< the datum's share of the objective's model-data term
   };
-  std::vector<ModelDatumValue> ModelDataRWA(const vector_r &rwaParams) const;
+  std::vector<ModelDatumValue> ModelDataRWA(const vector_r &rwaParams);
 
   /*!
    * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
    * R-matrix level at the given non-fixed RWA parameters, in the order of
-   * CNuc::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
+   * CompoundSystem::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
    * formalism.  A fit must keep them positive; CalculateChi2RWA adds
    * Park's wall (the objective's term T6) for any that are not.
    */
-  vector_r ParkNorms(const vector_r &rwaParams) const;
+  vector_r ParkNorms(const vector_r &rwaParams);
 
   /*!
    * Data covariances ("covariance <file>" segments): forget the model frozen for their
@@ -309,7 +312,7 @@ class AZUREAPI {
    * finite-differenced.  (For a log-likelihood use lnL = -0.5*(chi2 + const),
    * grad lnL = -0.5*grad chi2.)
    */
-  vector_r CalculateChi2GradRWA(const vector_r &params) const;
+  vector_r CalculateChi2GradRWA(const vector_r &params);
 
   /*!
    * The objective of the fit (docs/upgrade/objective.md; Objective.h): the data chi-squared and every prior and
@@ -320,9 +323,9 @@ class AZUREAPI {
    * segment number).
    */
   double CalculateObjectiveRWA(const vector_r &params, std::vector<double> *terms = nullptr,
-                               ObjectiveContext::SegmentPriors *segments = nullptr) const;
+                               ObjectiveContext::SegmentPriors *segments = nullptr);
   /// The objective and its gradient: [ objective, d/dp_0, ..., d/dp_{n-1} ] (CalculateChi2GradRWA plus the priors).
-  vector_r CalculateObjectiveGradRWA(const vector_r &params) const;
+  vector_r CalculateObjectiveGradRWA(const vector_r &params);
   /// The names of the objective's terms, in the order of CalculateObjectiveRWA's `terms`.
   std::vector<std::string> ObjectiveTermNames() const;
 
@@ -338,7 +341,7 @@ class AZUREAPI {
    * (as CalculateObjectiveRWA) and its breakdown by term from the same model values.  The results buffer then holds
    * what the output writer reads (model values, profiled norms, per-segment chi^2), until the next evaluation.
    */
-  ObjectiveBreakdown EvaluateObjectiveRWA(const vector_r &params) const;
+  ObjectiveBreakdown EvaluateObjectiveRWA(const vector_r &params);
   /*!
    * The objective as least-squares rows, sum r^2 = the objective (docs/upgrade/pyazr3.md section 7): the rows of
    * CalculateResidualJacobianRWA (data, model data, prior covariance), then AppendModelRows (Park's wall, the
@@ -349,13 +352,13 @@ class AZUREAPI {
    * columns whose finite differences are not computed and come back zero).
    */
   bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
-                        const std::vector<int> &skipColumns = {}) const;
+                        const std::vector<int> &skipColumns = {});
   /// Whether a free value lies outside the fit's limits of its parameter, of any kind (PosteriorSupport, the
   /// ensemble sampler's rule: -infinity there, docs/upgrade/objective.md section 6).
-  bool OutsideSamplerSupport(const vector_r &params) const;
+  bool OutsideSamplerSupport(const vector_r &params);
   /// ln P = -1/2 x the objective (no constant), -infinity outside the ensemble sampler's support: outside the
   /// fit's limits of a parameter, or where a term excludes the point (Park's J < 0).
-  double LogProbabilityRWA(const vector_r &params) const;
+  double LogProbabilityRWA(const vector_r &params);
 
   /*!
    * Standardized residuals r_i = (fit_i - data_i*n)/(cmErr_i*n) (so sum r_i^2 =
@@ -370,7 +373,7 @@ class AZUREAPI {
    * comes back zero, for a caller that holds those parameters (rmfit's fixed
    * bounds, 2026-10-30).  The adjoint columns are always filled.
    */
-  vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {}) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {});
 
   /*!
    * Standardized residuals only, from one forward pass: the residual vector
@@ -378,7 +381,7 @@ class AZUREAPI {
    * segment, in segment order), without the Jacobian.  sum r_i^2 equals
    * CalculateChi2RWA.  Never bails: it uses the forward model, not the adjoint.
    */
-  vector_r CalculateResidualsRWA(const vector_r &params) const;
+  vector_r CalculateResidualsRWA(const vector_r &params);
 
   /*!
    * The normalization each segment carries now (one per calculated segment,
@@ -389,7 +392,7 @@ class AZUREAPI {
   vector_r GetCurrentNorms() const;
   /// The THM experiments (<thm> experiment[...]) as the last chi^2 evaluation
   /// profiled them: shared norm, background and their covariance.
-  std::vector<ThmExperimentReport> GetThmExperiments() const;
+  std::vector<ThmExperimentReport> GetThmExperiments();
   /// The Coulomb line shape of THM experiment `name` (lineshape=on) at the
   /// c.m. energies `energies`, with the level poles of the current compound
   /// (the last evaluation's parameters).  False and `why` if unavailable.
@@ -421,7 +424,7 @@ class AZUREAPI {
    * costs about two forward evaluations regardless of the parameter count --
    * against the 2*nCols forward passes a finite-difference band would need.
    */
-  vector_r CalculateModelGradientsRWA(const vector_r &params) const;
+  vector_r CalculateModelGradientsRWA(const vector_r &params);
 
   /*!
    * Coulomb wave functions on a requested energy grid.
@@ -493,19 +496,19 @@ class AZUREAPI {
  private:
   /// The arrays of UpdateSegments* (the model value of every point, its E1 / E2 parts, frame and coefficients) for
   /// the hand-over already made into the session's compound and data.  Returns the number of segments reported.
-  int ReportSegments(const CNuc *localCompound, WorkingCopy *localData);
+  int ReportSegments(const CompoundSystem *localCompound, WorkingCopy *localData);
   /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
   /// without the parameters of the prior covariance (D3).
-  double NuisanceChi2(const vector_r &full) const;
-  void AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const;
-  bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
+  double NuisanceChi2(const vector_r &full);
+  void AddNuisanceGradient(const vector_r &full, vector_r &gradFull);
+  bool NuisancePriorOf(int f, double &nominal, double &sigma);
   /// The fit's settings, read once per model: <parameterSettings> applied to a scratch parameter set (not to the
   /// session's parameters), from which come the nuisance priors, the fit's limits (GetParameterBounds) and the
   /// support of the posterior (OutsideSamplerSupport).
-  void ReadFitSettings() const;
-  mutable std::unique_ptr<AZUREParams> nuisanceParams_;
-  mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
-  mutable bool nuisanceRead_ = false;
+  void ReadFitSettings();
+  std::unique_ptr<AZUREParams> nuisanceParams_;
+  std::unique_ptr<ParameterLimitsManager> nuisance_;
+  bool nuisanceRead_ = false;
   /// Deletes compound_ and data_, makes empty new ones and drops what was derived from the old ones (the nuisance
   /// manager): the one place a model is replaced (Initialize, RebuildImpl).
   void ReplaceModel();
@@ -531,11 +534,11 @@ class AZUREAPI {
    * the analytic path bails.
    */
   bool Chi2GradEGammaNorm(const vector_r &fullParams, vector_r &gradFull,
-                          double &chi2Out) const;
+                          double &chi2Out);
 
   /// Fill the canonical compound/data from a full RWA vector (R-matrix
   /// parameters, norms, energy shifts, and the Brune shift functions).
-  void FillFromFullRWA(const vector_r &full) const;
+  void FillFromFullRWA(const vector_r &full);
 
   /*!
    * Forward model and data chi-squared on the already-filled compound/data,
@@ -547,24 +550,24 @@ class AZUREAPI {
    * the row order of ComputeResidualJacobian -- with the profiled n, so that
    * sum r^2 is the returned chi-squared.
    */
-  double EvaluateFilledChi2(vector_r *res) const;
+  double EvaluateFilledChi2(vector_r *res);
   /// Park's J > 0 wall, the abundance priors and the scattering-length chi^2 on the filled compound: the terms
   /// both CalculateChi2RWA and CalculateChi2Physical add to EvaluateFilledChi2.
-  double FilledModelPenalties() const;
+  double FilledModelPenalties();
 
   /// Residuals and d r/d(packed parameter) of the points of one THM segment.
   /// THM (HOES) rows of the residual Jacobian; see ::ComputeTHMRows (AZUREGrad.h).
   typedef ::THMRows THMRows;
-  std::vector<THMRows> ComputeTHMRows(const vector_r &full, const ParamIndexMap &pmap) const;
+  std::vector<THMRows> ComputeTHMRows(const vector_r &full, const ParamIndexMap &pmap);
 
   // Configuration
   Config &configure_;
   WorkingCopy *data_;
-  CNuc *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
+  CompoundSystem *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
   std::unique_ptr<LevelState> state_;
   std::unique_ptr<LevelInputs> inputs_;
-  // The results of this session's evaluations (results()); mutable as data_ is: the const evaluations write both.
-  mutable azure2::Results results_;
+  // The results of this session's evaluations (results()), written by the (non-const) evaluations.
+  azure2::Results results_;
 
   // Parameters
   std::vector<bool> fixed_;

@@ -8,7 +8,8 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 
 ## How the names are assigned
 
-- **Level parameters** (`CNuc::FillMnParams`): `energy_<N>` counts levels in J-group order (J-groups in order of first
+- **Level parameters** (`CompoundSystem::FillMnParams`): `energy_<N>` counts levels in J-group order (J-groups in
+  order of first
   appearance in `<levels>`, then the group's levels in file order), not in raw file order and not by `levelID`.
   `width_<N>_<c>` is channel `c` of the J-group's channel set, in the order of that level's channel lines. Only active
   levels are counted.

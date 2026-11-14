@@ -1,4 +1,4 @@
-#include "CNucSystem.h"
+#include "SystemOfCompound.h"
 
 #include <cmath>
 #include <sstream>
@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 
 namespace phys = azure2::physics;
@@ -21,7 +21,7 @@ int TwiceSpin(double j, const std::string &what) {
   const double rounded = std::floor(twice + 0.5);
   if (twice != rounded || rounded < 0.0) {
     std::ostringstream msg;
-    msg << "BuildSystemFromCNuc: " << what << " = " << j << " is not a non-negative multiple of 1/2";
+    msg << "BuildSystemOfCompound: " << what << " = " << j << " is not a non-negative multiple of 1/2";
     throw std::runtime_error(msg.str());
   }
   return (int)rounded;
@@ -33,7 +33,7 @@ phys::PartitionKind PartitionKindOf(int pType, int pairKey) {
     case 10: return phys::PartitionKind::Photon;
     case 20: return phys::PartitionKind::Beta;
   }
-  throw std::runtime_error("BuildSystemFromCNuc: pair " + std::to_string(pairKey) + " has pair type " +
+  throw std::runtime_error("BuildSystemOfCompound: pair " + std::to_string(pairKey) + " has pair type " +
                            std::to_string(pType) + ", which the System has no partition kind for");
 }
 
@@ -45,7 +45,7 @@ phys::ChannelKind ChannelKindOf(char radType) {
     case 'F': return phys::ChannelKind::Fermi;
     case 'G': return phys::ChannelKind::GamowTeller;
   }
-  throw std::runtime_error(std::string("BuildSystemFromCNuc: radiation type '") + radType +
+  throw std::runtime_error(std::string("BuildSystemOfCompound: radiation type '") + radType +
                            "', which the System has no channel kind for");
 }
 
@@ -55,21 +55,21 @@ phys::LevelBasis BasisOf(const Config &configure) {
     case AZUREParams::kBasisBrune: return phys::LevelBasis::Brune;
     case AZUREParams::kBasisPark: return phys::LevelBasis::Park;
   }
-  throw std::runtime_error("BuildSystemFromCNuc: the configuration names no level-parameter basis");
+  throw std::runtime_error("BuildSystemOfCompound: the configuration names no level-parameter basis");
 }
 
 }  // namespace
 
-CNucSystem BuildSystemFromCNuc(const CNuc &compound, const LevelInputs &inputs, const Config &configure,
-                               CNucSystemContent content) {
-  const bool withParameters = (content == CNucSystemContent::Parameters);
-  const bool allGroups = (content == CNucSystemContent::AllGroups);
+SystemOfCompound BuildSystemOfCompound(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure,
+                               SystemOfCompoundContent content) {
+  const bool withParameters = (content == SystemOfCompoundContent::Parameters);
+  const bool allGroups = (content == SystemOfCompoundContent::AllGroups);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
   if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !inputs.TransformedIn())
-    throw std::runtime_error("BuildSystemFromCNuc: the compound nucleus has not been initialized "
-                             "(CNuc::Initialize): its level parameters are still the input widths");
+    throw std::runtime_error("BuildSystemOfCompound: the compound nucleus has not been initialized "
+                             "(CompoundSystem::Initialize): its level parameters are still the input widths");
 
-  CNucSystemMap map;
+  SystemOfCompoundMap map;
 
   std::vector<phys::Nucleus> nuclei;
   for (int i = 1; i <= compound.NumNuclei(); i++) {
@@ -147,16 +147,16 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const LevelInputs &inputs, 
     map.channelOfBlockChannel.push_back(groupChannels);
   }
 
-  return CNucSystem{phys::System(BasisOf(configure), std::move(nuclei), std::move(partitions), std::move(channels),
+  return SystemOfCompound{phys::System(BasisOf(configure), std::move(nuclei), std::move(partitions), std::move(channels),
                                  std::move(blocks)),
                     std::move(map)};
 }
 
-// The two Systems of a CNuc, built once at the end of CNuc::Fill (CNuc.h).
-void CNuc::BuildSystems(const Config &configure) {
+// The two Systems of a CompoundSystem, built once at the end of CompoundSystem::Fill (CompoundSystem.h).
+void CompoundSystem::BuildSystems(const Config &configure) {
   try {
-    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, LevelInputs(), configure, CNucSystemContent::Structure));  // no level values
-    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, LevelInputs(), configure, CNucSystemContent::AllGroups));
+    systemStructure_ = std::make_shared<const SystemOfCompound>(BuildSystemOfCompound(*this, LevelInputs(), configure, SystemOfCompoundContent::Structure));  // no level values
+    systemAllGroups_ = std::make_shared<const SystemOfCompound>(BuildSystemOfCompound(*this, LevelInputs(), configure, SystemOfCompoundContent::AllGroups));
   } catch (...) {
     // Kept for the readers, which stop on it where they did when each built its own System.
     systemStructure_.reset();
@@ -165,16 +165,16 @@ void CNuc::BuildSystems(const Config &configure) {
   }
 }
 
-const CNucSystem &CNuc::SystemStructure() const { return *this->SystemStructureHandle(); }
+const SystemOfCompound &CompoundSystem::SystemStructure() const { return *this->SystemStructureHandle(); }
 
-std::shared_ptr<const CNucSystem> CNuc::SystemStructureHandle() const {
+std::shared_ptr<const SystemOfCompound> CompoundSystem::SystemStructureHandle() const {
   if (systemError_) std::rethrow_exception(systemError_);
-  if (!systemStructure_) throw std::logic_error("CNuc::SystemStructure: the compound nucleus has not been filled");
+  if (!systemStructure_) throw std::logic_error("CompoundSystem::SystemStructure: the compound nucleus has not been filled");
   return systemStructure_;
 }
 
-const CNucSystem &CNuc::SystemAllGroups() const {
+const SystemOfCompound &CompoundSystem::SystemAllGroups() const {
   if (systemError_) std::rethrow_exception(systemError_);
-  if (!systemAllGroups_) throw std::logic_error("CNuc::SystemAllGroups: the compound nucleus has not been filled");
+  if (!systemAllGroups_) throw std::logic_error("CompoundSystem::SystemAllGroups: the compound nucleus has not been filled");
   return *systemAllGroups_;
 }

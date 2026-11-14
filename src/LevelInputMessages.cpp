@@ -1,13 +1,13 @@
-// The messages of the level-parameter transformations (CNucTransformMessages.h).  Reads the nucleus through const
+// The messages of the level-parameter transformations (LevelInputMessages.h).  Reads the nucleus through const
 // access only.
-#include "CNucTransformMessages.h"
+#include "LevelInputMessages.h"
 
 #include <cmath>
 #include <iostream>
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
@@ -16,15 +16,15 @@
 namespace phys = azure2::physics;
 
 namespace {
-std::string LevelLabel(const CNuc &compound, const LevelInputs &inputs, int j, int la) {
+std::string LevelLabel(const CompoundSystem &compound, const LevelInputs &inputs, int j, int la) {
   return AZURELabel::Level(compound.GetJGroup(j), inputs.E(j, la), j, la);
 }
-std::string ChannelLabel(const CNuc &compound, int j, int ch) {
+std::string ChannelLabel(const CompoundSystem &compound, int j, int ch) {
   return AZURELabel::Channel(&compound, compound.GetJGroup(j), ch);
 }
 }  // namespace
 
-void WarnInputColumn(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch, phys::ColumnNote note,
+void WarnInputColumn(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch, phys::ColumnNote note,
                      double input) {
   const JGroup *group = compound.GetJGroup(j);
   const ALevel *level = group->GetLevel(la);
@@ -59,7 +59,7 @@ void WarnInputColumn(const CNuc &compound, const LevelInputs &inputs, const Conf
   }
 }
 
-void WarnObservedOutOfReach(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la,
+void WarnObservedOutOfReach(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure, int j, int la,
                             const phys::BasisAmplitudes &amp, const phys::ProjectLevels &in, std::size_t lb,
                             std::size_t nc) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
@@ -121,7 +121,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const LevelInputs &inputs, con
   }
 }
 
-void WarnExternalExceedsTotal(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch) {
+void WarnExternalExceedsTotal(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch) {
   const JGroup *group = compound.GetJGroup(j);
   configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
                       << "than the total width" << std::endl
@@ -132,7 +132,7 @@ void WarnExternalExceedsTotal(const CNuc &compound, const LevelInputs &inputs, c
                       << std::endl;
 }
 
-void WarnParkNormNotPositive(const CNuc &compound, const LevelState &state, const LevelInputs &inputs,
+void WarnParkNormNotPositive(const CompoundSystem &compound, const LevelState &state, const LevelInputs &inputs,
                              const Config &configure, int j, int la) {
   configure.outStream << "**WARNING: Park norm J = " << state.ParkNorm(j, la)
                       << " is not positive" << std::endl
@@ -143,7 +143,7 @@ void WarnParkNormNotPositive(const CNuc &compound, const LevelState &state, cons
                       << std::endl;
 }
 
-void WarnFormalToBrune(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, const phys::LevelSet &out,
+void WarnFormalToBrune(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure, int j, int la, const phys::LevelSet &out,
                        std::size_t lb, std::size_t nc, const phys::FormalToBruneOptions &options) {
   if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
     configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl

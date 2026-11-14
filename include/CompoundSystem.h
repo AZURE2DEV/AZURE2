@@ -1,5 +1,5 @@
-#ifndef CNUC_H
-#define CNUC_H
+#ifndef COMPOUNDSYSTEM_H
+#define COMPOUNDSYSTEM_H
 
 #include <string>
 #include <functional>
@@ -26,25 +26,24 @@ class MnUserParameters;
 }  // namespace ROOT
 class Config;
 class AZUREParams;
-struct CNucSystem;
+struct SystemOfCompound;
 namespace azure2 {
 namespace io {
 class LevelRow;
 }
 }  // namespace azure2
 
-/// An AZURE compound nucleus
-
 /*!
- * The compound nucleus is the fundamental concept of R-Matrix theory.  As such, the CNuc object
- * in AZURE is the top level container object for all structure and reaction objects.  Specifically,
- * the CNuc object is the container object for vectors of PPair and JGroup objects, within which all other
- * nuclear data objects are contained.
+ * The compound system of a project: its compound nuclei, particle pairs (PPair), J^pi groups (JGroup) with their
+ * channels (AChannel, B_c) and the levels' set-up data (ALevel), the physics/ System built from them, the pathway
+ * table, the external-capture set-up, the model data, the gamma_decay records and the layout of the level block of
+ * the parameter vector.
  *
- * It holds the set-up only: the structure, the pathways and the set-up records, written by Fill, AddHardSphereGroups,
- * ParseExternalCapture and Initialize and read-only after them.  The values of an evaluation are the caller's: a
- * LevelState (and the LevelInputs of a transformation) per owner, passed to every fill, transformation and reader.
- * One object is shared, constant, by every evaluation, thread and walker of a run or a session; it is not copied.
+ * It holds the set-up only, written by Fill, AddHardSphereGroups, ParseExternalCapture and Initialize
+ * (CompoundSystemBuild.cpp, ExternalCaptureFinalStates.cpp) and read-only after them.  The values of an evaluation
+ * are the caller's: a LevelState (and the LevelInputs of a transformation) per owner, passed to every fill,
+ * transformation and reader.  One object is shared, constant, by every evaluation, thread and walker of a run or a
+ * session; it is not copied.
  */
 
 /// One compound nucleus of a project: the (Z, A) its pairs form.
@@ -53,11 +52,11 @@ struct CompoundNucleus {
   int A = 0;
 };
 
-class CNuc {
+class CompoundSystem {
  public:
-  CNuc() = default;
-  CNuc(const CNuc &) = delete;
-  CNuc &operator=(const CNuc &) = delete;
+  CompoundSystem() = default;
+  CompoundSystem(const CompoundSystem &) = delete;
+  CompoundSystem &operator=(const CompoundSystem &) = delete;
   // -- structure ------------------------------------------------------------
   /// Number of compound nuclei the pairs form.  One for every project written
   /// before several nuclei could share a file.
@@ -80,7 +79,7 @@ class CNuc {
   /// Convert an input-file pair key to its 1-based position in the PPair vector.
   int GetPairNumFromKey(int) const;
   /// Pair \p i, 1-based.  The structure (pairs, J^pi groups, channels) is read-only after Fill and Initialize: only
-  /// CNuc's own set-up writes it (Pair, Group, below).
+  /// CompoundSystem's own set-up writes it (Pair, Group, below).
   const PPair *GetPair(int) const;
   /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
   /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
@@ -125,7 +124,7 @@ class CNuc {
   /// Boundary condition per channel, evaluated at the energy of the group's
   /// first level.
   void CalcBoundaryConditions(const Config &, const LevelInputs &inputs);
-  /// Build the pathway table (Pathways()); CNucPathways.cpp.
+  /// Build the pathway table (Pathways()); CompoundSystemBuild.cpp.
   void BuildPathways(const Config &);
   /// Which energy derivatives of the shift functions CalcShiftFunctions takes in Park's basis: a chi-squared alone
   /// needs no second derivatives, the gradient does.
@@ -175,17 +174,17 @@ class CNuc {
   /// numbers at its slots); the level block only.
   vector_r GetTransformParams(const LevelState &state, const ObservedLevelTable &table) const;
   /// The observed values of a parameter vector, as TransformOut computes them but without its messages (for
-  /// WarnLargeRadiativeWidths, CNucChecks.h); `state` is left at the vector.  Empty if the transformation fails.
+  /// WarnLargeRadiativeWidths, CompoundSystemChecks.h); `state` is left at the vector.  Empty if the transformation fails.
   std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &, const vector_r &, LevelState &state,
                                                      const LevelInputs &inputs) const;
   /// The observed values of the fit values of `state` (TransformOut without its messages), as the model data read
   /// them (ModelData.cpp) inside an evaluation: nothing a calculation reads is changed.  Empty if the transformation
-  /// fails.  CNucObserved.cpp.
+  /// fails.  LevelTransforms.cpp.
   std::optional<ObservedLevelTable> ObservedOfFitValues(const Config &, LevelState &state,
                                                         const LevelInputs &inputs) const;
   /// Set the fit value of one slot of the level block (ParameterLayout), as FillCompoundFromParams sets it with
   /// everything derived from it: a level's energy or its amplitude in one channel.  For the numerical derivatives of
-  /// the model data; setting the value back restores the state bit for bit.  CNucObserved.cpp.
+  /// the model data; setting the value back restores the state bit for bit.  LevelTransforms.cpp.
   void SetFitLevelParameter(LevelState &state, const LevelParameterLayout::Slot &slot, double value) const;
 
   // -- fitting --------------------------------------------------------------
@@ -200,15 +199,15 @@ class CNuc {
   /// partial widths the level's input widths (GammaDecaySet::WithPartialWidths; gamma_parametrisation.md section 2.8).
   void FillCompoundFromParamsPhysical(const vector_r &, LevelState &state, LevelInputs &inputs) const;
 
-  /// The physics/ System of the structure (CNucSystem.h, CNucSystemContent::Structure: R-matrix blocks, B_c = 0, no
-  /// level values) and the same with every J-group and level (CNucSystemContent::AllGroups).  Built once, when Fill
+  /// The physics/ System of the structure (SystemOfCompound.h, SystemOfCompoundContent::Structure: R-matrix blocks, B_c = 0, no
+  /// level values) and the same with every J-group and level (SystemOfCompoundContent::AllGroups).  Built once, when Fill
   /// has made the structure; the structure does not change after Fill but for B_c,
-  /// which neither holds.  Throws, as BuildSystemFromCNuc did, when the System cannot represent the structure, and
+  /// which neither holds.  Throws, as BuildSystemOfCompound did, when the System cannot represent the structure, and
   /// std::logic_error before Fill.
-  const CNucSystem &SystemStructure() const;
-  const CNucSystem &SystemAllGroups() const;
+  const SystemOfCompound &SystemStructure() const;
+  const SystemOfCompound &SystemAllGroups() const;
   /// The handle of SystemStructure(), for a set-up object that keeps it (GammaDecaySet, the external-capture set-up).
-  std::shared_ptr<const CNucSystem> SystemStructureHandle() const;
+  std::shared_ptr<const SystemOfCompound> SystemStructureHandle() const;
   /// The reaction pathways of the run (PathwayTable.h), built by Initialize.
   /// Throws std::logic_error before Initialize.
   const azure2::PathwayTable &Pathways() const;
@@ -259,7 +258,7 @@ class CNuc {
   std::vector<int> entranceRequests_;  ///< RequestEntrance, 1-based pair numbers
   /// Fill's last step: SystemStructure and SystemAllGroups, or the exception their build threw.
   void BuildSystems(const Config &);
-  std::shared_ptr<const CNucSystem> systemStructure_, systemAllGroups_;
+  std::shared_ptr<const SystemOfCompound> systemStructure_, systemAllGroups_;
   std::exception_ptr systemError_;
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;

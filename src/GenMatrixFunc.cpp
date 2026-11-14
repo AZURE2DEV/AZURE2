@@ -1,7 +1,7 @@
 #include "AngCoeff.h"
 #include "Profile.h"
 #include "AChannel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Unit.h"
 #include "GenMatrixFunc.h"
 #include "PolarizationFunc.h"
@@ -225,7 +225,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
         if (!point->IsAngularDist()) {
           // Identical particles in the ENTRANCE channel: the reported total
           // is sigma = (pi/k^2) sum_J g_J (1+delta_12) sum |T|^2 over the
-          // channels symmetry allows (l+s even; CNuc refuses or warns about
+          // channels symmetry allows (l+s even; CompoundSystem refuses or warns about
           // the others) -- for spin-0 bosons the familiar
           // (pi/k^2) sum_l (2l+1)[1+(-1)^l] T_l.  The sum above is the
           // distinguishable-particle one, so an identical entrance pair takes
@@ -430,7 +430,7 @@ std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, con
  * c_{s,l} = sum statSpin conj(T) over the diagonal pathways of channel spin s and orbital l (BuildCoulombInterference).
  * Identical particles: in channel spin s, F_X = f_X(theta) + (-1)^s f_X(pi - theta) (exchange multiplies |s v> by
  * (-1)^(2j-s), the state must pick up (-1)^(2j), and Y_l(pi - theta, pi) = (-1)^l Y_l(theta, 0)); the nuclear term
- * carries 1 + (-1)^(l'+s'), 2 on every channel CNuc admits (l + s even), so |F_N|^2 = 4 |f_N|^2 (the factor 4 of
+ * carries 1 + (-1)^(l'+s'), 2 on every channel CompoundSystem admits (l + s even), so |F_N|^2 = 4 |f_N|^2 (the factor 4 of
  * LegendreSymmetryFactor) and 2 Re[F_C* F_N] = 4 Re[F_C,s* f_N] (f_it = 2; 1 otherwise).  Only the Coulomb amplitude
  * depends on s: for j = 0 there is s = 0 alone and f_d is the symmetrized F_C (f_x = 0, X_l = 0); for j != 0,
  * F_C,s = f_d + (-1)^s f_x, and the spin average of |F_C,s|^2, sum_s (2s+1) |F_C,s|^2 / (2j+1)^2, is

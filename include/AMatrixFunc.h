@@ -63,14 +63,14 @@ struct BilinearTerm {
 class AMatrixFunc : public GenMatrixFunc {
  public:
   /// The compound (structure) and the levels it is solved at (`state`, held by the caller, which outlives the use).
-  AMatrixFunc(const CNuc *, const LevelState &state, const Config &configure);
+  AMatrixFunc(const CompoundSystem *, const LevelState &state, const Config &configure);
   /// Keep the channel-space route's values in `memo` (an energy task's scratch, which outlives this object's use)
   /// instead of the object's own; null: the own one again.
   void ShareChannelMemo(ChannelSpace::Memo *memo) { sharedMemo_ = memo; }
   /*!
    * Returns a pointer to the compound nucleus object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   const LevelState &state() const override { return *state_; }
   /*!
    * Returns a reference to the Config structure.
@@ -81,7 +81,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * instance can serve many energy points without reallocating its scratch
    * storage.  ClearMatrices() must still be called before each point.
    */
-  void Reset(const CNuc *compound, const LevelState &state, const Config &configure) {
+  void Reset(const CompoundSystem *compound, const LevelState &state, const Config &configure) {
     compound_ = compound;
     state_ = &state;
     configure_ = &configure;
@@ -138,7 +138,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * separation and excitation energies of the entrance pair (of the exit pair for a beta-delayed entrance).  Units
    * with the same nucleus and the same bits of this number share one solve (CalculationPlan.h, EnergyTask).
    */
-  static double InEnergy(const CNuc *compound, Site *point);
+  static double InEnergy(const CompoundSystem *compound, Site *point);
 
   /// Level-matrix element at (J-group, level, level'), all 1-based.
   complex GetAMatrixElement(int, int, int);
@@ -349,7 +349,7 @@ class AMatrixFunc : public GenMatrixFunc {
   void VerifyChannelSpace(int j, Site *point, double inEnergy);
 
   const Config *configure_;
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   const LevelState *state_;
   vector_matrix_c a_inv_matrices_;
   /// Factored level matrix of each J-group.

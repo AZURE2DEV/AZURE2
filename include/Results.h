@@ -40,7 +40,7 @@ namespace azure2 {
  *
  * The one way to reach a result: every accessor and every function that reads or writes one takes the buffer as an
  * argument, `const Results &` to read and `Results &` to write -- `point->GetFitCrossSection(results)`,
- * `point->Calculate(cnuc, state, config, results)`, `azure2::EvaluateModelPoint(segment, i, cnuc, state, config, results,
+ * `point->Calculate(compound, state, config, results)`, `azure2::EvaluateModelPoint(segment, i, compound, state, config, results,
  * leaves)`.  There is no default buffer, no global and no thread-local one.  The owner hands its buffer to
  * WorkingCopy::FillEnergyShiftsFromParams, the last step of the hand-over (WorkingCopy::BeginEvaluation), which sizes it for the
  * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.

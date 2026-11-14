@@ -1,5 +1,5 @@
 // Properties the pathway table (PathwayTable.h, docs/upgrade/cnuc_split.md section 11.6 step 1) must have, checked
-// from the loaded CNuc without the builder's loops:
+// from the loaded CompoundSystem without the builder's loops:
 //  - every internal row joins two channels of one J-group: the entrance channel of the entrance pair with the group's
 //    entrance spin s, the exit channel of the exit pair with spin s' (or s2' of a UPOS group); its System indices are
 //    the J-group's channel positions;
@@ -10,7 +10,7 @@
 //    Weller's Eq. (20) is the unpolarized coefficient of the differential cross section (the capture
 //    A_y record of GenMatrixFunc::AnalyzingPowerCoefficientsOf states the relation); every (k, L, m1, m2) with an interference has its capture-A_y term and the converse.
 // Arguments: .azr files or directories (every *.azr below, outside output/ and the converter's fixtures, which the
-// engine refuses), loaded as pathways_from_cnuc_test does
+// engine refuses), loaded as pathways_of_compound_test does
 // (every particle and beta pair an entrance, capture A_y requested for every photon exit), Brune basis.
 #include <algorithm>
 #include <cmath>
@@ -25,7 +25,7 @@
 #include "AChannel.h"
 #include "ProjectSetup.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "JGroup.h"
@@ -49,7 +49,7 @@ std::string Where(int a, int e, int k, int m) {
          std::to_string(m);
 }
 
-void CheckEntrance(CNuc &c, int a, const std::string &tag) {
+void CheckEntrance(CompoundSystem &c, int a, const std::string &tag) {
   const azure2::EntrancePathways &P = c.Pathways().Entrance(a);
   const bool beta = c.GetPair(a)->GetPType() == 20;
   for (int e = 1; e <= (int)P.exits.size(); e++) {
@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
     Config cfg(sink);
     cfg.configfile = fs::path(file).filename().string();
     cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-    CNuc compound;
+    CompoundSystem compound;
     LevelState state;  // the levels, as the run holds them
     LevelInputs inputs;
     if (cfg.ReadConfigFile() < 0) {

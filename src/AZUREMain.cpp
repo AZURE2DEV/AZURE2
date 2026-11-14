@@ -2,8 +2,8 @@
 #include "AZUREMain.h"
 
 #include "AZURECalc.h"
-#include "CNucChecks.h"
-#include "CNucReport.h"
+#include "CompoundSystemChecks.h"
+#include "LevelReport.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "GSLException.h"

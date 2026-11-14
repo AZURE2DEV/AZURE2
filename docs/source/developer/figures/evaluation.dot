@@ -20,7 +20,7 @@ digraph evaluation {
   n_THMMatrixFunc [label=<<b>THMMatrixFunc</b><br/><font point-size="12">the HOES cross section<br/>of THM sites</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_RMatrixFunc [label=<<b>RMatrixFunc</b><br/><font point-size="12">the channel-matrix<br/>route (a<br/>GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_LevelMatrixSolver [label=<<b>LevelMatrixSolver</b><br/><font point-size="12">factorizes one J<br/>group&#x27;s level matrix</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">the compound nuclei as<br/>set up, shared<br/>constant by every<br/>evaluation</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_CompoundSystem [label=<<b>CompoundSystem</b><br/><font point-size="12">the compound nuclei as<br/>set up, shared<br/>constant by every<br/>evaluation</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the levels at the<br/>evaluation&#x27;s vector,<br/>the owner&#x27;s</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
   n_DataSet -> n_TargetEffect [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
@@ -37,9 +37,9 @@ digraph evaluation {
   n_azure2__TaskScratch -> n_AMatrixFunc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_azure2__TaskScratch -> n_THMMatrixFunc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AMatrixFunc -> n_LevelMatrixSolver [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_AMatrixFunc -> n_CNuc [style=dashed, arrowhead=vee];
+  n_AMatrixFunc -> n_CompoundSystem [style=dashed, arrowhead=vee];
   n_AMatrixFunc -> n_LevelState [style=dashed, arrowhead=vee];
-  n_RMatrixFunc -> n_CNuc [style=dashed, arrowhead=vee, label=" nc"];
+  n_RMatrixFunc -> n_CompoundSystem [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_azure2__Results [style=dashed, arrowhead=vee, label=" nc"];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

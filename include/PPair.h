@@ -16,7 +16,7 @@ struct CoulombTableUse;
 
 /*!
  * What the run's Config says about how a pair's functions are computed: the same for every pair of a run, given when
- * the pair is built (CNuc::Fill).  The readers deep in the channel functions (Kinematics::Channel, CoulFunc, ShftFunc,
+ * the pair is built (CompoundSystem::Fill).  The readers deep in the channel functions (Kinematics::Channel, CoulFunc, ShftFunc,
  * WhitFunc) take it from their pair, never from a process-wide pointer, so two runs in one process (two pyazr sessions,
  * the web UI's server) with different settings never read each other's.
  */
@@ -70,8 +70,8 @@ class PPair {
   /// Mass number of the compound nucleus: round(M1+M2) for a particle pair,
   /// round(M2) otherwise.
   int GetNucleusA() const;
-  /// 1-based index of the compound nucleus in the CNuc's nucleus list, set by
-  /// CNuc::AddPair; 0 until the pair is added.
+  /// 1-based index of the compound nucleus in the CompoundSystem's nucleus list, set by
+  /// CompoundSystem::AddPair; 0 until the pair is added.
   int GetNucleus() const;
   void SetNucleus(int);
   /// Mass of particle 1 or 2, in u.
@@ -137,7 +137,7 @@ class PPair {
   /// a further 2 of its own (GenMatrixFunc).
   double GetEntranceSymmetryFactor() const;
   /// The nuclear potential of the hybrid model for this pair (spin_orbit_potential.md section 1.1), none for a pair
-  /// with plain Coulomb functions.  Set by CNuc::Fill from Config::potentials.
+  /// with plain Coulomb functions.  Set by CompoundSystem::Fill from Config::potentials.
   const std::optional<azure2::physics::HybridPotential> &GetHybridPotential() const { return hybrid_potential_; }
   /// Throws std::invalid_argument (with the code of experiment/SpinOrbitChecks.h) for a spin-orbit term the pair cannot
   /// have: both particles spinning, or the term on a particle of spin 0.

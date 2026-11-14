@@ -196,7 +196,7 @@ class Config {
   /// (RefineQuadratureFromEnvironment, CommandLineValues.h), which refuse a bad value.
   int refineQuadrature;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
-  /// (CNuc::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
+  /// (CompoundSystem::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;
   /// Orbital momentum limit of that enumeration ("maxOrbitalMomentum=N" in <config>); -1 = the largest l of
   /// any particle channel in the <levels> block.

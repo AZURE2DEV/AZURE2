@@ -9,7 +9,7 @@
 #include <tuple>
 #include <vector>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "JGroup.h"
 #include "ModelPass.h"
@@ -78,7 +78,7 @@ struct Pass {
 
 // The points of the data segments (the THM ones only with `hoes`, the context of their adjoint), the forward pass over
 // them, their models.
-void Forward(const CNuc *compound, const LevelState &state, WorkingCopy &data, Results &results, const Config &config, Pass &pass,
+void Forward(const CompoundSystem *compound, const LevelState &state, WorkingCopy &data, Results &results, const Config &config, Pass &pass,
              const ThmAdjointContext *hoes) {
   AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradForward);
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
@@ -104,7 +104,7 @@ void Forward(const CNuc *compound, const LevelState &state, WorkingCopy &data, R
 
 // Each point's cotangents for fitBar[k] (0: none), then the units' cotangents ordered by unit (each unit's in point
 // order).  False, with bailSeg, where a point is outside the analytic path (the first such point in data order).
-bool Cotangents(const CNuc *compound, const LevelState &state, WorkingCopy &data, Results &results, const Config &config,
+bool Cotangents(const CompoundSystem *compound, const LevelState &state, WorkingCopy &data, Results &results, const Config &config,
                 const std::vector<double> &fitBar, Pass &pass, int &bailSeg) {
   const int n = (int)pass.points.size();
   std::vector<std::vector<UnitCotangent>> perPoint(n);
@@ -206,7 +206,7 @@ void MergeSharedReads(WorkingCopy &data, const Pass &pass, const std::vector<std
 }
 
 // The solver of a task on this thread, filled and factored at the task's first unit.
-AMatrixFunc &SolveTask(const CNuc *compound, const LevelState &state, const Config &config, Results &results, Site *first) {
+AMatrixFunc &SolveTask(const CompoundSystem *compound, const LevelState &state, const Config &config, Results &results, Site *first) {
   AMatrixFunc &amf = results.scratch.ForThisThread().GradientSolver(compound, state, config);
   AZUREProfile::Timer timer(config.profile, AZUREProfile::kGradForward);
   amf.ClearMatrices();
@@ -266,7 +266,7 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
 
 // The THM sites of one task (kHoes) into `acc`: per site the cotangents of all its readers summed (in their order), and
 // the HOES adjoint taken once per site on a level-space fill at the task's energy (THMMatrixFunc::THMPointAdjoint).
-bool HoesTask(const CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
+bool HoesTask(const CompoundSystem *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
               const EnergyTaskList &list, const EnergyTask &task, const ThmAdjointContext &context, GradAccum &acc) {
   THMMatrixFunc &thm = results.scratch.ForThisThread().GradientThmSolver(compound, state, config);
   bool filled = false;
@@ -293,7 +293,7 @@ bool HoesTask(const CNuc *compound, const LevelState &state, const Config &confi
 // The scalar adjoint of one task into `acc`: per T-matrix group the T-matrix cotangents of all its units summed;
 // the bilinear terms of the decays without external capture merged over the task and back-propagated once per
 // J-group, a decay with external capture on its own.
-bool ScalarTask(const CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
+bool ScalarTask(const CompoundSystem *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
                 const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv,
                 const ThmAdjointContext *hoes, GradAccum &acc) {
   if (!HasCotangents(pass, list, task)) return true;
@@ -339,7 +339,7 @@ bool ScalarTask(const CNuc *compound, const LevelState &state, const Config &con
 // terms merged over the task; then either one back-propagation per row, or, where it costs less, the derivatives of
 // the task's bilinear forms by free parameter once (the basis: AMatrixFunc::LevelBasis or BilinearAdjoint with the
 // cotangents 1 and i) and each row as a combination of them.
-bool RowTask(const CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
+bool RowTask(const CompoundSystem *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
              const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv,
              const AMatrixFunc::FreeMask *mask, std::vector<int> &slotOfRow, std::vector<int> &rowsOf,
              std::vector<GradAccum> &rowAcc, GradAccum &scratch) {
@@ -484,7 +484,7 @@ bool RowTask(const CNuc *compound, const LevelState &state, const Config &config
 
 }  // namespace
 
-bool EnergyTaskGradient(const CNuc *compound, const LevelState &state, WorkingCopy *data, Results &results, const Config &config,
+bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, Results &results, const Config &config,
                         const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
                         const ThmAdjointContext *hoes) {
   bailSeg = 0;
@@ -536,7 +536,7 @@ bool EnergyTaskGradient(const CNuc *compound, const LevelState &state, WorkingCo
   return true;
 }
 
-bool EnergyTaskRows(const CNuc *compound, const LevelState &state, WorkingCopy *data, Results &results, const Config &config,
+bool EnergyTaskRows(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, Results &results, const Config &config,
                     const vector_matrix_r *shiftDeriv, const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask,
                     const std::function<double(const GradPoint &, double)> &rowFitBar, std::vector<GradPoint> &points,
                     std::vector<double> &models, std::vector<double> &rows, int &bailSeg, int &numTasks) {

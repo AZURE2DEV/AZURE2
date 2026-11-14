@@ -87,7 +87,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
                            "parameterSettings", "config", "potential"})
     if (const io::Document::Section *s = doc.Find(name))
       if (s->close == io::Document::Section::npos) return std::string("<") + name + "> is not closed";
-  // <levels>: the pairs, from the first line naming each (as CNuc::Fill reads them), active or not.
+  // <levels>: the pairs, from the first line naming each (as CompoundSystem::Fill reads them), active or not.
   if (const io::Document::Section *s = doc.Find("levels")) {
     for (const std::string &line : doc.Body(*s)) {
       if (BlankLine(line)) continue;

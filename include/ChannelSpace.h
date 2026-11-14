@@ -159,7 +159,7 @@ struct LevelDerivatives {
  * selects the level matrix: 0 standard, 1 Brune (shift-function derivatives
  * from `shiftDeriv` of the group, [level-1][ch-1]), 2 Park (the first and
  * second derivatives and the overlap J of `state`,
- * CNuc::CalcShiftFunctions); `particle` marks the channels with the shift
+ * CompoundSystem::CalcShiftFunctions); `particle` marks the channels with the shift
  * terms (by channel, 0-based).  `j` is the group's number in `state`.  Kept
  * per thread, rebuilt when a level's version or the mask changes.
  */

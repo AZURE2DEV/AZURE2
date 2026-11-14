@@ -3,7 +3,7 @@
 // MakePoints, WorkingCopy::SetAbundanceSamples) consumes its specs.
 #include "ProjectSetup.h"
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -31,7 +31,7 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 
 }  // namespace
 
-int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &configure, const CNuc &compound) {
+int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &configure, const CompoundSystem &compound) {
   std::vector<std::pair<int, int> > nucleiZA;
   for (int k = 1; k <= compound.NumNuclei(); k++) nucleiZA.push_back({compound.GetNucleus(k)->Z, compound.GetNucleus(k)->A});
   const int read = Draft().abundances_.Set(messages, configure.project->built.abundances, nucleiZA);
@@ -39,17 +39,17 @@ int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &confi
   return read;
 }
 
-int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs) {
-  if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
+int WorkingCopy::Fill(const Config &configure, const CompoundSystem *compound, const LevelInputs &inputs) {
+  if (SetAbundanceSamples(configure.outStream, configure, *compound) == -1) return -1;
   if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
   // Every refusal of the set-up prints its ERROR line before it returns: that line ends the run (WorkingCopy.h).
-  return this->Fill(configure, theCNuc, inputs, configure.project->built.data) == 0 ? 0 : kFillRefused;
+  return this->Fill(configure, compound, inputs, configure.project->built.data) == 0 ? 0 : kFillRefused;
 }
 
-int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs) {
-  if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
+int WorkingCopy::MakePoints(const Config &configure, const CompoundSystem *compound, const LevelInputs &inputs) {
+  if (SetAbundanceSamples(configure.outStream, configure, *compound) == -1) return -1;
   ReportUnreadDataFiles(configure, false);
-  return this->MakePoints(configure, theCNuc, inputs, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
+  return this->MakePoints(configure, compound, inputs, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
 }
 
 
@@ -97,7 +97,7 @@ std::vector<std::pair<int, int>> ProjectReactionPairs(const Config &configure, b
 
 namespace {
 // Every entrance pair key of the active items of `items` that names a pair of `compound`, requested as an entrance.
-template <class Items> void RequestEntrancesOf(CNuc &compound, const Items &items) {
+template <class Items> void RequestEntrancesOf(CompoundSystem &compound, const Items &items) {
   auto add = [&compound](int entranceKey, int) {
     if (compound.IsPairKey(entranceKey)) compound.RequestEntrance(compound.GetPairNumFromKey(entranceKey));
   };
@@ -106,11 +106,11 @@ template <class Items> void RequestEntrancesOf(CNuc &compound, const Items &item
 }
 }  // namespace
 
-void RequestDataEntrances(CNuc &compound, const Config &configure) {
+void RequestDataEntrances(CompoundSystem &compound, const Config &configure) {
   RequestEntrancesOf(compound, configure.project->built.data.datasets.items);
 }
 
-void RequestExtrapolationEntrances(CNuc &compound, const Config &configure) {
+void RequestExtrapolationEntrances(CompoundSystem &compound, const Config &configure) {
   RequestEntrancesOf(compound, configure.project->built.extrapolations.extrapolations.items);
 }
 

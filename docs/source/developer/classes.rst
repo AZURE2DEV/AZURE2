@@ -62,7 +62,7 @@ Project and set-up
 ``Config::ReadConfigFile`` parses the file into an ``azure2::io::Document``
 and makes the ``Format3Project`` (validated records, the ``<levels>`` rows,
 the specs of ``BuiltProject``), which ``Config`` keeps as
-``std::shared_ptr<const Format3Project>``. ``CNuc`` is filled from the
+``std::shared_ptr<const Format3Project>``. ``CompoundSystem`` is filled from the
 ``<levels>`` rows: pairs (``PPair``) and :math:`J^\pi` groups (``JGroup``),
 each with its channels (``AChannel``) and levels (``ALevel``: the values of
 the ``<levels>`` rows, the fix flags, the external-capture final-state data;
@@ -74,36 +74,42 @@ functions and their derivatives, Park's :math:`J`, the external-capture
 amplitudes and :math:`N_f^{1/2}`, the ``gamma_decay`` records' fills, the
 formal-basis capture-mask projectors, and what an evaluation reads of the
 input: the zero-width flags) are a ``LevelState``.
-``CNuc``'s fills and transformations are ``const`` and write the state and
+``CompoundSystem``'s fills and transformations are ``const`` and write the state and
 inputs they are given (``FillCompoundFromParams`` with
 ``GammaDecaySet::ToEngine``, ``CalcShiftFunctions``, ``TransformIn``,
 ``FillCompoundFromParamsPhysical``, ``SetFitLevelParameter``,
 ``TransformOut``); every reader of an evaluation's values takes the
 ``LevelState`` it reads as an argument (the matrix functions hold the one
 they are solved at), and every reader of the input values the
-``LevelInputs``. ``CNuc`` holds neither: each owner holds its own and hands it
-to the readers -- the program's run and the session (made by ``CNuc::Fill``
+``LevelInputs``. ``CompoundSystem`` holds neither: each owner holds its own and hands it
+to the readers -- the program's run and the session (made by ``CompoundSystem::Fill``
 and ``Initialize``, which write the state and inputs they are given), a fit's
 evaluations (copies of the caller's state in ``FitterStates``, their pool a
 ``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
 and a copy per walker), the reaction rate, a limit's conversion and the
 sub-point grids. Where each level's energy and amplitudes sit in the
-parameter vector is the ``LevelParameterLayout`` (``CNuc::ParameterLayout()``,
-built by ``Fill``): every walk of the level block reads it. ``CNuc`` is not
+parameter vector is the ``LevelParameterLayout`` (``CompoundSystem::ParameterLayout()``,
+built by ``Fill``): every walk of the level block reads it. ``CompoundSystem`` is not
 copied (its copy constructor is deleted): one object, set up by the run or
 the session, is shared constant by every owner, thread and walker; its
 pairs, groups and channels do not change after the set-up, and the compiler
-holds to it: outside ``CNuc``'s own set-up it is reached through ``const``
-pointers only (``GetPair``, ``GetJGroup``), levels included. The observed values of the levels at a vector (Brune
+holds to it: outside ``CompoundSystem``'s own set-up it is reached through ``const``
+pointers only (``GetPair``, ``GetJGroup``), levels included. Its files: the set-up in
+``src/CompoundSystemBuild.cpp`` and ``src/ExternalCaptureFinalStates.cpp``, the queries in
+``src/CompoundSystem.cpp``, the transformations in ``src/LevelTransforms.cpp``, the fills of a state in
+``src/LevelStateFill.cpp``, the parameter vector in ``src/LevelParameterVector.cpp``, its ``System`` in
+``src/SystemOfCompound.cpp``, the channel functions it hands to ``physics/`` in
+``src/EngineChannelFunctions.cpp``, its checks and reports in ``src/CompoundSystemChecks.cpp``,
+``src/LevelReport.cpp`` and ``src/LevelInputMessages.cpp``. The observed values of the levels at a vector (Brune
 energies and amplitudes, observed widths, ANCs and moments, the external parts)
-are not stored on the levels: ``CNuc::TransformOut`` returns them as an
+are not stored on the levels: ``CompoundSystem::TransformOut`` returns them as an
 ``ObservedLevelTable``, which the reports (``WriteParametersOut``), the model
-data and the observed parameter vector (``CNuc::GetTransformParams``) read. The
+data and the observed parameter vector (``CompoundSystem::GetTransformParams``) read. The
 entrance pairs are an input of the set-up
-(``CNuc::RequestEntrance``, collected from the specs by
+(``CompoundSystem::RequestEntrance``, collected from the specs by
 ``RequestDataEntrances`` or ``RequestExtrapolationEntrances``,
-``src/ProjectSetup.cpp``). ``CNucSystem`` is the ``azure2::physics::System``
-of a ``CNuc``, built once by ``CNuc::Fill`` and shared by the copies, and the
+``src/ProjectSetup.cpp``). ``SystemOfCompound`` is the ``azure2::physics::System``
+of a ``CompoundSystem``, built once by ``CompoundSystem::Fill``, and the
 ``PathwayTable`` is built from it once. ``WorkingCopy`` builds the
 ``DataSet`` (segments, target effects) from the ``DatasetSpec`` rows while it
 is set up and then holds it as ``std::shared_ptr<const DataSet>``. The
@@ -144,8 +150,9 @@ Inference
    The objective, the parameters, the fitters and the sampler.
 
 ``AZURECalc`` is Minuit2's function. During a fit it takes, for every
-evaluation, a ``CNuc`` and a ``WorkingData`` (a working copy with its own
-``Results``) from its pools, makes an ``ObjectiveContext`` and asks the one
+evaluation, a ``LevelState`` and a ``WorkingData`` (a working copy with its own
+``Results``) from its pools, reads the one ``CompoundSystem`` of its caller, makes an ``ObjectiveContext`` and asks
+the one
 ``Objective`` (``Objective::Engine()``), whose ``ObjectiveTerm`` list is fixed.
 ``AZUREParams`` holds Minuit's parameter list with one ``ParameterRecord``
 per parameter, whose kind is a row of ``ParamKindTable()``; the gradient makes
@@ -170,7 +177,7 @@ Front ends
    The program, the session of the binding, pyazr and the web UI.
 
 The program's ``AZUREMain`` and the binding's ``AZUREAPI`` own the same pair of
-engine objects, ``CNuc`` and ``WorkingCopy``, and set them up with the same
+engine objects, ``CompoundSystem`` and ``WorkingCopy``, and set them up with the same
 calls. The program's run is a ``ProgramRun`` handed from stage to stage; it
 owns the objective (``AZURECalc``), whose progress lines and intermediate
 files ``ProgramProgress`` writes; ``AZUREAPI::FitWithEngine`` makes an
@@ -185,9 +192,9 @@ owns the ``Project``), the session worker and the job table; the session
 itself lives in the worker process, where ``Engine`` owns a ``pyazr.Session``.
 
 .. note:: **Planned.**
-   When ``CNuc`` is split, the grey ``CNuc`` boxes become an immutable
-   ``CompoundSystem`` (shared like the ``DataSet``) and a per-evaluation
-   ``LevelState``. The tables below then change by those rows.
+   ``CompoundSystem`` is made by four set-up calls with the data's set-up between the first and the last;
+   one build that returns the finished object, held as ``std::shared_ptr<const CompoundSystem>``, is the next
+   step. The tables below then change by those rows.
 
 Changing the scheme
 -------------------

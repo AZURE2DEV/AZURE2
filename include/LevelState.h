@@ -12,15 +12,15 @@
  * N_f^1/2 with which it enters external capture as a final state, the shift functions at its energy (with the energy
  * they were computed at), and in Park's basis J = 1 - sum_c gamma_c^2 dS_c/dE with the first and second derivatives.
  * Beside the levels: what the fill left for each gamma_decay record (GammaDecayFill) and, in the formal basis with
- * --ignore-externals, the projector of each capture mask (CNuc::FormalCaptureMaskSlot).
+ * --ignore-externals, the projector of each capture mask (CompoundSystem::FormalCaptureMaskSlot).
  *
  * Indexed like the compound's levels: J-group j and level la, both 1-based, and the group's channels ch, 1-based.  The
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in physics/ JpiBlock.
  *
  * Owned by whoever evaluates (the program's run, the session, a fit's pooled evaluation, a walker, the rate, ...: a
- * value, copied from its caller's); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
+ * value, copied from its caller's); CompoundSystem's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
  * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write the one they are given, readers get it const.  Its
- * shape (levels, channels, capture masks) is set by the compound's set-up (CNuc::Fill, Initialize).
+ * shape (levels, channels, capture masks) is set by the compound's set-up (CompoundSystem::Fill, Initialize).
  */
 class LevelState {
  public:
@@ -42,10 +42,10 @@ class LevelState {
   /// The N_f^1/2 normalization of the level's bound-state wave function.
   double SqrtNF(int j, int la) const { return groups_[j - 1].sqrtNF[la - 1]; }
   /// Was the channel's input width exactly zero (a zero in the <levels> line, a channel the level does not list, or a
-  /// zero in the physical vector handed to CNuc::TransformIn)?  With IGNORE_ZERO_WIDTHS (--ignore-externals, the
+  /// zero in the physical vector handed to CompoundSystem::TransformIn)?  With IGNORE_ZERO_WIDTHS (--ignore-externals, the
   /// default) such a radiative channel has no external part: neither in the observed width (TransformIn,
   /// TransformOut) nor in the resonant channel capture through the level (AMatrixFunc).  A property of the input,
-  /// written where the input is read (CNuc::Fill, CNuc::TransformIn), not a test on the fit amplitude.
+  /// written where the input is read (CompoundSystem::Fill, CompoundSystem::TransformIn), not a test on the fit amplitude.
   bool ZeroInputWidth(int j, int la, int ch) const { return groups_[j - 1].zero[At(j, la, ch)] != 0; }
 
   // -- shift functions at the level energy ------------------------------------------------------------------------
@@ -76,11 +76,11 @@ class LevelState {
   bool HasGammaDecayFill(int r) const { return r >= 0 && r < (int)gammaDecayFills_.size(); }
   /// What the last fill left for record r: its values (slot order) and the parts of its photon amplitudes.
   const GammaDecayFill &GammaDecayFillOf(int r) const { return gammaDecayFills_[r]; }
-  /// The projector Pi = T^-1 P T of capture-mask slot `slot` (CNuc::FormalCaptureMaskOf), row-major over the slot's
+  /// The projector Pi = T^-1 P T of capture-mask slot `slot` (CompoundSystem::FormalCaptureMaskOf), row-major over the slot's
   /// levels; empty: Pi = P (no masked level, or every masked level decoupled).
   const std::vector<double> &CaptureProjector(int slot) const { return captureProjectors_[slot]; }
 
-  // -- writing (CNuc's fills) -------------------------------------------------------------------------------------
+  // -- writing (CompoundSystem's fills) -------------------------------------------------------------------------------------
   void SetE(int j, int la, double energy);
   void SetGamma(int j, int la, int ch, double gamma);
   void SetECGamma(int j, int la, int ch, double gamma) { groups_[j - 1].ecGamma[At(j, la, ch)] = gamma; }
@@ -93,7 +93,7 @@ class LevelState {
   void SetShiftsEnergy(int j, int la, double energy) { groups_[j - 1].shiftEnergy[la - 1] = energy; }
   void SetSecondDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d2Energy[la - 1] = energy; }
   void SetGammaDecayFill(int r, GammaDecayFill fill);
-  /// `slots` capture-mask slots, every projector empty (CNuc's set-up).
+  /// `slots` capture-mask slots, every projector empty (CompoundSystem's set-up).
   void ShapeCaptureProjectors(std::size_t slots) { captureProjectors_.assign(slots, std::vector<double>()); }
   void SetCaptureProjector(int slot, std::vector<double> projector) { captureProjectors_[slot] = std::move(projector); }
 

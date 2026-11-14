@@ -3,7 +3,7 @@
 # The standard (non-Brune) parameter transformations hand the eigenvalues to the levels by energy, not by
 # their position in the file (audit item 13, 2026-10-27).
 #
-# CNuc::TransformIn solves a generalized eigenproblem whose eigenvalues come back in ascending order and
+# CompoundSystem::TransformIn solves a generalized eigenproblem whose eigenvalues come back in ascending order and
 # assigned them to the levels of a J^pi group in FILE order; TransformOut followed the same positional
 # index.  A group listed out of energy order (a background pole first, say) therefore had its energies,
 # widths and fix flags permuted: the first-listed level carried the lowest formal energy, and a fit that

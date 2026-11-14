@@ -6,7 +6,7 @@
 
 #include "Constants.h"
 
-class CNuc;
+class CompoundSystem;
 class Config;
 class LevelInputs;
 class LevelState;
@@ -21,7 +21,7 @@ class WorkingCopy;
  * For each active extrapolation with an adaptive grid (in file order): its start grid (Build: the uniform grid of
  * start_step) with, as seeds, E_lambda + k Gamma_lambda for k = 0, +-1/2, +-1, +-2, +-4 of every level of the R-matrix
  * of the entrance pair's compound nucleus (the observed energy E_lambda as c.m. energy of the entrance pair and the
- * total width Gamma_lambda of the open channels, CNuc::ObservedWidthsAt; the formal energy alone if the observed
+ * total width Gamma_lambda of the open channels, CompoundSystem::ObservedWidthsAt; the formal energy alone if the observed
  * values cannot be computed; no seeds for a beta-delayed extrapolation) that fall inside its range, is refined by
  * experiment::RefineGrid.  Each sweep's batch of energies is computed by the point pass of the run (AZURECalc on an
  * extrapolation data set made by WorkingCopy::MakePoints from the project's specs, the batch as this extrapolation's grid
@@ -42,6 +42,6 @@ bool SessionRefusesAdaptiveGrids(const Config &configure);
 /// The extrapolation data set on the refined grids, made by WorkingCopy::MakePoints and laid out on the parameter vector as
 /// the run's data set, for the parameters `params` (the run's vector); nullptr after an error message.  The
 /// compound nucleus is initialized and its pairs marked as the run's MakePoints marked them.
-std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, const CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params);
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params);
 
 #endif

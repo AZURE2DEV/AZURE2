@@ -15,7 +15,7 @@
 
 #include "AZURECalc.h"
 #include "WorkingCopy.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "AZUREParams.h"
 #include "Fitters.h"
 

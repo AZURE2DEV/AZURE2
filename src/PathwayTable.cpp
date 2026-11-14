@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "CNucSystem.h"
+#include "SystemOfCompound.h"
 #include "azure2/physics/ObservableCoupling.h"
 
 namespace azure2 {
@@ -181,11 +181,11 @@ void AddCaptureAy(const phys::System &system, int entrancePair, int maxL, Entran
 
 }  // namespace
 
-std::shared_ptr<const PathwayTable> BuildPathwayTable(const CNucSystem &structure,
+std::shared_ptr<const PathwayTable> BuildPathwayTable(const SystemOfCompound &structure,
                                                       const std::vector<PathwayFinalState> &finalStates,
                                                       const PathwayTableOptions &options) {
   const phys::System &system = structure.system;
-  const CNucSystemMap &map = structure.map;
+  const SystemOfCompoundMap &map = structure.map;
   for (std::size_t a = 0; a < map.pairOfPartition.size(); a++)
     if (map.pairOfPartition[a] != (int)a + 1)
       throw std::logic_error("BuildPathwayTable: partition " + std::to_string(a) + " is not pair " +

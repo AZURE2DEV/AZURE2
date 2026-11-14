@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A beta-decay feeding amplitude keeps its sign through the physical transform.
 
-``CNuc::GetTransformParams`` used to return ``sign(B) * B = |B|`` for a Fermi
+``CompoundSystem::GetTransformParams`` used to return ``sign(B) * B = |B|`` for a Fermi
 or Gamow-Teller channel, so every consumer of the physical vector -- the GUI's
 level write-back after a fit, the MCMC's physical parameters and pyazr's
 ``save_fit`` -- turned a negative amplitude positive.  On the 12C+a evaluation

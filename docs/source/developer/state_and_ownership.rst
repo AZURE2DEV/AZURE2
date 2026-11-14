@@ -51,12 +51,12 @@ The set-up objects, immutable
      task (``NodeState``, ``include/NodeTable.h``), the shared angular rows
      (``RowSet``), the ``ChannelTable``; all held as
      ``std::shared_ptr<const ...>`` or ``SharedTable``.
-   - ``CNuc``, the set-up of the compound nuclei: the pairs, groups, channels
-     and levels, the two ``CNucSystem`` of the structure, the
+   - ``CompoundSystem``, the set-up of the compound nuclei: the pairs, groups, channels
+     and levels, the two ``SystemOfCompound`` of the structure, the
      ``PathwayTable``, the model data, the ``gamma_decay`` set and the
      parameter layout. ``Fill``, ``AddHardSphereGroups``,
      ``ParseExternalCapture`` and ``Initialize`` write it; after them every
-     owner reads it through a ``const CNuc *`` (or ``const CNuc &``) whose
+     owner reads it through a ``const CompoundSystem *`` (or ``const CompoundSystem &``) whose
      maker, the program's run or the session, outlives the owner. It holds no
      value of an evaluation and cannot be copied.
 
@@ -76,8 +76,10 @@ The per-evaluation objects
      from the observed basis. Each owner holds its own and hands it to the
      readers (the compound first, then the state, then the inputs): the
      program's run (``ProgramRun::state``, ``inputs``, made by
-     ``CNuc::Fill`` and ``Initialize``), the session (``AZUREAPI::state()``,
-     ``inputs()``), a fit's evaluations (copies of the caller's state in its
+     ``CompoundSystem::Fill`` and ``Initialize``), the session (``AZUREAPI::state()``,
+     ``inputs()``: a method of ``AZUREAPI`` that writes the session's levels, data, ``Results`` or its lazily
+     read fit settings is not ``const``, so a ``const AZUREAPI &`` only reads), a fit's evaluations (copies of the
+     caller's state in its
      ``FitterStates``, ``include/AZURECalc.h``), the sampler (its own
      ``WalkerLevels`` and a copy per walker and per snapshot), the reaction
      rate (``ReactionRate::State``, a copy per thread), a limit's conversion
@@ -111,8 +113,7 @@ The rule and its check
   process-wide output streams, the version generator of ``LevelState``. A row whose
   reason is ``pending`` names state still to be moved to its owner: the pools
   and the gradient memo of ``AZURECalc``, the sampler's lazily filled layout
-  in ``AZURECalcMCMC``, the session buffer and nuisance objects of
-  ``AZUREAPI``. A row is never added for new code.
+  in ``AZURECalcMCMC``. A row is never added for new code.
 - check 39: the process's environment is read in one place,
   ``support/src/Environment.cpp``; no other file calls ``getenv``.
 - check 25: a point or a data set holds where its record lies, never a
@@ -187,8 +188,6 @@ which must give the same bits as the pooled copy
 
 .. note:: **Planned.**
    The remaining pools and ``mutable`` members of ``AZURECalc``,
-   ``AZURECalcMCMC`` and ``AZUREAPI`` go to their owners (the fitter's
-   adapter, the run), as the pools of level states did (``StatePool``), and
-   ``CNuc``, set up once and shared constant by the owners of the
-   ``LevelState``, becomes the ``CompoundSystem``; the allow-list then keeps
-   only its ``table:`` rows.
+   ``AZURECalcMCMC`` go to their owners (the fitter's adapter, the run), as the
+   pools of level states did (``StatePool``); the allow-list then keeps only
+   its ``table:`` rows.

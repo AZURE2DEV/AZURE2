@@ -1,5 +1,5 @@
 // AChannel::SetWignerLimit: gamma_W^2 = 3 hbar^2 / (2 mu a^2) for a particle channel, and no limit
-// (0, which CNuc::FillMnParams skips) for a photon or beta channel or a channel without a radius.
+// (0, which CompoundSystem::FillMnParams skips) for a photon or beta channel or a channel without a radius.
 // A photon pair has mu = 0, so until 2026-10-27 a photon channel with a nonzero radius got an
 // infinite limit, and FillMnParams set Minuit limits (-inf, inf), which its sine transform turns
 // into NaN (audit 2026-10-25, item 32; the archive's photon pairs all have radius 0, so none hit it).

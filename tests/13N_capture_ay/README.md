@@ -23,7 +23,7 @@ independent checks do that:
    the `[prod (2j+1)]^{1/2}`-normalized Fano X.
 2. **Against AZURE2 itself.** The denominator `sum_k a_k P_k` must reproduce the
    differential capture cross section AZURE2 builds by the entirely separate
-   Blatt-Biedenharn route in `CNuc::CalcAngularDists`, up to the
+   Blatt-Biedenharn route in `CompoundSystem::CalcAngularDists`, up to the
    angle-independent factor `400 pi / (geom * I1I2)`. Set
    `AZURE2_CAPPOL_DEBUG=1` and the ratio is printed per point; it agrees to
    machine precision, which is what pins the pathway enumeration, the coupling

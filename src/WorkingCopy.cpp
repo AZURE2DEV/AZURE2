@@ -1,7 +1,7 @@
 #include "InputFiles.h"
 #include "AZUREOutput.h"
 #include "Profile.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "WorkingCopy.h"
@@ -57,7 +57,7 @@
 /*!
  * An analyzing-power segment (isDiff 7) needs a spin-1/2 projectile: the
  * particle route (PolarizationFunc) is written for one and returned 0 for any
- * other, and the capture route (CNuc::CalcCaptureAnalyzingPower) ran for any
+ * other, and the capture route (CompoundSystem::CalcCaptureAnalyzingPower) ran for any
  * projectile spin but returned 3/(x+1) <S_y>, which is the Madison A_y only
  * at x = 1/2 (for a deuteron 1.5 times Ohlsen's Cartesian A_y).  Both are
  * refused here instead (2026-10-26, audit item 9); tensor observables and the
@@ -69,7 +69,7 @@
  * Coulomb amplitude out), total capture, composites, samples, "total", UPOS, and a free
  * normalization on normalised coefficients (a_k / a_0 has no scale; use "absolute 1" for A_k).
  */
-static bool CoefficientsAllowed(const CNuc *theCNuc, const Segment &segment, int number, const Config &configure) {
+static bool CoefficientsAllowed(const CompoundSystem *compound, const Segment &segment, int number, const Config &configure) {
   if (!segment.IsCoefficients()) return true;
   std::string why;
   if (segment.GetExitKey() == -1)
@@ -91,10 +91,10 @@ static bool CoefficientsAllowed(const CNuc *theCNuc, const Segment &segment, int
   return false;
 }
 
-static bool AnalyzingPowerAllowed(const CNuc *theCNuc, const Segment &segment, int number, bool isTest,
+static bool AnalyzingPowerAllowed(const CompoundSystem *compound, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
-  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
                       << ": an analyzing power needs a spin-1/2 projectile; entrance pair " << segment.GetEntranceKey()
@@ -148,14 +148,14 @@ static bool TotalCaptureCodeOk(const Segment &segment, int key, bool isTest, con
 }
 
 /*!
- * The UPOS coefficient (CNuc, Brune and deBoer 2020 Eq. 22) is written for a secondary gamma ray from the HEAVY
+ * The UPOS coefficient (CompoundSystem, Brune and deBoer 2020 Eq. 22) is written for a secondary gamma ray from the HEAVY
  * partner of the exit pair: its final-state spin is J2.  With the light particle excited (column 32 of the
  * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
  * describe -- refuse instead of computing the heavy partner's correlation silently.
  */
-static bool UPOSAllowed(const CNuc *theCNuc, const Segment &segment, int key, bool isTest, const Config &configure) {
-  if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
-  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+static bool UPOSAllowed(const CompoundSystem *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsUPOS() || !compound->IsPairKey(segment.GetExitKey())) return true;
+  const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(segment.GetExitKey()));
   if (exitPair->GetLightExE() == 0.) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
                       << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
@@ -164,7 +164,7 @@ static bool UPOSAllowed(const CNuc *theCNuc, const Segment &segment, int key, bo
   return false;
 }
 
-static bool TotalAllowed(const CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
+static bool TotalAllowed(const CompoundSystem *compound, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
   auto refuse = [&](const std::string &why) {
@@ -176,8 +176,8 @@ static bool TotalAllowed(const CNuc *theCNuc, Segment &segment, int key, bool is
   if (segment.IsDifferential() || segment.IsPhase() || segment.IsAnalyzingPower() || segment.IsAngularDist() ||
       segment.IsUPOS())
     return refuse("a total cross section is angle-integrated (data type 0).");
-  if (!theCNuc->IsPairKey(segment.GetEntranceKey())) return true;  // reported where the pair is checked
-  const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  if (!compound->IsPairKey(segment.GetEntranceKey())) return true;  // reported where the pair is checked
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (pair->GetPType() != 0 || pair->GetZ(1) * pair->GetZ(2) != 0)
     return refuse("the optical theorem needs a neutral particle pair (the total cross section of charged particles "
                   "diverges).");
@@ -189,9 +189,9 @@ static bool TotalAllowed(const CNuc *theCNuc, Segment &segment, int key, bool is
 
 // A beta-delayed spectrum (entrance pair of type 20) is the energy distribution of one decay pair: its energies are
 // converted with that pair's masses (Segment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
-static bool BetaDelayedAllowed(const CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
-  if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
-  if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
+static bool BetaDelayedAllowed(const CompoundSystem *compound, Segment &segment, int key, bool isTest, const Config &configure) {
+  if (!compound->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
+  if (compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment" : "segment") << " #" << key << ": a beta-delayed "
                       << "spectrum (entrance pair " << segment.GetEntranceKey() << " of type 20) needs its decay pair as"
                       << " the exit pair, not -1 (total capture)." << std::endl;
@@ -294,7 +294,7 @@ WorkingCopy::WorkingCopy() : draft_(std::make_shared<DataSet>()) {
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs, const azure2::experiment::DataSpecs &specs) {
+int WorkingCopy::Fill(const Config &configure, const CompoundSystem *compound, const LevelInputs &inputs, const azure2::experiment::DataSpecs &specs) {
   const int numTotalSegments_ = (int)specs.datasets.items.size();
   for (const auto &item : specs.datasets.items) {
     {
@@ -305,43 +305,43 @@ int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelI
       if (segment.active) {
         Segment NewSegment(segment);
 
-        if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
-          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
-          if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
+        if (compound->IsPairKey(NewSegment.GetEntranceKey())) {
+          const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (!AnalyzingPowerAllowed(compound, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!CoefficientsAllowed(compound, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(Data().Abundances(), NewSegment, numTotalSegments, false, configure)) return -1;
-          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
-          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
-          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
-          if (!ThmVertexAllowsPair(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!TotalAllowed(compound, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!BetaDelayedAllowed(compound, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!UPOSAllowed(compound, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!ThmVertexAllowsPair(compound, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
-            for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entrancePair->GetNucleus()) {
+            for (int i = 1; i <= compound->NumPairs(); i++) {
+              if (compound->GetPair(i)->GetPType() == 10 && compound->GetPair(i)->GetNucleus() == entrancePair->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
           }
-          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
-              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != entrancePair->GetNucleus()) {
+          if (!isValidTotal && compound->IsPairKey(NewSegment.GetExitKey()) &&
+              compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != entrancePair->GetNucleus()) {
             configure.outStream << "ERROR: segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
                                 << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
-                                << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
-                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << compound->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                                << compound->NucleusLabel(compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
                                 << "); a reaction stays within one nucleus." << std::endl;
             return -1;
           }
-          if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
+          if (isValidTotal || compound->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
             if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightBySegment, numTotalSegments));
             this->AddSegment(NewSegment);
 
             // Fill the segment with data first
-            if (Draft().GetSegment(Draft().NumSegments())->Fill(theCNuc, this, configure) == -1) {
+            if (Draft().GetSegment(Draft().NumSegments())->Fill(compound, this, configure) == -1) {
               if (covarianceError_ || kinematicsError_) return -1;  // never skipped silently
               configure.outStream << "WARNING: Could Not Fill Segment #" << Draft().NumSegments()
                                   << " from file." << std::endl;
@@ -361,7 +361,7 @@ int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelI
 
                 // One leaf per component (spec: entrance, exit, optional fixed angle, scaling)
                 for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
-                  if (!this->CheckComponentPairs(theCNuc, *filledSegment, c.entranceKey, c.exitKey, configure)) return -1;
+                  if (!this->CheckComponentPairs(compound, *filledSegment, c.entranceKey, c.exitKey, configure)) return -1;
                   this->AddLeaf(*filledSegment, c.entranceKey, c.exitKey,
                                 c.hasAngle ? std::optional<double>(c.angle) : std::nullopt, c.scaling);
                 }
@@ -375,23 +375,23 @@ int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelI
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
-                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
-                for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
+                const int entranceNucleus = compound->GetPair(compound->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
+                for (int i = 1; i <= compound->NumPairs(); i++) {
+                  if (compound->GetPair(i)->GetPType() == 10 && compound->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
-                      baseSegment->SetExitKey(*this, theCNuc->GetPair(i)->GetPairKey());
+                      baseSegment->SetExitKey(*this, compound->GetPair(i)->GetPairKey());
                     } else {
                       // Each further capture pair is a leaf of the segment
-                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
+                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), compound->GetPair(i)->GetPairKey(),
                                     std::nullopt, 1.0);
                     }
                   }
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
-              if (!this->FinishTransformedSegment(theCNuc, Draft().GetSegment(thisSegmentNum), numTotalSegments, false, configure))
+              if (!this->FinishTransformedSegment(compound, Draft().GetSegment(thisSegmentNum), numTotalSegments, false, configure))
                 return -1;
             }
           } else {
@@ -424,11 +424,11 @@ int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelI
 
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", this) != 0)
     return -1;
-  if (BuildThmGroups(configure, theCNuc) != 0) return -1;
+  if (BuildThmGroups(configure, compound) != 0) return -1;
 
   if (Draft().NumSegments() > 0) {
-    if (this->SetUpTargetEffects(configure, theCNuc, inputs, specs.targetEffects) == -1) return -1;
-    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
+    if (this->SetUpTargetEffects(configure, compound, inputs, specs.targetEffects) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(compound, configure)) return -1;
     this->BuildPlan();
   }
 
@@ -441,7 +441,7 @@ int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelI
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs, const azure2::experiment::ExtrapolationSpecs &specs) {
+int WorkingCopy::MakePoints(const Config &configure, const CompoundSystem *compound, const LevelInputs &inputs, const azure2::experiment::ExtrapolationSpecs &specs) {
   const int numTotalSegments_ = (int)specs.extrapolations.items.size();
   for (const auto &item : specs.extrapolations.items) {
     {
@@ -451,43 +451,43 @@ int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const 
       if (!item.note.empty()) configure.Note(item.note);
       if (segment.active) {
         Segment NewSegment(segment);
-        if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          const PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
-          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+        if (compound->IsPairKey(NewSegment.GetEntranceKey())) {
+          const PPair *segEntrance = compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (!AnalyzingPowerAllowed(compound, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(Data().Abundances(), NewSegment, numTotalSegments, true, configure)) return -1;
-          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
-          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
-          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
-          if (!ThmVertexAllowsPair(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!TotalAllowed(compound, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!BetaDelayedAllowed(compound, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!UPOSAllowed(compound, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!ThmVertexAllowsPair(compound, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
-            for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == segEntrance->GetNucleus()) {
+            for (int i = 1; i <= compound->NumPairs(); i++) {
+              if (compound->GetPair(i)->GetPType() == 10 && compound->GetPair(i)->GetNucleus() == segEntrance->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
           }
-          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
-              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != segEntrance->GetNucleus()) {
+          if (!isValidTotal && compound->IsPairKey(NewSegment.GetExitKey()) &&
+              compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != segEntrance->GetNucleus()) {
             configure.outStream << "ERROR: test segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
                                 << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
-                                << theCNuc->NucleusLabel(segEntrance->GetNucleus()) << " and "
-                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << compound->NucleusLabel(segEntrance->GetNucleus()) << " and "
+                                << compound->NucleusLabel(compound->GetPair(compound->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
                                 << "); a reaction stays within one nucleus." << std::endl;
             return -1;
           }
-          if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
+          if (isValidTotal || compound->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
             if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightByTestSegment, numTotalSegments));
             this->AddSegment(NewSegment);
             Segment *theSegment = Draft().GetSegment(Draft().NumSegments());
 
-            const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
-            const PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
+            const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(theSegment->GetEntranceKey()));
+            const PPair *exitPair = compound->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
             theSegment->SetGridRows(*this, segment.energies, segment.angles);
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as Segment::Fill for data segments;
@@ -510,7 +510,7 @@ int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const 
 
               // One leaf per component (spec: entrance, exit, optional fixed angle, scaling)
               for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
-                if (!this->CheckComponentPairs(theCNuc, *theSegment, c.entranceKey, c.exitKey, configure)) return -1;
+                if (!this->CheckComponentPairs(compound, *theSegment, c.entranceKey, c.exitKey, configure)) return -1;
                 this->AddLeaf(*theSegment, c.entranceKey, c.exitKey,
                               c.hasAngle ? std::optional<double>(c.angle) : std::nullopt, c.scaling);
               }
@@ -528,23 +528,23 @@ int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const 
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
-                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
-                for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
+                const int entranceNucleus = compound->GetPair(compound->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
+                for (int i = 1; i <= compound->NumPairs(); i++) {
+                  if (compound->GetPair(i)->GetPType() == 10 && compound->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
-                      baseSegment->SetExitKey(*this, theCNuc->GetPair(i)->GetPairKey());
+                      baseSegment->SetExitKey(*this, compound->GetPair(i)->GetPairKey());
                     } else {
                       // Each further capture pair is a leaf of the segment
-                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
+                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), compound->GetPair(i)->GetPairKey(),
                                     std::nullopt, 1.0);
                     }
                   }
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
-              if (!this->FinishTransformedSegment(theCNuc, Draft().GetSegment(thisSegmentNum), numTotalSegments, true, configure))
+              if (!this->FinishTransformedSegment(compound, Draft().GetSegment(thisSegmentNum), numTotalSegments, true, configure))
                 return -1;
             }
           } else {
@@ -572,8 +572,8 @@ int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const 
     return -1;
 
   if (Draft().NumSegments() > 0) {
-    if (this->SetUpTargetEffects(configure, theCNuc, inputs, specs.targetEffects) == -1) return -1;
-    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
+    if (this->SetUpTargetEffects(configure, compound, inputs, specs.targetEffects) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(compound, configure)) return -1;
     this->BuildPlan();
   }
 
@@ -582,7 +582,7 @@ int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const 
 
 /*!
  * Returns true if the data is to be fit, otherwise returns false.  Used in the AZURECalc function class
- * to determine if a clone of the CNuc and WorkingCopy objects should be made for thread safety.
+ * to determine if a clone of the CompoundSystem and WorkingCopy objects should be made for thread safety.
  */
 
 bool WorkingCopy::IsFit() const {
@@ -635,7 +635,7 @@ int WorkingCopy::Iterate() {
  * and entire WorkingCopy object instead of a single Unit object.
  */
 
-int WorkingCopy::Initialize(const CNuc *compound, const Config &configure) {
+int WorkingCopy::Initialize(const CompoundSystem *compound, const Config &configure) {
   // The last step of the set-up: the data set is written once more (the nuclei, the leaves' frames at load) and then
   // frozen.  A second Initialize (a session set up again) works on a new data set.
   if (!draft_) {
@@ -844,7 +844,7 @@ void WorkingCopy::SetPriorCovariance(std::shared_ptr<const PriorCovariance> prio
  * Calls Unit::CalcLegendreP for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::CalcLegendreP(int maxL, const CNuc *theCNuc) {
+void WorkingCopy::CalcLegendreP(int maxL, const CompoundSystem *compound) {
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     const TargetEffect *effect = (segment->IsTargetEffect() &&
                             Data().GetTargetEffect(segment->GetTargetEffectNum())->IsQCoefficients())
@@ -853,7 +853,7 @@ void WorkingCopy::CalcLegendreP(int maxL, const CNuc *theCNuc) {
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
       Unit *point = segment->GetPoint(*this, i);
-      point->CalcLegendreP(this, maxL, theCNuc, effect);
+      point->CalcLegendreP(this, maxL, compound, effect);
     }
   }
 }
@@ -866,7 +866,7 @@ void WorkingCopy::CalcLegendreP(int maxL, const CNuc *theCNuc) {
  * The channel table of the given points and their sub-points, built before the threads that fill them start
  * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
  */
-std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CNuc *theCNuc, const Config &configure,
+std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CompoundSystem *compound, const Config &configure,
                                                              const std::vector<Unit *> &points) {
   // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
   // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
@@ -874,27 +874,27 @@ std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CNuc *t
   std::size_t requested = 0;
   for (Unit *point : points) {
     own.clear();
-    point->ChannelKeys(this, theCNuc, own);
+    point->ChannelKeys(this, compound, own);
     requested += own.size();
     std::sort(own.begin(), own.end());
     own.erase(std::unique(own.begin(), own.end()), own.end());
     keys.insert(keys.end(), own.begin(), own.end());
   }
-  std::shared_ptr<const ChannelTable> table = ChannelTable::Build(theCNuc, configure, std::move(keys), channelTable_.get());
+  std::shared_ptr<const ChannelTable> table = ChannelTable::Build(compound, configure, std::move(keys), channelTable_.get());
   if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kProfile))
     configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
                         << table->Computed() << " computed" << std::endl;
   return table;
 }
 
-int WorkingCopy::CalcEDependentValues(const CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalcEDependentValues(const CompoundSystem *compound, const Config &configure) {
   {
     std::vector<Unit *> points;
     for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
       for (int i = 1; i <= segment->NumPoints(); i++)
         points.push_back(segment->GetPoint(*this, i));
     try {
-      channelTable_ = BuildChannelTable(theCNuc, configure, points);
+      channelTable_ = BuildChannelTable(compound, configure, points);
     } catch (std::exception &e) {
       configure.outStream << "Channel functions: " << e.what() << std::endl;
       return -1;
@@ -910,7 +910,7 @@ int WorkingCopy::CalcEDependentValues(const CNuc *theCNuc, const Config &configu
       if (configure.stopFlag || localStop) continue;
       Unit *point = segment->GetPoint(*this, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, table);
+        point->CalcEDependentValues(this, compound, configure, table);
       } catch (GSLException e) {
 #pragma omp critical
         {
@@ -929,12 +929,12 @@ int WorkingCopy::CalcEDependentValues(const CNuc *theCNuc, const Config &configu
  * Calls Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::CalcCoulombAmplitude(const CNuc *theCNuc) {
+void WorkingCopy::CalcCoulombAmplitude(const CompoundSystem *compound) {
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
       Unit *point = segment->GetPoint(*this, i);
-      point->CalcCoulombAmplitude(this, theCNuc);
+      point->CalcCoulombAmplitude(this, compound);
     }
   }
 }
@@ -946,7 +946,7 @@ void WorkingCopy::CalcCoulombAmplitude(const CNuc *theCNuc) {
  * intEC file after those of the segments).  The run log still calls them component segments.
  */
 
-int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::InitializeLeaves(const CompoundSystem *compound, const Config &configure) {
   // The leaves go through the steps of the segments' own points
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments (" << Draft().leafRefs_.size() << " components)..." << std::endl;
@@ -959,14 +959,14 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
     bool isValidExit = false;
     if (exitKey == -1) {
       // Check for total capture validity
-      for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-        if (theCNuc->GetPair(i)->GetPType() == 10) {
+      for (int i = 1; i <= compound->NumPairs(); i++) {
+        if (compound->GetPair(i)->GetPType() == 10) {
           isValidExit = true;
           break;
         }
       }
     } else {
-      isValidExit = theCNuc->IsPairKey(exitKey);
+      isValidExit = compound->IsPairKey(exitKey);
     }
 
     if (!isValidExit) {
@@ -984,11 +984,11 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
     const PPair *entrancePair = nullptr;
     const PPair *exitPair = nullptr;
 
-    if (theCNuc->IsPairKey(entranceKey)) {
-      entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
+    if (compound->IsPairKey(entranceKey)) {
+      entrancePair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
     }
-    if (theCNuc->IsPairKey(exitKey)) {
-      exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+    if (compound->IsPairKey(exitKey)) {
+      exitPair = compound->GetPair(compound->GetPairNumFromKey(exitKey));
     }
 
     // Apply the same conversions that are done for test segment points
@@ -1035,7 +1035,7 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
         points.push_back(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
     if (!points.empty()) {
       try {
-        channelTable_ = BuildChannelTable(theCNuc, configure, points);
+        channelTable_ = BuildChannelTable(compound, configure, points);
       } catch (std::exception &e) {
         configure.outStream << "Channel functions: " << e.what() << std::endl;
         return -1;
@@ -1052,7 +1052,7 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
       if (configure.stopFlag || localStop) continue;
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, componentTable);
+        point->CalcEDependentValues(this, compound, configure, componentTable);
       } catch (GSLException e) {
 #pragma omp critical
         {
@@ -1076,7 +1076,7 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
     }
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
-      point->CalcLegendreP(this, configure.maxLOrder, theCNuc, effect);
+      point->CalcLegendreP(this, configure.maxLOrder, compound, effect);
     }
   }
 
@@ -1084,7 +1084,7 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
-      point->CalcCoulombAmplitude(this, theCNuc);
+      point->CalcCoulombAmplitude(this, compound);
     }
   }
 
@@ -1117,7 +1117,7 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
       if (!(configure.paramMask & Config::USE_API))
         configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
     }
-    if (this->LeafECAmplitudes(theCNuc, configure, usePrevious, in, out) == -1) return -1;
+    if (this->LeafECAmplitudes(compound, configure, usePrevious, in, out) == -1) return -1;
     if (out.is_open()) {
       out.flush();
       out.close();
@@ -1143,23 +1143,23 @@ int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) 
  * exist and belong to one compound nucleus (a reaction does not change the
  * compound nucleus).  The component's entrance pair is an entrance of the run
  * (RequestDataEntrances, RequestExtrapolationEntrances: every term's entrance), so
- * CNuc::Initialize builds its pathways.
+ * CompoundSystem::Initialize builds its pathways.
  * Returns false, with the error printed, when the component cannot be made.
  */
-bool WorkingCopy::CheckComponentPairs(const CNuc *theCNuc, const Segment &baseSegment, int entranceKey, int exitKey,
+bool WorkingCopy::CheckComponentPairs(const CompoundSystem *compound, const Segment &baseSegment, int entranceKey, int exitKey,
                                 const Config &configure) {
-  if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
+  if (!compound->IsPairKey(entranceKey) || !compound->IsPairKey(exitKey)) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
                         << " -> " << exitKey << " names a pair key that is not in the compound nucleus." << std::endl;
     return false;
   }
-  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
-  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
+  const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(exitKey));
   if (entrancePair->GetNucleus() != exitPair->GetNucleus()) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
                         << " -> " << exitKey << " connects two compound nuclei ("
-                        << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
-                        << theCNuc->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
+                        << compound->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                        << compound->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
     return false;
   }
   return true;
@@ -1170,7 +1170,7 @@ bool WorkingCopy::CheckComponentPairs(const CNuc *theCNuc, const Segment &baseSe
  * cannot mean, make every component a plain cross section, and give a yield its hidden total-cross-section term
  * (entrance pair to itself, "total 1", by the optical theorem), the s_t of Y0 = (s / s_t)(1 - exp(-n s_t)).
  */
-bool WorkingCopy::FinishTransformedSegment(const CNuc *theCNuc, Segment *seg, int key, bool isTest, const Config &configure) {
+bool WorkingCopy::FinishTransformedSegment(const CompoundSystem *compound, Segment *seg, int key, bool isTest, const Config &configure) {
   if (!seg || !seg->IsTransformed()) return true;
   const std::string what = std::string(isTest ? "test segment #" : "segment #") + std::to_string(key) + " (" +
                            (seg->IsTransmission() ? "transmission" : "yield") + "): ";
@@ -1183,7 +1183,7 @@ bool WorkingCopy::FinishTransformedSegment(const CNuc *theCNuc, Segment *seg, in
       seg->IsCoefficients() || seg->GetCrossSectionComponent() != 0)
     return refuse("the transform acts on an angle-integrated cross section (data type 0, or 3 for total capture).");
   if (seg->IsAdvanced() && seg->GetLegacyOperationType() != 0) return refuse("not on a RATIO.");
-  const PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+  const PPair *entrance = compound->GetPair(compound->GetPairNumFromKey(seg->GetEntranceKey()));
   if (entrance->GetPType() != 0 || entrance->GetZ(1) * entrance->GetZ(2) != 0)
     return refuse("a sample transmission or self-shielded yield needs a neutral entrance pair (a neutron beam).");
   if (seg->IsTransmission()) return true;

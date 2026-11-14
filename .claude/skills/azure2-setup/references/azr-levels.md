@@ -7,8 +7,8 @@ it, so that a project can be written or audited by hand. The authoritative colum
 
 ## 1. There is no pairs section
 
-Every channel line repeats the full particle-pair description. `CNuc::Fill` rebuilds the pair list by
-de-duplicating those repeats (`CNuc::IsPair`). Writing correct level lines therefore creates the pairs.
+Every channel line repeats the full particle-pair description. `CompoundSystem::Fill` rebuilds the pair list by
+de-duplicating those repeats (`CompoundSystem::IsPair`). Writing correct level lines therefore creates the pairs.
 `pyazr.Project` edits an existing format-3 project (levels, channels, pair columns, records) but cannot create a
 particle pair; a compound nucleus that has never been set up is reached by writing level lines directly.
 
@@ -32,7 +32,7 @@ pType chRad g1 g2 ecMultMask
 | `levelJ` | J itself (not 2J) | reading it as 2J turns a 3⁻ level into "3/2⁻" |
 | `levelE` | compound-nucleus excitation energy E_x (MeV) | not the resonance energy in a channel |
 | `levelFix` | 1 = energy fixed, 0 = fit parameter | per level, repeated on each of its lines |
-| `aa` | legacy entrance key | the Qt GUI wrote `1`; `CNuc` never reads it |
+| `aa` | legacy entrance key | the Qt GUI wrote `1`; `CompoundSystem` never reads it |
 | `ir` | this channel's pair key | what `entrance`/`exit` of a segment refer to |
 | `2S`, `2L` | doubled channel spin and orbital momentum | integers; the engine halves them on read |
 | `channelFix` | 1 = width fixed | per channel |
@@ -43,7 +43,7 @@ pType chRad g1 g2 ecMultMask
 | `entranceSepE` | separation energy of the first pair (MeV) | the same value on every line of the file |
 | `sepE` | this pair's separation energy (MeV) | 0 for a photon pair |
 | `j3 pi3 e3` | unused for particle and photon pairs | the Qt GUI wrote `0 0 0.0` |
-| `pType` | 0 particle+particle, 10 particle+γ, 20 β decay | `src/CNuc.cpp` |
+| `pType` | 0 particle+particle, 10 particle+γ, 20 β decay | `src/CompoundSystemBuild.cpp` |
 | `chRad` | channel radius a_c (fm) | 0 for a photon pair |
 | `g1 g2` | nuclear g-factors | used only for M1 external capture |
 | `ecMultMask` | external-capture multipoles of this pair | bit0 E1, bit1 M1, bit2 E2 (`include/Constants.h`); 5 = E1+E2 |

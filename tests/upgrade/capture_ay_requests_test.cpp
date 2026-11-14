@@ -1,6 +1,6 @@
 // The capture analyzing-power terms are built at set-up for the reactions the data sets name (cnuc_split.md section
 // 11.5, decision 2; include/CaptureAyRequests.h).  Every project of the tree given is loaded as the engine loads it
-// (CNuc::Fill, WorkingCopy::Fill or MakePoints, RequestCaptureAyTerms, CNuc::Initialize), in a scratch copy, and:
+// (CompoundSystem::Fill, WorkingCopy::Fill or MakePoints, RequestCaptureAyTerms, CompoundSystem::Initialize), in a scratch copy, and:
 //  (a) every term of an analyzing-power data set with a photon exit has its exit's terms in the pathway table;
 //  (b) no beta entrance has capture-A_y terms;
 //  (c) the table is the same with the requests in one order and in the reverse order (every entrance and every photon
@@ -19,7 +19,7 @@
 
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
@@ -42,7 +42,7 @@ void Check(bool ok, const std::string &what) {
 struct Loaded {
   std::unique_ptr<std::ostringstream> sink;
   std::unique_ptr<Config> cfg;
-  std::unique_ptr<CNuc> compound;
+  std::unique_ptr<CompoundSystem> compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
@@ -57,7 +57,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.sink.reset(new std::ostringstream);
   l.cfg.reset(new Config(*l.sink));
   l.cfg->configfile = file;
-  l.compound.reset(new CNuc);
+  l.compound.reset(new CompoundSystem);
   l.data.reset(new WorkingCopy);
   if (l.cfg->ReadConfigFile() < 0) return l;
   if (withData)
@@ -71,7 +71,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get(), l.inputs)
                                                                        : l.data->MakePoints(*l.cfg, l.compound.get(), l.inputs);
   if (filled != 0) return l;
-  CNuc &c = *l.compound;
+  CompoundSystem &c = *l.compound;
   if (l.cfg->paramMask & Config::CALCULATE_WITH_DATA)
     RequestDataEntrances(c, *l.cfg);
   else
@@ -95,7 +95,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
 }
 
 // The capture-A_y part of the table, one line per exit and per term, doubles as hexadecimal floats.
-std::vector<std::string> DumpCaptureAy(CNuc &c) {
+std::vector<std::string> DumpCaptureAy(CompoundSystem &c) {
   std::vector<std::string> out;
   char buf[256];
   for (int a = 1; a <= c.NumPairs(); a++) {
@@ -117,7 +117,7 @@ std::vector<std::string> DumpCaptureAy(CNuc &c) {
 // The capture-A_y terms of the data sets: (number of such terms, number of them whose exit has its terms built).
 std::pair<int, int> CaptureAyTerms(Loaded &l) {
   int terms = 0, built = 0;
-  CNuc &c = *l.compound;
+  CompoundSystem &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
     const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower()) continue;
@@ -146,10 +146,10 @@ std::vector<double> CaptureAyValues(Loaded &l) {
   l.compound->FillCompoundFromParams(p, l.state);
   l.data->FillNormsFromParams(p);
   l.data->FillEnergyShiftsFromParams(p, results, l.compound.get(), &l.state, &l.inputs, l.cfg.get());
-  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, l.state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, l.state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   azure2::EvaluateModel(*l.data, l.compound.get(), l.state, *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
-  CNuc &c = *l.compound;
+  CompoundSystem &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
     const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower() || !c.IsPairKey(s.GetExitKey())) continue;
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
       if (forward.ok && reverse.ok) {
         const std::vector<std::string> f = DumpCaptureAy(*forward.compound), r = DumpCaptureAy(*reverse.compound);
         if (f != r) Check(false, tag + ": the table depends on the order of the requests");
-        CNuc &c = *forward.compound;
+        CompoundSystem &c = *forward.compound;
         for (int a = 1; a <= c.NumPairs(); a++) {
           if (c.GetPair(a)->GetPType() != 20) continue;
           betaEntrances++;

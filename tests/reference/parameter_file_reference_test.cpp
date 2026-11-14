@@ -37,7 +37,7 @@ int main() {
   }
   AZUREParams params;
   auto &mp = params.GetMinuitParams();
-  // Each parameter with its record (AZUREParams::Add), as CNuc::FillMnParams makes them: two levels of J group 1.
+  // Each parameter with its record (AZUREParams::Add), as CompoundSystem::FillMnParams makes them: two levels of J group 1.
   params.Add("energy_1", 0.0, 0.5, ParameterRecord::LevelEnergy(1, 1, 1));
   params.Add("width_1_1", 1.0, 0.25, ParameterRecord::Width(1, 1, 1, 1));
   params.Add("energy_2", 1.0, 0.75, ParameterRecord::LevelEnergy(1, 2, 2));
