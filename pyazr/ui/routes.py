@@ -271,10 +271,12 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_ROUTES = (
     ("/", "index.html", "The page; a request with ?token= is answered by a redirect to / that sets the cookie; "
                         "a browser without the token gets a page that asks for it."),
-    ("/static/{path:path}", None, "The page's modules, style sheet and the vendored plotly.js."),
+    ("/static/{path:path}", None, "The page's modules, style sheet, the original program's icon and the vendored "
+                                  "plotly.js."),
 )
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-                ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8"}
+                ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8",
+                ".png": "image/png"}
 
 # The Content-Security-Policy of every response.  Scripts only from the server ('self': the page's modules and the
 # vendored plotly.js; no inline script, no eval); styles from the server and inline, because plotly.js sets style

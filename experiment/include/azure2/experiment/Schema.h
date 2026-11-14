@@ -80,6 +80,9 @@ struct FieldDef {
   bool repeatable = false;
   std::string defaultText;  ///< an optional field's value when absent (logged by the engine when used)
   std::string doc;
+  /// Set rarely: a form shows it one click away ("more") unless the record sets it.  The engine reads it nowhere; the
+  /// schema writes it as "rare" (the web page's first depth, docs/upgrade/web_ui.md).
+  bool rare = false;
 };
 
 struct RecordKind {

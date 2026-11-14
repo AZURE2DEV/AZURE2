@@ -9,3 +9,37 @@ export const LAYOUT = {
   target: [["kind", "active", "phase"], ["composition", "compound_correction"]],
   datum: [["quantity", "level", "J"], ["value", "error"], ["imag", "imag_error"], ["source", "exfor", "doi"]],
 };
+
+// The first view (docs/upgrade/web_ui.md section 6, the two depths): the old setup program's path, in its order and
+// words, each tab a view of one of the page's tabs (app.js TABS): `tab` the page's tab, `hash` the route it opens,
+// `part` the first word of the routes it stands for (the Nucleus tab's "pair" or "level"), `sections` the Data tab's
+// groups it shows (null: every group no other view of the tab names).  The expert's view shows TABS as they are.
+export const FIRST_VIEW = [
+  { title: "Project", tab: "project", hash: "#/project" },
+  { title: "Particle Pairs", tab: "nucleus", part: "pair", hash: "#/nucleus/pair" },
+  { title: "Levels and Channels", tab: "nucleus", hash: "#/nucleus/level" },
+  { title: "Segments", tab: "data", sections: null, hash: "#/data?section=data" },
+  { title: "Experimental Effects", tab: "data", sections: ["targets"], hash: "#/data?section=targets" },
+  { title: "Fit", tab: "fit", hash: "#/fit" },
+  { title: "Plot", tab: "results", hash: "#/results" },
+];
+
+/** The old program's words for the groups of the Data tab (a group without a row is shown by its section's name). */
+export const SECTION_TITLES = { data: "Segments From Data", extrapolations: "Segments Without Data",
+  modelData: "Model data", targets: "Experimental Effects" };
+
+/** The tabs of a depth, each {title, hash, tab, part?, sections?, row}: the first view's (FIRST_VIEW, each with the
+ * row of `tabs` it is a view of) or the expert's (`tabs`, app.js TABS, as they are). */
+export function shownTabs(expert, tabs) {
+  if (expert) return tabs.map((t) => ({ title: t.title, hash: `#/${t.id}`, tab: t.id, row: t }));
+  return FIRST_VIEW.map((v) => ({ ...v, row: tabs.find((t) => t.id === v.tab) }));
+}
+
+/** The shown tab a route belongs to: the one of its tab whose part is the route's first word (a pair) or whose
+ * sections hold the group the tab drew (`section`, the Data tab's); else the view of its tab without either. */
+export function tabOfRoute(shown, route, section) {
+  const mine = shown.filter((t) => t.tab === route.tab);
+  return mine.find((t) => t.part && t.part === route.args[0])
+    || mine.find((t) => t.sections && section && t.sections.includes(section))
+    || mine.find((t) => !t.part && !t.sections) || mine[0] || null;
+}

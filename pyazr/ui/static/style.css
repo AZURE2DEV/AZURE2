@@ -1,27 +1,34 @@
 /* The look of AZURE2's web UI (docs/upgrade/web_ui.md section 7): a scientific tool, dense tables with tabular
    figures, little chrome, one accent colour; light and dark themes following the system, switchable (data-theme on
-   the root element).  Colours are tokens; the plots read --fg, --panel and --grid. */
+   the root element).  Colours are tokens; the plots read --fg, --panel and --grid.
+
+   The colours are the original program's icon's (static/azure2_icon.png, measured): its blue #004293 is the accent,
+   its red #990000 the colour of an error, its green #04800d (darkened to #04720c to keep 4.5:1 on every panel) that
+   of success.  Red and green are a pair many people cannot tell apart, so a state is never said by its colour alone:
+   the boxes and the status line carry a word or a symbol (✓ ⚠ ✕) beside it.  The dark theme uses lighter tints of
+   the same three hues.  tests/pyazr/ui/static_test.py computes the contrast of every text token on its backgrounds in
+   both themes (at least 4.5 to 1). */
 
 :root {
-  --bg: #f4f5f7; --panel: #ffffff; --fg: #1d2129; --muted: #5b6270; --line: #d5d9e0; --grid: #e3e6eb;
-  --accent: #0b5cad; --accent-fg: #ffffff; --accent-soft: #e3eefa; --row-hover: #f0f4f9;
-  --error: #b3261e; --error-bg: #fdecea; --warn: #8a5300; --warn-bg: #fff4dc; --ok: #1e6b35;
+  --bg: #f3f5f9; --panel: #ffffff; --fg: #1b2230; --muted: #545d6e; --line: #d3d9e2; --grid: #e2e7ee;
+  --accent: #004293; --accent-fg: #ffffff; --accent-soft: #e0e9f5; --row-hover: #eef3fa;
+  --error: #990000; --error-bg: #fbe9e9; --warn: #7d4b00; --warn-bg: #fff3d6; --ok: #04720c;
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #15181d; --panel: #1d2128; --fg: #e3e6eb; --muted: #9aa3b2; --line: #343a45; --grid: #2c313a;
-    --accent: #6cb0f5; --accent-fg: #0d1117; --accent-soft: #1f3550; --row-hover: #252b34;
-    --error: #ff8a80; --error-bg: #3b1f1f; --warn: #f2c46d; --warn-bg: #3a2f17; --ok: #7bd28f;
+    --bg: #12161d; --panel: #1a2029; --fg: #e4e8ee; --muted: #9aa4b4; --line: #333b47; --grid: #2a313c;
+    --accent: #79aef0; --accent-fg: #0b1220; --accent-soft: #1b3254; --row-hover: #222a35;
+    --error: #ff8f8a; --error-bg: #3a1c1c; --warn: #f0c46a; --warn-bg: #382c14; --ok: #6fd27a;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #15181d; --panel: #1d2128; --fg: #e3e6eb; --muted: #9aa3b2; --line: #343a45; --grid: #2c313a;
-  --accent: #6cb0f5; --accent-fg: #0d1117; --accent-soft: #1f3550; --row-hover: #252b34;
-  --error: #ff8a80; --error-bg: #3b1f1f; --warn: #f2c46d; --warn-bg: #3a2f17; --ok: #7bd28f;
+  --bg: #12161d; --panel: #1a2029; --fg: #e4e8ee; --muted: #9aa4b4; --line: #333b47; --grid: #2a313c;
+  --accent: #79aef0; --accent-fg: #0b1220; --accent-soft: #1b3254; --row-hover: #222a35;
+  --error: #ff8f8a; --error-bg: #3a1c1c; --warn: #f0c46a; --warn-bg: #382c14; --ok: #6fd27a;
   color-scheme: dark;
 }
 
@@ -37,7 +44,14 @@ a { color: var(--accent); }
 /* header, tabs, status line */
 header.top { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel);
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.brand { font-weight: 700; letter-spacing: 0.04em; color: var(--accent); }
+.brand { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--accent); }
+.brand img { width: 22px; height: 22px; }
+.about { margin: 0; }
+.about dt { font-weight: 600; margin-top: 6px; }
+.about dd { margin: 0 0 0 1em; }
+.depth { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+button.calculate { font-weight: 600; }
 .project-name { font-weight: 600; font-size: 14px; }
 .unsaved { color: var(--warn); font-weight: 600; }
 .saved { color: var(--muted); }
@@ -198,6 +212,10 @@ input.wide { max-width: 100%; }
 .error-box .k { color: var(--muted); }
 .warn-box { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 6px 10px; margin: 6px 0; }
 .ok-box { border-left: 3px solid var(--ok); padding: 6px 10px; margin: 6px 0; }
+/* a state is said by a symbol too, not by its colour alone (red and green look alike to many people) */
+.error-box::before, .status.error::before { content: "✕ "; color: var(--error); font-weight: 700; }
+.warn-box::before, .status.warn::before { content: "⚠ "; color: var(--warn); }
+.ok-box::before, .status.ok::before { content: "✓ "; color: var(--ok); font-weight: 700; }
 
 /* text, overlay */
 pre.project-text { max-height: 420px; overflow: auto; background: var(--bg); padding: 8px; margin: 4px 0 0; }
@@ -245,3 +263,17 @@ section.panel.model-options form.record-form .form-line,
 section.panel.experiments form.record-form .form-line { border-bottom: 0; }
 section.panel.model-options form.record-form .form-actions,
 section.panel.experiments form.record-form .form-actions { flex-basis: 100%; }
+
+/* the first view: a field's meaning under its title, the rarely set fields and the rest of a tab one click away */
+.field-doc { color: var(--muted); font-size: 11.5px; max-width: 46ch; margin: 1px 0 2px; }
+details.form-more, details.more { margin: 6px 0; }
+details.form-more > summary, details.more > summary { cursor: pointer; color: var(--accent); padding: 3px 0; }
+details.more > section.panel, details.more > div { margin-top: 6px; }
+p.empty { padding: 6px 0; }
+
+/* the run's settings (Project tab): a table per group, the control beside the title and key */
+table.settings-group { border-collapse: collapse; margin: 6px 0 10px; width: 100%; }
+table.settings-group caption { text-align: left; font-weight: 600; padding: 4px 0; }
+table.settings-group th { text-align: left; font-weight: 500; width: 26%; vertical-align: top; padding: 4px 8px 4px 0; }
+table.settings-group td { vertical-align: top; padding: 4px 8px 4px 0; border-top: 1px solid var(--grid); }
+table.settings-group th { border-top: 1px solid var(--grid); }

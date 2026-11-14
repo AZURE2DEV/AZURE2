@@ -35,6 +35,20 @@ struct ConfigSection {
   const ConfigEntry *Find(const std::string &name) const;
 };
 
+/// One of the eleven positional entries: how it is read and what a user is told about it.  The words (`title`,
+/// `group`, `rare`) are for the forms that set it (pyazr.kinds()["config"], the web page's run settings); the engine
+/// reads none of them.
+struct ConfigPositional {
+  const char *name;
+  bool token;          ///< read as its line's first token (one of `values`); else the whole line (a directory)
+  const char *values;  ///< a token entry's values, separated by blanks, in the order a form offers them
+  const char *title;   ///< the old setup program's words for it
+  const char *group;   ///< the group of settings it belongs to (ConfigKey::group)
+  const char *doc;     ///< what it sets
+  bool rare;           ///< set rarely (ConfigKey::rare)
+};
+/// The positional entries, in file order.
+const std::vector<ConfigPositional> &ConfigPositionals();
 /// The names of the eleven positional entries, in file order.
 const std::vector<std::string> &ConfigPositionalNames();
 
@@ -56,6 +70,12 @@ struct ConfigKey {
   const char *negation = "";
   bool defaultOn = false;
   const char *effect = "";
+  // What a form that sets the key tells a user (pyazr.kinds()["config"], the web page's run settings); the engine
+  // reads none of these.
+  const char *title = "";   ///< the old setup program's words for it where it had the setting, else a short name
+  const char *group = "";   ///< the group of settings a user finds it in ("Runtime options", "Physics", ...)
+  const char *absent = "";  ///< what the engine does when the key is absent, in words (an option: its default)
+  bool rare = false;        ///< set rarely: a form shows it one click away ("more"), unless the project sets it
 };
 /// The keys, in the order the engine applies them: the options in the order a session applies its keywords (use_brune
 /// before use_park, so that use_park=True with use_brune=False gives Park, as before the keys).

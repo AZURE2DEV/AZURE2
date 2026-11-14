@@ -782,6 +782,11 @@ value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle
 checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
 User guide: "The web interface".
 
+The page carries the original's face (2026-11-14): the original program's icon in its header and as the browser
+tab's icon (the same file as `packaging/icons/azure2_icon.png`), colours built on the icon's blue, red and green
+(each state also with a symbol, for those who cannot tell red from green), an About box with the version and the
+reference to cite, and the original's words where a tab or a button does what the old program's did.
+
 The Fit tab (2026-11-13, second step of the page) runs the recipe fits (iminuit's MIGRAD with HESSE, scipy's
 L-BFGS-B) and iminuit's MINOS as jobs from a form drawn from the server's job table, follows a running job (calls,
 objective, its plot against the call, Stop, Kill), writes an accepted fit into the project as one Undo-able edit and

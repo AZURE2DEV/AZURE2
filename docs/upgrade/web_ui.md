@@ -95,7 +95,8 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
   `thm_experiments`, `thm_background`, `thm_vertex`, `thm_lineshape`, `thm_distortion`. E (the THM tab, section 11.8).
 - THM binding energy and amplitude flag per channel (13) → THM: `set_pair` has neither. M (shown read-only from the
   session, section 11.8).
-- Title, About, help, theme, dialogs, screenshots (2, 14) → Shell: `pyazr.describe()`; the page. D, P.
+- Title, About, help, theme, dialogs, screenshots (2, 14) → Shell: `pyazr.describe()`; the page. D, P (the icon,
+  About with the citation and the versions: section 7; the first view in the old program's words: section 11.11).
 
 ### 1.2 What the engine does that Qt never showed
 
@@ -818,6 +819,16 @@ page works without it: plots are replaced by their data table and CSV export, so
 action reachable by keyboard and listed in a `?` overlay; light and dark themes following the system, switchable;
 numbers right-aligned with units in the column head; the engine's own words for every description and message.
 
+**The original's face.** The header and the browser tab show the original program's icon
+(`pyazr/ui/static/azure2_icon.png`, byte-identical to `packaging/icons/azure2_icon.png`: consistency check 57).
+The colour tokens of `style.css` are built on the icon's measured colours: its blue `#004293` is the accent, its red
+`#990000` the error colour, its green `#04800d` (darkened to `#04720c` for 4.5:1 on every panel) the success colour;
+the dark theme uses lighter tints of the same hues (`#79aef0`, `#ff8f8a`, `#6fd27a`). A state is never said by its
+colour alone: the error, warning and success boxes and the status line carry ✕, ⚠ or ✓ beside it (CSS `::before`).
+`tests/pyazr/ui/static_test.py` computes the WCAG contrast of every text token on every background it is drawn on,
+in both themes, from the CSS (at least 4.5:1). **About** (header) gives the program's and pyazr's versions, the
+reference to cite (as `docs/source/index.rst` gives it; the test compares the two) and the documentation's address.
+
 **Plots and accessibility.** A colour-blind-safe palette (Okabe–Ito for up to 8 data sets, then markers vary as
 well as colours); every plot has "Export data (CSV)" with the exact numbers drawn and their units, SVG and PNG
 export from plotly, PDF through `pyazr.plot` (matplotlib, server side) for a paper figure; every plot's title and
@@ -876,7 +887,8 @@ What must know of a new thing under this design:
 - **A kind of plot**: one function in `plots.js`, one row of the plot table, one smoke-test step.
 - **A kind of job**: one row of `jobs.py` (its pyazr call, settings, progress fields) and its test.
 - **A session option**: none. The Project tab's options come from `kinds()["options"]`; an option of the calculation
-  is a `<config>` key, edited with the other entries.
+  is a `<config>` key, edited with the other entries: its row of `io::ConfigKeys()` (with its title, group, absence
+  and rarity) gives its control in the run settings.
 
 ## 11. The order of work
 
@@ -1572,6 +1584,55 @@ T1 and T2: the χ² unchanged throughout.
 **Extensibility.**  A new argument of `set_pair` or `add_pair`: its route row's `kwargs` (one word) and nothing in
 the page (a unit in `UNITS` if it has one).  A new column of the fitter table: a fact in `engine_rows` (one entry);
 a new outcome word or notice: nothing.
+
+### 11.11 The page for the median user (2026-11-14): the original's face, two depths, Calculate, run settings
+
+The PI after using the page: a user who knows R-matrix and the old program, but not the project's grammar, must not
+be overwhelmed, should set pairs, levels and data easily, and check an evaluation easily; the experts work through
+pyazr. Measured first (the typed places, the six tasks in steps: the HANDOFF entry of the branch
+`feature/upgrade-9-webui-first-view`).
+
+- **The original's face** (section 7): the icon, colours from it, symbols beside every state colour, About.
+- **Two depths, one page.** The first view (`layout.js` `FIRST_VIEW`, the default; `ctx.expert` false) shows the
+  old program's path and words: Project, Particle Pairs, Levels and Channels, Segments, Experimental Effects, Fit,
+  Plot. Each is a view of one of `TABS` (the Nucleus tab's `pair` part or the rest; the Data tab's `targets` group
+  or every other group); a route keeps its meaning in both depths and marks the view it belongs to (`tabOfRoute`,
+  after the tab has drawn: the Data tab says which group it drew). Physics and THM are in the expert's depth. In the
+  first view the Nucleus tab's γ decays and potentials, the Project tab's session options, history, text and engine,
+  and the Results tab's totals and band are under a `details.more`; the expert's depth (`expert` in the header, key
+  `e`, kept in `localStorage`, `?depth=` for one view) shows what the page showed before.
+- **Rare fields: a column of the engine's table.** `FieldDef::rare` (`experiment/src/Schema.cpp`, `Rare(...)`),
+  written as `"rare": true` by the schema: 35 fields of 6 kinds (provenance texts, pair keys, THM, reference, UPOS,
+  multipole, shape constant; a target's phase, compound correction, isotope sum, Doppler, screening; a potential's
+  pair key, matching radius, Numerov step; a γ decay's mixing and sign). A first-view form (`foldRare`) puts a rare
+  field under "More fields" unless the record sets it, needs it or has a message about it (`forms.js` `folded`);
+  an edit of a folded field is found as any other (`changedFields` reads both parts). The field's doc is written
+  under its title in the first view (`showMeaning`), on hover in the expert's.
+- **Calculate** (header, every tab, key `c`): `POST /api/evaluate` of the current text, remembered as a snapshot
+  (revision, χ² and objective, χ² and N per data set: `calculate.js`, page state lost on reload), then the Plot tab
+  (`#/results?calculated=1`) with "Calculate: what changed": Δχ² in total and of the objective, one row per data
+  set (before, now, Δ; the largest change first), each row scrolling to its plot, the plots in that order. The
+  baseline is the newest calculation that is not the current one (same revision and χ²); the status line gives the
+  change since the last Calculate after every edit. Clicks from an edited width to the plot of the data set it moves:
+  one (Calculate), the set that moved most first; before, one (Results) and the data set found by eye.
+- **Run settings** (Project tab, both depths; `tabs/settings.js`): the rows of `kinds()["config"]`, a record kind
+  made by `pyazr/described.py` from the engine's table (`config_table()` of the binding: `io::ConfigPositionals()`
+  and `io::ConfigKeys()`, which gained the columns `title` (the old program's words where it had the setting),
+  `group`, `absent` (what the engine does without the key) and `rare`; the positional entries their `values`, now
+  also the edit's check). A switch for a 0/1 key, a choice for a positional entry, a number box with its bound, a
+  text box for a path or a directory; each change is one `PATCH /api/project/config` (one history entry); `×`
+  removes a key; a search over key, title, meaning and group; rare rows under "More settings" unless set; the free
+  key and value table under "Advanced". A new key of the table appears with no line of the page.
+- **Next step** (Project tab, first view): the first missing thing in the old program's order (`nextStep`: pairs,
+  levels, data (records of a kind with a quantity), the engine's refusal, else Calculate) with its button. Empty
+  pairs, levels and Data groups say what belongs there and offer the first one.
+
+**Tests.** `tests/pyazr/ui/js/firstview.test.mjs` (the views and their marking, the groups of the Data views, the
+folding on every kind with rare fields of the engine's schema, an edit of a folded field, the next step, the
+comparison of two calculations); the self-test visits every view in the expert's depth, then each first-view tab,
+a data set's form (one "More fields") and Calculate twice; with `edit=1` it presses Calculate after the width edit
+and `smoke_test.py` checks that the comparison is the engine's two χ² (before, after) and that the Plot tab is
+marked.
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 

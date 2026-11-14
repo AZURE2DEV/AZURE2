@@ -3,9 +3,10 @@
 // unhandled rejection, console error and failed request, and writes the result as JSON into
 // <pre id="selftest-result" data-done="1">.  tests/pyazr/ui/smoke_test.py reads it from Chrome's dumped document.
 // "#selftest?theme=dark" runs it in the dark theme; "#selftest?edit=1" also edits a width and undoes it, and adds a
-// pair with the Nucleus tab's form, removes it with its button and undoes both.
+// pair with the Nucleus tab's form, removes it with its button and undoes both.  The views are visited in the
+// expert's depth (every tab and field), then each tab of the first view (FIRST_VIEW) and Calculate twice.
 
-import { LAYOUT } from "./layout.js";
+import { FIRST_VIEW, LAYOUT } from "./layout.js";
 import { fitCheck } from "./selftestfit.js";
 import { NUCLEUS_SECTIONS } from "./tabs/records.js";
 
@@ -33,8 +34,10 @@ export function selftest(ctx, tabs, draw) {
   addEventListener("unhandledrejection", (e) => errors.push(`unhandled rejection: ${e.reason?.stack || e.reason}`));
   const consoleError = console.error.bind(console);
   console.error = (...a) => { errors.push(`console.error: ${a.map(String).join(" ")}`); consoleError(...a); };
-  const extra = location.hash.includes("?") ? `?${location.hash.split("?")[1]}` : "";
+  let extra = location.hash.includes("?") ? `?${location.hash.split("?")[1]}` : "";
+  if (!/[?&]depth=/.test(extra)) extra = `${extra}${extra ? "&" : "?"}depth=expert`;
   const join = (route) => (route.includes("?") ? `${route}&${extra.slice(1)}` : `${route}${extra}`);
+  const first = (route) => join(route).replace(/depth=expert/, "depth=first");
   const steps = [];
   const edit = {};
   const pair = {};
@@ -62,12 +65,44 @@ export function selftest(ctx, tabs, draw) {
     routes.push(...await thmRoutes(ctx, tabs));
     routes.push("#/results", "#/results?plot=table", "#/results?x=e_x&levels=1&logy=1");
     routes.push(...PHYSICS_ROUTES);
-    for (const route of routes) {
-      const s = performance.now();
-      location.hash = join(route);
+    for (const route of routes) await visit(route, join(route));
+    await firstView();
+    if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
+    if (/[?&]edit=1/.test(extra)) await pairAddRemove();
+    if (/[?&]fit=1/.test(extra)) fit = await fitCheck(ctx, draw, join);
+    return Math.round(performance.now() - t0);
+  }
+
+  /** The first view: each of its tabs as it opens, a data set's form (its rare fields folded), and Calculate twice
+   * (the second shows what changed: nothing, the text being the same). */
+  async function firstView() {
+    for (const v of FIRST_VIEW) await visit(v.hash, first(v.hash));
+    const evaluated = ctx.evaluation?.datasets?.[0]?.name;
+    const at = `#/data/${encodeURIComponent(evaluated)}`;
+    if (evaluated) await visit(at, first(at));
+    for (let i = 0; i < 2; i++) {
+      location.hash = first("#/project");
       await new Promise((r) => setTimeout(r, 0));
       await draw();
-      await new Promise((r) => setTimeout(r, 30));  // forms and descriptions that load after the draw
+      await ctx.calculate();
+      await new Promise((r) => setTimeout(r, 0));
+      await draw();
+      await record("Calculate", performance.now());
+    }
+  }
+
+  /** One view: the route set, the page drawn, then its step recorded. */
+  async function visit(route, hash) {
+    const s = performance.now();
+    location.hash = hash;
+    await new Promise((r) => setTimeout(r, 0));
+    await draw();
+    await new Promise((r) => setTimeout(r, 30));  // forms and descriptions that load after the draw
+    await record(route, s);
+  }
+
+  async function record(route, s) {
+    {
       const plot = document.querySelector(".plot[data-drawn]");
       const physics = document.querySelector(".physics-status");
       steps.push({ route, ms: Math.round(performance.now() - s), plot: plot ? plot.dataset.drawn : null,
@@ -78,12 +113,11 @@ export function selftest(ctx, tabs, draw) {
         tables: [...document.querySelectorAll(".physics-out table[data-table], .physics-out .table-wrap")].length,
         facts: document.querySelectorAll("dl.function-facts dd").length,
         tabListed: !document.querySelector('a.tab[data-tab="thm"]')?.hidden,
+        depth: document.documentElement.dataset.depth, tab: document.querySelector("a.tab.active")?.textContent || "",
+        folded: document.querySelectorAll("details.form-more").length,
+        changes: document.querySelectorAll('[aria-label^="changes"]').length,
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
-    if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
-    if (/[?&]edit=1/.test(extra)) await pairAddRemove();
-    if (/[?&]fit=1/.test(extra)) fit = await fitCheck(ctx, draw, join);
-    return Math.round(performance.now() - t0);
   }
 
   /** "#selftest?edit=1": a free channel's width typed into its box (Enter), then the Undo button, as a person
@@ -109,6 +143,14 @@ export function selftest(ctx, tabs, draw) {
     edit.edited = await until(() => ctx.statusLine.textContent.includes("→"));
     Object.assign(edit, { chi2_after: ctx.evaluation?.chi2, rev_after: ctx.project.rev,
       status: ctx.statusLine.textContent });
+    // Calculate (the header's button) after the edit: the change since the first view's Calculate, the data set
+    // that moved most first
+    document.querySelector("button.calculate").click();
+    edit.calculated = Boolean(await until(() => document.querySelector('[aria-label^="changes"] tr')));
+    Object.assign(edit, { calc_chi2: ctx.calculations.slice(-2).map((c) => c.chi2),
+      calc_total: document.querySelector(".tab-panel section.panel strong")?.textContent || "",
+      calc_first: document.querySelector('[aria-label^="changes"] tr td')?.textContent || "",
+      calc_tab: document.querySelector("a.tab.active")?.textContent || "" });
     ctx.undoButton.click();
     edit.undone = await until(() => ctx.statusLine.textContent.startsWith("undo: done"));
     Object.assign(edit, { chi2_back: ctx.evaluation?.chi2, rev_back: ctx.project.rev });

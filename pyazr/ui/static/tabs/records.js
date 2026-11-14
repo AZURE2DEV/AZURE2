@@ -30,6 +30,7 @@ export async function formContext(ctx, records, diagnostics = []) {
   return {
     schema: ctx.schema, records, pairLabels: labels, spins,
     spinParities: spins.flatMap((j) => [`${j}+`, `${j}-`]), diagnostics,
+    foldRare: !ctx.expert, showMeaning: !ctx.expert,
   };
 }
 

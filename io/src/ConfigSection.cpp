@@ -28,16 +28,53 @@ bool FirstToken(const std::string &line, std::size_t &a, std::size_t &b) {
   return true;
 }
 
+}  // namespace
+
 // The positional entries and how each is read: a token (>> then the rest of the line skipped) or a whole line.
-struct Positional {
-  const char *name;
-  bool token;
-};
-const Positional kPositional[] = {
-    {"amatrix", true},           {"output_dir", false},       {"checks_dir", false},
-    {"check_compound_nucleus", true}, {"check_boundary_conditions", true}, {"check_data", true},
-    {"check_energy_dependence", true}, {"check_legendre", true}, {"check_coulomb_amplitudes", true},
-    {"check_pathways", true},    {"check_angular_distributions", true}};
+const std::vector<ConfigPositional> &ConfigPositionals() {
+  static const char *const kChecks = "none screen file";
+  static const char *const kCheckDoc = "none: not written; screen: printed while the program runs; file: written into "
+                                       "the checks directory";
+  static const std::vector<ConfigPositional> rows = {
+      {"amatrix", true, "true false", "Formalism: A-Matrix", "Runtime options",
+       "true: the A-matrix calculation (needed to ignore external widths); false: the R-matrix calculation", false},
+      {"output_dir", false, "", "Output directory", "Directories",
+       "where the program writes its output files, relative to the project (empty: the project's directory)", false},
+      {"checks_dir", false, "", "Checks directory", "Directories",
+       "where the checks set to 'file' are written, relative to the project", true},
+      {"check_compound_nucleus", true, kChecks, "Compound nucleus", "Checks", kCheckDoc, true},
+      {"check_boundary_conditions", true, kChecks, "Boundary conditions", "Checks", kCheckDoc, true},
+      {"check_data", true, kChecks, "Data", "Checks", kCheckDoc, true},
+      {"check_energy_dependence", true, kChecks, "L-Matrix, phases, penetrabilities", "Checks", kCheckDoc, true},
+      {"check_legendre", true, kChecks, "Legendre polynomials", "Checks", kCheckDoc, true},
+      {"check_coulomb_amplitudes", true, kChecks, "Coulomb amplitudes", "Checks", kCheckDoc, true},
+      {"check_pathways", true, kChecks, "Reaction pathways", "Checks", kCheckDoc, true},
+      {"check_angular_distributions", true, kChecks, "Angular distributions", "Checks", kCheckDoc, true}};
+  return rows;
+}
+
+namespace {
+
+// "a b c" as "a, b or c".
+std::string ValuesInWords(const std::string &values) {
+  std::vector<std::string> words;
+  std::size_t a = 0;
+  while ((a = values.find_first_not_of(' ', a)) != std::string::npos) {
+    const std::size_t b = std::min(values.find(' ', a), values.size());
+    words.push_back(values.substr(a, b - a));
+    a = b;
+  }
+  std::string out;
+  for (std::size_t i = 0; i < words.size(); i++)
+    out += (i == 0 ? "" : (i + 1 == words.size() ? " or " : ", ")) + words[i];
+  return out;
+}
+
+// Whether `value` is one of a token entry's values.
+bool PositionalValueTaken(const ConfigPositional &p, const std::string &value) {
+  const std::string values = std::string(" ") + p.values + " ";
+  return !value.empty() && value.find(' ') == std::string::npos && values.find(" " + value + " ") != std::string::npos;
+}
 
 // key=value of a line after the positional ones: false when it has no '=' before its comment.
 bool KeyValue(const std::string &line, std::string &key, std::string &value) {
@@ -114,7 +151,7 @@ bool ValueTaken(const ConfigKey &k, const std::string &value, std::string &why) 
 const std::vector<std::string> &ConfigPositionalNames() {
   static const std::vector<std::string> names = [] {
     std::vector<std::string> n;
-    for (const Positional &p : kPositional) n.push_back(p.name);
+    for (const ConfigPositional &p : ConfigPositionals()) n.push_back(p.name);
     return n;
   }();
   return names;
@@ -143,42 +180,75 @@ ConfigKey Option(const char *name, const char *flag, const char *negation, bool 
   return k;
 }
 
+// What a form tells a user about a key: its title, group, what its absence means, and whether it is set rarely.
+ConfigKey Told(ConfigKey k, const char *title, const char *group, const char *absent, bool rare) {
+  k.title = title;
+  k.group = group;
+  k.absent = absent;
+  k.rare = rare;
+  return k;
+}
+constexpr bool kRare = true;
+constexpr bool kOften = false;
+
 }  // namespace
 
+// The groups, in the order a form shows them: the old setup program's "Runtime Options" first.
 const std::vector<ConfigKey> &ConfigKeys() {
   static const std::vector<ConfigKey> keys = {
-      Key("includeAllJPi", ConfigKey::Bool, 0, "every J^pi up to maxOrbitalMomentum gets a hard-sphere channel"),
-      Key("maxOrbitalMomentum", ConfigKey::Int, 0, "the largest l of the hard-sphere channels"),
-      Key("abundanceSumSigma", ConfigKey::Number, 0, "the width of the penalty on the sum of the abundances (0: none)"),
-      Key("relativistic", ConfigKey::Bool, 0, "relativistic two-body kinematics"),
-      Key("relativisticReferencePair", ConfigKey::Int, 1, "the pair whose masses define the relativistic frames"),
-      Key("priorCovariance", ConfigKey::Path, 0, "the prior parameter covariance file, relative to the project"),
-      Key("format", ConfigKey::Version, 0, "the project format (3)"),
+      Told(Key("includeAllJPi", ConfigKey::Bool, 0, "every J^pi up to maxOrbitalMomentum gets a hard-sphere channel"),
+           "Hard-sphere scattering in every J^pi", "Physics", "0: only the J^pi of the levels", kOften),
+      Told(Key("maxOrbitalMomentum", ConfigKey::Int, 0, "the largest l of the hard-sphere channels"),
+           "Maximum orbital momentum", "Physics", "the largest l of any particle channel of the levels", kOften),
+      Told(Key("abundanceSumSigma", ConfigKey::Number, 0,
+               "the width of the penalty on the sum of the abundances (0: none)"),
+           "Abundance-sum penalty width", "Fit", "0: no penalty", kRare),
+      Told(Key("relativistic", ConfigKey::Bool, 0, "relativistic two-body kinematics"), "Relativistic kinematics",
+           "Physics", "0: non-relativistic kinematics", kOften),
+      Told(Key("relativisticReferencePair", ConfigKey::Int, 1, "the pair whose masses define the relativistic frames"),
+           "Reference pair of the relativistic frames", "Physics", "the first pair", kRare),
+      Told(Key("priorCovariance", ConfigKey::Path, 0, "the prior parameter covariance file, relative to the project"),
+           "Prior covariance file", "Fit", "no prior covariance", kOften),
+      Told(Key("format", ConfigKey::Version, 0, "the project format (3)"), "Project format", "File",
+           "the converter writes it", kRare),
       // The options of the calculation (project_format3.md section 3.12); src/ProjectOptions.cpp says where the engine
       // keeps each one.
-      Option("use_brune", "--use-brune", "--no-brune", true, "convention",
-             "Brune's alternative level matrix (on-shell boundary conditions); off: Lane-Thomas constant boundary "
-             "conditions"),
-      Option("use_park", "--use-park", "", false, "convention",
-             "the fit's amplitudes are the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); needs "
-             "use_brune"),
-      Option("transform", "", "--no-transform", true, "convention",
-             "the input parameters are transformed to the run's basis at start"),
-      Option("ignore_externals", "--ignore-externals", "--no-ignore-externals", true, "physics",
-             "the external capture of a photon channel whose input width is exactly zero is ignored"),
-      Option("use_long_wavelength", "", "--no-long-wavelength", true, "physics",
-             "the long-wavelength approximation for EL capture"),
-      Option("ec_convection_current", "--ec-convection-current", "--no-ec-convection-current", true, "physics",
-             "with use_long_wavelength off: external capture with the convection-current part of the EL operator too"),
-      Option("use_rmc", "--use-rmc", "", false, "physics",
-             "the Reich-Moore approximation for capture (neutron capture only); needs use_brune off"),
-      Option("use_gsl_coul", "--gsl-coul", "", false, "numerics", "GSL's Coulomb functions instead of AZURE2's own"),
-      Option("use_coulomb_table", "--coulomb-table", "--no-coulomb-table", true, "numerics",
-             "P, S and the hard-sphere phase of charged channels from the universal Coulomb table, exact outside it"),
-      Option("use_ec_table", "--ec-table", "--no-ec-table", true, "numerics",
-             "external-capture integrals from per-term energy tables, interpolated"),
-      Option("replace_grids", "--grid-replacement", "--no-grid-replacement", true, "numerics",
-             "the adaptive sub-point grids are laid out again as levels and energy shifts move")};
+      Told(Option("use_brune", "--use-brune", "--no-brune", true, "convention",
+                  "Brune's alternative level matrix (on-shell boundary conditions); off: Lane-Thomas constant "
+                  "boundary conditions"),
+           "Use Brune formalism", "Runtime options", "1", kOften),
+      Told(Option("use_park", "--use-park", "", false, "convention",
+                  "the fit's amplitudes are the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); "
+                  "needs use_brune"),
+           "Use Park's observed amplitudes", "Runtime options", "0", kOften),
+      Told(Option("transform", "", "--no-transform", true, "convention",
+                  "the input parameters are transformed to the run's basis at start"),
+           "Perform parameter transformations", "Runtime options", "1", kOften),
+      Told(Option("ignore_externals", "--ignore-externals", "--no-ignore-externals", true, "physics",
+                  "the external capture of a photon channel whose input width is exactly zero is ignored"),
+           "Ignore external width if internal width is zeroed", "Runtime options", "1", kOften),
+      Told(Option("use_long_wavelength", "", "--no-long-wavelength", true, "physics",
+                  "the long-wavelength approximation for EL capture"),
+           "Long-wavelength approximation for capture", "Physics", "1", kRare),
+      Told(Option("ec_convection_current", "--ec-convection-current", "--no-ec-convection-current", true, "physics",
+                  "with use_long_wavelength off: external capture with the convection-current part of the EL operator "
+                  "too"),
+           "Convection current in external capture", "Physics", "1", kRare),
+      Told(Option("use_rmc", "--use-rmc", "", false, "physics",
+                  "the Reich-Moore approximation for capture (neutron capture only); needs use_brune off"),
+           "Use RMC capture formalism (neutron capture only)", "Runtime options", "0", kOften),
+      Told(Option("use_gsl_coul", "--gsl-coul", "", false, "numerics", "GSL's Coulomb functions instead of AZURE2's own"),
+           "Use GSL Coulomb functions", "Runtime options", "0", kOften),
+      Told(Option("use_coulomb_table", "--coulomb-table", "--no-coulomb-table", true, "numerics",
+                  "P, S and the hard-sphere phase of charged channels from the universal Coulomb table, exact outside "
+                  "it"),
+           "Coulomb functions from the table", "Numerics", "1", kRare),
+      Told(Option("use_ec_table", "--ec-table", "--no-ec-table", true, "numerics",
+                  "external-capture integrals from per-term energy tables, interpolated"),
+           "External-capture integrals from tables", "Numerics", "1", kRare),
+      Told(Option("replace_grids", "--grid-replacement", "--no-grid-replacement", true, "numerics",
+                  "the adaptive sub-point grids are laid out again as levels and energy shifts move"),
+           "Adaptive grids follow the levels", "Numerics", "1", kRare)};
   return keys;
 }
 
@@ -253,7 +323,7 @@ const ConfigEntry *ConfigSection::Find(const std::string &name) const {
 ConfigSection ReadConfigSection(const std::vector<std::string> &lines) {
   ConfigSection c;
   std::size_t next = 1;  // line 0 is the <config> tag
-  for (const Positional &p : kPositional) {
+  for (const ConfigPositional &p : ConfigPositionals()) {
     ConfigEntry e;
     e.name = p.name;
     e.positional = true;
@@ -308,7 +378,7 @@ bool ConfigEdits(const std::vector<std::string> &lines, const std::string &name,
     return false;
   }
   int k = 0;
-  for (const Positional &p : kPositional) {
+  for (const ConfigPositional &p : ConfigPositionals()) {
     if (name != p.name) {
       k++;
       continue;
@@ -318,12 +388,9 @@ bool ConfigEdits(const std::vector<std::string> &lines, const std::string &name,
       return false;
     }
     if (!OneLine(value, why)) return false;
-    if (p.token) {
-      const bool amatrix = k == 0;
-      if (amatrix ? (value != "true" && value != "false") : (value != "none" && value != "screen" && value != "file")) {
-        why = name + "=" + value + ": the value is " + (amatrix ? "true or false" : "none, screen or file");
-        return false;
-      }
+    if (p.token && !PositionalValueTaken(p, value)) {
+      why = name + "=" + value + ": the value is " + ValuesInWords(p.values);
+      return false;
     }
     const ConfigEntry &e = c.entries[k];
     const std::string &old = lines[e.line];
