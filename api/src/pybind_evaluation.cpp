@@ -24,7 +24,7 @@
 
 namespace py = pybind11;
 
-void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
+void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 
 namespace {
 
@@ -89,7 +89,7 @@ const std::vector<PointOutput> &PointOutputs() {
 
 // The arrays of the reported segment at position `first` (0-based; the first of its run of equal keys, as
 // AZUREAPI::ReportedSegments) and of the run's rows of chiSquared.out.
-py::dict DataSetDict(const AZUREAPI &api, const AZUREAPI::ObjectiveBreakdown &b, int first, int last) {
+py::dict DataSetDict(AZUREAPI &api, const AZUREAPI::ObjectiveBreakdown &b, int first, int last) {
   WorkingCopy &wc = *api.data();
   const CompoundSystem &nuc = *api.compound();
   const azure2::Results &res = api.results();
@@ -179,7 +179,7 @@ py::list PointOutputFields() {
   return out;
 }
 
-py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free) {
+py::dict EvaluationDict(AZUREAPI &api, const vector_r &free) {
   AZUREAPI::ObjectiveBreakdown b;
   {
     py::gil_scoped_release release;
@@ -210,7 +210,7 @@ py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free) {
   return d;
 }
 
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+py::dict ObjectiveRowsDict(AZUREAPI &api, const vector_r &free, bool withJacobian,
                            const std::vector<int> &skip) {
   vector_r rows, jac;
   bool ok;
@@ -229,7 +229,7 @@ py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJ
   return d;
 }
 
-double LogProbability(const AZUREAPI &api, const vector_r &free) {
+double LogProbability(AZUREAPI &api, const vector_r &free) {
   py::gil_scoped_release release;
   return api.LogProbabilityRWA(free);
 }

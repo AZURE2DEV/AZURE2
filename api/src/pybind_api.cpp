@@ -65,14 +65,14 @@ class ParameterVectorError : public AZURE2Error {
 };
 
 // pybind_records.cpp: the parameter and pair records with their named fields
-py::list ParameterRecordDicts(const AZUREAPI &api);
-py::list PairRecordDicts(const AZUREAPI &api);
+py::list ParameterRecordDicts(AZUREAPI &api);
+py::list PairRecordDicts(AZUREAPI &api);
 // pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
 py::list PointOutputFields();
-py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+py::dict EvaluationDict(AZUREAPI &api, const vector_r &free);
+py::dict ObjectiveRowsDict(AZUREAPI &api, const vector_r &free, bool withJacobian,
                            const std::vector<int> &skip);
-double LogProbability(const AZUREAPI &api, const vector_r &free);
+double LogProbability(AZUREAPI &api, const vector_r &free);
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
 // pybind_fit.cpp: the engine's fitters on the session (fit_with_engine), StopRequest, fitters()
 py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
@@ -146,7 +146,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 
 }  // namespace
 
-void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
+void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 class Session {
  public:
   // rateEntrance != 0: a reaction-rate session (the rate's pair keys; exit -1 the total radiative capture), set up as

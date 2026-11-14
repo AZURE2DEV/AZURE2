@@ -5,7 +5,7 @@
 #include "Config.h"
 #include "ModelData.h"
 
-std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rwaParams) const {
+std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rwaParams) {
   vector_r full = all_rwa_;
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)

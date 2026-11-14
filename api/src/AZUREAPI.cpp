@@ -445,7 +445,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 }
 
 // Transform RWA parameters to physical values
-vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixed) const {
+vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixed) {
   // p holds every parameter, fixed ones included; a short p updates a prefix.
   vector_r params = all_rwa_;
   for (int i = 0; i < p.size() && i < params.size(); ++i) {
@@ -603,7 +603,7 @@ bool AZUREAPI::WriteOutputFiles() {
   return true;
 }
 
-std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
+std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() {
   if (data_ == nullptr) return std::vector<ThmExperimentReport>();
   return data()->ThmExperimentReports(results());
 }
@@ -698,7 +698,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   return true;
 }
 
-vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) const {
+vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) {
   vector_r params_ = all_rwa_;
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)
@@ -729,7 +729,7 @@ static vector_r MapPackedToFull(const vector_r &packed, const vector_r &all_rwa,
   return full;
 }
 
-void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
+void AZUREAPI::FillFromFullRWA(const vector_r &full) {
   const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full, state());
@@ -739,7 +739,7 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
 }
 
 // The data term of AZURECalc::operator(), on the filled canonical objects.
-double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
+double AZUREAPI::EvaluateFilledChi2(vector_r *res) {
   const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   if (res) res->clear();
@@ -800,13 +800,13 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 
 // The terms of the objective beyond the data (EvaluateFilledChi2), on the filled canonical compound: the same in
 // both bases (CalculateChi2RWA and CalculateChi2Physical must give one objective).
-double AZUREAPI::FilledModelPenalties() const {
+double AZUREAPI::FilledModelPenalties() {
   // Park's J > 0 wall, the abundance priors and sum-to-one, measured scattering lengths (Objective T6, T7, T9).
   const vector_r none;
   return Objective::Engine().ModelChi2(ObjectiveContext{compound(), state(), inputs(), data(), results(), none, configure()});
 }
 
-double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
+double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) {
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
   const vector_r full = MapPackedToFull(rwaParams, all_rwa_, fixed_);
@@ -817,7 +817,7 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
 
-vector_r AZUREAPI::CalculateResidualsRWA(const vector_r &params) const {
+vector_r AZUREAPI::CalculateResidualsRWA(const vector_r &params) {
   FillFromFullRWA(MapPackedToFull(params, all_rwa_, fixed_));
   vector_r res;
   EvaluateFilledChi2(&res);
@@ -848,7 +848,7 @@ int AZUREAPI::RefreezeCovariance() {
   return n;
 }
 
-vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
+vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) {
   vector_r params_ = all_rwa_;
   for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i] && k < (int)rwaParams.size()) params_[i] = rwaParams[k++];
@@ -865,7 +865,7 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
   return out;
 }
 
-double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
+double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) {
   int k = 0;
   vector_r params_ = all_;
   for (int i = 0; i < all_.size(); ++i) {
@@ -909,12 +909,12 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 }
 
 std::vector<AZUREAPI::THMRows> AZUREAPI::ComputeTHMRows(const vector_r &full,
-                                                        const ParamIndexMap &pmap) const {
+                                                        const ParamIndexMap &pmap) {
   return ::ComputeTHMRows(compound(), state(), inputs(), data(), results(), configure(), full, pmap);
 }
 
 bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
-                                  double &chi2Out) const {
+                                  double &chi2Out) {
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   // Only one API request runs at a time, so operate on the canonical
   // compound/data in place (like UpdateSegments) rather than cloning; every
@@ -1005,7 +1005,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   return ok;
 }
 
-vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
+vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // The analytic gradient pass runs the full forward model at every point, so
@@ -1076,7 +1076,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   return out;
 }
 
-void AZUREAPI::ReadFitSettings() const {
+void AZUREAPI::ReadFitSettings() {
   if (nuisanceRead_) return;
   nuisanceRead_ = true;
   // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
@@ -1087,7 +1087,7 @@ void AZUREAPI::ReadFitSettings() const {
   if (nuisance_->ReadParameterSettings()) nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
 }
 
-std::pair<double, double> AZUREAPI::GetParameterBounds(int index) const {
+std::pair<double, double> AZUREAPI::GetParameterBounds(int index) {
   ReadFitSettings();
   const ROOT::Minuit2::MinuitParameter &limits =
       static_cast<const AZUREParams &>(*nuisanceParams_).GetMinuitParams().Parameter(index);
@@ -1095,7 +1095,7 @@ std::pair<double, double> AZUREAPI::GetParameterBounds(int index) const {
           limits.HasUpperLimit() ? limits.UpperLimit() : std::numeric_limits<double>::infinity()};
 }
 
-bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
+bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) {
   ReadFitSettings();
   if (!nuisance_) return false;
   // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
@@ -1106,7 +1106,7 @@ bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
   return nuisance_->NuisancePrior(f, nominal, sigma);
 }
 
-double AZUREAPI::NuisanceChi2(const vector_r &full) const {
+double AZUREAPI::NuisanceChi2(const vector_r &full) {
   double chi2 = 0.0;
   for (int f = 0; f < (int)full.size(); f++) {
     double nominal, sigma;
@@ -1117,7 +1117,7 @@ double AZUREAPI::NuisanceChi2(const vector_r &full) const {
   return chi2;
 }
 
-void AZUREAPI::AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const {
+void AZUREAPI::AddNuisanceGradient(const vector_r &full, vector_r &gradFull) {
   for (int f = 0; f < (int)full.size() && f < (int)gradFull.size(); f++) {
     double nominal, sigma;
     if (NuisancePriorOf(f, nominal, sigma)) gradFull[f] += 2.0 * (full[f] - nominal) / (sigma * sigma);
@@ -1131,7 +1131,7 @@ std::vector<std::string> AZUREAPI::ObjectiveTermNames() const {
 }
 
 double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<double> *terms,
-                                       ObjectiveContext::SegmentPriors *segments) const {
+                                       ObjectiveContext::SegmentPriors *segments) {
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
@@ -1142,7 +1142,7 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
   return Objective::Engine().Chi2(context);
 }
 
-vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
+vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) {
   // The gradient of CalculateChi2RWA's terms (data, Park, abundances, scattering lengths) ...
   vector_r out = CalculateChi2GradRWA(params);
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
@@ -1161,7 +1161,7 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
   return out;
 }
 
-vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) const {
+vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) {
   AZUREProfile::ScopedReport profileReport(configure().profile, "api jacobian");
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
@@ -1300,7 +1300,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   return out;
 }
 
-vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
+vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // Same preparation as CalculateResidualJacobianRWA: one request at a time, so

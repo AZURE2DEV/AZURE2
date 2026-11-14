@@ -50,7 +50,7 @@ bool InSet(KindSet set, ParamKind kind) { return (set >> (unsigned)kind) & 1u; }
 // What a field's reader sees of one parameter: the session, the parameter's place and record, and the engine objects
 // it belongs to, looked up once (null where they do not apply).
 struct ParameterView {
-  const AZUREAPI *api;
+  AZUREAPI *api;
   int index;  // among all parameters
   const ParameterRecord *record;
   const CompoundSystem *nuc;
@@ -413,7 +413,7 @@ const std::vector<PairField> &PairFields() {
 
 }  // namespace
 
-py::list ParameterRecordDicts(const AZUREAPI &api) {
+py::list ParameterRecordDicts(AZUREAPI &api) {
   const std::vector<ParameterRecord> &records = api.GetParameterRecords();
   const std::vector<bool> fixed = api.params_fixed();
   const std::map<std::pair<int, int>, std::string> labels = LevelLabels(api.configure());
@@ -435,7 +435,7 @@ py::list ParameterRecordDicts(const AZUREAPI &api) {
   return out;
 }
 
-py::list PairRecordDicts(const AZUREAPI &api) {
+py::list PairRecordDicts(AZUREAPI &api) {
   const CompoundSystem &nuc = *api.compound();
   const WorkingCopy &data = *api.data();
   py::list out;

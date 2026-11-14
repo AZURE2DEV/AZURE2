@@ -7,7 +7,7 @@
 
 namespace py = pybind11;
 
-void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free) {
+void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free) {
   py::list out;
   for (const AZUREAPI::ModelDatumValue &v : api.ModelDataRWA(free)) {
     py::dict r;
