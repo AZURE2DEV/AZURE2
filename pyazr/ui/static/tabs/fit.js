@@ -8,7 +8,7 @@
 // or after a second with its progress); a reload finds it again in GET /api/jobs.
 
 import { pathOf } from "../api.js";
-import { chainRows, filterParameters, isFinal, jobToShow, kindsOf, matrixCsv, matrixRows, parameterRows,
+import { chainRows, filterParameters, isFinal, jobToShow, kindsOf, matrixCsv, matrixRows, parameterRows, variedText,
   shownColumns } from "../fitting.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, download, h, section } from "../ui.js";
@@ -204,11 +204,13 @@ function chainSection(job) {
     + "A sampler job started from this job's best point continues the chain."));
 }
 
-/** A band job's result: where it is drawn. */
+/** A band job's result: where it is drawn, and which parameters it varied (the job's own list). */
 function bandsSection(job) {
   const b = job.result.bands;
+  const varied = variedText(job.result);
   return section("Bands", h("p", {}, `${b.how}. ${b.sets.length} data sets and extrapolations; the Results tab draws `
-    + "the band of the newest band job of each.", " ", h("a", { href: "#/results" }, "→ Results")));
+    + "the band of the newest band job of each.", " ", h("a", { href: "#/results" }, "→ Results")),
+  varied ? h("p.hint.band-varied", {}, `Varied: ${varied}.`) : null);
 }
 
 /** The covariance and the correlation of a fit (the recipe's, by name), each as a table and as CSV. */

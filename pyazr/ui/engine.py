@@ -417,7 +417,8 @@ def linear_sigma(e, x, covariance, names):
     """The 1-sigma of the model of every active data set and extrapolation at x from a fit's covariance over the free
     vector ``names`` (``pyazr.bands.uncertainty_bands``: sigma^2 = g^T C g with the engine's sensitivities g, over
     the columns a band spans, ``pyazr.bands.rmatrix_columns``: the nuisances do not enter).  ``(data sets,
-    extrapolations)``: lists of arrays in the order of :func:`band_points`."""
+    extrapolations, the names of the parameters the band varied)``: lists of arrays in the order of
+    :func:`band_points`."""
     from pyazr import bands
     free = e._free_names()
     if list(names) != free:
@@ -439,7 +440,7 @@ def linear_sigma(e, x, covariance, names):
             out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
         finally:
             e.s.data_mode()
-    return out_data, out_grids
+    return out_data, out_grids, [free[c] for c in cols]
 
 
 def _read_chi_squared(path):

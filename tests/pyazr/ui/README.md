@@ -211,3 +211,5 @@ Added with the THM tab (each shown failing on 2026-11-14, the file restored afte
   `thm_routes_test.py::test_distortion_lineshape_and_coherent_background_equal_the_session[cbkg]`.
 - the key table has every key of an experiment line the engine reads: the row `theta` renamed; fails
   `thm_routes_test.py::test_key_table_has_every_key_the_engine_reads`.
+- a killed or interrupted sampler continues from its saved chain: the saved file not looked up; fails
+  `sampler_bands_test.py::test_killed_sampler_continues_from_its_saved_chain`.

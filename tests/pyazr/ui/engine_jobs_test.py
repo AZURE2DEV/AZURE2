@@ -155,6 +155,13 @@ def test_stop_ends_a_running_engine_fit_within_one_call(t2, method):
           f"{stopped['progress']['calls']} at the end; {stopped['result']['reports_after_stop']} report(s) after the "
           f"request; {per_call:.3f} s per call before it")
     assert stopped["state"] == "stopped" and stopped["result"]["engine_status"] == "stopped", stopped["result"]
+    # T2's THM data sets have no analytic Jacobian: LM runs MIGRAD in its place, and the result says so
+    fitter, notices = stopped["result"]["fitter"], stopped["result"]["notices"]
+    if method == "engine_lm":
+        assert fitter == {"asked": "lm", "ran": "migrad"} and any("MIGRAD" in n for n in notices), stopped["result"]
+        assert "migrad in place of lm" in stopped["result"]["message"], stopped["result"]["message"]
+    else:
+        assert fitter == {"asked": "migrad", "ran": "migrad"} and notices == [], stopped["result"]
     assert stopped["best"]["objective"] == stopped["progress"]["best"] or method == "engine_lm"
     assert stopped["best"]["objective"] <= stopped["result"]["start_objective"] * (1 + 1e-12)  # see 11.6
     # the evaluation (MIGRAD) or iteration (LM) running when the request came is the last one reported

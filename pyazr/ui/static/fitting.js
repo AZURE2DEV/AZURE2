@@ -170,10 +170,21 @@ export function progressView(rec) {
 }
 
 /** Whether a row of the job table follows the job `rec`: its `follows` names the job's kind and its method (or any
- * method of that kind, null). */
+ * method of that kind, null), or is a list of such pairs (the sampler follows a fit, and a sampler: its chain). */
 export function follows(row, rec) {
-  return Array.isArray(row.follows) && Boolean(rec) && row.follows[0] === rec.kind
-    && (row.follows[1] === null || row.follows[1] === rec.method);
+  if (!Array.isArray(row.follows) || !rec) return false;
+  const pairs = Array.isArray(row.follows[0]) ? row.follows : [row.follows];
+  return pairs.some(([kind, method]) => kind === rec.kind && (method === null || method === rec.method));
+}
+
+/** The words of a band job's result about what it varied: "energy_5, width_5_1 (2 of 3 free parameters)". */
+export function variedText(result) {
+  const varied = result?.varied;
+  if (!Array.isArray(varied)) return "";
+  const free = Array.isArray(result.free) ? result.free.length : null;
+  const left = Array.isArray(result.free) ? result.free.filter((n) => !varied.includes(n)) : [];
+  return `${varied.join(", ") || "none"} (${varied.length}${free === null ? "" : ` of ${free}`} free parameters`
+    + `${left.length ? `; held at the start point: ${left.join(", ")}` : ""})`;
 }
 
 /** The rows of a sampler's summary (its result: mean, errors, quantiles, tau, effective_draws, rhat by name). */
@@ -194,6 +205,7 @@ export function resultView(rec, table = []) {
     bestObjective: rec.best?.objective ?? null, edm: r.edm ?? null, valid: r.valid ?? null,
     hasBest: Boolean(rec.best?.x), covariance: r.covariance || null, correlation: r.correlation || null,
     errorsFrom: r.errors ? (r.errors_from || "the recipe") : "", minos: r.minos || null, followers,
+    notices: Array.isArray(r.notices) ? r.notices : [], fitter: r.fitter || null,
   };
 }
 

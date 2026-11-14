@@ -1293,7 +1293,9 @@ answered 0.16-0.22 s after the request with one record after it.
    it before its next call as before. `reports_after_stop` in the result counts the progress records after the
    request (the evaluation, or LM's iteration, running when it came).
 6. *`max_calls` is offered on every engine row*: the fitter table has no column saying which fitters honour a call
-   limit (the doc of `fit_with_engine` says MIGRAD and NLopt); a column would let the row say so.
+   limit (the doc of `fit_with_engine` says MIGRAD and NLopt); a column would let the row say so.  The engine prints
+   no notice when a least-squares fitter ignores it.  Where LM or GSL-LM run MIGRAD in their place, the result has
+   `fitter` (`asked`, `ran`) and `notices` (the engine's line of the fitter's log), shown as a notice.
 7. *Equality with the program* is measured against the program's printed total (12 digits) with the fitter's switch;
    on T2 the program fits THM data with `migrad-gradient` when no switch is given, so the plain MIGRAD row of T2 is
    compared with `fit_with_engine` only.
@@ -1364,19 +1366,24 @@ parameters, energy_5 and width_5_1 of the level 2⁻ 19.0 MeV; every other level
    result that has what it takes.
 2. *The linear band spans the level parameters only*: `pyazr.bands.uncertainty_bands` propagates the covariance's
    block over the columns a band spans (`rmatrix_columns`: energies, widths, the THM coherent background); the band
-   from draws moves every free parameter of the chain, nuisances included. The two agree where no nuisance is free
+   from draws moves every free parameter of the chain, nuisances included.  Each band job's result says which
+   (`varied`, `free`), and the Fit and Results tabs show them. The two agree where no nuisance is free
    (the evidence above); on a project with free shifts or densities they differ by the nuisances' share.
 3. *The band's centre*: the linear band is the model at the fit's best point ± σ; the band from draws is the median
    of the draws. The Results tab draws the band around the model of the band job's start point and the model line at
-   the working x: they coincide once that point is accepted into the project.
+   the working x: they coincide once that point is accepted into the project.  The legend names the band's job and
+   the job whose best point it is drawn around; where the text is an accepted best point and the band is around
+   another, the Results tab offers a band job from the accepted job.
 4. *A sampler that ends* (all its steps) is in the state `finished`, not `converged`: a chain does not converge by
    a criterion of the job. Its burn-in is a setting; the summary does not test the chain's length against τ (the
    page states τ and the effective draws; the user guide's rule of 50 τ applies).
 5. *One process*: the sampler runs without a pool (the budget gives a job one thread). The split R-hat treats each
    half of a walker's series as a chain; walkers of an ensemble sampler are not independent, so a value near 1 is
    necessary, not sufficient.
-6. *A killed sampler* keeps the chain written at its last save (every 50 stored steps), but its record has no result,
-   so it cannot be continued from the page; a stopped one can.
+6. *A killed sampler* keeps the chain written at its last save (every 50 stored steps); its record has no result,
+   and a sampler started from it continues that file (`Tracker.source_product`), as after a restart of the server
+   (an `interrupted` job); the page offers **sample (emcee)…** beside any sampler job (the row follows a fit and a
+   sampler).
 7. *A start outside the fit's limits* is refused by the job (state `failed`, `ParameterError` naming each parameter,
    its value and its limits), not by the request: the limits are the session's (`Objective.bounds`), which only the
    job's worker has.

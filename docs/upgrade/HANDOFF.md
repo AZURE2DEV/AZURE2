@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the Fit tab's loose ends
+
+**Done** (`docs/upgrade/web_ui.md` sections 11.6 and 11.7, the departures updated):
+
+- A sampler killed or interrupted by a restart continues from its chain as last saved (`Tracker.source_product`;
+  the result says `continued_from`); the sampler row follows a fit and a sampler, so the page offers
+  **sample (emcee)…** beside any sampler job.
+- The band's legend names its job and the job whose best point it is drawn around; when the text is an accepted best
+  point and the band drawn is around another, the Results tab offers the band jobs of the accepted job.
+- Each band job's result says which parameters it varied (`varied`, `free`): the Fit and Results tabs show them.
+- An engine LM or GSL-LM that ran MIGRAD in its place: the result has `fitter` (asked, ran) and `notices` (the
+  engine's log line), shown as a notice; the words and the errors' source name the fitter that ran.
+- `max_calls` on the LM rows: left as it was; the fitter table lacks a column saying which fitters honour a call
+  limit, and the engine prints no notice.
+
+**Verified**: `engine_jobs_test.py` (T2: LM asked, MIGRAD ran, the notice), `sampler_bands_test.py` (a killed
+sampler continued from its saved file, the old steps unchanged; the bands' `varied`), the node tests, the routes
+consistency and static tests; `OMP_NUM_THREADS=1 ctest -R pyazr_ui -j1` on `work/b-uithm`: 13 of 13 passed (229 s,
+the smoke test with headless Chrome among them; the full `ctest -LE slow` was run on the first commit only: this
+one changes `pyazr/ui` and its tests alone). A screenshot run on T2 and T3 over HTTP (`work/uithm/shoot_fit.py`).
+
+**Open**: a fitter column "honours a call limit"; an engine fit that ends at its call limit reports its start
+objective as the best objective in the result while the progress's best is lower (seen on T2 with LM falling back
+to MIGRAD, `max_calls` 40: result 10910.13 at the best point, progress best 7087.92).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the web page's THM tab
 
 **Done** (`docs/upgrade/web_ui.md` section 11.8): the tab **THM**, listed when the project has THM content.
