@@ -36,9 +36,8 @@ add_test(NAME pyazr_physical_norm
                  ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
 set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A channel radius set with Session.set_channel_radius survives every later rebuild of the session
-# (another pair's radius, a nuclear-potential change, a mode switch); before 2026-11-02 each rebuild
-# re-read the .azr with only its own call's radius.  The wrapper checks the read-back radius.
+# A channel radius is a Project edit and a new session: the radii Project.set_pair writes are the session's, in
+# either order of the edits, and a scan over radii in one process gives every radius its own model.
 add_test(NAME pyazr_radius_override
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
@@ -57,9 +56,8 @@ add_test(NAME pyazr_api_model_value
                  ${CMAKE_CURRENT_SOURCE_DIR}/api_model_value_test.py)
 set_tests_properties(pyazr_api_model_value PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A rebuild (set_channel_radius, a potential change) keeps no Coulomb memo of the old radius, reads no
-# unchanged input file and prints the setup Notes once per session (before 2026-11-04: ~96 kB per new
-# radius, every file re-read, every Note reprinted; the 3H+d free-radius MCMC reached 239 GB).
+# Sessions of a radius scan in one process keep no Coulomb memo, read no unchanged input file again (the
+# process's input-file cache) and each print their setup Notes once (a free-radius MCMC once reached 239 GB).
 add_test(NAME pyazr_rebuild_resources
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_resources_test.py)
@@ -209,7 +207,7 @@ set_tests_properties(pyazr_thm_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THR
                      TIMEOUT 600)
 
 # vertex=constant: the S_c(E_lowest) memo follows the channel radius across
-# sessions in one process and after set_channel_radius on a live session.
+# sessions in one process, one after the other and alive at once.
 add_test(NAME pyazr_thm_vertex_memo_sessions
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_memo_sessions_test.py)
@@ -550,7 +548,7 @@ add_test(NAME pyazr_hybrid_per_pair
 set_tests_properties(pyazr_hybrid_per_pair PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The hybrid potential as a format-3 record: its Coulomb radius against an independent integration (DOP853, R_C =
-# 5 fm), set_nuclear_potential(coulomb_radius=...) equal to the record, save_fit writing the record.
+# 5 fm), a Project edit of coulomb_radius equal to the record, save_fit keeping the record.
 add_test(NAME pyazr_potential_record
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/potential_record_test.py)
@@ -837,7 +835,7 @@ add_test(NAME pyazr_project
 set_tests_properties(pyazr_project PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # save_fit of a format-3 project with norms="fitted" (the fitted nuisances written into their records), a changed
-# potential of a format-1/2 project refused with the conversion command, set_nuclear_potential's matching radius and step.
+# potential of a format-1/2 project refused with the conversion command, a record's matching radius and step.
 add_test(NAME pyazr_save_fit_format3
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_format3_test.py)
@@ -913,8 +911,8 @@ add_test(NAME pyazr_describe
                  ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
 set_tests_properties(pyazr_describe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
-# objective, gradient and nuisance term equal a fresh session's at the same radius.
+# The nuisance priors belong to the session's model: a session of a project edited to another radius, made after
+# another session evaluated its objective, gives the nuisance term 1 at the start, and the same numbers twice.
 add_test(NAME pyazr_rebuild_nuisance
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)

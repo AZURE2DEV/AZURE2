@@ -586,9 +586,9 @@ class Project(NuclearPart):
             raise FormatError(f"remove {name!r}: it is referenced by {', '.join(users)}", e.diagnostics) from None
 
     def _replace_record_section(self, section, lines):
-        """The body of the record section ``section`` replaced by ``lines`` (records as the engine wrote them, e.g.
-        the session's potential records): the section removed when ``lines`` is empty, added where :meth:`add` adds
-        one when the project has none; validated as every edit."""
+        """The body of the record section ``section`` replaced by ``lines`` (records as the engine wrote them, e.g. the
+        merged sections of :func:`pyazr.system.merge_projects`): the section removed when ``lines`` is empty, added
+        where :meth:`add` adds one when the project has none; validated as every edit."""
         lines = [_bytes(x) for x in lines]
 
         def edit(doc):

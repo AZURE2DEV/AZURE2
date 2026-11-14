@@ -29,9 +29,8 @@ SESSION_NOT_SERVED = {
     "dimensionless widths and level quantities, not a route of this step":
         "wigner_widths dimensionless_widths park_norms scattering_lengths",
     "session edits: edits of the Project and a new session (pyazr3.md decision 11)":
-        "set_channel_radius configure recalculate_external_capture "
-        "refreeze_covariance set_nuclear_potential clear_nuclear_potential nuclear_potential nuclear_potentials "
-        "potential_records",
+        "configure recalculate_external_capture "
+        "refreeze_covariance nuclear_potential nuclear_potentials",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
         "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "

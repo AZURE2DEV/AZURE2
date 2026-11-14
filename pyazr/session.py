@@ -25,7 +25,7 @@ except ImportError as err:                            # pragma: no cover
         "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
-from .errors import ParameterError, ParameterKeyError, close_names, listed
+from .errors import close_names, listed
 from . import session_checks, session_fit, session_options, session_physics, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
@@ -94,7 +94,7 @@ class Session(
             ``extrapolations[i]``), every chi-squared field ``None``, and the fit vector holds the extrapolations'
             nuisances; :meth:`objective` and the fits refuse.  ``False`` (the default): the data sets.  Chosen when
             the session is made: a session for the other is a second ``Session`` (``**s.options`` with this keyword
-            changed rebuilds the same model).
+            changed rebuilds the same model).  A project without an active extrapolation record is refused.
         use_brune, ignore_externals, transform, use_long_wavelength :
             R-matrix formalism options, matching the CLI's ``--use-brune``,
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
@@ -146,7 +146,8 @@ class Session(
         pyazr.FormatError
             if the file is not a format-3 project (the message names the conversion).
         pyazr.AZURE2Error
-            (``pyazr.EngineError``) if the model will not initialize.
+            (``pyazr.EngineError``) if the model will not initialize, or with ``extrapolations=True`` if the project
+            has no active extrapolation record.
 
         Warns
         -----
@@ -163,6 +164,8 @@ class Session(
             os.path.dirname(self.file) or "."))
         if not os.path.isdir(self.cwd):
             raise session_checks.missing_directory(self.cwd, self.file)
+        if extrapolations:
+            session_checks.require_extrapolations(self.file, self.cwd)
 
         # The keywords this call named win over the project's <config> keys, which win over the defaults (the engine's
         # rule); self.options holds the values in effect, so that a worker process can rebuild this same model
@@ -256,15 +259,6 @@ class Session(
         if self._parameter_file is not None:
             apply_parameter_file(self._engine, self.file, self._parameter_file, self.basis, self.mode == "extrap")
 
-    @engine_call
-    def _take_parameter_file(self, path):
-        """Take the parameter file ``path`` as if the session had been made with ``parameter_file=path``
-        (:func:`pyazr.bands.best_fit_params`); the table of parameters is rebuilt, ``parameters.x0`` is the file's."""
-        self._parameter_file = os.path.abspath(os.fspath(path))
-        self._apply_parameter_file()
-        self._fixed = [bool(f) for f in self._engine.params_fixed()]
-        self._parameters = None
-
     # -- the .azr, parsed once per version of the file ------------------------
 
     def _azr_stamp(self):
@@ -335,61 +329,6 @@ class Session(
         if self._pairs is None:
             self._pairs = self._build_pairs()
         return self._pairs
-
-    # -- channel radius -------------------------------------------------------
-
-    @engine_call
-    def set_channel_radius(self, pair, radius):
-        """Change one particle pair's channel radius.
-
-        ``pair`` is the 1-based :attr:`Pair.number`, ``radius`` is in fm.  This
-        is not a light edit: the radius sets the matching surface, so AZURE2
-        rebuilds the compound nucleus and the data from the ``.azr``, redoes the
-        penetrabilities, shift functions, boundary conditions and Wigner limits,
-        and **recomputes every external-capture integral** rather than reading
-        back ``output/intEC*`` (which belong to the old radius).  Expect it to
-        cost about as much as starting a fresh instance.
-
-        Everything cached on the Python side is re-read afterwards, so
-:attr:`parameters` (``x0``, ``wigner_limit``),
-        :attr:`pairs` and the data arrays are consistent with the new radius.
-
-        The reduced widths keep their numerical values, but a reduced width
-        means something different at a different radius -- **the model is no
-        longer fitted**.  Refit before reading anything off it.
-
-        Note this changes only the running session; the ``.azr`` on disk is
-        untouched.  To persist a radius (and to scan several radii, which is
-        the safer pattern) use :meth:`pyazr.Project.set_pair` (``radius=``) and
-        write a new file.
-
-        The radius stays set for the life of the session, through later
-        rebuilds: another pair's ``set_channel_radius`` and a nuclear-potential
-        change keep it.  (Before
-        2026-11-02 each rebuild re-read the ``.azr`` with only its own call's
-        radius, so setting pair 2 put pair 1 back to its file value, silently.)
-        The radius read back from the rebuilt model is checked against the
-        request; a mismatch raises ``RuntimeError``.
-        """
-        pair = int(pair)
-        if not any(p.number == pair for p in self.pairs):
-            raise ParameterKeyError(f"set_channel_radius: no pair {pair} in this model (have "
-                                    f"{[p.number for p in self.pairs]}); Session.pairs lists the pairs.")
-        if not radius > 0:
-            raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
-                                 f"in fm, got {radius}; Session.pairs.by_number({pair}).channel_radius is the "
-                                 f"current one.")
-        if not self._engine.set_radius(pair, float(radius)):
-            raise RuntimeError(
-                f"AZURE2 could not rebuild with pair {pair} at "
-                f"{radius} fm; the session is no longer usable.")
-        self.configure()
-        got = self.pairs.by_number(pair).channel_radius
-        if abs(got - float(radius)) > 1e-9 * float(radius):
-            raise RuntimeError(
-                f"pair {pair}: asked for a channel radius of {radius} fm, the "
-                f"rebuilt model has {got} fm.")
-        return got
 
     def _build_pairs(self):
         return PairSet(Pair(r) for r in self._engine.pair_records())

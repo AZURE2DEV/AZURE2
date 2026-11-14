@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
-"""A channel radius set with Session.set_channel_radius must survive every later rebuild of the session.
-
-Before 2026-11-02 the API's SetRadius rebuilt the model from the .azr with only its own call's
-override, and Rebuild()/Initialize() with none: setting pair 2 put pair 1 back to its file radius,
-and so did a nuclear-potential change or a data/extrapolation mode switch -- silently, while the
-caller believed the earlier radius was in force (3H+d radius scan, 2026-11-02).  The wrapper
-returned the read-back radius without comparing it with the request.
+"""A channel radius is an edit of the Project and a new session: the radii written by Project.set_pair are the ones the
+session computes with, and a scan over radii in one process gives every radius its own model.
 
 Checks, on tests/channel_space/channel_space.azr (p+12C and p+12C*, both 5.0 fm, plus a gamma pair):
-  1. set_channel_radius(1, 4.2) then (2, 6.3): both radii are in force, and chi2 equals a fresh
-     session on an .azr with both radii written by Project.set_pair(radius=);
-  2. a nuclear-potential change (clear_nuclear_potential, which rebuilds) keeps both;
-  4. setting a pair back to its file radius is an override like any other (chi2 as the file);
-  5. the wrapper raises RuntimeError when the rebuilt model does not have the radius asked for.
-The old engine fails 1-2 (pair 1 back at 5.0 fm), the old wrapper 5.
+  1. Project.set_pair(1, radius=4.2) and (2, 6.3) in one edit: the session reads both radii, and the radii matter
+     (chi2 differs from the file's by more than 1e-3);
+  2. the same edit made in the other order, and as two saves of one project, gives the same reduced widths
+     (rel 1e-12) and chi2 (rel 1e-10) as (1);
+  3. a scan in one process (4.2, 6.3 on pair 2, then the file radius back): each session has the radius it was
+     saved with, and the session at the file radius gives the file's reduced widths and chi2 (rel 1e-12, 1e-10);
+  4. the session has no method that changes a channel radius (set_channel_radius is gone).
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -81,67 +77,49 @@ def main():
         check("the radii matter (reference chi2 differs from the file's)", rel(chi_ref, chi_file) > 1e-3,
               f"{chi_ref} vs {chi_file}")
 
-        # The .azr holds physical widths, so the session's reduced widths are recomputed at each rebuild
-        # from the radii in force: compare them with the reference file's, and chi2 at them.
-        with Session(base, cwd=work) as m:
+        # The .azr holds physical widths, so the session's reduced widths are computed from the radii in force:
+        # compare them with the reference file's, and chi2 at them.
+        def session_of(edits, name):
+            p = Project.open(base)
+            for pair, radius in edits:
+                p.set_pair(pair, radius=radius)
+            return Session(p.save(os.path.join(work, name)), cwd=work)
 
-            def radii():
-                return [p.channel_radius for p in m.pairs][:2]
+        def same_vector(x, ref):
+            return x.shape == ref.shape and np.allclose(x, ref, rtol=1e-12, atol=0.0)
 
-            def chi():
-                return m.evaluate(np.asarray(m.parameters.x0, float)).chi2
-
-            def same_vector(ref):
+        print("1-2. both radii through Project edits, in either order")
+        for edits, name in (([(1, R1), (2, R2)], "a.azr"), ([(2, R2), (1, R1)], "b.azr")):
+            with session_of(edits, name) as m:
                 x = np.asarray(m.parameters.x0, float)
-                return x.shape == ref.shape and np.allclose(x, ref, rtol=1e-12, atol=0.0)
+                check(f"{name}: both radii in force", [p.channel_radius for p in m.pairs][:2] == [R1, R2],
+                      f"{[p.channel_radius for p in m.pairs]}")
+                check(f"{name}: reduced widths == the reference file's", same_vector(x, x_ref))
+                c = m.evaluate(x).chi2
+                check(f"{name}: chi2 == the reference file's", rel(c, chi_ref) <= 1e-10, f"{c} vs {chi_ref}")
+        p = Project.open(base)
+        p.set_pair(1, radius=R1)
+        p.save(os.path.join(work, "c.azr"))
+        p.set_pair(2, radius=R2)
+        with Session(p.save(os.path.join(work, "c.azr")), cwd=work) as m:
+            check("two saves of one project: both radii in force",
+                  [q.channel_radius for q in m.pairs][:2] == [R1, R2], f"{[q.channel_radius for q in m.pairs]}")
 
-            print("1. two set_channel_radius calls in one session")
-            got1 = m.set_channel_radius(1, R1)
-            check("pair 1 reads back its radius", got1 == R1, f"{got1}")
-            m.set_channel_radius(2, R2)
-            check("pair 1 kept after setting pair 2", radii() == [R1, R2], f"{radii()}")
-            check("reduced widths == the reference file's", same_vector(x_ref))
-            c = chi()
-            check("chi2 == fresh session on the file with both radii", rel(c, chi_ref) <= 1e-10,
-                  f"{c} vs {chi_ref}")
+        print("\n3. a scan in one process")
+        scan = (([(1, R1)], [R1, 5.0]), ([(2, R2)], [5.0, R2]), ([(1, 5.0), (2, 5.0)], [5.0, 5.0]))
+        for i, (edits, want) in enumerate(scan):
+            with session_of(edits, f"scan{i}.azr") as m:
+                got = [q.channel_radius for q in m.pairs][:2]
+                check(f"radii {want}", got == want, f"{got}")
+                if want == [5.0, 5.0]:
+                    x = np.asarray(m.parameters.x0, float)
+                    check("the file radius back: the file's reduced widths", same_vector(x, x_file))
+                    c = m.evaluate(x).chi2
+                    check("the file radius back: the file's chi2", rel(c, chi_file) <= 1e-10, f"{c} vs {chi_file}")
 
-            print("\n2. a nuclear-potential change (rebuild) keeps them")
-            m.clear_nuclear_potential(1)
-            check("radii after clear_nuclear_potential", radii() == [R1, R2], f"{radii()}")
-            c = chi()
-            check("chi2 after clear_nuclear_potential", rel(c, chi_ref) <= 1e-10, f"{c} vs {chi_ref}")
-
-            print("\n4. back to the file radii")
-            m.set_channel_radius(1, 5.0)
-            m.set_channel_radius(2, 5.0)
-            check("radii back at 5.0", radii() == [5.0, 5.0], f"{radii()}")
-            check("reduced widths == the file's", same_vector(x_file))
-            c = chi()
-            check("chi2 == the file's", rel(c, chi_file) <= 1e-10, f"{c} vs {chi_file}")
-
-            print("\n5. a rebuild that does not take the radius is refused")
-
-            class NoRadius:
-                """The session, except that set_radius reports success and changes nothing."""
-
-                def __init__(self, sess):
-                    self._sess = sess
-
-                def set_radius(self, pair, radius):
-                    return True
-
-                def __getattr__(self, name):
-                    return getattr(self._sess, name)
-
-            real = m._sess
-            m._sess = NoRadius(real)
-            try:
-                m.set_channel_radius(1, 3.3)
-                check("RuntimeError on a read-back mismatch", False, "no exception")
-            except RuntimeError as e:
-                check("RuntimeError on a read-back mismatch", "3.3" in str(e), str(e))
-            finally:
-                m._sess = real
+        print("\n4. no live radius edit")
+        with Session(base, cwd=work) as m:
+            check("Session has no set_channel_radius", not hasattr(m, "set_channel_radius"))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

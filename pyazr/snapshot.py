@@ -281,12 +281,11 @@ def _snapshot_mismatch(session, x, want, got, back):
 
 def place_values(self, project, x, want, full, norms):
     """The fitted level values into the <levels> rows they come from (the engine's (group, level) and (pair key, l,
-    2s) of each parameter, ``_azure2.level_value_edits``), the THM coherent backgrounds into their experiments, the
-    session's potentials as records, and the free nuisances (with ``norms="fitted"``; else the abundances) into the
-    records they come from: edits of ``project`` in memory."""
+    2s) of each parameter, ``_azure2.level_value_edits``), the THM coherent backgrounds into their experiments, and
+    the free nuisances (with ``norms="fitted"``; else the abundances) into the records they come from: edits of
+    ``project`` in memory."""
     place_level_values(project, self.parameters, self.pairs, want)
     write_cbkg(self, project, np.asarray(full, float))
-    self._write_potential_records(project)
     project._write_parameter_values(
         {p.name: float(want[p.index]) for p in self.parameters.of_kind("abundance")} if norms != "fitted"
         else {p.name: float(x[p.free_index]) for p in self.parameters if p.free_index is not None})

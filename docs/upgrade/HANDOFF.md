@@ -2,6 +2,94 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-libraries`) — pyazr: the session's radius and potential edits go
+
+**Measured first** (build `work/b-pysess5`, scripts `work/pysess5/measure_radius.py`, `probe_table.py`, `ui_http.py`).
+
+One channel radius of pair 1 with an evaluation, OMP 1, the start commit's pyazr: the live edit
+(`set_channel_radius`) against a `Project.set_pair` edit, a save and a new session (the same chi2, to the bit, at
+4.6, 5.0 and 5.4 fm):
+
+| project | session opened (first in the process) | live edit + evaluation | Project edit + new session + evaluation |
+|---|---|---|---|
+| T1 | 3.42 s | 3.40-3.43 s | 0.04-0.05 s |
+| T2 | 0.12 s | 0.16-0.17 s | 0.17-0.18 s |
+
+A new session per radius is not slower (the input files are cached per process; the live edit's rebuild of T1 costs
+as much as the first opening).
+
+The probe of `wigner_widths` (the engine's transformation of `x` with every free particle amplitude at 1e-4 and
+every free photon amplitude at 0, `|Gamma_c| / eps^2 * gamma_W^2`) against `2 P(E) gamma_W^2` with P from
+`channel_functions` at the level's energy (the energy of the full vector), one level per project, and the range over
+every probed channel:
+
+| project, basis | level, E_x (MeV) | fixed nonzero widths | channel | probe (eV) | 2PgW^2 (eV) | ratio | all |
+|---|---|---|---|---|---|---|---|
+| T1 Brune | 3/2-, 3.5020 | none | width_3_1 (l=1) | 1.21027e6 | 1.21027e6 | 1 | 3: 1 to 5e-9 |
+| T1 formal | 3/2-, 3.7364 | none | width_3_1 (l=1) | 1.82744e6 | 1.67551e6 | 1.091 | 1 to 1.091 |
+| T2 Brune | 1-, 12.4258 | width_1_1, _1_4 | width_1_3 (l=1) | 3.2081e6 | 4.02025e6 | 0.798 | 0.798 to 0.987 |
+| T2 formal | 1-, 12.4258 | width_1_1, _1_4 | width_1_3 (l=1) | 3.2081e6 | 4.02025e6 | 0.798 | 0.798 to 8006 |
+| 13N Brune | 1/2+, 2.3682 | none | width_3_1 (l=0) | 121063 | 121063 | 1 | 3: 1 to 5e-9 |
+| 17O Brune | 1-, 1.8110 | none | width_1_2 (l=1) | 7462.14 | 154389 | 0.048 | 0.048 to 1.1e4 |
+
+(In the formal basis the full vector's energy is the formal one, so P is taken there while the probe's width belongs
+to the transformed level: part of the T1 formal 9 % is that choice of energy.)  The two agree only where the probe
+makes the level's shift denominator 1 and the levels of a J-group do not mix: a decision for the PI and the owner
+(the probe, or P from `channel_functions`).  Both stay as they are; the docstrings and the user guide say what the
+number is.
+
+**Done.**
+- `Session.set_channel_radius`, `set_nuclear_potential`, `clear_nuclear_potential`, `potential_records` and the
+  private `_take_parameter_file`, `_rebuild_after_potential_change`, `_write_potential_records` deleted
+  (`pyazr/session.py`, `pyazr/potentials.py`, `pyazr/snapshot.py`): a radius is `Project.set_pair(pair, radius=)`, a
+  potential the pair's `potential` record (`Project.set` / `add` / `remove`), and a new session; `save_fit` writes
+  `<potentials>` as the project has it.  `nuclear_potential(s)` stays (the view).  Migration rows added.
+- `bands.best_fit_params(model, path)` (same signature): the session's own `x0` when it was made with
+  `parameter_file=path`; else a second session of the same project and options made with it (the caller's session
+  is not changed), and `ParameterError` when the file moves a fixed parameter (made to fail once by removing the
+  comparison: `sav_readers` failed).  `extrapolation_bands` makes its session with `parameter_file=`; the five
+  examples with `--params` open their session with `parameter_file=` (run by hand on a 13N copy with a nudged
+  `param.sav`: each runs, the chi2 moves with the file).  `nuclear_potential.py` scans depths by Project edits.
+- `Session(file, extrapolations=True)` on a project without an active extrapolation record raises `AZURE2Error`
+  in pyazr (`session_checks.require_extrapolations`; a row of `errors_test`).  The web page's adapter already asks
+  for that session only when an extrapolation is active (`band_points`, `models_at`, `linear_sigma`,
+  `Engine._extrapolation_arrays`): over HTTP on T2 and 13N (`python -m pyazr ui`, `ui_http.py`) the Results payload
+  (13 / 16 data sets, 0 extrapolations), an `engine_migrad` fit job and a band job from its covariance all finish,
+  and the server log names no refused session.
+- `pyazr/ui/engine.py`: the not-served list (`SESSION_NOT_SERVED`) loses the four removed names, nothing else.
+- Skills: `azure2-fit/references/parameters-and-sav.md` (best_fit_params); the checker found nothing else.
+- Pages: `pyazr.rst` (the input-file cache, the potential section rewritten on Project edits, the spin-orbit term,
+  `best_fit_params`, the probe of Wigner widths, migration rows), `examples/spin_orbit_potential.rst`,
+  `theory/hybrid_potential.rst`, `pyazr3.md` as built.
+
+**Tests changed in more than names** (each now measures through Project edits and new sessions; the live edit is
+gone): `radius_override` (both radii in either order of the edits, a scan in one process, the file radius back;
+the wrapper's read-back check and the rebuild after a potential change are gone with the method),
+`thm_vertex_memo_sessions` (step 2: two sessions of 4.1 and 6.1 fm alive at once, in turn, instead of an in-place
+change), `rebuild_resources` (8 sessions at random radii instead of 40 rebuilds; Notes once per session; the
+process's input-file cache: a session at a new radius reads its .azr only; the files are dated back so that a
+just-written file is not read at every open), `rebuild_nuisance` (a session of the edited project after another
+session's objective, twice, nuisance 1 at the start), `potential_record` (4) and (5), `spin_orbit_potential` (2) and
+(3) (the term on the default pair 0 has no format-3 form: that refusal is gone), `save_fit_format3` part 2,
+`errors` (two rows of the removed method replaced by `Project.set_pair` rows: the engine's messages lack the value
+given for a negative radius and a call that fixes it, see "Open"; one row added for the extrapolation refusal),
+`sav_readers` (the session unchanged, the refusal on T2), `tests/hybrid_potential/check_per_pair.py` (sections 4-7
+on Project edits).
+
+**Engine code left without a pyazr caller** (not deleted): `AZUREAPI::SetRadius`, `AZUREAPI::Rebuild` (binding
+`rebuild`), the binding's `set_radius`, `set_potential`, `clear_potential`, `potential_records`
+(`SessionPotentialRecords`, `SessionPotentialSetting` in `api/src/pybind_potentials.cpp`), and the once-per-session
+Note log (`Config::noteLog`), which only a rebuild could repeat.  The input-file cache keeps its use: the sessions of
+one process share it.
+
+**Open.**
+- The probe of `wigner_widths` against `2 P gamma_W^2` (table above): the PI's decision.
+- `Project.set_pair(1, radius=-1.0)`: the engine's message ("a channel radius and a mass are positive numbers") names
+  neither the value given nor the call that shows the current one (`experiment/LevelEdits`, not pyazr).
+- `pyazr ui FILE --json` prints the URL line and exits with status 2 at once (the start commit too); without
+  `--json` the server runs.
+- The binding removals (part 2) not done yet.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-no-python-physics`) — pyazr: no physics in Python
 
 **Measured first** (build `work/b-pysess4`, scripts `work/pysess4/measure4.py`, `measure_extrap.py`).

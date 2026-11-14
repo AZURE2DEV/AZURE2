@@ -1083,5 +1083,16 @@ as the writer forms them (`SigmaAndS`), read-only views.
   `s.extrapolations` evaluation beside `s.data` (the engine evaluates one segment set per session);
   `s.extrapolations` stays the description of the records.  The web page's adapter keeps a second session for the
   extrapolations.
-- Not done in this part: `set_channel_radius`, `set_nuclear_potential`, `clear_nuclear_potential` still edit a live
-  session; `bands.best_fit_params` still makes a live session take a parameter file (`_take_parameter_file`).
+- The session's radius and potential edits are gone (`set_channel_radius`, `set_nuclear_potential`,
+  `clear_nuclear_potential`, `potential_records`): a channel radius is `Project.set_pair(pair, radius=)`, a potential
+  the pair's `potential` record (`Project.set` / `add` / `remove`), then a new session; `save_fit` writes
+  `<potentials>` as the project has it.  A radius through a new session costs no more than the live edit did (T1
+  0.05 s against 3.4 s, T2 0.17 s against 0.17 s, with the evaluation; the input files are cached per process).
+  `nuclear_potential(s)` stays as the view of what each pair resolves to.
+- `bands.best_fit_params(s, path)` changes no session: the session's own `x0` when it was made with
+  `parameter_file=path`, else the vector of a second session made with it, refused (`ParameterError`) when the file
+  moves a fixed parameter; `extrapolation_bands` makes its session with `parameter_file=`.
+- `wigner_widths` / `dimensionless_widths` stay the probe (the engine's transformation of a probe vector); their
+  docstrings and the user guide say where it is not the single-channel `2 P gamma_W^2` (a decision for the PI).
+- `Session(file, extrapolations=True)` on a project without an active extrapolation record is refused by pyazr
+  (`AZURE2Error`: what, what is needed, the two fixes) before the engine is asked.

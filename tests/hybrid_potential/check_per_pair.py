@@ -10,12 +10,13 @@ That is what this script covers:
   2. (The old <potential> block's default, inherited by a pair without a section of
      its own, is the converter's: it writes one record per particle pair, and
      convert_spec_equivalence compares the potential of every particle pair.)
-  3. Switching a pair off returns exactly the no-hybrid answer.
-  4. Setting a potential through the API equals loading the same potential
-     from a file -- the two paths must not drift.
-  5. The Coulomb memo is keyed on the potential, so changing one is seen.
-  6. The parameter vector is re-derived by the change, and reusing a vector
-     captured beforehand is what quietly gives a different answer.
+  3. Removing the pair's record returns exactly the no-hybrid answer.
+  4. Adding the record to a project without one (a Project edit, a new
+     session) equals loading the committed file -- the two paths must not drift.
+  5. Sessions of different depths in one process each see their own potential
+     (nothing keyed on the session or the pair alone is reused).
+  6. The parameter vector belongs to its session: a vector of the session
+     without the potential quietly gives a different answer.
 
 The project and its variants are run in a temporary copy of this folder.
 Needs the compiled engine (ctest pyazr_hybrid_per_pair; PYAZR_ENGINE_DIR for a
@@ -34,7 +35,7 @@ sys.path.insert(0, os.path.normpath(os.path.join(SOURCE, "..", "..")))
 try:
     import numpy as np
     from pyazr import _azure2  # noqa: F401  (the compiled engine)
-    from pyazr import Session
+    from pyazr import Project, Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -135,42 +136,55 @@ with Session(path, cwd=HERE) as m:
                abs(chi2_off - FILE_CHI2) > 1e-4 * FILE_CHI2,
                f"{chi2_off} vs {FILE_CHI2}")
 
-print("\n4. switching pair 1 off at runtime returns the baseline")
-with Session(AZR, cwd=HERE) as m:
-    m.set_nuclear_potential(1, enabled=False)
-    m.set_nuclear_potential(0, enabled=False)
-    # Re-read: the potential changes the penetrabilities, which are what map
-    # physical widths to reduced-width amplitudes, so the vector is re-derived.
-    x = np.asarray(m.parameters.x0, float)
-    check("chi2 with everything off", m.evaluate(x).chi2, chi2_off)
+RECORD = "p12C"
 
-print("\n5. setting a potential through the API equals loading it from a file")
-with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
-    m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
-    x = np.asarray(m.parameters.x0, float)
-    check("chi2 built through the API", m.evaluate(x).chi2, FILE_CHI2)
 
-print("\n6. the Coulomb memo is keyed on the potential, so a change is seen")
-with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
-    seen = []
-    for v0 in (10.0, 20.0, 30.0):
-        m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=v0, R=3.6, a=0.6)
+def edited(tmp, depth):
+    """A copy of the project as committed: without pair 1's record (depth None) or with its depth at ``depth`` MeV."""
+    p = Project.open(AZR)
+    if depth is None:
+        p.remove(RECORD)
+    else:
+        p.set(RECORD, central=f"woods_saxon depth {depth} MeV radius 3.6 fm diffuseness 0.6 fm")
+    return p.save(os.path.join(HERE, tmp))
+
+
+def added(tmp):
+    """The no-hybrid copy with pair 1's record added back by a Project edit."""
+    p = Project.open(variant("_no_hybrid.azr", NO_HYBRID))
+    p.add("potential", RECORD, pair="p+12C", coulomb_radius="3.5 fm",
+          central="woods_saxon depth 20 MeV radius 3.6 fm diffuseness 0.6 fm")
+    return p.save(os.path.join(HERE, tmp))
+
+
+print("\n4. removing pair 1's record (a Project edit) returns the baseline")
+with Session(edited("_removed.azr", None), cwd=HERE) as m:
+    check("chi2 without the record", m.evaluate(np.asarray(m.parameters.x0, float)).chi2, chi2_off)
+
+print("\n5. adding the record by a Project edit equals loading it from the file")
+with Session(added("_added.azr"), cwd=HERE) as m:
+    check("chi2 of the edited project", m.evaluate(np.asarray(m.parameters.x0, float)).chi2, FILE_CHI2)
+
+print("\n6. sessions of three depths in one process each see their own")
+seen = []
+for v0 in (10.0, 20.0, 30.0):
+    with Session(edited(f"_V{v0:g}.azr", v0), cwd=HERE) as m:
         seen.append(m.evaluate(np.asarray(m.parameters.x0, float)).chi2)
-    print("        chi2 at V0 = 10, 20, 30: " + ", ".join(f"{c:.1f}" for c in seen))
-    check_true("every depth gives its own answer", len(set(seen)) == 3, str(seen))
-    check("V0=20 matches the file", seen[1], FILE_CHI2)
+print("        chi2 at V0 = 10, 20, 30: " + ", ".join(f"{c:.1f}" for c in seen))
+check_true("every depth gives its own answer", len(set(seen)) == 3, str(seen))
+check("V0=20 matches the file", seen[1], FILE_CHI2)
 
-print("\n7. a parameter vector captured before the change no longer fits the model")
+print("\n7. a parameter vector of the session without the potential does not fit the model with it")
 with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     stale = np.asarray(m.parameters.x0, float)
-    m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
+with Session(added("_added.azr"), cwd=HERE) as m:
     with_stale = m.evaluate(stale).chi2
     with_fresh = m.evaluate(np.asarray(m.parameters.x0, float)).chi2
-    check("re-read vector reproduces the file", with_fresh, FILE_CHI2)
-    check_true("the stale vector does not", abs(with_stale - FILE_CHI2) > 1e-3 * FILE_CHI2,
-               f"stale {with_stale} vs file {FILE_CHI2}")
+check("the new session's vector reproduces the file", with_fresh, FILE_CHI2)
+check_true("the other session's vector does not", abs(with_stale - FILE_CHI2) > 1e-3 * FILE_CHI2,
+           f"stale {with_stale} vs file {FILE_CHI2}")
 
-for tmp in ("_no_hybrid.azr",):
+for tmp in ("_no_hybrid.azr", "_removed.azr", "_added.azr", "_V10.azr", "_V20.azr", "_V30.azr"):
     p = os.path.join(HERE, tmp)
     if os.path.exists(p):
         os.remove(p)

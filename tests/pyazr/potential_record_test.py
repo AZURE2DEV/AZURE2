@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The hybrid potential as a format-3 record (`potential` in <potentials>, docs/upgrade/project_format3.md section
-3.10a): its Coulomb radius reaches the channel functions, and pyazr's set_nuclear_potential, its view and its writer
+3.10a): its Coulomb radius reaches the channel functions, and pyazr's view of it, a Project edit of it and save_fit
 agree with the record.
 
 Checks, on the old original of tests/hybrid_potential (tests/convert/fixtures) converted to format 3 (pyazr.convert_azr,
@@ -12,11 +12,11 @@ to=3), pair 1 (p + 12C, Woods-Saxon
       (data/coulomb_radius.csv, data/make_coulomb_radius_reference.py) to 1e-6 (P relative, S absolute); the R_C = 3.5
       fm rows differ from those by more than 1e-4, so the check sees the radius;
   (3) the record as it was converted (3.5 fm) gives the 3.5 fm rows;
-  (4) the session view reads coulomb_radius 5.0 for pair 1 and no default; set_nuclear_potential(coulomb_radius=5)
-      on the conversion (3.5 fm) gives the 5 fm record's channel functions bit for bit;
-  (5) save_fit of the format-3 project after set_nuclear_potential(1, coulomb_radius=5) writes the record with
-      coulomb_radius 5 fm, and the written project gives the same channel functions; without a change the
-      <potentials> section is written as it was read.
+  (4) the session view reads coulomb_radius 5.0 for pair 1 and no default; the conversion (3.5 fm) edited by
+      Project.set(record, coulomb_radius="5 fm") gives, in a new session, the 5 fm record's channel functions bit for
+      bit;
+  (5) save_fit keeps the <potentials> section as it was read, of the conversion and of the edited project (whose
+      written project gives the same channel functions).
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/potential_record_test.py
@@ -47,7 +47,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import Session, convert_azr
+    from pyazr import Project, Session, convert_azr
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -116,23 +116,25 @@ try:
           p1.enabled and p1.own and p1.coulomb_radius == 5.0 and not A50.nuclear_potential(0).enabled, repr(p1))
     B = Session(f35, cwd=work)
     check("(4) the converted record's Coulomb radius is 3.5 fm", B.nuclear_potential(1).coulomb_radius == 3.5)
-    B.set_nuclear_potential(1, coulomb_radius=5.0)
-    vB = functions(B)
-    check("(4) set_nuclear_potential(1, coulomb_radius=5) = the record, bit for bit", vB == v50,
-          str(max(abs(vB[k] - v50[k]) for k in v50)))
+    edited = Project.open(f35)
+    edited.set("p12C", coulomb_radius="5 fm")
+    f50e = edited.save(os.path.join(work, "f3_50_edited.azr"))
+    E = Session(f50e, cwd=work)
+    vE = functions(E)
+    check("(4) Project.set(p12C, coulomb_radius=5 fm), a new session = the record, bit for bit", vE == v50,
+          str(max(abs(vE[k] - v50[k]) for k in v50)))
 
     # (5) the writer
     C = Session(f35, cwd=work)
     same = os.path.join(work, "same.azr")
     C.save_fit(same, verify=False, norms="nominal")
-    check("(5) save_fit without a change keeps <potentials> as read", section(open(same).read(), "potentials") == pot)
-    C.set_nuclear_potential(1, coulomb_radius=5.0)
+    check("(5) save_fit keeps <potentials> as read", section(open(same).read(), "potentials") == pot)
     moved = os.path.join(work, "moved.azr")
-    C.save_fit(moved, verify=False, norms="nominal")
+    E.save_fit(moved, verify=False, norms="nominal")
     written = section(open(moved).read(), "potentials")
-    check("(5) save_fit writes the record p12C with coulomb_radius 5 fm",
-          "potential p12C" in written and re.search(r"coulomb_radius +5 fm", written) and written.count("\npotential ") == 1,
-          written)
+    check("(5) save_fit of the edited project keeps its record p12C with coulomb_radius 5 fm",
+          written == section(open(f50e).read(), "potentials") and re.search(r"coulomb_radius +5 fm", written)
+          and written.count("\npotential ") == 1, written)
     D = Session(moved, cwd=work)
     check("(5) the written project gives the record's channel functions", functions(D) == v50)
 finally:
