@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 23:45) — the PI's two answers; an `Objective`'s calls are quiet too
+
+**The PI, 2026-11-14 late** ("Yes" to both questions of the entry below): (1) written MF=6 stays within
+CHECKR's limits (200 energies per section, 201 cosines per panel) although the manual allows more: given to
+the ENDF branch (the writer thins to the limits and says the tolerance it reached; the manual's limits are a
+named option for the expert); (2) the logger `pyazr.engine` is the place for the engine's text of a library
+call, and the calls of an `Objective` are held as a session's are.
+
+**Done** (branch `feature/upgrade-7-objective-quiet`, Python only): the six engine calls of
+`pyazr/objective.py` (`__call__`, `value_and_grad`, `residuals`, `residuals_and_jacobian`, `log_prob`,
+`describe`) run inside `engine_text.held()`; the module's text and the user guide (`pyazr.rst`, "A library
+call is quiet") say so. **Test**: `tests/pyazr/library_calls_test.py` part (a): 13N's
+objective with the engine itself (its note is not on standard output and reaches the logger); the engine
+stood in for by an object that writes a line on descriptor 1 before it asks the real engine, for each of
+the calls (nothing on standard output, the numbers the same, each line at the logger at level WARNING);
+without the change the checks fail.
+**Measured**: of the 208 projects under `tests/` (without `tests/convert/`) an objective can be made for
+105; at the start and three points near it the engine prints during an `Objective` call in two (13N and
+`beam_profile_kernel`: "Note: the sub-point grids of segments with external capture are not re-placed").
+The cost per call, alternating the two trees twice: T1 0.91 ms -> 0.94 to 0.97 ms (30 to 60 microseconds,
+3 to 7 %), T2 36 ms, no difference outside the scatter.
+**Verified how**: the tests `objective_object`, `objective`, `objective_terms`, `session_lock`,
+`fit_recipes`, `upgrade_thread_independence`, `fit_with_engine`, `library_calls` run directly on the engine
+of `work/b-trial78`; the consistency test.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-one-setup`) — the set-up of the compound and the data, once
 
 **Done.** The compound system and the data are set up by one function, `SetUpCompoundSystem`
