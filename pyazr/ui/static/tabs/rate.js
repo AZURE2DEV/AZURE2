@@ -10,7 +10,7 @@
 import { pathOf } from "../api.js";
 import { isFinal, progressView } from "../fitting.js";
 import { renderTable } from "../tables.js";
-import { button, download, drawPlot, h, section } from "../ui.js";
+import { button, download, drawPlot, h, section, withFiles } from "../ui.js";
 
 export async function render(ctx, el, args) {
   const view = ctx.rateView || (ctx.rateView = { entrance: null, exit: null, grid: "table", t_min: "", t_max: "",
@@ -115,7 +115,7 @@ export async function render(ctx, el, args) {
     h("div", {}, h("label", {}, "parameters ", start), " ", h("label", {}, "band ", band), " ",
       h("label", {}, "draws ", draws)),
     libraries,
-    h("div", {}, h("label", {}, "compare with ", comparison), ctx.expert ? [" ", calculate] : null));
+    h("div", {}, h("label", {}, "compare with ", withFiles(ctx, comparison)), ctx.expert ? [" ", calculate] : null));
   el.appendChild(section("Reaction rate",
     h("p.hint", {}, "N_A<σv> integrated by the engine over the entrance pair's c.m. energy from 10⁻⁷ to 50 MeV "
       + "(σ on a grid with a cluster of points around each level, a spline of ln σ against ln E), as the program's "

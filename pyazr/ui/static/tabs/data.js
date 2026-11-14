@@ -94,7 +94,7 @@ export async function render(ctx, el, args) {
       () => ctx.navigate(`#/data/+new?section=${current}`), "primary")));
   }
   if (ctx.evalError) list.appendChild(h("p.hint", {}, `No evaluation: ${ctx.evalError.what}`));
-  el.appendChild(list);
+  if (!(ctx.route.params.preview && selected)) el.appendChild(list);  // a linked preview shows the record alone
 
   if (args[0] === "+new") {
     el.appendChild(await newRecordPanel(ctx, kinds, records,

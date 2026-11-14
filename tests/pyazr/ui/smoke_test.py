@@ -47,7 +47,9 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the two utilities: the rate tab (the expert's depth has its link) and a data set's covariance builder
          ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"),
          # the first view's Reaction Rate tab, and its Physics tab (shown there on a project with THM content: T2)
-         ("first-rate", "rate"), ("first-physics", "physics"), ("first-dataset", "data/{dataset}"))
+         ("first-rate", "rate"), ("first-physics", "physics"), ("first-dataset", "data/{dataset}"),
+         # a file of the folder previewed in a data set's file field (as the field's change shows it)
+         ("first-file-preview", "data/{dataset}?field=file&preview=data/{file}"))
 
 
 def extra_projects():
@@ -174,6 +176,10 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert opened and opened[0]["forms"] == 1 and opened[0]["folded"] == 1 and opened[0]["tab"] == "Segments", \
                 opened
             assert [s["tab"] for s in first if s["route"] == "Calculate"] == ["Plot", "Plot"], first
+            # the data set's file typed again: the folder's files offered, its first rows and the engine's reading
+            preview = result["preview"]
+            assert preview["offered"] > 0 and preview["head"] and preview["text"].startswith("The engine reads"), \
+                preview
         thm = [s for s in result["steps"] if s["route"].startswith("#/thm")]
         listed = thm[0]["tabListed"]
         assert listed == (label != "T1") or label not in ("T1", "T2"), thm[0]
@@ -216,12 +222,12 @@ def test_selftest_and_screenshots(name, tmp_path):
             print(f"{label}: fit {fit['method']} {fit['state']} after {fit['calls_seen']} calls seen; chi2 "
                   f"{fit['chi2_before']} -> fit {fit['chi2_fit']}, as written {fit['chi2_written']} -> undo "
                   f"{fit['chi2_back']}")
-        take_screenshots(server, tmp_path, label, shots, result)
+        take_screenshots(server, tmp_path, label, shots, result, azr)
     finally:
         server.stop()
 
 
-def take_screenshots(server, tmp_path, label, shots, result):
+def take_screenshots(server, tmp_path, label, shots, result, azr):
     """One screenshot per view (the routes of VIEWS filled from the self-test's own routes)."""
     routes = [s["route"] for s in result["steps"]]
     fill = {"label": next((r.split("/", 3)[3] for r in routes if r.startswith("#/nucleus/level/")), None),
@@ -229,6 +235,9 @@ def take_screenshots(server, tmp_path, label, shots, result):
                              and r != "#/data/+new"), None),
             "record": next((r.split("/", 2)[2] for r in routes if r.startswith("#/nucleus/")
                             and not r.startswith("#/nucleus/level/")), None)}
+    data = os.path.join(os.path.dirname(azr), "data")  # a data file of the project for the preview's view
+    fill["file"] = (sorted(n for n in os.listdir(data) if n.endswith(".dat")) or [None])[-1] \
+        if os.path.isdir(data) else None
     sets = [("light", 1400, 900)]
     if os.environ.get("AZURE2_UI_SHOTS") == "all":
         sets = [(t, w, h) for t in ("light", "dark") for (w, h) in ((1400, 900), (1000, 700))]

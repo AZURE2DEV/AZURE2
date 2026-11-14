@@ -283,3 +283,7 @@ table.settings-group th { border-top: 1px solid var(--grid); }
 .kind-list + .kind-list { margin-top: 10px; }
 .kind-list h3 { margin: 2px 0 0; font-size: 14px; }
 .kind-list .kind-doc { margin: 0 0 4px; }
+/* a file previewed under the field that names it (records.js filePreview); a whole line of its row */
+.file-preview { flex-basis: 100%; width: 100%; }
+.file-preview:empty { display: none; }
+.file-choice datalist { display: none; }

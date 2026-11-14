@@ -112,7 +112,8 @@ export const WIDGETS = {
     return { controls, compose: (v) => (v.v ? (v.epoch ? `${v.v}@${v.epoch}` : v.v) : "") };
   },
   name: (f, t) => whole(f, t),
-  path: (f, t) => whole(f, t, { path: true }),
+  // a file of the project folder: the folder's files offered (ctx.files, GET /api/files), a typed path kept
+  path: (f, t, ctx) => whole(f, t, { path: true, list: (ctx?.files || []).map((x) => x.path) }),
   text: (f, t, ctx) => whole(f, t, { list: suggestionsOf(f, ctx) }),
   formula: (f, t) => whole(f, t, { mono: true }),
   spin: (f, t, ctx) => whole(f, t, { list: ctx.spins || [] }),

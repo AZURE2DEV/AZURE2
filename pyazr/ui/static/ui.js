@@ -111,3 +111,24 @@ export function drawPlot(el, plot, fileName, { usePlotly = true, height = null, 
   el.append(h("div.plot-fallback", {}, table.element), bar);
   return "table";
 }
+
+let fileListId = 0;
+/** A text box that names a file, with the project folder's files (GET /api/files) as its choices: a list beside
+ * the box (a typed path stays possible), each choice labelled with the file's kind and size.  Returns the box and
+ * its list in one element. */
+export function withFiles(ctx, input) {
+  const id = `files${++fileListId}`;
+  const list = h("datalist", { id });
+  input.setAttribute("list", id);
+  ctx.api.get("/api/files", { quiet: true }).then((r) => {
+    for (const f of r.files) list.appendChild(h("option", { value: f.path }, fileLabel(f)));
+  }).catch(() => {});
+  return h("span.file-choice", {}, input, list);
+}
+
+/** A file of GET /api/files in words: "table, 4 columns, 1.2 kB". */
+export function fileLabel(f) {
+  const size = f.size < 1024 ? `${f.size} B` : f.size < 1048576 ? `${(f.size / 1024).toFixed(1)} kB`
+    : `${(f.size / 1048576).toFixed(1)} MB`;
+  return [f.kind, f.columns ? `${f.columns} columns` : "", size].filter(Boolean).join(", ");
+}

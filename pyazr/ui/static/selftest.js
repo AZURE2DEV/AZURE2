@@ -41,6 +41,7 @@ export function selftest(ctx, tabs, draw) {
   const steps = [];
   const edit = {};
   const pair = {};
+  const preview = {};
   let fit = {};
 
   async function run() {
@@ -79,7 +80,21 @@ export function selftest(ctx, tabs, draw) {
     for (const v of FIRST_VIEW) await visit(v.hash, first(v.hash));
     const evaluated = ctx.evaluation?.datasets?.[0]?.name;
     const at = `#/data/${encodeURIComponent(evaluated)}`;
-    if (evaluated) await visit(at, first(at));
+    if (evaluated) {
+      await visit(at, first(at));
+      // a file typed into the data set's file field: the preview of its rows and the engine's reading, before Apply
+      const box = document.querySelector('[data-field="file"] input');
+      if (box) {
+        box.value = box.value.replace(/^"|"$/g, "");
+        box.dispatchEvent(new Event("change", { bubbles: true }));
+        for (let i = 0; i < 100 && !document.querySelector(".file-read > *"); i++) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        preview.text = document.querySelector(".file-read")?.textContent || "";
+        preview.head = document.querySelector(".file-preview pre.file-head")?.textContent || "";
+        preview.offered = document.querySelector('[data-field="file"] datalist')?.options.length || 0;
+      }
+    }
     for (let i = 0; i < 2; i++) {
       location.hash = first("#/project");
       await new Promise((r) => setTimeout(r, 0));
@@ -210,7 +225,7 @@ export function selftest(ctx, tabs, draw) {
     const out = document.createElement("pre");
     out.id = "selftest-result";
     out.textContent = JSON.stringify({ done: true, ms, plotly: typeof globalThis.Plotly === "object",
-      errors, failed: ctx.api.failures, steps, edit, pair, fit, chi2: ctx.evaluation?.chi2 ?? null,
+      errors, failed: ctx.api.failures, steps, edit, pair, preview, fit, chi2: ctx.evaluation?.chi2 ?? null,
       evaluation_refused: ctx.evalError?.what ?? null }, null, 1);
     out.dataset.done = "1";
     out.style.display = "none";
