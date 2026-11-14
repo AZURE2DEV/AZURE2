@@ -2,7 +2,7 @@
 #
 # --no-brune on a project with no standard-R-matrix equivalent: a clean refusal, not a crash.
 #
-# The standard formalism needs the input (observed) parameters transformed to formal ones (CNuc::TransformIn), a
+# The standard formalism needs the input (observed) parameters transformed to formal ones (CompoundSystem::TransformIn), a
 # generalized eigenproblem N a = E M a that has a real solution only for a positive-definite M = 1 - sum gamma
 # gamma' dS/dE (Brune, PRC 66, 044611).  tests/7Li_p_ay (a Brune fit, 0+ background poles with partial widths up to
 # 135 MeV) makes M indefinite.  GSL reported the failure, AZURE2's error handler ignores that code, and before

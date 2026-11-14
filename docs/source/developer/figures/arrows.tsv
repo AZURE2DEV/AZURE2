@@ -52,8 +52,8 @@ CompoundSystem	ObservedLevelTable	makes	setup		CompoundSystem::TransformOut(cons
 CompoundSystem	SystemOfCompound	reads	setup	const	CompoundSystem::systemStructure_, systemAllGroups_ (shared_ptr<const SystemOfCompound>), made once by BuildSystemOfCompound(const CompoundSystem &, ...) in CompoundSystem::Fill
 SystemOfCompound	azure2::physics::System	owns	setup		SystemOfCompound::system
 CompoundSystem	azure2::PathwayTable	reads	setup	const	CompoundSystem::pathways_ (shared_ptr<const PathwayTable>), made by BuildPathwayTable(const SystemOfCompound &) in CompoundSystem::BuildPathways
-WorkingCopy	azure2::experiment::DatasetSpec	reads	setup	const	WorkingCopy::Fill(const Config &, CompoundSystem *, const DataSpecs &)
-WorkingCopy	CompoundSystem	reads	setup	nonconst	WorkingCopy::Fill(const Config &, CompoundSystem *, ...), WorkingCopy::Initialize(CompoundSystem *, const Config &)
+WorkingCopy	azure2::experiment::DatasetSpec	reads	setup	const	WorkingCopy::Fill(const Config &, const CompoundSystem *, const LevelInputs &, const DataSpecs &)
+WorkingCopy	CompoundSystem	reads	setup	const	WorkingCopy::Fill(const Config &, const CompoundSystem *, ...), WorkingCopy::Initialize(const CompoundSystem *, const Config &)
 WorkingCopy	DataSet	makes	setup		WorkingCopy::Draft() (DataSet &) during the set-up, WorkingCopy::Freeze() at the end of Initialize
 WorkingCopy	DataSet	reads	setup	const	WorkingCopy::set_ (shared_ptr<const DataSet>), WorkingCopy::Data()
 DataSet	Segment	owns	setup		DataSet::segments_ (std::vector<Segment>)
@@ -76,7 +76,7 @@ azure2::TaskScratch	THMMatrixFunc	owns	evaluation		TaskScratch::pointThm_, gradi
 AMatrixFunc	LevelMatrixSolver	owns	evaluation		AMatrixFunc::solvers_ (std::vector<LevelMatrixSolver>)
 AMatrixFunc	CompoundSystem	reads	evaluation	const	AMatrixFunc::compound_ (const CompoundSystem *)
 AMatrixFunc	LevelState	reads	evaluation	const	AMatrixFunc(const CompoundSystem *, const LevelState &, const Config &): the state it is solved at (GenMatrixFunc::state())
-RMatrixFunc	CompoundSystem	reads	evaluation	nonconst	RMatrixFunc(CompoundSystem *, const Config &), made per energy task in SolveAtOneEnergy (src/EnergyPass.cpp)
+RMatrixFunc	CompoundSystem	reads	evaluation	const	RMatrixFunc(const CompoundSystem *, const LevelState &, const Config &), made per energy task in SolveAtOneEnergy (src/EnergyPass.cpp)
 AZURECalc	WorkingData	owns	inference		AZURECalc::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
 AZURECalc	CompoundSystem	reads	inference	const	AZURECalc::compound_ (const CompoundSystem *): the caller's, which outlives it
 AZURECalc	FitterStates	reads	inference	nonconst	AZURECalc::states_ (FitterStates &): the caller's pooled states, taken by GetPooledState
@@ -96,7 +96,7 @@ AZURECalc	ParameterLimitsManager	reads	inference	nonconst	AZURECalc::limitsManag
 AZUREParams	ROOT::Minuit2::MnUserParameters	owns	inference		AZUREParams::params_
 AZUREParams	ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<ParameterRecord>)
 ParameterRecord	ParamKindRow	reads	inference	const	ParameterRecord::Row() (const ParamKindRow &, a row of ParamKindTable())
-AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(CompoundSystem *, WorkingCopy *, ...) in AZURECalc::GradientBy
+AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, WorkingCopy *, ...) in AZURECalc::GradientBy
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
 AZURECalcMCMC	CompoundSystem	reads	inference	const	AZURECalcMCMC::compound_ (const CompoundSystem *): the caller's, which outlives it

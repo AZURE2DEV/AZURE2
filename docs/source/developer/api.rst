@@ -8,7 +8,7 @@ How Python reaches the engine. The user's side is in the user guide
 ------------
 
 ``AZUREAPI`` (``api/include/AZUREAPI.h``, ``api/src/AZUREAPI.cpp``) is the
-engine as a session: it owns a ``CNuc`` and a ``WorkingCopy`` (made in
+engine as a session: it owns a ``CompoundSystem`` and a ``WorkingCopy`` (made in
 ``AZUREAPI::ReplaceModel``), reads the run's ``Config``, and keeps the
 session's ``Results`` buffer. ``AZUREAPI::Initialize`` makes the same set-up
 calls as the program's ``AZUREMain`` (:doc:`architecture`, step 2), so a

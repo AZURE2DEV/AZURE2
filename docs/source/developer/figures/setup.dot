@@ -43,7 +43,7 @@ digraph setup {
   n_SystemOfCompound -> n_azure2__physics__System [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_CompoundSystem -> n_azure2__PathwayTable [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_azure2__experiment__DatasetSpec [style=dashed, arrowhead=vee];
-  n_WorkingCopy -> n_CompoundSystem [style=dashed, arrowhead=vee, label=" nc"];
+  n_WorkingCopy -> n_CompoundSystem [style=dashed, arrowhead=vee];
   n_WorkingCopy -> n_DataSet [style=dotted, penwidth=1.6, arrowhead=empty];
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
   n_DataSet -> n_Segment [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];

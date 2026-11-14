@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """An external-capture final state must be a level of the project; pyazr sees the engine's new rule (2026-10-26).
 
-The API always switches external capture on, so it is where the two branches of CNuc::ParseExternalCapture show:
+The API always switches external capture on, so it is where the two branches of CompoundSystem::ParseExternalCapture show:
 
   * models/missing_level.azr (tests/ec_final_state_listed): the only data segment exits into the capture pair and
     its final state is not listed -> the engine prints the ERROR line and Initialize fails, so pyazr.Session(...)

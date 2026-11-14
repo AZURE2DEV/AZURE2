@@ -4,7 +4,7 @@ across pyazr sessions, one after the other and alive at once.
 
 THMMatrixFunc keeps a per-thread memo of S_c at the lowest level of each J
 group.  It used to be keyed by the PPair address, l and the level energy: the
-memo outlives a CNuc, so a later session in the same process could get the
+memo outlives a CompoundSystem, so a later session in the same process could get the
 address back from the allocator and read S_c of another radius, and a radius
 changed in place was never seen.  The model-averaging driver fits its radius
 variants one after the other in one process; on the 18O(p,a) narrow-resonance

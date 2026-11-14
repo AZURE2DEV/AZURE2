@@ -7,7 +7,7 @@ stays at its `.azr` value. This page says how to detect such a file, convert it,
 
 ## The two naming schemes
 
-| old builds | current builds (`CNuc::FillMnParams`) |
+| old builds | current builds (`CompoundSystem::FillMnParams`) |
 |---|---|
 | `j=<J>_la=<L>_energy` | `energy_<N>` |
 | `j=<J>_la=<L>_ch=<C>_rwa` | `width_<N>_<C>` |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Separation energies against masses (2026-10-29, CNuc::CheckMassSeparationConsistency).
+# Separation energies against masses (2026-10-29, CompoundSystem::CheckMassSeparationConsistency).
 #
 # Two particle pairs of one compound nucleus must satisfy S_b - S_a = (m1b + m2b - m1a - m2a) c^2.  AZURE2 takes the
 # thresholds from the separation energies and the kinematics from the masses, so a mismatch changes nothing in the

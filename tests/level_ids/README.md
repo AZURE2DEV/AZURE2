@@ -1,7 +1,7 @@
 # level_ids
 
 Level identity in the `<levels>` block: lines of one J^pi group belong to one level when they carry the same level
-ID (column 9) within 1 keV, or the identical energy (`CNuc::Fill`).  Before 2026-10-24 any lines within 1 keV were
+ID (column 9) within 1 keV, or the identical energy (`CompoundSystem::Fill`).  Before 2026-10-24 any lines within 1 keV were
 one level whatever their IDs (`JGroup::IsLevel`, tolerance 1e-3 MeV), so a narrow level next to a broad one of the
 same J^pi was merged into it: the later lines' widths replaced the earlier level's and its parameters vanished from
 the fit (17O+a/10-22-26_an3_jpiscan: 3/2- 8.2900 MeV, ID 91, swallowed by 3/2- 8.2893 MeV, ID 22; 32 instead of 35

@@ -270,7 +270,7 @@ Three changes, 2026-10-19:
   ``replace_grids``). Each adaptive grid remembers how it was laid out
   (``Unit::SubGridSpec``: window, node budget, step, width multiplier). The
   current fit values are converted to observed energies and widths on a
-  private copy of the compound nucleus (``CNuc::TransformOut``, then
+  private copy of the compound nucleus (``CompoundSystem::TransformOut``, then
   ``GetTransformParams``), which is what a saved file would hold, and the same
   generator lays the grid out again. A point whose grid is unchanged (every
   node within 1e-12 relative) keeps its sub-points; the others get new ones,

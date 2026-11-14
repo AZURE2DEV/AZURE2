@@ -26,7 +26,7 @@ whoever asks for a calculation, and a project file that says in words what each 
 | 1. Physics core | `physics/`, a standalone library (no engine headers, no GSL): Coulomb and Whittaker functions, level-parameter conventions and transformations (Brune, formal, Park), external capture, coupling coefficients, reaction pathways. Calculations no longer depend on the thread count | done |
 | 2. One objective | One ordered list of χ² terms used by the fit, the gradient, least squares, the MCMC and the Python API | done |
 | 3. One project model | `io/`: the project file read once, losslessly, by the engine and pyazr alike; one mass table | done |
-| 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced | most of it done, see below |
+| 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced and renamed `CompoundSystem` | most of it done, see below |
 | 5–9 | Energy grid and apparatus kernels, own stopping, finite targets for yields; evaluation without copies; DWBA for THM; pyazr 3.0; web interface | not begun |
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
@@ -163,6 +163,19 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   pathways are files of their own. The pathways of a run are one immutable table built at set-up and shared by all
   threads, read by every observable and by external capture; the six classes of the old pathway trees are deleted;
   the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
+- **`CNuc` is now `CompoundSystem`** (`include/CompoundSystem.h`). What you knew as `CNuc` did five jobs; each has its
+  place now. The compound nuclei as set up (pairs, J^π groups, channels with B_c, the levels' `<levels>` data, the
+  physics `System`, the pathway table, the external-capture set-up, the model data, the `gamma_decay` records, the
+  layout of the level block of the parameter vector) are the `CompoundSystem`: built by `Fill`, `AddHardSphereGroups`,
+  `ParseExternalCapture` and `Initialize` (`src/CompoundSystemBuild.cpp`, `src/ExternalCaptureFinalStates.cpp`),
+  constant afterwards and shared by every thread, walker and evaluation, never copied (no `Clone`). The values at a
+  parameter vector (fit energies and amplitudes, shift functions, Park's J, external-capture parts) are a
+  `LevelState`, and the levels' starting values in the fit's basis a `LevelInputs`: each owner (the run, the session,
+  the fitter's pool, the sampler's walkers, the rate) holds its own. The transformations in and out are
+  `src/LevelTransforms.cpp` (the observed values come back as an `ObservedLevelTable`), the fills
+  `src/LevelStateFill.cpp`, the parameter vector `src/LevelParameterVector.cpp`, the reports `src/LevelReport.cpp`,
+  the checks `src/CompoundSystemChecks.cpp`; the abundances went to the data. The consistency test refuses the old
+  name.
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the

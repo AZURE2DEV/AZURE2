@@ -454,7 +454,7 @@ else bad "the observed-parameter MCMC did not run"; fi
 
 echo "-- (j) a final state's energy free: the pull-back's term in E_f"
 # The external-capture twin with a second particle pair (alpha + 11C, its threshold put at 5.0 MeV, in a 9/2+ group of
-# its own, width 0): the 6.1763 MeV final state lies above it, so its energy is a free parameter (CNuc::FillMnParams).
+# its own, width 0): the 6.1763 MeV final state lies above it, so its energy is a free parameter (CompoundSystem::FillMnParams).
 alpha() { awk '/^<\/levels>/ { print " 4.5 1 20 1 1 9 3 6 34 1 1 0 0 1 1.5 -1 0 4.0026 11.0114 2 6 7.297 5.0 0 0 0.0 0 5.5 0 0 0" } { print }' "$1"; }
 efree() { awk '{ n = split($0, a, " "); if (n > 30 && a[9] == "9") { $4 = 0; if (a[27] == "0" && a[12] != "0") $11 = 0; print " " $0 }
   else if (n > 30 && a[9] == "5" && a[27] == "0" && a[7] == "1") { $11 = 0; print " " $0 } else print }' "$1"; }

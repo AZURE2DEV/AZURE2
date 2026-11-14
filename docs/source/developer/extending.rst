@@ -88,7 +88,7 @@ level scheme, of a THM experiment):
 1. ``include/ParameterKind.h``: the value of ``ParamKind`` and its row of
    ``ParamKindTable()`` (key, unit, owner fields, prior and vary flags, doc);
    a ``ParameterRecord`` factory for new owner fields.
-2. Create it with ``AZUREParams::Add`` in ``CNuc::FillMnParams`` or
+2. Create it with ``AZUREParams::Add`` in ``CompoundSystem::FillMnParams`` or
    ``WorkingCopy::FillMnParams``; every later question asks the record, never
    the name (check 23).
 3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``; a level's
@@ -109,7 +109,7 @@ energy and the amplitudes:
 1. ``include/LevelParameterLayout.h`` / ``src/LevelParameterLayout.cpp``: a
    ``Slot::Kind`` and its slots in the constructor, which fixes where the
    number sits in the level block, and its name in ``Name``. Every walk of
-   the level block reads the layout (``CNuc::FillMnParams``, the fills from a
+   the level block reads the layout (``CompoundSystem::FillMnParams``, the fills from a
    fit vector and from an observed vector, ``GetTransformParams``,
    ``ConvertAmplitudeBasis``, ``SetFitLevelParameter``, the level part of
    ``BuildParamIndexMap``, the labels of ``src/ParameterLabel.cpp``, the
@@ -124,9 +124,9 @@ energy and the amplitudes:
    (the compound first, then the state, then the inputs), as every reader of
    an evaluation's values does.
 3. The input value: a member of ``LevelInputs`` (``include/LevelInputs.h``),
-   made by ``CNuc::Fill`` from the ``<levels>`` rows, written by
+   made by ``CompoundSystem::Fill`` from the ``<levels>`` rows, written by
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
-   vector), read by ``CNuc::FillMnParams`` as the start value; its observed
+   vector), read by ``CompoundSystem::FillMnParams`` as the start value; its observed
    value in ``GetTransformParams``. What an evaluation reads of the input
    (the zero-width flags) is
    written into the ``LevelState`` where the input is read (``Fill``,
@@ -146,8 +146,8 @@ An owner of the levels
 ----------------------
 
 Something that evaluates the model on levels of its own (a second sampler, a
-scan, a new front end) holds the compound as ``const CNuc *`` (or ``const
-CNuc &``) of the run or session that set it up and outlives it, and its own
+scan, a new front end) holds the compound as ``const CompoundSystem *`` (or ``const
+CompoundSystem &``) of the run or session that set it up and outlives it, and its own
 ``LevelState`` (with a ``LevelInputs`` if it transforms from the observed
 basis), copied from its caller's: ``LevelState state(callerState)``. It
 passes the compound, the state and the inputs to the fills and the readers.
@@ -156,6 +156,17 @@ copies are a ``StatePool`` (``include/StatePool.h``) of its caller, lent as
 the ``Results`` are (``FitterStates`` of ``AZURECalc``,
 ``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
 changes: the owner's own file, and its test.
+
+A set-up fact of the compound system
+------------------------------------
+
+Something the compound system learns once from the project and that no evaluation changes (a property of a
+pair, a group or a level, a table derived from them) is a member of ``CompoundSystem``
+(``include/CompoundSystem.h``) with a ``const`` accessor, written by its set-up only:
+``src/CompoundSystemBuild.cpp`` (``Fill`` or ``Initialize``), or ``src/ExternalCaptureFinalStates.cpp`` for the
+external capture. Its readers take ``const CompoundSystem &``. If the check file of the compound nucleus shows
+it, ``WriteCompoundNucleusCheck`` (``src/LevelReport.cpp``) prints it. A value that moves with the parameter
+vector is not a set-up fact: it belongs in ``LevelState`` (above).
 
 A term of the objective
 -----------------------

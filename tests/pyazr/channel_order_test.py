@@ -5,7 +5,7 @@ A J-group's channels can be written in any order -- the group owns the set, and
 every level of the group carries a width for each of them. Listing them
 differently must not change a result, and must certainly not crash.
 
-It did both. CNuc::TransformIn and CNuc::TransformOut each padded their
+It did both. CompoundSystem::TransformIn and CompoundSystem::TransformOut each padded their
 per-channel arrays for a non-particle channel by copying entry [0], to keep the
 array indexed by channel number. When channel 1 was *itself* a photon or beta
 channel that array was still empty, so the copy read off the end of an empty
@@ -18,7 +18,7 @@ the Brune formalism off, which is why neither had been seen.
 
 Reversing every level keeps the levels of a group in step. One level listing
 its channels in a different order from the rest of its group, or leaving out a
-channel the group carries, is the harder case: until 2026-10-17 CNuc::Fill
+channel the group carries, is the harder case: until 2026-10-17 CompoundSystem::Fill
 stored each width in the position of its line, so the first put widths on the
 wrong channels without a message and the second left the level's width vector
 one short (TransformIn then wrote past its end). Widths are now matched to
