@@ -15,6 +15,7 @@
 #include "GammaDecayMap.h"
 #include "ObservedLevelTable.h"
 #include "LevelState.h"
+#include "LevelParameterLayout.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {
@@ -101,6 +102,9 @@ class CNuc {
   /// The levels at the current parameter vector: fit energies and amplitudes, shift functions, Park's J, the
   /// external-capture amplitudes and N_f^1/2 (LevelState.h).  Written by this class's fills only.
   const LevelState &State() const { return levelState_; }
+  /// Where each level's energy and amplitudes sit in the parameter vector (LevelParameterLayout.h); built by Fill,
+  /// shared by the copies.  Every walk of the level block reads it.
+  const LevelParameterLayout &ParameterLayout() const { return *parameterLayout_; }
   /// Take the fit energies and amplitudes of `from` (a state of a compound of the same structure), nothing derived
   /// from them (WorkingCopy::ReplaceSubPointGrids' copy).
   void CopyFitEnergiesAndAmplitudes(const LevelState &from);
@@ -183,10 +187,10 @@ class CNuc {
   /// (ModelData.cpp) inside an evaluation: nothing a calculation reads is changed.  Empty if the transformation
   /// fails.  CNucObserved.cpp.
   std::optional<ObservedLevelTable> ObservedOfFitValues(const Config &);
-  /// Set one fit value, as FillCompoundFromParams sets it with everything derived from it: the energy of level la of
-  /// J-group j (channel 0) or its amplitude in channel ch (1-based).  For the numerical derivatives of the model data;
-  /// setting the value back restores the state bit for bit.  CNucObserved.cpp.
-  void SetFitLevelParameter(int j, int la, int ch, double value);
+  /// Set the fit value of one slot of the level block (ParameterLayout), as FillCompoundFromParams sets it with
+  /// everything derived from it: a level's energy or its amplitude in one channel.  For the numerical derivatives of
+  /// the model data; setting the value back restores the state bit for bit.  CNucObserved.cpp.
+  void SetFitLevelParameter(const LevelParameterLayout::Slot &slot, double value);
 
   // -- fitting --------------------------------------------------------------
   /// Seed the parameter vector from the current level parameters, each with its record (what it is).
@@ -278,6 +282,8 @@ class CNuc {
   bool transformedIn_ = false;
   /// The levels at the current parameter vector (State); shaped by Fill.
   LevelState levelState_;
+  /// The level block of the parameter vector (ParameterLayout); built by Fill.
+  std::shared_ptr<const LevelParameterLayout> parameterLayout_ = std::make_shared<LevelParameterLayout>();
 };
 
 extern double DoubleFactorial(int);

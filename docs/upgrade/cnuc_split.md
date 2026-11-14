@@ -1823,6 +1823,45 @@ first, calls outside `ALevel.cpp`: 183 in 22 files (`GetFitGamma` 54 in 14 files
   `LevelState` as from its copy; the check: `Clone` aborts in one commit (the tree, `ctest -LE slow`, the sampler's
   chains of the check scripts identical), then deleted.
 
+*Step 4 as built, first part: the layout* (branch `feature/upgrade-5-cnuc-parameter-layout`, start f0b17b19).
+Measured first: the walks of the level block, each counting positions of its own (the design counted eight; the code
+had twelve places, and `SetFitLevelParameter` takes one slot, not a walk):
+
+| walk | file, lines at the start | per slot |
+|---|---|---|
+| `CNuc::FillMnParams` | `CNuc.cpp` 823–873 | adds it: name, input value, step, record, fixes, Wigner bounds (a record's number at its slots) |
+| `CNuc::FillCompoundFromParams` | `CNucLevelState.cpp` 23–43 | writes E, or γ and the EC amplitude, into the state; per level N_f^½ |
+| `CNuc::FillCompoundFromParamsPhysical` | `CNuc.cpp` 629–647 | writes the level's input E or γ (`ALevel`); per level N_f^½ into the state |
+| `CNuc::GetTransformParams` | `CNuc.cpp` 1020–1036 | the observed E or value (a record's number at its slots) |
+| `CNuc::ConvertAmplitudeBasis` | `CNuc.cpp` 1053–1059 (its index map), 1066–1086 | reads E and γ, writes γ and its error |
+| `BuildParamIndexMap`, level part | `AZUREGrad.cpp` 333–355 | the flat index and the kind (level energy, width, radiative decay) |
+| `AZURELabel::NumParameters` | `ParameterLabel.cpp` 125–131 | counts the block |
+| `AZURELabel::Parameter` | `ParameterLabel.cpp` 150–170 | the label of one index |
+| `LevelEnergyIndex` (`gamma_decay` records) | `GammaDecayMap.cpp` 57–63 | the index of a record level's energy (its numbers at energy + channel) |
+| `WorkingCopy::BuildThmGroups` | `ThmNorm.cpp` 631–634 | counts the block (the THM coherent offset; `FillMnParams` sets it again) |
+| `LevelJacobian` (model data) | `ModelData.cpp` 162–186 | E or γ of a level moved up and down (`SetFitLevelParameter`) |
+| `CNuc::SetFitLevelParameter` | `CNucObserved.cpp` 43–58 | one slot (group, level, channel), written as the fill writes it |
+
+- `LevelParameterLayout` (`include/LevelParameterLayout.h`, `src/LevelParameterLayout.cpp`): the slots in the format's
+  order (kind, group, level, channel, the level's number), per level the index of its energy and of each amplitude,
+  and the names `energy_N`, `width_N_M`. `CNuc::Fill` builds it once, beside the shape of the `LevelState`; the
+  copies share it (`shared_ptr<const>`). All twelve places above read it; `SetFitLevelParameter` takes a slot of it.
+  What still assumes the order rather than reading it: the `gamma_decay` records' numbers sit at energy + channel
+  (`GammaDecayMap.cpp`), which the layout states as part of its order.
+- Byte-identical because the slots are listed in the order of the old loops (all projects in the three bases, the
+  eight fits, the sampler's chains); `tests/upgrade/level_parameter_layout_test.cpp` checks the layout against the
+  format's order written out independently and against the names `FillMnParams` gives.
+- What differed from the design: the walks were twelve, not eight (the THM offset, the `gamma_decay` index and the
+  model data's columns were not counted); the layout is a member of `CNuc` until the set-up moves out.
+- Not done here, measured for the next branch (the copies): what an owner writes on its copy after set-up is more
+  than a `LevelState`. `FillCompoundFromParamsPhysical` and `TransformIn` write the levels' input values (`ALevel`:
+  E, γ, the zero-input flags) and `gammaDecayInputs_`; `FillCompoundFromParams` writes `gammaDecayFills_` (through
+  `GammaDecaySet::ToEngine`) and `captureMasks_`; `TransformIn` writes `transformedIn_` and `transformError_`. The
+  sampler's physical mode, `ParameterLimitsManager::ConvertPhysicalLimitToReduced`, `RateResonances` and the
+  sub-point-grid copy do this on their copies. So the owners need `LevelInputs` as well as `LevelState` (as the
+  design's end state says), and every reader of `CNuc::State()` (about 80 calls in 17 files), of the fills and of
+  the masks must take the owner's state: the design's step 5 signatures, in part, moved into step 4.
+
 **Step 5. The set-up out and the name gone.** (≈ 900 lines touched, mostly signatures in ≈ 110 files; `CNuc.cpp`
 → `CompoundSystemBuild.cpp` and `ExternalCaptureFinalStates.cpp`; the `CNuc*` files renamed: `CNucReport` →
 `LevelReport`, `CNucChecks` → `CompoundSystemChecks`, `CNucSystem` → `SystemOfCompound`, `CNucLevelParameters` →
@@ -1880,7 +1919,8 @@ changes numbers and is its own step, 2b.
    between the input set and the report set; step 3 replaces it by the two sources it reads from.
 8. **The parameter layout written eight times** (`FillMnParams`, `FillCompoundFromParams`,
    `FillCompoundFromParamsPhysical`, `GetTransformParams`, `ConvertAmplitudeBasis`, `BuildParamIndexMap`,
-   `ParameterLabel.cpp`'s two walks); kept in lock-step by comments. Step 4.
+   `ParameterLabel.cpp`'s two walks); kept in lock-step by comments. Step 4. *Fixed*: twelve places counted, all read
+   `LevelParameterLayout` (step 4 as built, first part).
 
 Radiative widths stay out of a level's total width (the PI's decision); nothing here touches it.
 

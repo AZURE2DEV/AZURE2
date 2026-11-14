@@ -189,7 +189,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      for the requested entrance pairs).
    * ``CNuc::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
      parameters out in ``AZUREParams``, each with its ``ParameterRecord``: the
-     level block, then the abundance block (``AbundanceSamples::AddParameters``,
+     level block (where each level's energy and amplitudes sit is the
+     ``LevelParameterLayout`` that ``CNuc::Fill`` builds, read by every walk
+     of the block), then the abundance block (``AbundanceSamples::AddParameters``,
      the one place that writes the abundances into a parameter vector and
      reads them back), then the data's parameters.
    * ``WorkingCopy::Initialize``: the energy-dependent values of every

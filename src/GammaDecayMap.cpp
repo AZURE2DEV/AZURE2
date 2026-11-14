@@ -54,12 +54,10 @@ bool IsParticleChannel(CNuc &compound, const JGroup *group, int ch) {
   return compound.GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 0;
 }
 
-/// The full-vector index of level la's energy in group j (CNuc::FillMnParams: per level its energy, then one entry
-/// per channel of its group).
+/// The full-vector index of level la's energy in group j; its amplitudes follow it, in channel order
+/// (LevelParameterLayout.h).
 int LevelEnergyIndex(CNuc &compound, int j, int la) {
-  int index = 0;
-  for (int g = 1; g < j; g++) index += compound.GetJGroup(g)->NumLevels() * (1 + compound.GetJGroup(g)->NumChannels());
-  return index + (la - 1) * (1 + compound.GetJGroup(j)->NumChannels());
+  return compound.ParameterLayout().Of(j, la).energy;
 }
 
 /// The numbers of record level L as the file gives them, slot order (Gamma_gamma in eV).

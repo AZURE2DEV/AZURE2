@@ -123,12 +123,7 @@ std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, const ALevel *
 
 int NumParameters(CNuc *compound, WorkingCopy *data) {
   int n = 0;
-  if (compound) {
-    for (int j = 1; j <= compound->NumJGroups(); j++) {
-      const JGroup *jgroup = compound->GetJGroup(j);
-      n += jgroup->NumLevels() * (1 + jgroup->NumChannels());
-    }
-  }
+  if (compound) n += compound->ParameterLayout().Size();
   if (data) {
     n += data->Data().Abundances().NumParams();  // isotopic abundances, right after the level block
     const std::vector<Segment> &segments = data->Data().GetSegments();
@@ -149,25 +144,19 @@ int NumParameters(CNuc *compound, WorkingCopy *data) {
 std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
   if (minuitIndex < 0) return std::string();
 
-  // Same order CNuc::FillMnParams uses: per J-group, per level, one energy
-  // then one width per channel.
+  // The level block first, as the compound's layout places it.
   int index = 0;
   if (compound) {
-    for (int j = 1; j <= compound->NumJGroups(); j++) {
-      const JGroup *jgroup = compound->GetJGroup(j);
-      for (int la = 1; la <= jgroup->NumLevels(); la++) {
-        const ALevel *level = jgroup->GetLevel(la);
-        if (index == minuitIndex)
-          return "level energy: " + Level(jgroup, level, j, la);
-        index++;
-        for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
-          if (index == minuitIndex)
-            return "width: " +
-                LevelAndChannel(compound, jgroup, level, j, la, ch);
-          index++;
-        }
-      }
+    const LevelParameterLayout &layout = compound->ParameterLayout();
+    if (minuitIndex < layout.Size()) {
+      const LevelParameterLayout::Slot &slot = layout.Slots()[minuitIndex];
+      const JGroup *jgroup = compound->GetJGroup(slot.group);
+      const ALevel *level = jgroup->GetLevel(slot.level);
+      if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy)
+        return "level energy: " + Level(jgroup, level, slot.group, slot.level);
+      return "width: " + LevelAndChannel(compound, jgroup, level, slot.group, slot.level, slot.channel);
     }
+    index = layout.Size();
     // then the isotopic abundances, one per (sample, nucleus) (AbundanceSamples::AddParameters)
     const int numAbundances = data ? data->Data().Abundances().NumParams() : 0;
     for (int k = 1; k <= numAbundances; k++) {

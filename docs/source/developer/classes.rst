@@ -71,7 +71,10 @@ derivatives, Park's :math:`J`, the external-capture amplitudes and
 :math:`N_f^{1/2}`) are the ``LevelState`` the ``CNuc`` holds: its fills
 (``FillCompoundFromParams``, ``CalcShiftFunctions``, ``TransformIn``,
 ``SetFitLevelParameter``) write it, every reader gets it ``const`` through
-``CNuc::State()``. ``CNuc`` is copied for every evaluation that runs at the
+``CNuc::State()``. Where each level's energy and amplitudes sit in the
+parameter vector is the ``LevelParameterLayout`` (``CNuc::ParameterLayout()``,
+built by ``Fill``, shared by the copies): every walk of the level block reads
+it. ``CNuc`` is copied for every evaluation that runs at the
 same time; its pairs, groups and channels do not change after the set-up, and
 the compiler holds to it: outside ``CNuc``'s own set-up they are reached
 through ``const`` pointers only (``GetPair``, ``GetJGroup``), and a level's
