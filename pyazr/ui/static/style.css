@@ -263,3 +263,10 @@ section.panel.model-options form.record-form .form-line,
 section.panel.experiments form.record-form .form-line { border-bottom: 0; }
 section.panel.model-options form.record-form .form-actions,
 section.panel.experiments form.record-form .form-actions { flex-basis: 100%; }
+
+/* the first view: a field's meaning under its title, the rarely set fields and the rest of a tab one click away */
+.field-doc { color: var(--muted); font-size: 11.5px; max-width: 46ch; margin: 1px 0 2px; }
+details.form-more, details.more { margin: 6px 0; }
+details.form-more > summary, details.more > summary { cursor: pointer; color: var(--accent); padding: 3px 0; }
+details.more > section.panel, details.more > div { margin-top: 6px; }
+p.empty { padding: 6px 0; }

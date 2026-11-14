@@ -6,11 +6,21 @@ import { pathOf } from "../api.js";
 import { plotOf } from "../plots.js";
 import { renderTable } from "../tables.js";
 import { button, drawPlot, h } from "../ui.js";
+import { FIRST_VIEW, SECTION_TITLES } from "../layout.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel } from "./records.js";
 
 /** The sections the Data tab shows, in the schema's order, with their record kinds. */
 export function dataSections(schema) {
   return Object.entries(schema.sections).filter(([s]) => !NUCLEUS_SECTIONS.includes(s));
+}
+
+/** The groups a view of the first view's Data tabs shows (layout.js FIRST_VIEW): its `sections`, or, for the view
+ * without them, every group no other view names (a section the schema gains appears there). */
+export function sectionsOfView(sections, view, firstView = FIRST_VIEW) {
+  if (!view) return sections;
+  if (view.sections) return sections.filter(([s]) => view.sections.includes(s));
+  const named = firstView.filter((v) => v.tab === "data" && v.sections).flatMap((v) => v.sections);
+  return sections.filter(([s]) => !named.includes(s));
 }
 
 /** Up to three fields a record kind is summarised by in the list: its first required fields of a one-word type. */
@@ -28,17 +38,22 @@ export function summaryFields(schema, kinds) {
 export async function render(ctx, el, args) {
   const [records, problems] = await Promise.all([ctx.api.get("/api/project/records"),
     ctx.api.get("/api/project/validate")]);
-  const sections = dataSections(ctx.schema);
+  const every = dataSections(ctx.schema);
   const selected = args[0] && args[0] !== "+new" ? records.find((r) => r.name === args[0]) : null;
-  const sectionOf = (kind) => sections.find(([, kinds]) => kinds.includes(kind))?.[0];
-  const current = ctx.route.params.section || (selected ? sectionOf(selected.kind) : null) || sections[0][0];
+  const sectionOf = (kind) => every.find(([, kinds]) => kinds.includes(kind))?.[0];
+  const current = ctx.route.params.section || (selected ? sectionOf(selected.kind) : null) || every[0][0];
+  ctx.section = current;  // the first view marks its tab by the group drawn
   const kinds = ctx.schema.sections[current] || [];
+  // the expert's view: every group; the first view: the groups of the tab the group drawn belongs to
+  const sections = ctx.expert ? every : sectionsOfView(every, firstViewOf(current));
+  const title = (s) => (ctx.expert ? s : SECTION_TITLES[s] || s);
 
   // the group bar: one button per section with its number of records
   const bar = h("div.group-bar", { role: "toolbar", "aria-label": "sections" });
   for (const [s, ks] of sections) {
     const n = records.filter((r) => ks.includes(r.kind)).length;
-    const a = h("a.group", { href: `#/data?section=${s}`, title: ks.join(", ") }, `${s} `, h("span.count", {}, n));
+    const a = h("a.group", { href: `#/data?section=${s}`, title: ks.join(", ") }, `${title(s)} `,
+      h("span.count", {}, n));
     if (s === current) a.classList.add("active");
     bar.appendChild(a);
   }
@@ -71,6 +86,14 @@ export async function render(ctx, el, args) {
     caption: `${current}: ${kinds.map((k) => ctx.schema.records[k]?.title || k).join(", ")}`,
     onSelect: (r) => ctx.navigate(`#/data/${encodeURIComponent(r.name)}`) });
   const list = h("section.panel.list", {}, table.element);
+  if (!rows.length) {
+    // an empty group says what belongs there and offers the first one
+    const said = kinds.map((k) => `${ctx.schema.records[k]?.title || k}: `
+      + `${firstSentence(ctx.schema.records[k]?.doc)}`);
+    list.appendChild(h("p.hint.empty", {}, `No ${title(current)} yet. ${said.join(" ")} `, button(`+ new`,
+      `Add the first record of ${kinds.join(", ")}`,
+      () => ctx.navigate(`#/data/+new?section=${current}`), "primary")));
+  }
   if (ctx.evalError) list.appendChild(h("p.hint", {}, `No evaluation: ${ctx.evalError.what}`));
   el.appendChild(list);
 
@@ -91,6 +114,15 @@ export async function render(ctx, el, args) {
   const file = selected.fields.file;
   if (typeof file === "string" && file) extras.appendChild(fileRows(ctx, file));
   if (evaluated[selected.name]) extras.appendChild(await preview(ctx, selected.name));
+}
+
+/** The first sentence of the engine's description of a kind. */
+const firstSentence = (doc) => (String(doc || "").match(/^.*?[.;](\s|$)/)?.[0] || String(doc || "")).trim();
+
+/** The first view's tab a group of the Data tab belongs to (a view naming it, else the view without sections). */
+function firstViewOf(section) {
+  const views = FIRST_VIEW.filter((v) => v.tab === "data");
+  return views.find((v) => v.sections?.includes(section)) || views.find((v) => !v.sections) || null;
 }
 
 /** The first rows of a data file, as the server reads them (the text, not a parse). */

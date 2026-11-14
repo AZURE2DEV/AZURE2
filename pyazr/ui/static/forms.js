@@ -296,11 +296,20 @@ export function textsOf(value) {
   return Array.isArray(value) ? value.map(String) : [String(value)];
 }
 
+/** Whether a field waits under "more fields": the form folds (`foldRare`, the first view's forms), the engine's table
+ * marks the field rare, and the record neither sets it nor needs it nor has a message about it (a rare field in use
+ * is always shown). */
+export function folded(entry, foldRare) {
+  return Boolean(foldRare) && Boolean(entry.field.rare) && !entry.required && !entry.texts.length
+    && !entry.diagnostics.length;
+}
+
 /**
- * The form of a record of `kind` as data: {kind, title, doc, lines: [[entry, ...], ...], hidden: [keys]}.
+ * The form of a record of `kind` as data: {kind, title, doc, lines: [[entry, ...], ...], more: [[entry, ...], ...],
+ * hidden: [keys]}; `more` holds the fields folded() puts one click away where `ctx.foldRare` (else it is empty).
  * An entry: {key, field, title, type, required, repeatable, doc, grammar, note, texts, widgets, diagnostics}.
  * `fields` are the record's fields as the server sends them; `ctx`: {schema, records, quantity, pairLabels,
- * reactions, spins, spinParities, diagnostics: [{record, field, ...}], name}.
+ * reactions, spins, spinParities, diagnostics: [{record, field, ...}], name, foldRare, showMeaning}.
  */
 export function describeForm(schema, kind, fields, ctx = {}) {
   const rec = schema.records[kind];
@@ -320,7 +329,10 @@ export function describeForm(schema, kind, fields, ctx = {}) {
       diagnostics: (ctx.diagnostics || []).filter((d) => d.field === key || (d.field || "").split(".")[0] === key),
     };
   }
-  return { kind, title: rec.title || kind, doc: rec.doc || "", lines: arrange(kind, entries), hidden };
+  const shown = Object.fromEntries(Object.entries(entries).filter(([, e]) => !folded(e, ctx.foldRare)));
+  const more = Object.fromEntries(Object.entries(entries).filter(([, e]) => folded(e, ctx.foldRare)));
+  return { kind, title: rec.title || kind, doc: rec.doc || "", lines: arrange(kind, shown), more: arrange(kind, more),
+    hidden };
 }
 
 function firstToken(v) {
@@ -346,7 +358,7 @@ export function arrange(kind, entries) {
  */
 export function changedFields(form, composed) {
   const out = {};
-  for (const line of form.lines) {
+  for (const line of [...form.lines, ...(form.more || [])]) {
     for (const e of line) {
       const now = (composed[e.key] || []).map((s) => s.trim()).filter((s) => s !== "");
       const before = e.texts.map((s) => s.trim());

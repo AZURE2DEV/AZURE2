@@ -39,7 +39,11 @@ QUIET_PROFILE = ("--disable-extensions", "--disable-component-update", "--disabl
 VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
          "physics", ("physics-masked", "physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3"
                      "&fields=F,G"), ("physics-stopping", "physics/stopping_power?logy=1"), "thm",
-         ("thm-vertex", "thm?fn=thm_vertex"))
+         ("thm-vertex", "thm?fn=thm_vertex"),
+         # the first view's own tabs (a fresh profile opens in the first view), and two views in the expert's
+         ("first-pairs", "nucleus/pair"), ("first-segments", "data?section=data"),
+         ("first-effects", "data?section=targets"), ("first-calculated", "results?calculated=1"),
+         ("expert-project", "project?depth=expert"), ("expert-dataset", "data/{dataset}?depth=expert"))
 
 
 def extra_projects():
@@ -148,6 +152,18 @@ def test_selftest_and_screenshots(name, tmp_path):
             refused = step["route"].startswith("#/thm?fn=") and all("(422)" in b for b in step["errorBoxes"])
             assert not step["errorBoxes"] or refused, step
         # the THM tab: listed exactly where the project has THM content; its diagnostics drew their answers
+        # the first view: each tab of the old program's path marked as it opens, a data set's form with its rarely
+        # set fields folded, Calculate on the Plot tab
+        first = [s for s in result["steps"] if s["depth"] == "first"]
+        titles = [s["tab"] for s in first if not s["route"].startswith("#/data/") and s["route"] != "Calculate"]
+        assert titles == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
+                          "Plot"], titles
+        assert all(s["depth"] == "expert" for s in result["steps"] if s not in first), "a view not in its depth"
+        if result["chi2"] is not None:
+            opened = [s for s in first if s["route"].startswith("#/data/")]
+            assert opened and opened[0]["forms"] == 1 and opened[0]["folded"] == 1 and opened[0]["tab"] == "Segments", \
+                opened
+            assert [s["tab"] for s in first if s["route"] == "Calculate"] == ["Plot", "Plot"], first
         thm = [s for s in result["steps"] if s["route"].startswith("#/thm")]
         listed = thm[0]["tabListed"]
         assert listed == (label != "T1") or label not in ("T1", "T2"), thm[0]
@@ -171,6 +187,9 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert edit["edited"] and edit["undone"], edit
             assert edit["chi2_after"] != edit["chi2_before"] and edit["chi2_back"] == edit["chi2_before"], edit
             assert edit["rev_after"] == edit["rev_before"] + 1 and edit["rev_back"] == edit["rev_after"] + 1, edit
+            # Calculate after the edit: compared with the first view's Calculate on the text before it
+            assert edit["calculated"] and edit["calc_chi2"] == [edit["chi2_before"], edit["chi2_after"]], edit
+            assert edit["calc_total"].startswith("Δχ² ") and edit["calc_first"] and edit["calc_tab"] == "Plot", edit
         pair = result["pair"]  # a pair added with the Nucleus tab's form, removed with its button, both undone
         print(f"{label}: pair step {pair}")
         if "skipped" not in pair:

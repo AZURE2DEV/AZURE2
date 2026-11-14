@@ -5,7 +5,28 @@
 
 import { formatNumber, renderTable } from "../tables.js";
 import { button, diagnosticLine, h, section } from "../ui.js";
+import { FIRST_VIEW } from "../layout.js";
 import { recordRoute } from "./records.js";
+
+/**
+ * The next step of a project, from what it has (the first view's guide): {text, hash, label} of the first thing
+ * missing in the old program's order (pairs, levels, data, a calculation), or the way on when nothing is.  `counts`:
+ * {pairs, levels, data} (data: the records of a kind with a quantity); `evalError`: the
+ * engine's refusal to evaluate, if any.
+ */
+export function nextStep(counts, evalError, firstView = FIRST_VIEW) {
+  const view = (title) => firstView.find((v) => v.title === title)?.hash;
+  if (!counts.pairs) return { text: "Add the particle pairs: the entrance pair and every exit pair.",
+    label: "Particle Pairs", hash: view("Particle Pairs") };
+  if (!counts.levels) return { text: "Add the levels of the compound nucleus; their channels come from the pairs.",
+    label: "Levels and Channels", hash: view("Levels and Channels") };
+  if (!counts.data) return { text: "Add the data: a segment from data (a data file) or without data (a grid).",
+    label: "Segments", hash: view("Segments") };
+  if (evalError) return { text: `The engine does not calculate the project yet: ${evalError.what}`,
+    label: "Problems", hash: null };
+  return { text: "Calculate shows every data set against the model; Fit adjusts the free parameters.",
+    label: "Calculate", hash: "calculate" };
+}
 
 export async function render(ctx, el) {
   const [config, problems, history, records] = await Promise.all([ctx.api.get("/api/project/config"),
@@ -13,6 +34,16 @@ export async function render(ctx, el) {
   const msg = h("div.messages");
   el.appendChild(msg);
   el.appendChild(fileSection(ctx, msg));
+  if (!ctx.expert) {
+    // the first view: the next step, the problems, the run's settings; the rest one click away
+    el.appendChild(await nextSection(ctx, records));
+    el.appendChild(problemsSection(ctx, problems, records));
+    el.appendChild(configSection(ctx, config, msg));
+    el.appendChild(h("details.more", {}, h("summary", {}, "More: session options, history, the project's text, "
+      + "the engine"), optionsSection(ctx), historySection(ctx, history), textSection(ctx, msg),
+    engineSection(ctx)));
+    return;
+  }
   el.appendChild(problemsSection(ctx, problems, records));
   const columns = h("div.two-columns");
   columns.append(configSection(ctx, config, msg), optionsSection(ctx));
@@ -20,6 +51,22 @@ export async function render(ctx, el) {
   el.appendChild(historySection(ctx, history));
   el.appendChild(textSection(ctx, msg));
   el.appendChild(engineSection(ctx));
+}
+
+/** The next step (nextStep) with the button that takes it. */
+async function nextSection(ctx, records) {
+  const [pairs, levels] = await Promise.all([ctx.api.get("/api/project/pairs"), ctx.api.get("/api/project/levels")]);
+  // the data: records of a kind with a quantity (measured values, values on a grid, model data)
+  const dataKinds = Object.entries(ctx.schema.records).filter(([, r]) => r.fields?.quantity).map(([k]) => k);
+  const counts = { pairs: pairs.length, levels: levels.length,
+    data: records.filter((r) => dataKinds.includes(r.kind)).length };
+  const step = nextStep(counts, ctx.evalError);
+  const go = step.hash === "calculate" ? () => ctx.calculate().catch((e) => ctx.showError(e))
+    : step.hash ? () => ctx.navigate(step.hash) : null;
+  return section("Next step", h("p", {}, step.text, " ", go ? button(step.label, step.text, go, "primary") : null),
+    h("p.hint", {}, `This project: ${counts.pairs} pairs, ${counts.levels} levels, ${counts.data} segments (from `
+      + "data, without data, model data). The tabs follow the old program's order; the expert's view (top right) "
+      + "shows every tab and field."));
 }
 
 function fileSection(ctx, msg) {

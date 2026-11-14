@@ -68,6 +68,26 @@ on every background in both themes, at least 4.5:1, computed from the CSS; the a
 equal to the documentation's). Verified: `tests/pyazr/ui/` whole, 100 passed (own build `work/b-pagefv`,
 `OMP_NUM_THREADS=1`); consistency test; the documents built (55 pages).
 
+**The first view** (second commit): the page opens in the old program's path and words (Project, Particle Pairs,
+Levels and Channels, Segments, Experimental Effects, Fit, Plot: `layout.js` `FIRST_VIEW`, each a view of one of the
+page's tabs; every route keeps its meaning and marks the view it belongs to); `expert` in the header (key `e`, kept
+in the browser, `?depth=` for one view) shows the seven tabs as before. In the first view a form folds the fields the
+engine's table marks rare (`FieldDef::rare`, `Rare(...)` in `experiment/src/Schema.cpp`, written `"rare": true`: 35
+fields of 6 kinds; `tests/schema/schema_v3.json` regenerated, the reference page unchanged) under "More fields"
+unless the record sets them, and writes every field's meaning under its title; the Nucleus tab's γ decays and
+potentials, the Project tab's options, history, text and engine, and the Results tab's totals are one click away;
+the Project tab says the next step; empty pairs, levels and Data groups say what belongs there with the button that
+adds the first. **Calculate** (header, every tab, key `c`) evaluates the current text and opens the Plot tab with
+"what changed" since the last Calculate (Δχ² in total, of the objective and per data set, largest first, each row
+to its plot; the plots in that order); the status line gives the change after every edit. Where a tab is
+registered is unchanged (`app.js` `TABS`); the first view's tabs are `layout.js` `FIRST_VIEW`; a record's buttons
+are made where they were (`tabs/records.js` `recordPanel`).
+Tests: `tests/pyazr/ui/js/firstview.test.mjs`; the self-test visits every view in the expert's depth, then the
+first view's tabs, a data set's form and Calculate; after its width edit (`edit=1`) it presses Calculate, and
+`smoke_test.py` checks the comparison is the engine's χ² before and after on the Plot tab. Verified: `tests/pyazr/ui/`
+whole (99 passed, then the one long line repaired and static, node and smoke tests 19 passed), the ctests of the
+schema, `describe`, `<config>` and `project_nuclear_part` (7 passed), the consistency test, the documents built.
+
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree

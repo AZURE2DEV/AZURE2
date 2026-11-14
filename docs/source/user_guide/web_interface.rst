@@ -40,6 +40,54 @@ log in to the remote machine with the gateway as jump host (``ssh -J user@gatewa
 of the page, a browser restarted since) or with the token of another server: paste the token into the field of that
 page, or open the printed URL again.  Several projects served on one machine keep separate cookies (one per port).
 
+The first view and the expert's
+-------------------------------
+
+The page opens in its **first view**: the tabs follow the old setup program's path and words, **Project**,
+**Particle Pairs**, **Levels and Channels**, **Segments** (Segments From Data, Segments Without Data, Model
+data), **Experimental Effects** (targets, beams, detectors), **Fit** and **Plot**.  Each screen holds what its task
+needs: a field the engine's table marks as rarely set (the source, EXFOR and DOI of a data set, its pair keys,
+THM experiment, reference cross section, UPOS, a target's phase, Doppler broadening or screening, ...) waits under
+**More fields** unless the record sets it, and every field's meaning is written under its title.  The Project tab
+says what to do next (add the pairs, then the levels, then the data, then Calculate).  The γ decays and potentials,
+the session's options, the history and the project's text are one click away under **More**.
+
+Tick **expert** (top right; the key ``e``) for the expert's view: the tabs Project, Nucleus, Data, Fit, Results,
+Physics and THM with every field, as before.  The choice is kept in this browser; ``?depth=expert`` or
+``?depth=first`` in an address opens one view in that depth.  The two depths show the same project: every
+address means the same thing in both.
+
+**Calculate** (in the header on every tab; the key ``c``) asks the engine for the current text and opens the
+Plot tab with every data set, its model and its residuals, the χ² per data set and in total, and what changed
+since the last Calculate: Δχ² in total and per data set, the data set that moved most first (choose a row to go
+to its plot), and the plots in that order.  The status line also gives the change of χ² since the last Calculate
+after every edit.  The page computes no χ²: each number is the engine's, and a change is the difference of two.
+
+Six tasks, step by step
+~~~~~~~~~~~~~~~~~~~~~~~
+
+*Add a particle pair.*  **Particle Pairs** › **+ pair**: the kind (particle, photon, beta), each partner's J,
+parity, Z, mass (u) and g, the separation energy, the radius and the rest › **Add pair**.  The engine checks every
+number and says what it refuses.
+
+*Add a level and set a width free.*  **Levels and Channels** › **+ level**: J, parity, E (MeV), l max ›
+**Channels** (the channels that J^π has with the project's pairs) › tick those you want › **Add level**.  Choose
+the level, untick a channel's **fixed** and type its width (Enter sends it).
+
+*Add a data set with its file and a normalisation.*  **Segments** › **+ new**: the reaction, the quantity, the
+unit, the data file (the first rows of the file are shown once it is set), the columns, the normalisation (a value
+of its own with a mode and a prior, or a shared one) › **Apply**.
+
+*Add a target effect.*  **Experimental Effects** › **+ new**: a target (its kind, the active nucleus, the
+composition, the areal density, stopping and straggling), a beam or a detector › **Apply**; then **Segments** ›
+the data set › **Target** (or Beam, Detector) › **Apply**.
+
+*Run a fit and look at it.*  **Fit** › the method › **Run**; follow its progress; **Accept into project** ›
+**Calculate**: every data set against the new model, with what the fit changed.
+
+*Give a data set a covariance.*  **Segments** › the data set › **Covariance file**: a file of the project folder
+(``data_formats.rst``, covariance files) › **Apply**.
+
 What the page shows
 -------------------
 
