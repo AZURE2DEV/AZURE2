@@ -19,15 +19,15 @@ class LevelRow;
  * An R-matrix level  represents a specific eigenstate of the compound nucleus.
  *
  * A level carries its energy and one reduced width amplitude per channel of
- * its \f$J^\pi\f$ group, in three parallel sets that are easy to confuse:
+ * its \f$J^\pi\f$ group, in two parallel sets that are easy to confuse:
  *
  *  - **input / formal** -- GetE, GetGamma: what the nuclear input file said,
  *    in the formal R-matrix parameterization.
  *  - **fitted** -- GetFitE, GetFitGamma: the working values the minimizer
  *    moves. This is the set a calculation actually reads.
- *  - **physical / transformed** -- GetTransformE, GetTransformGamma and
- *    GetBigGamma: the observed energy, reduced width amplitude and partial
- *    width \f$\Gamma\f$ that CNuc::TransformOut produces for reporting.
+ *
+ * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
+ * ObservedLevelTable.
  *
  * Channel numbers are 1-based and index the channels of the owning JGroup, so
  * the same index means the same channel for every level in the group.
@@ -61,8 +61,6 @@ class ALevel {
   /// Is the level a final state for external capture?
   bool IsECLevel() const;
   int NumNFIntegrals() const;
-  /// Iterations CNuc::TransformOut needed to converge for this level.
-  int GetTransformIterations() const;
   /// 1-based pair number this level is the bound state of; 0 if it is not one.
   int GetECPairNum() const;
   /// Bit mask of the external-capture multipolarities feeding this level.
@@ -80,18 +78,6 @@ class ALevel {
   /// Working level energy the minimizer moves.
   double GetFitE() const;
 
-  // -- physical parameters, from TransformOut --------------------------------
-  /// Observed reduced width amplitude after the formal-to-physical transformation.
-  double GetTransformGamma(int) const;
-  /// Observed level energy after the formal-to-physical transformation.
-  double GetTransformE() const;
-  /// Observed partial width \f$\Gamma\f$ for a channel (Breit-Wigner).
-  double GetBigGamma(int) const;
-  /// The observed value of a channel as a <levels> line gives it (Gamma in eV, C in fm^-1/2, mu, Q, B, or the
-  /// Brune amplitude of a gammaIsRWA column), and its kind (azure2::physics::ObservedKind), from TransformOut.
-  double GetObservedValue(int) const;
-  unsigned char GetObservedKind(int) const;
-
   // -- external capture ------------------------------------------------------
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
   /// \f$\int_a^\infty [W_c(kr)/W_c(ka_c)]^2\f$.
@@ -105,8 +91,6 @@ class ALevel {
   double GetECEnergy() const;
   /// Factor converting this channel's reduced width amplitude to an ANC.
   double GetECConversionFactor(int) const;
-  /// External part of the reduced width amplitude for a channel.
-  complex GetExternalGamma(int) const;
 
   /// Shift function for a channel, evaluated at the resonance energy.
   double GetShiftFunction(int) const;
@@ -136,12 +120,6 @@ class ALevel {
   void SetECGamma(int, double);
   void SetECEnergy(double);
   void AddECConversionFactor(double);
-  void SetTransformGamma(int, double);
-  void SetTransformE(double);
-  void SetBigGamma(int, double);
-  void SetObserved(int, double, unsigned char);
-  void SetTransformIterations(int);
-  void SetExternalGamma(int, complex);
   void SetShiftFunction(int, double);
   void SetParkNorm(double);
   void SetShiftDerivative(int, double);
@@ -179,13 +157,11 @@ class ALevel {
   bool isinrmatrix_;
   bool energyfixed_;
   bool isECLevel_;
-  int transform_iter_;
   int ecPairNum_;
   unsigned char ecMultMask_;
   double level_e_;
   double fitlevel_e_;
   double sqrt_nf_factor_;
-  double transform_e_;
   double park_norm_ = 1.0;
   double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
   double shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
@@ -201,14 +177,9 @@ class ALevel {
   double ec_energy_ = 0.0;
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;
-  vector_r transform_gammas_;
-  vector_r big_gammas_;
-  vector_r observed_values_;
-  std::vector<unsigned char> observed_kinds_;
   vector_r shifts_;
   vector_r shift_derivs_;
   vector_r shift_derivs2_;
-  vector_c external_gammas_;
 };
 
 #endif

@@ -404,10 +404,10 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
   // Fill clone with current parameters
   clone->FillCompoundFromParams(params_->GetMinuitParams().Params());
   clone->CalcShiftFunctions(*config_);
-  clone->TransformOut(*config_);
+  const ObservedLevelTable observed = clone->TransformOut(*config_);
 
   try {
-    vector_r currentParams = clone->GetTransformParams(*config_);
+    vector_r currentParams = clone->GetTransformParams(observed);
     // Only the level parameters (and abundances) are in the physical vector; the callers convert widths only.
     if (paramIndex < 0 || paramIndex >= (int)currentParams.size()) {
       delete clone;

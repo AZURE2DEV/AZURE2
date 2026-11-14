@@ -894,17 +894,20 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
  * Performs the final parameter transformations from formal to physical parameters.
  */
 
-void CNuc::TransformOut(const Config &configure) {
-  this->TransformToBrune(configure, true);
-  this->ObservedWidths(configure);
+ObservedLevelTable CNuc::TransformOut(const Config &configure) {
+  ObservedLevelTable table = this->EmptyObservedTable();
+  this->TransformToBrune(configure, Messages::kPrint, table);
+  this->ObservedWidths(configure, table);
+  return table;
 }
 
 /*!
- * The Brune (Park) values of the fit parameters, E and gamma, in the level's transform slots: in the formal basis by
- * physics/ brune_from_formal, otherwise a copy.  report: print the warnings for levels that do not convert.
+ * The Brune (Park) values of the fit parameters, E and gamma, with N_f^-1/2 formed from them, in `table`: in the
+ * formal basis by physics/ brune_from_formal, otherwise a copy (N_f^-1/2 the fit's).  kPrint: print the warnings
+ * for levels that do not convert.
  */
 
-void CNuc::TransformToBrune(const Config &configure, bool report) {
+void CNuc::TransformToBrune(const Config &configure, Messages messages, ObservedLevelTable &table) {
   // Park (2021): the fit parameters already are the observed reduced width
   // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
   // Refresh J and the bound-state normalization for the current parameters.
@@ -914,27 +917,28 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
     for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
         ALevel *theLevel = this->Group(j)->GetLevel(la);
-        if (report && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
+        if (messages == Messages::kPrint && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
       }
   }
+  // Every level first as a copy of its fit values; the formal basis then converts the levels of the R-matrix.
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+      const ALevel *theLevel = this->Group(j)->GetLevel(la);
+      ObservedLevel &out = table.Level(j, la);
+      out.E = theLevel->GetFitE();
+      out.iterations = 0;
+      out.sqrtNF = theLevel->GetSqrtNFFactor();
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) out.gamma[ch - 1] = theLevel->GetFitGamma(ch);
+    }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
     // the fit values.  A level not in the R-matrix keeps its values.
     const phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
-    for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-        ALevel *theLevel = this->Group(j)->GetLevel(la);
-        if (theLevel->IsInRMatrix() && this->Group(j)->IsInRMatrix()) continue;
-        theLevel->SetTransformE(theLevel->GetFitE());
-        theLevel->SetTransformIterations(0);
-        for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++)
-          theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
-      }
     const CNucSystem &structure = this->SystemStructure();
     const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       const int j = structure.map.groupOfBlock[b];
-      JGroup *theJGroup = this->Group(j);
+      const JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma, B(nc);
@@ -943,65 +947,58 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
         for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetFitGamma((int)k + 1));
       }
       for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
-      const phys::LevelSet out = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
+      const phys::LevelSet converted = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
         const int la = levels[lb];
-        ALevel *theLevel = theJGroup->GetLevel(la);
-        if (report) WarnFormalToBrune(*this, configure, j, la, out, lb, nc, options);
-        theLevel->SetTransformE(out.E[lb]);
-        theLevel->SetTransformIterations(out.iterations[lb]);
-        const std::vector<double> g(out.gamma.begin() + lb * nc, out.gamma.begin() + (lb + 1) * nc);
-        for (std::size_t k = 0; k < nc; k++) theLevel->SetTransformGamma((int)k + 1, g[k]);
-        theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, 1.0, g));
+        if (messages == Messages::kPrint) WarnFormalToBrune(*this, configure, j, la, converted, lb, nc, options);
+        ObservedLevel &out = table.Level(j, la);
+        out.E = converted.E[lb];
+        out.iterations = converted.iterations[lb];
+        const std::vector<double> g(converted.gamma.begin() + lb * nc, converted.gamma.begin() + (lb + 1) * nc);
+        for (std::size_t k = 0; k < nc; k++) out.gamma[k] = g[k];
+        out.sqrtNF = SqrtNFFactor(*this, theJGroup, theJGroup->GetLevel(la), 1.0, g);
       }
     }
-  } else {
-    for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-        this->Group(j)->GetLevel(la)->SetTransformIterations(0);
-        this->Group(j)->GetLevel(la)->SetTransformE(this->Group(j)->GetLevel(la)->GetFitE());
-        for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++)
-          this->Group(j)->GetLevel(la)->SetTransformGamma(ch, this->Group(j)->GetLevel(la)->GetFitGamma(ch));
-      }
   }
-
 }
 
 /*!
- * The observed quantities of every level (cnuc_split.md section 8) from its Brune (Park) values in the transform
- * slots (TransformToBrune) and, with external capture, the external part of its photon amplitudes: physics/
- * observed_levels.  Sets the external amplitude, W (SetBigGamma) and the reported value with its kind.
+ * The observed quantities of every level (cnuc_split.md section 8) from its Brune (Park) values in `table`
+ * (TransformToBrune) and, with external capture, the external part of its photon amplitudes: physics/
+ * observed_levels.  Sets the external amplitude, W and the reported value with its kind in `table`.
  */
 
-void CNuc::ObservedWidths(const Config &configure) {
+void CNuc::ObservedWidths(const Config &configure, ObservedLevelTable &table) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool external = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE);
   const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
   const CNucSystem &all = this->SystemAllGroups();
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, all.map, configure);
   for (std::size_t b = 0; b < all.system.num_blocks(); b++) {
-    JGroup *theJGroup = this->Group(all.map.groupOfBlock[b]);
+    const int j = all.map.groupOfBlock[b];
+    const JGroup *theJGroup = this->Group(j);
     const std::vector<int> &levels = all.map.levelOfBlockLevel[b];
     const std::size_t nc = theJGroup->NumChannels();
     std::vector<double> E, gamma;
     std::vector<unsigned char> rwa;
     std::vector<phys::ExternalWidth> ext(levels.size() * nc);
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
-      ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
-      E.push_back(theLevel->GetTransformE());
+      const ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
+      ObservedLevel &out = table.Level(j, levels[lb]);
+      E.push_back(out.E);
       for (std::size_t k = 0; k < nc; k++) {
         const int ch = (int)k + 1;
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        gamma.push_back(theLevel->GetTransformGamma(ch));
+        const AChannel *theChannel = theJGroup->GetChannel(ch);
+        gamma.push_back(out.gamma[k]);
         rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
         complex externalWidth(0.0, 0.0);
         if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
             external && !(ignoreZero && theLevel->ZeroInputWidth(ch))) {
-          externalWidth = ExternalReducedWidth(*this, theJGroup, theLevel, theChannel, false, configure);
+          externalWidth = ExternalReducedWidthOfTable(*this, table, j, levels[lb], theChannel, configure);
           ext[lb * nc + k].present = true;
           ext[lb * nc + k].value = externalWidth;
         }
-        theLevel->SetExternalGamma(ch, externalWidth);
+        out.external[k] = externalWidth;
       }
     }
     const phys::ObservedLevels obs =
@@ -1009,9 +1006,10 @@ void CNuc::ObservedWidths(const Config &configure) {
                               park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
     for (std::size_t lb = 0; lb < levels.size(); lb++)
       for (std::size_t k = 0; k < nc; k++) {
-        ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
-        theLevel->SetBigGamma((int)k + 1, obs.W[lb * nc + k]);
-        theLevel->SetObserved((int)k + 1, obs.value[lb * nc + k], (unsigned char)obs.kind[lb * nc + k]);
+        ObservedLevel &out = table.Level(j, levels[lb]);
+        out.W[k] = obs.W[lb * nc + k];
+        out.value[k] = obs.value[lb * nc + k];
+        out.kind[k] = (unsigned char)obs.kind[lb * nc + k];
       }
   }
 }
@@ -1019,35 +1017,37 @@ void CNuc::ObservedWidths(const Config &configure) {
 /*!
  * The observed widths of a parameter vector, as parameters.out reports them (TransformOut without its messages):
  * particle and photon widths with the level's normalization and, with external capture, the external part of the
- * photon amplitude (physics/ observed_levels), in the levels' observed slots.  The fit state is set back to the vector
- * afterwards, since TransformToBrune also sets the bound-state normalizations from the Brune values.
+ * photon amplitude (physics/ observed_levels).  The fit state is set back to the vector afterwards, since
+ * TransformToBrune in Park's basis recomputes the shift functions and the bound-state normalizations.
  */
 
-bool CNuc::ObservedWidthsAt(const Config &configure, const vector_r &params) {
+std::optional<ObservedLevelTable> CNuc::ObservedWidthsAt(const Config &configure, const vector_r &params) {
   this->FillCompoundFromParams(params);
+  ObservedLevelTable table = this->EmptyObservedTable();
   try {
-    this->TransformToBrune(configure, false);
-    this->ObservedWidths(configure);
+    this->TransformToBrune(configure, Messages::kQuiet, table);
+    this->ObservedWidths(configure, table);
   } catch (const std::exception &) {
     this->FillCompoundFromParams(params);
-    return false;
+    return std::nullopt;
   }
   this->FillCompoundFromParams(params);
-  return true;
+  return table;
 }
 
 /* Gets the transformet parameters*/
 
-vector_r CNuc::GetTransformParams(const Config &) {
+vector_r CNuc::GetTransformParams(const ObservedLevelTable &table) const {
   // The observed values TransformOut computed (physics/ observed_levels, cnuc_split.md section 8): Gamma (eV),
   // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
   vector_r params;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->Group(j);
+    const JGroup *theJGroup = this->GetJGroup(j);
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      ALevel *theLevel = theJGroup->GetLevel(la);
-      params.push_back(theLevel->GetTransformE());
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) params.push_back(gammaDecays_->ValueOr(*this, j, la, ch, theLevel->GetObservedValue(ch)));
+      const ObservedLevel &level = table.Level(j, la);
+      params.push_back(level.E);
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
+        params.push_back(gammaDecays_->ValueOr(*this, j, la, ch, level.value[ch - 1]));
     }
   }
   // The level block only: the caller appends the abundance block of the fit's vector (AbundanceSamples::AppendTo).

@@ -141,8 +141,7 @@ struct Model {
       CNuc *c = compound->Clone();
       c->FillCompoundFromParams(all);
       c->CalcShiftFunctions(cfg);
-      c->TransformOut(cfg);
-      vector_r phys = c->GetTransformParams(cfg);
+      vector_r phys = c->GetTransformParams(c->TransformOut(cfg));
       for (int i = (int)phys.size(); i < N(); i++) phys.push_back(all[i]);
       all = phys;
       delete c;
