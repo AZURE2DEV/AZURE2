@@ -71,7 +71,12 @@ What a finished change contains
    updated in the same branch. Claude Code skills in ``.claude/skills`` that
    describe the old behaviour are corrected; skills teach use and link this
    site for behaviour, and ``tools/check_skills.py`` checks their rules
-   (``docs/upgrade/RULES.md`` §3).
+   (``docs/upgrade/RULES.md`` §3), among them that no skill names a pyazr
+   name the migration table of :doc:`../user_guide/pyazr` lists as removed.
+   A skill's scripts are run by its ``scripts/selftest.py`` on a project of
+   ``tests/``; ctest runs each as ``skill_<name>``
+   (``tests/skills/CMakeLists.txt``): a change of pyazr or the engine that
+   breaks a skill fails there.
 4. **A commit message that carries the evidence.** It says what was wrong, how
    it was tested, whether the test fails on the old build, and the numbers
    before and after where results moved.

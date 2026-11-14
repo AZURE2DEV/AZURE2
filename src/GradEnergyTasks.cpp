@@ -416,7 +416,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
   for (int q = 0; q < g; q++)
     for (int j = 1; j <= (int)rowTerms[q].size(); j++) {
       if (rowTerms[q][j - 1].empty()) continue;
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       const double n2 = (double)jg->NumLevels() * jg->NumLevels();
       costMembers += n2 * (rowTerms[q][j - 1].size() + jg->NumChannels());
       for (const BilinearTerm &t : rowTerms[q][j - 1]) {
@@ -442,7 +442,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
   std::vector<std::vector<double>> basisRe(keys.size()), basisIm(keys.size());
   for (size_t k = 0; k < keys.size(); k++) {
     const int j = keys[k].j;
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     const int n = jg->NumLevels(), nch = jg->NumChannels();
     for (int part = 0; part < 2; part++) {
       std::vector<double> &block = part ? basisIm[k] : basisRe[k];
@@ -469,7 +469,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
         const int k = keyOf[q][t++];
         const double a = std::real(term.beta), b = std::imag(term.beta);
         const std::vector<double> &re = basisRe[k], &im = basisIm[k];
-        JGroup *jg = compound->GetJGroup(j);
+        const JGroup *jg = compound->GetJGroup(j);
         const int n = jg->NumLevels(), nch = jg->NumChannels();
         for (int la = 0; la < n; la++) {
           acc.e[j - 1][la] += a * re[la] + b * im[la];

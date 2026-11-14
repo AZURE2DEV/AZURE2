@@ -21,9 +21,9 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystem
   CNuc *cn = &compound;
   const CNucSystemMap m = map;
   return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
-    JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
-    AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
-    PPair *pair = cn->GetPair(channel->GetPairNum());
+    const JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
+    const AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
+    const PPair *pair = cn->GetPair(channel->GetPairNum());
     const double Ec = E - pair->GetSepE() - pair->GetExE();  // (E_x - S) - e, as at a data point
     const int l = channel->GetL();
     const int twoJ = pair->SpinOrbitTwoJ(group->GetJ());
@@ -65,13 +65,13 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystem
 }
 
 phys::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSystemMap &map, std::size_t b) {
-  JGroup *group = filled.GetJGroup(map.groupOfBlock.at(b));
+  const JGroup *group = filled.GetJGroup(map.groupOfBlock.at(b));
   const std::vector<int> &levels = map.levelOfBlockLevel.at(b);
   const std::vector<int> &channels = map.channelOfBlockChannel.at(b);
   phys::ProjectLevels out;
   out.form = phys::ProjectLevels::Form::Observed;
   for (int la : levels) {
-    ALevel *level = group->GetLevel(la);
+    const ALevel *level = group->GetLevel(la);
     out.E.push_back(level->GetE());
     for (int ch : channels) {
       out.value.push_back(level->GetGamma(ch));
@@ -83,14 +83,14 @@ phys::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSystemMap &map
 
 std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CNucSystemMap &map, std::size_t b,
                                                         const Config &configure) {
-  JGroup *group = compound.GetJGroup(map.groupOfBlock.at(b));
+  const JGroup *group = compound.GetJGroup(map.groupOfBlock.at(b));
   const std::vector<int> &levels = map.levelOfBlockLevel.at(b);
   const std::vector<int> &channels = map.channelOfBlockChannel.at(b);
   std::vector<phys::ExternalWidth> out(levels.size() * channels.size());
   if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return out;
   for (std::size_t la = 0; la < levels.size(); la++)
     for (std::size_t k = 0; k < channels.size(); k++) {
-      AChannel *channel = group->GetChannel(channels[k]);
+      const AChannel *channel = group->GetChannel(channels[k]);
       if (channel->GetRadType() != 'E' && channel->GetRadType() != 'M') continue;
       // --ignore-externals: a channel whose input width is zero has no external part (external_capture.md
       // section 3); gamma^ext is not evaluated.

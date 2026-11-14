@@ -126,8 +126,6 @@ class ALevel {
   void SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLine);
   /// Pad the width vectors with zero, fixed widths up to n channels.
   void PadChannels(int n);
-  /// Number of channels the width vectors hold.
-  int NumGammas() const { return (int)gammas_.size(); }
   void SetGamma(int, double);
   void SetZeroInputWidth(int, bool);
   void SetE(double);
@@ -146,7 +144,6 @@ class ALevel {
   void SetExternalGamma(int, complex);
   void SetShiftFunction(int, double);
   void SetParkNorm(double);
-  void SetShiftDerivatives(int, double, double);
   void SetShiftDerivative(int, double);
   void SetShiftSecondDerivative(int, double);
   /// Energy at which the shift functions (and their derivatives) were last

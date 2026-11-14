@@ -436,16 +436,6 @@ double ALevel::GetShiftSecondDerivative(int channelNum) const {
   return shift_derivs2_[channelNum - 1];
 }
 
-/*!
- * Stores the first and second energy derivatives of a channel's shift
- * function at the level energy.
- */
-
-void ALevel::SetShiftDerivatives(int channelNum, double first, double second) {
-  shift_derivs_[channelNum - 1] = first;
-  shift_derivs2_[channelNum - 1] = second;
-}
-
 void ALevel::SetShiftDerivative(int channelNum, double first) {
   shift_derivs_[channelNum - 1] = first;
 }

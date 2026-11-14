@@ -35,8 +35,8 @@ enum class CNucSystemContent {
   /// The level parameters and B_c the CNuc holds; the CNuc must have been initialized (below).
   Parameters,
   /// The structure only: every block with its channels, B_c = 0 and no levels; the map still lists the block's
-  /// R-matrix levels.  Any state after CNuc::Fill.  This is what CNuc::CalcBoundaryConditions and CNuc::TransformIn
-  /// hand to physics/ level_parameters, which takes the level values as separate arguments.
+  /// R-matrix levels.  Any state after CNuc::Fill.  This is CNuc::SystemStructure, what CNuc::CalcBoundaryConditions
+  /// and CNuc::TransformIn hand to physics/ level_parameters, which takes the level values as separate arguments.
   Structure,
   /// As Structure, but with every J-group and level, also those outside the R-matrix (a group made only to hold an
   /// external-capture final state): the observed quantities (CNuc::ObservedWidths) are reported for all of them.
@@ -47,8 +47,8 @@ enum class CNucSystemContent {
 /*!
  * Builds the System from a CNuc after CNuc::Fill and CNuc::Initialize (boundary conditions set and, unless
  * --no-transform, the input parameters transformed in); with CNucSystemContent::Structure, after CNuc::Fill alone.
- * Reads only; the CNuc is not modified (its accessors are not const, hence the non-const reference).  The engine
- * uses the structure (CNuc::CalcBoundaryConditions, CNuc::TransformIn); the full System is used by the tests.
+ * Reads only.  The engine builds the structure and all groups once, at the end of CNuc::Fill (CNuc::SystemStructure,
+ * CNuc::SystemAllGroups), and every reader takes those; the full System is used by the tests.
  *
  * What is taken, and from where:
  *  - nuclei: CNuc::GetNucleus (Z, A), in CNuc order;
@@ -66,7 +66,7 @@ enum class CNucSystemContent {
  * still the file's widths), when a spin is not a multiple of 1/2, or for a pair type or radiation type the System has
  * no kind for; std::invalid_argument from the System's own checks.
  */
-CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure,
+CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure,
                                CNucSystemContent content = CNucSystemContent::Parameters);
 
 #endif

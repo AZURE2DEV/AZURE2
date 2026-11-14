@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "AZUREParams.h"
+#include "ProjectSetup.h"
 #include "DataSet.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -192,6 +193,7 @@ int RunProject(const std::string &path, bool externalCapture) {
     check("loads", false, sink.str().substr(0, 400));
     return 1;
   }
+  RequestDataEntrances(compound, cfg);
   compound.Initialize(cfg);
   compound.FillMnParams(params, &cfg);
   data.FillMnParams(params);
@@ -211,6 +213,7 @@ int RunProject(const std::string &path, bool externalCapture) {
     AZUREParams params2;
     const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2) != -1 && data2.Fill(cfg2, &compound2) == 0;
     if (loaded) {
+      RequestDataEntrances(compound2, cfg2);
       compound2.Initialize(cfg2);
       compound2.FillMnParams(params2, &cfg2);
       data2.FillMnParams(params2);

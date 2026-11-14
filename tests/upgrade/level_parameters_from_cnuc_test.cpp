@@ -113,7 +113,7 @@ bool IsPhoton(const phys::System &s, int c) {
 
 // Amplitudes of a block as the CNuc's levels hold them.
 std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b, bool transformOut) {
-  JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
+  const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
   std::vector<double> out;
   for (int la : map.levelOfBlockLevel[b])
     for (int ch : map.channelOfBlockChannel[b])
@@ -121,7 +121,7 @@ std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b,
   return out;
 }
 std::vector<double> CNucE(CNuc &cn, const CNucSystemMap &map, std::size_t b, bool transformOut) {
-  JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
+  const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
   std::vector<double> out;
   for (int la : map.levelOfBlockLevel[b]) out.push_back(transformOut ? g->GetLevel(la)->GetTransformE() : g->GetLevel(la)->GetE());
   return out;
@@ -186,7 +186,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     CNuc &cn = refF->compound;
     for (int j = 1; j <= cn.NumJGroups(); j++)
       for (int la = 1; la <= cn.GetJGroup(j)->NumLevels(); la++) {
-        ALevel *lev = cn.GetJGroup(j)->GetLevel(la);
+        ALevel *lev = cn.MutableLevel(j, la);
         lev->SetFitE(lev->GetE());
         for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) lev->SetFitGamma(ch, lev->GetGamma(ch));
       }
@@ -223,7 +223,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     const std::vector<double> gP = CNucGamma(refP->compound, map, b, false);
     for (std::size_t i = 0; i < gP.size(); i++) parkG.add(pp.basis_gamma[i], gP[i], std::fmax(std::fabs(gP[i]), 1e-300));
     {
-      JGroup *g = refP->compound.GetJGroup(map.groupOfBlock[b]);
+      const JGroup *g = refP->compound.GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++)
         parkJ.add(pp.park_norm[la], g->GetLevel(map.levelOfBlockLevel[b][la])->GetParkNorm(), 1.0);
     }
@@ -260,11 +260,11 @@ void CheckProject(const std::string &name, const std::string &azr) {
     }
     // emul: group b becomes formal for the later groups.
     {
-      JGroup *ge = emul->compound.GetJGroup(map.groupOfBlock[b]);
-      JGroup *gf = refF->compound.GetJGroup(map.groupOfBlock[b]);
+      const JGroup *gf = refF->compound.GetJGroup(map.groupOfBlock[b]);
       for (int la : map.levelOfBlockLevel[b]) {
-        ge->GetLevel(la)->SetE(gf->GetLevel(la)->GetE());
-        for (int ch : map.channelOfBlockChannel[b]) ge->GetLevel(la)->SetGamma(ch, gf->GetLevel(la)->GetGamma(ch));
+        ALevel *level = emul->compound.MutableLevel(map.groupOfBlock[b], la);
+        level->SetE(gf->GetLevel(la)->GetE());
+        for (int ch : map.channelOfBlockChannel[b]) level->SetGamma(ch, gf->GetLevel(la)->GetGamma(ch));
       }
     }
 
@@ -282,7 +282,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       const phys::LevelSet back = phys::brune_from_formal(sys, b, EF, gF, builtF.system.block(b).B(), cf);
       const std::vector<double> gOut = CNucGamma(refF->compound, map, b, true), EOut = CNucE(refF->compound, map, b, true);
       const double scaleO = MaxAbs(gOut);
-      JGroup *g = refF->compound.GetJGroup(map.groupOfBlock[b]);
+      const JGroup *g = refF->compound.GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++) {
         outE.add(back.E[la], EOut[la], std::fabs(EOut[la]));
         for (std::size_t k = 0; k < nc; k++) outG.add(back.gamma[la * nc + k], gOut[la * nc + k], scaleO);

@@ -161,8 +161,8 @@ void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
  */
 
 double Site::CompoundEnergy(CNuc *theCNuc) {
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
   if (entrancePair->GetPType() == 20) return this->GetCMEnergy() + exitPair->GetSepE() + exitPair->GetExE();
   return this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
 }
@@ -170,15 +170,15 @@ double Site::CompoundEnergy(CNuc *theCNuc) {
 void Site::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
   // The walk of CalcEDependentValues: the blocks of the entrance pair's compound nucleus, their particle channels,
   // E_c by the same expression; the exact threshold of a scattering length is not a row.
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   const double inEnergy = this->CompoundEnergy(theCNuc);
   const int nucleus = entrancePair->GetNucleus();
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-    JGroup *theJGroup = theCNuc->GetJGroup(j);
+    const JGroup *theJGroup = theCNuc->GetJGroup(j);
     if (!theJGroup->IsInRMatrix() || theJGroup->GetNucleus() != nucleus) continue;
     for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-      AChannel *theChannel = theJGroup->GetChannel(ch);
-      PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
+      const AChannel *theChannel = theJGroup->GetChannel(ch);
+      const PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
       if (thePair->GetPType() != 0) continue;
       double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
       if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) continue;
@@ -189,8 +189,8 @@ void Site::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTabl
 
 void Site::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kEDependent);
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 
   double inEnergy;
   double geofactor;
@@ -249,7 +249,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &
   const int nucleus = entrancePair->GetNucleus();
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;
   // ownRows: the distinct rows this point used, from the tables or computed; rows->used receives them once.
-  auto channelRow = [&](int pairNum, PPair *pair, int l, int two_j, double e) -> ChannelTable::Row {
+  auto channelRow = [&](int pairNum, const PPair *pair, int l, int two_j, double e) -> ChannelTable::Row {
     const ChannelTable::Key key{pairNum, l, two_j, e};
     for (const auto &kr : ownRows)
       if (kr.first == key) return kr.second;
@@ -260,10 +260,10 @@ void Site::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
     if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
     if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == nucleus) {
-      JGroup *theJGroup = theCNuc->GetJGroup(j);
+      const JGroup *theJGroup = theCNuc->GetJGroup(j);
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
+        const AChannel *theChannel = theJGroup->GetChannel(ch);
+        const PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
@@ -586,7 +586,7 @@ void Site::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift
  * Calculates the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-void Site::CoulombAmplitudesAt(PPair *entrancePair, double energy, double angle, complex &direct, complex &exchange,
+void Site::CoulombAmplitudesAt(const PPair *entrancePair, double energy, double angle, complex &direct, complex &exchange,
                                bool &spinDependent) {
   int z1 = entrancePair->GetZ(1);
   int z2 = entrancePair->GetZ(2);
@@ -625,7 +625,7 @@ void Site::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
   // A slot without an angle has no Coulomb amplitude: its readers hold theirs (RowSet.h).
   if (is_sub_point_ && AngleFree()) return;
   if (this->GetEntranceKey() == this->GetExitKey()) {
-    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
     complex direct, exchange;
     CoulombAmplitudesAt(entrancePair, this->GetCMEnergy(), this->GetCMAngle(), direct, exchange, spinDependentCoulomb_);
     if (spinDependentCoulomb_) coulombdirect_ = direct, coulombexchange_ = exchange;

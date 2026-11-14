@@ -49,16 +49,16 @@ void ThrowIfFailed(const phys::LevelSet &set) {
 }
 }  // namespace
 
-double SqrtNFFactor(CNuc &compound, JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma) {
+double SqrtNFFactor(CNuc &compound, const JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma) {
   std::vector<phys::BoundChannel> channels;
   for (int ch = 1; ch <= group->NumChannels() && ch <= level->NumNFIntegrals(); ch++) {
-    PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
+    const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
     channels.push_back({pair->GetChRad(), pair->GetRedMass(), gamma[ch - 1], level->GetNFIntegral(ch)});
   }
   return 1.0 / std::sqrt(phys::bound_state_normalization(n0, channels));
 }
 
-std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, AChannel *channel) {
+std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, const AChannel *channel) {
   const char type = channel->GetRadType();
   if (type != 'E' && !(type == 'M' && channel->GetL() == 1)) return {0, 0};
   for (int j = 1; j <= compound.NumJGroups(); j++)
@@ -75,7 +75,7 @@ std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, AChannel *channel)
   return {0, 0};
 }
 
-complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel, std::pair<int, int> finalState,
+complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChannel *channel, std::pair<int, int> finalState,
                                const ExternalCaptureInputs &values, const Config &configure,
                                ExternalCaptureSlopes *slopes) {
   if (slopes) {
@@ -85,23 +85,23 @@ complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel,
   if (finalState.first == 0) return complex(0.0, 0.0);
   const char type = channel->GetRadType();
   const int L = channel->GetL();
-  JGroup *finalGroup = compound.GetJGroup(finalState.first);
-  ALevel *finalLevel = finalGroup->GetLevel(finalState.second);
+  const JGroup *finalGroup = compound.GetJGroup(finalState.first);
+  const ALevel *finalLevel = finalGroup->GetLevel(finalState.second);
   std::vector<phys::CaptureChannel> in;
-  std::vector<AChannel *> inChannels;
+  std::vector<const AChannel *> inChannels;
   std::vector<int> inNumber;
   for (int ch = 1; ch <= group->NumChannels(); ch++) {
-    AChannel *c = group->GetChannel(ch);
+    const AChannel *c = group->GetChannel(ch);
     if (c->GetRadType() != 'P') continue;
     in.push_back({c->GetPairNum(), c->GetL(), c->GetS(), values.levelGamma[ch - 1]});
     inChannels.push_back(c);
     inNumber.push_back(ch);
   }
   std::vector<phys::FinalChannel> out;
-  std::vector<AChannel *> outChannels;
+  std::vector<const AChannel *> outChannels;
   std::vector<int> outNumber;
   for (int chp = 1; chp <= finalGroup->NumChannels(); chp++) {
-    AChannel *c = finalGroup->GetChannel(chp);
+    const AChannel *c = finalGroup->GetChannel(chp);
     if (c->GetRadType() != 'P') continue;
     // s_fc = gamma~_fc N_f^(-1/2) K_c (Eq. 2), in the engine's order.
     out.push_back({c->GetPairNum(), c->GetL(), c->GetS(),
@@ -139,7 +139,7 @@ complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel,
   return value;
 }
 
-complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChannel *channel, bool initial,
+complex ExternalReducedWidth(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel, bool initial,
                              const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
@@ -164,7 +164,7 @@ complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChan
  * Brune amplitude, the residue of its own pole, is what external capture needs.  Setup state, shared by the clones.
  */
 struct CNuc::ECFinalBlocks {
-  CNucSystem structure;
+  std::shared_ptr<const CNucSystem> structure;
   std::vector<std::size_t> blocks;
   bool gslCoulomb = false, rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
@@ -175,21 +175,21 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   // The final state's energy in external capture (the photon energy, the bound-state wave): its Brune energy, the
   // level energy now except in the formal basis (below).
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
-      if (this->GetJGroup(j)->GetLevel(la)->IsECLevel())
-        this->GetJGroup(j)->GetLevel(la)->SetECEnergy(this->GetJGroup(j)->GetLevel(la)->GetE());
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
+      if (this->Group(j)->GetLevel(la)->IsECLevel())
+        this->Group(j)->GetLevel(la)->SetECEnergy(this->Group(j)->GetLevel(la)->GetE());
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE))
     return;
   auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
-      BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
+      this->SystemStructureHandle(), {},
       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
       configure.printedOnce});
-  for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
-    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
+  for (std::size_t b = 0; b < record->structure->system.num_blocks(); b++) {
+    const std::vector<int> &levels = record->structure->map.levelOfBlockLevel[b];
     // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
     // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3), as long as its
     // energy stays there.  So does the only level of a block.
-    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
+    const JGroup *group = this->Group(record->structure->map.groupOfBlock[b]);
     std::size_t lowest = 0;
     for (std::size_t lb = 1; lb < levels.size(); lb++)
       if (group->GetLevel(levels[lb])->GetE() < group->GetLevel(levels[lowest])->GetE()) lowest = lb;
@@ -204,11 +204,11 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   if (record->blocks.empty()) return;
   ecFinalBlocks_ = record;
   // The Brune energies of their final states, from the formal parameters (EvaluationIteration).
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure.map, record->gslCoulomb, record->rmc);
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure->map, record->gslCoulomb, record->rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : record->blocks) {
-    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
-    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
+    JGroup *group = this->Group(record->structure->map.groupOfBlock[b]);
+    const std::vector<int> &levels = record->structure->map.levelOfBlockLevel[b];
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
@@ -216,7 +216,7 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
       for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetGamma((int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(record->structure.system, b, E, gamma, B, cf, options);
+    const phys::LevelSet brune = phys::brune_from_formal(record->structure->system, b, E, gamma, B, cf, options);
     ThrowIfFailed(brune);
     WarnOnce(brune, record->printedOnce);
     for (std::size_t lb = 0; lb < levels.size(); lb++)
@@ -231,11 +231,11 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
  */
 void CNuc::ECFinalStatesFromFormal() {
   const ECFinalBlocks &r = *ecFinalBlocks_;
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
-    JGroup *group = this->GetJGroup(r.structure.map.groupOfBlock[b]);
-    const std::vector<int> &levels = r.structure.map.levelOfBlockLevel[b];
+    JGroup *group = this->Group(r.structure->map.groupOfBlock[b]);
+    const std::vector<int> &levels = r.structure->map.levelOfBlockLevel[b];
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
@@ -243,7 +243,7 @@ void CNuc::ECFinalStatesFromFormal() {
       for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, b, E, gamma, B, cf, options);
+    const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, b, E, gamma, B, cf, options);
     WarnOnce(brune, r.printedOnce);
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
       ALevel *level = group->GetLevel(levels[lb]);
@@ -261,7 +261,7 @@ void CNuc::ECFinalStatesFromFormal() {
  * themselves are recomputed with the fit parameters (FormalCaptureMasksFromParams).
  */
 struct CNuc::CaptureMaskSetup {
-  CNucSystem structure;
+  std::shared_ptr<const CNucSystem> structure;
   struct Slot {
     std::size_t block;
     int group, channel;
@@ -278,10 +278,10 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
       !(configure.paramMask & Config::TRANSFORM_PARAMETERS))
     return;
   auto setup = std::make_shared<CaptureMaskSetup>(CaptureMaskSetup{
-      BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
+      this->SystemStructureHandle(), {},
       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
       configure.printedOnce});
-  const CNucSystemMap &map = setup->structure.map;
+  const CNucSystemMap &map = setup->structure->map;
   for (int p = 1; p <= this->NumPairs(); p++) {
     const azure2::EntrancePathways &P = this->Pathways().Entrance(p);
     for (const azure2::ExternalRow &ec : P.external) {
@@ -312,12 +312,12 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
  */
 void CNuc::FormalCaptureMasksFromParams() {
   const CaptureMaskSetup &r = *captureMaskSetup_;
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(true);
   for (std::size_t i = 0; i < r.slots.size(); i++) {
     const CaptureMaskSetup::Slot &s = r.slots[i];
     CaptureMask &mask = captureMasks_[i];
-    JGroup *group = this->GetJGroup(s.group);
+    JGroup *group = this->Group(s.group);
     const std::size_t n = mask.levels.size(), nc = group->NumChannels();
     std::vector<unsigned char> masked(n, 0);
     bool any = false;
@@ -339,7 +339,7 @@ void CNuc::FormalCaptureMasksFromParams() {
       for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, s.block, E, gamma, B, cf, options);
+    const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, s.block, E, gamma, B, cf, options);
     WarnOnce(brune, r.printedOnce);
     mask.projector = phys::capture_mask(brune.transform, n, masked);
   }
@@ -353,7 +353,7 @@ void CNuc::FormalCaptureMasksFromParams() {
 bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) {
   for (const CaptureMask &mask : captureMasks_) {
     if (!mask.projector.empty()) return true;
-    JGroup *group = this->GetJGroup(mask.group);
+    JGroup *group = this->Group(mask.group);
     for (int la : mask.levels) {
       if (!group->GetLevel(la)->ZeroInputWidth(mask.channel)) continue;
       for (int ch = 1; ch <= group->NumChannels(); ch++)
@@ -364,7 +364,7 @@ bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, i
 }
 
 /// Has level `la` of `group` a particle amplitude other than zero (current fit values)?
-bool CNuc::MaskedLevelCoupled(JGroup *group, int la) const {
+bool CNuc::MaskedLevelCoupled(const JGroup *group, int la) const {
   for (int ch = 1; ch <= group->NumChannels(); ch++)
     if (group->GetChannel(ch)->GetRadType() == 'P' && group->GetLevel(la)->GetFitGamma(ch) != 0.0) return true;
   return false;
@@ -377,7 +377,7 @@ const CNuc::CaptureMask *CNuc::FormalCaptureMask(int group, int channel) const {
 }
 
 void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum) {
-  PPair *pair = compound.GetPair(pairNum);
+  const PPair *pair = compound.GetPair(pairNum);
   configure.outStream << "ERROR: external capture into pairs " << otherPairKey
                       << " and " << pair->GetPairKey() << ": both have the final state J^pi = " << pair->GetJ(2)
                       << (pair->GetPi(2) > 0 ? "+" : "-") << " at E_x = " << pair->GetHeavyExE() << " MeV (level " << level

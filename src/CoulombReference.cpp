@@ -25,7 +25,7 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
                              const Config &configure) {
   if (!experiment::IsCoulombReference(part))
     throw std::logic_error("CoulombReferenceValue: the leaf is not a Coulomb reference");
-  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
   const physics::ChannelKinematics kin = Kinematics::Channel(pair).Physics();
   const int twoS = static_cast<int>(std::lround(2.0 * pair->GetJ(1)));
   const bool mott = part == experiment::LeafPart::Mott;
@@ -49,7 +49,7 @@ double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &
 }
 
 double SFactorConversionValue(const Site *point, CNuc *compound, double shape_perMeV) {
-  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
   return physics::modified_sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy(), shape_perMeV);
 }
 

@@ -96,7 +96,7 @@ __attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
  * g^2 = m1 m3 E / (m2 m4 (E + Q)) (E the c.m. energy; the same g as ConvertLabAngle's a13/a24); relativistic=1:
  * the c.m. boost gamma and beta / beta_3* of RelativisticLabToCM.  Returns false where the transform is not used.
  */
-bool Site::QLabBoostAt(double ti, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
+bool Site::QLabBoostAt(double ti, const PPair *entrancePair, const PPair *exitPair, double &g, double &gb) const {
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   if (ti <= 0.0 || tf <= 0.0) return false;
   if (entrancePair->FunctionSettings().relativistic) {
@@ -150,8 +150,8 @@ void Site::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
 
 bool Site::RowDependsOnEnergy(CNuc *theCNuc, const TargetEffect *targetEffect) const {
   if (!targetEffect || targetEffect->NumQCoefficients() <= 0 || !theCNuc) return false;
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
   const bool elastic = this->GetEntranceKey() == this->GetExitKey();
   const bool charged = entrancePair->GetZ(1) != 0 && entrancePair->GetZ(2) != 0;
   return entrancePair->GetPType() == 0 && exitPair->GetPType() == 0 && !this->IsUPOS() && !this->IsAnalyzingPower() &&
@@ -168,8 +168,8 @@ void Site::LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *theCNu
   LegendreSeries(maxL, x, p);
   const int numQ = targetEffect ? targetEffect->NumQCoefficients() : 0;
   if (numQ > 0) {
-    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+    const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
     double g = 0.0, gb = 1.0;
     const bool labTransform =
         this->RowDependsOnEnergy(theCNuc, targetEffect) && this->QLabBoostAt(cmEnergy, entrancePair, exitPair, g, gb);

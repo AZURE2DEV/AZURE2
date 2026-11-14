@@ -108,6 +108,6 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  * \param p      half-off-shell momentum (fm^-1)
  * \param useGSL kept for the interface; has no effect (see above)
  */
-complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL);
+complex ThmCoulombTerm(const PPair *pair, int l, double E, double p, bool useGSL);
 
 #endif

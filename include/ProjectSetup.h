@@ -7,6 +7,7 @@
 
 #include "azure2/io/LevelRows.h"
 
+class CNuc;
 class Config;
 
 /*!
@@ -21,6 +22,12 @@ std::set<int> ProjectExitPairKeys(const Config &);
 /// The (entrance, exit) pair keys of every term (the leading one and the components of a SUM or RATIO) of the active
 /// data sets (`data`) or extrapolations, in order.
 std::vector<std::pair<int, int>> ProjectReactionPairs(const Config &, bool data);
+/// The entrance pairs of a run with data: the entrance pair of every term (the leading one and the components of a SUM
+/// or RATIO) of the active data sets, requested on `compound` (CNuc::RequestEntrance) before CNuc::Initialize builds
+/// the pathway table from them.  A key that names no pair is passed over (the data set-up refuses or skips its set).
+void RequestDataEntrances(CNuc &compound, const Config &);
+/// The same for a run without data: the terms of the active extrapolations.
+void RequestExtrapolationEntrances(CNuc &compound, const Config &);
 /// An active data set with a THM observable.
 bool ProjectHasThmData(const Config &);
 

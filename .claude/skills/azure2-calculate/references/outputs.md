@@ -31,13 +31,14 @@ e = col7/n, c = col4,
     u* = Σ(c d / e²) / Σ(c² / e²),     n* = 1/u*.
 
 A large χ²/N that no n* removes is a shape problem, not a normalization one: compare the fit column's energy or
-angular shape with the data's. A segment's blocks appear among the active segments of that entrance/exit pair in
-`<segmentsData>` order, separated by blank lines.
+angular shape with the data's. A data set's block appears among the active data sets of that entrance/exit pair in file order, separated by
+blank lines.
 
-## Segment keys
+## Data-set numbers
 
-A segment's key is its 1-based position among all `<segmentsData>` lines, inactive ones included: the key
-`<targetInt>` binds to and `chiSquared.out` and `normalizations.out` print. Quote those files, not a count by eye.
+`chiSquared.out` and the `AZUREOut_*` blocks number the data sets by their position among the `dataset` records,
+inactive ones included: the `key` that `AZURE2 --describe` prints and `Evaluation.data[i].segment_key`. Quote those,
+not a count by eye; inside pyazr use the name (`d.name`).
 
 ## `param.fit`: an autosave of an evaluated point, not of the best point
 
@@ -49,13 +50,14 @@ from it: azure2-fit.
 
 ## `normalizations.out`
 
-A report only: nothing reads it back; fitted norms travel in `param.sav`. Files from builds before 2026-10-27 (expires: 2027-02-01)
- carry a malformed six-field row for every fixed-norm segment: read the ten-field rows only.
+A report only: nothing reads it back; fitted norms travel in `param.sav`.
+builds before 2026-10-27 (expires: 2027-02-01) wrote a malformed six-field row for every fixed norm: read the
+ten-field rows only.
 
 ## Writing the files from pyazr
 
-`m.write_output_files(x)` writes `AZUREOut_*` and `chiSquared.out` into the existing output directory, after a χ²
+`s.write_output_files(x)` writes `AZUREOut_*` and `chiSquared.out` into the existing output directory, after a χ²
 evaluation at `x` (a bare forward pass would leave zeros in `chiSquared.out`). It also writes the Park, abundance and
 scattering-length penalty totals. It does not write `param.par` (initialisation) or `parameters.out` (end of a CLI
-run); use `m.transform_rwa(x)` for those numbers.
+run); use `s.transform_rwa(x)` for those numbers.
 

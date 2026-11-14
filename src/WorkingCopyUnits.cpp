@@ -118,8 +118,8 @@ std::vector<int> WorkingCopy::LabFrameRules(CNuc *theCNuc, std::vector<azure2::e
   for (const Segment &segment : Data().GetSegments())
     for (int t = 0; t < segment.NumTerms(); t++) {
       if (!theCNuc->IsPairKey(segment.TermEntranceKey(t))) continue;
-      PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.TermEntranceKey(t)));
-      PPair *exit = theCNuc->GetPairFromKey(segment.TermExitKey(t));  // nullptr for total capture (-1)
+      const PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.TermEntranceKey(t)));
+      const PPair *exit = theCNuc->GetPairFromKey(segment.TermExitKey(t));  // nullptr for total capture (-1)
       const azure2::experiment::FrameRule rule = segment.TermFrameRule(t, entrance, exit);
       if (!azure2::experiment::AngleIsLab(rule)) continue;
       rules.push_back(rule);
@@ -208,7 +208,7 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
     const bool ay = p.Observable() == SiteObservable::kAnalyzingPower;
     const bool elastic = p.Observable() == SiteObservable::kElastic || (ay && p.GetEntranceKey() == p.GetExitKey());
     const azure2::experiment::FrameRule *lab = ruleOf[(std::size_t)u] >= 0 ? &rules[(std::size_t)ruleOf[u]] : nullptr;
-    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
+    const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
     readers++;
     const azure2::RowSet *set = p.RowSetOf();
     if (!set || p.RowSetIndex(1) < 0 || p.RowSetIndex(p.NumSubPoints()) >= set->count ||

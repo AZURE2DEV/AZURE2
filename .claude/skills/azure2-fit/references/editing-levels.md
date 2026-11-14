@@ -50,7 +50,7 @@ Rules:
 - **Adding or removing data sets invalidates the external-capture cache.** After `add_dataset`, `remove`, or an
   extrapolation change, delete `output/intEC.dat` and `output/intEC.extrap` before the next run, or give the edited
   model its own output directory (`p.set_config(output_dir="out2/")`); otherwise the engine may reuse integrals
-  computed for the old grids. In a live session `azr.recalculate_external_capture()` forces a recompute
+  computed for the old grids. In a live session `s.recalculate_external_capture()` forces a recompute
   (`pyazr/examples/edit_model.py`).
 - Data-set parameters are named by record (`meyer_84.norm`), so adding or removing a data set renames nothing else;
   deactivating one (`p.set(name, active="no")`) keeps its rows of `<parameterSettings>` for when it comes back
@@ -59,16 +59,17 @@ Rules:
 ## `save_fit`: snapshot a fit
 
 ```python
-azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
-azr, sav = m.save_fit("7Be_fit.azr", x_best)  # or an explicit free vector
+azr, sav = s.save_fit("7Be_fit.azr")          # current parameters
+azr, sav = s.save_fit("7Be_fit.azr", x_best)  # or an explicit free vector
 ```
 
-`m.save_fit(path, x=None)` writes the `.azr` and the companion `param.sav`, then verifies: it reopens what it wrote and
+`s.save_fit(path, x=None)` writes the `.azr` and the companion `param.sav`, then verifies: it reopens what it wrote and
 compares the physical values transformed back, and the reduced-width amplitudes the file reads for the particle and
 β channels of each level, against the fit's (up to a common sign of a level, which the standard parametrization may
 flip). If either disagrees it removes both files and raises. `path` is explicit; nothing is written in place. It
 writes every level parameter at its current observed value (`transform_all_rwa(full, free_only=False)`,
-`place_level_values`, fixed parameters included), so the re-read is exact; `load_sav` of the companion `.sav` gives the same.
+`place_level_values`, fixed parameters included), so the re-read is exact; `load_sav` of the companion `.sav` gives the
+same.
 
 - **Fixed parameters are fixed in reduced-width space, not in what the file shows.** A fixed channel's observed width
   or ANC moves whenever the free widths of the same level move (Brune's factor 1 + Σγ² dS/dE, the external width), and
@@ -88,17 +89,18 @@ writes every level parameter at its current observed value (`transform_all_rwa(f
   external-capture amplitudes keep their grids; `docs/source/user_guide/experimental_effects.rst`). With replacement a
   fresh load and a running session agree (one model: 25,776.076357 from either file).
   builds before 2026-10-19 (expires: 2027-02-01) placed the grid once from the file's levels, so a fit with narrow
-  levels under `<targetInt>` minimized against the start model's grid; re-evaluate such a fit's end point in a current
-  session before comparing.
+  levels under a target integration minimized against the start model's grid; re-evaluate such a fit's end point in a
+  current session before comparing.
   builds before 2026-10-22 (expires: 2027-02-01) also integrated the tail of a level much narrower than the coarse step
   badly (χ² oscillating with a 10 eV period in E_level, analytic gradient of the wrong sign); there, a wide fine region
   (Width Mult. 200, Pts/Width 5) is the work-around. If χ² oscillates or gradient checks fail in one narrow level's
-  energy under `<targetInt>`, suspect the grid before the physics.
+  energy under a target integration, suspect the grid before the physics.
 - **The verify tolerance (`rtol=1e-4`) can hide fragility.** The rwa ↔ physical conversion for an open channel is
   reproducible between sessions to 10⁻⁷–10⁻⁶ relative. Near a destructive-interference minimum (a broad, high-lying
   background pole feeding a low-energy capture channel) that noise can move a data set's χ² by orders of magnitude: a
   5 × 10⁻⁷ relative change to one 887 keV-wide background level's widths turned one segment's χ² of 883 into 358,000.
-  Check the objective (`m.objective()(x)`, or `m.evaluate(x)` per data set) of a reopened snapshot before using it as a refit's start.
+  Check the objective (`s.objective()(x)`, or `s.evaluate(x)` per data set) of a reopened snapshot before using it as a
+  refit's start.
 
 ## What a snapshot still cannot carry
 
@@ -114,7 +116,8 @@ writes every level parameter at its current observed value (`transform_all_rwa(f
 ## The placement and the example script
 
 `pyazr.snapshot.place_level_values(project, parameters, pairs, want)` is the lower-level half: it maps the engine's
-pair numbers to the file's keys through `pairs=` (`m.pairs`), places each value by the engine's own (group, level) and
-the channel's (pair key, l, 2s), and refuses any free parameter it cannot place. It does not verify; `save_fit` does. `pyazr/examples/save_fit_to_azr.py` does the whole job: it loads a fit from `param.sav` or
-an `.npz`, optionally changes a channel radius (`--radius 1=4.70`, dropping the stale `intEC` caches), writes the `.azr`
-plus a companion `param.sav` with the norms, and fails if the result does not round-trip.
+pair numbers to the file's keys through `pairs=` (`s.pairs`), places each value by the engine's own (group, level) and
+the channel's (pair key, l, 2s), and refuses any free parameter it cannot place. It does not verify; `save_fit` does.
+`pyazr/examples/save_fit_to_azr.py` does the whole job: it loads a fit from `param.sav` or an `.npz`, optionally changes
+a channel radius (`--radius 1=4.70`, dropping the stale `intEC` caches), writes the `.azr` plus a companion `param.sav`
+with the norms, and fails if the result does not round-trip.

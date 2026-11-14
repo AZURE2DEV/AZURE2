@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
+
+**Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the
+model and calculation skills, the skills of inference and the evaluation (twelve skills under `.claude/skills/`,
+each with scripts on pyazr's public interface and a self-test run by `ctest`), and the structure of the compound
+system frozen after set-up (the entrance pairs an input of the set-up, the `System` built once and shared,
+`const` readers, `CNuc::MutableLevel` the one writable way in). The entries of the three branches are below.
+
+**How it was checked.**
+- Rehearsal 62 (the lighter regime, once): build with 0 warnings; all projects in three bases (887 / 851 / 887
+  files) identical to the reference tag `tab-t60-1`; of the 624 `run.log` files none differs in anything but the
+  `Threads:` line and the progress bars; the eight fits identical to the base build; `ctest -LE slow`: 262 of 262
+  (the ten skill self-tests among them, 0.8 s to 50 s each).
+- Beside the suite, for the frozen structure: an extrapolation run and a reaction-rate run of T1 on the build
+  before and after: every output file identical.
+- The long suite on rehearsal 57 has ended: the tree against `tab-t50-1`, the eight fits, the prior-centre check,
+  the 142 tests of the web page and pyazr, the 12 slow tests, `run_tests` (168 passed, 0 failed), the spec
+  equivalence (181 equal) and the gate all passed. One test of `ctest -LE slow` failed once in it,
+  `pyazr_azr_layout` (0.3 s); alone it passes on the builds of rehearsals 57 and 62. The cause was not looked
+  for; if it fails again under load, look at its temporary directory and at what else writes under `tests/`.
+
+**What the director changed at the merge.**
+- `tools/check_skills.py`, the rule on removed pyazr names: a call is written `name(`. "calculate (1)" of a
+  menu and the skill's name `azure2-calculate` were reported as the removed function `calculate`; the rule's
+  unit test has the two cases.
+
+**For the next agent.**
+- Reference tag `tab-t62-1`, base build `work/b-trial62` (the tree of this merge without this entry).
+- The skills teach pyazr as it is on this tree. When pyazr's one vector and the views merge, the skills are ported
+  by the two lists the skills' agents left (`work/skills-a/to_port.md`, `work/skills-b/to_port.md`) and every
+  self-test is run again; the checker's rule reads the removed names from the migration table of
+  `docs/source/user_guide/pyazr.rst`, so a new row there finds the places.
+- A new script of a skill must be named in the skill's `selftest.py` (the checker asks it).
+
+**Open, found at this merge (not fixed).**
+- `Session.save_fit` to another directory writes a project that cannot be opened again (the data paths stay
+  relative to the old directory).
+- An engine message still names removed pyazr calls (`calculate()`, `calculate_energies()`, `calculate_rwa()`).
+- `docs/source/reference/output_files.rst` shows `segment_<k>_norm` names.
+- A level with its widths set to zero and the same level removed differ by 3e-8 on T1's capture.
+- `Session.dimensionless_widths` gives no θ² for a fixed channel; `ChannelWidth.jpi` reads "0.5+".
+- A pair record's `entrance` field is now true from `Initialize` on (before: from the data set-up on).
+- Routines the skills had to write themselves and that could live in pyazr (the Fisher matrix, a covariance file
+  writer, a radius scan, a project audit, a decomposition by level): proposed to the PI, nothing added.
+
 ## 2026-11-14 (director, 00:26) — merged: the session class, the options, the sampler's limits, the wheel, the fit
 
 **Merged into `feature/upgrade-4-data`** (each as a merge commit with the tree of the rehearsal it was checked on):
@@ -48,6 +93,133 @@ a function (`Session.fit_with_engine`). The entries of the six branches are belo
 - Precedence: a switch option on the command line wins over the options file; a calculation option in the options
   file still wins over the command line. One rule is wanted (the command line wins); the PI's decision.
 - A `<parameterSettings>` row that widens a clamped kind: refused or cut? (the sampler's limits; the PI's).
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-frozen`) — the structure of the compound frozen after set-up
+
+**Measured first** (start commit e9e37a18; the design `cnuc_split.md` §12 counted at 6e8d000b):
+
+| what | design | code at the start | after |
+|---|---|---|---|
+| `SetEntrance` calls in the engine | 6 | 6 (and 2 in tests) | 0 |
+| `BuildSystemFromCNuc` calls in the engine | 12 | 9 (and 5 in tests) | 2, in `CNuc::Fill` |
+| dead members (§12.4 item 5) | 5 | 5 | 0 |
+| `CNuc.cpp` / `CNuc.h` lines | 1,527 / 327 | 1,527 / 327 | 1,526 / 350 |
+
+**Done.** The entrance pairs are an input of the set-up: `RequestDataEntrances` / `RequestExtrapolationEntrances`
+(`src/ProjectSetup.cpp`) request the entrance pair of every term of the active data sets or extrapolations, a rate run
+its entrance pair (`CNuc::RequestEntrance`, before `Initialize`); `CNuc::BuildPathways` flags them. The comparison
+commit 37ac9885 computed both sets and aborted on a difference; the merge of the fit as a function (ae347ae0) came
+next, so the requests of the program's set-up are in `src/RunSetUp.cpp`. The `System` of the structure and of all
+groups is built once at the end of `Fill` (`CNuc::SystemStructure`, `SystemAllGroups`), shared by the copies. The
+structure is read-only outside `CNuc`'s own set-up: `GetPair`, `GetJGroup`, `GetPairFromKey`, `GetNucleus` return
+`const` pointers only; the level values that move after set-up are written through `CNuc::MutableLevel`. Dead
+members deleted; `IsPair`, `AddPair`, `AddJGroup` private. Design and code differ in three places (written in
+`cnuc_split.md`, "Step 1 as built"): nine builds of the `System`, not twelve; the levels are written through
+`GetJGroup`, so a separate door was needed; the run-time abort of the non-`const` accessors could not be a check (every
+reader on a non-`const` pointer calls that overload), the compiler does it.
+
+**Verified how** (build `work/b-cnucend`, 2 threads, 0 warnings): the comparison commit on all projects × 3 bases
+(`tab-cnucend-1`): 887 / 851 / 887 identical, no abort. The last commit of the step: all projects × 3 bases
+(`tab-cnucend-2`) 887 / 851 / 887 identical to `tab-t57-1` (59 `run.log` files differ only in progress-bar lines);
+`ctest -LE slow` (`OMP_NUM_THREADS=1`, `-j2`): 250 of 252; the two failures (`pyazr_session_lock`,
+`pyazr_objective_object`) came with the merge of the fit as a function (ae347ae0) and are fixed by the director's
+e3528379, merged next: both pass then. Unit tests near the change (`physics_system_from_cnuc`,
+`physics_level_parameters_from_cnuc`, `physics_pathway_table`, `upgrade_external_capture_exit`, `channel_table_unit`,
+`upgrade_capture_ay_requests`) pass. Developer Guide: `classes.rst`, `state_and_ownership.rst`, `architecture.rst`,
+`physics_core.rst`, the class scheme (`classes.tsv`, `arrows.tsv`, `setup.svg` regenerated); `grep -rn
+'SetEntrance\|BuildSystemFromCNuc\|GammaDecayInputs\|SetBindingEnergy' docs/source` leaves only the adapter's
+correct mention in `physics_core.rst`.
+
+**Open.** The tree runs menu 1 only: the comparison of the entrance sets covered the extrapolation path through the
+C++ tests that load projects without data, not the rate path nor the binding's sessions (their tests are run on the
+final code, not on the comparison commit). A pair record's `entrance` field (`pybind_records.cpp`) reads the flag,
+which is set at `Initialize` now (during the data set-up before).
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-skills-inference`) — the skills of inference and the evaluation
+
+**Done.** The skills `azure2-fit`, `azure2-uncertainty`, `azure2-resonance-search`, `rmfit-campaign` on pyazr 3.0
+and project format 3, the new `azure2-evaluation`, their tools, a self-test per skill, and the shared machinery:
+
+| Aspect | Owner skill / file | State before | Tool now | Done |
+|---|---|---|---|---|
+| Fit with the Jacobian (rows, bounds, skip, staged, multiple starts) | azure2-fit (SKILL.md §5, references/pyazr-fitting.md) | Objective names right, recipe never run, stale `parameters.widths/norms`, `m.` names | lsq_fit.py | rewritten, run on T3 (four minima found) |
+| The engine's fitters, MINOS, when which | azure2-fit §5 | missing | engine_fit.py | new; T3 numbers for LM / MIGRAD / MIGRAD-gradient |
+| Nuisances, priors, norms and shifts | azure2-fit references/normalizations-and-shifts.md | format-1 (`dataNorm`, `normErr`, `segment_<k>_norm`, `<segmentsData>`) | (prose) | rewritten for format-3 records and save_fit |
+| Parameter files, names, remapping | azure2-fit references/parameters-and-sav.md | `segment_<key>_*` names, `m.`/`extrap_mode` | convert_sav_names.py | format-3 names; old-format renamer tested |
+| Dropping a data set | azure2-fit references/drop-dataset.md | format-1 line edits | (Project.set) | rewritten, recipe run on T3 |
+| Fisher information (spectrum, sloppy directions, per data set, new measurement, vs HESSE/LM) | azure2-uncertainty §2 | missing | fisher.py | new; F^-1 = LM covariance to 6e-15 |
+| Data covariance files, writer, PD check, the two chi2 splits | azure2-uncertainty §1, references/data-covariance.md | prose only | write_covariance.py | new; chi2 = independent numpy to 1e-8; splits shown |
+| Profile likelihood and MINOS | azure2-uncertainty §3 | prose | profile_scan.py | new; agrees with MINOS to 0.2 % |
+| MCMC (emcee) on log_prob with the limits rule | azure2-uncertainty §4, references/sampling.md | partly | sample_emcee.py | new |
+| NUTS on the gradient, whitening at the MAP | none (user-level rmatrix-posterior) | missing | nuts.py (ported), sample_nuts.py | new; recovers the Laplace covariance |
+| Convergence (R-hat, ESS, tau, divergences), open directions and priors | azure2-uncertainty | tau only | mcmc_stats.py | new |
+| Bands from draws and from the covariance | azure2-uncertainty §5 | covariance only | draw_bands.py | new; draws = linear band to 4 % |
+| Prior covariance, systematic axes, model averaging | azure2-uncertainty §6-7 | correct | (pyazr calls) | kept |
+| Level search (locators) | azure2-resonance-search | dump_residuals needed rmfit; J labels wrong for integer spins; no self-test | dump_residuals.py etc. | on pyazr 3.0; fixed; tested |
+| Add / remove / deactivate / move / sign of a level with refit | azure2-fit references/editing-levels.md (prose) | no tool | level_test.py | new |
+| Significance: Delta chi2, AIC, BIC, F test, held-out data | none | missing | level_test.py | new; T3: removed level found at 19.00063 MeV |
+| The evaluation procedure | none | missing | azure2-evaluation | new skill |
+| rmfit campaigns | rmfit-campaign | private `pyazr._azure2` | (rmfit) | public pyazr.describe() |
+
+- `tools/check_skills.py`: rule 10 (no removed pyazr name: the column "earlier name" of the migration table of
+  `docs/source/user_guide/pyazr.rst`, read from the page, as a call or an attribute, outside a version note) and
+  rule 11 (every `scripts/*.py` of a skill is named in its `selftest.py`); unit tests for both
+  (`tests/consistency/check_skills_test.py`); `docs/upgrade/RULES.md` §3 items 9–11 and its table.
+- `tests/skills/CMakeLists.txt` (added from the top-level `CMakeLists.txt`): one ctest `skill_<name>` per
+  `.claude/skills/*/scripts/selftest.py` (no label) and `skill_<name>_slow` per `selftest_slow.py` (label slow), with
+  OMP_NUM_THREADS=1, PYTHONPATH = the checkout, AZURE2_BIN, PYAZR_ENGINE_DIR when the build sets PYAZR_OUTPUT_DIR,
+  skip code 77; AZURE2_COULOMB_TABLE from the caller, as for the pyazr tests. Part A's seven self-tests land in it.
+- `CLAUDE.md` "Skills", `FOR_THE_OWNER.md` (a paragraph on the skills), `ROADMAP.md`, the Developer Guide's
+  contributing page.
+
+**Verified.** The three self-tests with the ctest environment against the build of rehearsal 60: azure2-fit 4.9 s,
+azure2-uncertainty 51 s, azure2-resonance-search 14 s, all PASS; each shown to fail once on an injected error; exit
+77 without the engine. `tools/check_skills.py` and the consistency test pass. The ctest registration was not
+configured (no build of this branch): the director's ctest on the merged tree is its test.
+
+**Open.** The port to the names of the parameter table and the extrapolation option (the list of places is in the
+branch's report); the locator scripts of the resonance search keep lines above 120 columns; NUTS has no
+checkpointing (the PI's `chain.py` has it); the level-sign fold before R-hat is described, not scripted.
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-skills-model`) — the model and calculation skills on format 3 and pyazr 3.0
+
+**Done.** The seven skills azure2-setup, -calculate, -check, -targets, -thm, -plot, -exchange read against the code and
+rewritten where they taught the earlier formats or removed pyazr names; each has scripts with a self-test on a test
+project (`scripts/selftest.py`, PASS/FAIL lines, exit 77 without the engine). Scripts: audit_project.py (setup),
+extrapolate.py and decompose.py (calculate), chi2_report.py, widths_check.py and radius_scan.py (check), layer.py and
+target_check.py (targets), thm_inspect.py (thm), plot_fit.py (plot), basis_compare.py (exchange). The notes on
+results of older builds are one reference, azure2-check `references/older-results.md`.
+
+Coverage (aspect, owner, state at the start, tool, what was done):
+the aspect (self-tested), or the pyazr example / program option the skill teaches.
+
+| Aspect | Owner (skill, file) | State at start | Tool | Done |
+|---|---|---|---|---|
+| Data kinds of format 3 (quantity, frame, units, keys; totals, natural targets, ratios, A_y, phase shifts, Legendre, yields, model data) | azure2-setup references/data-kinds.md; azure2-calculate references/observables.md | stale: segment lines, isDiff codes, tail keywords, `<segmentsData>`, abundances block; no chooser | `AZURE2 --describe/--print-predictions`; audit_project.py | rewritten: record, column roles with frames, chooser of every quantity, sums/ratios, natural targets, provenance; observables on format 3 |
+| Levels and channels (ENSDF, J^π, l, s, signs) | azure2-setup SKILL, azr-levels.md, nds-exfor.md | mostly right; old verification steps (`<segmentsData>` needed) | `Project.add_level`, audit_project.py | verification on --validate/audit; old-build notes moved |
+| Bases (Brune, formal, Park) and conversion | azure2-exchange | `pyazr.transform.transform_out` (goes) | basis_compare.py | Park transform by session; three-basis check script |
+| Wigner limit, θ², W.u., level norm J | azure2-check SKILL, widths.md | `pyazr.widths.teichmann_wigner/lane_thomas_wigner` (go); no J; no tool | widths_check.py | J (Brune) per level, Γ_W of fixed channels from the engine's physics; PI's saturation guidance ported |
+| External capture (ANCs, which transitions, operator, table, hybrid potential) | azure2-setup azr-levels.md §7; azure2-calculate physics-options.md | options covered; "how to decide" missing | decompose.py (bare = direct capture) | decision paragraph added; `coulomb_functions` → `channel_functions` |
+| Target effects (SRIM stopping, straggling, layers, implanted, gas, beam spread, resolution, Doppler, screening) | azure2-targets | stopping library not taught; `<targetInt>`, sigmalab, burstFWHM wording; hand recipe for the fold check | layer.py, target_check.py | stopping section (evaluation/table/formula/scale, epochs, quadrature); fold checked outside the engine (1e-4) |
+| THM (block, HOES/OES, vertex, DWBA, normalisation, model dependence) | azure2-thm | isDiff+10, `segments=`, `weight[k]`, targetInt, `pyazr.widths`, "pyazr does not fit" | thm_inspect.py | data sets with `thm`, experiment lines, thm_weight, fit_with_engine; inspection script |
+| Observables anywhere (S factor, S(0), rates, decomposition, extrapolation) | azure2-calculate | extrap_mode/data_mode, without_level/only_level, m.sfactor, test segments, "engine not thread-safe" | extrapolate.py, decompose.py; menu 5; examples/reaction_rate.py | extrapolation records, session per mode, decomposition on the fit vector, pairwise J^π check |
+| Channel-radius search (scan as Project edits, refit per radius, what to report) | azure2-check | `set_channel_radius` (goes), no refit, no tool | radius_scan.py | copies per radius with own output dirs, refit walked outward, report rules |
+| Checks: χ² reproduction, pulls, structure, χ²/ν | azure2-check | names right, no tool | chi2_report.py | agreement with chiSquared.out, same-sign runs, largest point |
+| Checks: grid convergence, thread independence | azure2-check | text; thread claim 1e-5 | — (text) | text kept; thread claim to pyazr.rst's "rounding" |
+| Checks: --validate, --describe, --print-predictions, diagnostics codes | azure2-check, azure2-setup | missing | audit_project.py | first item of the checklist |
+| Figures | azure2-plot | m.cross, m.sfactor, load_sav, test segments, targetInt | plot_fit.py | evaluation fields; pulls checked against the engine |
+| Exchange (GNDS/ENDF, SAMMY, rmfit parameters) | azure2-exchange | right except transform_out; Ferdinand on format 3 untested | basis_compare.py | doubt stated |
+| Results of older builds | spread over all bodies | many dated notes in bodies | — | one reference: azure2-check references/older-results.md |
+
+**Verified how.** Every self-test run against the build of the start commit (`work/b-trial60`) at
+OMP_NUM_THREADS=1, all PASS: setup 0.8 s, calculate 11.6 s, check 11.9 s, targets 8.9 s, thm 1.1 s, plot 8.1 s,
+exchange 4.0 s; one assertion per self-test shown to fail with an injected error. `tools/check_skills.py` and
+`tests/consistency/repo_consistency_test.py` pass on every commit.
+
+**Open.** The self-tests are not yet registered in ctest (shared file, the other part's). The names the one-vector
+pyazr branch removes are listed with file and line in the report (`pyazr.masses`, `pyazr.nds`, `transform_rwa`,
+`data_mode=`, `write_output_files`, `dimensionless_widths` if it moves). Ferdinand has not been run on a format-3
+file. Table rows longer than 120 columns remain in older references (Markdown tables cannot wrap).
 
 ## 2026-11-13 (agent, branch `feature/upgrade-6-fit-function`) — the engine's fit as a function
 

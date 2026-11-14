@@ -32,7 +32,7 @@ class JGroup {
   /// (channels, no levels) scatters through its hard-sphere phases alone, since its level sum is empty.
   void SetInRMatrix(bool inRMatrix) { isinrmatrix_ = inRMatrix; }
   /// 1-based position of the level in the group, or 0 if it is not there.
-  int IsLevel(ALevel);
+  int IsLevel(ALevel) const;
   /// Parity of the group, \f$\pm1\f$.
   int GetPi() const;
   /// Number of levels in the group.
@@ -40,7 +40,7 @@ class JGroup {
   /// Number of channels shared by every level of the group.
   int NumChannels() const;
   /// 1-based position of the channel in the group, or 0 if it is not there.
-  int IsChannel(AChannel);
+  int IsChannel(AChannel) const;
   /// Total angular momentum of the group.
   double GetJ() const;
   /// The compound nucleus the group belongs to: its 1-based index in the

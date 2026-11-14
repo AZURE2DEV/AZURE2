@@ -102,7 +102,6 @@ class PPair {
   /// Trojan-Horse nucleus; enters the half-off-shell momentum of the
   /// entrance transfer form factor. 0 for a conventional pair.
   double GetBindingEnergy() const;
-  void SetBindingEnergy(double);
   /// Reduced mass of the pair, in u.
   double GetRedMass() const;
   /// \f$1/[(2I_1+1)(2I_2+1)]\f$, the spin-statistics denominator of the entrance channel.
@@ -156,7 +155,6 @@ class PPair {
 
  private:
   bool entrance_;
-  bool ec_entrance_;
   bool is_identical_;
   int identical_sign_;
   int pair_z_[2];

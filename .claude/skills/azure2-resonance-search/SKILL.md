@@ -1,6 +1,6 @@
 ---
 name: azure2-resonance-search
-description: Gated search for missing or misassigned levels in an AZURE2 R-matrix fit. Rank the regions where the fit misses the data (coherent residual runs, data-only peak finder, blurred broad-structure map), characterise each one, list the hypotheses, screen them frozen, test survivors as level adds in the full model against a same-budget control, and judge on all the data. Use for "where does the fit fail", "is a level missing", residual or band maps, level adds, width-floor tests. Campaign mechanics: rmfit-campaign; editing levels: azure2-fit; significance of an existing level: azure2-check.
+description: Gated search for missing or misassigned levels in an AZURE2 R-matrix fit. Rank the regions where the fit misses the data (coherent residual runs, data-only peak finder, blurred broad-structure map), list the hypotheses, screen them, test level adds, removals, moves and sign flips refitted against the base (level_test.py: Delta chi2, AIC, BIC, F test, held-out data), and judge on all the data. Use for "is a level missing", residual maps, level adds or removals. Campaigns: rmfit-campaign; level edits: azure2-fit; trust: azure2-check.
 ---
 
 # Searching for missing or misassigned levels
@@ -12,11 +12,12 @@ Running campaigns, polishes and sign rounds is `rmfit-campaign`; adding, removin
 `azure2-fit`; whether an existing level is needed (frozen Δχ²) is `azure2-check`. What a level, channel or
 interference pattern means: `azure2-setup` (`references/` there) and `azure2-fit`.
 
-The scripts in `scripts/` read pyazr and rmfit from `PYTHONPATH`. Set `$AZURE2_SRC` to the repository checkout (it
-holds `pyazr/`) and `$RMFIT_HOME` to the directory that contains the `rmfit` package:
+The scripts in `scripts/` use pyazr only (`$AZURE2_SRC` is the repository checkout that holds `pyazr/`, with the
+engine built); the campaign commands of §4 and §5 are rmfit's (`rmfit-campaign`). `scripts/selftest.py` runs every
+script on `tests/upgrade/T3` with its 2⁻ level at 19.0006 MeV removed and finds it again (14 s at one thread).
 
 ```bash
-export PYTHONPATH=$RMFIT_HOME:$AZURE2_SRC OMP_NUM_THREADS=1
+export PYTHONPATH=$AZURE2_SRC OMP_NUM_THREADS=1
 S=$AZURE2_SRC/.claude/skills/azure2-resonance-search/scripts
 ```
 
@@ -43,13 +44,16 @@ Start from the incumbent's point-by-point residuals. The dump uses r = (fit − 
 enters χ² with the fitted normalization n; "model low" is r < 0.
 
 ```bash
-# one evaluation of the full model, parameters taken from the .sav by name (about 10 min for N ~ 45 000)
-python3 $S/dump_residuals.py fit.azr fit.sav work resid.npz
+# one evaluation of the fitted project (or --sav fit.sav: values loaded by name)
+python3 $S/dump_residuals.py fit.azr resid.npz
 # seconds; rerun freely
 python3 $S/rank_map.py resid.npz regions.txt fit_output/parameters.out fit.azr
 ```
 
-Check first that Σ r² of the dump equals the fit's χ² to the printed digits.
+Check first that Σ r² of the dump equals the fit's data χ² (the script prints both; they differ only where a data
+covariance joins points, and then the ranking ignores the correlations). `parameters.out` is the program's output of
+a calculation of the fit (`printf '1\n\n\n7\n' | $AZURE2_BINARY --no-readline fit.azr`). On T3 with the 2⁻ level
+removed, the first region peaks at 18.962 MeV (truth 19.0006).
 
 How the ranking works:
 
@@ -118,8 +122,8 @@ of broad levels only.
 
 ```bash
 # 1. where blurring is valid for this data set: switch off the narrow levels and compare blurred models
-python3 $S/make_broad_only.py fit.azr output/parameters.out broad_only.azr 50   # Γ < 50 keV zeroed and fixed
-python3 $S/dump_residuals.py broad_only.azr fit.sav work_b broad.npz
+python3 $S/make_broad_only.py fit.azr output/parameters.out broad_only.azr --gmax 50   # Γ < 50 keV zeroed, fixed
+python3 $S/dump_residuals.py broad_only.azr broad.npz
 python3 $S/blur_compare.py full.npz broad.npz blur_compare.txt
 # 2. broad-structure map: blurred data (x fitted norm) minus blurred fit, per detector
 python3 $S/blur_map.py full.npz blur_map.txt --scales 0.1,0.2 --levels output/parameters.out --azr fit.azr
@@ -197,6 +201,29 @@ d. Far from the optimum (after a large frozen removal) the global objective cann
 
 ## 5. Test: level add in the full model, against a control
 
+**Without rmfit** (a model of tens of free parameters): `scripts/level_test.py` makes each variant a `Project` edit
+of the fitted project, refits it (least squares on the objective's rows and Jacobian, all free parameters) and
+compares it with the base refitted the same way:
+
+```bash
+python3 $S/level_test.py fit.azr --variant "scan:2-:18.5,19.0,19.5:2/0/2/100000,3/0/2/50000" --out scan.json
+python3 $S/level_test.py fit.azr --variant "remove:2- 19.0006" --variant "off:1+ 17.64" \
+    --variant "move:1+ 17.64:17.7" --variant "sign:2- 19.0006:3/0/2" --hold-out n7be_total --out tests.json
+```
+
+Variants: `add` / `scan` (J^π, energies, channels pair/l/s/width with widths in eV, free), `remove`, `off`
+(inactive), `move`, `sign` (flip one width's sign before the refit). Per variant it prints the objective, the number
+k of free parameters, Δ = objective(base) − objective(variant), AIC = objective + 2k, BIC = objective + k ln N, and
+for nested models the F test, F = (Δ/Δk) / (objective_larger/(N − k_larger)), with its p value; `--hold-out SET`
+refits every model without SET and scores SET at that fit (cross-validation on data the fit did not see). On T3
+with the 2⁻ level removed (objective 89 939, k = 5), the scan's 19.0 MeV start returns to 19.00063 MeV with
+Δ = 89 359 for 3 parameters (p < 10⁻³⁰⁰); removing the level from the full fit raises the held-out n7be_total χ²
+from 32.8 to 34 877. A `sign` variant that refits to the base's objective shows that the sign is free to return;
+compare signs with the flipped width held (`azure2-fit`, interference). Accept by the rules of `azure2-evaluation`
+(F-test p < 0.01 and BIC lower, held-out data not worse, the level physical: `azure2-check`).
+
+**With rmfit** (hundreds of parameters, a cluster):
+
 ```bash
 rmfit structure add --candidate i [--jpi ...] --local-release 0.5 --local-nfev 80 --pinned-nfev 60 --nfev 150
 ```
@@ -271,6 +298,8 @@ sign).
 
 ## Pointers
 
+- Scripts: `dump_residuals.py`, `rank_map.py`, `peakfind.py`, `eval_peaks.py`, `blur_map.py`, `make_broad_only.py`,
+  `blur_compare.py`, `blur_figure.py`, `level_test.py`; `selftest.py`.
 - `references/locators.md`: measured recall of the peak finder, blur validity numbers, open improvements.
 - `references/width-floor-recipe.md`: the recipe for a structure that is visible but that no search finds.
 - Campaign commands (`levelscan`, `structure add`, `round`, `relocate`): rmfit-campaign.

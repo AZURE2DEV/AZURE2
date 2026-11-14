@@ -11,7 +11,7 @@ extern double DoubleFactorial(int);
  * The constructor takes a PPair object, gamma energy, and multipolarity as arguments.
  */
 
-EffectiveCharge::EffectiveCharge(PPair *pair, double energy, int L, int li, int lf) :
+EffectiveCharge::EffectiveCharge(const PPair *pair, double energy, int L, int li, int lf) :
   z1_(pair->GetZ(1)),
   z2_(pair->GetZ(2)),
   L_(L),

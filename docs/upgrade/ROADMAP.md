@@ -41,6 +41,11 @@ Tick boxes as work lands; put the commit hash after each tick.
       branch.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
+- [x] Skills on pyazr 3.0 and project format 3, one per aspect of an evaluation plus `azure2-evaluation` (the
+      procedure); every recipe longer than five lines a script with a self-test on a project of `tests/`, run by
+      ctest (`tests/skills/`); `tools/check_skills.py` refuses removed pyazr names and scripts no self-test runs.
+- [ ] Port the skills to the names that pyazr 3.0's parameter table and extrapolation option give (`Parameters`,
+      `extrapolations=True`): the list of places is kept with the branch's report.
 - [x] Developer Guide of the site for the new structure (`docs/source/developer/`: architecture, scheme of the
       classes from `figures/classes.tsv` and `arrows.tsv`, state and ownership, data model, extending; consistency
       check 44 keeps the scheme's types declared; 2026-11-13).
@@ -193,6 +198,8 @@ built at set-up. Remaining: external-capture amplitudes at set-up (with the deca
 classes), the pathway trees deleted, the parameter vector and the set-up out, `CNuc` deleted. The file-size ratchet
 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file passes 1,000 lines.
 *Design of the last steps, six branches: `cnuc_split.md` §12 (2026-11-13); it replaces the "Remaining" list above.*
+- [x] The structure frozen after set-up: the entrance pairs an input of the set-up, the `System` built once in `Fill`,
+      the pairs, groups and channels read through `const` pointers only (`cnuc_split.md` §12.3, step 1 as built).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

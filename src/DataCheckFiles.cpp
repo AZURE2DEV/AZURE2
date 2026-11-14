@@ -186,14 +186,14 @@ void WorkingCopy::PrintEDependentValues(const Config &configure, CNuc *theCNuc) 
       const int s = row.first, p = row.second;
       const Segment &seg = Data().GetSegments()[s];
       Unit *pt = seg.GetPoint(*this, p + 1);
-      PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
+      const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
       double inEnergy = pt->GetCMEnergy() + entrancePair->GetSepE();
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
         if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == entrancePair->GetNucleus()) {
-          JGroup *theJGroup = theCNuc->GetJGroup(j);
+          const JGroup *theJGroup = theCNuc->GetJGroup(j);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
+            const AChannel *theChannel = theJGroup->GetChannel(ch);
+            const PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
             int lValue = theChannel->GetL();
             double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
             complex loElement = pt->GetLoElement(j, ch);

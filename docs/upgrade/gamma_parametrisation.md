@@ -274,7 +274,7 @@ b_f, δ_f), as the fit's vector and `parameters.out` do: they are what a user, p
 One function turns such a vector into the levels' observed widths: `GammaDecaySet::WithPartialWidths` replaces each
 record's numbers by the partial widths of Eq. (2.3) (`PartialWidths`). `FillCompoundFromParamsPhysical` calls it
 and writes the result into the levels, and keeps the record's numbers as the compound's input values of the record
-(`CNuc::GammaDecayInputs`), which `FillMnParams` puts into the fit's vector, as it puts a level's input widths. So
+(`CNuc::gammaDecayInputs_`), which `FillMnParams` puts into the fit's vector, as it puts a level's input widths. So
 `FillCompoundFromParamsPhysical` → `TransformIn` → `FillMnParams` gives back the record's numbers it was given, and
 the record's photon widths in the levels are widths, not numbers of another kind. No caller reads or writes a record
 slot itself. Without a record both functions do what they did (the set is empty).
@@ -395,7 +395,7 @@ the datum computes is not changed here.
   channel (section 2.7): `ExternalCaptureFinalState` and `ExternalReducedWidthAt` in `src/CNucExternalCapture.cpp`,
   the record's inputs for the gradient's mask (`InputIndices`). The vector of observed parameters (section 2.8):
   `GammaDecaySet::WithPartialWidths`, `NumbersAt`, `FileNumbers` and the compound's input numbers
-  (`CNuc::GammaDecayInputs`, set by `Fill` and `FillCompoundFromParamsPhysical`, read by `FillMnParams`).
+  (`CNuc::gammaDecayInputs_`, set by `Fill` and `FillCompoundFromParamsPhysical`, read by `FillMnParams`).
 - Tests (`tests/gamma_decay/check.sh`): a project with partial widths and the same with the record, built by a script
   of the test from (2.3), calculations identical; pseudo-data from known Γ_γ, b_f fitted in both parametrisations
   (equal χ² minima, the errors of b_f equal the propagated ones), a prior's pull; the gradient against central

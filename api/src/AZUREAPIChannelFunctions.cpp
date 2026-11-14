@@ -38,7 +38,7 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   if (nE < 0 || request.size() < static_cast<size_t>(5 + nE)) return out;
 
   if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
-  PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
+  const PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
   if (!pair) return out;
   if (radius <= 0.0) radius = pair->GetChRad();  // the channel radius by default
 

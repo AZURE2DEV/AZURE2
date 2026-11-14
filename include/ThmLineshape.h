@@ -110,7 +110,7 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
  * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Memoized per thread on
  * the level, its parameters and the parametrization.
  */
-double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config &configure);
+double ThmLevelWidth(CNuc *compound, const JGroup *jgroup, const ALevel *level, const Config &configure);
 
 struct ThmExperiment;
 
