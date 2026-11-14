@@ -104,6 +104,13 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   in a tied model (branch feature/isospin-photon-channels; builds up to dev
   8b397ddb stop at load with "has a photon or beta channel"). A derived
   member's bound-state ANC then follows the reference nucleus's amplitude.
+  An excited particle is its own arrangement only if its STATE differs: the
+  key is mass numbers, spins, parities, isospins and the state rank (n-th
+  listed excitation energy of that Z, A, spin and parity; `0+#2` in the
+  report).  Builds up to dev 9404382a ignore the excitation energy, so e.g.
+  n+12C*(7.65, 0+) is tied to the partner's p+12C(g.s.) channel unless a
+  `factor <ID> <pair> 0` line overrides it (12C+p/11-11-26_mirror_tie_claude).
+  Check the factor table: a channel you expect free must say "free".
 - **Spin observables are data type 10 (`10 <token>`), and type 9 means two
   different things in files of different origin.** On dev since 6e4fa458 (PR #3,
   2026-11-11): analyzing powers of beam or target, spin correlations, spin-1

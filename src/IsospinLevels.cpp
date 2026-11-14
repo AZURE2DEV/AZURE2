@@ -4,7 +4,9 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <map>
+#include <set>
 #include <sstream>
 
 #include "AngCoeff.h"
@@ -219,14 +221,41 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
         t2 = o.t2;
       }
   };
-  // Pairs whose particles match in mass number, spin, parity and isospin form one arrangement.
+  // Which state of its nucleus a particle is in: the rank of its excitation energy among the distinct
+  // excitation energies (1 keV) of the particles in the project with the same Z, A, spin and parity.
+  // The ground state (or the lowest state listed) is rank 0.  Mirror partners are ranked in their own
+  // nucleus (different Z), so the n-th listed state of a spin and parity pairs with the n-th; a nucleus
+  // that is its own mirror (12C for A = 13) pairs each state with itself.  Without the rank, an excited
+  // particle with the ground state's spin and parity (12C*(7.65) 0+) fell in the ground-state
+  // arrangement and was tied to the partner nucleus's ground-state channel.
+  auto stateKey = [&](PPair *pp, int k) {
+    std::ostringstream o;
+    o << pp->GetZ(k) << ":" << std::lround(pp->GetM(k)) << ":" << pp->GetJ(k) << ":" << pp->GetPi(k);
+    return o.str();
+  };
+  auto particleEx = [&](PPair *pp, int k) { return k == 1 ? pp->GetLightExE() : pp->GetHeavyExE(); };
+  std::map<std::string, std::set<long>> statesOf;
+  for (int p = 1; p <= c.NumPairs(); p++) {
+    PPair *pp = c.GetPair(p);
+    if (pp->GetPType() != 0) continue;
+    for (int k = 1; k <= 2; k++) statesOf[stateKey(pp, k)].insert(std::lround(1000.0 * particleEx(pp, k)));
+  }
+  auto stateRank = [&](PPair *pp, int k) {
+    const std::set<long> &s = statesOf[stateKey(pp, k)];
+    return (int)std::distance(s.begin(), s.find(std::lround(1000.0 * particleEx(pp, k))));
+  };
+  // Pairs whose particles match in mass number, spin, parity, isospin and state rank form one arrangement.
   auto arrangement = [&](int pairNum) {
     PPair *pp = c.GetPair(pairNum);
     double t1, t31, t2, t32;
     pairIsospin(pairNum, t1, t31, t2, t32);
+    auto rank = [&](int k) {
+      const int r = pp->GetPType() == 0 ? stateRank(pp, k) : 0;
+      return r > 0 ? "#" + std::to_string(r + 1) : std::string();
+    };
     std::ostringstream o;
     o << "A" << std::lround(pp->GetM(1)) << "+A" << std::lround(pp->GetM(2)) << " j" << pp->GetJ(1) << (pp->GetPi(1) < 0 ? "-" : "+")
-      << "," << pp->GetJ(2) << (pp->GetPi(2) < 0 ? "-" : "+") << " t" << t1 << "," << t2;
+      << rank(1) << "," << pp->GetJ(2) << (pp->GetPi(2) < 0 ? "-" : "+") << rank(2) << " t" << t1 << "," << t2;
     return o.str();
   };
 

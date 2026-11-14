@@ -40,6 +40,11 @@
 #     the boundary energy).  M.azr with the ground state and the 1/2+ state tied across 13N and 13C (Brune):
 #     the start-up report lists the photon channels as not tied, the reference nucleus's capture is A.azr's to
 #     1e-10, and the 13C capture differs from the untied M.azr's (its neutron amplitudes are now the proton ones).
+# (k) Excited particles: the tied 13N + 13C model of (j) with a n + 12C*(7.654, 0+) line added to the 13C member of
+#     level 1 (pair 5).  12C*(7.654) has the ground state's spin, parity and isospin; it must not fall in the
+#     ground-state arrangement: pair 5 is free, and its isospin key carries the state rank (0+#2).  With a
+#     p + 12C*(7.654) line in the 13N member as well (pair 6), pair 5 is tied to it (= 1 x free amplitude), and
+#     pair 3 is still tied to pair 1.  Before the fix pair 5 was tied to pair 1 (13N p + 12C ground state).
 #
 # The models are written by make_models.py (committed).
 
@@ -475,6 +480,37 @@ if [ -s "$a" ] && [ -s "$m1" ] && [ -s "$m2" ] && [ -s "$u2" ]; then
   if le "$r" 1e-3; then bad "tied capture model: 12C(n,g0) is the untied curve (max rel $r); the tie did nothing"; else ok "tied capture model: 12C(n,g0) follows the tie (differs from the untied model, max rel $r)"; fi
 else
   bad "tied capture model: an extrapolation is missing"; grep -i -m3 "error" "$WORK/ecMtied/run.log"
+fi
+
+# ---- (k) excited particles are not the ground-state arrangement ----------------------------------
+python3 - "$WORK/ecM_tied.azr" "$WORK/ecM_exc1.azr" "$WORK/ecM_exc2.azr" <<'EOF'
+# clone level 1's n + 12C line (pair 3) as pair 5 with 12C in its 7.654 MeV 0+ state; in exc2 also level 1's
+# p + 12C line (pair 1) as pair 6.  Columns (0-based): 5 pair key, 8 level ID, 16 heavy excitation energy.
+import sys
+src = open(sys.argv[1]).read()
+head, rest = src.split("<levels>\n", 1)
+body, tail = rest.split("</levels>\n", 1)
+def build(clones):
+    out = []
+    for ln in body.split("\n"):
+        out.append(ln)
+        f = ln.split()
+        if len(f) > 20 and f[8] == "1" and f[5] in clones:
+            g = list(f); g[5] = clones[f[5]]; g[16] = "7.654"; out.append(" ".join(g))
+    return head + "<levels>\n" + "\n".join(out) + "</levels>\n" + tail
+open(sys.argv[2], "w").write(build({"3": "5"}))
+open(sys.argv[3], "w").write(build({"3": "5", "1": "6"}))
+EOF
+lvl1() { awk '/^ *level ID 1 /{on = 1; next} /^ *level ID /{on = 0} on && /^ *pair /' "$1"; }
+run ecExc1 "$WORK/ecM_exc1.azr" "3\nn" "--use-brune"; run ecExc2 "$WORK/ecM_exc2.azr" "3\nn" "--use-brune"
+r1="$(lvl1 "$WORK/ecExc1/run.log")"; r2="$(lvl1 "$WORK/ecExc2/run.log")"
+if [ -z "$r1" ] || [ -z "$r2" ]; then
+  bad "excited-particle models: no start-up report for level 1"; grep -i -m3 "error" "$WORK/ecExc1/run.log" "$WORK/ecExc2/run.log"
+else
+  if echo "$r1" | grep -qE "^ *pair 5 .* free$"; then ok "n + 12C*(7.654, 0+) alone in 13C: free, not tied to the 13N ground-state channel"; else bad "n + 12C*(7.654) in 13C: $(echo "$r1" | grep -E '^ *pair 5')"; fi
+  if grep -q "0+#2" "$WORK/ecExc1/output/isospin.out" 2>/dev/null; then ok "isospin.out key of the excited-12C channel carries the state rank (0+#2)"; else bad "isospin.out has no 0+#2 key"; fi
+  if echo "$r2" | grep -qE "^ *pair 5 .*= 1 x free amplitude" && echo "$r2" | grep -qE "^ *pair 6 .* free$"; then ok "with p + 12C*(7.654) in 13N: n + 12C*(7.654) is tied to it"; else bad "excited-12C pair in both nuclei: $(echo "$r2" | grep -E '^ *pair (5|6)' | tr '\n' '|')"; fi
+  if echo "$r2" | grep -qE "^ *pair 3 .*= 1 x free amplitude"; then ok "the ground-state pair 3 is still tied to pair 1"; else bad "pair 3 lost its tie: $(echo "$r2" | grep -E '^ *pair 3')"; fi
 fi
 
 echo "isospin_levels: $nok ok, $nbad failed"
