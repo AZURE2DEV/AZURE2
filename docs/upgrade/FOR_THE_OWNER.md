@@ -133,6 +133,13 @@ The engine's physics functions (penetrability, shift, Coulomb and Whittaker func
 are `pyazr.physics.<name>` on numpy arrays, each a row of one table in the binding (`api/src/pybind_physics.cpp`)
 that states its arguments, units and domain; a new one is a row and a test.
 
+pyazr 3.0 has one name for each thing and no aliases of the earlier ones: `Session`, `Project`, `Parameters`,
+`Objective`, `Evaluation`, `pyazr.physics`, `pyazr.system` (pairs, level scheme, compound nuclei).  Physical values
+are `s.transform(x)`, the engine's own transformation; Python computes no physics formula but the Weisskopf
+estimate, which the engine lacks.  A session is made for the data sets or, with `extrapolations=True`, for the
+extrapolations.  Every earlier name and what replaces it is the table "Earlier names" of the pyazr page of the user
+guide.
+
 A fit or a sampler in Python starts from `f = s.fit_objective()`: the objective the program's fit minimises as one
 callable, with its gradient, its least-squares rows and Jacobian, its bounds and `log_prob` (the rule of the
 program's own sampler), so scipy, iminuit and emcee each take it in a line (`pyazr/examples/fit_*.py`; on T2

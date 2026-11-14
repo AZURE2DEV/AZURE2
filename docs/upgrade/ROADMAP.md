@@ -286,6 +286,10 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
   - [x] `Objective` and `Evaluation` beside today's methods (`pyazr3.md` section 7): `azure2.fit_objective()`,
         `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
         outputs (`api/src/pybind_evaluation.cpp`).
+- [ ] Rename and remove (`pyazr3.md` section 4, step 5): `Session`, one evaluation, one parameter vector, no
+      physics in Python (`transform.py` deleted, `pyazr.system`, the extrapolations a session option: section 8).
+      Open: the session's radius and potential edits, `best_fit_params`, the libraries to `pyazr.sources`,
+      `write_outputs`, the unused bindings.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
       Built: `pyproject.toml` (scikit-build-core), the install rules, `pyazr coulomb-table fetch|build|where`,
       `.github/workflows/wheels.yml` (Linux, macOS; publishes nothing), tests `pyazr_wheel`, `pyazr_coulomb_table`,
