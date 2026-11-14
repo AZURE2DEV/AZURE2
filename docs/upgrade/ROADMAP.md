@@ -434,11 +434,12 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       module's own format check; `pyazr endf summary|curves`); stage 4 built (the checking codes found and run,
       their reports read, candidates with their difference; `pyazr endf check|standardize`); the page's screens
       built (the ENDF tab: files over the data with ratios, Check and Correct as jobs, `web_ui.md` 11.13); stage 2
-      built (the start model from LRF=7, the engine's two level doors; `pyazr endf to-project`); stage 3 built in
-      part (MF=1, MF=2, MF=3 from the engine, LRP=2; `pyazr endf write`); on the page, "New project from a file"
+      built (the start model from LRF=7, IFG=0 converted, the engine's two level doors; `pyazr endf to-project`);
+      stage 3 built (MF=1, MF=2, MF=3 and MF=6 from the engine: LAW=2 exits, LAW=5 elastic with MF=3/MT=2, MT=102
+      primary photons; one seeded grid; LRP=2; `pyazr endf write`); on the page, "New project from a file"
       (`to_project` as a job, the report before anything is written) and "Export this project" (`write` as a job,
-      the losses before and after; `web_ui.md` 11.16); next: MF=6 of the writer (LAW=2 exits,
-      LAW=5 elastic, MT=102 primaries), then stage 5 (MF=32, LTP=1) and stage 6 (`check_resonances`).
+      the losses before and after; `web_ui.md` 11.16); next: stage 5 (MF=32, LTP=1) and stage 6
+      (`check_resonances`).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

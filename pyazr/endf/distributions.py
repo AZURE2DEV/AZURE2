@@ -276,19 +276,20 @@ def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, wher
                 return _legendre_sum(c, m) / (1 - m)
             return sum((4 * l + 1) / 2.0 * c[l] * legendre.legval(m, [0] * (2 * l) + [1])
                        for l in range(len(c))) / (1 - m * m)
-        if p.flag in (12, 14, 15):  # eqs. 6.19-6.20: P_NI, multiplied by sigma_NI(E) below
+        if p.flag in (12, 14, 15):  # eqs. 6.19-6.20: sigma_NI(E_i) P_NI(mu, E_i), the part interpolated
             ms, v = p.values[0::2], p.values[1::2]
             if not ms[0] <= m <= ms[-1]:
                 return 0.0
-            return interpolate(m, ms, v, (len(ms),), (4 if p.flag == 14 else 2,))
+            return float(sigma_ni(np.array([p.energy]))[0]) * interpolate(m, ms, v, (len(ms),),
+                                                                          (4 if p.flag == 14 else 2,))
         raise FormatRefused(what=f"{where}: LTP={p.flag} at E={p.energy:g} eV", allowed="LTP 1, 2, 12, 14, 15 (p. 146)",
                             fix="the file breaks the format: pyazr.endf.check_format(path)")
 
     flags = {p.flag for p in product.panels}
+    if flags & {12, 14, 15} and sigma_ni is None:
+        raise FormatRefused(what=f"{where}: LTP={sorted(flags)} needs sigma_NI(E) of MF=3/MT=2",
+                            allowed="a material with MF=3/MT=2", fix="the file lacks MF=3/MT=2")
+    # sigma_e - sigma_c at each panel's energy (for LTP 12-15 sigma_NI there times P_NI), interpolated between
+    # the panels at fixed mu: the module's reading, the part the manual tabulates (eq. 6.20)
     part = _between_panels(product, energies_ev, nuclear_and_interference, where)
-    if flags & {12, 14, 15}:
-        if sigma_ni is None:
-            raise FormatRefused(what=f"{where}: LTP={sorted(flags)} needs sigma_NI(E) of MF=3/MT=2",
-                                allowed="a material with MF=3/MT=2", fix="the file lacks MF=3/MT=2")
-        part = part * np.asarray(sigma_ni(energies_ev), float)
     return coulomb.sigma(energies_ev, mu, identical=identical, two_s=two_s) + part

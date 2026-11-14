@@ -548,9 +548,10 @@ implementation in C++ would break the rule of one. The command line is pyazr's (
 Status (2026-11-14): decisions 1 (photon channels out of MF=2, capture pointwise in MF=3/MF=6), 3 (LRP=2 with full
 pointwise MF=3), 7 (the MAT 228 extract committed as test data) and 10 (MF=32 from a formal-basis HESSE) are
 **decided by the PI**, as recommended. Decisions 2, 4, 5, 6, 8 and 9 are the director's interim choices, as
-recommended (HANDOFF, 2026-11-14 15:00). As built (sections 13.4, 13.5): 1 (no photon channel in MF=2; capture in
-MF=3/MT=102; MF=6/MT=102 not yet written), 2 (widest form by default), 3 (LRP=2, one named value `writer.LRP`; MF=2
-checked against MF=3 before writing), 4 (KRL=1 refused on reading and writing), 7, 8, 9 (AME2020 for the incident
+recommended (HANDOFF, 2026-11-14 15:00). As built (sections 13.4, 13.5, 13.8): 1 (no photon channel in MF=2;
+capture in MF=3/MT=102 and the primary photons in MF=6/MT=102), 2 (widest form by default), 3 (LRP=2, one named
+value `writer.LRP`; MF=3 and MF=6 from the engine; MF=2 checked against MF=3 before writing), 4 (KRL=1 refused on
+reading and writing), 7, 8, 9 (AME2020 for the incident
 pair, the file's Q values for the others) are in the code.
 
 1. **Photon channels.** (a) In MF=2 as channels of photon pairs (KRM=4, P = 1, Gamma_gamma kept at E_lambda): the
@@ -795,10 +796,9 @@ options `use_coulomb_table`, `use_gsl_coul`. What differs from the design, and w
   (`src/CNucLevelParameters.cpp`, another agent's file) for a `PPair`; that function could call the door's.
 - `to_project` asks door 2 for a Brune tolerance of 1e-11 MeV (the engine's report uses 1e-6 MeV): with 1e-6 the
   write-then-read of T1 moved the model by 7.6e-5.
-- IFG=0 and KRM=3 are refused, not converted (IFG=0 needs the penetrabilities in the file's frame at E_lambda; KRM=3
-  needs the photon pair of the eliminated widths): not built.
-- The coupling order of SCH is not in the manual; read as AZURE2's (light particle first). The library's MF=3
-  tests angle-integrated cross sections only, which do not depend on it.
+- IFG=0 is converted by `to_project` (section 13.7); KRM=3 is refused (section 13.7: the door it needs).
+- The coupling order of SCH is not in the manual; read as AZURE2's (light particle first). No ENDF-6 section can
+  settle it: unpolarized cross sections and distributions do not depend on it (section 13.9, measured).
 
 Measured (`tests/pyazr/endf_model_test.py`, build `work/b-endf3`): door 1 on a Brune session's start equals the
 formal session's levels bit for bit, door 2 on those with door 1's B_c equals the formal session's transform bit
@@ -826,8 +826,7 @@ points, 13N MT=102 488 points). Before writing, MF=2 is read back (to_project) a
 at the grid: T2 7.9e-8 (T1 and 13N have no particle exit: nothing to compare). The own format check: no error, the
 LRP=2 warning.
 
-Not built: MF=3/MT=2 with MF=6/MT=2 LAW=5, MF=6 LAW=2 of the exits, MF=6/MT=102 (listed in MF=1 and in `Written`).
-The real codes on the written files: section 13.6.
+MF=6 and MF=3/MT=2: section 13.8. The real codes on the written files: sections 13.6 and 13.8.
 
 ### 13.6 The checking codes on the written files
 
@@ -837,7 +836,147 @@ CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11 (`opt/`), on T1, T2, 13N as written:
 - FIZCON: MF=3/MT needs MF=6 (one per MF=3 section: MF=6 not written); on 13N before AWI was taken from AME2020,
   "AWI SHOULD BE SET TO 9.98623E-01" (13N gives the proton's mass as 1.00728 u, nuclear; repaired).
 - PSYCHE: AP not in range and, on T2, "SPIN OF ISOTOPE 7015. DISAGREES WITH 0.5" (both its reading of the record
-  after the range as SPI, AP of LRF 1-3, section 13.2: that record holds 0, 0, IFG, KRM, NJS, KRL); for MT=102 "calculated Q 6.67452E+06 disagrees
-  with the given Q 1.94349E+06" (the given Q is AME2020's S_p of 13N; PSYCHE's number not explained), a negative
-  thermal cross section and a resonance integral (neutron quantities, below the table).
+  after the range as SPI, AP of LRF 1-3, section 13.2: that record holds 0, 0, IFG, KRM, NJS, KRL); for MT=102
+  "calculated Q 6.67452E+06 disagrees with the given Q 1.94349E+06": PSYCHE's `QTEST` (psyche.f lines 2700-2820)
+  takes the masses from its function `AMASS` (lines 8874-9046), a semi-empirical mass formula with shell terms and
+  a table for n, p, d, t, 3He and alpha only; that formula, coded in `work/endf4/s/amass.py`, gives 6.6745 MeV for
+  12C + p -> 13N. The file's QM = QI is AME2020's S_p of 13N (1.94349 MeV): the code's number, not the file's (the
+  test of PSYCHE is 5 % and above 0.25 MeV, so any light capture target is reported); a negative thermal cross
+  section and a resonance integral (neutron quantities, below the table).
 
+### 13.7 The writer's loose ends (as built)
+
+- **The start grid** (`pyazr/endf/grid.py`, `start_grid`): 41 even points over the range, every exit threshold and
+  every level energy with E_r -+ Gamma/2 inside it. The lists are pyazr's: the physical values of the session's
+  parameters at x (`Session.transform`: energies and the widths of the channels open at the level) and the pair
+  records (`Session.pairs`), E_x to lab by the engine's `cm_to_lab_energy`. `grid.refine` runs `pyazr.refine_grid`
+  and then checks the quarter points of every interval by the same rule, refining again from the failing ones (up to
+  four rounds; the model is cached, so a point is computed once). Without the check, the seeded grid of 13N reached
+  3.6e-3 on a flank (44 of 20001 points above 2e-3); with it T1 MT=102, T2 MT=800/801 and 13N MT=102 are within
+  1.0e-3 on 20001 points each. Test: a copy of T2 with its 3- level at 13.0734 MeV made 0.2 eV wide, the level
+  2.6 keV from an even point: the grid follows the engine to 1.8e-4 of the peak; with the seeds removed it misses it
+  (0.92, the injected error). A file of that copy is not written: its MF=2 reproduces MF=3 only to 3.7e-4 near the
+  level, since ER holds 1e-3 eV at 1 MeV (the 11-column field) against a width of 0.2 eV; the writer's 1e-5 check
+  refuses it (a question for the PI: a narrow level cannot be written).
+- **The loss list**: `from_session`'s losses name only what the project holds (photon pairs, data sets with their
+  records, THM experiments, beta pairs, excited light particles); `Written.not_written` names every section (MF=3,
+  MF=6 of elastic MT=2, of each exit, of MT=102) a reaction of the project needs that the file lacks, with the
+  reason; both are in the MF=1 text. The test compares them with the file's sections and the project.
+- **Refusal texts**: the fix of `Candidate.accept`, `write`, `to_project` and `from_session` is in words (no Python
+  call), so that the page, the command line and a script read the same.
+- **IFG=0** (p. 73): converted by `to_project`, gamma = sign(GAM) sqrt(|GAM| / 2P) (the manual prints
+  "sign(GAM) x |GAM|/2P": its square root is meant, Gamma = 2 gamma^2 P, eq. D.45 p. 356), P the engine's
+  `penetrability` row at the channel's c.m. energy |ER| m_B/(m_A+m_B) + Q (eq. D.82, p. 364; |ER| for a negative
+  ER, p. 73); a width on a channel closed there is refused. T2 written as IFG=0 gives the levels of the IFG=1 file to
+  6.9e-7. **KRM=3** stays refused: AZURE2's `use_rmc` holds eliminated photon widths, but a start model is in the
+  Brune basis, and the Brune transformation of the eliminated widths needs a door the engine lacks: door 2
+  (`observed_levels_of_block`) with, per level, the formal eliminated width Gamma_gamma (MeV, P = 1) as an
+  argument, returning the observed Gamma_gamma of each level (the eigenvector transformation of the particle
+  channels applied to the photon amplitudes). No library file of `work/endf/evals` exercises either: the only one,
+  ENDF/B-VIII.1 3He + 4He, is IFG=1, KRM=4.
+- **PSYCHE's Q of MT=102**: its mass formula (section 13.6); nothing to repair in the file.
+
+### 13.8 MF=6 (as built)
+
+Files: `pyazr/endf/engine_values.py` (the engine's values on the grids: `Reaction`, `Sweeps.energy_grid`,
+`Sweeps.elastic_cosines`), `pyazr/endf/sections.py` (the records: MF=3, LAW=2 with its LAW=4 recoil, LAW=5 with
+MF=3/MT=2, MF=6/MT=102), `pyazr/endf/grid.py` (`refine`, `thin`), `writer.py` (`_reactions`, the assembly). The
+signatures of `write` and `to_project` are unchanged; `write` has one keyword more, `elastic_max_cosine` (0.98).
+
+- **LAW=2** of every particle exit (p. 143): LCT=2, the emitted particle (LAW=2, LANG=0, yield 1) and the residual
+  (LAW=4, yield 1); a_l per energy are the engine's `legendre` quantity with the expansion `rsl`, A_L/((2L+1)A_0),
+  which is LAW=2's normalisation (eq. 6.8): no arithmetic in Python. Orders asked up to 2 l_max + 4; the last must
+  come back zero (else refused). NL per panel is the highest non-zero order.
+- **LAW=5** of charged-particle elastic scattering, LTP=12 (the design's choice: no new door; pp. 144-147) with
+  MF=3/MT=2 holding sigma_NI (p. 150: "With LPT=12 and LPT=14 representation, MT=2 in File 3 contains
+  sigma_NI(E) in barns"). sigma_e from the engine's `dsigma_domega` at c.m. angles, sigma_c by the reader's own
+  terms (`CoulombTerms`, the engine's rows on the file's AWI and AWR) so that the reader gets the engine's sigma_e
+  back at the nodes. sigma_NI = the trapezoid integral of sigma_e - sigma_c over the panel's cosines (exact for
+  P_NI linear in mu), P_NI = (sigma_e - sigma_c)/sigma_NI. mu from -1 (0 for identical particles, LIDP=1, SPI the
+  projectile's spin) to 0.98; above it the file gives the Coulomb term alone (listed in MF=1).
+- **MF=6/MT=102** (p. 136): per final state (photon pair) in order of excitation, the primary photon (ZAP=0, LAW=2,
+  yield sigma_f/sigma of MF=3/MT=102, a_l of the engine's capture distribution to that state) and the compound's
+  recoil (LAW=4, the same yield). Not written: the cascade below the final states (MF=1 says so).
+- **Masses** (p. 24): AWP of light products (A <= 4) nuclear, of heavier ones atomic, AME2020; AWI the same function.
+- **The grid**: one energy grid for every section (MF=3 and MF=6), `grid.refine` from `grid.start_grid`, the rule
+  applied to sigma of each exit and of capture, the yield of each final state, p(mu) of each LAW=2 distribution at
+  9 cosines and sigma_e at 9 cosines of the LAW=5 range. The cosines of LAW=5: `grid.refine` on sigma_e - sigma_c
+  plus a constant per energy (the smallest sigma_e of the start cosines: it cancels in the chord, so the rule holds
+  the error against the size of the cross section; on sigma_e - sigma_c alone T2 needed 2418 cosines per energy and
+  an 81 MB file), then each energy keeps the cosines its own values need (`grid.thin`, the same rule; T2: up to 203).
+
+What the manual leaves open, and the reading taken:
+- AWP of a primary photon "can contain the energy of a primary photon" (p. 135), not at which incident energy: EG of
+  MF=12 LP=2 (p. 201), the photon energy at zero incident energy, S - E_x,f.
+- The yield of a primary photon and of its recoil: the multiplicity of a discrete photon, sigma_f/sigma (eq. 12.1,
+  p. 200); LIP=0 for a recoil in an excited state (LIP marks isomers, p. 135).
+- Eq. 6.19 integrates sigma_e - sigma_c over mu, not over the solid angle, while p. 146 says sigma_NI is "in barns";
+  the equations are taken as written (sigma_e = sigma_c + sigma_NI P_NI), as the reader computes it.
+- Between incident energies the reader interpolates sigma_e - sigma_c at fixed mu, sigma_NI(E_i) P_NI(mu, E_i) of
+  the panels (its documented reading since stage 1). Its code multiplied the interpolated P_NI by the interpolated
+  sigma_NI instead (a difference between the code and its text; repaired here): where sigma_NI changes sign
+  between two panels, P_NI = v/sigma_NI is large and of opposite sign on either side, and the product of the two
+  interpolations was 13 % off at a T1 data point (0.55 MeV) and 93 % at a 13N one. A processing code that
+  multiplies the two interpolations would make the same error near such energies: a question for the PI (a grid
+  point at each sign change of sigma_NI, or LTP=1 with a door).
+- The recoil of LAW=5 for distinguishable particles: LAW=4 (two-body, p. 144); the library file writes LAW=0 there.
+
+Measured (`tests/pyazr/endf_write_test.py`, build `work/b-endf4`, tolerance 1e-3): `Material.curves` of the written
+file against the engine's dsigma/dOmega, relative to max(|engine|, 1e-3 of its largest value), (i) at the points
+of the project's differential data sets inside the file's range and LAW=5 cosines, (ii) at 60 midpoints of the
+energy grid x 16 c.m. angles 20-170 deg:
+
+| project | elastic LAW=5 (i), (ii) | exits LAW=2 (i), (ii) | capture photons (i), (ii) | grid |
+|---|---|---|---|---|
+| T1 | 1.8e-3 (207 points), 5.6e-4 | - | 5.5e-4 (21), 8.3e-4 to the ground state; 3.0e-3 to the 1.0 MeV state | 736 energies, up to 267 cosines |
+| T2 | no data, 2.5e-4 | 1.0e-3 (60), 1.1e-3 (MT=800); 9.9e-4 (MT=801) | - | 655 energies, up to 203 cosines |
+| 13N | 3.4e-3 (136), 7.8e-4 | - | 1.1e-3 (67), 1.4e-3 | 740 energies |
+
+So the stated tolerance: each tabulated quantity to the rule (1e-3); dsigma/dOmega, a product of two tables
+interpolated each, to 3e-3 for LAW=2 and the photons and 5e-3 for elastic scattering (the test's bounds). The grid
+grows with MF=6 (T1 736 energies against 381 with MF=3 alone; T2 655 against 446): the elastic cross section at 9
+cosines is the column that asks most. The write takes 47 s for T2, about 2 min for T1 (the example).
+
+The real codes on the written files (CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11; T1, T2, 13N), every finding:
+- CHECKR "LRP=2 ONLY ALLOWED IN DERIVED FILES" (the PI's decision) and "MATERIAL NUMBER SHOULD BE 625/728" (MAT
+  9999, the evaluator's field): as before.
+- CHECKR "NE = 655 (736, 740) OUT OF RANGE 1 - 200" in MF=6, then "SECTION CANNOT BE CHECKED", then "OUT OF
+  SEQUENCE AT SEQUENCE NUMBER 1" of the next MF=6 section: CHECKR applies MF=5's limit of 200 incident energies
+  (`NES5MAX`, checkr.f lines 337, 3419, 3459) to LAW=2 and LAW=5, where Appendix G (p. 391) gives MF=6 NE 2,000;
+  the third follows from the second (a file written over 0.6-0.9 MeV, 48 energies, has none of them). The code's.
+  With 48 energies CHECKR reports "NL = 208 OUT OF RANGE 1 - 201" for a LAW=5 panel: MF=4's 201 angular points
+  (p. 391 gives no limit for the cosines of MF=6 LAW=5); the code's. The library file has the NE finding too. Whether
+  to keep MF=6 under 200 energies and 201 cosines for the codes that copied these limits is a question for the PI.
+- CHECKR "EMAX = 9.00E+05 OUT OF RANGE 1.00E+06 - 3.00E+09" on that 0.6-0.9 MeV file: CHECKR's bound; EMAX is the
+  file's upper energy.
+- FIZCON "DISCRETE 2-BODY LAW NOT PERMITTED FOR MT= 102" (T1, 13N): fizcon.f lines 4343-4349 allow LAW=2 only for MT
+  2, 50-90 and 600-848; p. 143 allows it for the primary photons of MT=102. The code's.
+- FIZCON "CHECK NORMALIZATION= 0.998889 AT E= 2.7275E+05" (T1 MF=6/MT=2): at that energy sigma_NI = -6.4e-5 b and
+  P_NI reaches 2e4; the panel as written integrates to 1.0000001 (the module); FIZCON sums the intervals in single
+  precision (fizcon.f lines 4418-4436). The code's arithmetic; the panel is the fragile case of the reading above.
+- FIZCON "MF=3/MT REQUIRES MF=6": gone (MF=6 written).
+- PSYCHE: "AP NOT IN RANGE", "SPIN OF ISOTOPE" (its reading of LRF=7, section 13.6); the calculated Q of MT=102 (its
+  mass formula, section 13.6); thermal cross sections, resonance integrals and boundary tests of MT=2 and MT=102
+  (neutron quantities); "NO ENERGY-BALANCE TEST FOR ..." and "NO GAMMAS" (notes of what PSYCHE does not test).
+
+### 13.9 The channel-spin coupling order (measured)
+
+The full ENDF/B-VIII.1 3He + 4He file (`work/endf/evals/h_He4/h-002_He_004.endf`, read with `python -I`;
+`work/endf4/s/sch_order.py`): `to_project` of its MF=2, then the engine's 4He(3He,p)6Li at 13 panel energies of
+MF=6/MT=600 from 7.2 to 19.2 MeV and 9 angles.
+1. The file's LAW=2 coefficients are not normalised as eq. 6.8 says (p. 143: "the angular distribution p_i is
+   normalized"): they are the engine's a_l times sigma(E)/(2 pi) of its own MF=3/MT=600, to 5 digits, at every
+   energy up to 17.2 MeV (a defect of the file, or of its translation by FUDGE; a reader following the manual draws
+   the distribution wrong by that factor). Divided by sigma/(2 pi), p(mu) of the file equals the engine's to 4.2e-4
+   of its maximum (7.2-17.2 MeV; below 1e-7 at 6 of the 11 energies); at 18.2 and 19.2 MeV it differs by 52 % and 36 %
+   (not explained: the coefficients' ratios to the engine's differ by order). The l-dependent signs of the start
+   model are right where the file is consistent.
+2. Every amplitude of channel spin 1/2 of p + 6Li flipped in sign in all levels (14 amplitudes, a copy of the
+   project): sigma, dsigma/dOmega and every Legendre coefficient unchanged to the last bit (0.0). A control, one
+   amplitude of one level flipped, changes dsigma/dOmega by 17 %. Exchanging the two spins in the coupling changes a
+   channel's state by the constant sign (-1)^(I1+I2-s), the collision matrix by a sign per channel pair; unpolarized
+   cross sections sum over the channel spins incoherently, so no MF=3 or MF=6 number depends on the order, and no
+   library file can settle it. Analysing powers mix channel spins coherently and do depend on it: a project made by
+   `to_project` and fitted to analysing powers rests on AZURE2's order (the light particle first), which the
+   conversion report says when a pair has two non-zero spins.
+3. The reader reads MF=6/MT=600 (LAW=2, LANG=0) and MF=6/MT=2 (LAW=5, LTP=1) of this file.

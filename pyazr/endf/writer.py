@@ -8,8 +8,9 @@ What is written:
 - MF=2/MT=151 (pp. 64-65, 71-74): the particle channels in the formal basis, LRF=7 KRM=4 IFG=1
   (:func:`pyazr.endf.from_session`, the engine's door).
 - MF=3 per reaction (pp. 103-104): every particle exit (MT 600 + k, 650 + k, ..., 800 + k, 50 + k) and the total
-  capture (MT=102) from the engine on one grid refined by :func:`pyazr.refine_grid` (the engine's refinement of an
-  adaptive extrapolation grid) to the tolerance of linear interpolation, lab energies of the projectile in eV,
+  capture (MT=102) from the engine on one grid (:mod:`pyazr.endf.grid`: the engine's refinement of an adaptive
+  extrapolation grid, started at the level energies and thresholds, checked at quarter points) to the tolerance of
+  linear interpolation, lab energies of the projectile in eV,
   barns, INT=2.  Before the file is written, MF=2 is read back into a project and its
   reaction cross sections compared with MF=3 at every grid point (the PI's decision: LRP=2 with the statement that
   MF=2 reproduces MF=3); a difference above ``MF2_TOLERANCE`` refuses the write.
@@ -27,7 +28,8 @@ import tempfile
 import numpy as np
 
 from ..errors import FormatRefused
-from . import names
+from . import engine_values, grid, names
+from . import sections as section_rows
 from .material import M_NEUTRON_U
 from .model import EV_PER_MEV, from_session, to_project
 from .records import RecordWriter, NUMBER_FORMS
@@ -38,31 +40,51 @@ from .records import RecordWriter, NUMBER_FORMS
 LRP = 2
 #: MF=2 must reproduce MF=3 to this (relative, at every grid point where MF=3 is above 1e-12 of its largest value).
 MF2_TOLERANCE = 1e-5
-ELECTRON_MASS_U = 0.000548579909  # CODATA 2018
-NOT_WRITTEN = ("MF=3/MT=2 and MF=6/MT=2 (charged-particle elastic needs MF=6 LAW=5, pp. 144-147)",
-               "MF=6 of the particle exits (LAW=2 Legendre coefficients, pp. 142-143)",
-               "MF=6/MT=102 (the primary photons to each final state, p. 136)")
+#: Why a section a project's reactions need is not written: (MF, role) -> the reason.  The writer lists every section
+#: that a reaction of the project needs and the file does not hold (``Written.not_written`` and the MF=1 text).
+NOT_WRITTEN_REASONS = {
+    (3, "neutral_elastic"): "elastic scattering of a neutral projectile (MF=3/MT=2 with MF=4 or MF=6 LAW=2) is not "
+                            "written",
+    (6, "neutral_elastic"): "elastic scattering of a neutral projectile (MF=3/MT=2 with MF=4 or MF=6 LAW=2) is not "
+                            "written",
+    (3, "elastic"): "charged-particle elastic scattering: sigma_NI was not computed",
+    (6, "elastic"): "charged-particle elastic scattering: LAW=5 was not computed",
+    (3, "exit"): "the exit's cross section was not computed",
+    (6, "exit"): "the exit's angular distribution was not computed",
+    (3, "capture"): "the capture cross section was not computed",
+    (6, "capture"): "the primary photons were not computed"}
+#: The largest c.m. cosine of the LAW=5 table (p. 146: "as close to 1.0 as possible"; sigma_e - sigma_c grows as
+#: 1/(1 - mu) towards 1): about 11.5 degrees.  Below it the file's elastic cross section is the Coulomb term alone.
+ELASTIC_MAX_COSINE = 0.98
 
 
 @dataclasses.dataclass(frozen=True)
 class Written:
     """What :func:`write` wrote: the file, its sections (MF, MT, lines), the grid of each MF=3 section (points, lab
-    eV range), the largest relative difference of MF=2's reconstruction from MF=3 per MT, the losses and the
-    sections not written.  ``print()`` lists it."""
+    eV range; MF=6 has the same energies), the largest relative difference of MF=2's reconstruction from MF=3 per
+    MT, the losses, the sections not written, the cosine grid of LAW=5 per MT (points, first, last) and the number
+    of engine sessions the grids took.  ``print()`` lists it."""
     path: str
     sections: tuple
     grids: dict
     mf2_check: dict
     losses: tuple
     not_written: tuple
+    cosines: dict = dataclasses.field(default_factory=dict)
+    sessions: int = 0
 
     def __str__(self):
         out = [f"{self.path}"]
         for mf, mt, nc in self.sections:
             g = self.grids.get(mt) if mf == 3 else None
+            if mf == 6 and mt in self.cosines:
+                c = self.cosines[mt]
+                g = None
+                nc = f"{nc} lines, LAW=5 on up to {c[0]} cosines {c[1]:g} to {c[2]:g} per energy,"
             extra = f", {g[0]} points {g[1]:.6g}-{g[2]:.6g} eV" if g else ""
             check = f", MF=2 reproduces it to {self.mf2_check[mt]:.1e}" if mf == 3 and mt in self.mf2_check else ""
-            out.append(f"  MF={mf}/MT={mt} {names.reaction_name(mt)}: {nc} lines{extra}{check}")
+            out.append(f"  MF={mf}/MT={mt} {names.reaction_name(mt)}: {nc}{'' if isinstance(nc, str) else ' lines'}"
+                       f"{extra}{check}")
         out += [f"  lost: {t}" for t in self.losses]
         out += [f"  not written: {t}" for t in self.not_written]
         return "\n".join(out)
@@ -78,45 +100,34 @@ def _zsymam(z, a):
     return f"{int(z):3d}-{_symbol(z):<2s}-{int(a):3d}"
 
 
-def _engine_grid(session, x, reactions, energy_range_MeV, tolerance, max_points, workdir):
-    """The engine's values on one grid for every reaction, refined by :func:`pyazr.refine_grid` (the engine's own
-    refinement of an ``adaptive`` extrapolation grid, the same C++ function): an interval is split while the midpoint
-    differs from the linear interpolation by more than ``tolerance`` (relative, floor 1e-3 of the largest value) for
-    any reaction.  Each sweep is one session of a project made of the session's nuclear part, at the fit vector x,
-    with one extrapolation per reaction at the sweep's lab energies.  Returns (lab energies in MeV, {label: values
-    in b}, the refinement's report)."""
-    from ..grids import refine_grid
-    from ..project import Project
-    from ..session import Session
-    path = os.path.join(workdir, "grid.azr")
-    p = Project.new(path, nuclear_part=session.file)
-    lo, hi = energy_range_MeV
-    grid_file = os.path.join(workdir, "grid.dat")  # absolute: the project is also read without its directory
-    np.savetxt(grid_file, [lo, hi], fmt="%.17g")  # read when the record is checked
-    for k, (label, _, pair_keys) in enumerate(reactions):
-        p.add_extrapolation(f"endf{k}", reaction=label, quantity="sigma", unit="b",
-                            energies=f"file {grid_file} MeV lab", **pair_keys)
-    for d in ("output", "checks"):
-        os.makedirs(os.path.join(workdir, d), exist_ok=True)
-    p.save()
-    pf = _parameter_file(session, x, workdir)
-    opts = {k: v for k, v in session.options.items() if k in ("use_brune", "use_park", "use_rmc", "use_gsl_coul",
-                                                              "use_coulomb_table", "ignore_externals",
-                                                              "use_long_wavelength", "ec_convection_current")}
+def _za(z, mass_neutron):
+    """ZA = 1000 Z + A of a particle of the record (charge, mass in neutron masses)."""
+    return 1000 * int(round(z)) + int(round(mass_neutron * M_NEUTRON_U))
 
-    def model(xs):
-        np.savetxt(grid_file, np.asarray(xs, float), fmt="%.17g")
-        s = Session(path, extrapolations=True, parameter_file=pf, **opts)
-        try:
-            data = s.evaluate(s.parameters.x0).data
-            return np.column_stack([np.asarray(d.model, float) for d in data])
-        finally:
-            s.close()
 
-    refined = refine_grid(np.linspace(lo, hi, 41), model, tolerance, max_points)
-    e = np.asarray(refined["x"], float)
-    v = np.asarray(refined["values"], float)
-    return e, {mt: v[:, k] for k, (_, mt, _) in enumerate(reactions)}, refined
+def _reactions(session, project, record):
+    """The reactions the file holds, as :class:`pyazr.endf.engine_values.Reaction`: elastic scattering of a charged
+    projectile (MT=2), every particle exit (its MT from the record), capture to every final state (MT=102) and to each
+    final state (one per photon pair, for MF=6/MT=102).  Labels and pair keys are the project's."""
+    pairs = {p.key: p.to_dict() for p in session.pairs}
+    entrance = next(p for p in pairs.values() if p["is_entrance"])
+    e = entrance["key"]
+    particle = [k for k, p in pairs.items() if p["pair_kind"] == "particle" and k != e]
+    mt_of = dict(zip([e] + particle, [p.mt for p in record.pairs]))
+    out = []
+    if entrance["Z1"] > 0 and entrance["Z2"] > 0:
+        out.append(engine_values.Reaction(2, "elastic", project.reaction(e, e),
+                                          tuple(_pair_keys(project, e, e).items()), e))
+    for k in particle:
+        out.append(engine_values.Reaction(mt_of[k], "exit", project.reaction(e, k),
+                                          tuple(_pair_keys(project, e, k).items()), k))
+    photons = [k for k, p in pairs.items() if p["pair_kind"] == "photon"]
+    if photons:
+        out.append(engine_values.Reaction(102, "capture", project.reaction(e, -1), (), -1))
+        for k in photons:
+            out.append(engine_values.Reaction(102, "final_state", project.reaction(e, k),
+                                              tuple(_pair_keys(project, e, k).items()), k, pairs[k]["excitation"]))
+    return out
 
 
 def _pair_keys(project, entrance_key, exit_key):
@@ -128,20 +139,6 @@ def _pair_keys(project, entrance_key, exit_key):
         if key > 0 and sum(v == pairs[key] for v in pairs.values()) > 1:
             out[field] = key
     return out
-
-
-def _parameter_file(session, x, workdir):
-    """Every parameter of the session at x, full precision, in the session's basis (a param.sav as the engine reads
-    it by name)."""
-    P = session.parameters
-    x = P.x0 if x is None else np.asarray(x, float)
-    path = os.path.join(workdir, "x.par")
-    with open(path, "w") as fh:
-        fh.write(f"#parametrization {session.basis}\n")
-        for p in P:
-            v = p.start if p.fixed else x[p.free_index]
-            fh.write(f"{p.name} {float(v)!r}\n")
-    return path
 
 
 def _reconstruct(sections, s_entrance, energies_MeV, workdir):
@@ -209,11 +206,9 @@ def _header_rows(record, header, sections, text, number_form):
     n451 = 4 + nwd + nxc
     w = RecordWriter(number_form)
     za_projectile = 1000 * int(round(ent.za)) + int(round(ent.ma * M_NEUTRON_U))
-    # AWI: the projectile's mass in neutron masses, nuclear (p. 24): its AME2020 atomic mass minus Z electron masses
-    # (electron binding neglected, < 1e-7 u for Z <= 2), not the project's mass, which a project may give nuclear
-    from ..sources import masses
-    z_projectile, a_projectile = int(round(ent.za)), int(round(ent.ma * M_NEUTRON_U))
-    awi = (masses.atomic_mass((z_projectile, a_projectile)) - z_projectile * ELECTRON_MASS_U) / M_NEUTRON_U
+    # AWI: the projectile's mass in neutron masses, nuclear (p. 24), from AME2020, not the project's mass, which a
+    # project may give nuclear or atomic
+    awi = section_rows.product_mass(round(ent.za), round(ent.ma * M_NEUTRON_U))
     w.cont(record.za, record.awr, LRP, 0, header["NLIB"], header["NMOD"])
     w.cont(0.0, 0.0, 0, 0, 0, 6)
     w.cont(awi, record.eh, header["LREL"], 0, 10 * za_projectile, header["NVER"])
@@ -241,7 +236,7 @@ def _wrap(text, width=66):
 
 
 def write(session, path, x=None, *, header=None, energy_range_MeV=None, tolerance=1e-3, max_points=4000,
-          number_form="widest", overwrite=False):
+          number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE):
     """Write ``session``'s model at the fit vector ``x`` (default its start) as an ENDF-6 material at ``path``.
 
     ``header``: the evaluator's fields of MF=1 (p. 42), a dict with any of ``MAT`` (default 9999), ``NLIB``
@@ -256,24 +251,26 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     MF=3 to ``MF2_TOLERANCE``."""
     path = os.path.abspath(path)
     if os.path.exists(path) and not overwrite:
-        raise FormatRefused(what=f"{path} exists", allowed="a new file (write never replaces a file unasked)",
-                            fix="give another path, or overwrite=True")
+        raise FormatRefused(what=f"{path} exists", allowed="a new file (an existing file is replaced only when that is "
+                            "asked for)", fix="write to a file name that does not exist yet, or ask for the "
+                            "existing file to be replaced (overwrite)")
     if number_form not in NUMBER_FORMS:
         raise FormatRefused(what=f"number_form {number_form!r}", allowed=", ".join(NUMBER_FORMS),
-                            fix="number_form='widest' (the default)")
+                            fix="choose the widest form (the default): fixed point where it fits, 8-10 digits")
     h = dict(MAT=9999, NLIB=0, NVER=1, LREL=0, NMOD=1, ALAB="", EDATE="", AUTH="", REF="", DDATE="", RDATE="",
              LIBRARY="AZURE2", TEXT=())
     unknown = set(header or {}) - set(h)
     if unknown:
         raise FormatRefused(what=f"header fields {sorted(unknown)}", allowed=", ".join(h),
-                            fix="give the MF=1 fields by these names")
+                            fix="name the MF=1 fields as listed")
     h.update(header or {})
     if energy_range_MeV is None:
         lab = [e for d in session.evaluate(session.parameters.x0 if x is None else x).data
                for e in np.asarray(d.extra.get("energy_lab", []), float)]
         if not lab:
             raise FormatRefused(what="the session has no data to take an energy range from",
-                                allowed="energy_range_MeV=(low, high), lab MeV", fix="give energy_range_MeV")
+                                allowed="an energy range given with the request (lab MeV of the projectile)",
+                                fix="give the lowest and highest lab energy of the file")
         energy_range_MeV = (min(lab), max(lab))
     lo, hi = (float(v) for v in energy_range_MeV)
     record, losses = from_session(session, x, energy_range_eV=(lo * EV_PER_MEV, hi * EV_PER_MEV))
@@ -282,59 +279,97 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     pairs = {p.key: p.to_dict() for p in session.pairs}
     entrance = next(p for p in pairs.values() if p["is_entrance"])
     s_ent = entrance["sep_energy"] + entrance["excitation"]
-    reactions = []  # (label, MT, the pair keys an extrapolation names when the label is ambiguous)
-    keys = [k for k, p in pairs.items() if p["pair_kind"] == "particle" and k != entrance["key"]]
-    mt_of = {}
-    for k, p in zip([entrance["key"]] + keys, record.pairs):
-        mt_of[k] = p.mt
-    for k in keys:
-        reactions.append((project.reaction(entrance["key"], k), mt_of[k],
-                          _pair_keys(project, entrance["key"], k)))
-    if any(p["pair_kind"] == "photon" for p in pairs.values()):
-        reactions.append((project.reaction(entrance["key"], -1), 102, {}))
-    if not reactions:
-        raise FormatRefused(what="the session has no exit pair (elastic only)", allowed="a project with a reaction "
-                            "or capture exit", fix="the elastic channel needs MF=6 LAW=5, which this writer does not "
-                            "write yet")
+    reactions = _reactions(session, project, record)
+    ent = record.pairs[0]
+    awi = section_rows.product_mass(round(ent.za), round(ent.ma * M_NEUTRON_U))
+    identical = round(ent.za) == round(ent.zb) and round(ent.ma * M_NEUTRON_U) == round(ent.mb * M_NEUTRON_U)
+    mu_range = (0.0 if identical else -1.0, float(elastic_max_cosine))
+    from .curves import CoulombTerms
+    coulomb = CoulombTerms.of(round(ent.za), round(ent.zb), awi * M_NEUTRON_U, record.awr * M_NEUTRON_U)
+
+    def coulomb_minus(e_MeV, mu):
+        """The Coulomb term of LAW=5 as the file's reader adds it (b/sr), (n_E, n_mu)."""
+        return np.array([coulomb.sigma(np.full(len(mu), e * EV_PER_MEV), mu, identical=identical,
+                                       two_s=int(round(2 * ent.spin_a))) for e in e_MeV])
+
     work = tempfile.mkdtemp(prefix="endf_write_")
-    e_grid, grid, refined = _engine_grid(session, x, reactions, (lo, hi), tolerance, max_points, work)
+    order = 2 * max([c.l for g in record.groups for c in g.channels] + [0]) + 4
+    sweeps = engine_values.Sweeps(session, x, work, order)
+    has_elastic = any(r.role == "elastic" for r in reactions)
+    values = sweeps.energy_grid(reactions, grid.start_grid(session, x, (lo, hi)), tolerance, max_points,
+                                mu_range if has_elastic else None)
+    refined = values.report
     if refined.get("budget_reached"):
-        raise FormatRefused(what=f"the grid reached max_points={max_points} before the tolerance {tolerance:g} "
+        raise FormatRefused(what=f"the grid reached {max_points} points before the tolerance {tolerance:g} "
                             f"(largest deviation {refined.get('largest_deviation'):.2e} at "
                             f"{refined.get('largest_deviation_at')} MeV)", allowed="a grid that meets the tolerance",
-                            fix="raise max_points, loosen tolerance or narrow energy_range_MeV")
-    mf2 = record.rows(number_form)
-    sections = {(2, 151): mf2}
-    grids, values = {}, {}
-    for _, mt, _ in reactions:
-        order = np.argsort(e_grid)
-        e_MeV, sigma = e_grid[order], grid[mt][order]
-        if mt == 102:
-            qm = qi = s_ent * EV_PER_MEV
-        else:
-            pk = next(k for k, m in mt_of.items() if m == mt)
-            qi = record.pairs[[p.mt for p in record.pairs].index(mt)].q
-            qm = qi + pairs[pk]["excitation"] * EV_PER_MEV
-        w = RecordWriter(number_form)
-        w.cont(record.za, record.awr, 0, 0, 0, 0)
-        w.tab1(qm, qi, 0, 0, [len(e_MeV)], [2], list(e_MeV * EV_PER_MEV), list(sigma))
-        sections[(3, mt)] = w.rows
-        grids[mt] = (len(e_MeV), e_MeV[0] * EV_PER_MEV, e_MeV[-1] * EV_PER_MEV)
-        values[mt] = (e_MeV, sigma)
+                            fix="allow more grid points, a looser tolerance or a narrower energy range")
+    e_MeV = values.energies
+    e_eV = e_MeV * EV_PER_MEV
+    written = {(2, 151): record.rows(number_form)}
+    grids, cosines = {}, {}
+    za, awr = record.za, record.awr
+    capture_total = next((r for r in reactions if r.role == "capture"), None)
+    finals = []
+    for r in reactions:
+        if r.role == "exit":
+            p = next(q for q in record.pairs if q.mt == r.mt)
+            qm = p.q + pairs[r.exit_key]["excitation"] * EV_PER_MEV
+            written[(3, r.mt)] = section_rows.cross_section(za, awr, qm, p.q, e_eV, values.sigma[r.key], number_form)
+            emitted = (_za(p.za, p.ma), section_rows.product_mass(round(p.za), round(p.ma * M_NEUTRON_U)))
+            residual = (_za(p.zb, p.mb), section_rows.product_mass(round(p.zb), round(p.mb * M_NEUTRON_U)))
+            written[(6, r.mt)] = section_rows.two_body(za, awr, emitted, residual, e_eV, values.legendre[r.key],
+                                                   number_form)
+        elif r.role == "capture":
+            q = s_ent * EV_PER_MEV
+            written[(3, 102)] = section_rows.cross_section(za, awr, q, q, e_eV, values.sigma[r.key], number_form)
+        elif r.role == "final_state":
+            total = values.sigma[capture_total.key]
+            y = np.divide(values.sigma[r.key], total, out=np.zeros(len(total)), where=total != 0)
+            finals.append((r.excitation, (s_ent - r.excitation) * EV_PER_MEV, y, values.legendre[r.key]))
+        if r.role in ("exit", "capture"):
+            grids[r.mt] = (len(e_eV), e_eV[0], e_eV[-1])
+    if finals:
+        z_c, a_c = round(ent.za + ent.zb), round((ent.ma + ent.mb) * M_NEUTRON_U)
+        compound = (1000 * z_c + a_c, section_rows.product_mass(z_c, a_c))
+        written[(6, 102)] = section_rows.capture(za, awr, compound, [f[1:] for f in sorted(finals, key=lambda f: f[0])],
+                                             e_eV, number_form)
+    elastic = next((r for r in reactions if r.role == "elastic"), None)
+    if elastic is not None:
+        panels, mu_report = sweeps.elastic_cosines(elastic, e_MeV, mu_range, coulomb_minus, tolerance, max_points)
+        if mu_report.get("budget_reached"):
+            raise FormatRefused(what=f"the cosine grid of elastic scattering reached {max_points} points before the "
+                                f"tolerance {tolerance:g}", allowed="a grid that meets the tolerance",
+                                fix="allow more grid points, a looser tolerance, a smaller largest cosine or a "
+                                "narrower energy range")
+        projectile = (_za(ent.za, ent.ma), awi)
+        target = (_za(ent.zb, ent.mb), section_rows.product_mass(round(ent.zb), round(ent.mb * M_NEUTRON_U)))
+        written[(3, 2)], written[(6, 2)], _ = section_rows.elastic(za, awr, projectile, target, identical, ent.spin_a,
+                                                               e_eV, panels, number_form)
+        grids[2] = (len(e_eV), e_eV[0], e_eV[-1])
+        counts = [len(m) for m, _ in panels]
+        cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
-    particle = {mt: values[mt][0] for _, mt, _ in reactions if mt != 102}
+    particle = {r.mt: e_MeV for r in reactions if r.role == "exit"}
     mf2_check = {}
     if particle:
-        back = _reconstruct(sections, s_ent, particle, work)
-        for mt, e in particle.items():
-            sigma = values[mt][1]
+        back = _reconstruct({k: v for k, v in written.items() if k[0] in (2, 3)}, s_ent, particle, work)
+        for mt in particle:
+            sigma = values.sigma[(mt,)]
             keep = np.abs(sigma) > 1e-12 * np.max(np.abs(sigma)) if np.any(sigma) else np.zeros(len(sigma), bool)
             mf2_check[mt] = float(np.max(np.abs(back[mt][keep] - sigma[keep]) / np.abs(sigma[keep]))) \
                 if keep.any() else 0.0
             if mf2_check[mt] > MF2_TOLERANCE:
                 raise FormatRefused(what=f"MF=2 as written reproduces MF=3/MT={mt} only to {mf2_check[mt]:.2e}",
                                     allowed=f"agreement to {MF2_TOLERANCE:g} (LRP=2: MF=2 reproduces MF=3)",
-                                    fix=f"the files are kept in {work} for a look; report the project")
+                                    fix=f"report the project to the AZURE2 developers (the files are kept in {work})")
+    # every section a reaction of the project needs, and why it is not written where it is not
+    needed = [(mf, r.mt, r.role) for r in reactions if r.role != "final_state" for mf in (3, 6)]
+    if not has_elastic:  # a neutron (uncharged) projectile: elastic scattering is not LAW=5
+        needed = [(3, 2, "neutral_elastic"), (6, 2, "neutral_elastic")] + needed
+    not_written = tuple(f"MF={mf}/MT={mt} ({names.reaction_name(mt)}): {NOT_WRITTEN_REASONS[(mf, role)]}"
+                        for mf, mt, role in needed if (mf, mt) not in written)
+    sections = written
     # MF=1
     ent = record.pairs[0]
     target_z, target_a = int(round(ent.zb)), int(round(ent.mb * M_NEUTRON_U))
@@ -356,6 +391,15 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             "IFG=1) reproduces the particle reactions "
             f"of MF=3 (checked before writing to {MF2_TOLERANCE:g}). MF=2 holds no photon channel: AZURE2 keeps "
             "radiative widths out of the total width; capture is MF=3/MT=102 (internal and external capture).",
+            "MF=6 holds the engine's angular distributions on the energy grid of MF=3, in the c.m. (LCT=2): LAW=2 "
+            "Legendre coefficients of each two-body exit with the residual as LAW=4"
+            + (f"; charged-particle elastic scattering as LAW=5 LTP=12, P_NI tabulated on up to {cosines[2][0]} "
+               f"cosines from {cosines[2][1]:g} to {cosines[2][2]:g} with sigma_NI in MF=3/MT=2 (below the largest "
+               "cosine "
+               "the cross section is the Coulomb term alone)" if 2 in cosines else "")
+            + ("; for capture (MT=102) the primary photon to each final state (LAW=2, AWP its energy at zero "
+               "incident energy, the yield sigma_f/sigma) and its recoil (LAW=4); the cascade below the final "
+               "states is not given (AZURE2 does not hold it)" if (6, 102) in sections else "") + ".",
             "Separation energy of the incident pair: "
             f"{s_ent:.9f} MeV (the project's); masses as the project's atomic masses."]
     text = std
@@ -366,7 +410,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         for jpi, e, k, r, l, wv in losses.photon_widths:
             text.append(f"  {jpi:5s} E_x {e:11.6f} MeV to pair {k} ({r}{l}): {wv:.6g}")
     text += ["", "Not carried by this file:"]
-    for t in losses.items + NOT_WRITTEN:
+    for t in losses.items + not_written:
         text += _wrap("- " + t)
     for t in h["TEXT"]:
         text += _wrap(t) or [""]
@@ -375,4 +419,5 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                     tpid=f" pyazr.endf.write, {os.path.basename(session.file)}")
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
-    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), NOT_WRITTEN)
+    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), not_written, cosines,
+                   sweeps.count)

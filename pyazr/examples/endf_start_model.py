@@ -4,8 +4,8 @@
 1. The ENDF/B-VIII.1 3He + 4He extract of the tests (MF=2/MT=151 in LRF=7): its record printed, a new project made
    of it (Brune basis, every level fixed; separation energy from AME2020), the conversion report, and the file's own
    MF=3/MT=600 against the engine's reconstruction from that project.
-2. The project T1 of the tests written as an ENDF-6 file (MF=1, MF=2 in the formal basis, MF=3 from the engine,
-   LRP=2), the module's own format check of it, and its MF=3 read back.
+2. The project T1 of the tests written as an ENDF-6 file (MF=1, MF=2 in the formal basis, MF=3 and MF=6 from the
+   engine, LRP=2), the module's own format check of it, and its MF=3 read back.
 
 Usage:
     python3 endf_start_model.py [WORKDIR]      (default: a new temporary directory)
@@ -48,7 +48,7 @@ def main(workdir):
     above = np.asarray(xs.table.x) > 7.2e6
     rel = np.abs(model[above] - np.asarray(xs.table.y)[above]) / np.asarray(xs.table.y)[above]
     print(f"MF=3/MT=600 above 7.2 MeV: largest relative difference {rel.max():.2e}")
-    # 4. A model written as an evaluation: MF=1, MF=2 (formal basis), MF=3 from the engine; LRP=2.
+    # 4. A model written as an evaluation: MF=1, MF=2 (formal basis), MF=3 and MF=6 from the engine; LRP=2.
     t1 = os.path.join(workdir, "T1")
     shutil.copytree(T1, t1, ignore=shutil.ignore_patterns("output*", "checks*"))
     for d in ("output", "checks"):

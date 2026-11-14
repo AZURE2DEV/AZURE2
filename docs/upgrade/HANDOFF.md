@@ -2,6 +2,37 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: MF=6
+
+**Done** (`endf.md` 13.8, 13.9): `pyazr.endf.write` writes MF=6 from the engine on the one energy grid of MF=3:
+LAW=2 of each particle exit (the engine's `legendre` quantity with the expansion `rsl`, which is LAW=2's a_l; the
+residual LAW=4), LAW=5 LTP=12 of charged-particle elastic scattering with sigma_NI in MF=3/MT=2 (cosines per energy,
+`grid.thin`), MF=6/MT=102 (per final state the primary photon, LAW=2 with the yield sigma_f/sigma, and the recoil).
+New files `pyazr/endf/engine_values.py`, `sections.py`; `write(..., elastic_max_cosine=0.98)`, other signatures
+unchanged. Reader: capture to one final state in `curves`; LAW=5 LTP 12-15 interpolates sigma_NI(E_i) P_NI as its
+text said (the code multiplied two interpolations). The channel-spin coupling order measured on the full 3He + 4He
+library file (no MF=3/MF=6 number depends on it; the file's MF=6/MT=600 coefficients are not normalised).
+**Verified how**: `pyazr_endf_write` (curves of the written files against the engine at the data's points and
+between grid points: elastic 3.4e-3, LAW=2 1.1e-3, photons 3.0e-3 at most), `pyazr_endf_model`, `_read`, `_check`,
+the example, the consistency test, the pages built, CHECKR, FIZCON, PSYCHE on the written files (every finding in
+`endf.md` 13.8, all the codes' limits or readings). **Open** (questions for the PI): MF=6 over 200 energies and
+LAW=5 panels over 201 cosines (CHECKR's limits, not the manual's); LTP=12 where sigma_NI changes sign (an outside
+code multiplying two interpolations errs there); a narrow level cannot be written (13.7).
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: the loose ends
+
+**Done** (`endf.md` 13.7): the start grid of every written section seeded with the level energies (E_r and
+E_r -+ Gamma/2) and the exit thresholds, and the quarter points of every interval checked by the refinement's own
+rule (`pyazr/endf/grid.py`); the loss list exact (`from_session`'s losses only for what the project holds;
+`Written.not_written` every section a reaction needs and the file lacks, with the reason; both in MF=1); refusal
+fixes in words (`Candidate.accept`, `write`, `to_project`, `from_session`); IFG=0 converted on reading (p. 73),
+KRM=3 refused with the door it would need; PSYCHE's MT=102 Q explained (its mass formula, not the file).
+**Verified how**: build `work/b-endf4` (no C++ change), `pyazr_endf_write`, `pyazr_endf_model`, `pyazr_endf_check`,
+`pyazr_endf_read`, the consistency test, the pages built; dense check (20001 points per section) on T1, T2, 13N
+within 1.0e-3; injected errors (seeds removed: the narrow level missed; the factor 2 of IFG=0 removed) fail the tests.
+**Open**: a level narrower than about 1e3 times the ER field's last digit cannot be written (MF=2 reproduces MF=3 only
+to 4e-4 near a 0.2 eV level; the 1e-5 check refuses it): a question for the PI.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-curve-export`) — the model as a curve; ENDF in and out
 
 `web_ui.md` section 11.16 has the whole; user guide `web_interface.rst`, `web_ui_api.rst`, `endf.rst`, `pyazr.rst`,

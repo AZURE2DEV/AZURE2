@@ -74,8 +74,11 @@ Which section gives which quantity:
      - MF=3 x MF=6 LAW=2 (Legendre or tabulated): sigma y p / 2 pi
    * - ``sigma`` of capture to every final state
      - MF=3/MT=102
+   * - ``sigma``, ``sfactor``, ``dsigma_domega`` of capture to one final state
+     - MF=3/MT=102 x the yield of its primary photon in MF=6/MT=102 (found by its energy, QI minus the final
+       state's excitation), and its LAW=2 distribution for ``dsigma_domega``
 
-Anything else (an analyzing power, a phase shift, capture to one final state, an excited light particle) is
+Anything else (an analyzing power, a phase shift, an excited light particle) is
 refused with what was asked, what is allowed and what to do (``pyazr.FormatRefused``), never drawn as zero.
 
 The conversions are the engine's, not a second copy in Python: the lab energy of the projectile is the engine's
@@ -213,13 +216,24 @@ format-3 project of it (never an existing file) in the Brune basis, every level 
 On the 3He + 4He extract of the tests the project reproduces the file's own MF=3/MT=600 (4He(3He,p)6Li) to 1.1e-6
 above 7.2 MeV (median 7e-8); the two points just above the p + 6Li threshold do not follow from the file's MF=2.
 
+A file with IFG=0 holds widths at the level energy instead of amplitudes: ``to_project`` converts them as the
+manual says (p. 73, eq. D.45), gamma = sign(GAM) sqrt(abs(GAM) / 2P), with P the engine's penetrability of the
+channel at the level, at abs(ER) for a negative ER (the channel's c.m. energy abs(ER) m_B/(m_A + m_B) + Q,
+eq. D.82); a width on a channel closed there cannot be converted and is refused.
+
 Refused, each with what, what is allowed and how to fix it: a range that is not LRF=7 or has NRO=1, KRM other than
-4 (Reich-Moore and Breit-Wigner files are not read as a start model), KRL=1 (no equations in the manual), IFG=0
-(widths instead of amplitudes), a photon pair (with KRM=4 its channels enter the level matrix; AZURE2 keeps
-radiative widths out of the total width), a fission pair, KBK > 0 or KPS > 0 (background R-matrix, tabulated
-phases), APE different from APT or two radii in one pair (AZURE2 has one radius per pair), SHF=0 or PNT=-1 on a
-particle channel. The manual does not say in which order the channel spin couples the two spins; the module reads
-SCH as AZURE2's (light particle first). An angle-integrated cross section does not depend on that order.
+4 (Reich-Moore and Breit-Wigner files are not read as a start model; a Reich-Moore file's eliminated widths would
+need a conversion to the Brune basis that is not built), KRL=1 (no equations in the manual), a photon pair (with
+KRM=4 its channels enter the level matrix; AZURE2 keeps radiative widths out of the total width), a fission pair,
+KBK > 0 or KPS > 0 (background R-matrix, tabulated phases), APE different from APT or two radii in one pair (AZURE2
+has one radius per pair), SHF=0 or PNT=-1 on a particle channel. The manual does not say in which order the
+channel spin couples the two spins; the module reads
+SCH as AZURE2's (light particle first). No cross section or angular distribution an ENDF-6 file holds depends on
+that order: exchanging the two spins changes each channel by a sign, and unpolarized cross sections sum over the
+channel spins incoherently (measured on the ENDF/B-VIII.1 3He + 4He file: every amplitude of one channel spin of p +
+6Li flipped, sigma and dsigma/dOmega of 4He(3He,p)6Li unchanged to the last bit). Analysing powers do depend on it:
+a project made from an evaluation and fitted to analysing-power data rests on AZURE2's order, which the conversion
+report says when a pair has two non-zero spins.
 
 Write an evaluation
 -------------------
@@ -249,14 +263,27 @@ Write an evaluation
   and external capture), on one grid of laboratory energies made by ``pyazr.refine_grid``, the engine's refinement
   of an adaptive extrapolation grid: an interval is split while its midpoint differs from linear interpolation by
   more than ``tolerance`` (default 1e-3) times the value, or times 1e-3 of the largest value where the cross section
-  is smaller than that. INT=2. On T1, T2 and 13N linear interpolation in the written file gives the engine's value at
-  the data's energies and at the grid's midpoints to 1e-3 by that rule.
+  is smaller than that. The refinement starts from 41 even points, every threshold of an exit and every level energy
+  of the project with the two energies half its width away (so a level narrower than the spacing is found), and
+  the quarter points of every interval are checked by the same rule afterwards (a midpoint can lie on the chord of
+  a steep flank). INT=2. On T1, T2 and 13N linear interpolation in the written file gives the engine's value on
+  20001 points per section to 1.0e-3 by that rule.
 - Before the file is written, MF=2 is read back into a project and its particle reactions computed on the grid: they
   must equal MF=3 to 1e-5 (T2: 8e-8), else the write is refused.
+- **MF=6** (pp. 133-147), in the c.m. (LCT=2), on the energy grid of MF=3 (the grid's rule also covers the
+  distributions): each particle exit as LAW=2 (the engine's Legendre coefficients, normalised as eq. 6.8) with the
+  residual as LAW=4; charged-particle elastic scattering as LAW=5 with LTP=12 (P_NI tabulated in mu, each energy
+  on the cosines it needs) and sigma_NI in MF=3/MT=2 (p. 150), from mu = -1 (0 for identical particles) to
+  ``elastic_max_cosine`` (0.98; at smaller angles the file gives the Coulomb term alone); capture to each final
+  state as its primary photon (LAW=2, its energy at zero incident energy in AWP, the yield sigma_f/sigma) and the
+  recoil (LAW=4). The cascade below the final states is not given (AZURE2 does not hold it). On T1, T2 and 13N the
+  file's dsigma/dOmega equals the engine's at the data's points and between the tabulated energies and angles to
+  3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section.
 
-Not written, and listed in MF=1 and in the answer: MF=3/MT=2 and MF=6 (the elastic channel needs MF=6 LAW=5, the
-exits MF=6 LAW=2, capture to each final state MF=6/MT=102), the photon channels and external capture in MF=2, the
-data and the apparatus of the project, the particles' g-factors. Refused: a session in the formal basis, Reich-Moore
+Listed in MF=1 and in the answer (``w.losses``, ``w.not_written``), each only when the project has it: every
+section a reaction of the project needs and the file does not hold, with the reason; the photon channels (their
+widths are listed in the text); the data sets with their records; the Trojan-horse experiments; beta-decay pairs;
+an excited light particle. Refused: a session in the formal basis, Reich-Moore
 (``use_rmc``), relativistic kinematics, a nuclear potential, several compound nuclei, an exit pair outside ENDF's
 reaction families, a session without an exit. A cross section far below 1e-3 of its largest value in the energy
 range is good to the absolute tolerance only: give a lower range (``energy_range_MeV``) for sub-barrier capture.
@@ -269,11 +296,19 @@ Measured with CHECKR 8.24, FIZCON 8.19 and PSYCHE 8.11 on the files written from
 - *LRP=2 ONLY ALLOWED IN DERIVED FILES* (CHECKR): expected, the PI's decision (the library's charged-particle LRF=7
   files have the same).
 - *MATERIAL NUMBER SHOULD BE 625* (CHECKR, warning, for p + 12C): the default MAT 9999; the MAT is the evaluator's (``header``).
-- *PRESENCE OF FILE 3, MT= ... REQUIRES AN EQUIVALENT SECTION IN FILE 6* (FIZCON): MF=6 is not written yet.
+- *NE = 655 OUT OF RANGE 1 - 200* in MF=6, then *SECTION CANNOT BE CHECKED* and *OUT OF SEQUENCE* in the next
+  section (CHECKR): CHECKR applies File 5's limit of 200 incident energies to MF=6; the manual's limit for MF=6 is
+  2,000 (Appendix G, p. 391). The library's files have the same finding. *NL = 208 OUT OF RANGE 1 - 201* (CHECKR,
+  a LAW=5 panel with more than 201 cosines): File 4's limit.
+- *DISCRETE 2-BODY LAW NOT PERMITTED FOR MT= 102* (FIZCON): the manual allows LAW=2 for the primary photons of
+  MT=102 (p. 143); FIZCON's list of reactions omits it.
+- *CHECK NORMALIZATION= 0.998889* (FIZCON, a LAW=5 panel where sigma_NI is close to zero and P_NI large): the panel
+  integrates to 1 to 1e-7; FIZCON sums in single precision.
 - *AP NOT IN RANGE* and *SPIN OF ISOTOPE ... DISAGREES WITH ...* (PSYCHE): PSYCHE's reading of LRF=7 (above).
-- *THE CALCULATED Q 6.67452E+06 DISSAGREES WITH THE GIVEN Q 1.94349E+06* for MT=102 (PSYCHE, note): the given Q
-  of 12C(p,g)13N is the AME2020 separation energy; how PSYCHE reckons 6.67 MeV for a proton capture is not
-  established here.
+- *THE CALCULATED Q 6.67452E+06 DISSAGREES WITH THE GIVEN Q 1.94349E+06* for MT=102 (PSYCHE, note): PSYCHE's Q
+  comes from its own mass formula (its function ``AMASS``: a liquid-drop formula with shell terms; a table only for
+  n, p, d, t, 3He and alpha), which gives 6.67 MeV for 12C + p -> 13N; the file's QM = QI = 1.94349 MeV is the
+  AME2020 proton separation energy of 13N. PSYCHE's number, not the file.
 - *THERMAL SIGMA* (negative) and *RESONANCE INTEGRAL* (PSYCHE, notes): PSYCHE's neutron quantities, computed
   below the first energy of the table (0.12 MeV), where the file has no value.
 
