@@ -79,3 +79,14 @@ test("the pairs' list: the particles by name, heads in words with units, rare co
     assert.ok(heads(columns).includes(`${f.binding_energy.title} (MeV)`));
     assert.ok(columns.every((c) => c.doc.endsWith(`(${c.key})`)));
   });
+
+test("a reference offers the existing records and \"new …\", which is never a value", { skip }, async () => {
+  const forms = await mod("forms.js");
+  const ctx = { schema, records: [{ kind: "target", name: "tgt" }, { kind: "normalization", name: "D" }] };
+  const target = forms.widgetOf(schema.records.dataset.fields.target, "tgt", ctx);
+  const values = target.controls[0].options.map((o) => o.value);
+  assert.deepEqual(values, ["", "tgt", `${forms.NEW_RECORD}:target`]);
+  assert.equal(target.controls[0].options.at(-1).label, "new target …");
+  const norm = forms.widgetOf(schema.records.dataset.fields.norm, "D", ctx);
+  assert.ok(norm.controls.some((c) => c.options?.some((o) => o.value === `${forms.NEW_RECORD}:normalization`)));
+});

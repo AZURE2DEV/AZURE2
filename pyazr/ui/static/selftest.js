@@ -94,6 +94,19 @@ export function selftest(ctx, tabs, draw) {
         preview.head = document.querySelector(".file-preview pre.file-head")?.textContent || "";
         preview.offered = document.querySelector('[data-field="file"] datalist')?.options.length || 0;
       }
+      // "new …" of the data set's target: the form of a new target opens, the data set unchanged
+      const target = document.querySelector('[data-field="target"] select');
+      const choice = target && [...target.options].find((o) => o.value.startsWith("+new:"));
+      if (choice) {
+        target.value = choice.value;
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 0));
+        await draw();
+        await new Promise((r) => setTimeout(r, 30));
+        preview.newRoute = location.hash;
+        preview.newKind = document.querySelector('[aria-label="kind of the new record"]')?.value || "";
+        preview.rev = ctx.project.rev;
+      }
     }
     for (let i = 0; i < 2; i++) {
       location.hash = first("#/project");

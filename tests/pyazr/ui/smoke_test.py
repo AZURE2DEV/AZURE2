@@ -49,7 +49,9 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the first view's Reaction Rate tab, and its Physics tab (shown there on a project with THM content: T2)
          ("first-rate", "rate"), ("first-physics", "physics"), ("first-dataset", "data/{dataset}"),
          # a file of the folder previewed in a data set's file field (as the field's change shows it)
-         ("first-file-preview", "data/{dataset}?field=file&preview=data/{file}"))
+         ("first-file-preview", "data/{dataset}?field=file&preview=data/{file}"),
+         # "new …" of a data set's detector: the form of a new detector
+         ("first-new-detector", "data/+new?kind=detector&section=targets"))
 
 
 def extra_projects():
@@ -179,6 +181,9 @@ def test_selftest_and_screenshots(name, tmp_path):
             # the data set's file typed again: the folder's files offered, its first rows and the engine's reading
             preview = result["preview"]
             assert preview["offered"] > 0 and preview["head"] and preview["text"].startswith("The engine reads"), \
+                preview
+            # "new …" of its target opens the form of a new target (a choice, never a name typed)
+            assert preview["newRoute"].startswith("#/data/+new?kind=target") and preview["newKind"] == "target", \
                 preview
         thm = [s for s in result["steps"] if s["route"].startswith("#/thm")]
         listed = thm[0]["tabListed"]

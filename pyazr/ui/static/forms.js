@@ -56,6 +56,12 @@ export function suggestionsOf(field, ctx) {
   return Object.entries(ctx.choices || {}).filter(([token]) => grammar.includes(token)).flatMap(([, names]) => names);
 }
 
+/** The value of a reference's choice "new …": choosing it opens the form of a new record of the kind referred to
+ * (formview.js calls ctx.onNewRecord), never a value sent. */
+export const NEW_RECORD = "+new";
+/** The choice "new …" of a reference to records of `kinds` (one per kind, by the kind's name). */
+const newRecordChoice = (kinds) => (kinds || []).map((k) => ({ value: `${NEW_RECORD}:${k}`, label: `new ${k} …` }));
+
 /** Names of the project's records of the given kinds (for references). */
 function recordNames(ctx, kinds) {
   return (ctx.records || []).filter((r) => (kinds || []).includes(r.kind)).map((r) => r.name);
@@ -107,7 +113,8 @@ export const WIDGETS = {
   }),
   reference: (f, t, ctx) => {
     const [name, epoch] = String(t ?? "").split("@");
-    const controls = [select("v", name, ["", ...recordNames(ctx, f.refers_to)], { reference: f.refers_to })];
+    const controls = [select("v", name, ["", ...recordNames(ctx, f.refers_to), ...newRecordChoice(f.refers_to)],
+      { reference: f.refers_to })];
     if (f.epoch) controls.push(input("epoch", epoch ?? "", { placeholder: "epoch", label: "@" }));
     return { controls, compose: (v) => (v.v ? (v.epoch ? `${v.v}@${v.epoch}` : v.v) : "") };
   },
@@ -159,7 +166,8 @@ function nuisanceWidget(f, t, ctx) {
   const units = unitsOf(f, ctx);
   if (f.or_refers_to) {
     own.controls.push(select("ref", ref, [{ value: "", label: "own value" },
-      ...shared.map((s) => ({ value: s, label: `shared: ${s}` }))], { rerender: true, reference: f.or_refers_to }));
+      ...shared.map((s) => ({ value: s, label: `shared: ${s}` })), ...newRecordChoice(f.or_refers_to)],
+    { rerender: true, reference: f.or_refers_to }));
   }
   if (!ref) {
     own.controls.push(input("value", value, { numeric: true, placeholder: "value", disabled: mode === "profiled" }));

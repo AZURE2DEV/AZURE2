@@ -32,6 +32,9 @@ export async function formContext(ctx, records, diagnostics = []) {
     schema: ctx.schema, records, pairLabels: labels, spins,
     spinParities: spins.flatMap((j) => [`${j}+`, `${j}-`]), diagnostics,
     foldRare: !ctx.expert, showMeaning: !ctx.expert, files,
+    // a reference's "new …": the form of a new record of that kind, in the tab and group that holds the kind
+    onNewRecord: (kind) => ctx.navigate(`#/${tabOfKind(ctx.schema, kind)}/+new?kind=${encodeURIComponent(kind)}`
+      + `&section=${encodeURIComponent(ctx.schema.records[kind]?.sections?.[0] || "")}`),
   };
 }
 
@@ -202,6 +205,7 @@ export async function newRecordPanel(ctx, kinds, records, { onAdded } = {}) {
     watchFiles(ctx, formEl, kind, preview, null);
     body.append(formEl);
   };
+  if (kinds.includes(ctx.route?.params?.kind)) kindSelect.value = ctx.route.params.kind;  // ?kind=: "new …"
   kindSelect.addEventListener("change", draw);
   draw();
   return panel;

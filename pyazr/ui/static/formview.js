@@ -2,7 +2,7 @@
 // engine's diagnostics under the field they concern, Apply and Revert.  Every control is a native input or select,
 // so the form is reachable by keyboard (Tab between controls, Ctrl+Enter applies, Esc reverts).
 
-import { valuesOf, widgetOf, changedFields } from "./forms.js";
+import { NEW_RECORD, valuesOf, widgetOf, changedFields } from "./forms.js";
 
 let uid = 0;
 
@@ -53,7 +53,15 @@ function controlElement(doc, c, onChange, ctx) {
   if (c.title) el.title = c.title;
   el.setAttribute("aria-label", c.ariaLabel || c.label || c.placeholder || c.name);
   el.dataset.name = c.name;
-  el.addEventListener(c.kind === "select" ? "change" : "input", () => onChange(c, el.value));
+  el.addEventListener(c.kind === "select" ? "change" : "input", () => {
+    if (c.reference && el.value.startsWith(NEW_RECORD)) {  // "new …": the form of a new record, not a value
+      const kind = el.value.slice(NEW_RECORD.length + 1);
+      el.value = c.value ?? "";
+      if (ctx?.onNewRecord) ctx.onNewRecord(kind);
+      return;
+    }
+    onChange(c, el.value);
+  });
   wrap.appendChild(el);
   if (c.hint) {
     const h = doc.createElement("span");
