@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-no-python-physics`) — pyazr: no physics in Python
+
+**Measured first** (build `work/b-pysess4`, scripts `work/pysess4/measure4.py`, `measure_extrap.py`).
+
+The Python port of the engine's transformation (`pyazr/transform.py`: `transform_out`, `partial_widths`,
+`LevelWidthTransformer`, `levels_from_azr`) against `Session.transform(x)` (the engine's `CNuc::TransformOut`, what
+the program writes into `<levels>`), at `parameters.x0`, the reduced widths of the fit vector given to both:
+
+| project, basis | energies | particle widths | ANCs |
+|---|---|---|---|
+| T1 Brune / formal | 0 / 7e-12 | 5 rows, 7e-10 / 6e-10 | 2 rows, 1.6e-9 |
+| T2 Brune / Park | 0 | 20 rows, 1.9e-9 / 8.6e-10 | none |
+| T2 formal (`use_brune=False`) | 9e-11 | 20 rows, **0.10** | none |
+| T3 Brune | 0 | 12 rows, **9.4e-3** (the engine gives back the file's widths exactly) | 2 rows, 0 |
+| 13N Brune / formal (a bound state: an ANC) | 0 / 9e-12 | 11 rows, 1.4e-9 | 1 row, 1.0e-8 |
+| 17O Brune (closed channels) | 0 | 7 rows, **6e4** | 1 row, **0.97** |
+
+(largest relative difference.)  Where the port agrees it agrees to the precision of its own Coulomb functions
+(mpmath against the engine's table, 1e-9).  It is wrong on T3 (pair `a+4He` has a hybrid nuclear potential, which
+the port ignores) and on T2 formal (the level-matrix rotation; the cause was not looked for further); on 17O the
+script's mapping of the port's channels to the engine's rows is the likely cause (not looked for).  The engine's
+numbers are the ones the program writes, so the port is deleted, not kept as a second opinion.  The formulas of
+`transform.py` with a row of `pyazr.physics` (Sommerfeld eta, rho, Coulomb waves, P, S, dS/dE, Whittaker, the photon
+penetrability) were measured against the rows by `physics_table_test` before (largest 9.5e-6 for dS/dE, the
+engine's difference step).  `widths.teichmann_wigner` returned `Parameter.wigner_limit` unchanged and
+`lane_thomas_wigner` two thirds of it (`physics_table_test`: 0 difference).
+
+`Session.wigner_widths` (Gamma_W read off the engine's transformation of a probe vector with every free width set to
+1e-4) against `2 P(E_lambda) gamma_W^2` with P from `Session.channel_functions` at the same level energy: T1 and 13N
+5e-9; T2 **0.20** (the probe leaves a level's fixed widths at their values, so the Brune denominator is not 1); T2
+formal **8e3**, 17O **1e4** (the levels of a J-group mix through the probe).  The two do not agree, so
+`wigner_widths` and `dimensionless_widths` stay as they are (the stop rule); see "Open".
+
+A session made in extrapolation mode (`data_mode=False`) and evaluated, every project of `tests/` (208 files):
+24 projects with data and extrapolations evaluate, and their model values are bit for bit those of the mode switch
+of a data session (`extrap_mode()` after construction, the fit vector's head carried over); 59 projects with
+extrapolations and no data evaluate (no data session to compare with); 123 projects without an extrapolation record
+fail with "AZURE2 could not initialize ...; check the output above" and no output above it (T2, 13N among them:
+the engine refuses a run without an active segment); 2 files are not complete projects (`shift_subpoint_angle/
+template.azr`, `transform_level_order/models/desc_fit.azr`).  The failure of the mode switch on T2, 13N,
+`energy_shift_sqrt`, `gamma_decay` ("the working copy has no node table") is not met here: a session made in
+extrapolation mode on those projects fails earlier, because they have no extrapolations.
+
 ## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
 
 **Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the
