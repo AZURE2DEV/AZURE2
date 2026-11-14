@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-examples`) — the experts' examples: measured
+
+The 27 scripts of `pyazr/examples/` as they stand on `19c55dad`, each run once from a copy of the repository's
+projects (`work/examples/before/`), one thread (`OMP_NUM_THREADS=1`), the engine of `work/b-trial76`.  "Beside" =
+in the project's directory; "cwd" = the working directory.
+
+| script | command (from the root) | runs | s | what breaks or is wrong | what it shows that no other script shows |
+|---|---|---|---|---|---|
+| angular_distribution | `tests/upgrade/T1/T1.azr` | yes | 5.0 | `--plot` writes a PNG into cwd | Legendre coefficients at chosen energies |
+| channel_functions | `tests/upgrade/T1/T1.azr` | yes | 4.7 | needs matplotlib; PNG into cwd; prints no number | F, G, P, hard-sphere phase per l |
+| channel_radius_scan | `tests/upgrade/T3/T3.azr --pair 2 --radii 3.5 4 4.5` | yes | 0.7 | writes `_radius_*.azr` beside; deletes `output/intEC.*` beside | chi2 against a channel radius |
+| covariance_builder | `tests/upgrade/T1/T1.azr el_lab090` | yes | 7.2 | writes `cov_el_lab090.txt` and `T1_cov.azr` beside | a data covariance from parts |
+| deactivate_level | none: `13N.azr` of cwd (run in a copy of `tests/13N`) | from there | 16.1 | default in cwd; writes `13N_no_level.azr` beside; takes `1/2- 20`, a pole with no free width, so "off" equals "full" | runtime off/only of a level; `set_level(active=False)` (same as decompose_cross_section + edit_model) |
+| decompose_cross_section | `tests/upgrade/T1/T1.azr` | yes | 3.7 | — | full / off / only / bare per level |
+| dimensionless_widths | `tests/upgrade/T1/T1.azr` | yes | 3.7 | reads `param.sav` by hand (the session takes it) | theta^2 and Weisskopf units |
+| ec_integrals | `tests/upgrade/T1/T1.azr` | yes | 7.9 | needs matplotlib; PNG into cwd | external-capture integrals per pathway |
+| edit_model | `tests/13N/13N.azr` | yes | 8.1 | names of 13N only (level `1/2+ 20`, `artemov`, `roughton.dat`); writes beside; deletes `output/intEC.*` beside (the engine checks their signature itself) | level and data-set edits |
+| edit_scheme | none: `13N.azr` of cwd | from there | 8.2 | default in cwd; leaves `13N_edited.azr` beside | nothing: the first half of edit_model |
+| endf_evaluation | none (repository files) | yes | 3.7 | — (another agent's) | an ENDF-6 file beside a project |
+| exfor_fetch | not run (network) | no | — | network (director: HTTP 403); writes `pyazr/examples/_exfor_demo/` inside the package | EXFOR search, conversion, DOI |
+| fit_emcee | `tests/upgrade/T2/T2.azr 40 20 0` | yes | 96.3 | default `T2.azr` of cwd; `chain.npy` into cwd | emcee on `Objective.log_prob` |
+| fit_iminuit | `tests/upgrade/T2/T2.azr` | **no** | 0.4 | `s.objective()(x0)` is a float: `AttributeError` | MIGRAD/HESSE of iminuit |
+| fit_scipy | `tests/upgrade/T2/T2.azr` | **no** | 0.7 | the same | L-BFGS-B and least_squares |
+| fit_zeus | — | **no** | 0.0 | zeus absent; names of before 3.0 (`datasets.sys_errors`, `cross_err`, `p.value`); `13N.azr` of cwd | nothing: fit_emcee with its own priors |
+| nuclear_potential | none (repository files) | yes | 9.5 | project fixed in the script | the hybrid potential per pair |
+| per_dataset_chi2 | `tests/upgrade/T2/T2.azr` | yes | 0.5 | — | chi2 per data set, whitened rows |
+| print_scheme | none: `13N.azr` of cwd | from there | 8.1 | default in cwd | the level scheme and the data sets |
+| project_from_python | none (temporary directory) | yes | 0.4 | — | a project from records |
+| reaction_rate | `tests/upgrade/T1/T1.azr --entrance 1 --exit 2` | yes | 19.4 | the engine's progress bars on stdout (package) | N_A<sigma v>, Gamow window, REACLIB |
+| save_fit_to_azr | `tests/upgrade/T2/T2.azr --params <golden param.sav> --out ...` | **no** | 0.4 | no parameter file of the repository has format-3 names; reads `param.sav` by hand | `save_fit` and the read-back |
+| sensitivities | `tests/upgrade/T1/T1.azr --check` | yes | 3.7 | — | d ln sigma / d ln p, analytic against differences |
+| sfactor_extrapolation | `tests/upgrade/T1/T1.azr` | yes | 3.0 | writes `_sfactor.azr` beside; deletes `output/intEC.extrap` beside | S(E) below the data, S(0) |
+| tabulate_cross_sections | `tests/upgrade/T1/T1.azr` | yes | 9.5 | default `tests/13N/13N.azr` of cwd; table into cwd; on no page | an adaptive sigma(E) table |
+| transform_widths | `tests/upgrade/T1/T1.azr` | yes | 3.7 | — | `Session.transform` beside 2 gamma^2 P; a chain mapped |
+| uncertainty_band | none: `7Be.azr` of cwd | **no** | 0.2 | `7Be.azr` is in no directory of the repository (key 113) | bands from a fit covariance |
+
+The same thing twice: edit_scheme is the first half of edit_model; deactivate_level is decompose_cross_section's
+off/only plus one `set_level` of edit_model; fit_zeus is fit_emcee with priors of its own; sfactor_extrapolation's
+grid is the central value of uncertainty_band's second part; dimensionless_widths and transform_widths both print
+the physical widths.
+
 ## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
 
 Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page
