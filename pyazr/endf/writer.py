@@ -28,6 +28,7 @@ import tempfile
 import numpy as np
 
 from ..errors import FormatRefused
+from . import elastic as elastic_section
 from . import engine_values, grid, names
 from . import sections as section_rows
 from .material import M_NEUTRON_U
@@ -59,6 +60,37 @@ ELASTIC_MAX_COSINE = 0.98
 
 
 @dataclasses.dataclass(frozen=True)
+class ElasticReport:
+    """The elastic section's energies (:mod:`pyazr.endf.elastic`): ``energies`` written, ``candidates`` the engine
+    computed, ``brackets`` ((E_low, E_high) lab MeV) of the sign changes of sigma_NI, inside which the manual's
+    reading of the file is wrong by up to sigma_e - sigma_c, ``bracket_width`` (their largest width relative to E),
+    ``reached`` (the largest deviation by the grid's rule under the manual's reading at an energy computed and not
+    written), ``checked`` (every written interval checked at its quarter points)."""
+    energies: int
+    candidates: int
+    brackets: tuple
+    bracket_width: float
+    reached: float
+    checked: bool = True
+
+    def lines(self):
+        """The statement of MF=1 and of the report, in words."""
+        out = [f"Elastic scattering (MF=3/MT=2 and MF=6/MT=2) on {self.energies} energies chosen of {self.candidates} "
+               f"the engine computed, so that sigma_NI(E) of MF=3 times P_NI(mu, E) of MF=6, each interpolated "
+               f"linearly (the manual's reading, p. 146), gives the elastic cross section to {self.reached:.1e} by the "
+               f"grid's rule at every computed energy outside the brackets below"
+               + (", the quarter points of every written interval among them." if self.checked else
+                  "; the search stopped at its budget before every written interval was checked at its quarter "
+                  "points.")]
+        if self.brackets:
+            out.append(f"sigma_NI changes sign {len(self.brackets)} time(s); each change lies between two written "
+                       f"energies at most {self.bracket_width:g} x E apart, inside which the manual's reading is "
+                       "wrong by up to sigma_e - sigma_c: " + ", ".join(f"{lo * 1e6:.3f}-{hi * 1e6:.3f} eV"
+                                                                       for lo, hi in self.brackets) + ".")
+        return out
+
+
+@dataclasses.dataclass(frozen=True)
 class Written:
     """What :func:`write` wrote: the file, its sections (MF, MT, lines), the grid of each MF=3 section (points, lab
     eV range; MF=6 has the same energies), the largest relative difference of MF=2's reconstruction from MF=3 per
@@ -72,6 +104,7 @@ class Written:
     not_written: tuple
     cosines: dict = dataclasses.field(default_factory=dict)
     sessions: int = 0
+    elastic: object = None
 
     def __str__(self):
         out = [f"{self.path}"]
@@ -85,6 +118,8 @@ class Written:
             check = f", MF=2 reproduces it to {self.mf2_check[mt]:.1e}" if mf == 3 and mt in self.mf2_check else ""
             out.append(f"  MF={mf}/MT={mt} {names.reaction_name(mt)}: {nc}{'' if isinstance(nc, str) else ' lines'}"
                        f"{extra}{check}")
+        if self.elastic is not None:
+            out += [f"  {t}" for t in self.elastic.lines()]
         out += [f"  lost: {t}" for t in self.losses]
         out += [f"  not written: {t}" for t in self.not_written]
         return "\n".join(out)
@@ -345,8 +380,10 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         written[(6, 102)] = section_rows.capture(za, awr, compound, [f[1:] for f in sorted(finals, key=lambda f: f[0])],
                                              e_eV, number_form)
     elastic = next((r for r in reactions if r.role == "elastic"), None)
+    elastic_report = None
     if elastic is not None:
-        panels, mu_report = sweeps.elastic_cosines(elastic, e_MeV, mu_range, coulomb_minus, tolerance, max_points)
+        el, mu_report = elastic_section.section(sweeps, elastic, e_MeV, mu_range, coulomb_minus, tolerance,
+                                                max_points)
         if mu_report.get("budget_reached"):
             raise FormatRefused(what=f"the cosine grid of elastic scattering reached {max_points} points before the "
                                 f"tolerance {tolerance:g}", allowed="a grid that meets the tolerance",
@@ -354,9 +391,13 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                                 "narrower energy range")
         projectile = (_za(ent.za, ent.ma), awi)
         target = (_za(ent.zb, ent.mb), section_rows.product_mass(round(ent.zb), round(ent.mb * M_NEUTRON_U)))
+        el_eV = el.energies * EV_PER_MEV
+        panels = el.panels
         written[(3, 2)], written[(6, 2)], _ = section_rows.elastic(za, awr, projectile, target, identical, ent.spin_a,
-                                                               e_eV, panels, number_form)
-        grids[2] = (len(e_eV), e_eV[0], e_eV[-1])
+                                                               el_eV, panels, number_form)
+        grids[2] = (len(el_eV), el_eV[0], el_eV[-1])
+        elastic_report = ElasticReport(len(el_eV), el.candidates, tuple(el.brackets),
+                                       elastic_section.BRACKET_WIDTH, el.reached, el.checked)
         counts = [len(m) for m, _ in panels]
         cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
@@ -401,7 +442,8 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             "IFG=1) reproduces the particle reactions "
             f"of MF=3 (checked before writing to {MF2_TOLERANCE:g}). MF=2 holds no photon channel: AZURE2 keeps "
             "radiative widths out of the total width; capture is MF=3/MT=102 (internal and external capture).",
-            "MF=6 holds the engine's angular distributions on the energy grid of MF=3, in the c.m. (LCT=2): LAW=2 "
+            "MF=6 holds the engine's angular distributions in the c.m. (LCT=2), on the energy grid of MF=3 (elastic "
+            "scattering on its own, below): LAW=2 "
             "Legendre coefficients of each two-body exit with the residual as LAW=4"
             + (f"; charged-particle elastic scattering as LAW=5 LTP=12, P_NI tabulated on up to {cosines[2][0]} "
                f"cosines from {cosines[2][1]:g} to {cosines[2][2]:g} with sigma_NI in MF=3/MT=2 (below the largest "
@@ -412,6 +454,8 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                "states is not given (AZURE2 does not hold it)" if (6, 102) in sections else "") + ".",
             "Separation energy of the incident pair: "
             f"{s_ent:.9f} MeV (the project's); masses as the project's atomic masses."]
+    if elastic_report is not None:
+        body += elastic_report.lines()
     text = std
     for paragraph in body:
         text = text + [""] + _wrap(paragraph)
@@ -430,4 +474,4 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
     return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), not_written, cosines,
-                   sweeps.count)
+                   sweeps.count, elastic_report)

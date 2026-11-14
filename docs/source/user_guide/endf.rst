@@ -85,8 +85,12 @@ The conversions are the engine's, not a second copy in Python: the lab energy of
 lab energy of each point (or its ``cm_to_lab_energy`` when the file's projectile is the pair's second particle);
 the Coulomb terms of LAW=5 (eta, the Rutherford and Mott cross sections, eqs. 6.9-6.12 of the manual) are the rows
 of :doc:`physics_functions` on the file's masses (AWI, AWR). Between the incident energies of MF=6 the module
-interpolates the value at fixed angle by the section's law; for LAW=5 it interpolates the nuclear and interference
-part, sigma - sigma_c, as the manual tabulates it for LTP=12-15, and adds the Coulomb part at the energy asked.
+interpolates the value at fixed angle by the section's law. For LAW=5 with a tabulated distribution (LTP=12, 14,
+15) it reads the file as the manual says (p. 146): sigma_NI(E) of MF=3 times P_NI(mu, E) of MF=6, each
+interpolated under its own law, plus the Coulomb part at the energy asked. ``m.curves(data, session=s,
+elastic_reading="product")`` interpolates sigma_NI(E_i) P_NI(mu, E_i) of the tabulated energies instead; where
+the two readings differ by more than 1e-3 the curve's notes say so (it happens between two energies where
+sigma_NI changes sign). For LTP=1 and 2 the nuclear and interference part sigma - sigma_c is interpolated.
 
 Check a file's format
 ---------------------
@@ -276,7 +280,12 @@ Write an evaluation
   on the cosines it needs) and sigma_NI in MF=3/MT=2 (p. 150), from mu = -1 (0 for identical particles) to
   ``elastic_max_cosine`` (0.98; at smaller angles the file gives the Coulomb term alone); capture to each final
   state as its primary photon (LAW=2, its energy at zero incident energy in AWP, the yield sigma_f/sigma) and the
-  recoil (LAW=4). The cascade below the final states is not given (AZURE2 does not hold it). On T1, T2 and 13N the
+  recoil (LAW=4). The cascade below the final states is not given (AZURE2 does not hold it). Elastic scattering
+  has energies of its own, chosen so that a code reading the file as the manual says (sigma_NI of MF=3 times P_NI
+  of MF=6, each interpolated) gets the cross section to the tolerance: wherever sigma_NI changes sign, the two
+  written energies around the change are at most 1e-5 x E apart, and between them that reading is wrong by up to
+  the nuclear part of the cross section. MF=1 and the answer (``w.elastic``) list these brackets, the number of
+  energies and the tolerance reached. On T1, T2 and 13N the
   file's dsigma/dOmega equals the engine's at the data's points and between the tabulated energies and angles to
   3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section.
 

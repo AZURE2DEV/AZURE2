@@ -429,7 +429,9 @@ MF=6 (LAW=2 of the exits, LAW=5 of elastic scattering, the primary photons of MT
    quantities the file tabulates; a second axis, as the cosines of LAW=5, refined by the same ``grid.refine``). If
    the engine has no quantity for it, a door of the binding (a new file of ``api/src/``, registered in
    ``BindPhysics``); never a physics formula in Python. MF=6 needed no door: the ``legendre`` quantity with the
-   expansion ``rsl`` is LAW=2's a_l.
+   expansion ``rsl`` is LAW=2's a_l. A section whose reader does not interpolate linearly between energies (LAW=5
+   LTP=12: sigma_NI of MF=3 times P_NI of MF=6, each interpolated) gets energies of its own, chosen by
+   ``grid.thin_to`` with the reader's own reconstruction instead of the chord (``pyazr/endf/elastic.py``).
 3. The records: a function of ``sections.py`` that lays the section out as its page of ENDF-102 says (cite it),
    with a ``RecordWriter`` (``records.py``), and the line of ``write`` that puts it into ``written[(MF, MT)]``.
    The directory of MF=1 and the sequence numbers follow from the sections.

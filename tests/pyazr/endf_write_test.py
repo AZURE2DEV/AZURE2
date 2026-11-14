@@ -264,6 +264,44 @@ for azr in PROJECTS:
                   f"|file - engine| / max(engine, 1e-3 max) {dev.max():.2e}, median {np.median(dev):.1e}")
             check(f"{name}: {what}: dsigma/dOmega between the tabulated points = the engine to {bound:g}",
                   dev.max() < bound, dev.max())
+        # (g) the elastic section under the manual's reading (p. 146: sigma_NI(E) of MF=3 times P_NI(mu, E) of
+        # MF=6, each interpolated): every sign change of sigma_NI in the file lies in a stated bracket at most
+        # BRACKET_WIDTH x E wide, named in MF=1; at the midpoint of every two written energies outside the brackets,
+        # at 6 c.m. angles, the file's dsigma/dOmega equals the engine's to the bound of (f)
+        if w.elastic is not None:
+            from pyazr.endf.distributions import elastic_cross_section
+            from pyazr.endf import elastic as elastic_module
+            prod = m.distribution(2).product(m.header.projectile_za)
+            sni = m.cross_section(2)
+            el_e = np.asarray(sni.table.x)
+            sig = np.asarray(sni.table.y)
+            changes = [(el_e[i] / 1e6, el_e[i + 1] / 1e6) for i in np.nonzero(sig[:-1] * sig[1:] < 0)[0]]
+            stated = [tuple(b) for b in w.elastic.brackets]
+            check(f"{name}: elastic: the file's sign changes of sigma_NI are the stated brackets, each at most "
+                  f"{elastic_module.BRACKET_WIDTH:g} x E wide, named in MF=1",
+                  len(changes) == len(stated) and (not stated or np.allclose(changes, stated, rtol=1e-9)) and
+                  all(hi - lo <= elastic_module.BRACKET_WIDTH * lo * (1 + 1e-9) for lo, hi in stated) and
+                  all(" ".join(line.split())[:60] in text for line in w.elastic.lines()), (changes, stated))
+            mids = 0.5 * (el_e[1:] + el_e[:-1]) / 1e6
+            outside = np.array([not any(lo < x < hi for lo, hi in stated) for x in mids])
+            ang6 = np.array([30.0, 60.0, 90.0, 120.0, 150.0, 170.0])
+            ref, _ = engine_dsdo(s, project.reaction(entrance, entrance), mids[outside], ang6, d,
+                                 _pair_keys(project, entrance, entrance))
+            coul = E.CoulombTerms(m)
+            got = np.column_stack([elastic_cross_section(prod, mids[outside] * 1e6, np.full(int(outside.sum()),
+                                                         np.cos(np.radians(a))), coul, sni) for a in ang6])
+            dev = np.abs(got - ref) / np.maximum(np.abs(ref), 1e-3 * np.max(np.abs(ref)))
+            print(f"      elastic, manual reading, at {int(outside.sum())} midpoints x 6 angles outside "
+                  f"{len(stated)} bracket(s): largest {dev.max():.2e}, median {np.median(dev):.1e}; the writer "
+                  f"states {w.elastic.reached:.2e} at the energies it computed")
+            # the bound: 5x the tolerance reached at the energies the writer computed (the tolerance asked, or what
+            # the limits left); where the search stopped at its budget (w.elastic.checked False, said in MF=1) the
+            # intervals it did not check are not bounded: the median is then the check
+            bound_el = 5 * max(TOLERANCE, w.elastic.reached)
+            ok_el = dev.max() < bound_el if w.elastic.checked else np.median(dev) < bound_el
+            check(f"{name}: elastic: the manual's reading between every two written energies outside the brackets "
+                  f"= the engine to {bound_el:.1e} ({'largest' if w.elastic.checked else 'median: not every interval '
+                  'was checked, as MF=1 says'})", ok_el, (dev.max(), np.median(dev)))
         if os.environ.get("AZURE2_ENDF_UTILITIES") and os.environ.get("AZURE2_PREPRO"):
             result = E.check(out)
             print("\n".join("      " + line for line in str(result).splitlines()))

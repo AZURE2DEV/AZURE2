@@ -127,6 +127,7 @@ pyazr.endf	pyazr/endf/__init__.py	ENDF-6 files: read, summarise, curves, format 
 pyazr::endf::Material	pyazr/endf/material.py	one material of an ENDF-6 file: sections, header, curves	frontends	class	run
 pyazr::endf::resonances::LRF7	pyazr/endf/resonances.py	MF=2 R-Matrix Limited parameters in the file's units and frame	frontends	class	immutable
 pyazr::endf::engine_values::Sweeps	pyazr/endf/engine_values.py	the ENDF writer's engine sessions: the values of MF=3 and MF=6 on the writer's grids	frontends	class	run
+pyazr::endf::elastic::ElasticSection	pyazr/endf/elastic.py	the written elastic section (LAW=5 LTP=12): energies, panels, the brackets of the sign changes of sigma_NI	frontends	class	immutable
 RateSession	pyazr/rate.py	a session set up for a reaction rate, as the program's rate command	frontends	class	run
 CurveSession	pyazr/model_curve.py	the session of the extrapolations that draws data sets' model curves	frontends	class	run
 Covariance	pyazr/covariance.py	a data covariance built from named parts, checked	frontends	class	run

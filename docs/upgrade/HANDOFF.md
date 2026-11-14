@@ -2,6 +2,21 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: the elastic section under the manual's reading
+
+**Done** (`endf.md` 13.10): the reader reads LAW=5 LTP=12-15 as the manual says (p. 146: sigma_NI(E) of MF=3
+times P_NI(mu, E) of MF=6, each interpolated), the product reading is a named option
+(`elastic_cross_section(..., reading=)`, `Material.curves(..., elastic_reading=)`), a curve's notes say where
+the two differ by more than 1e-3. The writer gives elastic scattering its own energies (`pyazr/endf/elastic.py`):
+every sign change of sigma_NI bracketed to 1e-5 x E, the energies chosen by the grid's rule under the manual's
+reading (`grid.thin_to`, the reader's reconstruction instead of the chord), quarter points checked; MF=1,
+`Written.elastic` state the brackets and the tolerance reached. Measured on the old files: the manual reading
+was off by up to 0.79 (T1), 2.9e-3 (T2), 0.56 (13N), over 62 / 13 / 42 keV above 1e-3; on the new ones above 5e-3
+only within the brackets and a few eV beside them (T1 22.6 eV, T2 4.3 eV, 13N 14.5 eV).
+**Verified how**: `endf_read_test` (hand values of both readings; the default reading injected wrong fails two
+checks), `endf_write_test T1 narrow`, my measurement script on T1, T2, 13N, the consistency test, the pages built.
+**Open**: T1 and 13N need 3000-3500 elastic energies (20 MB files, 5 min) without limits; the PI's limits follow.
+
 ## 2026-11-14 (director, 23:30) — merged: the compound system's name, the model curve, ENDF MF=6, pyazr repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 78 (rehearsal 77 plus four branches and three

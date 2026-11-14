@@ -116,21 +116,54 @@ def thin(x, f, tolerance):
     |f - chord| <= tolerance x max(|f|, 1e-3 max|f|) (a recursive split at the worst point, as Douglas and
     Peucker's).  For a table whose rows are tabulated each on its own abscissae (the cosines of a LAW=5 panel), from a
     grid refined for all rows at once.  Returns the indices kept, increasing (the ends always)."""
+    return thin_to(x, f, tolerance)[0]
+
+
+def thin_to(x, f, tolerance, limit=None, required=(), reconstruct=None):
+    """:func:`thin` with a limit on the points kept, points that must be kept, and the interpolation of a reader.
+
+    ``f``: (n,) or (n, k) values at ``x`` (k components, the rule per component with its own 1e-3 floor);
+    ``required``: indices kept whatever the rule says; ``reconstruct(i, j, inner)``: the values a reader gets at the
+    points ``inner`` from the kept points i < j alone, shaped as ``f[inner]`` (default: the chord, linear
+    interpolation).  The interval whose worst dropped point deviates most by the rule is split there first, as long
+    as a point deviates by more than ``tolerance`` and fewer than ``limit`` points are kept (no limit: None); without
+    a limit the points kept are those of the recursive split, whatever the order.  Returns (indices kept,
+    increasing; the largest deviation by the rule at a dropped point: the tolerance reached, 0 when nothing is
+    dropped)."""
+    import heapq
     x = np.asarray(x, float)
     f = np.asarray(f, float)
-    scale = 1e-3 * np.max(np.abs(f)) if f.size else 0.0
-    keep = {0, len(x) - 1}
-    stack = [(0, len(x) - 1)]
-    while stack:
-        i, j = stack.pop()
+    f2 = f.reshape(len(x), -1)
+    scale = 1e-3 * np.max(np.abs(f2), axis=0) if f2.size else np.zeros(f2.shape[1])
+
+    def chord(i, j, inner):
+        t = ((x[inner] - x[i]) / (x[j] - x[i]))[:, None]
+        return f2[i] + (f2[j] - f2[i]) * t
+
+    def rebuild(i, j, inner):
+        if reconstruct is None:
+            return chord(i, j, inner)
+        return np.asarray(reconstruct(i, j, inner), float).reshape(len(inner), -1)
+
+    def worst(i, j):
         if j - i < 2:
-            continue
+            return 0.0, -1
         inner = np.arange(i + 1, j)
-        chord = f[i] + (f[j] - f[i]) * (x[inner] - x[i]) / (x[j] - x[i])
-        dev = _deviation(f[inner], chord, scale)
+        dev = _deviation(f2[inner], rebuild(i, j, inner), scale).max(axis=1)
         k = int(np.argmax(dev))
-        if dev[k] > tolerance:
-            m = int(inner[k])
-            keep.add(m)
-            stack += [(i, m), (m, j)]
-    return np.array(sorted(keep))
+        return float(dev[k]), int(inner[k])
+
+    keep = sorted({0, len(x) - 1} | {int(r) for r in required})
+    heap = []
+    for i, j in zip(keep[:-1], keep[1:]):
+        d, m = worst(i, j)
+        heapq.heappush(heap, (-d, i, j, m))
+    keep = set(keep)
+    while heap and -heap[0][0] > tolerance and (limit is None or len(keep) < limit):
+        _, i, j, m = heapq.heappop(heap)
+        keep.add(m)
+        for a, b in ((i, m), (m, j)):
+            d, k = worst(a, b)
+            heapq.heappush(heap, (-d, a, b, k))
+    reached = max((-h[0] for h in heap), default=0.0)
+    return np.array(sorted(keep)), reached

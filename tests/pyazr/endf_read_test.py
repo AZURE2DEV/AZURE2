@@ -248,6 +248,37 @@ for ltp, ppairs, want_p in ((12, [-1.0, 0.2, 1.0, 0.6], 0.2 + 0.4 * 0.65), (15, 
     check(f"LTP={ltp}: sigma - sigma_c = sigma_NI(E) P_NI(mu) (eqs. 6.19-6.20)", close(got, 0.6 * want_p, 1e-12),
           (got, 0.6 * want_p))
 
+# sigma_NI changing sign between two panels (the module's text: the manual's reading, p. 146, against the product
+# reading): sigma_NI 0.5 at 1 MeV and -0.5 at 3 MeV, P_NI linear in mu from 0.2 to 0.8 and from 0.9 to 0.1
+p_lo = [-1.0, 0.2, 1.0, 0.8]
+p_hi = [-1.0, 0.9, 1.0, 0.1]
+msc = law5_file("ltp12_sign.endf", 12, 0, [(1e6, p_lo), (3e6, p_hi)], 2, sigma_ni=[0.5, -0.5])
+ct = E.CoulombTerms(msc)
+prod_ = msc.distribution(2).product(1001)
+pna, pnb = 0.2 + 0.6 * 0.65, 0.9 - 0.8 * 0.65  # P_NI at mu = 0.3 of each panel
+for energy, tt in ((2e6, 0.5), (1.5e6, 0.25)):
+    sc_ = ct.sigma(np.array([energy]), np.array([mu]))[0]
+    got_m = elastic_cross_section(prod_, [energy], [mu], ct, msc.cross_section(2))[0] - sc_
+    got_p = elastic_cross_section(prod_, [energy], [mu], ct, msc.cross_section(2), reading="product")[0] - sc_
+    want_m = (0.5 - tt) * ((1 - tt) * pna + tt * pnb)  # sigma_NI(E) linear times P_NI(mu, E) linear
+    want_p = (1 - tt) * 0.5 * pna + tt * (-0.5) * pnb  # sigma_NI(E_i) P_NI(mu, E_i) linear
+    check(f"LTP=12, sigma_NI changing sign, E = {energy:g} eV: the manual's reading sigma_NI(E) P_NI(mu, E) "
+          "(p. 146) by default", close(got_m, want_m, 1e-12), (got_m, want_m))
+    check(f"LTP=12, sigma_NI changing sign, E = {energy:g} eV: the product reading on request",
+          close(got_p, want_p, 1e-12), (got_p, want_p))
+try:
+    elastic_cross_section(prod_, [2e6], [mu], ct, msc.cross_section(2), reading="both")
+    check("an unknown reading is refused", False)
+except pyazr.FormatRefused as err:
+    check("an unknown reading is refused with its three parts", err.what and err.allowed and err.fix, err)
+P_HP = E.PairSpec(1, 6, 1.00782503, 12.0, 1, 12, j1=0.5)
+to_cm_ = lambda elab: elab * 12.0 / (1.00782503 + 12.0) * 1e-6  # noqa: E731, MeV
+req = E.CurveRequest("dsigma_domega", (to_cm_(2e6), to_cm_(1.2e6)), (72.54, 72.54), P_HP, P_HP, (2.0, 1.2))
+cm_, cp_ = msc.curves(req), msc.curves(req, elastic_reading="product")
+check("curves: the manual's reading by default, the other on request, a note where they differ",
+      "manual reading" in cm_.source and "product reading" in cp_.source and not np.allclose(cm_.values, cp_.values)
+      and any("differs" in n for n in cm_.notes) and any("differs" in n for n in cp_.notes), (cm_, cp_))
+
 # ------------------------------------------------------------------------------------------------- 5. curves
 print("curves at a data set's points (section 7.2 of the design)")
 P_ENT = E.PairSpec(1, 6, 1.00782503, 12.0, 1, 12, j1=0.5)

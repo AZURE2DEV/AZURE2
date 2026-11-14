@@ -912,13 +912,10 @@ What the manual leaves open, and the reading taken:
   p. 200); LIP=0 for a recoil in an excited state (LIP marks isomers, p. 135).
 - Eq. 6.19 integrates sigma_e - sigma_c over mu, not over the solid angle, while p. 146 says sigma_NI is "in barns";
   the equations are taken as written (sigma_e = sigma_c + sigma_NI P_NI), as the reader computes it.
-- Between incident energies the reader interpolates sigma_e - sigma_c at fixed mu, sigma_NI(E_i) P_NI(mu, E_i) of
-  the panels (its documented reading since stage 1). Its code multiplied the interpolated P_NI by the interpolated
-  sigma_NI instead (a difference between the code and its text; repaired here): where sigma_NI changes sign
-  between two panels, P_NI = v/sigma_NI is large and of opposite sign on either side, and the product of the two
-  interpolations was 13 % off at a T1 data point (0.55 MeV) and 93 % at a 13N one. A processing code that
-  multiplies the two interpolations would make the same error near such energies: a question for the PI (a grid
-  point at each sign change of sigma_NI, or LTP=1 with a door).
+- Between incident energies the reader follows the manual (p. 146): sigma_NI(E) of MF=3 times P_NI(mu, E) of
+  MF=6, each interpolated under its own law; the product reading (sigma_NI(E_i) P_NI(mu, E_i) interpolated) is a
+  named option. Where sigma_NI changes sign the two differ by about sigma_e - sigma_c; the writer brackets every
+  sign change (section 13.10).
 - The recoil of LAW=5 for distinguishable particles: LAW=4 (two-body, p. 144); the library file writes LAW=0 there.
 
 Measured (`tests/pyazr/endf_write_test.py`, build `work/b-endf4`, tolerance 1e-3): `Material.curves` of the written
@@ -980,3 +977,59 @@ MF=6/MT=600 from 7.2 to 19.2 MeV and 9 angles.
    `to_project` and fitted to analysing powers rests on AZURE2's order (the light particle first), which the
    conversion report says when a pair has two non-zero spins.
 3. The reader reads MF=6/MT=600 (LAW=2, LANG=0) and MF=6/MT=2 (LAW=5, LTP=1) of this file.
+
+### 13.10 The elastic section under the manual's reading
+
+**The two readings.** ENDF-102 p. 146 (eqs. 6.19, 6.20): "The angular distribution p_NI is given in File 6 as a
+tabulated function of mu, and sigma_NI(E) in barns is given in File 3"; each record has its own interpolation, so
+a processing code interpolates sigma_NI(E) in MF=3 and P_NI(mu, E) between the panels of MF=6 at fixed mu, and
+multiplies (the *manual* reading). The manual states no other reading. The module had interpolated
+sigma_NI(E_i) P_NI(mu, E_i), the tabulated sigma_e - sigma_c (the *product* reading). Where sigma_NI changes sign
+between two energies, P_NI is large and of opposite sign on the two sides and the manual reading misses
+sigma_e - sigma_c by about its own size, however close the energies; next to a zero of sigma_NI, where its ratio
+between neighbours r is far from 1, the error is about (r - 1)^2 / (4 r) of sigma_e - sigma_c.
+
+**Measured on the files of the previous writer** (`work/endf5/s/readings.py`: the file's elastic dsigma/dOmega
+against the engine at the quarter points of every interval of MF=6/MT=2's energies, 12 c.m. angles 20-175 deg; the
+deviation relative to max(|engine|, 1e-3 of its largest value), as the writer's test; build `work/b-endf5`):
+
+| file | energies | sign changes of sigma_NI | product reading: max, median | manual reading: max (where), median | width off by > 1e-3 / 5e-3 / 1e-2 / 0.1 under the manual reading |
+|---|---|---|---|---|---|
+| T1 | 736 | 4 | 8.9e-4, 2.0e-5 | 0.79 (1.7361 MeV, 20 deg), 2.5e-5 | 62.1 / 24.7 / 19.6 / 4.8 keV (53 intervals) |
+| T2 | 655 | 3 | 2.4e-4, 7.7e-7 | 2.9e-3 (0.3847 MeV, 30 deg), 9.0e-7 | 13.0 keV / 0 / 0 / 0 |
+| 13N | 740 | 6 | 8.3e-4, 8.4e-6 | 0.56 (1.7338 MeV, 20 deg), 1.1e-5 | 42.4 / 20.3 / 14.8 / 2.9 keV (38 intervals) |
+
+(Widths: the summed lab-energy spacing of the quarter points off by more than the bound.) Off by more than the
+writer's tolerance are the intervals that hold a sign change and their neighbours, where sigma_NI is small.
+
+**The library.** `work/endf/evals` holds one charged-particle file, ENDF/B-VIII.1 3He + 4He: MF=6/MT=2 is LAW=5
+LTP=1 at 400 energies and MF=3/MT=2 holds 1.0 (p. 145), so it has no sigma_NI to change sign and says nothing
+on the reading of LTP=12 (`work/endf5/s/lib_mt2.py`, `python -I`). No library file contradicts the manual's
+text; none confirms it either.
+
+**What is built.** `pyazr.endf.distributions.elastic_cross_section(..., reading="manual" | "product")` and
+`Material.curves(..., elastic_reading=...)`, the manual's by default; a curve's notes say where the other reading
+differs by more than `curves.READINGS_BOUND` (1e-3). The writer (`pyazr/endf/elastic.py`) gives elastic
+scattering its own energies, chosen so that the manual reading holds the grid's rule:
+1. every sign change of sigma_NI on the grid is closed in by ladders of energies E_0 -+ (w/2) 1.05^k around the
+   chord's zero until the two energies that hold it are at most `BRACKET_WIDTH` = 1e-5 x E apart (the bracket);
+2. the energies written are chosen from all the engine computed by `grid.thin_to` with the manual reading between
+   two kept energies instead of the chord, the two ends of every bracket kept;
+3. the quarter points of every kept interval that holds no computed energy are computed and the choice made again,
+   until they all pass or the energies computed reach twice `max_points`.
+MF=1, `Written.elastic` and its `print()` state the number of energies, the tolerance reached, whether every
+interval was checked, and each bracket (inside which the manual reading is wrong by up to sigma_e - sigma_c).
+
+**Measured on the files written so** (same script, quarter points of the new intervals):
+
+| file | energies (computed) | brackets (eV wide) | checked | manual reading off by > 1e-3 / 5e-3 / 1e-2 / 0.1 | product reading max | write |
+|---|---|---|---|---|---|---|
+| T1 | 3551 (7987) | 4 (0.33, 0.14, 1.5, 15.7) | budget reached | 567 / 22.6 / 13.3 / 13.0 eV | 9.2e-4 | 293 s |
+| T2 | 415 (1908) | 5 (0.4-3.8) | yes | 10.2 / 4.3 / 0 / 0 eV | 9.3e-4 | 74 s |
+| 13N | 3174 (7965) | 6 (0.3-17) | budget reached | 337 / 14.5 / 14.5 / 14.3 eV | 9.2e-4 | 330 s |
+
+Outside the brackets and a few eV around them the file holds 5e-3 under the manual reading; the regions off by
+more than 1e-3 lie within 2.6 keV of a zero of sigma_NI. The cost: T1 and 13N need 3000-3500 elastic energies
+(about 20 MB files) where the product reading needed 736. The format allows it (Appendix G, p. 391: NE 2,000 in
+MF=6, exceeded here); the limits the PI chose for written MF=6 are the next section's.
+
