@@ -23,8 +23,8 @@ started; messages print them as the project writes them.  ``--validate`` and
 ``--describe`` read the data files by the same rule (relative to the project
 file's directory), as ``pyazr.validate`` and ``pyazr.describe`` do.
 ``--no-gui`` (needed by builds with the Qt setup utility) is accepted and has
-no effect; ``--no-readline`` (from the time of the text menu) is accepted with
-a one-line notice.  Scripts written for the menu: `Scripts written for the
+no effect; ``--no-readline`` (from the time of the text menu) is refused with
+exit status 2: drop it.  Scripts written for the menu: `Scripts written for the
 menu`_.
 
 Commands
@@ -238,7 +238,8 @@ Scripts written for the menu
 
 Before the commands, AZURE2 asked for the calculation and its answers in a
 text menu, and scripts piped the answers to it
-(``printf '2\nn\nparam.sav\n\n7\n' | AZURE2 --no-readline project.azr``).
+(``printf '2\nn\nparam.sav\n\n7\n' | AZURE2 project.azr``, often with the
+option ``--no-readline``, which is refused now).
 The menu is gone; such a script is refused with exit status 2 and the list of
 the commands, and nothing is calculated.  Replace the pipe by the command:
 ``python3 tools/menu_to_command.py '<the answers>'`` prints it (it walks the
@@ -299,10 +300,6 @@ Available Options
    * - ``--no-gui``
      - Accepted and ignored: this build has no graphical setup utility. Builds
        with the Qt setup utility need it to run in text mode.
-   * - ``--no-readline``
-     - Accepted and ignored, with a one-line notice: AZURE2 has no menu and
-       reads nothing from standard input.  Scripts from the time of the menu
-       pass it.
    * - ``--use-brune``
      - Use the Brune parameterization (equivalent to the GUI's
        "Use Brune formalism" option).  This is the default.

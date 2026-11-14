@@ -8,8 +8,8 @@
 # stops only at the missing project file, exit 255).  The same AZURE_REFINE_QUADRATURE in pyazr raises ValueError
 # (when the compiled module can be imported, PYAZR_ENGINE_DIR; else that case is skipped).  An unknown option is the same
 # kind of error (before, "WARNING: Unknown option" and the run went on: a mistyped --use-gradiant fitted without the
-# gradient), on the command line and in AZURE_OPTIONS_FILE; --no-readline is accepted with a one-line notice (the
-# program has no menu).
+# gradient), on the command line and in AZURE_OPTIONS_FILE; --no-readline, the option of the old menu's scripts, is
+# refused in three parts (the program has no menu: drop it and give the command).
 #
 #   ./tests/cli_option_values/check.sh path/to/AZURE2
 
@@ -32,7 +32,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 # probe ENV ARGS...: run the binary (calculate) on a project that does not exist; sets $out and $rc
 probe() {
   local env="$1"; shift
-  (cd "$WORK" && env $env $RUN "$AZURE2_BIN" calculate --no-gui --no-readline "$@" no_such_project.azr < /dev/null > out.txt 2>&1)
+  (cd "$WORK" && env $env $RUN "$AZURE2_BIN" calculate --no-gui "$@" no_such_project.azr < /dev/null > out.txt 2>&1)
   rc=$?
   out="$(head -c 20000 "$WORK/out.txt")"
 }
@@ -78,9 +78,12 @@ refused "--build-coulomb-table= (no file)" "--build-coulomb-table= needs a FILE"
 refused "--use-gradiant (unknown)" "Unknown option --use-gradiant\." "" --use-gradiant
 refused "--use-gradient=1 (unknown)" "Unknown option --use-gradient=1\." "" --use-gradient=1
 refused "an unknown option after good ones" "Unknown option --no-such-flag\." "" --use-brune --no-such-flag --use-lm
-accepted "--no-readline --use-gradient --use-brune" "" --use-gradient --use-brune
-grep -q "^Notice: --no-readline is accepted and ignored" <<< "$out" && ok "--no-readline: one notice line" ||
-  bad "--no-readline: no notice"
+accepted "--use-gradient --use-brune" "" --use-gradient --use-brune
+refused "--no-readline (the menu is gone)" "Unknown option --no-readline\.  AZURE2 has no menu" "" --no-readline
+grep -q "Drop --no-readline and give the command" <<< "$out" && ok "  ... the refusal says how to fix it" ||
+  bad "  ... no fix in the refusal"
+printf -- '--no-readline\n' > "$WORK/readline.txt"
+refused "--no-readline in AZURE_OPTIONS_FILE" "Unknown option --no-readline" "AZURE_OPTIONS_FILE=$WORK/readline.txt"
 printf -- '--use-gradiant\n' > "$WORK/unknown.txt"
 refused "an unknown option in AZURE_OPTIONS_FILE" "Unknown option --use-gradiant\." "AZURE_OPTIONS_FILE=$WORK/unknown.txt"
 printf -- '--max-calls\n' > "$WORK/options.txt"

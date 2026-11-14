@@ -855,9 +855,10 @@ option is one row of the table in `src/RunRequest.cpp` and its line where the an
 refused with exit status 2, a message that lists the commands, and nothing calculated; it does not hang or
 calculate something else. The user replaces the pipe by the command: `python3 tools/menu_to_command.py
 '1\n\n\n7\n'` prints `calculate` (it walks the answers through the menu's questions as the menu read them, and
-says when the answer depends on whether the project has external capture). `--no-readline` and `--no-gui` on the old
-line can stay: both are accepted (`--no-readline` with a one-line notice). Whether `--no-readline` stays accepted
-for good or is refused after a release is yours to decide.
+says when the answer depends on whether the project has external capture). `--no-gui` on the old line can stay (accepted,
+no effect); `--no-readline`, which nearly every old script carries, is refused (your decision): the user drops it.
+The refusal says so: "Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads nothing from
+standard input.  Drop --no-readline and give the command: ...", exit status 2.
 
 ## For the maintainers to decide
 

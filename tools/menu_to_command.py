@@ -2,9 +2,10 @@
 """The command line that does what a script's answers to the old text menu did.
 
 AZURE2 asked its run's questions in a text menu until the program took commands (``AZURE2 <command> [options]
-FILE``); scripts answered them through a pipe, ``printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-readline p.azr``.
-This tool reads such answers, walks them through the menu's questions as the menu read them (its order, its blank
-answers, its re-asking), and prints the command and options that give the same run::
+FILE``); scripts answered them through a pipe, ``printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 p.azr``
+(their --no-readline is refused now: drop it).  This tool reads such answers, walks them through the menu's
+questions as the menu read them (its order, its blank answers, its re-asking), and prints the command
+and options that give the same run::
 
     python3 tools/menu_to_command.py '3\\nn\\nparam.sav\\n\\n7\\n'
     extrapolate --parameter-file=param.sav

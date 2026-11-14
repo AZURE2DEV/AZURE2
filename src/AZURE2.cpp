@@ -113,9 +113,7 @@ void printHelp() {
                "without one):" << std::endl
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
-            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Accepted and ignored with a notice, so that older scripts keep working;" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "AZURE2 has no menu and reads nothing from standard input." << std::endl;
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl;
   printOptionFlags();
   std::cout << std::setw(25) << std::left << "\t--threads=N:" << std::setw(0)
             << "The OpenMP threads of the run (N >= 1), over OMP_NUM_THREADS; printed by the run and by --describe."
@@ -213,9 +211,11 @@ void parseOptions(const std::vector<std::string> &arguments, Config &configure) 
   options.insert(options.end(), environment.OptionsFileLines().begin(), environment.OptionsFileLines().end());
   configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
-    if (*it == "--no-readline")  // accepted (older scripts pass it) and ignored, with one line
-      configure.outStream << "Notice: --no-readline is accepted and ignored: AZURE2 has no menu and reads nothing "
-                             "from standard input." << std::endl;
+    if (*it == "--no-readline")  // a menu script's option: the menu is gone
+      throw std::invalid_argument("Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads "
+                                  "nothing from standard input.\n       Drop --no-readline and give the command: "
+                                  "AZURE2 <command> [options] FILE (AZURE2 --help lists them; "
+                                  "tools/menu_to_command.py turns an old script's answers into the command).");
     else if (ApplyOptionFlag(configure, *it))  // an option of the calculation: its row of io::ConfigKeys()
       continue;
     else if (it->compare(0, 16, "--coulomb-table=") == 0) {  // the option and the table file of this machine
