@@ -394,7 +394,9 @@ A checking code of ``pyazr.endf``
 
 The codes are found, never installed (``pyazr/endf/checkers.py``):
 
-1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does).
+1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does,
+   what it does to the numbers of a file: the page says it before a run). The page needs no line: its ENDF tab lists
+   the codes from ``GET /api/endf/checkers`` and runs them through the jobs ``endf_check`` and ``endf_standardize``.
 2. Its deck: for a checking code the one of ``_run_check``, for a rewriting code the branch of ``standardize`` (a
    PREPRO code: ``_prepro_deck``); take the deck from the program's source, cite the lines.
 3. Its report: a branch of ``parse_report`` that gives findings (severity, MAT, MF, MT, record, text) and the
