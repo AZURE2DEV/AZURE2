@@ -24,10 +24,11 @@ Two ways to get the matrix:
                 analytic path.  --nprocs spreads the columns over worker
                 processes, each with its own engine.
 
-Usage:
-    python3 sensitivities.py <file.azr> [--segment 1] [--params output/param.sav]
-    python3 sensitivities.py <file.azr> --check              # analytic vs findiff
-    python3 sensitivities.py <file.azr> --method central --nprocs 8
+Usage (from the repository's root):
+
+    python3 pyazr/examples/sensitivities.py tests/upgrade/T1/T1.azr [--segment 1] [--params output/param.sav]
+    python3 pyazr/examples/sensitivities.py tests/upgrade/T1/T1.azr --check     # analytic against differences
+    python3 pyazr/examples/sensitivities.py tests/upgrade/T1/T1.azr --method central --nprocs 2
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 import numpy as np
 
@@ -59,7 +60,7 @@ def label(param):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
+    ap.add_argument("azr", type=Path, help="the format-3 project (.azr)")
     ap.add_argument("--segment", type=int, default=1,
                     help="1-based data segment (default 1)")
     ap.add_argument("--params", type=Path, default=None,
@@ -117,11 +118,12 @@ def main() -> int:
         where = np.abs(elasticity).argmax(axis=0)
         order = np.argsort(-peak)
 
-        print(f"{'parameter':<34} {'value':>12} {'|dlnS/dlnp|':>12} "
-              f"{'at E (MeV)':>11}")
+        units = [free[j].unit for j in cols]
+        print(f"{'parameter':<34} {'value':>12} {'unit':<8} {'|dlnS/dlnp|':>12} "
+              f"{'at E_cm (MeV)':>14}")
         for j in order[:args.top]:
-            print(f"{names[j]:<34} {p[j]:12.4g} {peak[j]:12.3g} "
-                  f"{energy[where[j]]:11.4f}")
+            print(f"{names[j]:<34} {p[j]:12.4g} {units[j]:<8} {peak[j]:12.3g} "
+                  f"{energy[where[j]]:14.4f}")
         if len(order) > args.top:
             print(f"... {len(order) - args.top} more, all below "
                   f"{peak[order[args.top]]:.3g}")

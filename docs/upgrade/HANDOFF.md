@@ -2,6 +2,124 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-examples`) — the experts' examples: measured, repaired, tested, listed
+
+The 27 scripts of `pyazr/examples/` as they stand on `19c55dad`, each run once from a copy of the repository's
+projects (`work/examples/before/`), one thread (`OMP_NUM_THREADS=1`), the engine of `work/b-trial76`.  "Beside" =
+in the project's directory; "cwd" = the working directory.
+
+- angular_distribution: `tests/upgrade/T1/T1.azr`; runs: yes; 5.0 s; `--plot` writes a PNG into cwd; shows: Legendre
+  coefficients at chosen energies
+- channel_functions: `tests/upgrade/T1/T1.azr`; runs: yes; 4.7 s; needs matplotlib; PNG into cwd; prints no number;
+  shows: F, G, P, hard-sphere phase per l
+- channel_radius_scan: `tests/upgrade/T3/T3.azr --pair 2 --radii 3.5 4 4.5`; runs: yes; 0.7 s; writes `_radius_*.azr`
+  beside; deletes `output/intEC.*` beside; shows: chi2 against a channel radius
+- covariance_builder: `tests/upgrade/T1/T1.azr el_lab090`; runs: yes; 7.2 s; writes `cov_el_lab090.txt` and `T1_cov.azr`
+  beside; shows: a data covariance from parts
+- deactivate_level: none: `13N.azr` of cwd (run in a copy of `tests/13N`); runs: from there; 16.1 s; default in cwd;
+  writes `13N_no_level.azr` beside; takes `1/2- 20`, a pole with no free width, so "off" equals "full"; shows: runtime
+  off/only of a level; `set_level(active=False)` (same as decompose_cross_section + edit_model)
+- decompose_cross_section: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; —; shows: full / off / only / bare per level
+- dimensionless_widths: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; reads `param.sav` by hand (the session takes it);
+  shows: theta^2 and Weisskopf units
+- ec_integrals: `tests/upgrade/T1/T1.azr`; runs: yes; 7.9 s; needs matplotlib; PNG into cwd; shows: external-capture
+  integrals per pathway
+- edit_model: `tests/13N/13N.azr`; runs: yes; 8.1 s; names of 13N only (level `1/2+ 20`, `artemov`, `roughton.dat`);
+  writes beside; deletes `output/intEC.*` beside (the engine checks their signature itself); shows: level and data-set
+  edits
+- edit_scheme: none: `13N.azr` of cwd; runs: from there; 8.2 s; default in cwd; leaves `13N_edited.azr` beside; shows:
+  nothing: the first half of edit_model
+- endf_evaluation: none (repository files); runs: yes; 3.7 s; — (another agent's); shows: an ENDF-6 file beside a
+  project
+- exfor_fetch: not run (network); runs: no; — s; network (director: HTTP 403); writes `pyazr/examples/_exfor_demo/`
+  inside the package; shows: EXFOR search, conversion, DOI
+- fit_emcee: `tests/upgrade/T2/T2.azr 40 20 0`; runs: yes; 96.3 s; default `T2.azr` of cwd; `chain.npy` into cwd; shows:
+  emcee on `Objective.log_prob`
+- fit_iminuit: `tests/upgrade/T2/T2.azr`; runs: **no**; 0.4 s; `s.objective()(x0)` is a float: `AttributeError`; shows:
+  MIGRAD/HESSE of iminuit
+- fit_scipy: `tests/upgrade/T2/T2.azr`; runs: **no**; 0.7 s; the same; shows: L-BFGS-B and least_squares
+- fit_zeus: —; runs: **no**; 0.0 s; zeus absent; names of before 3.0 (`datasets.sys_errors`, `cross_err`, `p.value`);
+  `13N.azr` of cwd; shows: nothing: fit_emcee with its own priors
+- nuclear_potential: none (repository files); runs: yes; 9.5 s; project fixed in the script; shows: the hybrid potential
+  per pair
+- per_dataset_chi2: `tests/upgrade/T2/T2.azr`; runs: yes; 0.5 s; —; shows: chi2 per data set, whitened rows
+- print_scheme: none: `13N.azr` of cwd; runs: from there; 8.1 s; default in cwd; shows: the level scheme and the data
+  sets
+- project_from_python: none (temporary directory); runs: yes; 0.4 s; —; shows: a project from records
+- reaction_rate: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; runs: yes; 19.4 s; the engine's progress bars on
+  stdout (package); shows: N_A<sigma v>, Gamow window, REACLIB
+- save_fit_to_azr: `tests/upgrade/T2/T2.azr --params <golden param.sav> --out ...`; runs: **no**; 0.4 s; no parameter
+  file of the repository has format-3 names; reads `param.sav` by hand; shows: `save_fit` and the read-back
+- sensitivities: `tests/upgrade/T1/T1.azr --check`; runs: yes; 3.7 s; —; shows: d ln sigma / d ln p, analytic against
+  differences
+- sfactor_extrapolation: `tests/upgrade/T1/T1.azr`; runs: yes; 3.0 s; writes `_sfactor.azr` beside; deletes
+  `output/intEC.extrap` beside; shows: S(E) below the data, S(0)
+- tabulate_cross_sections: `tests/upgrade/T1/T1.azr`; runs: yes; 9.5 s; default `tests/13N/13N.azr` of cwd; table into
+  cwd; on no page; shows: an adaptive sigma(E) table
+- transform_widths: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; —; shows: `Session.transform` beside 2 gamma^2 P; a
+  chain mapped
+- uncertainty_band: none: `7Be.azr` of cwd; runs: **no**; 0.2 s; `7Be.azr` is in no directory of the repository (key
+  113); shows: bands from a fit covariance
+
+The same thing twice: edit_scheme is the first half of edit_model; deactivate_level is decompose_cross_section's
+off/only plus one `set_level` of edit_model; fit_zeus is fit_emcee with priors of its own; sfactor_extrapolation's
+grid is the central value of uncertainty_band's second part; dimensionless_widths and transform_widths both print
+the physical widths.
+
+**After** (the same machine, one thread, the seconds of `tests/pyazr/examples_test.py`'s rows; every command from the
+repository's root, `python3 pyazr/examples/<script>`; q = quick row, s = slow row):
+
+- print_scheme: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+- project_from_python: `[WORKDIR]`; 0.4 s; q
+- edit_model (+ edit_scheme, + deactivate_level's file part): `tests/upgrade/T1/T1.azr --out DIR`; 7.7 s; s
+- exfor_fetch: `tests/upgrade/T1/T1.azr --entry T0001003.1 --local tests/pyazr/data/exfor_master`; 3.8 s; q (the network
+  row skipped)
+- covariance_builder: `tests/upgrade/T1/T1.azr el_lab090 --out DIR/T1_cov.azr`; 7.2 s; s
+- nuisances (new): `tests/upgrade/T1/T1.azr el_lab090 el_lab125 el_lab160`; 4.6 s; s
+- natural_target (new): `tests/natural_target/models/M.azr`; 0.3 s; q
+- gamma_decay (new): `tests/gamma_decay/models/record.azr`; 0.4 s; q
+- refusals (new): `tests/upgrade/T3/T3.azr`; 0.4 s; q
+- per_dataset_chi2: `tests/upgrade/T2/T2.azr`; 0.5 s; q
+- decompose_cross_section (+ deactivate_level's runtime part): `tests/upgrade/T1/T1.azr --level "1/2+ 2.365"`; 3.9 s; q
+- angular_distribution: `tests/upgrade/T1/T1.azr -n 3`; 4.5 s; s
+- channel_radius_scan: `tests/upgrade/T3/T3.azr --pair 2 --radii 3.5 4.0 4.5`; 0.7 s; q
+- nuclear_potential: `tests/hybrid_potential/hybrid_potential.azr`; 9.8 s; s
+- thm_dataset (new): `tests/upgrade/T2/T2.azr`; 0.5 s; q
+- tabulate_cross_sections: `tests/upgrade/T1/T1.azr --out sigma.dat`; 9.9 s; s
+- fit_engine (new; + save_fit_to_azr): `tests/upgrade/T1/T1.azr --out DIR`; 14.0 s; s
+- fit_iminuit: `tests/upgrade/T3/T3.azr`; 0.7 s; q
+- fit_scipy: `tests/upgrade/T3/T3.azr`; 1.0 s; q
+- fit_emcee (+ fit_zeus): `tests/upgrade/T3/T3.azr --steps 60 --rate 2 1 --draws 5`; 3.0 s; q
+- sensitivities: `tests/upgrade/T1/T1.azr --check`; 3.8 s; q
+- uncertainty_band: `tests/upgrade/T1/T1.azr`; 7.2 s; s
+- reaction_rate: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; 20.9 s; s
+- sfactor_extrapolation: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; 3.1 s; q
+- endf_evaluation (untouched): none; 3.9 s; q
+- channel_functions: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+- ec_integrals: `tests/upgrade/T1/T1.azr`; 5.4 s; s
+- dimensionless_widths: `tests/upgrade/T1/T1.azr`; 3.8 s; q
+- transform_widths: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+
+- **Rule**: a script takes its project as the first argument, required (endf_evaluation, another agent's, keeps its
+  optional pair of arguments); files only where `--out`/`--plot`/`--csv` say or in a printed temporary directory; an
+  edited copy's session reads the data from the project's directory (`Session(..., cwd=)`).
+- **Test**: `tests/pyazr/examples_test.py` (ctest `pyazr_examples`, 41 s, and `pyazr_examples_slow`, label slow,
+  91 s): one row per run with a pinned number; nothing may appear in the root or beside a named project.  Check 58:
+  the files of `pyazr/examples`, the test's rows and the page `user_guide/pyazr_examples.rst` are one set.  Injected
+  once: a script without rows (check 58: two failures), a row of the page without a file (one), a script writing
+  beside its project (the test fails); removed.
+- **Page**: `docs/source/user_guide/pyazr_examples.rst` by task; `pyazr.rst` "Examples" and
+  `getting_started/examples.rst` point to it; Developer Guide `extending.rst` "An example script of pyazr".
+- **Open**: defects of pyazr the scripts show (not repaired): `Session.level_scheme` numbers pairs in the engine's
+  order and calls T3's beta pair a photon; `Session.ec_integrals` gives no final state and no unit; `evaluate(x).data[i]
+  .unit` is None in an extrapolation session; the `ParameterVectorError` of `evaluate` has no what/allowed/fix;
+  a `radiative` parameter's unit is its kind's text; a Project edit that leaves a phase-shift data set without its
+  channel is accepted and the session refuses; `trimmed_model`, `extrapolation_bands` and `tabulate` write beside the
+  project unless given a `cwd`, and `trimmed_model`'s docstring calls a changed-grid `intEC.extrap` silently reused.
+  Gaps: no Project edit of `<parameterSettings>` (a prior or limit on a level parameter); no project without a
+  nuclear-part file.  The repository's skills still name the removed scripts (`.claude/skills/azure2-calculate/
+  references/examples.md`, `azure2-setup/SKILL.md`, `azure2-fit/SKILL.md`, `azure2-uncertainty/SKILL.md`).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-endf-model-writer`) — ENDF: the start model and the writer
 
 **Done**: the engine's two level doors (`api/src/pybind_level_doors.cpp`, registered in `BindPhysics`:

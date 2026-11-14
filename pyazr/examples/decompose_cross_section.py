@@ -17,11 +17,17 @@ from which
     only - bare   = the bare resonance on the background
     difference    = the interference alone
 
-The interference is block-diagonal in J^pi -- only levels of the same spin and
-parity interfere -- which is a check on any decomposition you compute this way.
+In an angle-integrated reaction cross section the interference is block-diagonal in J^pi -- only levels of the
+same spin and parity interfere -- which is a check on a decomposition computed this way; in a differential cross
+section, and in elastic scattering with its Coulomb amplitude, every amplitude interferes.
 
-Usage:
-    python3 decompose_cross_section.py <file.azr> [--segment 1]
+The same evaluations probe what one level does, with no file written: ``--level LABEL`` prints full, off and only
+at every fifth point of the segment.  To keep a level switched off in a project, edit the file
+(``Project.set_level(label, active=False)``, as ``edit_model.py`` does).
+
+Usage (from the repository's root):
+
+    python3 pyazr/examples/decompose_cross_section.py tests/upgrade/T1/T1.azr [--segment 1] [--level "1/2+ 2.365"]
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 import numpy as np
 
@@ -41,17 +47,19 @@ from pyazr import Session
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
-    ap.add_argument("--segment", type=int, default=1, help="1-based")
-    ap.add_argument("--params", type=Path, default=None)
+    ap.add_argument("azr", type=Path, help="the format-3 project (.azr)")
+    ap.add_argument("--segment", type=int, default=1, help="the data set, 1-based among the active ones")
+    ap.add_argument("--params", type=Path, default=None, help="a parameter file (param.sav) to take")
+    ap.add_argument("--level", default=None, help="a level's label (Project.levels()) to print point by point")
     args = ap.parse_args()
 
     with Session(str(args.azr), parameter_file=args.params) as azr:
         x = np.asarray(azr.parameters.x0, float)
 
         i = args.segment - 1
-        energies = np.asarray(azr.evaluate(x).data[i].energies, float)
-        full = np.asarray(azr.evaluate(x).data[i].model, float)
+        data = azr.evaluate(x).data[i]
+        energies = np.asarray(data.energies, float)
+        full = np.asarray(data.model, float)
 
         # The background: every free width off, leaving hard-sphere scattering
         # and external capture.
@@ -60,10 +68,10 @@ def main() -> int:
         bare_x = P.put(bare_x, P.of_kind("width").free, 0.0)
         bare = np.asarray(azr.evaluate(bare_x).data[i].model, float)
 
-        print(f"{args.azr.name}, segment {args.segment}: "
-              f"{len(energies)} points, {energies.min():.3f}-{energies.max():.3f} MeV")
+        print(f"{args.azr.name}, segment {args.segment} ({data.name}, {data.quantity} in {data.unit}): "
+              f"{len(energies)} points, {energies.min():.3f}-{energies.max():.3f} MeV (c.m.)")
         print(f"\n{'level':>16} {'max |full-off|':>15} {'max |only-bare|':>16} "
-              f"{'max |interf.|':>14}")
+              f"{'max |interf.|':>14}   ({data.unit})")
 
         widths = P.of_kind("width").free
         for e in P.of_kind("energy"):
@@ -82,8 +90,18 @@ def main() -> int:
                   f"{np.max(np.abs(bare_res)):16.3e} "
                   f"{np.max(np.abs(interference)):14.3e}")
 
-        print("\nThe third column is interference and should be non-zero only "
-              "where\nanother level of the same J^pi overlaps.")
+        print("\nThe third column is the interference: in an angle-integrated reaction cross section only levels of "
+              "the same J^pi\ninterfere; in a differential or elastic one every amplitude does (Coulomb and "
+              "hard-sphere scattering too).")
+
+        if args.level:
+            key = args.level
+            off = azr.evaluate(P.put(x, P.of_level(key).of_kind("width").free, 0.0)).data[i].model
+            only = azr.evaluate(P.put(x, [w for w in widths if w.level_label != key], 0.0)).data[i].model
+            print(f"\nthe level {key}, {data.unit}:")
+            print(f"{'E_cm (MeV)':>11} {'full':>12} {'off':>12} {'only':>12}")
+            for k in range(0, len(energies), 5):
+                print(f"{energies[k]:11.4f} {full[k]:12.5g} {off[k]:12.5g} {only[k]:12.5g}")
     return 0
 
 

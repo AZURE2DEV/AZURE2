@@ -7,8 +7,9 @@ Where a data covariance joins several data sets only the group's sum has a meani
 ``chiSquared.out`` does, and the sum of the squares of the data set's rows of the objective
 (``objective().residuals(x)[d.rows]``, whitened rows) splits it otherwise; both add up to the group's chi-squared.
 
-Usage:
-    python3 per_dataset_chi2.py <file.azr> [--params output/param.sav]
+Usage (from the repository's root):
+
+    python3 pyazr/examples/per_dataset_chi2.py tests/upgrade/T2/T2.azr [--params output/param.sav]
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 import numpy as np
 
@@ -28,7 +29,7 @@ from pyazr import Session
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
+    ap.add_argument("azr", type=Path, help="the format-3 project (.azr)")
     ap.add_argument("--params", type=Path, default=None,
                     help="a param.sav to load instead of the .azr values")
     args = ap.parse_args()

@@ -5,24 +5,27 @@ AZURE2 fits reduced-width amplitudes but reports partial widths, and the step be
 without the Brune parametrization the levels of a J-group mix.  ``Session.transform(x)`` is that step, as the
 program writes ``<levels>`` from a fit; this script prints it beside the naive ``2 gamma^2 P``.
 
-Print the widths at the start of the fit vector, or at a parameter file's values::
+Print the widths at the start of the fit vector, or at a parameter file's values (from the repository's root)::
 
-    python transform_widths.py T1.azr [--params output/param.sav]
+    python3 pyazr/examples/transform_widths.py tests/upgrade/T1/T1.azr [--params output/param.sav]
 
 Map the samples of a chain onto physical values: a CSV with a header row whose columns are named after free
 parameters (``Session.parameters.free.names``); a free parameter without a column keeps its start value::
 
-    python transform_widths.py T1.azr --chain samples.csv --show width_1_1,width_1_2
+    python3 pyazr/examples/transform_widths.py tests/upgrade/T1/T1.azr --chain samples.csv --show width_3_1
 
 A naive ``2 gamma^2 P`` far above the engine's width means a strongly coupled level, where a width saturates at
 ``2 P_c / (dS_c/dE)``: a chain pressed against that ceiling says the data do not fix the coupling strength.
 """
 
 import argparse
+import os
 
-import numpy as np
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-import pyazr
+import numpy as np  # noqa: E402
+
+import pyazr  # noqa: E402
 
 
 def level_table(s, x):
