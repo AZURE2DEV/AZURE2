@@ -75,6 +75,7 @@ ROWS = [
         "peak S = 263.5 keV b at 0.4190 MeV"),
     # evaluations
     Row("endf_evaluation", [], "format check by pyazr.endf: 0 errors, 0 warnings"),
+    Row("endf_start_model", ["{out}"], "MF=3/MT=102 (z,g) capture: 130 lines, 381 points", slow=True),
     # physics functions
     Row("channel_functions", [T1], " 0      1.0284      0.18764       2.0968      0.17374"),
     Row("ec_integrals", [T1], "20 external-capture pathways from pair 1", slow=True),

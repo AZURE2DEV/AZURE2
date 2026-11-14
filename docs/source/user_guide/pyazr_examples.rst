@@ -152,6 +152,10 @@ Evaluations
    * - ``endf_evaluation.py``
      - An ENDF-6 evaluation beside a project: read it, draw it over the data, check the file (:doc:`endf`).
      - ``endf_evaluation.py``
+   * - ``endf_start_model.py``
+     - An evaluation's resonance parameters (LRF=7) as a new project, and a project written as an ENDF-6 file
+       (:doc:`endf`).
+     - ``endf_start_model.py``
 
 Physics functions
 -----------------
