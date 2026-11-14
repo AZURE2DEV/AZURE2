@@ -11,86 +11,74 @@ Command-Line Mode
 .. code-block:: bash
 
    AZURE2 <command> [options] input_file.azr
-   AZURE2 [options] input_file.azr
 
-With a command, AZURE2 runs that calculation with the answers its options
-give and reads nothing from standard input (see `Commands`_ below).  Without a
-command it starts in text mode, with an interactive menu similar to that of the
-original FORTRAN version; every calculation type is reached from it.
-The paths a project names -- its output and checks directories, data,
-reference, grid, covariance and table files -- and the file names typed at the
-menu's prompts (a parameter file, an integrals file, a temperature file) are
-relative to the directory of ``input_file.azr``, wherever AZURE2 is started;
-messages print them as the project writes them.  ``--validate`` and
+The command names the calculation; its options give every answer the run
+needs, by name (see `Commands`_ below).  AZURE2 reads nothing from standard
+input: a run without a command is refused with exit status 2 and the list of
+the commands.  The paths a project names -- its output and checks
+directories, data, reference, grid, covariance and table files -- and the
+files the options name (a parameter file, an amplitude file, a temperature
+file) are relative to the directory of ``input_file.azr``, wherever AZURE2 is
+started; messages print them as the project writes them.  ``--validate`` and
 ``--describe`` read the data files by the same rule (relative to the project
-file's directory), as ``pyazr.validate`` and ``pyazr.describe`` do; before
-November 2026 these four read them relative to the working directory.
-Builds with the Qt setup utility need ``--no-gui`` for text mode; here it is
-accepted and has no effect, so scripts written for those builds run
-unchanged.
+file's directory), as ``pyazr.validate`` and ``pyazr.describe`` do.
+``--no-gui`` (needed by builds with the Qt setup utility) is accepted and has
+no effect; ``--no-readline`` (from the time of the text menu) is refused with
+exit status 2: drop it.  Scripts written for the menu: `Scripts written for the
+menu`_.
 
 Commands
 ^^^^^^^^
 
-A command names the calculation; its options answer every question the menu
-would ask, by name.  An option that the command does not take, a missing
-required answer, a value out of range, a file that cannot be read (relative to
-the directory of the project file, as the project's paths), and an unknown
-command are refused before anything is calculated, with exit status 2 and a
-message in three parts: what is wrong, what the command takes, how to fix it.
-A command option given without a command is refused the same way.  A command
-needs no readline and ignores standard input.  ``AZURE2 --help`` lists the
-commands and their options; ``AZURE2 --describe FILE --json`` gives them as
-data (the member ``commands``: per command its name, its menu number and its
-options with kind, range, default and whether it is required).  Both are made
-from one table (``src/RunRequest.cpp``), which the menu reads too; the test
-``tests/cli_commands`` checks that the help, the JSON and this page name the
-same commands and options, and that a run by command writes the same files as
-the run by menu with the same answers.
+An option that the command does not take, a missing required answer, a value
+out of range, a file that cannot be read (relative to the directory of the
+project file, as the project's paths), and an unknown command are refused
+before anything is calculated, with exit status 2 and a message in three
+parts: what is wrong, what the command takes, how to fix it.  A command
+option given without a command is refused the same way.  ``AZURE2 --help``
+lists the commands and their options first; ``AZURE2 --describe FILE --json``
+gives them as data (the member ``commands``: per command its name and its
+options with kind, range, default, whether it is required and, for one of two
+ways, the other way in ``instead``).  Both are made from one table
+(``src/RunRequest.cpp``); the test ``tests/cli_commands`` checks that the
+help, the JSON and this page name the same commands and options.
 
 .. list-table::
-   :widths: 18 10 72
+   :widths: 18 82
    :header-rows: 1
 
    * - Command
-     - Menu
      - What it runs, and its options
    * - ``calculate``
-     - 1
      - The data sets at their data points from the parameters (no fit).
        ``--covariance-band``, ``--parameter-file=FILE``,
        ``--capture-amplitudes=FILE``.
    * - ``fit``
-     - 2
      - Fits the parameters to the data sets, then calculates them.
        ``--covariance-band``, ``--scale-covariance``,
        ``--parameter-file=FILE``, ``--capture-amplitudes=FILE``.
    * - ``extrapolate``
-     - 3
      - The extrapolations of the project (no data).  ``--covariance-band``,
        ``--parameter-file=FILE``, ``--capture-amplitudes=FILE``.
    * - ``minos``
-     - 4
      - A fit, then the MINOS interval of every free parameter.
        ``--delta-chi2=X`` (required), ``--covariance-band``,
        ``--scale-covariance``, ``--parameter-file=FILE``,
        ``--capture-amplitudes=FILE``.
    * - ``rate``
-     - 5
      - The reaction rate of one entrance and exit pair.
-       ``--rate-entrance=N`` and ``--rate-exit=N`` (required), and either
-       ``--temperature-file=FILE`` or ``--temperature-min=T``,
-       ``--temperature-max=T`` and ``--temperature-step=T`` (GK);
-       ``--parameter-file=FILE``.
+       ``--rate-entrance=N`` and ``--rate-exit=N`` (required), and one of two
+       ways to give the temperatures (GK): ``--temperature-file=FILE``, or
+       ``--temperature-min=T``, ``--temperature-max=T`` and
+       ``--temperature-step=T``; ``--parameter-file=FILE``.
    * - ``mcmc``
-     - 6
      - The ensemble sampler (a build with ``USE_MCMC``).  ``--walkers=N``,
        ``--steps=N``, ``--sampler-threads=N`` and ``--basis=rwa|physical``
        (required); ``--parameter-spread=P``, ``--energy-spread=E``,
        ``--overwrite-samples``, ``--parameter-file=FILE``,
        ``--capture-amplitudes=FILE``.
 
-The options of the commands, each with the menu's question it answers:
+The options of the commands:
 
 .. list-table::
    :widths: 30 70
@@ -100,68 +88,69 @@ The options of the commands, each with the menu's question it answers:
      - Answer
    * - ``--delta-chi2``
      - ``=X``: the rise of chi-squared that bounds each MINOS interval
-       (Minuit's Up; 1 for one standard deviation of one parameter), X >= 0.
-       Menu: "Allowed Chi-Squared Variance".
+       (Minuit's Up; 1 for one standard deviation of one parameter), X > 0.
    * - ``--covariance-band``
      - Writes the cross-section uncertainty band from the parameter
        covariance (this fit's, else the ``covariance.dat`` a fit saved).
-       Menu: "Calculate cross-section uncertainty band? (y/n)" (modes 2 to
-       4; without a command the flag answers it yes, as it always did).
    * - ``--scale-covariance``
      - With ``--covariance-band`` after a fit: inflates the covariance by the
        reduced chi-squared when it exceeds 1 (Birge ratio); refused without
-       ``--covariance-band``.  Menu: "Scale covariance to reduced
-       chi-squared = 1? (y/n)".
+       ``--covariance-band``.
    * - ``--parameter-file``
      - ``=FILE``: start from the parameters of FILE (a ``param.sav``),
        applied by name; without it, from the ``<levels>`` of the project.
-       Menu: "External Parameter File (leave blank for new file)".
+       A file none of whose names is a parameter of the run is refused
+       (``E_PARAMETER_FILE_NO_MATCH``, exit 1: nothing of it would be
+       applied); a file with names the project has no parameter for, or
+       without names of parameters the run has, is applied with
+       ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
+       gives to the parameters of its other run (the data sets' in a run
+       without data, the extrapolations' in a run with data) and fixed
+       data-set or extrapolation parameters the file leaves out are not
+       reported.  A file written for a project before its conversion to
+       format 3 names data-set parameters by their old names:
+       ``--convert-params`` renames it.  The log says ``Reading User
+       Parameter File...`` when the file was applied.
    * - ``--capture-amplitudes``
      - ``=FILE``: read the external-capture amplitudes from FILE (an
        ``intEC.dat`` of an earlier run, checked against its signature file;
        FILE is read, not rewritten) instead of computing them into
        ``intEC.dat``.  Used only when the run has external capture; otherwise
-       the run says so and ignores it.  Menu: "External Capture Amplitude
-       File (leave blank for new file)".
+       the run says so and ignores it.
    * - ``--rate-entrance``
-     - ``=N``: the rate's entrance pair key (not 0).  Menu: "Reaction Rate
-       Entrance Pair".
+     - ``=N``: the rate's entrance pair key, 1 or more.
    * - ``--rate-exit``
      - ``=N``: the rate's exit pair key (at least -1, not 0; -1 the total
-       radiative capture), different from the entrance.  Menu: "Reaction Rate
-       Exit Pair".
+       radiative capture), different from the entrance.
    * - ``--temperature-file``
-     - ``=FILE``: the rate's temperatures, GK, one per line.  Menu: "Use
-       temperatures from file (yes/no)" answered yes, then "Temperature File
-       Name".
+     - ``=FILE``: the rate's temperatures, GK, one per line; required unless
+       the three options below are given.
    * - ``--temperature-min``
      - ``=T``: the lowest temperature, GK (with ``--temperature-max`` and
-       ``--temperature-step``, without ``--temperature-file``).  Menu: "Use
-       temperatures from file" answered no, then "Reaction Rate Min Temp".
+       ``--temperature-step``, without ``--temperature-file``).
    * - ``--temperature-max``
-     - ``=T``: the highest temperature, GK.  Menu: "Reaction Rate Max Temp".
+     - ``=T``: the highest temperature, GK.
    * - ``--temperature-step``
-     - ``=T``: the temperature step, GK.  Menu: "Reaction Rate Temp Step".
+     - ``=T``: the temperature step, GK.
    * - ``--walkers``
-     - ``=N``: the sampler's walkers, 2 to 1000.  Menu: "Number of Walkers".
+     - ``=N``: the sampler's walkers, 2 to 1000.
    * - ``--steps``
-     - ``=N``: the sampler's steps, 100 to 10000000.  Menu: "Number of
-       Steps".
+     - ``=N``: the sampler's steps, 100 to 10000000.
    * - ``--parameter-spread``
      - ``=P``: the walkers' initial spread, percent of each parameter, above 0
-       and up to 50; default 5.  Menu: "Initial Parameter Spread %".
+       and up to 50; default 5.
    * - ``--energy-spread``
      - ``=E``: the walkers' initial spread of a level energy, keV, above 0 and
-       up to 1; default 1.  Menu: "Level Energy Spread keV".
+       up to 1; default 1.
    * - ``--sampler-threads``
      - ``=N``: the sampler's threads, 1 or more (``--threads`` sets the
-       OpenMP threads of the run).  Menu: "Number of Threads".
+       OpenMP threads of the run).
    * - ``--basis``
      - ``=rwa`` samples reduced width amplitudes, ``=physical`` the project's
-       physical parameters.  Menu: "Use Reduced Width Amplitudes (yes/no)".
+       physical parameters.
    * - ``--overwrite-samples``
      - Overwrites ``samples.mcmc``; without it the sampler continues the
-       file.  Menu: "Overwrite existing samples.mcmc? (yes/no)".
+       file.
 
 Examples:
 
@@ -241,58 +230,60 @@ same way.  pyazr sets a key with
 
 Not keys (not a property of a project): the fit's and the job's settings
 (``--use-gradient``, ``--use-lm``, ``--max-calls``, ...), the table file of
-``--coulomb-table=FILE``, the menu choice, threads, and the environment
+``--coulomb-table=FILE``, the command, threads, and the environment
 switches below.
 
-Scripted input
-^^^^^^^^^^^^^^
+Scripts written for the menu
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A script runs a command (`Commands`_ above).  Without one, a run can also be
-scripted by piping the answers to the menu (pass ``--no-readline``); the
-commands replace this.  The prompts come in this order:
+Before the commands, AZURE2 asked for the calculation and its answers in a
+text menu, and scripts piped the answers to it
+(``printf '2\nn\nparam.sav\n\n7\n' | AZURE2 project.azr``, often with the
+option ``--no-readline``, which is refused now).
+The menu is gone; such a script is refused with exit status 2 and the list of
+the commands, and nothing is calculated.  Replace the pipe by the command:
+``python3 tools/menu_to_command.py '<the answers>'`` prints it (it walks the
+answers through the menu's questions as the menu read them; whether the menu
+asked for the amplitude file depended on the project, and the tool says when
+that matters).  The common answers:
 
-1. the menu choice (1 to 7);
-2. modes 2, 3 and 4 only: "Calculate cross-section uncertainty band? (y/n)";
-   after a yes, the fit modes also ask "Scale covariance to reduced
-   chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
-   before both);
-3. the external parameter file (blank: start from the ``<levels>`` of the
-   project).  Its lines are applied by name.  A file none of whose names is a
-   parameter of the run is refused (``E_PARAMETER_FILE_NO_MATCH``, exit 1:
-   nothing of it would be applied); a file with names the project has no
-   parameter for, or without names of parameters the run has, is applied with
-   ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
-   gives to the parameters of its other run (the data sets' in a run without
-   data, the extrapolations' in a run with data) and fixed data-set or
-   extrapolation parameters the file leaves out are not reported.  A file
-   written for a project before its conversion to format 3 names data-set
-   parameters by their old names: ``--convert-params`` renames it;
-4. the external capture amplitude file (blank: compute them);
-5. the menu again (``7`` exits).
+.. list-table::
+   :widths: 40 60
+   :header-rows: 1
 
-.. code-block:: bash
+   * - Menu answers
+     - Command
+   * - ``1\n\n\n7\n``
+     - ``AZURE2 calculate project.azr``
+   * - ``1\nfit.sav\n\n7\n``
+     - ``AZURE2 calculate --parameter-file=fit.sav project.azr``
+   * - ``2\nn\n\n\n7\n``
+     - ``AZURE2 fit project.azr``
+   * - ``2\ny\ny\nfit.sav\n\n7\n``
+     - ``AZURE2 fit --covariance-band --scale-covariance
+       --parameter-file=fit.sav project.azr``
+   * - ``3\nn\nfit.sav\n\n7\n``
+     - ``AZURE2 extrapolate --parameter-file=fit.sav project.azr``
+   * - ``4\n1\nn\n\n\n7\n``
+     - ``AZURE2 minos --delta-chi2=1 project.azr``
+   * - ``5\n\n1\n-1\nyes\ntemps.dat\n``
+     - ``AZURE2 rate --rate-entrance=1 --rate-exit=-1
+       --temperature-file=temps.dat project.azr``
+   * - ``5\n\n1\n2\nno\n0.01\n2\n0.01\n``
+     - ``AZURE2 rate --rate-entrance=1 --rate-exit=2 --temperature-min=0.01
+       --temperature-max=2 --temperature-step=0.01 project.azr``
+   * - ``6\n\n\n24\n1000\n\n\n4\nyes\nyes\n``
+     - ``AZURE2 mcmc --walkers=24 --steps=1000 --sampler-threads=4
+       --basis=rwa --overwrite-samples project.azr``
 
-   printf '1\nfit.sav\n\n7\n'   | AZURE2 --no-gui --no-readline project.azr   # calculate
-   printf '2\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # fit from fit.sav
-   printf '3\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # calculate without data
-
-A y/n question takes y, yes, 1, t, true or n, no, 0, f, false (any case); a
-blank line is "no".  Any other answer stops a piped run with an error and exit
-status 1 before anything is calculated (at a terminal the question is asked
-again).  Before November 2026 any other answer counted as "no", so a script
-that left out the band line gave the parameter-file name to the y/n question
-and the next line to the parameter-file prompt, and the run used the
-``<levels>`` of the project without an error.  Check the log of an older run:
-one that read the file prints ``Reading User Parameter File...``, one that did
-not prints ``Creating New param.par File...``.  ``--covariance-band`` answers
-the band question yes without a prompt.
-
-If the input ends at a prompt that needs an answer (the menu, the MINOS
-variance, the reaction-rate and MCMC questions without a default), AZURE2
-stops with ``ERROR: the input ended (end of file) at the prompt ...`` and exit
-status 1. A prompt whose blank answer is its default (the parameter and
-integral file names, the uncertainty-band questions, the MCMC spreads,
-overwriting ``samples.mcmc``) takes that default at end of input.
+The second blank line of the calculate, fit and extrapolate answers was the
+external-capture amplitude file (blank: compute them), asked only of a
+project with external capture; ``--capture-amplitudes=FILE`` gives a file.
+A script that left out the band line of modes 2 and 3 gave the
+parameter-file name to the y/n question: such a run used the ``<levels>`` of
+the project (before November 2026 without an error).  The log of an older run
+says which: ``Reading User Parameter File...`` when it read the file,
+``Creating New param.par File...`` when it did not.
 
 Available Options
 -----------------
@@ -309,8 +300,6 @@ Available Options
    * - ``--no-gui``
      - Accepted and ignored: this build has no graphical setup utility. Builds
        with the Qt setup utility need it to run in text mode.
-   * - ``--no-readline``
-     - Disable readline support for command-line input (accepted, with no effect, in a build without readline).
    * - ``--use-brune``
      - Use the Brune parameterization (equivalent to the GUI's
        "Use Brune formalism" option).  This is the default.
@@ -737,7 +726,7 @@ in the same way.  Two environment variables control and report this:
        channel-space and level-matrix solves and why a group fell back to the
        level matrix.  The set-up's stages (every point's Coulomb functions,
        penetrabilities and shifts, computed once) come first in a report of
-       their own (``[profile] set-up``); a calculation (menu 1) reports under
+       their own (``[profile] set-up``); a calculation (``calculate``) reports under
        ``calculation``, the evaluation after a fit under ``final evaluation``.
        No cost when unset.
 

@@ -49,7 +49,7 @@ model() {
     /^<targets>$/ { print; if (ENVIRON["TARGETS"] != "") print ENVIRON["TARGETS"]; skip = 1; next }
     /^<\/targets>$/ { skip = 0 }
     !skip { print }' "$SRC" > "$WORK/$name/m.azr"
-  (cd "$WORK/$name" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1; echo "exit $?" >> run.log)
+  (cd "$WORK/$name" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui m.azr > run.log 2>&1; echo "exit $?" >> run.log)
 }
 # column 4 (the cross section, lab frame here) of a test-segment output file, blank lines dropped
 col() { awk 'NF { print $4 }' "$1"; }

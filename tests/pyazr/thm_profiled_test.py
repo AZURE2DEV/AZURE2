@@ -96,8 +96,8 @@ with tempfile.TemporaryDirectory() as tmp:
     fresh_copy(py_dir)
 
     # -- the CLI, fresh -------------------------------------------------------
-    proc = subprocess.run([binary, "--no-gui", "--no-readline", "7Li_p_a.azr"],
-                          cwd=cli_dir, input="1\n\n\n7\n", text=True,
+    proc = subprocess.run([binary, "calculate", "--no-gui", "7Li_p_a.azr"],
+                          cwd=cli_dir, stdin=subprocess.DEVNULL, text=True,
                           capture_output=True, timeout=1800)
     log = proc.stdout.replace("\r", "\n")
     hit = re.findall(r"Total Chi-Squared:\s*([0-9.eE+-]+)", log)

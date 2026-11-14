@@ -138,8 +138,8 @@ path of the row, or a path of the row never appears.
 
 ## The wheel (`pyproject.toml`)
 
-- `pip install .` / `pip wheel .` build with scikit-build-core: the same CMake files with `BUILD_TESTING` and
-  `USE_READLINE` off (`USE_MCMC` on: the binding needs the sampler), targets `_azure2` and `AZURE2`, the install rules of component `python` (module into the
+- `pip install .` / `pip wheel .` build with scikit-build-core: the same CMake files with `BUILD_TESTING`
+  off (`USE_MCMC` on: the binding needs the sampler), targets `_azure2` and `AZURE2`, the install rules of component `python` (module into the
   package, program into the scripts), the package directory copied as it is less `wheel.exclude`.  The in-tree build
   (`work/build.sh`, `PYAZR_OUTPUT_DIR`, `PYAZR_ENGINE_DIR`) is what every test uses; the wheel is tested by
   `pyazr_wheel` (slow: builds, unpacks, never installs) and `tests/pyazr/wheel_smoke.py` (the workflow's test).

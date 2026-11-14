@@ -125,7 +125,7 @@ Rules:
   penalty, and in Park mode the objective always takes the residual path.
   Results of rmfit builds before 2026-10-24 (expires: 2027-02-01) did not see the wall in the LM polish: check `m.park_norms(x)`. Broad levels sit at
   J ~ 0.2-0.4 on large models, and a ×1.3 amplitude step can put most of them past the wall.
-- `--sav` seeds are applied by name with no basis conversion. Convert first: a CLI mode-1 run in the target mode with
+- `--sav` seeds are applied by name with no basis conversion. Convert first: a CLI `calculate` run in the target mode with
   that `.sav` as external file writes a converted, tagged `output/param.par`; seed from that.
 - `theta2_cap` bounds the fit amplitudes: the observed θ² in Park mode, the formal one in Brune mode -- the same number
   is a tighter bound in Park mode for broad levels.

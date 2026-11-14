@@ -793,7 +793,7 @@ line's prior as the parameter's prior. Malformed fit forms are refused with an
 error naming the segment: ``vary`` not 0 or 1, ``sigma`` missing or negative,
 :math:`n \le 0`, or a ``thicknessgroup`` without a label.
 
-On a test segment (mode 3) the fit form is read but has no effect: a test
+On a test segment (``extrapolate``) the fit form is read but has no effect: a test
 segment has no fit parameters, uses its own :math:`n`, and prints a note. A
 ``thicknessgroup`` there is skipped the same way. To extrapolate with a fitted
 thickness, copy the fitted value into the test line.

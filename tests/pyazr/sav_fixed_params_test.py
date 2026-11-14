@@ -156,9 +156,9 @@ with tempfile.TemporaryDirectory() as tmp:
         print("  skip  no AZURE2 binary to cross-check against")
     else:
         # The pyazr defaults: Brune, ignore externals, long-wavelength on.
-        subprocess.run([binary, "--no-gui", "--no-readline", "--use-brune",
+        subprocess.run([binary, "calculate", "--parameter-file=fixed.sav", "--no-gui", "--use-brune",
                         "--ignore-externals", "fixed_width.azr"],
-                       cwd=work, input="1\nfixed.sav\n\n7\n", text=True,
+                       cwd=work, stdin=subprocess.DEVNULL, text=True,
                        capture_output=True, timeout=900)
         total = None
         out = os.path.join(work, "output", "chiSquared.out")

@@ -1,6 +1,6 @@
 ---
 name: azure2-calculate
-description: Compute AZURE2 observables from a format-3 project and a parameter file without changing the parameters - cross sections, S factors, differential cross sections, A_y, Legendre coefficients, phase shifts and scattering lengths on the data or on any grid (extrapolation records), S(0), reaction rates, level/interference/external-capture decomposition, adaptive tables; the CLI menu and pyazr sessions. Use for "calculate", "extrapolate", "rate", "S factor", "decompose". Fitting: azure2-fit; trust checks: azure2-check; bands: azure2-uncertainty; figures: azure2-plot.
+description: Compute AZURE2 observables from a format-3 project and a parameter file without changing the parameters - cross sections, S factors, differential cross sections, A_y, Legendre coefficients, phase shifts and scattering lengths on the data or on any grid (extrapolation records), S(0), reaction rates, level/interference/external-capture decomposition, adaptive tables; the CLI commands and pyazr sessions. Use for "calculate", "extrapolate", "rate", "S factor", "decompose". Fitting: azure2-fit; trust checks: azure2-check; bands: azure2-uncertainty; figures: azure2-plot.
 ---
 
 # Calculating observables with AZURE2
@@ -43,8 +43,9 @@ python3 $S/decompose.py model.azr --params output/param.sav --level "1/2+ 2.365"
 
 ## Two ways to run the engine
 
-- **The program** (`AZURE2 --no-gui --no-readline project.azr`, the menu piped): one-shot calculate (1), fit (2),
-  calculate the extrapolations (3), MINOS (4), rate (5), MCMC (6). Use it when its output files are the product.
+- **The program** (`AZURE2 <command> [options] project.azr`): one-shot `calculate`, `fit`, `extrapolate` (the
+  extrapolations), `minos`, `rate`, `mcmc`. Use it when its output files are the product. `AZURE2 --help` lists the
+  commands and their options; a command reads nothing from standard input.
 - **pyazr** (`pyazr.Session`): the engine in the interpreter, for everything else (scans, decompositions, samplers,
   figures). Installed by `pip install .` from the repository; the Coulomb table once with
   `pyazr coulomb-table fetch` (or `build`).
@@ -55,22 +56,23 @@ python3 $S/decompose.py model.azr --params output/param.sav --level "1/2+ 2.365"
    `use_long_wavelength=0`, ...); a flag given wins over the key. `AZURE2 --describe project.azr` prints every option
    with its value and source: read it before trusting a run of an inherited project. Without keys, take the flags
    from the project's job scripts, never from defaults. Bases and their conversion: azure2-exchange.
-2. **Pass flags as words.** zsh does not split an unquoted variable (`F="--use-brune --no-readline"; AZURE2 $F` passes
-   one unknown argument, which is ignored): use an array or a shell function.
+2. **Pass flags as words.** zsh does not split an unquoted variable (`F="--use-brune --use-gradient"; AZURE2 fit $F`
+   passes one unknown argument, which is refused): use an array or a shell function.
 3. **Create `output/` and `checks/`** beside the project (paths in `<config>` are relative to the project file).
-4. **Answer the prompts in order** (`command_line.rst`, "Scripted input"): menu → (2, 3, 4) the band question →
-   parameter file (blank: the project's `<levels>`) → capture-amplitude file (blank: compute) → `7`.
+4. **Give the command and its options** (`command_line.rst`, "Commands"); a file an option names is relative to the
+   project's directory.
 
    ```bash
-   az() { AZURE2 --no-gui --no-readline "$@"; }
-   printf '1\n\n\n7\n'                     | az project.azr   # calculate at the project's values
-   printf '1\noutput/param.sav\n\n7\n'     | az project.azr   # calculate at a fit (names matched)
-   printf '3\nn\noutput/param.sav\n\n7\n'  | az project.azr   # calculate the extrapolation records
-   printf '5\noutput/param.sav\n1\n-1\nyes\ntemperatures.dat\n' | az project.azr   # rate, pair 1, total capture
+   AZURE2 calculate project.azr                                    # at the project's values
+   AZURE2 calculate --parameter-file=output/param.sav project.azr  # at a fit (names matched)
+   AZURE2 extrapolate --parameter-file=output/param.sav project.azr   # the extrapolation records
+   AZURE2 rate --parameter-file=output/param.sav --rate-entrance=1 --rate-exit=-1 \
+          --temperature-file=temperatures.dat project.azr          # rate, pair 1, total capture
    ```
 
-   A y/n prompt that receives anything else stops a piped run with exit 1; the log says
-   `Reading User Parameter File...` when a parameter file was applied.
+   A missing required option, an option of another command or a file that does not exist is refused with exit 2
+   before anything is calculated; the log says `Reading User Parameter File...` when a parameter file was applied.
+   An old script with piped menu answers: `python3 tools/menu_to_command.py '<its answers>'` prints the command.
 5. **Check the exit status and `output/chiSquared.out`** (its `Total-Chi-Squared` line is the quickest check).
 
 ## Procedure B: pyazr

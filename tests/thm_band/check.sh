@@ -64,7 +64,7 @@ run() {
   # native Windows binary cannot open /tmp/...
   local par=""
   [ -z "$2" ] || { cp "$2" "$d/start.par"; par="start.par"; }
-  (cd "$d" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline $3 run.azr 2>&1 \
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate ${par:+--parameter-file="$par"} --no-gui $3 run.azr 2>&1 \
      | head -c 1000000 > log)
   [ -f "$d/output/$OUT" ] || { echo "FAIL: run $1 produced no $OUT"; tail -5 "$d/log"; exit 1; }
 }

@@ -61,8 +61,9 @@ rate() {
   else cp "$HERE/models/$model.azr" "$d/t.azr"; fi
   cp "$HERE/${TEMPERATURES:-temperatures.dat}" "$d/temperatures.dat"
   [ -n "$par" ] && cp "$HERE/expected/$par" "$d/"
-  (cd "$d" && printf '5\n%s\n%s\n%s\nyes\ntemperatures.dat\n' "$par" "$entrance_key" "$exit_key" |
-     run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" &&
+     run_limited 600 "$AZURE2_BIN" rate ${par:+--parameter-file="$par"} --rate-entrance="$entrance_key" \
+       --rate-exit="$exit_key" --temperature-file=temperatures.dat --no-gui t.azr > run.log 2>&1)
   local status=$?
   if [ "$status" -ne 0 ] || [ ! -s "$d/output/reactionrates.out" ]; then
     bad "$model: the rate run failed (exit status $status)"; tail -5 "$d/run.log"; return 1
@@ -135,7 +136,7 @@ for m in p12C_2g; do
   fi
 done
 d="$WORK/refuse"; mkdir -p "$d/output" "$d/checks"; cp "$HERE/models/p12C.azr" "$d/t.azr"; cp "$HERE/temperatures.dat" "$d/"
-(cd "$d" && printf '5\n\n2\n-1\nyes\ntemperatures.dat\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$d" && run_limited 120 "$AZURE2_BIN" rate --rate-entrance=2 --rate-exit=-1 --temperature-file=temperatures.dat --no-gui t.azr > run.log 2>&1)
 if [ ! -s "$d/output/reactionrates.out" ] && grep -q "is not a particle pair" "$d/run.log"; then
   ok "(i) exit -1 from a capture pair refused, no rate file"
 else bad "(i) exit -1 from a capture pair: not refused as expected"; tail -3 "$d/run.log"; fi

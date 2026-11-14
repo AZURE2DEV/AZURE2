@@ -35,8 +35,8 @@ run() {   # run DIR [FLAGS]
   mkdir -p "$dir/output" "$dir/checks"
   cp -r "$HERE/models/"* "$dir/"
   # shellcheck disable=SC2086
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-long-wavelength --use-brune $flags \
-    --no-gui --no-readline ng.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" calculate --no-long-wavelength --use-brune $flags \
+    --no-gui ng.azr > run.log 2>&1)
 }
 
 echo "ec_threshold: $AZURE2_BIN"

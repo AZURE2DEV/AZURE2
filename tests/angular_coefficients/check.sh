@@ -37,22 +37,22 @@ if [ -z "$PYTHON" ] || ! "$PYTHON" -c "import numpy" > /dev/null 2>&1; then echo
 
 # run MODEL MODE [FLAGS] [ENV...] -> $WORK/MODEL (data/ = $WORK/data)
 run() {
-  local model="$1" mode="$2" flags="${3:-}"; shift 3 2> /dev/null || shift $#
+  local model="$1" command="$2" flags="${3:-}"; shift 3 2> /dev/null || shift $#
   local dir="$WORK/$model"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
   [ -d "$WORK/datafiles" ] && cp -r "$WORK/datafiles" "$dir/data"
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$mode\n\n\n7\n" | run_limited 600 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 600 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 
 # ---- (a), (b): the convention, and the data files -------------------------------------------------------------------
-run extrap 3 "--use-brune"
+run extrap extrapolate "--use-brune"
 [ -s "$WORK/extrap/output/AZUREOut_aa=2_R=5.extrap" ] || { bad "extrap: no output"; tail -5 "$WORK/extrap/run.log"; exit 1; }
 "$PYTHON" "$HERE/verify.py" prepare "$WORK/extrap" "$WORK/datafiles" || failures=$((failures + 1))
 
 # ---- (c) data segments ----------------------------------------------------------------------------------------------
-run data 1 "--use-brune"
+run data calculate "--use-brune"
 if [ -s "$WORK/data/output/chiSquared.out" ]; then
   chi="$(grep "Total-Chi" "$WORK/data/output/chiSquared.out" | awk '{print $2}')"
   if awk -v c="$chi" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c + 0 <= 1e-8) }'; then ok "(c) both coefficient data segments: total chi2 $chi"; else bad "(c) total chi2 $chi (expected ~0)"; grep -i "error" "$WORK/data/run.log" | sed -n '1,3p'; fi
@@ -62,18 +62,18 @@ else
 fi
 
 # ---- (d) energy shift -----------------------------------------------------------------------------------------------
-run shift 1 "--use-brune"
+run shift calculate "--use-brune"
 "$PYTHON" "$HERE/verify.py" shift "$WORK/shift" "$WORK/extrap" || failures=$((failures + 1))
 
 # ---- (e) beam-energy spread -----------------------------------------------------------------------------------------
-run conv 1 "--use-brune"
-run conv_diff 3 "--use-brune"
+run conv calculate "--use-brune"
+run conv_diff extrapolate "--use-brune"
 "$PYTHON" "$HERE/verify.py" conv "$WORK/conv" "$WORK/conv_diff" || failures=$((failures + 1))
 
 # ---- (f) gradient ---------------------------------------------------------------------------------------------------
 # --no-grid-replacement: the finite differences otherwise include the motion of the convolved segment's adaptive
 # sub-point grid with the widths (a ~1e-5 effect the analytic gradient leaves out by design, as everywhere else)
-run fit 2 "--use-brune --use-gradient --no-grid-replacement" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
+run fit fit "--use-brune --use-gradient --no-grid-replacement" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
 awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
        print idx, a, f, j }' "$WORK/fit/run.log" | sort -n > "$WORK/grad.rows"
@@ -103,9 +103,9 @@ edited "$HERE/models/data.azr" "$WORK/bad_norm.azr" \
   || bad "(g) bad_norm: the norm of coef_norm was not freed"
 mkdir -p "$WORK/bad_norm/output" "$WORK/bad_norm/checks"; cp "$WORK/bad_norm.azr" "$WORK/bad_norm/t.azr"
 [ -d "$WORK/datafiles" ] && cp -r "$WORK/datafiles" "$WORK/bad_norm/data"
-(cd "$WORK/bad_norm" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/bad_norm" && run_limited 600 "$AZURE2_BIN" calculate --use-brune --no-gui t.azr > run.log 2>&1)
 if grep -q "E_MODE_NOT_ALLOWED: dataset 'coef_norm', field 'norm': fit is not allowed: normalised coefficients carry no normalization" "$WORK/bad_norm/run.log" && [ ! -s "$WORK/bad_norm/output/chiSquared.out" ]; then ok "(g) a free normalization on normalised coefficients is refused"; else bad "(g) free norm not refused"; fi
-run bad_elastic 1 "--use-brune"
+run bad_elastic calculate "--use-brune"
 if grep -q "ERROR: segment #1 (angular coefficients): an elastic distribution" "$WORK/bad_elastic/run.log"; then ok "(g) an elastic pair is refused"; else bad "(g) elastic pair not refused"; fi
 # an old <segmentsTest> line of isDiff 9 (format 3 has no such extrapolation): the old file is the converter's fixture,
 # refused by AZURE2 --convert with the old engine's reason

@@ -42,7 +42,7 @@ model() {
   local d="$WORK/$1"; mkdir -p "$d/output" "$d/checks"; cp -r "$SRC/data" "$d/"
   awk -v OFS=' ' "BEGIN{inl=0} /<levels>/{inl=1; print; next} /<\\/levels>/{inl=0} inl && NF > 25 { $2 } {print}" \
     "$SRC/li7pn_ang_rel.azr" > "$d/t.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 }
 warnings() { grep -c "separation energies and masses disagree" "$WORK/$1/run.log"; }
 completed() { [ -s "$WORK/$1/output/chiSquared.out" ]; }
@@ -91,7 +91,7 @@ print(masses.fill_masses(m))
 m.save(sys.argv[3])
 PYEOF
   then
-    (cd "$d" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+    (cd "$d" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
     if [ "$(warnings filled)" -eq 0 ] && ! grep -q "mass numbers as masses" "$d/run.log" && completed filled; then
       ok "(e) mass numbers filled by pyazr from AME2020: no warning, no note, run completes"
     else bad "(e) pyazr fill: $(warnings filled) warning(s), note $(grep -c 'mass numbers as masses' "$d/run.log")"; fi

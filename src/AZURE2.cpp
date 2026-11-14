@@ -26,7 +26,6 @@
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
-#include "RunMenu.h"
 #include "RunPreparation.h"
 #include "RunRequest.h"
 #include <atomic>
@@ -48,10 +47,6 @@
 #include <optional>
 #include <tuple>
 #include <gsl/gsl_errno.h>
-#ifndef NO_READLINE
-#include <readline/readline.h>
-#include <readline/history.h>
-#endif
 #include <string.h>
 #include <cstdlib>
 
@@ -113,13 +108,12 @@ static void printOptionFlags() {
 void printHelp() {
   // Every flag parseOptions (and main) accepts, and only those
   // (tests/cli_help/check.sh compares the two).
-  std::cout << "Syntax: AZURE2 <options> configfile" << std::endl
-            << std::endl
-            << "Options:" << std::endl
+  std::cout << RunCommandsHelp() << std::endl
+            << "The options of the program (with any command; the project-file actions --convert ... --schema run "
+               "without one):" << std::endl
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
-            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use the readline package (no effect in a build without it)." << std::endl;
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl;
   printOptionFlags();
   std::cout << std::setw(25) << std::left << "\t--threads=N:" << std::setw(0)
             << "The OpenMP threads of the run (N >= 1), over OMP_NUM_THREADS; printed by the run and by --describe."
@@ -142,11 +136,9 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
             << FitterSwitchesHelp()
-            << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
-            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
-            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl
-            << std::endl
-            << RunCommandsHelp();
+            << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "An option of a command (above); in an options file it applies to every command." << std::endl
+            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "An option of a command (above); in an options file it applies to every command." << std::endl
+            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
 }
 
 
@@ -202,12 +194,7 @@ int buildCoulombTable(const std::string &path) {
  * std::invalid_argument naming it (include/CommandLineValues.h).
  */
 
-bool parseOptions(const std::vector<std::string> &arguments, Config &configure) {
-#ifndef NO_READLINE
-  bool useReadline = true;
-#else
-  bool useReadline = false;
-#endif
+void parseOptions(const std::vector<std::string> &arguments, Config &configure) {
   configure.configfile = "";
   std::vector<std::string> options;
   for (const std::string &arg : arguments) {
@@ -224,8 +211,11 @@ bool parseOptions(const std::vector<std::string> &arguments, Config &configure) 
   options.insert(options.end(), environment.OptionsFileLines().begin(), environment.OptionsFileLines().end());
   configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
-    if (*it == "--no-readline")  // accepted in every build (scripts pass it); without readline it changes nothing
-      useReadline = false;
+    if (*it == "--no-readline")  // a menu script's option: the menu is gone
+      throw std::invalid_argument("Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads "
+                                  "nothing from standard input.\n       Drop --no-readline and give the command: "
+                                  "AZURE2 <command> [options] FILE (AZURE2 --help lists them; "
+                                  "tools/menu_to_command.py turns an old script's answers into the command).");
     else if (ApplyOptionFlag(configure, *it))  // an option of the calculation: its row of io::ConfigKeys()
       continue;
     else if (it->compare(0, 16, "--coulomb-table=") == 0) {  // the option and the table file of this machine
@@ -253,11 +243,10 @@ bool parseOptions(const std::vector<std::string> &arguments, Config &configure) 
     else if (*it == "--no-gui")
       continue;
     else if (const RunQuestion *question = FindRunQuestion(OptionName(*it)))
-      throw std::invalid_argument(CommandOptionWithoutCommand(*question));  // the menu asks it
+      throw std::invalid_argument(CommandOptionWithoutCommand(*question));
     else  // a mistyped flag must not run another calculation: exit 2 with the usage line (main, OptionError)
       throw std::invalid_argument("Unknown option " + *it + ".");
   }
-  return useReadline;
 }
 
 /*!
@@ -821,9 +810,8 @@ int main(int argc, char *argv[]) {
   } catch (const std::invalid_argument &e) {
     return CommandError(e.what());
   }
-  bool useReadline = false;
   try {
-    useReadline = parseOptions(programArguments, configure);
+    parseOptions(programArguments, configure);
   } catch (const std::invalid_argument &e) {
     return azure2::OptionError(e.what());
   }
@@ -836,13 +824,10 @@ int main(int argc, char *argv[]) {
                         << "       drive it from Python instead:  from pyazr import azure2" << std::endl;
     return 1;
   }
+  // A run is a command: without one, refused (exit 2) before the project is read; nothing is read from the input.
+  if (!byCommand) return CommandError(NoCommandRefusal());
 
-  // Read the parameters from the runtime configuration file
-  if (configure.configfile.empty()) {
-    configure.outStream << "A valid configuration file must be specified." << std::endl
-                        << "\tSyntax: AZURE2 <options> configfile" << std::endl;
-    return -1;
-  }
+  // Read the parameters from the runtime configuration file (ReadRunCommand has refused a command without one)
   int configStatus = configure.ReadConfigFile();
   if (configStatus == Config::kConfigUnreadable) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
@@ -858,9 +843,8 @@ int main(int argc, char *argv[]) {
     return -1;
 #endif
   // A file a command's option names, relative to the project's directory: refused before anything is calculated
-  if (byCommand)
-    if (const std::string refusal = RequestFileRefusal(configure, request); !refusal.empty())
-      return CommandError(refusal);
+  if (const std::string refusal = RequestFileRefusal(configure, request); !refusal.empty())
+    return CommandError(refusal);
   // Joint THM+direct fits couple an arbitrary HOES scale (~1e-4) to widths in
   // eV; MIGRAD's own numerical differences stall far from the minimum on that
   // scaling (7Li(p,a) Tumino+Rolfs benchmark: default MIGRAD stops at
@@ -893,23 +877,8 @@ int main(int argc, char *argv[]) {
     welcomeMessage(configure);
     configure.outStream << "Threads: " << threads.count << " (" << threads.source << ")" << std::endl;
 
-    // The command and its answers: from the command line, else asked in the menu as the walk of the questions reaches
-    // them (PrepareRun); what follows does not know which.
-    if (!byCommand) {
-      RunMenu menu(configure, useReadline);
-      const std::optional<RunCommand> chosen = menu.AskCommand();
-      if (!chosen) {
-        exitMessage(configure);
-        ExitRun(configure, 0);
-      }
-      request.command = *chosen;
-#ifndef NO_READLINE
-      if (useReadline) read_history("./.azure_history");  // the history of the file names typed at the prompts
-#endif
-      PrepareRun(configure, request, &menu);
-    } else {
-      PrepareRun(configure, request, nullptr);
-    }
+    // The command and its answers into the Config
+    PrepareRun(configure, request);
 
 #ifdef USE_MCMC
     // Handle MCMC separately
@@ -945,11 +914,6 @@ int main(int argc, char *argv[]) {
     // Print exit message
     exitMessage(configure);
   }
-
-  // Write readline history file (the menu's; a command reads nothing from standard input)
-#ifndef NO_READLINE
-  if (useReadline && !byCommand) write_history("./.azure_history");
-#endif
 
   // Cleanup caches
   CleanupECAmplitudeCache(configure);

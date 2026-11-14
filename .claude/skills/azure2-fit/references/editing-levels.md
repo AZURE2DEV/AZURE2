@@ -110,7 +110,7 @@ same.
 - **Fitted normalizations and shifts** go into their records' nuisances with `save_fit(norms="fitted")` (the
   default; each prior keeps its own centre); with `norms="nominal"` they are only in the `.sav`, and a calculation
   with a blank parameter file is then not the fit (`references/normalizations-and-shifts.md`).
-- **Verify a bake of `<levels>` with a blank parameter file**, not with `param.sav`: mode 1 with an external file
+- **Verify a bake of `<levels>` with a blank parameter file**, not with `param.sav`: `calculate --parameter-file`
   loads that file's values by name and overrides `<levels>`, so it can only confirm the `.sav`. A blank-file run must
   equal a pyazr evaluation at the fitted R-matrix block with every norm and shift at its nominal value.
 - **The check dumps are keywords, not filenames.** `<config>` accepts only `none`, `screen` or `file`

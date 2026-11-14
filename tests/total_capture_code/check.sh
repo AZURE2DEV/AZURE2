@@ -44,7 +44,7 @@ model() {
   awk '{ sub(/\r$/, "") } /^<\/extrapolations>$/ { print ENVIRON["RECORDS"] } { print }' "$BASE/13N.azr" > "$WORK/$name/m.azr"
   run "$name"
 }
-run() { (cd "$WORK/$1" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1; echo "exit $?" >> run.log); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui m.azr > run.log 2>&1; echo "exit $?" >> run.log); }
 status() { tail -1 "$WORK/$1/run.log"; }
 same() { [ -s "$1" ] && [ -s "$2" ] && paste <(awk 'NF{print $4}' "$1") <(awk 'NF{print $4}' "$2") | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > 1e-9 * ($2 > 0 ? $2 : 1)) bad = 1 } END { exit bad }'; }
 grid="    quantity       sigma

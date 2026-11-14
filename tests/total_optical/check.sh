@@ -86,12 +86,11 @@ done
 
 # run NAME MODEL MODE -> $WORK/NAME
 run() {
-  local dir="$WORK/$1" input
+  local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$REF/data" "$dir/data"
   cp "$WORK/$2" "$dir/t.azr"
-  if [ "$3" = 3 ]; then input='3\n\n\n7\n'; else input='1\n\n\n7\n'; fi
-  (cd "$dir" && printf "$input" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" "$3" --no-gui t.azr > run.log 2>&1)
 }
 # max relative difference of the calculated cross section (4th column) over every AZUREOut file of two runs
 maxrel() {
@@ -109,7 +108,7 @@ maxrel() {
   echo "$n $w"
 }
 
-for m in sum total elast; do run "$m" "$m.azr" 1; run "x$m" "x$m.azr" 3; done
+for m in sum total elast; do run "$m" "$m.azr" calculate; run "x$m" "x$m.azr" extrapolate; done
 for kind in "data out ''" "extrapolation extrap x"; do
   set -- $kind; what="$1"; ext="$2"; p="${3//\'/}"
   read -r n w <<< "$(maxrel "$WORK/${p}sum" "$WORK/${p}total" "$ext")"
@@ -126,10 +125,10 @@ done
 # target-integrated Sikkema segments disagree with finite differences by ~1e-2 on a few parameters with or without
 # "total 1", from the integration grid.)
 awk '/^dataset / { n++; print; if (n > 1) print "    active         no"; next } { print }' "$WORK/total.azr" > "$WORK/gtotal.azr"
-run gcalc gtotal.azr 1
+run gcalc gtotal.azr calculate
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$REF/data" "$WORK/fit/data"; cp "$WORK/gtotal.azr" "$WORK/fit/t.azr"
-(cd "$WORK/fit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/fit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
 chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/fit/run.log")"
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/gcalc/output/chiSquared.out")"
 if [ -n "$chi" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then
@@ -161,7 +160,7 @@ refuse() {
     on && $1 == field { printf "    %-14s %s\n", field, value; next } { print }' "$WORK/total.azr" > "$WORK/$name.azr"
   grep -qF -- "$value" "$WORK/$name.azr" || { bad "(c) $name: the edit did not apply"; return; }
   mkdir -p "$dir/output" "$dir/checks"; ln -s "$REF/data" "$dir/data"; cp "$WORK/$name.azr" "$dir/t.azr"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); local rc=$?
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); local rc=$?
   if grep -qF -- "$want" "$dir/run.log" && grep -q "^ERROR: t.azr (format 3) is refused" "$dir/run.log" && [ "$rc" = 1 ] \
     && [ ! -s "$dir/output/chiSquared.out" ]; then ok "(c) refused: $name"
   else bad "(c) not refused as expected: $name (exit $rc; $(grep -m1 ERROR "$dir/run.log"))"; fi

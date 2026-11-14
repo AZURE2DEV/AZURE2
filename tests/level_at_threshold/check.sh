@@ -62,7 +62,7 @@ make() {
 run() {
   local d="$WORK/$1" t0 t1 status
   t0=$(date +%s)
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 \
      | head -c 1000000 > log)
   status=${PIPESTATUS[0]}
   t1=$(date +%s)

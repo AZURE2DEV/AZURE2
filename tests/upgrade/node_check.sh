@@ -29,11 +29,11 @@ trap 'rm -rf "$WORK"' EXIT
 fail=0
 ok()  { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; fail=1; }
-# run NAME SRC_DIR AZR CHECK MENU [FLAGS] -> $WORK/NAME.CHECK (exit code in rc)
+# run NAME SRC_DIR AZR CHECK COMMAND [FLAGS] -> $WORK/NAME.CHECK (exit code in rc)
 run() {
   local d="$WORK/$1.$4"
   mkdir -p "$d" && cp -r "$2/." "$d/" && rm -rf "$d/output" "$d/checks" && mkdir -p "$d/output" "$d/checks"
-  (cd "$d" && printf "$5" | AZURE_NODE_CHECK=$4 "$BIN" --no-gui --no-readline ${6:-} "$3" > run.log 2>&1; echo $? > rc)
+  (cd "$d" && AZURE_NODE_CHECK=$4 "$BIN" $5 --no-gui ${6:-} "$3" > run.log 2>&1; echo $? > rc)
 }
 # clean NAME: the checked run's check lines all clean, and how many of them used the overflow table
 clean() {
@@ -51,8 +51,8 @@ clean() {
   [ "$lines" -gt 0 ] && [ "$dirty" -eq 0 ] && [ "$groups" -eq "$lines" ] && [ "$grouped" -eq "$groups" ] &&
     [ "$rowlines" -eq "$lines" ] && [ "$rowsclean" -eq "$rowlines" ]
 }
-CALC='1\n\n\n7\n'
-FIT='2\n\n\n\n7\n'
+CALC=calculate
+FIT=fit
 for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr:0" \
          "natural_neon:$TESTS/natural_neon:natural_neon.azr:0" "elastic:$TESTS/hybrid_potential:hybrid_potential.azr:0" \
          "ay:$TESTS/13N:13N.azr:0"; do

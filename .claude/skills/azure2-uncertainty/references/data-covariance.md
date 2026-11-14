@@ -98,7 +98,7 @@ One covariance file per experiment (different experiments uncorrelated), coverin
   --check` does both).
 - **√diag C equals the `_cov.dat` error column** to 1e-6 relative.
 - **Correlation plot** per file, inspected: a detector term shows as a block over that detector's rows.
-- **AZURE2 read test** (mode 1, any model with the needed exit pairs; run it on a compute node, not a login node):
+- **AZURE2 read test** (`calculate`, any model with the needed exit pairs; run it on a compute node, not a login node):
   the log says `Covariance <file>: N of N rows fitted` for every file (fewer only where the test model lacks an exit
   pair, which must be stated), and no warnings.
 - `WARNING: k point(s) of <file> have an error column more than 1 % from sqrt(C_ii)` means the data file and the

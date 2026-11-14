@@ -32,12 +32,12 @@ done)"
 awk '/^<\/data>$/ { print ENVIRON["RECS"] } { print }' "$HERE/../mcmc_physical_norm/13N_fast.azr" > "$WORK/t.azr"
 cd "$WORK"
 # mode 6: param file (blank), EC file (blank), walkers, steps, spread %, energy spread (default), threads, RWA?, overwrite?
-printf '6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > mcmc.log 2>&1
+"$AZURE2_BIN" mcmc --walkers=4 --steps=100 --parameter-spread=0.5 --sampler-threads=1 --basis=physical --overwrite-samples --no-gui t.azr > mcmc.log 2>&1
 [ -s output/param.mcmc ] && [ -s "output/AZUREOut_aa=1_R=2.out" ] || { bad "no snapshot written"; tail -5 mcmc.log; exit 1; }
 cp "output/AZUREOut_aa=1_R=2.out" snapshot.out
 cp output/param.mcmc sampled.par
 mkdir -p calc/output calc/checks && cp t.azr calc/ && cp -r data calc/
-( cd calc && printf '1\n../sampled.par\n\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > calc.log 2>&1 )
+( cd calc && "$AZURE2_BIN" calculate --parameter-file=../sampled.par --no-gui t.azr > calc.log 2>&1 )
 grep -q "Reading User Parameter File" calc/calc.log || { bad "the calculation did not read param.mcmc"; tail -5 calc/calc.log; exit 1; }
 # the blocks of a file (blank-line separated) -> "block point value" with the calculated cross section (column 4)
 blocks() { awk 'NF == 0 { if (n) b++; n = 0; next } { n++; print b + 0, n, $4 }' "$1"; }

@@ -41,11 +41,11 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS [env ...] [-- flags]: menu 1 (calculation) or 3 (extrapolation) of $WORK/NAME/m.azr
+# run NAME COMMAND THREADS [env ...] [-- flags]: calculate or extrapolate of $WORK/NAME/m.azr
 run() {
-  local name="$1" menu="$2" threads="$3"; shift 3
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf '%s\n\n\n7\n' "$menu" |
-     env OMP_NUM_THREADS="$threads" "$@" $(guard_command 300) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"; shift 3
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     env OMP_NUM_THREADS="$threads" "$@" $(guard_command 300) "$AZURE2_BIN" "$command" --no-gui m.azr > run.log 2>&1)
 }
 
 # compare EXPECTED EXTRAP: column 4 of the .extrap rows against the truth, row by row (and the grid itself)
@@ -63,7 +63,7 @@ compare() {
 # ---- 1, 2. hard-sphere scattering against truth.py
 for m in aC aa; do
   setup "hs_$m" "$HERE/models/${m}_hs.azr"
-  run "hs_$m" 3 "$OMP_NUM_THREADS"
+  run "hs_$m" extrapolate "$OMP_NUM_THREADS"
   out="$WORK/hs_$m/output/AZUREOut_aa=1_R=1.extrap"
   if [ ! -s "$out" ]; then bad "$m: no extrapolation written ($(grep -m1 ERROR "$WORK/hs_$m/run.log"))"; continue; fi
   if res="$(compare "$HERE/expected/${m}_hs.dat" "$out")"; then
@@ -90,8 +90,8 @@ else
 fi
 
 # ---- 4. 1 and 2 threads
-run story 1 1 && cp -r "$WORK/story/output" "$WORK/story_1"
-run story 1 2
+run story calculate 1 && cp -r "$WORK/story/output" "$WORK/story_1"
+run story calculate 2
 if [ -s "$WORK/story_1/chiSquared.out" ] && diff -r "$WORK/story_1" "$WORK/story/output" > /dev/null; then
   ok "story: calculation at 1 and 2 threads, every output identical ($(grep Total "$WORK/story_1/chiSquared.out"))"
 else
@@ -102,8 +102,8 @@ fi
 sed -e 's|^    norm           1 fit prior 1 3%$|&\n    beam           B\n    quadrature     points 60|' \
     -e 's|^<targets>$|&\nbeam B\n    spread         0.05 MeV lab|' "$HERE/models/aC_story.azr" > "$WORK/grad.azr"
 setup grad "$WORK/grad.azr"
-(cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 300 "$AZURE2_BIN" --use-gradient --no-gui \
-   --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit run_limited 300 "$AZURE2_BIN" fit --use-gradient --no-gui \
+   m.azr > run.log 2>&1)
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"

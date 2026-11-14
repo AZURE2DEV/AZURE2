@@ -72,11 +72,6 @@ void BindDescription(py::module_ &m) {
 #else
         d["nlopt"] = false;
 #endif
-#ifdef NO_READLINE
-        d["readline"] = false;
-#else
-        d["readline"] = true;
-#endif
 #ifdef _OPENMP
         d["openmp"] = true;
         d["max_threads"] = omp_get_max_threads();
@@ -86,8 +81,8 @@ void BindDescription(py::module_ &m) {
 #endif
         return d;
       },
-      "The build: version, git (git describe at CMake configure time), mcmc, nlopt, readline (the program's), "
-      "openmp, max_threads (omp_get_max_threads(): the threads an evaluation uses now).");
+      "The build: version, git (git describe at CMake configure time), mcmc, nlopt, openmp, "
+      "max_threads (omp_get_max_threads(): the threads an evaluation uses now).");
   m.def(
       "coulomb_table_info",
       [](const std::string &path) {

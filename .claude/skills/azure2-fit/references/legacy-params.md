@@ -25,7 +25,7 @@ Scale of the problem: in one group's archive surveyed in 2026, 6,997 of 11,073 p
 fit with archived `chiSquared.out` total 10,422 gave 133,516 with its own unconverted `param.sav`; its α₀ reaction
 rate at T₉ = 1 came out at the `.azr` levels' value (9.41 × 10⁵ cm³ mol⁻¹ s⁻¹) instead of the fit's (9.70 × 10⁵).
 
-Use this page before any mode 1/3/4/5 run, pyazr `parameter_file=` or `parameters.read` call, or refit that starts
+Use this page before any `calculate`, `extrapolate`, `minos` or `rate` run, pyazr `parameter_file=` or `parameters.read` call, or refit that starts
 from an archived fit's parameter file, and whenever an archived `chiSquared.out`, rate or extrapolation will not
 reproduce.
 
@@ -63,7 +63,7 @@ python3 "$AZURE2_SRC/.claude/skills/azure2-fit/scripts/convert_sav_names.py" \
    `.azr`. Make it in a scratch copy so the archive's `output/` is not touched:
    ```bash
    mkdir -p $SCR/output $SCR/checks && cp -rp model.azr data $SCR/ && cd $SCR
-   printf '1\n\n\n\n7\n' | "$AZURE2_BINARY" <the fit's flags> --no-gui --no-readline model.azr
+   "$AZURE2_BINARY" calculate <the fit's flags> model.azr
    ```
    The log must say `Creating New param.par File...`. The check requires every level name to match both ways and
    every width that is exactly 0 in one file to be 0 in the other. Widths that are 0 in the `.azr` are fixed and
@@ -72,7 +72,7 @@ python3 "$AZURE2_SRC/.claude/skills/azure2-fit/scripts/convert_sav_names.py" \
    parameter file of an older model of the same reaction) failed with 257 of 331 names in common and dozens of
    pattern mismatches.
 
-2. **χ² against the archived `chiSquared.out`.** Run mode 1 with the converted file (scratch copy again) and compare
+2. **χ² against the archived `chiSquared.out`.** Run `calculate` with the converted file (scratch copy again) and compare
    per segment. First check that the archived `param.sav`, `chiSquared.out` and `normalizations.out` share a
    timestamp (`ls --time-style=full-iso`): written together means they came from one run. Check also that the `.azr`
    is not newer than them; an `.azr` edited after the fit cannot be expected to reproduce it.

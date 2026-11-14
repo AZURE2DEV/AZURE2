@@ -67,7 +67,7 @@ with open(d + "/data/bare.dat", "w") as f:
             e, *rest = line.split()
             f.write(" ".join(["%.9g" % (float(e) + s)] + rest) + "\n")
 PY
-  (cd "$d" && printf '1\n\n\n7\n' | $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$d" && $(guard_command 120) "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
 }
 
 densities="$(python3 -I -c 'print(" ".join("%.6e" % (10 ** (13 + k / 8)) for k in range(33)))')"

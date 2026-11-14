@@ -60,8 +60,8 @@ run() {
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline ${4:-} run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui ${4:-} run.azr 2>&1 | head -c 1000000 > log;
+   echo "${PIPESTATUS[0]}" > status)
 }
 
 # awk programs editing the .azr
@@ -169,7 +169,7 @@ MEMBERS=lc723_thm_points run d_off "experiment[A] $KIN" "NOFOLD ONELEVEL GRID"
 MEMBERS=lc723_thm_points run d_on "experiment[A] $KIN lineshape=on" "NOFOLD ONELEVEL GRID"
 for r in d_off d_on; do
   awk 'BEGIN { for (e = 0.40; e <= 0.8200001; e += 0.0005) printf "%.4f 0.0 1.0 0.1\n", e }' > "$WORK/$r/data/grid.dat"
-  (cd "$WORK/$r" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log)
+  (cd "$WORK/$r" && rm -rf output && mkdir output && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log)
 done
 peak() { tr -d '\r' < "$1" | awk 'NF > 4 && $4 > m { m = $4; e = $1 } END { printf "%.4f", e }'; }
 if [ -f "$WORK/d_off/output/$OUT" ] && [ -f "$WORK/d_on/output/$OUT" ]; then

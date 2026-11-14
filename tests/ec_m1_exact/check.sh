@@ -46,7 +46,7 @@ run() {
   cp "$HERE/models/$model.azr" "$dir/t.azr"
   cp -r "$HERE/models/data" "$dir/"
   # shellcheck disable=SC2086
-  (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" | run_limited 300 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" calculate ${ec:+--capture-amplitudes="$ec"} $flags --no-gui t.azr > run.log 2>&1)
 }
 
 # compare FILE COLUMN LABEL [TRUTH]: cross sections (column 4 of the output) against column COLUMN of the truth

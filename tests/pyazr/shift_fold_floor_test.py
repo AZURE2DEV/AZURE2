@@ -76,7 +76,7 @@ def run(label, shift):
         os.makedirs(os.path.join(work, d))
     azr = model(work, shift)
     env = dict(os.environ, OMP_NUM_THREADS=os.environ.get("OMP_NUM_THREADS", "2"))
-    out = subprocess.run([BIN, "--no-gui", "--no-readline", azr], input="1\n\n\n7\n", cwd=work, env=env,
+    out = subprocess.run([BIN, "calculate", "--no-gui", azr], stdin=subprocess.DEVNULL, cwd=work, env=env,
                          capture_output=True, text=True)
     yields = []
     with open(os.path.join(work, "output", "AZUREOut_aa=1_R=2.out")) as f:

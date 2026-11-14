@@ -38,14 +38,14 @@ first() { awk 'NF >= 4 { printf "%.10e %.10e\n", $1, $4; exit }' "$1"; }
 
 # ---- (a) extrapolation with and without the .sav
 prep plain
-(cd "$WORK/plain" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/plain" && run_limited 300 "$AZURE2_BIN" extrapolate --use-brune --no-gui t.azr > run.log 2>&1)
 f="$WORK/plain/output/AZUREOut_aa=2_R=3.extrap"
 [ -s "$f" ] && [ -s "$WORK/plain/output/param.par" ] || { bad "plain extrapolation wrote no output"; tail -5 "$WORK/plain/run.log"; exit 1; }
 grep -q "^ *x1.shift.offset " "$WORK/plain/output/param.par" || { bad "param.par has no x1.shift.offset line"; head -3 "$WORK/plain/output/param.par"; exit 1; }
 awk '$1 == "x1.shift.offset" { $2 = "0.01"; print; next } { print }' "$WORK/plain/output/param.par" > "$WORK/shift.sav"
 prep sav; cp "$WORK/shift.sav" "$WORK/sav/"
 # mode 3 asks for the uncertainty band (n) before the parameter file
-(cd "$WORK/sav" && printf '3\nn\nshift.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/sav" && run_limited 300 "$AZURE2_BIN" extrapolate --parameter-file=shift.sav --use-brune --no-gui t.azr > run.log 2>&1)
 g="$WORK/sav/output/AZUREOut_aa=2_R=3.extrap"
 [ -s "$g" ] || { bad "extrapolation with the .sav wrote no output"; tail -5 "$WORK/sav/run.log"; exit 1; }
 grep -q "Reading User Parameter File" "$WORK/sav/run.log" || bad "the .sav was not read"
@@ -71,10 +71,10 @@ assert s.count("<data>\n</data>") == 1
 s = s.replace("<data>\n</data>", "<data>\n" + one + "</data>")
 open(p, "w").write(s)
 EOF
-(cd "$WORK/data" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/data" && run_limited 300 "$AZURE2_BIN" calculate --use-brune --no-gui t.azr > run.log 2>&1)
 awk '$1 == "one.shift.offset" { $2 = "0.01"; print; next } { print }' "$WORK/data/output/param.par" > "$WORK/data/shift.sav"
 e0="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out")"
-(cd "$WORK/data" && printf '1\nshift.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run2.log 2>&1)
+(cd "$WORK/data" && run_limited 300 "$AZURE2_BIN" calculate --parameter-file=shift.sav --use-brune --no-gui t.azr > run2.log 2>&1)
 e1="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out")"
 if awk -v a="$e0" -v b="$e1" 'BEGIN { d = b - a; exit !(d > 0.005 && d < 0.009) }'; then ok "(b) with data the file's shift moves the point as before (E_cm $e0 -> $e1)"; else bad "(b) with data the shift did not apply as expected ($e0 -> $e1)"; fi
 

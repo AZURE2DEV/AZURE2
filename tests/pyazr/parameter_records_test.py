@@ -99,8 +99,8 @@ def copy_project(src_dir, dst):
 
 def run_program(path, cwd):
     """The program's menu 1 on PATH: its output directory's param.par as [(name, value)], and the directory."""
-    proc = subprocess.run([BINARY, "--no-gui", "--no-readline", os.path.basename(path)], cwd=cwd,
-                          input="1\n\n\n7\n", text=True, capture_output=True, timeout=3600)
+    proc = subprocess.run([BINARY, "calculate", "--no-gui", os.path.basename(path)], cwd=cwd,
+                          stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=3600)
     out = os.path.join(cwd, "output")
     par = os.path.join(out, "param.par")
     if not os.path.isfile(par):

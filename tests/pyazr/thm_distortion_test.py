@@ -215,8 +215,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     block = f"experiment[A] {KIN} distortion=coulomb spectatorAngle=30"
     cli_dir, py_dir = project("cli", block), project("py", block)
-    proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
-                          input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
+    proc = subprocess.run([binary, "calculate", "--no-gui", "run.azr"], cwd=cli_dir,
+                          stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=600)
     hit = re.findall(r"Total Chi-Squared:\s*([0-9.eE+-]+)", proc.stdout.replace("\r", "\n"))
     from_cli = output_files(cli_dir)
     if not hit or "thm_experiments.out" not in from_cli:
@@ -283,7 +283,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the session refuses daehnick80 for d + 19F", False, "no error")
     except Exception as err:
         check("the session refuses daehnick80 for d + 19F", "could not initialize" in str(err), str(err))
-    proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=bad, input="1\n\n\n7\n",
+    proc = subprocess.run([binary, "calculate", "--no-gui", "run.azr"], cwd=bad, stdin=subprocess.DEVNULL,
                           text=True, capture_output=True, timeout=600)
     check("the engine says why: outside the range, :extrapolate",
           "opticalSF=daehnick80" in proc.stdout and "target A = 19 (valid 27-238)" in proc.stdout

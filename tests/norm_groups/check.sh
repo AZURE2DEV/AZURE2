@@ -70,9 +70,7 @@ ds() {
 # value of the group's first line)
 nr() { printf 'normalization %s\n    value          %s\n' "$1" "$2"; }
 run() {  # NAME MODE EXTRA_FLAGS
-  local input
-  if [ "$2" = 1 ]; then input='1\n\n\n7\n'; else input='2\n\n\n\n7\n'; fi
-  (cd "$WORK/$1" && printf "$input" | "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$1" && "$AZURE2_BIN" "$2" $3 --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$WORK/$1/output/chiSquared.out" ]; then
     bad "$1: no chiSquared.out"; tail -15 "$WORK/$1/run.log"; return 1
   fi
@@ -86,7 +84,7 @@ run() {  # NAME MODE EXTRA_FLAGS
 mk group 0 "$(nr D "1.2 fixed")" "$(ds xs_40_s08 40 D)" "$(ds xs_90_s09 90 D)"
 mk direct 0 "$(ds xs_40_s08 40 "1.2 fixed")" "$(ds xs_90_s09 90 "1.2 fixed")"
 mk plain 0 "$(ds xs_40_s08 40 "1.2 fixed")" "$(ds xs_90_s09 90 "1 fixed")"
-if run group 1 "" && run direct 1 "" && run plain 1 ""; then
+if run group calculate "" && run direct calculate "" && run plain calculate ""; then
   g1="$(seg "$WORK/group" 1)"; g2="$(seg "$WORK/group" 2)"; d1="$(seg "$WORK/direct" 1)"; d2="$(seg "$WORK/direct" 2)"; p2="$(seg "$WORK/plain" 2)"
   if relclose "$g1" "$d1" 1e-10; then ok "leader keeps its own norm (chi2 $g1 = $d1)"; else bad "leader: grouped $g1 != direct $d1"; fi
   if relclose "$g2" "$d2" 1e-10; then ok "follower uses the leader's norm (chi2 $g2 = $d2)"; else bad "follower: grouped $g2 != direct $d2"; fi
@@ -99,7 +97,7 @@ fi
 # The group's value fixed at 1.2: no free norm may appear.
 # Only the leader's shift is free (the data want 0), so the fit has one parameter.
 mk fixedleader 1 "$(nr D "1.2 fixed")" "$(ds xs_40_s08 40 D "offset 0.001 MeV fit prior 0 0.01")" "$(ds xs_90_s09 90 D)"
-if run fixedleader 2 ""; then
+if run fixedleader fit ""; then
   # format 3 states the group's value once: a fixed group has no norm parameter at all (the old file kept the
   # follower's own "free" flag as a fixed follower row at the leader's 1.2; that flag cannot be written now)
   nrows="$(awk '$1 ~ /^D[.]value/' "$WORK/fixedleader/output/param.sav" 2>/dev/null | wc -l | tr -d ' ')"
@@ -114,7 +112,7 @@ fi
 # follower's own line says "free, 10%": ignored (its parameter is fixed).
 fit_common() {  # NAME EXTRA_FLAGS
   mk "$1" 1 "$(nr F "1 fit")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s08 90 F)"
-  run "$1" 2 "$2" || return
+  run "$1" fit "$2" || return
   local n1 n2 t dir="$WORK/$1"
   n1="$(par "$dir" F.value)"; n2="$(par "$dir" "F.value[xs_90_s08]")"; t="$(total "$dir")"
   if absclose "$n1" 1.25 1e-4; then ok "$1: shared norm n = $n1 (truth 1.25)"; else bad "$1: shared norm n = $n1, expected 1.25"; fi
@@ -127,7 +125,7 @@ fit_common fit_lm "--use-lm"
 
 # ---- 3. different scales -> one compromise -----------------------------------
 mk compromise 1 "$(nr F "1 fit")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s09 90 F)"
-if run compromise 2 "--use-gradient"; then
+if run compromise fit "--use-gradient"; then
   n1="$(par "$WORK/compromise" F.value)"; n2="$(par "$WORK/compromise" "F.value[xs_90_s09]")"
   if awk -v n="$n1" 'BEGIN { exit !(n ~ /^ *[-+]?\.?[0-9]/ && n > 1.1112 && n < 1.2499) }' && relclose "$n2" "$n1" 1e-12; then
     ok "one norm for both, between the two truths (n = $n1; truths 1.111 / 1.25)"
@@ -141,7 +139,7 @@ fi
 # Grouped: chi2 + ((n-1)/0.1)^2 once.  Total-Norm-Chi-Squared must be that one
 # term, and the follower's own row must show no penalty.
 mk penalty 1 "$(nr F "1 fit prior 1 10%")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s08 90 F)"
-if run penalty 2 "--use-gradient"; then
+if run penalty fit "--use-gradient"; then
   n="$(par "$WORK/penalty" F.value)"; pt="$(normtotal "$WORK/penalty")"; p2="$(segnormchi "$WORK/penalty" 2)"
   want="$(awk -v n="$n" 'BEGIN { printf "%.10g", ((n - 1) / 0.1) ^ 2 }')"
   if relclose "$pt" "$want" 1e-4 && [ "$p2" = 0 ]; then ok "one penalty ((n-1)/0.1)^2 = $pt at n = $n; follower row 0"
@@ -154,7 +152,7 @@ fi
 # leader's column.  The follower's shift is free too, so the check is not
 # about a single component.
 mk gradcheck 1 "$(nr G "1.1 fit prior 1.1 10%")" "$(ds xs_40_s08 40 G)" "$(ds xs_90_s09 90 G "offset 0.001 MeV fit prior 0 0.01")"
-(cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > check.log 2>&1)
+(cd "$WORK/gradcheck" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > check.log 2>&1)
 line="$(grep 'components with relative' "$WORK/gradcheck/check.log")"
 if grep -q "norm 0/1 .*Jacobian path: norm 0/1" <<< "$line"; then ok "leader's norm: adjoint and Jacobian gradients = finite difference"
 else bad "norm gradient check: $line"; fi

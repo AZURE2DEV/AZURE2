@@ -62,7 +62,7 @@ left="$(awk '$1 ~ /^(segment_|density_|abundance_)/' "$WORK/new.sav" 2>/dev/null
 # (b), (c): menu 1 with a parameter file
 calc() {  # calc NAME FILE: menu 1 of T2.azr from FILE, outputs in $WORK/NAME
   rm -rf "$WORK/output" "$WORK/checks"; mkdir -p "$WORK/output" "$WORK/checks"
-  (cd "$WORK" && printf '1\n%s\n\n7\n' "$2" | "$AZURE2_BIN" --no-gui --no-readline --no-coulomb-table T2.azr > "$1.log" 2>&1)
+  (cd "$WORK" && "$AZURE2_BIN" calculate ${2:+--parameter-file="$2"} --no-gui --no-coulomb-table T2.azr > "$1.log" 2>&1)
   rm -rf "$WORK/$1"; cp -R "$WORK/output" "$WORK/$1"
 }
 total() { awk '{ for (i = 1; i < NF; i++) if ($i == "Total-Chi-Squared:") print $(i + 1) }' "$1"; }

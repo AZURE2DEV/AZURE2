@@ -37,7 +37,7 @@ for route in true false; do
     dir="$WORK/run_${route}${flags}"
     mkdir -p "$dir/output" "$dir/checks"
     sed "1,2s/^\(true\|false\) #Perform A-Matrix/$route #Perform A-Matrix/" "$HERE/models/hard_sphere_pc.azr" > "$dir/t.azr"
-    (cd "$dir" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+    (cd "$dir" && run_limited 300 "$AZURE2_BIN" extrapolate $flags --no-gui t.azr > run.log 2>&1)
     out="$dir/output/AZUREOut_aa=1_R=1.extrap"
     if [ ! -s "$out" ]; then bad "$tag: no extrapolation written"; tail -15 "$dir/run.log"; continue; fi
     # rows with theta > 0, in file order, against expected/dsdo.dat (same order)

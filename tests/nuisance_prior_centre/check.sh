@@ -47,7 +47,7 @@ run() {
   mkdir -p "$dir/output" "$dir/checks"
   for f in "$2"/*; do [ "$(basename "$f")" = output ] || ln -s "$f" "$dir/$(basename "$f")"; done
   rm -f "$dir/$3"; sed -e "$4" "$2/$3" > "$dir/$3"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline "$3" > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" calculate --no-gui "$3" > run.log 2>&1)
 }
 # term NAME LABEL: the value of " Total-LABEL-Chi-Squared:" in NAME's chiSquared.out ("" when absent)
 term() {

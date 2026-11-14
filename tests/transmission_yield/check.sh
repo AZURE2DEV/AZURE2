@@ -78,16 +78,15 @@ N=0.15; NNAT=0.05; SIG=0.015; M1=1.008665; M2=12
 
 # run NAME MODEL MODE DATA -> $WORK/NAME (DATA: n12C or neon)
 run() {
-  local dir="$WORK/$1" input
+  local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   if [ "$4" = neon ]; then ln -s "$HERE/../natural_neon/data" "$dir/data"; else ln -s "$WORK/models/data" "$dir/data"; fi
   cp "$WORK/models/$2.azr" "$dir/t.azr"
-  if [ "$3" = 3 ]; then input='3\n\n\n7\n'; else input='1\n\n\n7\n'; fi
-  (cd "$dir" && printf "$input" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" "$3" --no-gui t.azr > run.log 2>&1)
 }
 
-for m in bare thin conv bconv; do run $m $m 1 n12C; done
-run truth truth 3 n12C
+for m in bare thin conv bconv; do run $m $m calculate n12C; done
+run truth truth extrapolate n12C
 
 # (a) no spread
 for k in T Y; do
@@ -107,8 +106,8 @@ for k in T Y; do
 done
 
 # (c) natural sum of three nuclei, no target effect
-run nat nat 1 neon
-run natT natT 1 neon
+run nat nat calculate neon
+run natT natT calculate neon
 read -r w rest <<< "$("$PY" -I "$HERE/analyze.py" natural "$WORK/nat" "$WORK/natT" $NNAT)"
 if le "$w" 1e-9; then ok "(c) natural sum: T = exp(-n sigma_nat) (max rel $w, $rest)"
 else bad "(c) natural sum: T vs exp(-n sigma_nat): max rel $w ($rest)"; fi
@@ -117,10 +116,10 @@ grep -q "transmission of n = $NNAT atoms/b" "$WORK/natT/output/AZUREOut_sample_s
   bad "(c) no transmission note in AZUREOut_sample_seg=1.out"
 
 # (d) gradient check
-run gcalc grad 1 n12C
+run gcalc grad calculate n12C
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$WORK/models/data" "$WORK/fit/data"; cp "$WORK/models/grad.azr" "$WORK/fit/t.azr"
-(cd "$WORK/fit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-grid-replacement --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/fit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
 chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/fit/run.log")"
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/gcalc/output/chiSquared.out")"
 if [ -n "$chi" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then
@@ -144,8 +143,8 @@ else
 fi
 
 # (f) test segments (mode 3)
-run xbare xbare 3 n12C
-run xthin xthin 3 n12C
+run xbare xbare extrapolate n12C
+run xthin xthin extrapolate n12C
 for k in T Y; do
   read -r w rest <<< "$("$PY" -I "$HERE/analyze.py" xformula $k "$WORK/xbare" "$WORK/xthin" $N)"
   if le "$w" 1e-9; then ok "(f) test segment: $k = formula of the plain test curves (max rel $w, $rest)"
@@ -153,9 +152,9 @@ for k in T Y; do
 done
 
 # (g) the yield's sigma_t is the total cross section (elastic + reactions), not the elastic
-run ybare ybare 1 neon
-run yelast yelast 1 neon
-run yreac yreac 1 neon
+run ybare ybare calculate neon
+run yelast yelast calculate neon
+run yreac yreac calculate neon
 read -r w npts _ sep <<< "$("$PY" -I "$HERE/analyze.py" reaction "$WORK/ybare" "$WORK/yelast" "$WORK/yreac" $NNAT)"
 if le "$w" 1e-9 && gt "$sep" 1e-3; then
   ok "(g) Y0 of n+20Ne -> alpha+17O uses the total (max rel $w, $npts open points; elastic is $sep off the total)"
@@ -164,7 +163,7 @@ else bad "(g) Y0 to alpha+17O: max rel $w vs the formula with the total ($npts p
 # (e) refusals: NAME DATA the text of the run's ERROR
 refuse() {
   local name="$1" data="$2" want="$3"
-  run "$name" "$name" 1 "$data"
+  run "$name" "$name" calculate "$data"
   if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(e) refused: $name"
   else bad "(e) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
@@ -182,14 +181,14 @@ fit() {  # fit <name> <model> <flags>: mode 2, no parameter file
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$WORK/models/data" "$dir/data"
   cp "$WORK/models/$2.azr" "$dir/t.azr"
-  (cd "$dir" && printf '2\nn\n\n\n' | run_limited 900 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" fit $3 --no-gui t.azr > run.log 2>&1)
 }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav" 2>/dev/null; }
 chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" 2>/dev/null | sed -n 1p; }
 near() { awk -v a="$1" -v b="$2" -v t="$3" -v re="$num" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a ~ re && d <= t) }'; }
 
 # (h), (i) fits on data made at n = 0.18
-run thin18 thin18 1 n12C
+run thin18 thin18 calculate n12C
 if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.azr" "$WORK/thin18" "$WORK/models"; then
   for v in "fitT:transmission" "fitY:yield"; do
     m="${v%%:*}"; what="${v#*:}"
@@ -220,8 +219,8 @@ else bad "(h) fit data not built"; fi
 # (j) gradient check with the thicknesses free
 mkdir -p "$WORK/tfit/output" "$WORK/tfit/checks"; ln -s "$WORK/models/data" "$WORK/tfit/data"
 cp "$WORK/models/grad_fit.azr" "$WORK/tfit/t.azr"
-(cd "$WORK/tfit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-grid-replacement --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/tfit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
 awk '{ sub(/\r$/, "") }
      /^\[grad-check\] idx / { a = f = j = ""
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
@@ -245,7 +244,7 @@ fi
 # (l) malformed fit forms and group members
 refuse_t() {
   local name="$1" want="$2"
-  run "$name" "$name" 1 n12C
+  run "$name" "$name" calculate n12C
   if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(l) refused: $name ($(grep -m1 -o 'ERROR: .*' "$WORK/$name/run.log" | cut -c1-110))"
   else bad "(l) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
@@ -258,9 +257,9 @@ refuse_t refuse_t_member "g.target: error E_TARGET_KIND: .*target 'S' is of kind
 # (m) plain "transmission n" / "yield n" byte-identical to a reference build (optional)
 if [ -n "${REF_AZURE2:-}" ]; then
   ref="$AZURE2_BIN"; AZURE2_BIN="$REF_AZURE2"
-  for m in thin conv; do run "ref_$m" "$m" 1 n12C; done
-  run ref_xthin xthin 3 n12C
-  run ref_natT natT 1 neon
+  for m in thin conv; do run "ref_$m" "$m" calculate n12C; done
+  run ref_xthin xthin extrapolate n12C
+  run ref_natT natT calculate neon
   AZURE2_BIN="$ref"
   same=0; diff=0
   for m in thin conv xthin natT; do

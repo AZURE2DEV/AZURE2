@@ -40,7 +40,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME MODEL MODE "FLAGS" [VAR=VALUE ...] -> a fresh copy of MODEL.azr (as t.azr) in $WORK/NAME
 run() {
-  local name="$1" model="$2" mode="$3" flags="$4"
+  local name="$1" model="$2" command="$3" flags="$4"
   shift 4
   local dir="$WORK/$name"
   rm -rf "$dir"
@@ -49,14 +49,14 @@ run() {
   cp "$HERE"/cov_*.txt "$dir/"
   cp "$HERE/$model.azr" "$dir/t.azr"
   (cd "$dir" && for v in "$@"; do export "$v"; done &&
-   printf "$mode\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 # the segment table of chiSquared.out ("segment chi2" per line)
 segchi() { awk -F, '$1 ~ /^[0-9]+$/ { print $1, $2 }' "$WORK/$1/output/chiSquared.out"; }
 
 # ---- (a) diagonal covariance = no covariance ----------------------------------------------------
-run plain plain 1 ""
-run diag diag 1 ""
+run plain plain calculate ""
+run diag diag calculate ""
 if [ ! -s "$WORK/diag/output/covariance.out" ]; then
   bad "diagonal covariance: no covariance.out"; grep -i "error" "$WORK/diag/run.log" | sed -n '1,3p'
 else
@@ -72,7 +72,7 @@ fi
 
 # ---- (b), (c) dense and relvector against numpy ---------------------------------------------------
 for m in dense rel; do
-  run "$m" "$m" 1 ""
+  run "$m" "$m" calculate ""
   if [ ! -s "$WORK/$m/output/covariance.out" ]; then
     bad "$m: no covariance.out"; grep -i "error" "$WORK/$m/run.log" | sed -n '1,3p'
     continue
@@ -102,7 +102,7 @@ rows() {
          print idx, a, f, j }' "$WORK/$1/run.log" | sort -n
 }
 for m in dense rel; do
-  run "g_$m" "$m" 2 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-8
+  run "g_$m" "$m" fit "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-8
   rows "g_$m" > "$WORK/g_$m.rows"
   nrows="$(wc -l < "$WORK/g_$m.rows" | tr -d ' ')"
   kinds="$(awk '/^\[grad-check\] idx / { print $4 }' "$WORK/g_$m/run.log" | sort -u | tr '\n' ' ')"
@@ -129,7 +129,7 @@ objective() {  # data + norm + shift + abundance chi2 of a finished fit
 declare -a objs=()
 for v in "migrad:--use-gradient" "lm:--use-lm" "gsl:--use-gsl-lm"; do
   tag="${v%%:*}"
-  run "f_$tag" fit 2 "${v#*:}"
+  run "f_$tag" fit fit "${v#*:}"
   objs+=("$tag=$(objective "f_$tag")")
 done
 start="$(objective dense)"
@@ -143,31 +143,31 @@ fi
 
 # ---- (f) broken inputs ---------------------------------------------------------------------------------
 broken() {  # NAME MODE "description" EXPECTED-ERROR-REGEX : edit the copy with the rest of the arguments (a command)
-  local name="$1" mode="$2" what="$3" pat="$4"
+  local name="$1" command="$2" what="$3" pat="$4"
   shift 4
-  run "$name" dense 1 ""
+  run "$name" dense calculate ""
   local dir="$WORK/$name"
   rm -rf "$dir/output"/*
   (cd "$dir" && "$@")
-  (cd "$dir" && printf "$mode\n\n\n7\n" | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run2.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" "$command" --no-gui t.azr > run2.log 2>&1)
   if grep -Eq "ERROR.*($pat)" "$dir/run2.log" && [ -z "$(ls "$dir/output")" ]; then
     ok "refused: $what"
   else
     bad "not refused: $what ($(grep -m1 -i "error" "$dir/run2.log"))"
   fi
 }
-broken b_count 1 "a header with a wrong record count" "has 61 data rows, the header says 60" \
+broken b_count calculate "a header with a wrong record count" "has 61 data rows, the header says 60" \
   sed -i.bak 's|^file data/p12c_90.dat 61|file data/p12c_90.dat 60|' cov_dense.txt
-broken b_missing 1 "a data set's file missing from the header" "not among the" \
+broken b_missing calculate "a data set's file missing from the header" "not among the" \
   sed -i.bak 's|^    file           data/p12c_90s.dat$|&\
     covariance     cov_dense.txt|' t.azr
-broken b_overlap 1 "two data sets fitting one record" "fitted twice" \
+broken b_overlap calculate "two data sets fitting one record" "fitted twice" \
   sed -i.bak 's|^    angle_window   145 155 deg$|    angle_window   115 125 deg|' t.azr
-broken b_notpd 1 "a matrix that is not positive definite" "not positive definite" \
+broken b_notpd calculate "a matrix that is not positive definite" "not positive definite" \
   sh -c "printf 'block 2\\n1 2\\n0 10 10 0\\n' >> cov_dense.txt"
-broken b_asym 1 "an asymmetric block" "not symmetric" \
+broken b_asym calculate "an asymmetric block" "not symmetric" \
   sh -c "printf 'block 2\\n1 2\\n0 1e-3 2e-3 0\\n' >> cov_dense.txt"
-broken b_test 3 "a covariance file on an extrapolation" "E_FIELD_NOT_APPLICABLE.*an extrapolation has no data" \
+broken b_test extrapolate "a covariance file on an extrapolation" "E_FIELD_NOT_APPLICABLE.*an extrapolation has no data" \
   sed -i.bak 's|^</extrapolations>|extrapolation x_cov\n    reaction       12C(p,p)12C\n    quantity       dsigma_domega\n    unit           b/sr\n    energies       range 0.5 2.0 MeV lab step 0.1\n    angles         list 60 deg lab\n    covariance     cov_dense.txt\n</extrapolations>|' t.azr
 
 echo
