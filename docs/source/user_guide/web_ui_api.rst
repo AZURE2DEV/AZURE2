@@ -57,7 +57,15 @@ What the server keeps
   ``"nan"``, never a refusal), the arguments as used, ``python`` (the pyazr call that makes the same arrays; run it
   to check) and, for stopping, ``citation``; at most 20000 elements per request.  ``GET /api/session/functions`` and
   ``POST /api/session/functions/<fn>`` do the same for the session's own functions (``channel_functions`` of a pair
-  of the project), in the session worker.
+  of the project, and the THM diagnostics ``thm_experiments``, ``thm_background``, ``thm_lineshape``,
+  ``thm_vertex``, ``thm_distortion`` with an ``experiment`` argument), in the session worker; a THM answer adds
+  ``lines`` (a field over channels or levels: one list per line, its labels), ``facts`` (the call's scalars with
+  units) and ``tables``.  The session's own answer of each THM call, as plain data, is ``POST
+  /api/session/thm_<call>`` (``experiment``, ``energies``).
+- **THM** (the THM tab's routes): ``GET /api/project/thm`` (``null`` without a ``<thm>`` section), ``PATCH
+  /api/project/thm`` (``{"options": {key: value or null}}``), ``PUT /api/project/thm/experiments/<name>``
+  (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET
+  /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc).
 - Routes that need a pyazr call that does not exist yet (the engine's own fitters, the reaction rate, the level
   matrix, ...) answer 501 naming that call.
 

@@ -139,11 +139,29 @@ were not (they are gaps in the plot, never zeros); the CSV holds the arrays as r
 as Python** gives the ``pyazr.physics`` call that makes the same arrays.  A view is a link:
 ``#/physics/coulomb_waves?from=-2&to=20&spacing=linear&v.l=0 1 2 3``.
 
+THM
+---
+
+The **THM** tab is listed when the project has THM content (a ``<thm>`` section, or a data set that names a THM
+experiment).  **Model options**: a form of the global keys of ``<thm>`` (vertex, kinematics, entranceL,
+coulombIntegral, spectatorEnergy), each with its choices and the engine's default; a key the form does not list
+(``spectatorEnergy[2]``, one pair's spectator energy) is set under "other key".  **Experiments**: the table of the
+experiments with the data sets that name them and their keys as written; a row opens the form of its keys (beam,
+target, spectator, Ebeam, background, ps window, distortion, optical potentials, vertexModel, coherent background,
+...) with "data sets that join", and **Remove**; **+ experiment** adds one.  Every change is one edit of the project:
+**Undo** takes it back, and what the engine refuses is shown in its words.  **Channels**: the THM pairs with their
+binding energy B and their channels, with whether a width is an amplitude; these are read from the session and
+cannot be edited here yet.  **Diagnostics**: the session's THM calls at the working parameters: the experiments'
+profiled norms and backgrounds (with their σ and covariance, and the coherent background's parameters), the entrance
+vertex per channel and level, the Coulomb line shape per level, and the distortion factor R(E), each with its form,
+its numbers, its plots (an energy outside the reach of the spectator window is a gap), CSV and Copy as Python, as in
+the Physics tab.  A view is a link: ``#/thm/LC09?fn=thm_vertex``.
+
 Not there yet
 -------------
 
-The tab **THM** says which step brings it; the ``<thm>`` section is edited through the API. In the
-Fit tab a fixed parameter is not edited from the table.
+In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are not
+edited from the THM tab.
 Adding or removing a particle pair, generating channels from a J^π,
 the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical
 widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction

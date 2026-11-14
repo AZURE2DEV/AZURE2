@@ -204,3 +204,10 @@ Added with the sampler and the bands (each shown failing on 2026-11-14, the file
   test_linear_band_and_band_from_draws_agree`.
 - the band is a closed region (the lower edge drawn back); a band of other points is not drawn: each broken in
   turn; each fails `node_test.py` (`js/results.test.mjs`).
+
+Added with the THM tab (each shown failing on 2026-11-14, the file restored after):
+
+- the THM answers carry the session's numbers: `norm_sigma` taken from the last sigma instead of the first; fails
+  `thm_routes_test.py::test_distortion_lineshape_and_coherent_background_equal_the_session[cbkg]`.
+- the key table has every key of an experiment line the engine reads: the row `theta` renamed; fails
+  `thm_routes_test.py::test_key_table_has_every_key_the_engine_reads`.

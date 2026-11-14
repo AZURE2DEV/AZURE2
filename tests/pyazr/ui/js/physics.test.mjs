@@ -11,7 +11,7 @@ const p = await mod("physicsform.js");
 const forms = await mod("forms.js");
 const FUNCTIONS = process.env.AZURE2_UI_FUNCTIONS
   ? JSON.parse(readFileSync(process.env.AZURE2_UI_FUNCTIONS, "utf8")) : null;
-const ctx = { pairs: [{ key: 1, label: "p+12C" }, { key: 2, label: "g+13N" }] };
+const ctx = { pairs: [{ key: 1, label: "p+12C" }, { key: 2, label: "g+13N" }], experiments: ["LC09", "E"] };
 
 /** A row of a kind no table has yet, written here: it must get a working form and plot with no code. */
 const INJECTED = {
@@ -59,9 +59,20 @@ function checkForm(row, axis) {
   assert.equal(req.lines.length, 1);
 }
 
+/** A row answered as a table (no axis): a field per argument, a request of its arguments alone. */
+function checkTableForm(row) {
+  const texts = p.startTexts(row, null, ctx);
+  const keys = p.rowForm(row, null, texts, ctx).lines.flat().map((e) => e.key);
+  assert.deepEqual(keys, row.arguments.map((a) => a.name), `${row.name}: one field per argument`);
+  const req = p.requestOf(row, null, texts);
+  assert.equal(req.error, "");
+  assert.deepEqual(Object.keys(req.arguments), row.arguments.map((a) => a.name), row.name);
+}
+
 test("every row of the tables (and an injected one) gets a working form from its fields alone, on every axis", () => {
   if (!FUNCTIONS) return;  // run by node_test.py, which writes the engine's tables
   for (const row of rows()) {
+    if (!row.axis) { checkTableForm(row); continue; }
     const axes = p.axisChoices(row);
     assert.equal(axes[0].name, row.axis, `${row.name}: the row's axis first`);
     for (const a of axes) checkForm(row, a.name);
@@ -185,4 +196,49 @@ test("the list: rows grouped as the tables group them, in their order; the searc
   assert.deepEqual(list.map((g) => [g.group, g.rows.map((r) => r.name)]), [["A", ["a1", "a2"]], ["B", ["b1"]]]);
   assert.deepEqual(p.groupedRows([{ name: "a1", group: "A" }, { name: "b1", group: "B", summary: "Coulomb" }],
     "coul").map((g) => g.group), ["B"]);
+});
+
+// A THM diagnostic's answer: fields over channels and levels have lines of their own (one list per line), a field on
+// the energies alone has none; one status per energy, which every line of a field shares.
+const thmRow = {
+  name: "made_up_vertex", axis: "energies", returns: [{ name: "M2", unit: "", doc: "" },
+    { name: "q", unit: "fm^-1", doc: "" }, { name: "absent", unit: "", doc: "" }],
+  arguments: [{ name: "experiment", kind: "experiment", unit: "", doc: "", domain: "", default: null, example: null,
+    sweep: null, choices: [] }, { name: "energies", kind: "real", unit: "MeV", doc: "", domain: "finite",
+    default: null, example: 0.5, sweep: { lower: 0.05, upper: 2, spacing: "linear" }, choices: [] }],
+};
+const thmAnswer = {
+  shape: [3], axis: "energies", arguments: { experiment: "E", energies: [0.1, 0.2, 0.3] },
+  returns: { M2: [[1, 2, 3], [4, 5, 6]], q: [0.5, 0.25, 0.125] },
+  lines: { M2: ["1/2+ level 1", "1/2+ level 2"] }, status: [0, -3, 0],
+  status_words: { 0: "computed", "-3": "beyond the reach" },
+};
+
+test("an experiment argument: a choice of the project's experiments, the first at start, sent as one text", () => {
+  const texts = p.startTexts(thmRow, "energies", ctx);
+  assert.equal(texts.experiment, "LC09");
+  const entry = p.rowForm(thmRow, "energies", texts, ctx).lines.flat().find((e) => e.key === "experiment");
+  assert.equal(entry.type, "enum");
+  assert.deepEqual(entry.field.values, ["LC09", "E"]);
+  const req = p.requestOf(thmRow, "energies", { ...texts, experiment: " E " });
+  assert.equal(req.arguments.experiment, "E");
+  assert.equal(req.lines.length, 1);
+});
+
+test("a field with lines: a trace per line, the energy's status a gap on every line; absent fields go", () => {
+  const req = p.requestOf(thmRow, "energies", p.startTexts(thmRow, "energies", ctx));
+  const plots = p.physicsPlots(thmRow, thmAnswer, req, { shown: new Set(["M2", "q", "absent"]) });
+  assert.deepEqual(plots.map((x) => x.y.unit), ["", "fm^-1"]);
+  assert.deepEqual(plots[0].traces.map((t) => t.name), ["M2, 1/2+ level 1", "M2, 1/2+ level 2"]);
+  assert.deepEqual(plots[0].traces.map((t) => t.y), [[1, null, 3], [4, null, 6]]);
+  assert.deepEqual(plots[1].traces.map((t) => t.y), [[0.5, null, 0.125]]);
+  assert.deepEqual(p.unitGroups(thmRow, null, thmAnswer).map((g) => g.fields), [["M2"], ["q"]]);
+});
+
+test("the CSV of an answer with lines: a line per energy, a column per field and line, the status", () => {
+  const lines = p.answerCsv(thmRow, thmAnswer).trim().split("\n");
+  assert.equal(lines[0], "energies (MeV),experiment,M2 [1/2+ level 1],M2 [1/2+ level 2],q (fm^-1),status");
+  const n = (v) => (typeof v === "number" ? v.toPrecision(17) : v);  // the CSV's 17 significant digits
+  assert.deepEqual(lines.slice(1).map((l) => l.split(",")), [[0.1, "E", 1, 4, 0.5, 0], [0.2, "E", 2, 5, 0.25, -3],
+    [0.3, "E", 3, 6, 0.125, 0]].map((r) => r.map(n)));
 });

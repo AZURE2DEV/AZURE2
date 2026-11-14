@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the web page's THM tab
+
+**Done** (`docs/upgrade/web_ui.md` section 11.8): the tab **THM**, listed when the project has THM content.
+Model options and experiments as forms of the form generator from a key table (`pyazr/ui/thm.py` `KEYS`, served at
+`GET /api/thm/keys`: the engine has no schema of `<thm>`, finding 27); each edit one project edit through the
+existing THM routes (Undo, refusals in the engine's words); add and remove an experiment, data sets that join it.
+The THM pairs (B) and channels (amplitude flag) read-only from the session (finding 11). The session's five THM calls
+served one-to-one (`POST /api/session/thm_*`, `Engine.thm_*`; they left `SESSION_NOT_SERVED`) and as rows of the
+physics table's shape (`THM_ROWS`, `tab: "thm"`), drawn with the Physics tab's code, now shared
+(`static/functionview.js`): fields with lines per channel and level, facts with units, tables, status per energy
+(an energy beyond the window's reach is a gap), CSV, Copy as Python. The distortion factor has a bound of 1000
+energies per request (17 ms each).
+
+**Verified** (base engine `work/b-trial63` with this worktree on `PYTHONPATH`, one thread): over HTTP on five THM
+projects (T2; `examples/f19_pag_thm`; two copies of `tests/18O_p_a_thm` with a coherent background and with a
+Coulomb distortion and the line shape; `examples/o18_lacognata2010` with the DW vertex) every number of every THM
+route and of what the tab shows equals the direct `Session` call (binary doubles); an option edit's χ² rows equal
+the program's `chiSquared.out` on the edited text; Undo returns the start χ² exactly (`work/uithm/walk_thm.py`).
+UI tests: `thm_routes_test.py` 8 passed (two injected errors shown failing), `routes_consistency`, `static`,
+`node` (58), `physics_tab`, `physics_routes`, the smoke test on T1 and T2 with the THM views (headless Chrome).
+`OMP_NUM_THREADS=1 ctest -LE slow -j1` on `work/b-uithm` (this worktree built, 0 warnings): 265 of 265 passed
+(2734 s, pinned to two CPUs).
+
+**Open**: the THM binding energy and amplitude flag need pyazr edits (finding 11); a schema of `<thm>` and the THM
+calls as rows of the session's description (findings 27, 28); the vertex legend repeats colours beyond eight lines
+(the palette) and draws coinciding lines (levels of one J group under `vertex=constant`, M2 and M2_qf in a delta
+window).
+
 ## 2026-11-14 (director, 02:02) — merged: pyazr's one parameter vector, the skills on it, the Fit tab's engine fitters
 
 **Merged into `feature/upgrade-4-data`** with the tree of rehearsal 63 (verified as one tree):

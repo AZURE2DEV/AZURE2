@@ -149,8 +149,10 @@ def test_engine_rows_are_the_engine_fitter_table():
 
 
 # Words of the engine's tables that occur in pyazr/ui as something else: argument names of Project.add_level and
-# Project.set_channel ("energy", "width") and a column of the program's chiSquared.out ("norm").
-NOT_KINDS = {"energy", "width", "norm"}
+# Project.set_channel ("energy", "width"), a column of the program's chiSquared.out ("norm"), keys of a THM
+# experiment line ("beam", "target"; pyazr/ui/thm.py KEYS) and of the answer of Session.thm_experiments ("sigma",
+# "cbkg").
+NOT_KINDS = {"energy", "width", "norm", "beam", "target", "sigma", "cbkg"}
 
 
 def test_no_engine_kind_is_spelled_in_the_ui():

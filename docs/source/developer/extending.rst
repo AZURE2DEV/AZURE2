@@ -318,9 +318,16 @@ type of a job's setting is a row of
 (``pyazr/ui/static/tabs/fitjob.js``).
 
 A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports
-``render(ctx, element, args)`` and one row of ``TABS`` in
+``render(ctx, element, args)`` (and ``shown(ctx)`` when it is about a part of
+a project that may be absent, as the THM tab) and one row of ``TABS`` in
 ``pyazr/ui/static/app.js``; add its view to ``VIEWS`` of
-``tests/pyazr/ui/smoke_test.py``. No test fails when a tab module is left out
+``tests/pyazr/ui/smoke_test.py``. A function of the session drawn by a tab is
+a row of the session's functions naming that tab in ``tab`` (the THM
+diagnostics: ``THM_ROWS`` and their answers ``ANSWERS`` in
+``pyazr/ui/thm.py``, an operation of ``Engine``, a route row); the tab draws
+it with ``functionview.js``. A key of ``<thm>`` is one entry of ``KEYS`` in
+``pyazr/ui/thm.py`` (``tests/pyazr/ui/thm_routes_test.py`` fails for an
+experiment key the engine reads and the table lacks). No test fails when a tab module is left out
 of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).

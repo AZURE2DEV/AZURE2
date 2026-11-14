@@ -91,9 +91,10 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
 - Reaction rate (10) → Results: no call. M.
 - MCMC (11) → Fit: the emcee recipe on `Objective.log_prob` (`pyazr3.md` 2.6), as a job. E (section 11.7).
 - Plots (12) → Results: `Evaluation.data[i]`; `physics.sfactor_conversion`; `pyazr.plot` for PDF. E, D, P.
-- THM workspace (13) → THM: `Project.thm`, `set_thm`, `set_thm_experiment`; `thm_vertex`, `thm_lineshape`,
-  `thm_distortion`. E.
-- THM binding energy and amplitude flag per channel (13) → THM: `set_pair` has neither. M.
+- THM workspace (13) → THM: `Project.thm`, `set_thm`, `set_thm_experiment`, `remove_thm_experiment`;
+  `thm_experiments`, `thm_background`, `thm_vertex`, `thm_lineshape`, `thm_distortion`. E (the THM tab, section 11.8).
+- THM binding energy and amplitude flag per channel (13) → THM: `set_pair` has neither. M (shown read-only from the
+  session, section 11.8).
 - Title, About, help, theme, dialogs, screenshots (2, 14) → Shell: `pyazr.describe()`; the page. D, P.
 
 ### 1.2 What the engine does that Qt never showed
@@ -380,7 +381,8 @@ Route → pyazr call: request → response.
 - `GET /api/project/pairs`, `PATCH .../pairs/{key}` → `pairs`, `set_pair`.
 - `GET`/`PATCH /api/project/config` → `config`, `set_config`.
 - `GET`/`PATCH /api/project/thm`, `PUT`/`DELETE .../thm/experiments/{name}` → `thm`, `set_thm`,
-  `set_thm_experiment`, `remove_thm_experiment`.
+  `set_thm_experiment`, `remove_thm_experiment`.  `GET /api/thm/keys` → the keys of `<thm>` as record kinds of a
+  schema (`pyazr/ui/thm.py` `KEYS`; the engine has no table of them, finding 27).
 - `POST /api/project/undo`, `/redo`; `GET /api/project/history` → the server's history: → rev; (rev, time, what).
 - `POST /api/project/apply` → missing (finding 8): the values of x written into the text: x by name, rev → rev.
 
@@ -418,7 +420,11 @@ Route → pyazr call: request → response.
 - `GET /api/session/functions`, `POST /api/session/functions/{fn}` → the session's functions as rows of the shape of
   `/api/physics` (`pyazr/ui/physics.py` `SESSION_ROWS`; finding 24) and a call of one answered as `/api/physics/{fn}`
   answers (status -2 where the channel is closed, the Python text opening a session on the project file).
-  **Served** (the Physics tab).
+  **Served** (the Physics tab; the THM diagnostics below are rows of it too, drawn by the THM tab).
+- `POST /api/session/thm_experiments`, `/thm_background`, `/thm_lineshape`, `/thm_vertex`, `/thm_distortion` →
+  `Session.thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`, `thm_distortion`: the session's
+  answer as plain data, at the working x.  **Served** (adapter `Engine.thm_*`); the same calls as rows of the shape
+  of `/api/physics` (`pyazr/ui/thm.py` `THM_ROWS`) through `/api/session/functions/{fn}` (section 11.8).
 - `GET /api/stopping`, `POST /api/stopping/{fn}` → `kinds()["stopping"]`, `pyazr.stopping.evaluate`: the rows of
   the binding's stopping table (the shape of the physics rows, a text argument `formula` first, SRIM's `citation`)
   and a call of one, answered as `/api/physics/{fn}` answers, with the citation. **Served** (the same generic
@@ -892,7 +898,7 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    sampler and the bands done 2026-11-14** (section 11.7).
 5. **Physics and THM.** `tabs/physics.js` generated from the physics table (pyazr step 4; before it, stopping only),
    `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines. **Physics tab done 2026-11-13**
-   (section 11.5, stopping included); THM to come.
+   (section 11.5, stopping included); **THM tab done 2026-11-14** (section 11.8).
 6. **Close-out.** `pyazr ui` as a command (pyazr step 7), static files and plotly in the wheel (pyazr step 8), the
    parity checklist ticked or dropped item by item, the smoke tests in their workflow, `numcmc` and the menus removed
    (Phase 9). About 400 lines and the checklist.
@@ -1383,6 +1389,77 @@ needs through `tracker.session` (`objective_of`), reports each step with `tracke
 `_band_entries`; the Results tab draws it with no change. A new setting type: a row of `SETTING_TYPES` and of
 `SETTING_WIDGETS` (`number` was added so).
 
+### 11.8 Step 5, second part, as built (2026-11-14): the THM tab
+
+`tabs/thm.js` (the tab: options, experiments, channels, diagnostics), `functionview.js` (a row computed and its
+answer drawn, moved out of `tabs/physics.js` and shared by both tabs: status line, facts, tables, plots, CSV, Python
+text), `physicsform.js` (an argument kind `experiment`; a row without an axis answered as tables; a field with lines
+of its own; a row's own bound of elements and the fields left off the first plot), `app.js` (a row of `TABS` may say
+when it is `shown`), `pyazr/ui/thm.py` (the `<thm>` keys as record kinds, `KEYS`; the five THM calls as rows,
+`THM_ROWS`, and how each answer is shaped, `ANSWERS`), `engine.py` (`Engine.thm_*`, the session's pairs in its
+description), `physics.py` (the session's rows from two tables, text kinds, status words per row), `routes.py` (five
+session rows and `GET /api/thm/keys`).  Tests: `tests/pyazr/ui/thm_routes_test.py` (8), `js/thm.test.mjs` (4),
+`js/physics.test.mjs` (3 new), the self-test's THM views and the smoke test's checks of them.
+
+**What a user can do.** On a project with THM content (a `<thm>` section, or a data set with a `thm` field) the tab
+**THM** is listed; on another its link is hidden and `#/thm` says why (setting an option there adds the section).
+*Model options*: a generated form of the global keys (vertex, kinematics, entranceL, coulombIntegral,
+spectatorEnergy; a key the table lacks, as `spectatorEnergy[2]`, is a text field of its own, and "other key" adds
+one); Apply is one `PATCH /api/project/thm`.  *Experiments*: their table (name, data sets that name it, keys as
+written); a row opens its generated form (the twenty keys of an experiment line, with choices where the grammar has
+them and its grammar where it is free text; `psNodes` and `spectatorAngleNodes` only with their window) with "data
+sets that join" (set in the same edit) and **Remove**; **+ experiment** adds one by name.  Each edit is one history
+entry, Undo takes it back, a refusal shows the engine's words.  *Channels*: the session's THM pairs (binding energy
+B, radius) and their channels (level, l, s, whether the width is an amplitude), read-only with the reason (finding
+11).  *Diagnostics*: the five THM calls of the session as links; each has the generated form of its row (the
+experiment a choice of the project's, the energies an axis) and its answer drawn by the Physics tab's code: the
+status line, the call's facts with units (B, E_aA, the window, the distortion's settings, ...), its tables (the
+experiments' profiled norms and backgrounds with sigma, the coherent background's parameters, a background's
+covariance), one plot per unit with a trace per channel and level (vertex), per exit pair and level (line shape) or
+per field (distortion), the CSV of the arrays, Copy as Python.  A view is a link: `#/thm/LC09?fn=thm_vertex`.
+
+**Measured** (`work/uithm/walk_thm.py`: a server process over HTTP at one thread, pinned to two CPUs with the
+browser; the direct `Session` calls on the same file at x0; 200 energies from 0.05 to 2 MeV):
+
+| project | kind | build | experiments, background, vertex | line shape | distortion | option edited |
+|---|---|---|---|---|---|---|
+| T2 (LC09) | plane wave | 0.5 s | equal, 0.04-0.06 s | 422 | 422 | kinematics=triple |
+| f19_pag_thm | plane wave, linear bkg | 0.4 s | equal, 0.02-0.06 s | 422 | 422 | kinematics=lambda32 |
+| 18O copy, cbkg | coherent background | 0.3 s | equal, 0.01 s | 422 | 422 | vertex=perlevel |
+| 18O copy, dist | Coulomb distortion | 2.7 s | equal, 0.02 s | equal, 0.02 s | equal, 3.2 s | vertex=onshell |
+| o18_lacognata2010 | DW vertex, optical | 6.4 s | equal, 0.01 s (98 unreached) | 422 | 422 | kinematics=triple |
+
+"equal" is equality of every number of the session's answer (the raw route) and of every number the tab shows
+(fields, facts, tables), as binary doubles; 422 is the engine's refusal of a call the experiment has no key for
+("has no line shape (lineshape=on)").  After each option edit the per-data-set rows of the server's χ² split equal
+the program's `chiSquared.out` on the edited text (six digits; the totals: T2 10896.788794139226 against the
+program's 10896.7822, f19 1310.5367 against 1310.53998).  Undo gave the start χ² and objective exactly on all five.
+The DW vertex is built with the session (6.3 s at every rebuild), so a vertex request costs no more than a plane-wave
+one; the distortion factor costs about 17 ms per energy (Coulomb and optical alike: 3.2 s and 3.4 s for 200
+energies), so its row has a bound of 1000 energies per request (about 20 s) instead of 20000.  No THM call needs a job.
+
+**Where it departs from section 6.7 and the brief:**
+
+1. *The keys' forms come from a table in `pyazr/ui/thm.py`*, not from the engine's schema: the engine has none for
+   `<thm>` (finding 27).  The table's experiment keys are checked against the list the engine names when it refuses
+   an unknown key; the global options are not (the engine's refusal of an unknown option names none).
+2. *The diagnostics are rows of `/api/session/functions`* with a `tab` field; the Physics tab leaves out a row that
+   names another tab.  The raw calls have routes of their own (`/api/session/thm_*`), one-to-one.
+3. *The THM calls' answers are reshaped on the server* (fields with lines, facts, tables; `ANSWERS`), one function
+   per call: the session returns nested dictionaries (finding 28).  The page has no code per function.
+4. *The binding energy and the amplitude flag are read-only* (finding 11).  Data sets leave an experiment through
+   their own `thm` field (the Data tab); the THM tab only adds members.
+5. *The diagnostics run at the working x*; the Python text opens a session on the saved file and says that
+   `params=x` gives another point.
+
+**Extensibility as built.** A new key of `<thm>`: one entry in `KEYS` of `pyazr/ui/thm.py` (value type of the
+schema, choices, doc; the test fails for an experiment key the engine reads and the table lacks); until then the
+page shows it as a text field.  A new THM diagnostic of the session: a row in `THM_ROWS` (arguments of the kinds
+`ARGUMENT_KINDS` knows, returns with units and `lines`, facts) and its function in `ANSWERS`, an adapter operation
+`Engine.<name>` and a route row; nothing in the page.  A new tab: a module `tabs/<name>.js` with `render` (and
+`shown` if it is about part of a project) and one row of `TABS`; a session function drawn by it names the tab in
+its row's `tab`.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1425,6 +1502,9 @@ None of these changes the decided objects; each is a call or a field to add:
 10. **Pairs added and removed, with channel generation**: `add_pair`, `remove_pair`, and the channels a J^π allows from
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
 11. **THM binding energy B and the width-is-amplitude flag** per channel: `set_pair` and `set_channel` have neither.
+    *The page shows them read-only* (section 11.8): the session's pair records carry `binding_energy` and its
+    parameter rows `width_is_amplitude`.  Wanted: `set_pair(key, binding_energy=...)` and `set_channel(...,
+    width_is_amplitude=...)` (or the record fields they are), so that the THM tab edits them as project edits.
 12. **Outputs of a physics function described in its row** (names, units, which argument is the natural axis), so
     the Physics tab can draw it without a per-function plot.  **Closed**: every row of `/api/physics` has its
     arguments (unit, kind, domain, bounds, default, choices), its returned fields with units and `axis`; the two
@@ -1520,6 +1600,19 @@ Found while building the Physics tab (step 5):
 
 26. **Stopping with the project's own targets**: the stopping rows take a formula; a target of the project (its
     layers, a user stopping table, a fitted stopping scale) has no call that evaluates its stopping on arrays.
+
+Found while building the THM tab (step 5, second part):
+
+27. **A schema of `<thm>`**: the engine reads its keys with a grammar of if-chains (`ParseThmOptionLine`,
+    `ParseThmExperimentLine` in `src/ThmExperiment.cpp`) and describes none of them as data.  The page's forms come
+    from a table written in `pyazr/ui/thm.py` (`KEYS`: value type of the schema, choices, unit, doc), checked against
+    the list of keys the engine names when it refuses an unknown one.  Wanted: the keys of the options and of an
+    experiment line as record kinds of `pyazr.schema()` (or `kinds()["thm"]`), read by the parser itself.
+28. **The THM calls described as rows**: `thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`,
+    `thm_distortion` return nested dictionaries; `pyazr/ui/thm.py` (`THM_ROWS`, `ANSWERS`) writes their rows from the
+    docstrings and turns the answer into fields on the energies with lines (per channel and level, per exit pair),
+    facts with units and tables.  Wanted: the rows in the session's description (as finding 24 asks for
+    `channel_functions`) and the arrays per line, so that the server reshapes nothing.
 
 ## 13. Decisions for the PI
 
