@@ -2,6 +2,43 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 17:05) — merged: the readers of the compound take the level state
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 75 (rehearsal 74 plus
+`feature/upgrade-5-cnuc-readers-owners`). The agent's entry follows. No conflict but this file.
+
+- **Every reader takes the state it reads** (argument order: compound, state, inputs). The fills and the
+  transformations of `CNuc` are `const` and write the `LevelState` and `LevelInputs` they are handed;
+  `GenMatrixFunc::state()` and `ObjectiveContext` carry them. `CalcShiftFunctions` takes the `ShiftOrders`
+  enum instead of a boolean. The vector's walks are in the new `src/CNucParameterVector.cpp`.
+- **Not done, and the next branch's**: the owners (the run, the session, the fitter's pool, the sampler,
+  the rate, the target set-up, the bands, the limits, the binding) still reach the default owner's state
+  through `CNuc::State()`, `Inputs()`, `MutableState()` and the one-argument fills: 120 calls in 17 files.
+  `Clone` and the pools of compounds are as they were; no row of `allowed_state.tsv` went.
+- **Two decisions of the director** on what the agent left open. The `--ignore-externals` zero-width flags
+  live in `LevelState` (`ZeroInputWidth`): accepted, an evaluation reads them. The level's input energy is
+  copied into the state (`LevelState::InputEnergy`; written in `src/CNuc.cpp` and
+  `src/CNucParameterVector.cpp`, read once in `src/ThmLineshape.cpp` to recognise a ground-state moment):
+  accepted for now; the owners' branch measures whether it must follow the fit, and makes it a set-up fact
+  if it need not.
+- My scan of the difference: no new `mutable` member, no new static state; one `const_cast` removed.
+
+**Verified on the merged tree** (build `work/b-trial75`, eight threads): 0 warnings; all projects in the
+three bases against `tab-t74-1`: Brune 887, formal 851, Park 887 files, all identical; the eight fits by
+command identical to `b-trial74`; the quick tests 277 of 277; the consistency test passes.
+
+**The director's own runs**, `b-trial75` against `b-trial74`, one thread, by command, every output file
+compared: MINOS, a fit with band and scaled covariance, the rate for one exit pair and for all, three
+`gamma_decay` fits, a T1 extrapolation with band, the natural-target fits in two fitters, the sampler's
+chains of T2 in both bases (8 walkers, 100 steps): all identical.
+
+**The agent's numbers, not repeated by me**: speed per 100 evaluations at one thread unchanged (T1 0.094 s,
+T2 3.8 s); peak memory of a T2 fit 174.4 / 197.1 / 233.0 MB at 1 / 3 / 5 threads against 174.4 / 196.7 /
+226.4 MB before (single runs; the pools are still pools of compounds, so no gain was expected yet).
+
+**Reference** stays `tab-t74-1` for the numbers (nothing changed); the base build for the next comparisons
+is `work/b-trial75`.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-readers-owners`) — the readers take the level state
 
 **A mergeable half** of the end of `CNuc`'s copies: the readers take the state; the owners do not hold their own yet
