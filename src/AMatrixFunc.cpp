@@ -465,16 +465,18 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
     chan_cap_exit_.assign(n, complex(0.0, 0.0));
     // The --ignore-externals mask (external_capture.md section 3): in the formal basis the projector T^-1 P T of
     // the Brune levels whose input width in the photon channel is zero; otherwise those levels are left out.
-    const CNuc::CaptureMask *formal = maskChannel ? compound()->FormalCaptureMask(jGroupNum, maskChannel) : nullptr;
-    if (formal && !formal->projector.empty()) {
-      const std::size_t nl = formal->levels.size();
+    const int maskSlot = maskChannel ? compound()->FormalCaptureMaskSlot(jGroupNum, maskChannel) : -1;
+    const std::vector<double> *projector = maskSlot >= 0 ? &compound()->State().CaptureProjector(maskSlot) : nullptr;
+    if (projector && !projector->empty()) {
+      const std::vector<int> &levels = compound()->FormalCaptureMaskOf(maskSlot).levels;
+      const std::size_t nl = levels.size();
       for (std::size_t i = 0; i < nl; i++) {
-        const int row = map[formal->levels[i]];
+        const int row = map[levels[i]];
         if (row == 0) continue;
         double en = 0.0, ex = 0.0;
         for (std::size_t j = 0; j < nl; j++) {
-          en += formal->projector[i * nl + j] * compound()->State().Gamma(jGroupNum, formal->levels[j], chNum);
-          ex += formal->projector[i * nl + j] * compound()->State().Gamma(jGroupNum, formal->levels[j], chpNum);
+          en += (*projector)[i * nl + j] * compound()->State().Gamma(jGroupNum, levels[j], chNum);
+          ex += (*projector)[i * nl + j] * compound()->State().Gamma(jGroupNum, levels[j], chpNum);
         }
         chan_cap_entrance_[row - 1] = en;
         chan_cap_exit_[row - 1] = ex;

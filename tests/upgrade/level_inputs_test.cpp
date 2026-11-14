@@ -6,6 +6,9 @@
 //      <levels> values are those of a compound only filled.  In the formal basis a level of several in a group moves
 //      its input energy.
 //  (c) A physical vector (FillCompoundFromParamsPhysical) is written into the input values at the layout's slots.
+//  (d) What a fill computes beside the levels is the state's: a copy of the LevelState keeps the gamma_decay records'
+//      fills of its vector when the compound is filled at another; the state has a capture-mask projector for every
+//      slot of the set-up.
 // Arguments: .azr files, each run in the Brune and the formal basis.  Reads them in place and writes nothing.
 #include <cstdio>
 #include <memory>
@@ -13,6 +16,9 @@
 #include <string>
 #include <vector>
 
+#include <Minuit2/MnUserParameters.h>
+
+#include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
@@ -106,6 +112,32 @@ void OnProject(const std::string &file, bool brune) {
       Check(ci.Inputs().Gamma(slots.group, slots.level, ch) == p[slots.amplitude[ch - 1]], tag + ": physical width");
   }
   if (!records.Empty()) Check(ci.Inputs().GammaDecayNumbers() == records.NumbersAt(v), tag + ": physical numbers");
+  // (d) on a compound initialized from the file
+  std::unique_ptr<Loaded> fresh = Load(file, brune, true);
+  CNuc &cf = fresh->compound;
+  AZUREParams params;
+  cf.FillMnParams(params, &fresh->cfg);
+  const vector_r start = params.GetMinuitParams().Params();
+  vector_r shifted = start;
+  for (const GammaDecayLevel &L : records.Levels())
+    for (const int ch : L.photonChannels) shifted[L.energyIndex + ch] *= 1.1;
+  cf.FillCompoundFromParams(start);
+  const LevelState atStart = cf.State();
+  cf.FillCompoundFromParams(shifted);
+  for (std::size_t r = 0; r < records.Levels().size(); r++) {
+    Check(atStart.HasGammaDecayFill((int)r) && cf.State().HasGammaDecayFill((int)r), tag + ": record filled");
+    if (!atStart.HasGammaDecayFill((int)r) || !cf.State().HasGammaDecayFill((int)r)) continue;
+    Check(atStart.GammaDecayFillOf((int)r).q == records.NumbersAt(start)[r], tag + ": the copy keeps its fill");
+    Check(cf.State().GammaDecayFillOf((int)r).q == records.NumbersAt(shifted)[r], tag + ": the state has the new fill");
+  }
+  for (int j = 1; j <= cf.NumJGroups(); j++)
+    for (int ch = 1; ch <= cf.GetJGroup(j)->NumChannels(); ch++) {
+      const int slot = cf.FormalCaptureMaskSlot(j, ch);
+      if (slot < 0) continue;
+      const std::size_t n = cf.FormalCaptureMaskOf(slot).levels.size();
+      const std::size_t size = cf.State().CaptureProjector(slot).size();
+      Check(size == 0 || size == n * n, tag + ": a projector over the slot's levels");
+    }
 }
 
 }  // namespace

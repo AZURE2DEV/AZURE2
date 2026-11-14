@@ -46,17 +46,17 @@ void Print(const Config &configure, const ex::Diagnostic &d) {
                       << " [" << d.code << "]: " << d.message << std::endl;
 }
 
-bool IsPhotonChannel(CNuc &compound, const JGroup *group, int ch) {
+bool IsPhotonChannel(const CNuc &compound, const JGroup *group, int ch) {
   return compound.GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 10;
 }
 
-bool IsParticleChannel(CNuc &compound, const JGroup *group, int ch) {
+bool IsParticleChannel(const CNuc &compound, const JGroup *group, int ch) {
   return compound.GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 0;
 }
 
 /// The full-vector index of level la's energy in group j; its amplitudes follow it, in channel order
 /// (LevelParameterLayout.h).
-int LevelEnergyIndex(CNuc &compound, int j, int la) {
+int LevelEnergyIndex(const CNuc &compound, int j, int la) {
   return compound.ParameterLayout().Of(j, la).energy;
 }
 
@@ -81,7 +81,7 @@ std::string Fmt(double x) {
 
 }  // namespace
 
-std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const Config &configure,
+std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(const CNuc &compound, const Config &configure,
                                                          const std::vector<azure2::io::LevelRow> &rows) {
   auto set = std::make_shared<GammaDecaySet>();
   std::unique_ptr<std::istream> section = configure.SectionStream(kSection);
@@ -275,8 +275,8 @@ vector_r GammaDecaySet::WithPartialWidths(const vector_r &observed) const {
 
 double GammaDecaySet::ValueOr(const CNuc &compound, int j, int la, int ch, double otherwise) const {
   const int r = RecordOf(j, la), slot = SlotOf(r, ch);
-  if (slot < 0 || !compound.HasGammaDecayValues(r)) return otherwise;
-  return compound.GammaDecayValues(r).at(slot);
+  if (slot < 0 || !compound.State().HasGammaDecayFill(r)) return otherwise;
+  return compound.State().GammaDecayFillOf(r).q.at(slot);
 }
 
 std::vector<double> GammaDecaySet::PartialWidths(const GammaDecayLevel &L, const std::vector<double> &q,
@@ -354,7 +354,7 @@ namespace {
 /// The photon amplitudes (MeV^1/2, slot order) of record level L at energy E (MeV) with the record's values q and
 /// the full vector p's particle amplitudes: physics/ amplitudes_from_observed with the particle columns as amplitudes
 /// (Brune: n_lambda from them; Park: 0, the photon amplitude is (Gamma / 2P)^1/2), the photon columns as widths.
-std::vector<double> PhotonAmplitudes(CNuc &compound, const CNucSystem &structure, bool park, bool gsl, bool rmc,
+std::vector<double> PhotonAmplitudes(const CNuc &compound, const CNucSystem &structure, bool park, bool gsl, bool rmc,
                                      const GammaDecayLevel &L, double E, const std::vector<double> &q,
                                      const std::vector<double> &particle) {
   const std::vector<double> widths = GammaDecaySet::PartialWidths(L, q);
@@ -389,7 +389,7 @@ std::vector<double> PhotonAmplitudes(CNuc &compound, const CNucSystem &structure
 /// N_f^(-1/2) of final state (j, la) at energy E (MeV) and amplitudes gamma (per channel of its group), with
 /// dN_f/dgamma_d per channel: n0 = 1 (Brune) or Park's J_f = 1 - sum_c gamma_c^2 S'_c(E) over its particle channels,
 /// as CNuc::CalcShiftFunctions forms it (section 2.7).
-double FinalSqrtNF(CNuc &compound, bool park, bool gsl, int j, int la, double E, const std::vector<double> &gamma,
+double FinalSqrtNF(const CNuc &compound, bool park, bool gsl, int j, int la, double E, const std::vector<double> &gamma,
                    std::vector<double> *dN) {
   const JGroup *group = compound.GetJGroup(j);
   const ALevel *level = group->GetLevel(la);
@@ -419,7 +419,7 @@ struct GammaDecaySet::Point {
   std::vector<double> internal;     ///< the engine's photon amplitudes (MeV^1/2), slot order
 };
 
-GammaDecaySet::Point GammaDecaySet::Map(CNuc &compound, const GammaDecayLevel &L, double E,
+GammaDecaySet::Point GammaDecaySet::Map(const CNuc &compound, const GammaDecayLevel &L, double E,
                                         const std::vector<double> &q, const std::vector<double> &particle,
                                         const std::vector<std::pair<double, std::vector<double>>> &finals,
                                         bool slopes) const {
@@ -490,7 +490,7 @@ GammaDecaySet::Point GammaDecaySet::Map(CNuc &compound, const GammaDecayLevel &L
   return point;
 }
 
-vector_r GammaDecaySet::ToEngine(CNuc &compound, const vector_r &values) const {
+vector_r GammaDecaySet::ToEngine(const CNuc &compound, LevelState &state, const vector_r &values) const {
   vector_r p = values;
   const std::vector<std::vector<double>> numbers = NumbersAt(values);
   for (std::size_t r = 0; r < levels_.size(); r++) {
@@ -517,12 +517,13 @@ vector_r GammaDecaySet::ToEngine(CNuc &compound, const vector_r &values) const {
                 << " which no internal amplitude reaches; the observed width is that floor (gamma_int = -Re gamma^ext, as"
                 << " TransformIn; gamma_parametrisation.md section 2.7; further such warnings are not shown)" << std::endl;
     point.fill.q = q;
-    compound.SetGammaDecayFill((int)r, std::move(point.fill));
+    state.SetGammaDecayFill((int)r, std::move(point.fill));
   }
   return p;
 }
 
-void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const ParamIndexMap &map, vector_r &gradFull) const {
+void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const ParamIndexMap &map,
+                             vector_r &gradFull) const {
   const int nFull = (int)gradFull.size();
   auto add = [&](int index, double v) {
     if (index >= 0 && index < nFull) gradFull[index] += v;
@@ -532,8 +533,8 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
     const int j = L.spec.group, la = L.spec.level;
     const JGroup *group = compound.GetJGroup(j);
     const ALevel *level = group->GetLevel(la);
-    if (!compound.HasGammaDecayValues((int)r)) continue;
-    const GammaDecayFill &fill = compound.GammaDecayFillOf((int)r);
+    if (!compound.State().HasGammaDecayFill((int)r)) continue;
+    const GammaDecayFill &fill = compound.State().GammaDecayFillOf((int)r);
     const std::vector<double> &q = fill.q;
     const std::vector<double> &amp = fill.total;  // g_k, the amplitude of the record's observed width
     const std::size_t m = L.photonChannels.size();
@@ -673,8 +674,8 @@ std::vector<GammaDecaySet::PenaltyRow> GammaDecaySet::PenaltyRows(const CNuc &co
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const ex::GammaDecaySpec &s = L.spec;
-    if (!compound.HasGammaDecayValues((int)r)) continue;
-    const std::vector<double> &q = compound.GammaDecayValues((int)r);
+    if (!compound.State().HasGammaDecayFill((int)r)) continue;
+    const std::vector<double> &q = compound.State().GammaDecayFillOf((int)r).q;
     auto index = [&](std::size_t i) { return L.energyIndex + L.photonChannels[i]; };
     double sum = 0.0;
     std::vector<std::pair<int, double>> sumTerms;
@@ -729,8 +730,8 @@ std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const ex::GammaDecaySpec &s = L.spec;
-    if (!compound.HasGammaDecayValues((int)r)) continue;
-    const std::vector<double> &q = compound.GammaDecayValues((int)r);
+    if (!compound.State().HasGammaDecayFill((int)r)) continue;
+    const std::vector<double> &q = compound.State().GammaDecayFillOf((int)r).q;
     double excess = 0.0;
     const std::vector<double> widths = PartialWidths(L, q, nullptr, &excess);
     out << s.name << ": level " << s.levelId << ", E_x = " << Fmt(s.levelEnergy) << " MeV" << std::endl;
@@ -752,7 +753,7 @@ std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable
           if (L.photonChannels[k] == final.channels[c]) out << " " << Fmt(widths[k]) << " eV (L = " << final.L[c] << ")";
       out << std::endl;
       // A channel on the external-capture floor: the engine's observed width (TransformOut) is not the record's.
-      const GammaDecayFill &fill = compound.GammaDecayFillOf((int)r);
+      const GammaDecayFill &fill = compound.State().GammaDecayFillOf((int)r);
       for (std::size_t k = 0; k < L.photonChannels.size(); k++)
         for (const int ch : final.channels)
           if (L.photonChannels[k] == ch && k < fill.floor.size() && fill.floor[k])

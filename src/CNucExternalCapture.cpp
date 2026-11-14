@@ -49,7 +49,8 @@ void ThrowIfFailed(const phys::LevelSet &set) {
 }
 }  // namespace
 
-double SqrtNFFactor(CNuc &compound, const JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma) {
+double SqrtNFFactor(const CNuc &compound, const JGroup *group, const ALevel *level, double n0,
+                    const std::vector<double> &gamma) {
   std::vector<phys::BoundChannel> channels;
   for (int ch = 1; ch <= group->NumChannels() && ch <= level->NumNFIntegrals(); ch++) {
     const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
@@ -58,7 +59,7 @@ double SqrtNFFactor(CNuc &compound, const JGroup *group, const ALevel *level, do
   return 1.0 / std::sqrt(phys::bound_state_normalization(n0, channels));
 }
 
-std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, const AChannel *channel) {
+std::pair<int, int> ExternalCaptureFinalState(const CNuc &compound, const AChannel *channel) {
   const char type = channel->GetRadType();
   if (type != 'E' && !(type == 'M' && channel->GetL() == 1)) return {0, 0};
   for (int j = 1; j <= compound.NumJGroups(); j++)
@@ -75,7 +76,8 @@ std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, const AChannel *ch
   return {0, 0};
 }
 
-complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChannel *channel, std::pair<int, int> finalState,
+complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const AChannel *channel,
+                               std::pair<int, int> finalState,
                                const ExternalCaptureInputs &values, const Config &configure,
                                ExternalCaptureSlopes *slopes) {
   if (slopes) {
@@ -139,8 +141,8 @@ complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChann
   return value;
 }
 
-complex ExternalReducedWidthOfInputs(CNuc &compound, const LevelInputs &inputs, int j, int la, const AChannel *channel,
-                                     const Config &configure) {
+complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelInputs &inputs, int j, int la,
+                                     const AChannel *channel, const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
   const JGroup *group = compound.GetJGroup(j);
@@ -154,7 +156,7 @@ complex ExternalReducedWidthOfInputs(CNuc &compound, const LevelInputs &inputs, 
   return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
 }
 
-complex ExternalReducedWidthOfTable(CNuc &compound, const ObservedLevelTable &table, int j, int la,
+complex ExternalReducedWidthOfTable(const CNuc &compound, const ObservedLevelTable &table, int j, int la,
                                     const AChannel *channel, const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
@@ -279,18 +281,14 @@ void CNuc::ECFinalStatesFromFormal() {
  */
 struct CNuc::CaptureMaskSetup {
   std::shared_ptr<const CNucSystem> structure;
-  struct Slot {
-    std::size_t block;
-    int group, channel;
-  };
-  std::vector<Slot> slots;
+  std::vector<CaptureMaskSlot> slots;
   bool gslCoulomb = false, rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
 void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
   captureMaskSetup_.reset();
-  captureMasks_.clear();
+  levelState_.ShapeCaptureProjectors(0);
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::IGNORE_ZERO_WIDTHS) ||
       !(configure.paramMask & Config::TRANSFORM_PARAMETERS))
     return;
@@ -307,20 +305,14 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
       for (std::size_t b = 0; b < map.groupOfBlock.size(); b++) {
         if (map.groupOfBlock[b] != group || map.levelOfBlockLevel[b].size() < 2) continue;
         bool known = false;
-        for (const CaptureMaskSetup::Slot &s : setup->slots) known = known || (s.group == group && s.channel == channel);
-        if (!known) setup->slots.push_back({b, group, channel});
+        for (const CaptureMaskSlot &s : setup->slots) known = known || (s.group == group && s.channel == channel);
+        if (!known) setup->slots.push_back({b, group, channel, map.levelOfBlockLevel[b]});
       }
     }
   }
   if (setup->slots.empty()) return;
   captureMaskSetup_ = setup;
-  for (const CaptureMaskSetup::Slot &s : setup->slots) {
-    CaptureMask mask;
-    mask.group = s.group;
-    mask.channel = s.channel;
-    mask.levels = map.levelOfBlockLevel[s.block];
-    captureMasks_.push_back(mask);
-  }
+  levelState_.ShapeCaptureProjectors(setup->slots.size());
 }
 
 /*!
@@ -332,17 +324,16 @@ void CNuc::FormalCaptureMasksFromParams() {
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(true);
   for (std::size_t i = 0; i < r.slots.size(); i++) {
-    const CaptureMaskSetup::Slot &s = r.slots[i];
-    CaptureMask &mask = captureMasks_[i];
-    JGroup *group = this->Group(s.group);
+    const CaptureMaskSlot &mask = r.slots[i];
+    const JGroup *group = this->GetJGroup(mask.group);
     const std::size_t n = mask.levels.size(), nc = group->NumChannels();
     std::vector<unsigned char> masked(n, 0);
     bool any = false;
     for (std::size_t lb = 0; lb < n; lb++) {
-      masked[lb] = levelInputs_.ZeroInputWidth(s.group, mask.levels[lb], s.channel) ? 1 : 0;
+      masked[lb] = levelInputs_.ZeroInputWidth(mask.group, mask.levels[lb], mask.channel) ? 1 : 0;
       any = any || masked[lb];
     }
-    mask.projector.clear();
+    levelState_.SetCaptureProjector((int)i, std::vector<double>());
     if (!any) continue;
     // A masked level whose particle amplitudes are all zero is decoupled: no shift-matrix element links it to another
     // level, so T is the identity on its row and column and Pi = P exactly (external_capture.md section 7).
@@ -356,9 +347,9 @@ void CNuc::FormalCaptureMasksFromParams() {
       for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(mask.group, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, s.block, E, gamma, B, cf, options);
+    const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, mask.block, E, gamma, B, cf, options);
     WarnOnce(brune, r.printedOnce);
-    mask.projector = phys::capture_mask(brune.transform, n, masked);
+    levelState_.SetCaptureProjector((int)i, phys::capture_mask(brune.transform, n, masked));
   }
 }
 
@@ -367,10 +358,12 @@ void CNuc::FormalCaptureMasksFromParams() {
  * projector (T depends on the parameters), or when a masked level is decoupled now but one of its particle amplitudes
  * is free: P is exact at the point, but dPi = [P, dT] is not zero there (external_capture.md section 7).
  */
-bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) {
-  for (const CaptureMask &mask : captureMasks_) {
-    if (!mask.projector.empty()) return true;
-    JGroup *group = this->Group(mask.group);
+bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) const {
+  if (!captureMaskSetup_) return false;
+  for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++) {
+    const CaptureMaskSlot &mask = captureMaskSetup_->slots[i];
+    if (!levelState_.CaptureProjector((int)i).empty()) return true;
+    const JGroup *group = this->GetJGroup(mask.group);
     for (int la : mask.levels) {
       if (!levelInputs_.ZeroInputWidth(mask.group, la, mask.channel)) continue;
       for (int ch = 1; ch <= group->NumChannels(); ch++)
@@ -388,10 +381,15 @@ bool CNuc::MaskedLevelCoupled(int j, int la) const {
   return false;
 }
 
-const CNuc::CaptureMask *CNuc::FormalCaptureMask(int group, int channel) const {
-  for (const CaptureMask &m : captureMasks_)
-    if (m.group == group && m.channel == channel) return &m;
-  return nullptr;
+int CNuc::FormalCaptureMaskSlot(int group, int channel) const {
+  if (!captureMaskSetup_) return -1;
+  for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++)
+    if (captureMaskSetup_->slots[i].group == group && captureMaskSetup_->slots[i].channel == channel) return (int)i;
+  return -1;
+}
+
+const CNuc::CaptureMaskSlot &CNuc::FormalCaptureMaskOf(int slot) const {
+  return captureMaskSetup_->slots[slot];
 }
 
 void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum) {

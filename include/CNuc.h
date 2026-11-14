@@ -62,16 +62,6 @@ class CNuc {
   const ModelDataSet &GetModelData() const { return *modelData_; }
   /// The gamma_decay records (GammaDecayMap.h), read by Fill; empty without <gammaDecays>.
   const GammaDecaySet &GetGammaDecays() const { return *gammaDecays_; }
-  /// What the last FillCompoundFromParams (GammaDecaySet::ToEngine) left for record r: its values (slot order) and
-  /// the parts of its photon amplitudes.
-  const GammaDecayFill &GammaDecayFillOf(int r) const { return gammaDecayFills_[r]; }
-  const std::vector<double> &GammaDecayValues(int r) const { return gammaDecayFills_[r].q; }
-  /// Whether a fill has stored the values of record r.
-  bool HasGammaDecayValues(int r) const { return r >= 0 && r < (int)gammaDecayFills_.size(); }
-  void SetGammaDecayFill(int r, GammaDecayFill fill) {
-    if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
-    gammaDecayFills_[r] = std::move(fill);
-  }
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int) const;
@@ -151,21 +141,23 @@ class CNuc {
   /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
   /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
   bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
-  /// The --ignore-externals mask of a channel capture in the formal basis (external_capture.md section 3): the
-  /// projector Pi = T^-1 P T over the R-matrix levels `levels` of group `group`, for the photon channel `channel`,
-  /// at the current fit parameters.  The masked entrance and exit vectors are Pi gamma.
-  struct CaptureMask {
+  /// The --ignore-externals mask of a channel capture in the formal basis (external_capture.md section 3): a slot per
+  /// (group, photon channel) with the R-matrix levels of the block the projector Pi = T^-1 P T acts on.  The projector
+  /// at the current fit parameters is the state's (LevelState::CaptureProjector(slot)); the masked entrance and exit
+  /// vectors are Pi gamma.  Set up by Initialize.
+  struct CaptureMaskSlot {
+    std::size_t block = 0;  ///< the block of the structure System
     int group = 0, channel = 0;
     std::vector<int> levels;
-    std::vector<double> projector;  ///< row-major, levels x levels; empty: Pi = P (no masked level, or all decoupled)
   };
-  /// The formal-basis mask of (group, photon channel), or nullptr: the mask is then diagonal, a level whose input
+  /// The formal-basis mask slot of (group, photon channel), or -1: the mask is then diagonal, a level whose input
   /// width in the channel is zero (LevelInputs::ZeroInputWidth) is left out (Brune, Park, a block of one level).
-  const CaptureMask *FormalCaptureMask(int group, int channel) const;
+  int FormalCaptureMaskSlot(int group, int channel) const;
+  const CaptureMaskSlot &FormalCaptureMaskOf(int slot) const;
   /// Formal basis, --ignore-externals, channel capture through a block of several levels: the masks are recomputed
   /// with the fit parameters.  True when the adjoint does not differentiate that dependence: a slot has a projector,
   /// or a masked level has a free particle amplitude (freeGamma(group, level, channel), 1-based).
-  bool FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma);
+  bool FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) const;
   /// The Brune (Park) and observed values of the levels at the current fit values, for the reports; prints the
   /// warnings of levels that do not convert.  Changes no level but for Park's shift functions (TransformToBrune).
   ObservedLevelTable TransformOut(const Config &);
@@ -239,7 +231,6 @@ class CNuc {
   void FormalCaptureMasksFromParams();
   bool MaskedLevelCoupled(int j, int la) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
-  std::vector<CaptureMask> captureMasks_;
   /// Whether TransformToBrune prints the warnings of levels that do not convert.
   enum class Messages { kPrint, kQuiet };
   /// A table with an entry for every level and channel, all values zero.
@@ -266,7 +257,6 @@ class CNuc {
   /// Setup state, shared by the copies (Clone).
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
-  std::vector<GammaDecayFill> gammaDecayFills_;
   /// The levels' input values (Inputs); made by Fill.
   LevelInputs levelInputs_;
   /// The levels at the current parameter vector (State); shaped by Fill.

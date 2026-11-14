@@ -29,11 +29,11 @@ class LevelInputs;
  * --use-rmc), or the static-moment factor and E2 scale; beta channels 1 (docs/upgrade/cnuc_split.md section 7).
  * The CNuc must outlive the returned function; it is read, not modified.
  */
-azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map,
+azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
                                                            const Config &configure);
 /// The same, with the two settings it reads from the Config given directly: GSL Coulomb functions, --use-rmc.
-azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, bool gslCoulomb,
-                                                           bool rmc);
+azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
+                                                           bool gslCoulomb, bool rmc);
 
 /*!
  * The input values of block b (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2), amplitudes (gammaIsRWA)

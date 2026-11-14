@@ -12,13 +12,14 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure) {
+phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
+                                                const Config &configure) {
   return ChannelFunctionsFromCNuc(compound, map, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
                                   !!(configure.paramMask & Config::USE_RMC_FORMALISM));
 }
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, bool gsl, bool rmc) {
-  CNuc *cn = &compound;
+phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map, bool gsl, bool rmc) {
+  const CNuc *cn = &compound;
   const CNucSystemMap m = map;
   return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
     const JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
