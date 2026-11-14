@@ -37,13 +37,12 @@ Source = "https://github.com/rdeboer1/AZURE2"
 
 [project.optional-dependencies]
 # What the worked examples in pyazr/examples/ need, beyond the core.
-# scipy: the recipes fit_scipy.py and fit_zeus.py.
-examples = ["matplotlib", "emcee", "multiprocess", "scipy>=1.7"]
-zeus = ["zeus-mcmc"]
+# matplotlib: the --plot options; emcee, iminuit, scipy: the recipes fit_emcee.py, fit_iminuit.py, fit_scipy.py.
+examples = ["matplotlib", "emcee", "iminuit", "scipy>=1.7"]
 # The web UI's server (python -m pyazr.ui project.azr); httpx for its tests and for scripts that use the API; scipy for
 # its fit job scipy_lbfgsb (pyazr/ui/jobs.py).
 web = ["fastapi", "uvicorn", "httpx", "scipy>=1.7"]
-all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc", "scipy>=1.7"]
+all = ["matplotlib", "emcee", "iminuit", "scipy>=1.7"]
 
 [project.scripts]
 # The command line (pyazr/cli.py; also python -m pyazr).  The program AZURE2 is installed beside it from the

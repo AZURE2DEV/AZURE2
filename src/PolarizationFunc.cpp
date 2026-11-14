@@ -56,7 +56,7 @@ int MaxProjection(double j1, double j2, double jp1, double jp2) {
   return (int)std::lround(j1 + j2 + jp1 + jp2);
 }
 
-AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, double angle, int aa, int ir)
+AmplitudeMatrix::AmplitudeMatrix(const CNuc *compound, double angle, int aa, int ir)
     : AmplitudeMatrix(compound->GetPair(aa)->GetJ(1), compound->GetPair(aa)->GetJ(2), compound->GetPair(ir)->GetJ(1),
                       compound->GetPair(ir)->GetJ(2)) {
   compound_ = compound;
@@ -66,7 +66,7 @@ AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, double angle, int aa, int ir)
   HarmonicTable(theta_, Config::maxLOrder, muMax_, harmonics_);
 }
 
-AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, int aa, int ir)
+AmplitudeMatrix::AmplitudeMatrix(const CNuc *compound, int aa, int ir)
     : AmplitudeMatrix(compound->GetPair(aa)->GetJ(1), compound->GetPair(aa)->GetJ(2), compound->GetPair(ir)->GetJ(1),
                       compound->GetPair(ir)->GetJ(2)) {
   compound_ = compound;

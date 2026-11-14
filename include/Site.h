@@ -216,11 +216,11 @@ class Site {
   }
   /// Whether the point's angular row depends on the energy: Q coefficients on a particle-to-particle reaction that is
   /// not charged elastic scattering, UPOS or A_y (the detector averages the lab distribution: CalcLegendreP).
-  bool RowDependsOnEnergy(CNuc *, const TargetEffect *) const;
+  bool RowDependsOnEnergy(const CNuc *, const TargetEffect *) const;
   /// The row P_L Q-transformed at c.m. energy `cmEnergy` (MeV) and c.m. angle `cmAngle` (deg; the point's own where
   /// not given), L = 0 .. maxL, into p.
-  void LegendreRowAt(double cmEnergy, int maxL, CNuc *, const TargetEffect *, double *p) const;
-  void LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *, const TargetEffect *, double *p) const;
+  void LegendreRowAt(double cmEnergy, int maxL, const CNuc *, const TargetEffect *, double *p) const;
+  void LegendreRowAt(double cmEnergy, double cmAngle, int maxL, const CNuc *, const TargetEffect *, double *p) const;
   /// The number K of Legendre coefficients the record holds (AngleFree) and the first of them.
   int NumLegendreCoefficients(const azure2::Results &r) const {
     return num_ang_slots_ ? (int)Rec(r)[azure2::Results::AngularOffset()] : 0;
@@ -331,7 +331,7 @@ class Site {
   complex GetECAmplitude(int, int) const;
   /// As GetECAmplitude, at the point's current (shifted) energy: from the energy tables
   /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.
-  complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
+  complex GetECAmplitudeWithShift(int, int, const CNuc *, const Config &) const;
   /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
   void ConvertExcitationEnergy(const PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
@@ -392,18 +392,18 @@ class Site {
   void SetCMAngle(double);
   /// Compute the Legendre polynomials up to a maximum order.  `data`: the working copy of the site (null for a point
   /// outside one).  These functions write this site only; Unit's functions of the same names reach its slots too.
-  void CalcLegendreP(WorkingCopy *data, int, CNuc *, const TargetEffect *);
+  void CalcLegendreP(WorkingCopy *data, int, const CNuc *, const TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
   /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
   /// of the point; rows->used, when set, receives every row used.
-  void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
+  void CalcEDependentValues(WorkingCopy *data, const CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this site.
-  void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &);
+  void ChannelKeys(WorkingCopy *data, const CNuc *, std::vector<ChannelTable::Key> &);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
-  double CompoundEnergy(CNuc *);
+  double CompoundEnergy(const CNuc *);
   /// Recompute those at the current, possibly shifted, energy; nothing while they are at that energy.
-  void RecalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
+  void RecalcEDependentValues(WorkingCopy *data, const CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   /// Are the energy-dependent values those of the site's present energy?
   bool EDependentCurrent() const { return eDependentValid_ && this->GetCMEnergy() == eDependentEnergy_; }
   /// The channel rows the point holds (L_o, sqrt(P), phases per J group and channel; null before they are computed),
@@ -423,12 +423,12 @@ class Site {
   /// Store a hard-sphere phase factor at (J-group, channel).
   void AddExpHardSpherePhase(int, int, complex);
   /// Compute the Coulomb amplitude \f$C_\alpha\f$.
-  void CalcCoulombAmplitude(WorkingCopy *data, CNuc *);
+  void CalcCoulombAmplitude(WorkingCopy *data, const CNuc *);
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
   /// `table`: the stage's channel table, for sqrt(P) and exp(-i phi) at a_c (null: computed).
-  void CalculateECAmplitudes(WorkingCopy *data, CNuc *, const Config &, const ChannelTable *table = nullptr);
+  void CalculateECAmplitudes(WorkingCopy *data, const CNuc *, const Config &, const ChannelTable *table = nullptr);
   /// Keep an external-capture amplitude of pathway (k, m) at the point's energy (or at `energy`, MeV c.m.); with
   /// --no-ec-table also in the run's cache (RunECAmplitudes).
   void AddECAmplitude(int, int, complex, const Config &);

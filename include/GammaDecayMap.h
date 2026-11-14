@@ -36,7 +36,7 @@ class LevelRow;
  * subtracted as TransformIn does (section 2.7).  The engine's physics is not involved: it receives amplitudes as
  * before.
  *
- * Set-up state, read-only after CNuc::Fill and shared by the copies of the compound (CNuc::Clone).  What a fill
+ * Set-up state, read-only after CNuc::Fill and shared by every owner of the compound's levels.  What a fill
  * computes is the level state's (LevelState::GammaDecayFillOf), which the gradient's pull-back, the priors and the
  * report read.
  */

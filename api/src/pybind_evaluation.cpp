@@ -49,13 +49,13 @@ struct PointOutput {
   const char *when;  // the condition on the data set, in words
   const char *doc;
   bool ragged;
-  bool (*applies)(const Segment &, CNuc &);
+  bool (*applies)(const Segment &, const CNuc &);
   std::vector<double> (*read)(const PointView &);
 };
 
-bool Always(const Segment &, CNuc &) { return true; }
+bool Always(const Segment &, const CNuc &) { return true; }
 // A capture reaction: the exit pair is a photon pair (type 10), or the total capture of the entrance's nucleus.
-bool Capture(const Segment &s, CNuc &nuc) {
+bool Capture(const Segment &s, const CNuc &nuc) {
   if (s.GetExitKey() == -1) return true;
   const PPair *exit = nuc.GetPairFromKey(s.GetExitKey());
   return exit && exit->GetPType() == 10;
@@ -66,7 +66,7 @@ const std::vector<PointOutput> &PointOutputs() {
       {"energy_lab", "MeV", "every data set", "the beam's lab energy of the point (after the data set's energy shift)",
        false, Always, [](const PointView &v) { return std::vector<double>{v.point.GetLabEnergy()}; }},
       {"angle_lab", "deg", "a differential data set", "the lab angle of the point",
-       false, [](const Segment &s, CNuc &) { return s.IsDifferential(); },
+       false, [](const Segment &s, const CNuc &) { return s.IsDifferential(); },
        [](const PointView &v) { return std::vector<double>{v.point.GetLabAngle()}; }},
       {"sfactor_conversion", "MeV", "every data set",
        "the point's factor E exp(2 pi eta) from a cross section in b to the S factor in MeV b (0 where it has none)",
@@ -77,11 +77,11 @@ const std::vector<PointOutput> &PointOutputs() {
        false, Capture, [](const PointView &v) { return std::vector<double>{v.point.GetFitE2CrossSection(v.results)}; }},
       {"legendre", "model", "an angular distribution (Legendre coefficients)",
        "the c.m. Legendre coefficients A_L of the point, L = 0, 1, ... (a list per point)",
-       true, [](const Segment &s, CNuc &) { return s.IsAngularDist(); },
+       true, [](const Segment &s, const CNuc &) { return s.IsAngularDist(); },
        [](const PointView &v) { return v.segment.LegendreCoefficients(v.point, v.results); }},
       {"nucleus_terms", "model", "a sample of several compound nuclei",
        "the abundance-weighted term of each compound nucleus of the sample (a list per point, the nuclei's order)",
-       true, [](const Segment &s, CNuc &) { return s.IsNatural(); },
+       true, [](const Segment &s, const CNuc &) { return s.IsNatural(); },
        [](const PointView &v) { return v.point.GetNaturalTerms(v.results); }},
   };
   return rows;
@@ -91,7 +91,7 @@ const std::vector<PointOutput> &PointOutputs() {
 // AZUREAPI::ReportedSegments) and of the run's rows of chiSquared.out.
 py::dict DataSetDict(const AZUREAPI &api, const AZUREAPI::ObjectiveBreakdown &b, int first, int last) {
   WorkingCopy &wc = *api.data();
-  CNuc &nuc = *api.compound();
+  const CNuc &nuc = *api.compound();
   const azure2::Results &res = api.results();
   const Segment &seg = wc.Data().GetSegments()[first];
   const int index = first + 1;  // the engine's segment number
@@ -241,7 +241,8 @@ py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_
   double lp, constant;
   {
     py::gil_scoped_release release;
-    AZURECalcMCMC sampler(api.data(), api.compound(), api.configure());
+    StatePool<WalkerLevels> walkers;
+    AZURECalcMCMC sampler(api.data(), api.compound(), api.state(), api.inputs(), walkers, api.configure());
     sampler.PrepareRun(x0, true);
     lp = sampler.LogProbability(x, true);
     constant = sampler.LogPriorNormalisation();

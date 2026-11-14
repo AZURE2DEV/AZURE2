@@ -309,3 +309,43 @@ def test_about_cites_what_the_documentation_cites():
     assert m, "app.js: no ABOUT.citation"
     shown = "".join(re.findall(r'"([^"]*)"', m.group(1)))
     assert shown == cited, (shown, cited)
+
+
+def test_files_route_lists_the_project_folder(tmp_path):
+    """GET /api/files: the project folder's files (not output/, checks/, hidden ones), paths as a field names them,
+    a numeric table with its columns; a symbolic link leading out of the root is not listed."""
+    project = copy_project("T2", tmp_path)
+    directory = os.path.dirname(project)
+    os.symlink("/etc/hostname", os.path.join(directory, "data", "outside.dat"))
+    with open(os.path.join(directory, "output", "x.dat"), "w") as f:
+        f.write("1 2\n")
+    with make_client(project) as client:
+        answer = client.get("/api/files").json()
+    files = {f["path"]: f for f in answer["files"]}
+    assert files["T2.azr"]["kind"] == "project"
+    assert files["data/s01_int_thin.dat"]["kind"] == "table" and files["data/s01_int_thin.dat"]["columns"] >= 3
+    size = os.path.getsize(os.path.join(directory, "data", "s01_int_thin.dat"))
+    assert files["data/s01_int_thin.dat"]["size"] == size
+    assert "data/outside.dat" not in files and not any(p.startswith(("output/", "checks/", ".")) for p in files)
+    assert answer["more"] is False
+
+
+def test_field_preview_is_the_engines_reading_on_a_copy(tmp_path):
+    """GET /api/project/records/{name}/preview: the description of the record with the field set, as
+    Project.set then Project.describe give it on a copy; a file the engine cannot read is refused with its
+    diagnostics; outside the root 403; the project is not changed."""
+    from pyazr import Project
+    project = copy_project("T2", tmp_path)
+    with make_client(project) as client:
+        before = client.get("/api/project/text").text
+        got = client.get("/api/project/records/s01_int_thin/preview",
+                         params={"field": "file", "value": "data/s04_thick.dat"}).json()
+        direct = Project.open(project)
+        direct.set("s01_int_thin", file="data/s04_thick.dat")
+        assert got["description"] == direct.describe("s01_int_thin", as_json=True)
+        refused = client.get("/api/project/records/s01_int_thin/preview", params={"field": "file", "value": "T2.azr"})
+        assert refused.status_code == 422 and refused.json()["diagnostics"], refused.text
+        outside = client.get("/api/project/records/s01_int_thin/preview",
+                             params={"field": "file", "value": "../../x.dat"})
+        assert outside.status_code == 403
+        assert client.get("/api/project/text").text == before

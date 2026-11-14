@@ -81,7 +81,7 @@ class ThmVertexBoundary {
   static Rule RuleOf(const Config &configure);
 
   /// Channel `channel` (1-based) of J group `jgroup` (number `j`, 1-based); `pair` is its particle pair; `state`
-  /// the levels' fit values (CNuc::State), which the object reads while it is used.
+  /// the levels' fit values (the evaluation's LevelState), which the object reads while it is used.
   ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, const LevelState &state, int j,
                     int channel);
 
@@ -127,6 +127,6 @@ class ThmVertexBoundary {
  * ERROR E_THM_HYBRID_POTENTIAL written, for a THM segment (or test segment, isTest) #key whose entrance pair has a
  * potential (docs/upgrade/spin_orbit_potential.md section 3.4); true otherwise.
  */
-bool ThmVertexAllowsPair(CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure);
+bool ThmVertexAllowsPair(const CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure);
 
 #endif

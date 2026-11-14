@@ -17,9 +17,10 @@
  * Indexed like the compound's levels: J-group j and level la, both 1-based, and the group's channels ch, 1-based; the
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in LevelState.
  *
- * Held by the compound nucleus (CNuc::Inputs); made by CNuc::Fill from the <levels> rows (ALevel's file values) and
- * the gamma_decay records, rewritten by CNuc::TransformIn and CNuc::FillCompoundFromParamsPhysical.  FillMnParams and
- * the reports read it.
+ * Held by the owner that set the compound up (the program's run, the session) and copied by an owner that transforms
+ * (the sampler's walkers, a limit's conversion, the rate's resonances, the sub-point grids); made by CNuc::Fill from
+ * the <levels> rows (ALevel's file values) and the gamma_decay records, rewritten by CNuc::TransformIn and
+ * CNuc::FillCompoundFromParamsPhysical.  FillMnParams and the reports read it.
  */
 class LevelInputs {
  public:

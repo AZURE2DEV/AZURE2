@@ -12,3 +12,10 @@ export function engineSchema() {
   const path = process.env.AZURE2_UI_SCHEMA;
   return path ? JSON.parse(readFileSync(path, "utf8")) : null;
 }
+
+/** pyazr's tables of a pair's and a description's fields (pyazr.kinds()["pairs"], ["description"]) when the runner
+ * gave them, else null. */
+export function engineKinds() {
+  const path = process.env.AZURE2_UI_KINDS;
+  return path ? JSON.parse(readFileSync(path, "utf8")) : null;
+}

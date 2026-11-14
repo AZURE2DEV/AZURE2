@@ -43,10 +43,12 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    user_guide/fitting
    user_guide/chi_squared
    user_guide/covariance_builder
+   user_guide/prior_builder
    user_guide/calculate
    user_guide/reaction_rate
    user_guide/mcmc
    user_guide/pyazr
+   user_guide/pyazr_examples
    user_guide/physics_functions
    user_guide/pyazr_command_line
    user_guide/endf

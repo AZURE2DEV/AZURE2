@@ -375,9 +375,13 @@ int runMCMC(Config &configure, const RunRequest &request) {
   try {
     CNuc *compound = new CNuc();
     WorkingCopy *data = new WorkingCopy();
+    // The run's levels (made by the set-up below) and the idle levels of the sampler's walkers.
+    LevelState state;
+    LevelInputs inputs;
+    StatePool<WalkerLevels> walkerPool;
 
     configure.outStream << "Filling Compound Nucleus..." << std::endl;
-    if (compound->Fill(configure) == -1) {
+    if (compound->Fill(configure, state, inputs) == -1) {
       configure.outStream << "Could not fill compound nucleus from file." << std::endl;
       delete compound;
       delete data;
@@ -392,7 +396,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
     // Fill the data object from segments and data file
     configure.outStream << "Filling Data Structures..." << std::endl;
     if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (const int filled = data->Fill(configure, compound); filled != 0) {
+      if (const int filled = data->Fill(configure, compound, inputs); filled != 0) {
         if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
         delete compound;
         delete data;
@@ -405,7 +409,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
       }
       RequestDataEntrances(*compound, configure);
     } else {
-      if (const int made = data->MakePoints(configure, compound); made != 0) {
+      if (const int made = data->MakePoints(configure, compound, inputs); made != 0) {
         if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
         delete compound;
         delete data;
@@ -422,7 +426,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
     // Initialize compound nucleus, with the capture-A_y terms the data sets need
     RequestCaptureAyTerms(*compound, *data);
     try {
-      compound->Initialize(configure);
+      compound->Initialize(configure, state, inputs);
     } catch (GSLException e) {
       configure.outStream << e.what() << std::endl;
       configure.outStream << "Calculation was aborted." << std::endl;
@@ -448,7 +452,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
 
     // Create parameter structure
     AZUREParams params;
-    compound->FillMnParams(params, &configure);
+    compound->FillMnParams(params, state, inputs, &configure);
     data->FillMnParams(params);
 
     // Read existing parameters if provided
@@ -461,9 +465,9 @@ int runMCMC(Config &configure, const RunRequest &request) {
     }
 
     // Setup compound nucleus from parameters
-    compound->FillCompoundFromParams(params.GetMinuitParams().Params());
+    compound->FillCompoundFromParams(params.GetMinuitParams().Params(), state);
     if (configure.paramMask & Config::USE_BRUNE_FORMALISM) {
-      compound->CalcShiftFunctions(configure);
+      compound->CalcShiftFunctions(configure, state);
     }
 
     // Extract initial parameter values (only non-fixed parameters)
@@ -477,7 +481,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
       }
     } else {
       // Use physical parameters
-      vector_r physicalParams = compound->GetTransformParams(compound->State(), compound->TransformOut(configure));
+      vector_r physicalParams = compound->GetTransformParams(state, compound->TransformOut(configure, state, inputs));
       data->Data().Abundances().AppendTo(params.GetMinuitParams().Params(), physicalParams);
 
       // Extend with data parameters if needed
@@ -695,7 +699,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
     configure.outStream << std::endl;
 
     // Create MCMC calculator
-    AZURECalcMCMC mcmcCalc(data, compound, configure);
+    AZURECalcMCMC mcmcCalc(data, compound, state, inputs, walkerPool, configure);
 
     // Set priors in MCMC calculator (same as GUI does in AZUREMCMCThread.cpp)
     if (priorsFound > 0) {

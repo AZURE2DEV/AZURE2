@@ -155,8 +155,8 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const LevelInputs &inputs, 
 // The two Systems of a CNuc, built once at the end of CNuc::Fill (CNuc.h).
 void CNuc::BuildSystems(const Config &configure) {
   try {
-    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, levelInputs_, configure, CNucSystemContent::Structure));
-    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, levelInputs_, configure, CNucSystemContent::AllGroups));
+    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, LevelInputs(), configure, CNucSystemContent::Structure));  // no level values
+    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, LevelInputs(), configure, CNucSystemContent::AllGroups));
   } catch (...) {
     // Kept for the readers, which stop on it where they did when each built its own System.
     systemStructure_.reset();

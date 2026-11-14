@@ -201,6 +201,8 @@ int main(int argc, char **argv) {
     cfg.configfile = fs::path(file).filename().string();
     cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
     CNuc compound;
+    LevelState state;  // the levels, as the run holds them
+    LevelInputs inputs;
     if (cfg.ReadConfigFile() < 0) {
       std::printf("  FAIL  %s: config\n", file.c_str());
       failures++;
@@ -210,14 +212,14 @@ int main(int argc, char **argv) {
     cfg.screenCheckMask = 0;
     cfg.ResolveMatrixRoute();
     InitializeECAmplitudeCache(cfg);
-    if (compound.Fill(cfg) == -1) continue;
+    if (compound.Fill(cfg, state, inputs) == -1) continue;
     for (int a = 1; a <= compound.NumPairs(); a++)
       if (compound.GetPair(a)->GetPType() != 10) compound.RequestEntrance(a);
     for (int a = 1; a <= compound.NumPairs(); a++)
       for (int p = 1; p <= compound.NumPairs(); p++)
         if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);
     try {
-      compound.Initialize(cfg);
+      compound.Initialize(cfg, state, inputs);
     } catch (const std::exception &x) {
       continue;
     }

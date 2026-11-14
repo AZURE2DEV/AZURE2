@@ -68,7 +68,7 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
 - Save before a run, the snapshot file (1.3, 14) → Project: `Project.session()` saves the user's file first. M (a
   session from the text).
 - Pairs: table, masses, AME2020 checks (4) → Nucleus: `Project.pairs`, `set_pair`; `sources.masses` (today
-  `masses`). E.
+  `masses`). E. As built (11.14): the table in the old program's columns, particles by name (`kinds()["pairs"]`).
 - Pairs: add, delete, channel regeneration (4) → Nucleus: no call. M.
 - Levels and channels: table, edit, fix, Wigner limit (5) → Nucleus: `levels`, `add_level`, `remove_level`,
   `set_level`, `set_channel`; `Parameters.units`, `physics.wigner_limit`. E.
@@ -77,7 +77,9 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
 - IAEA levels (5) → Nucleus: `sources.ensdf` (today `nds.fetch_levels`). E.
 - Hybrid potential (8) → Nucleus: `potential` records (`add_potential`, `set`, `remove`). E.
 - Data sets, groups, samples, UPOS, sums, scattering lengths (6.1) → Data: `dataset`, `normalization`,
-  `energy_scale`, `datum`, `target` records; `validate`; `describe`. E.
+  `energy_scale`, `datum`, `target` records; `validate`; `describe`. E. As built (11.14): "Segments From Data" as a
+  list of data sets in words (reaction, file, range, points, normalization, fitted), the data file chosen among the
+  folder's files with the engine's reading previewed (the old "Choose…").
 - Segments without data (6.2) → Data: `extrapolation` records. E.
 - EXFOR (6.3) → Data: `sources.exfor` (today `nds.search_exfor`, `fetch_exfor`, `to_dataset`). E.
 - Experimental effects (7) → Data: `target`, `beam`, `detector` records; `pyazr.stopping`. E (the screening
@@ -1674,6 +1676,143 @@ and the two downloads beside the CSV.
 **Extensibility.**  A new kind of covariance part: a row of `PART_KINDS` and a branch in `_terms` returning its
 terms (the page's form comes from the row).  A new named temperature grid: a row of `TEMPERATURE_GRIDS` (the page
 lists it from `GET /api/rate/grids`).
+
+### 11.13 The ENDF tab: an evaluation over the data, the check of a file (2026-11-14)
+
+The PI: an easy way of checking the evaluations, and of checking that an ENDF file is correctly formatted with the
+ENDF tools.  The tab is named **ENDF** (id `endf`): the word an evaluator looks for, and both screens start from an
+ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one row of `FIRST_VIEW`
+(`{ title: "ENDF", tab: "endf", hash: "#/endf" }`), left to the merge.
+
+- **Over the data** (`#/endf?files=a.endf,d/b.endf`): the files of `GET /api/endf/files` with a box and a colour
+  each (and a typed path inside the root), what each holds (`POST /api/endf/summary` = `read(path).summary()`),
+  and per data set the plot of the data times its norm, the model and each file's values at the points, the ratio
+  plot below (file / data with the data's error, file / model), the sections and coverage under it; where a file
+  has nothing for a data set, its refusal (what, allowed, fix) in that place (`POST /api/endf/curves`, a session
+  operation `Engine.endf_curves`: `Material.curves(data, session=s)` for every data set at the working x).
+- **Where the shown files live** (section 5): in the route (`?files=`, `?file=`), not in the project text and not
+  in the server; the tab remembers the last list per project for the page's life (`ctx.endfShown`).
+- **Check and correct** (`#/endf/check?file=a.endf[&job=id]`): the codes of `GET /api/endf/checkers` (found or not,
+  what each does and does to numbers, how they are found); **Check** is the job `endf_check`/`codes`
+  (`pyazr.endf.check`): the own findings (line, MF, MT, message, page) apart from each code's (MF, MT, record, text,
+  `meaning`), the counts, the raw report in a `details`; **Correct** is the job `endf_standardize`/`program`
+  (`pyazr.endf.standardize`), the text of `PROGRAMS[program][3]` said before the run, `Candidate.diff()` as a table,
+  then **Keep as a new file** / **Replace** (asks a second time) through `POST /api/endf/accept`.
+- **Jobs without a session**: `JobRow.session = False` (the worker builds no session; x0 and names are empty) and
+  `JobRow.files` (settings naming a file: the server refuses a path outside the root, 403, before the job starts).
+- **Files**: `pyazr/ui/evaluations.py` (the listing `endf_files`, the only place that says what an ENDF-6 file is:
+  its first two lines read by `pyazr.endf.records.split_line`; the listing is a filter over the page's one file
+  listing, `Server.files` of `GET /api/files`, since the merge; its `job_rows()`, the two job rows, joined to the
+  table by `jobs.job_rows`), `tabs/endf.js`, five rows of `routes.py`, `Engine.endf_curves`, server methods `endf_*`; lines in shared files: `app.js` (one import, one `TABS` row), `style.css` (a block at the end),
+  `selftest.js` (the ENDF views and Check pressed), `smoke_test.py` (two views, the ENDF files and the stand-in codes
+  in the server's environment).
+- **Extensibility**: a new checking code is a row of `PROGRAMS` (with its numbers text) and its deck in
+  `checkers.py`; a new quantity of `curves` is a branch of `pyazr.endf.curves`; neither changes a file of the page.
+
+**Tests**: `tests/pyazr/ui/endf_test.py` (the routes and jobs against the direct calls on T1 with the two test
+files and the stand-in codes; refusals; accept without and with overwrite), `js/endf.test.mjs` (the plots and rows
+from an answer), the self-test and two screenshots (`expert-endf`, `expert-endf-check`).
+
+### 11.14 The lists in words, the Reaction Rate in the first view, nothing with a structure typed (2026-11-14)
+
+**The PI's decisions of 2026-11-14** (answers to the director's questions): the Reaction Rate tab is in the first
+view as its last tab; the Fit tab has two depths, the sampler, the bands and MINOS one click away in the first view;
+the first view is the default also for a returning user (the page remembers the expert's depth only when the user
+switched to it with `expert` or the key `e`, `localStorage` `azure2-depth`; nothing else stores it); when the project
+has THM content the Physics and THM tabs join the first view (after Plot, before Reaction Rate).  The REACLIB
+defaults (tolerance 5 %, set label azr2) stay as they are.
+
+- **Lists in words** (`lists.js`).  A group of the Data tab shows one list per record kind under the kind's title
+  (the schema's), the data sets first (`listKinds`: kinds with a `quantity` field), the records they name after.  A
+  kind the engine describes shows the entries of its description (`GET /api/project/describe`) that pyazr's table
+  marks for the list: `pyazr.project.DESCRIPTION_FIELDS`, served as `kinds()["description"]` (reaction, observable,
+  data file, energy range (MeV, lab), angle window, points, active), the normalization in use with fitted or fixed
+  and the shared record (from the description's parameter of kind `norm`) and χ²; any other kind shows the fields
+  its records set (not those the schema marks rare), headed by the schema's `title`, the key in the hint.  "Used
+  by" is the engine's references (`Project.references`, `GET /api/project/references`).  The pairs' list is the old
+  program's columns from `ProjectPair.FIELDS` (`kinds()["pairs"]`: title, unit, doc, `list`, `rare`; the particles
+  by name split from the engine's pair label, J^π and the kind in words, new fields of `ProjectPair`).  The levels'
+  list shows J^π and the energy once.  A new record kind costs nothing: its list comes from the schema.
+- **The model as a curve** (not built; measured).  The Plot tab draws the model at the data points.  What exists:
+  `bands.trimmed_model(azr, grids=[extrapolation fields])` writes a `.azr` with extrapolation records only, and a
+  `Session(..., extrapolations=True)` on it evaluates them (`_extrapolation_vector` carries x); on T2 one excitation
+  function of 601 points costs 0.02 s (trim) + 0.01 s (session) + 0.006 s (evaluate).  It is not one call: the
+  extrapolation record of a data set (reaction or sum or ratio, quantity, engine unit, energy range from the
+  description, the angle of a differential set, J, l, s of a phase shift, the target, beam and detector of a folded
+  set) must be made from the data set, the temporary file lives in the project's folder, and the session must be
+  kept per text.  Needed: a pyazr call `Session.model_curve(name, points=, params=)` (or `pyazr.curves`) returning
+  the model on a fine grid over a data set that is a function of one variable, with the rule for the others
+  (several angles, a ratio of two pairs), and its route `GET /api/evaluation/curve/{name}`.  Not built: the brief
+  stops this item where a new pyazr call is needed.
+- **First view**: `FIRST_VIEW` ends with Physics and THM (`when: "thm"`, shown by app.js `CONDITIONS.thm`, the THM
+  tab's own rule `thm.js hasThm`: the server's `<thm>` or a data set naming an experiment) and Reaction Rate (the
+  pairs, the temperatures and Calculate; the parameters, the band, the comparison and the library labels under one
+  `details.more`).  Keys `1`–`9` follow the tab bar as shown.
+- **Files** (`GET /api/files`, `Server.files`: the project directory to 4 levels, at most 2000 files, not
+  `output/`, `checks/` or hidden ones, never outside the root; kind at a glance: project, table with its columns,
+  text, binary).  Every field of type `path` offers them (`forms.js` row `path`, `ctx.files`), as do the covariance
+  builder's file and the Rate tab's comparison (`ui.js withFiles`).  A file chosen in a field is previewed under it:
+  its first rows and what the engine makes of the record with it on a copy of the project (`GET
+  /api/project/records/{name}/preview?field=&value=`, `Server.field_preview`: `Project.set` then
+  `Project.describe`; a refusal with its three parts).  `?field=file&preview=<path>` links to that state.
+- **References**: a reference's choice lists the existing records and "new <kind> …" (`forms.js NEW_RECORD`), which
+  opens the form of a new record of that kind (`#/data/+new?kind=`); never a value sent.
+- **Lists of numbers** (`number_list`, a detector's attenuation): a box per number and two empty ones; an emptied
+  box removes its number.  **A job's free parameters** (MINOS's `parameters`, setting type `names`): a check box per
+  free parameter of the working x (`ctx.freeNames` from `GET /api/x`), none ticked meaning every one.
+- **The pair form** from `kinds()["pairs"]`: `partner_fields` (J, parity as a choice of its `values`, Z, M (u),
+  g-factor), the route's other arguments with the words and units of `fields` or `arguments`; the page's lists
+  `UNITS`, `PARTNER`, `PAIR_KINDS` are gone.
+- **The Fit tab's two depths**: the first view's job form offers the kinds `jobs.py FIRST_VIEW_KINDS` marks (a fit;
+  the row's `first_view`), "More: minos, sample, bands, rate …" offers the others; the job table under the form is in
+  the expert's depth.  `#/fit?job=<kind>&method=<method>` opens a job's form.
+- **Still typed**: a data set's `columns`, a `reaction`, a `grid` (extrapolation energies and angles), a target's
+  `composition` and `nucleus`, the structured fields (stopping, straggling, profile, isotopes) and a THM key's
+  name; the covariance builder's list of data sets.  A list of numbers grows by two boxes per Apply.
+
+**Tests.** `tests/pyazr/ui/js/lists.test.mjs` (heads per kind, the description's columns, the norm's words, used
+by, the pairs' columns, "new …", a list of numbers), `nucleus.test.mjs` (the pair form's table),
+`firstview.test.mjs` (ten views, `when`), `nucleus_routes_test.py` (pairs' names, references, a target's
+description refused), `static_test.py` (the files route, the preview against `Project.set` + `describe`), the
+smoke test (the tabs shown on T1 and T2, the preview and "new …" pressed by the self-test, the Fit tab's kinds in
+both depths; views first-rate, first-physics, first-dataset, first-file-preview, first-new-detector, first-fit,
+fit-minos, first-new-pair).
+
+### 11.15 The prior builder (2026-11-14)
+
+The prior on the fit parameters (`priorCovariance`) from named parts, as the covariance builder is for a data set:
+pyazr's arithmetic with a screen that calls it (user guide `prior_builder.rst`).
+
+- **pyazr** (`pyazr/priors.py`): `build(parameters, parts, directory=)` over a session's parameter table (names,
+  kinds, units, fixed marks, limits, the priors of their own, the basis come from `Session.parameters`; nothing is
+  listed twice); parts `PART_KINDS`: `fit` (an earlier fit's `param.sav` and `covariance.dat`, the numbers of
+  `prior_from_fit`, the tag checked against the run's basis), `width`, `correlation`, `chain` (a sampler job's
+  `chain_<id>.npy` with its JSON: what pyazr reads of a chain today, `read_chain`).  The `Prior` record prints
+  itself; its checks are the engine's (symmetric, the engine's Cholesky rule) with the eigenvalues and the condition
+  number; its notes say what the engine does: a fixed parameter marginalized, a prior of its own replaced (measured:
+  `ReplaceDiagonalPriors`), a centre outside the limits.  `read_prior` reads the grammar as `PriorCovariance::Read`
+  does (a table of 35 files, `tests/pyazr/prior_builder_test.py`).
+- **Server** (`pyazr/ui/prior.py`, three methods of `server.py`, three rows of `routes.py`): `GET /api/prior` (the
+  key, the parts from the file's `#pyazr.prior` line, the proposed name, `kinds_table()`, the project's files: the
+  page's one listing, `Server.files(outputs=True)`, which adds the program's `output`, where a fit's `param.sav` and
+  `covariance.dat` and a sampler's chain are, since the merge), `POST /api/prior/build` (the session's
+  parameter rows made back into a `pyazr.Parameters` with `session.basis_of(options)`, then `build`), `POST
+  /api/prior/write` (`State.edit_with_files`: the file and `set_config(priorCovariance=)` as one entry).  Removing is
+  the config route.  `State.edit_with_files` now keeps an entry when only a file changed (a rewrite under the name
+  the text already holds); before, such a write was undone at once and the answer said it was written (the
+  covariance builder had the same defect).
+- **Page** (`tabs/prior.js`, `#/prior`, no header link): the parameter rows of `fitting.js` with check boxes; a part
+  per row with a control per field type (`path:<suffixes>` a select of the project's files, `names` the checked
+  parameters, `number`, `integer`, `pairs` two selects and a coefficient, `matrix` shown only); Build; the heat map
+  of the server's correlation; Write and use; Remove the prior.  Shared files, one line each: `app.js` (the import,
+  the `TABS` row), `tabs/fit.js` (the link "Prior on the parameters…"), `smoke_test.py` (`VIEWS`).
+
+**Tests.** `tests/pyazr/prior_builder_test.py` (pyazr: the readers' table, the term through a session = d^T C^-1 d,
+the fit part = `prior_from_fit`, the chain part, every refusal and note), `tests/pyazr/ui/prior_builder_test.py`
+(the routes against the direct calls on T1, the history), the smoke test's view `prior`.
+
+**Extensibility.** A new kind of part: a row of `PART_KINDS` and a function of `_BLOCKS`; a new type of field: its
+control in `fieldInput` of `tabs/prior.js`.
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 

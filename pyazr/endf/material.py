@@ -81,7 +81,8 @@ class Header:
 class Material:
     """One material of an ENDF-6 file: ``mat``, its sections by ``(MF, MT)``, its header (``header``, None
     without MF=1/MT=451) and the calls that read them: :meth:`summary`, :meth:`cross_section` (MF=3),
-    :meth:`distribution` (MF=6), :meth:`curves` (the file's values at a data set's points)."""
+    :meth:`distribution` (MF=6), :meth:`resonances` (MF=2 LRF=7), :meth:`curves` (the file's values at a data
+    set's points)."""
 
     def __init__(self, path, mat, sections, tpid=None):
         self.path, self.mat, self.sections, self.tpid = path, mat, dict(sections), tpid
@@ -123,6 +124,13 @@ class Material:
         """MF=6/MT as a :class:`pyazr.endf.distributions.Distribution` (its products and their laws)."""
         from .distributions import read_distribution
         return read_distribution(self, mt)
+
+    def resonances(self, isotope=0, energy_range=0):
+        """MF=2/MT=151 in the R-Matrix Limited format as an :class:`pyazr.endf.resonances.LRF7` record (the file's
+        units and frame); what AZURE2 cannot read is refused with :class:`pyazr.FormatRefused`
+        (:func:`pyazr.endf.resonances.read_resonances`)."""
+        from .resonances import read_resonances
+        return read_resonances(self, isotope=isotope, energy_range=energy_range)
 
     def summary(self):
         """What the file holds, as a :class:`pyazr.endf.summary.Summary` that prints itself."""

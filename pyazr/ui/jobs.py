@@ -515,7 +515,10 @@ class JobRow:
     (the page offers it beside that job's result; method None: any job of that kind), or a tuple of such pairs;
     ``takes`` the key of that job's result it needs (a covariance, a chain: the job is refused without one, and offered
     only beside a result that has it); ``facts`` what the page shows of it beside its doc (name -> value: the program's
-    switch, whether it gives a covariance, whether MINOS can follow).
+    switch, whether it gives a covariance, whether MINOS can follow); ``files`` the names of its settings that name a
+    file (the server refuses one outside its root before the job starts); ``session`` False for a job that needs no
+    session of the project (its worker builds none; x0 and the free names are empty); ``tab`` the page's tab whose
+    form starts it (the Fit tab's job form offers the rows of "fit" only; every row is in the expert's job table).
     """
     kind: str
     method: str
@@ -527,6 +530,9 @@ class JobRow:
     follows: tuple = None
     takes: str = None
     facts: tuple = ()  # (name, value) pairs
+    files: tuple = ()
+    session: bool = True
+    tab: str = "fit"
 
     def defaults(self):
         return {s.name: s.default for s in self.settings}
@@ -576,7 +582,8 @@ JOBS = (
            facts=(("from", "a sampler job (its best point as the start)"),)),
     JobRow("rate", "engine", "the reaction rate N_A<sigma v> of a pair of pairs at the start point, computed by the "
            "engine as the program's rate command (pyazr.rate), with the Gamow window, an optional band and an "
-           "optional comparison table", run=rate_engine, follows=(("fit", None), ("sample", "emcee")),
+           "optional comparison table", run=rate_engine, tab="rate",
+           follows=(("fit", None), ("sample", "emcee")),
            settings=(Setting("entrance", "integer", 1, "the entrance pair's key"),
                      Setting("exit", "integer", 2, "the exit pair's key; -1 the total radiative capture"),
                      Setting("grid", "text", "table", "table or log20 (pyazr.rate.TEMPERATURE_GRIDS), or custom: "
@@ -629,10 +636,12 @@ def engine_rows(fitters):
 
 @lru_cache(maxsize=1)
 def job_rows():
-    """The whole job table: the engine's fit rows, the rows of :data:`JOBS`, the engine's MINOS rows."""
+    """The whole job table: the engine's fit rows, the rows of :data:`JOBS`, the ENDF rows
+    (:func:`pyazr.ui.evaluations.job_rows`), the engine's MINOS rows."""
     import pyazr
+    from .evaluations import job_rows as endf_rows
     fits, minos = engine_rows(pyazr.kinds()["fitters"])
-    return fits + JOBS + minos
+    return fits + JOBS + endf_rows() + minos
 
 
 def job_row(kind, method):
@@ -644,6 +653,11 @@ def job_row(kind, method):
     raise NotFound(f"no job {kind}/{method} (the job table: {', '.join(known)})", known=known)
 
 
+# The kinds of job the Fit tab's first view offers (the PI, 2026-11-14: fit, stop, accept, undo and the result against
+# the data first); the others (MINOS, the sampler, the bands, ...) are one click away.  A row's ``first_view``.
+FIRST_VIEW_KINDS = ("fit",)
+
+
 def job_table():
     """The job table as data (GET /api/jobs/kinds)."""
     out = []
@@ -653,7 +667,8 @@ def job_table():
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": _follows(r.follows),
-                    "takes": r.takes, "facts": dict(r.facts)})
+                    "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session,
+                    "tab": r.tab, "first_view": r.kind in FIRST_VIEW_KINDS})
     return out
 
 
@@ -723,7 +738,8 @@ def listen_for_stop(channel, stop):
 
 
 def run_job(channel):
-    """A job worker: read the job's spec, build the session, run the row's function, report, write the checkpoint."""
+    """A job worker: read the job's spec, build the session (unless the row needs none), run the row's function,
+    report, write the checkpoint."""
     from .engine import objective_of, open_for_job
     spec = channel.receive()
     record = {"id": spec["id"], "kind": spec["kind"], "method": spec["method"], "text_rev": spec["rev"],
@@ -742,16 +758,19 @@ def run_job(channel):
 
     try:
         write_checkpoint(checkpoint, record)
+        row = job_row(spec["kind"], spec["method"])
         t0 = time.perf_counter()
-        session, x0, names = open_for_job(spec["session_file"], spec["cwd"])
+        session, x0, names, fg = None, [], [], None
+        if row.session:
+            session, x0, names = open_for_job(spec["session_file"], spec["cwd"])
+            fg = objective_of(session).value_and_grad
         channel.send({"event": "built", "build_s": time.perf_counter() - t0, "names": names})
-        if spec.get("x0"):
+        if spec.get("x0") and row.session:
             x0 = vector_from_names(spec["x0"], names, x0)
         record["state"] = "running"
         write_checkpoint(checkpoint, record)
-        row = job_row(spec["kind"], spec["method"])
-        tracker = Tracker(objective_of(session).value_and_grad, names, report=report, stop=stop, session=session,
-                          source=spec.get("source"), job_id=spec["id"], products=spec["products"])
+        tracker = Tracker(fg, names, report=report, stop=stop, session=session, source=spec.get("source"),
+                          job_id=spec["id"], products=spec["products"])
         try:
             status, message, extra = row.run(tracker, x0, spec["settings"], names)
         except StopRequested:

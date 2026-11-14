@@ -96,6 +96,10 @@ struct Model {
   std::ostringstream log;  // the engine's messages for this model (not checked), one stream per thread
   Config cfg;
   CNuc *compound = nullptr;
+  LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
+  LevelInputs inputs;
+  FitterStates fitterStates;
+  StatePool<WalkerLevels> walkers;
   WorkingCopy *data = nullptr;
   AZUREParams params;
   std::unique_ptr<ParameterLimitsManager> limits;
@@ -111,18 +115,18 @@ struct Model {
     if (!ok) return;
     compound = new CNuc();
     data = new WorkingCopy();
-    if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) {
+    if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) {
       ok = false;
       return;
     }
     RequestCaptureAyTerms(*compound, *data);
     RequestDataEntrances(*compound, cfg);
-    compound->Initialize(cfg);
+    compound->Initialize(cfg, state, inputs);
     ok = data->Initialize(compound, cfg) != -1;
-    compound->FillMnParams(params, &cfg);
+    compound->FillMnParams(params, state, inputs, &cfg);
     data->FillMnParams(params);
-    compound->FillCompoundFromParams(params.GetMinuitParams().Params());
-    compound->CalcShiftFunctions(cfg);
+    compound->FillCompoundFromParams(params.GetMinuitParams().Params(), state);
+    compound->CalcShiftFunctions(cfg, state);
   }
   ~Model() {
     delete compound;
@@ -138,13 +142,12 @@ struct Model {
     for (int i = 0; i < N(); i++) all.push_back(params.GetMinuitParams().Value(i));
     if (at) all = *at;
     if (!useRWA) {
-      CNuc *c = compound->Clone();
-      c->FillCompoundFromParams(all);
-      c->CalcShiftFunctions(cfg);
-      vector_r phys = c->GetTransformParams(c->State(), c->TransformOut(cfg));
+      LevelState c(state);
+      compound->FillCompoundFromParams(all, c);
+      compound->CalcShiftFunctions(cfg, c);
+      vector_r phys = compound->GetTransformParams(c, compound->TransformOut(cfg, c, inputs));
       for (int i = (int)phys.size(); i < N(); i++) phys.push_back(all[i]);
       all = phys;
-      delete c;
     }
     std::vector<double> x;
     for (int i = 0; i < N(); i++)
@@ -159,7 +162,7 @@ struct Fit {
   azure2::Results results;
   std::unique_ptr<AZURECalc> calc;
   explicit Fit(Model &model) : m(model) {
-    m.limits.reset(new ParameterLimitsManager(&m.cfg, m.compound, m.data, &m.params));
+    m.limits.reset(new ParameterLimitsManager(&m.cfg, m.compound, m.state, m.inputs, m.data, &m.params));
     m.limits->ReadParameterSettings();
     m.limits->ApplyAllParameterSettings(m.params);
     if (!m.cfg.priorCovariance.empty()) {
@@ -173,7 +176,7 @@ struct Fit {
       m.data->SetPriorCovariance(m.priorCov);
       if (m.priorCov && m.priorCov->Size() > 0) ReplaceDiagonalPriors(m.compound, m.data, *m.priorCov);
     }
-    calc.reset(new AZURECalc(m.data, results, m.compound, m.cfg, m.limits.get()));
+    calc.reset(new AZURECalc(m.data, results, m.compound, m.state, m.inputs, m.fitterStates, m.cfg, m.limits.get()));
     calc->SetErrorDef(1.0);
     std::vector<bool> fixed;
     for (int i = 0; i < m.N(); i++) fixed.push_back(m.Fixed(i));
@@ -184,17 +187,17 @@ struct Fit {
   double Chi2At(const AZURECalcMCMC &mc, const std::vector<double> &x, bool useRWA) {
     vector_r full = useRWA ? mc.ReconstructFullParameters(x) : mc.ReconstructFullParametersPhysical(x);
     if (!useRWA) {
-      CNuc *c = m.compound->Clone();
-      c->FillCompoundFromParamsPhysical(full);
+      LevelState c(m.state);
+      LevelInputs ci(m.inputs);
+      m.compound->FillCompoundFromParamsPhysical(full, c, ci);
       m.data->FillAbundancesFromVector(full);
-      c->TransformIn(m.cfg);
+      m.compound->TransformIn(m.cfg, c, ci);
       AZUREParams p;
-      c->FillMnParams(p, &m.cfg);
+      m.compound->FillMnParams(p, c, ci, &m.cfg);
       m.data->FillMnParams(p);
       vector_r fit = p.GetMinuitParams().Params();
       for (size_t i = (size_t)m.data->Data().GetNormParamOffset(); i < fit.size() && i < full.size(); i++) fit[i] = full[i];
       full = fit;
-      delete c;
     }
     return (*calc)(full);
   }
@@ -202,7 +205,7 @@ struct Fit {
 
 // The sampler on a model, set up as RunMCMCSampling sets it up (parameters, automatic priors, prior covariance).
 std::unique_ptr<AZURECalcMCMC> Sampler(Model &m, bool useRWA) {
-  std::unique_ptr<AZURECalcMCMC> mc(new AZURECalcMCMC(m.data, m.compound, m.cfg));
+  std::unique_ptr<AZURECalcMCMC> mc(new AZURECalcMCMC(m.data, m.compound, m.state, m.inputs, m.walkers, m.cfg));
   mc->PrepareRun(m.Start(useRWA), useRWA);
   return mc;
 }
@@ -261,7 +264,7 @@ void RemoveChain(const std::string &dir) {
 // initial ensemble and every step).
 std::vector<std::vector<double>> Chain(Model &m, bool useRWA, int steps, double spreadPercent = 1.0) {
   RemoveChain(m.cfg.outputdir);
-  AZURECalcMCMC mc(m.data, m.compound, m.cfg);
+  AZURECalcMCMC mc(m.data, m.compound, m.state, m.inputs, m.walkers, m.cfg);
   std::vector<std::vector<double>> samples;
   mc.RunMCMCSampling(8, steps, m.Start(useRWA), samples, spreadPercent, 1, useRWA, 0.5);
   return samples;

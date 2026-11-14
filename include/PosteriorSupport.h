@@ -7,6 +7,8 @@
 
 class AZUREParams;
 class CNuc;
+class LevelInputs;
+class LevelState;
 class Config;
 class WorkingCopy;
 
@@ -27,7 +29,8 @@ struct PosteriorSupport {
   /// The fit's limits of the free parameters of `params` (filled by CNuc and WorkingCopy::FillMnParams, after a
   /// parameter file if any): the kinds' own, then those of <parameterSettings>, which this applies to `params` as
   /// AZUREMain does before a fit.
-  static PosteriorSupport OfFit(const Config &configure, CNuc *compound, WorkingCopy *data, AZUREParams &params);
+  static PosteriorSupport OfFit(const Config &configure, const CNuc *compound, const LevelState &state,
+                                const LevelInputs &inputs, WorkingCopy *data, AZUREParams &params);
   /// The limits `params` holds for its free parameters, as they stand (OfFit after it has applied the settings; a
   /// caller that has applied them itself, the API's session).
   static PosteriorSupport OfParameters(const AZUREParams &params);

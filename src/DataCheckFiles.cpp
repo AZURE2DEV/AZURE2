@@ -157,7 +157,7 @@ void WorkingCopy::PrintLegendreP(const Config &configure) {
  * Prints the values calculated by Unit::CalcEDependentValues for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
+void WorkingCopy::PrintEDependentValues(const Config &configure, const CNuc *theCNuc) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_ENERGY_DEP) {
@@ -221,7 +221,7 @@ void WorkingCopy::PrintEDependentValues(const Config &configure, CNuc *theCNuc) 
  * Prints the values calculated by Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) {
+void WorkingCopy::PrintCoulombAmplitude(const Config &configure, const CNuc *theCNuc) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_COUL_AMPLITUDES) {

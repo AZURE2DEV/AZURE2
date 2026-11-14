@@ -6,7 +6,8 @@ the direct data it is fitted with. A project folder holds ``<name>.azr`` (the
 best fit), ``data/`` (every file names its source and what its points are in
 ``#`` header lines) and empty ``checks/`` and ``output/`` directories. Run
 the ``.azr`` from the command line or with ``pyazr``. The THM options are described in
-:doc:`../theory/thm_implementation`.
+:doc:`../theory/thm_implementation`. The Python scripts of ``pyazr/examples/``, one task each, are listed in
+:doc:`../user_guide/pyazr_examples`.
 
 "File alone" is the CLI calculation of the file as stored,
 

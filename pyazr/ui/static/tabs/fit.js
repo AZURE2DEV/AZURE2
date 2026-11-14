@@ -45,6 +45,10 @@ export async function render(ctx, el, args) {
     if (e.chi2 !== undefined) view.written[job.id] = { ...e, rev: ctx.project.rev };
   }
 
+  const asked = ctx.route.params;  // a link to a job's form: ?job=<kind>&method=<method>
+  if (asked.job && view.form.kind !== asked.job) Object.assign(view, { form: { kind: asked.job,
+    method: asked.method }, allKinds: true });
+  ctx.freeNames = Object.keys(x || {});  // the free parameters a job's list of names is chosen from
   const left = h("div", {}, jobForm(ctx, table, job, view), jobsList(ctx, jobs, job));
   const right = h("div", {}, job ? jobPanel(ctx, job, table, view)
     : section("Job shown", h("p.hint", {}, "No job yet: choose a recipe and press Run. A job runs in its own process "
@@ -119,6 +123,7 @@ function parametersSection(ctx, params, x, job, records, view) {
     h("span.hint", {}, `${params.length} parameters, ${nFree} free`
       + (job?.best?.x ? ` · fit, error: job ${job.id}` : "")),
     h("span.spacer"),
+    h("a", { href: "#/prior", title: "a prior on several parameters, correlated" }, "Prior on the parameters…"),
     button("Reset x", "Set the working x back to the values of the project text (PATCH /api/x, reset)",
       () => ctx.edit("reset x to the text's values", () => ctx.api.patch("/api/x", { reset: true })).catch(() => {})));
   const holder = h("div.parameter-table");

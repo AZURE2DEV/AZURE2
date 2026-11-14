@@ -19,6 +19,8 @@ import * as physicsTab from "./tabs/physics.js";
 import * as thmTab from "./tabs/thm.js";
 import * as rateTab from "./tabs/rate.js";
 import * as covarianceTab from "./tabs/covariance.js";
+import * as endfTab from "./tabs/endf.js";
+import * as priorTab from "./tabs/prior.js";
 
 /** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it;
  * `shown(ctx)` (where given): whether the project has what the tab is about (its link is hidden otherwise; the route
@@ -33,11 +35,13 @@ export const TABS = [
   { id: "thm", title: "THM", module: thmTab, shown: thmTab.shown },
   { id: "rate", title: "Rate", module: rateTab },
   { id: "covariance", title: "Covariance", module: covarianceTab, shown: covarianceTab.shown },
+  { id: "endf", title: "ENDF", module: endfTab },
+  { id: "prior", title: "Prior", module: priorTab, shown: priorTab.shown },
 ];
 
 /** The keys of the page, shown by "?" (the overlay lists exactly this table). */
 export const KEYS = [
-  ["1 … 7", "switch to the tab of that number"],
+  ["1 … 9", "switch to the tab of that number (as the tab bar shows them)"],
   ["c", "Calculate: every data set with the model, the residuals and χ², and what changed since the last time"],
   ["e", "switch between the first view and the expert's (every tab, every field)"],
   ["Ctrl+Z", "undo the last edit (outside a text box)"],
@@ -124,12 +128,20 @@ ctx.refresh = async () => {
 };
 
 /** Hide the link of every tab whose `shown(ctx)` says the project has nothing for it. */
+/** The conditions a view of the first view can be shown under (layout.js FIRST_VIEW `when`): the project's own
+ * content as the server reads it. */
+const CONDITIONS = { thm: (c) => thmTab.shown(c) };
+
 async function showTabs() {
-  await Promise.all(TABS.filter((t) => t.shown).map(async (t) => {
+  await Promise.all([...TABS.filter((t) => t.shown).map(async (t) => {
     let on = true;
     try { on = await t.shown(ctx); } catch { /* a failed read shows the tab */ }
     ctx.tabBar.querySelectorAll(`a.tab[data-tab="${t.id}"]`).forEach((link) => { link.hidden = !on; });
-  }));
+  }), ...Object.entries(CONDITIONS).map(async ([when, holds]) => {
+    let on = false;
+    try { on = await holds(ctx); } catch { /* a failed read keeps the first view as it is */ }
+    ctx.tabBar.querySelectorAll(`a.tab[data-when="${when}"]`).forEach((link) => { link.hidden = !on; });
+  })]);
 }
 
 async function evaluate() {
@@ -244,9 +256,11 @@ function toggleDepth() {
 /** The tab bar of the depth in use. */
 function drawTabBar() {
   ctx.tabBar.textContent = "";
-  shownTabs(ctx.expert).forEach((t, i) => {
-    const a = h("a.tab", { href: t.hash, role: "tab", title: `${t.row?.title === t.title ? t.title
-      : `${t.title} (the ${t.row?.title} tab)`} (${i + 1})`, data: { tab: t.tab, view: t.hash } }, t.title);
+  shownTabs(ctx.expert).forEach((t) => {
+    const title = t.row?.title === t.title ? t.title : `${t.title} (the ${t.row?.title} tab)`;
+    const data = { tab: t.tab, view: t.hash, ...(t.when ? { when: t.when } : {}) };
+    const a = h("a.tab", { href: t.hash, role: "tab", title, data }, t.title);
+    if (t.when) a.hidden = true;  // until showTabs has read the project
     ctx.tabBar.appendChild(a);
   });
 }
@@ -375,8 +389,8 @@ function onKey(e) {
   else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
   else if (mod || e.altKey) return;
   else if (/^[1-9]$/.test(e.key)) {
-    const t = shownTabs(ctx.expert)[+e.key - 1];
-    if (t) ctx.navigate(t.hash);
+    const link = [...ctx.tabBar.querySelectorAll("a.tab:not([hidden])")][+e.key - 1];  // the tabs as shown
+    if (link) ctx.navigate(link.dataset.view);
   } else if (e.key === "c") ctx.calculate().catch((err) => ctx.showError(err));
   else if (e.key === "e") toggleDepth();
   else if (e.key === "?") toggleKeys();

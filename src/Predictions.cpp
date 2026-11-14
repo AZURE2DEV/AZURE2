@@ -17,7 +17,7 @@ namespace azure2 {
 
 namespace {
 
-int NucleusOf(CNuc &compound, int entranceKey) {
+int NucleusOf(const CNuc &compound, int entranceKey) {
   if (!compound.IsPairKey(entranceKey)) return 0;
   return compound.GetPair(compound.GetPairNumFromKey(entranceKey))->GetNucleus();
 }
@@ -47,7 +47,7 @@ void AppendLines(WorkingCopy &data, const char *what, const std::vector<std::str
 
 }  // namespace
 
-experiment::PredictionSetup PredictionSetupOf(const Segment &segment, CNuc &compound) {
+experiment::PredictionSetup PredictionSetupOf(const Segment &segment, const CNuc &compound) {
   experiment::PredictionSetup s;
   s.reaction = segment.GetReaction();
   s.absolute = segment.IsCoefficientAbsolute();
@@ -99,16 +99,18 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     return lines;
   }
   CNuc compound;
-  if (compound.Fill(configure) == -1 || compound.NumPairs() == 0) {
+  LevelState state;
+  LevelInputs inputs;
+  if (compound.Fill(configure, state, inputs) == -1 || compound.NumPairs() == 0) {
     lines.push_back("project: <levels> cannot be set up");
     return lines;
   }
   WorkingCopy data, extrapolations;
-  if (data.Fill(configure, &compound) != 0)
+  if (data.Fill(configure, &compound, inputs) != 0)
     lines.push_back("data: set-up failed");
   else
     AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
-  if (extrapolations.MakePoints(configure, &compound) != 0)
+  if (extrapolations.MakePoints(configure, &compound, inputs) != 0)
     lines.push_back("extrapolation: set-up failed");
   else
     AppendLines(extrapolations, "extrapolation", RecordNames(configure, "extrapolation"), lines);
@@ -117,7 +119,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
 
 }  // namespace azure2
 
-bool WorkingCopy::BuildPredictions(CNuc *compound, const Config &configure) {
+bool WorkingCopy::BuildPredictions(const CNuc *compound, const Config &configure) {
   for (int s = 1; s <= this->Draft().NumSegments(); s++) {
     Segment *segment = this->Draft().GetSegment(s);
     try {

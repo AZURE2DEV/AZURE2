@@ -242,7 +242,7 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
     configure.outStream << "Could not save param.errors file." << std::endl;
 }
 
-bool AZUREParams::ReconcileBasis(CNuc *compound, const Config &configure) {
+bool AZUREParams::ReconcileBasis(const CNuc *compound, const Config &configure) {
   const int mode = BasisForConfig(configure);
   int tag = basisTag_;
   if (tag == kBasisUnknown) {

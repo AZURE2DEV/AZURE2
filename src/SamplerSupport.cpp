@@ -13,9 +13,10 @@
 
 bool AZURECalcMCMC::InsideFitLimits(const vector_r &fitVector) const { return support_.Contains(fitVector); }
 
-vector_r AZURECalcMCMC::FitVectorOfObserved(CNuc *transformed, WorkingCopy *copy, const vector_r &observedFull) const {
+vector_r AZURECalcMCMC::FitVectorOfObserved(const WalkerLevels &transformed, WorkingCopy *copy,
+                                            const vector_r &observedFull) const {
   AZUREParams params;
-  transformed->FillMnParams(params, &configure());
+  compound()->FillMnParams(params, transformed.state, transformed.inputs, &configure());
   copy->FillMnParams(params);
   // The tail of the observed vector (normalizations, energy shifts, every data parameter) is the fit's.
   vector_r fitVector = params.GetMinuitParams().Params();
@@ -26,17 +27,18 @@ vector_r AZURECalcMCMC::FitVectorOfObserved(CNuc *transformed, WorkingCopy *copy
 
 bool AZURECalcMCMC::StartInsideFitLimits(const std::vector<double> &sampled, bool useRWA) const {
   if (useRWA) return InsideFitLimits(ReconstructFullParameters(sampled));
-  CNuc *c = GetPooledCNuc();
+  WalkerLevels *walker = GetPooledLevels();
   WorkingData *working = GetPooledData();
   bool inside = true;  // a conversion that fails: outside no limit (its posterior is zero, as before)
   try {
     const vector_r observed = ReconstructFullParametersPhysical(sampled);
-    c->FillCompoundFromParamsPhysical(observed);
+    compound()->FillCompoundFromParamsPhysical(observed, walker->state, walker->inputs);
     working->data->FillAbundancesFromVector(observed);
-    if (c->TransformIn(configure())) inside = InsideFitLimits(FitVectorOfObserved(c, working->data.get(), observed));
+    if (compound()->TransformIn(configure(), walker->state, walker->inputs))
+      inside = InsideFitLimits(FitVectorOfObserved(*walker, working->data.get(), observed));
   } catch (...) {
   }
-  ReturnPooledCNuc(c);
+  ReturnPooledLevels(walker);
   ReturnPooledData(working);
   return inside;
 }

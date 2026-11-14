@@ -47,7 +47,7 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  * Updates the energies of all points in this segment based on the current energy shift.
  */
 
-void Segment::UpdatePointEnergiesWithShift(WorkingCopy &data, CNuc *theCNuc, const Config *configure) const {
+void Segment::UpdatePointEnergiesWithShift(WorkingCopy &data, const CNuc *theCNuc, const Config *configure) const {
   // No lock: each thread re-energises the points of its own working copy.
   for (int t = 0; t < NumTerms(); t++)
     for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
@@ -59,14 +59,14 @@ std::vector<double> Segment::ShiftState(const SegmentState &segment) {
   return state;
 }
 
-void Segment::BeginShiftRefill(WorkingCopy &data, int t, CNuc *theCNuc, const Config &configure) const {
+void Segment::BeginShiftRefill(WorkingCopy &data, int t, const CNuc *theCNuc, const Config &configure) const {
   TermState &u = data.State(*this).terms[t];
   // Tables of another system (a session that changed a radius or the Coulomb route) are dropped.
   if (!u.shiftTables.empty() && !u.shiftTables.front().table->SameSystem(theCNuc, configure)) u.shiftTables.clear();
   u.shiftRows.assign(NumPoints(), {});
 }
 
-void Segment::CommitShiftTable(WorkingCopy &data, int t, CNuc *theCNuc, const Config &configure) const {
+void Segment::CommitShiftTable(WorkingCopy &data, int t, const CNuc *theCNuc, const Config &configure) const {
   SegmentState &segment = data.State(*this);
   TermState &u = segment.terms[t];
   if ((int)u.shiftRows.size() != NumPoints()) return;  // no refill since BeginShiftRefill
@@ -96,7 +96,7 @@ ChannelRowSource Segment::ShiftRowSource(TermState &u, int i) {
  * and recalculates their energy-dependent values.  Writes only that point, so
  * different points may be updated concurrently.
  */
-void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const {
+void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const CNuc *theCNuc, const Config *configure) const {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
   // Half-off-shell data have points below the entrance threshold, and all of

@@ -376,7 +376,7 @@ int Segment::GetExitKey() const {
  * in the lab frame, conversions are performed to the center of mass frame.
  */
 
-int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) {
+int Segment::Fill(const CNuc *theCNuc, WorkingCopy *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
   std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.OpenPath(infile), configure.cacheInputFiles);
   std::istream &in = *inStream;
@@ -917,7 +917,7 @@ double Segment::TermFrameFactor(const SegmentState &state, int t, int i) {
  * 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated,
  * phase shift) or a term without a proper exit pair (a total-capture term).
  */
-double Segment::RatioTermFrameFactor(int t, Unit *point, CNuc *cnuc) const {
+double Segment::RatioTermFrameFactor(int t, Unit *point, const CNuc *cnuc) const {
   if (!point || !cnuc) return 1.0;
   if (!IsDifferential() || IsCMDifferential() || IsPhase() || IsAngularDist()) return 1.0;
   if (!cnuc->IsPairKey(TermEntranceKey(t)) || !cnuc->IsPairKey(TermExitKey(t))) return 1.0;

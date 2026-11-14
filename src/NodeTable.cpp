@@ -33,7 +33,7 @@ std::uint64_t Bits(double x) {
   return b;
 }
 
-int NucleusOf(CNuc *cnuc, const Site &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
+int NucleusOf(const CNuc *cnuc, const Site &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
 
 template <class V>
 bool SameBits(const V &a, const V &b) {
@@ -66,7 +66,7 @@ std::size_t TableBytes(const EDependentTables &t) {
   return n;
 }
 
-NodeKey KeyOf(CNuc *cnuc, Site &u) {
+NodeKey KeyOf(const CNuc *cnuc, Site &u) {
   return NodeKey(NucleusOf(cnuc, u), u.IsTHM() ? 1 : 0, Bits(AMatrixFunc::InEnergy(cnuc, &u)));
 }
 
@@ -120,7 +120,7 @@ int NodeOverflow::Place(const NodeKey &key, double ex, const SharedTable<EDepend
   return Size() - 1;
 }
 
-NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
+NodeState BuildNodeTable(WorkingCopy &data, const CNuc *cnuc, const Config &) {
   const CalculationPlan &plan = data.Plan();
   // Every unit of the pass with its key, in plan order; the first unit at a key gives the node its rows.
   std::vector<std::pair<NodeKey, UnitRef>> all;
@@ -159,7 +159,7 @@ bool NodeCheckRequested() {
 
 }  // namespace azure2
 
-void WorkingCopy::PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased) {
+void WorkingCopy::PlaceOverflowNodes(const CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased) {
   const azure2::NodeTable *stage = nodes_.table.get();
   if (!stage || !cnuc || (changedTasks.empty() && !rowsReleased)) return;
   const azure2::NodeSlots &old = *nodes_.slots;
@@ -204,7 +204,7 @@ void WorkingCopy::ReleaseOverflowRows() {
   for (auto &r : nodes_.overflow.rows) r = SharedTable<EDependentTables>();
 }
 
-void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc,
+void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segments, const CNuc *cnuc,
                                       const Config &configure) {
   ReleaseOverflowRows();
 #ifdef _OPENMP
@@ -228,7 +228,7 @@ void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segmen
   PlaceOverflowNodes(cnuc, moved, true);
 }
 
-long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
+long WorkingCopy::CheckNodeTable(const CNuc *cnuc, const std::vector<int> &work) {
   const azure2::NodeTable *stage = nodes_.table.get();
   if (!stage || !nodes_.slots) throw std::logic_error("AZURE_NODE_CHECK: the working copy has no node table");
   const azure2::NodeSlots &slots = *nodes_.slots;

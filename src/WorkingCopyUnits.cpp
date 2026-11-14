@@ -112,7 +112,7 @@ std::uint64_t Bits(double x) {
 
 }  // namespace
 
-std::vector<int> WorkingCopy::LabFrameRules(CNuc *theCNuc, std::vector<azure2::experiment::FrameRule> &rules) const {
+std::vector<int> WorkingCopy::LabFrameRules(const CNuc *theCNuc, std::vector<azure2::experiment::FrameRule> &rules) const {
   std::vector<int> ruleOf((std::size_t)NumUnits(), -1);
   rules.clear();
   for (const Segment &segment : Data().GetSegments())
@@ -129,7 +129,7 @@ std::vector<int> WorkingCopy::LabFrameRules(CNuc *theCNuc, std::vector<azure2::e
   return ruleOf;
 }
 
-void WorkingCopy::BuildRowSets(CNuc *theCNuc, const Config &configure) {
+void WorkingCopy::BuildRowSets(const CNuc *theCNuc, const Config &configure) {
   rowSets_.clear();
   contractedSize_ = 0;
   if (!theCNuc) return;
@@ -188,7 +188,7 @@ void WorkingCopy::ContractRowSetOf(const Unit &point, azure2::Results &results) 
   }
 }
 
-long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
+long WorkingCopy::CheckReaderRows(const CNuc *theCNuc) const {
   long readers = 0, slots = 0, differ = 0;
   std::vector<std::string> reports;
   const int maxL = Config::maxLOrder;

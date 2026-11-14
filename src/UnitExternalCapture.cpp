@@ -25,7 +25,7 @@
 #include "PPair.h"
 #include "PathwayTable.h"
 
-static complex ECPathwayAmplitude(CNuc *, const Config &, int entrancePair, const azure2::EntrancePathways &,
+static complex ECPathwayAmplitude(const CNuc *, const Config &, int entrancePair, const azure2::EntrancePathways &,
                                   const azure2::SpinGroupRow &, const azure2::ExternalRow &, double levelEnergy,
                                   double cmEnergy, const ChannelTable *table = nullptr);
 
@@ -54,7 +54,7 @@ complex Site::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
  * its ends, as before the tables.
  */
-complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
+complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CNuc *theCNuc, const Config &configure) const {
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
 
@@ -108,7 +108,7 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theC
  * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
  * GetECAmplitudeWithShift at a shifted one.
  */
-static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int entrance,
+static complex ECPathwayAmplitude(const CNuc *theCNuc, const Config &configure, int entrance,
                                   const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
                                   const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
                                   const ChannelTable *table) {
@@ -182,7 +182,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int en
  * entrance and exit pairs.
  */
 
-void Site::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+void Site::CalculateECAmplitudes(WorkingCopy *data, const CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {

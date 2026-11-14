@@ -1507,7 +1507,9 @@ rate's resonances and the sub-point-grid copy.) A calculation makes
 almost no copies: the program at one thread (`AZURE2 calculate --no-gui`, under `gdb` with a
 counting breakpoint) cloned 1 (T2), 0 (13N) and 1 (`natural_neon`) times, against 0.23 s, 8.0 s and 1.35 s of wall
 time; `FillCompoundFromParams` ran 3 times, `CalcShiftFunctions` once. A fit keeps one copy per thread in a pool
-(`cnuc_pool_`), and the sampler one per concurrent walker plus one per snapshot (every 10 steps). The end of `CNuc`
+(`cnuc_pool_`), and the sampler one per concurrent walker plus one per snapshot (every 10 steps). (Since step 4,
+fourth part, no copy of the compound is made: the pools hold `LevelState`s and the sampler's `WalkerLevels`.) The end
+of `CNuc`
 therefore gains no measurable time in a calculation or a fit; it gains a copy that cannot write the shared model
 (state owned by the evaluation) and 85–90 % less memory per copy, which matters only for many sessions of a large
 project (the web UI: 130 kB per session and per pooled copy for `natural_neon`, 22 kB after).
@@ -1945,6 +1947,67 @@ each, `TargetSetup`, `ModelData`, `CNucTransformMessages`, `CNucExternalCapture`
   limits, the sub-point grids, the bands, the binding, the program's run, the tests) still copy the compound (`Clone`)
   and pass their copy's state. Not done here: the owners' own states, the pools of `LevelState`, `Clone`'s deletion.
 
+*Step 4 as built, fourth part: the owners hold their own levels* (branch `feature/upgrade-5-cnuc-owners`, start
+19c55dad). Measured first: the default owner's doors (`State`, `Inputs`, `MutableState`, the one-argument fills,
+`TransformIn`, `TransformOut`, `ObservedWidthsAt`, `FillMnParams`) had about 300 calls in 36 files (grep, about 100 of
+them in 15 test files): the session (`AZUREAPI*.cpp`, `pybind_api`, `pybind_records`: 66), the fitter
+(`AZURECalc.cpp`: 48), the sampler (`AZURECalcMCMC.cpp`, `SamplerSupport.cpp`, the sampler's set-up in `AZURE2.cpp`:
+43), the rate (9), the sub-point-grid copy and the data set-up (`TargetSetup.cpp`: 7), the program's run
+(`RunSetUp`, `RunOutputs`, `ProgramFit`, `AZUREMain`, `FitLeastSquares`: 14), the band (5), the limits (4), the
+adaptive extrapolation (1). The copies (`Clone`): the fitter's pool, its output copy and its two fresh copies of
+`AZURE_TRACE_FCN=fresh` and `AZURE_POOL_CHECK`; the sampler's pool, its start table and its snapshot; the rate's
+resonance grid and one copy per thread; the limits' conversion; the sub-point-grid copy; five tests. The pools
+(`std::stack<std::unique_ptr<CNuc>>` under `pool_mutex_`, filled with a `Clone` of the owner's compound when none is
+idle, taken and given back by the evaluations): the fitter's (`operator()` in a fit, `Chi2Value`, `Gradient`,
+`ResidualJacobian`, `Residuals`) and the sampler's (the two log-likelihoods, `StartInsideFitLimits`,
+`ParkNonPositiveLevels`). Where the code and the design disagreed (code taken): the band and the adaptive
+extrapolation made no copy, they ran on the run's compound (the band computes its shift functions there, the sweeps
+run a calculation of `AZURECalc` on it); a calculation of `AZURECalc` (not a fit) wrote its caller's compound, and so
+did the rate's constructor; the session also runs an `AZURECalc` (`AZUREAPIFit.cpp`); the data set-up
+(`WorkingCopy::Fill`, `MakePoints`, the target effects) read the inputs.
+
+- `CNuc` holds the set-up only: `Fill(config, state, inputs, radii)` and `Initialize(config, state, inputs)` write the
+  caller's levels; every other method is `const` (`ConvertAmplitudeBasis` and `IsJGroup` became `const`); its copy
+  constructor is deleted. What is left is written by the set-up (`Fill`, `AddHardSphereGroups`,
+  `ParseExternalCapture`, `Initialize` with `CalcBoundaryConditions`, `BuildPathways`, `SetUpECFinalBlocks`,
+  `SetUpFormalCaptureMasks`; `RequestEntrance`, `RequestCaptureAy`): pairs, groups (their channels' B_c, the levels'
+  final-state energies), nuclei, the two systems, the pathways, the model data, the `gamma_decay` set, the layout,
+  the external-capture and capture-mask set-ups, the requests.
+- The readers take `const CNuc *` (or `const CNuc &`); `CNuc *` remains in the set-up only (the program's and the
+  sampler's set-up, the session's, the entrance and capture-A_y requests).
+- Each owner holds its own levels: the program's run (`ProgramRun::state`, `inputs`), the sampler's run
+  (`runMCMC`'s locals), the session (`AZUREAPI::state_`, `inputs_`, behind pointers as its compound and data, since
+  its `const` evaluations write them, as they write its `Results`); the fitter (`AZURECalc`: the caller's state by
+  reference, which a calculation writes and which seeds the pool; the pool and the output state in the caller's
+  `FitterStates`); the sampler (`AZURECalcMCMC::levels_`, a `WalkerLevels` of state and inputs, the seed of its
+  walkers' copies in the caller's `StatePool<WalkerLevels>`, its start table and snapshot on copies); the rate
+  (`ReactionRate::state_`, filled at the rate's vector, warned on and shift-functioned in its constructor, one copy
+  per thread, the resonance grid on a copy of state and inputs; the program's run takes the rate's state back for
+  its final transformation, as the old shared compound held it); the limits (copies of the caller's per
+  conversion); the sub-point grids (`WorkingCopy::GridLevels`, a state and inputs copied from the first evaluation's,
+  as the clone was); the band and the adaptive extrapolation (the run's state, as before). The pools are
+  `StatePool` (`include/StatePool.h`), a stack of idle values and its lock, owned by the caller and lent as the
+  `Results` are, so no pool is a `mutable` member: the `cnuc_pool_` rows (two) and `output_compound_` left
+  `allowed_state.tsv`; `pool_mutex_` stays, for the pooled working copies.
+- Byte-identical by construction: each owner copies its caller's state at the moment the old code cloned the
+  caller's compound, and a copy of a compound was its state and inputs beside shared or constant set-up. The check:
+  the doors and `Clone` aborted in one commit (the tree in the three bases identical to the reference, `ctest -LE slow`
+  283 of 283, the eight fits, the sampler's chains in both bases, MINOS, a band and a rate identical to the start
+  commit's build), then were deleted.
+- The input energy of the state (`LevelState::InputEnergy`) is gone: its one reader, the THM line shape's test for
+  a ground-state moment (`ThmLevelWidth`), asks whether the level is the photon pair's final state, a question of
+  structure, so it reads the level's file energy (`ALevel::FileE`), which nothing writes after the set-up. Written
+  before by `Fill`, `TransformIn` (a formal energy) and the physical fill (the sampled energy), it could have changed
+  the test's answer when a physical-basis sampler or a formal transformation moved the level by more than 1 keV;
+  no project of the tree does (the tree is identical; check (e) of `upgrade_level_inputs` shows the case: after a
+  physical vector that moves each level by 10 keV, the old reading took the 16 ground-state moments of its four projects
+  for widths).
+- The defects of the copies: the sub-point grids' stale N_f^1/2 is still there (their state is a copy of the first
+  evaluation's into which only the fit energies and amplitudes are copied, as the clone was); the snapshot of a chain
+  sampled in the RWA basis still writes the start vector's observed levels in its `parameters.out`
+  (`StartObservedLevels`, now on a copy of the sampler's levels). Neither was repaired: both would change output
+  files (the second the snapshot's `parameters.out`).
+
 **Step 5. The set-up out and the name gone.** (≈ 900 lines touched, mostly signatures in ≈ 110 files; `CNuc.cpp`
 → `CompoundSystemBuild.cpp` and `ExternalCaptureFinalStates.cpp`; the `CNuc*` files renamed: `CNucReport` →
 `LevelReport`, `CNucChecks` → `CompoundSystemChecks`, `CNucSystem` → `SystemOfCompound`, `CNucLevelParameters` →
@@ -1987,7 +2050,10 @@ changes numbers and is its own step, 2b.
    `ReactionRate`'s copy is made fresh at each call, so it does not have the defect. Fixed before step 3, in its own
    step (2b) with the acceptance rule; a test project with a fitted final state and a target effect, and the run of
    the tree naming every file that moves (in a menu-1 calculation the copy is made at the vector it is used at, so
-   only fits and the API's repeated evaluations can move).
+   only fits and the API's repeated evaluations can move). *State after step 4, fourth part*: the copy is a `LevelState`
+   and a
+   `LevelInputs` (`WorkingCopy::GridLevels`) with the same contents; the stale N_f^½ is unchanged (step 2b as found
+   says why it cannot move a grid).
 2. **Decay position of the external-capture amplitudes**: fixed (§11.12, decision 3 of §11.11). Nothing to do.
 3. **Two photon pairs with one final state** (`ParseExternalCapture`): refused since a629a391. Nothing to do; the
    contradicting paragraph of §11.12 is stale (§12.1.5).

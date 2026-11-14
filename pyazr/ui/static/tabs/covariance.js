@@ -8,7 +8,7 @@
 
 import { pathOf } from "../api.js";
 import { renderTable } from "../tables.js";
-import { button, drawPlot, h, section, themeColours } from "../ui.js";
+import { button, drawPlot, h, section, themeColours, withFiles } from "../ui.js";
 
 /** The tab is reached from a data set; it has no link of its own in the header. */
 export const shown = () => false;
@@ -74,7 +74,7 @@ export async function render(ctx, el, args) {
     + "back both)", () => ctx.edit(`covariance ${view.path}`, () => ctx.api.post("/api/covariance/write",
     { datasets: list(), parts: view.parts, path: view.path, rev: ctx.project.rev }), out).catch(() => {}));
   el.appendChild(section("Parts", partsBox, h("div.cov-actions", {}, h("label", {}, "data sets ", datasets), " ",
-    build, " ", h("label", {}, "file ", path), " ", write)));
+    build, " ", h("label", {}, "file ", withFiles(ctx, path)), " ", write)));
   el.appendChild(out);
   if (view.summary) drawSummary(ctx, out, view.summary);
 }

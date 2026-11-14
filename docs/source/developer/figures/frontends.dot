@@ -5,7 +5,9 @@ digraph frontends {
   n_RunRequest [label=<<b>RunRequest</b><br/><font point-size="12">the answers of a<br/>program run: its<br/>command and options</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain [label=<<b>AZUREMain</b><br/><font point-size="12">the program&#x27;s run: its<br/>stages in order</font>>, shape=box, style="filled", fillcolor="white"];
   n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read</font>>, shape=box, style="filled", fillcolor="white"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei and<br/>level parameters</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei as set<br/>up by the run or the<br/>session</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the run&#x27;s or the<br/>session&#x27;s levels at<br/>the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_LevelInputs [label=<<b>LevelInputs</b><br/><font point-size="12">the run&#x27;s or the<br/>session&#x27;s levels&#x27;<br/>input values</font>>, shape=box, style="filled", fillcolor="white"];
   n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">the data of one<br/>evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="12">Minuit&#x27;s function:<br/>chi^2, gradient</font>>, shape=box, style="filled", fillcolor="white"];
   n_ProgramRun [label=<<b>ProgramRun</b><br/><font point-size="12">one program run: what<br/>a stage hands to the<br/>next</font>>, shape=box, style="filled", fillcolor="white"];
@@ -26,6 +28,7 @@ digraph frontends {
   n_Engine [label=<<b>Engine</b><br/><font point-size="12">session operations for<br/>the routes (in the<br/>worker)</font>>, shape=box, style="filled", fillcolor="white"];
   n_JobTable [label=<<b>JobTable</b><br/><font point-size="12">fits and samplers run<br/>as jobs</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__endf__Material [label=<<b>pyazr::endf::Material</b><br/><font point-size="12">one material of an<br/>ENDF-6 file: sections,<br/>header, curves</font>>, shape=box, style="filled", fillcolor="white"];
+  n_pyazr__endf__resonances__LRF7 [label=<<b>pyazr::endf::resonances::LRF7</b><br/><font point-size="12">MF=2 R-Matrix Limited<br/>parameters in the<br/>file&#x27;s units and frame</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_RateSession [label=<<b>RateSession</b><br/><font point-size="12">a session set up for a<br/>reaction rate, as the<br/>program&#x27;s rate command</font>>, shape=box, style="filled", fillcolor="white"];
   n_Covariance [label=<<b>Covariance</b><br/><font point-size="12">a data covariance<br/>built from named<br/>parts, checked</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
@@ -33,10 +36,14 @@ digraph frontends {
   n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_ProgramRun [style=dotted, penwidth=1.6, arrowhead=empty];
   n_ProgramRun -> n_AZURECalc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ProgramRun -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ProgramRun -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_ProgramProgress -> n_AZURECalc [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREAPI -> n_AZURECalc [style=dotted, penwidth=1.6, arrowhead=empty];
   n_AZUREAPI -> n_Config [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREAPI -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREAPI -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREAPI -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREAPI -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n__azure2__Session -> n_Config [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n__azure2__Session -> n_AZUREAPI [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
@@ -55,5 +62,7 @@ digraph frontends {
   n_RateSession -> n__azure2__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_Covariance -> n_Project [style=dashed, arrowhead=vee];
   n_pyazr__endf__Material -> n_pyazr__Session [style=dashed, arrowhead=vee];
+  n_pyazr__endf__Material -> n_pyazr__endf__resonances__LRF7 [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_pyazr__endf__resonances__LRF7 -> n_pyazr__Session [style=dashed, arrowhead=vee];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

@@ -27,9 +27,10 @@ using azure2::experiment::ExtrapolationSpecs;
 
 // The positions of the run's data parameters (WorkingCopy::FillMnParams sets them from the length of the vector before):
 // the compound nucleus's parameters, then the data set's, as the run laid them out.
-void LayOutParameters(CNuc *compound, WorkingCopy *data, const Config &configure) {
+void LayOutParameters(const CNuc *compound, const LevelState &state, const LevelInputs &inputs, WorkingCopy *data,
+                      const Config &configure) {
   AZUREParams layout;
-  compound->FillMnParams(layout, &configure);
+  compound->FillMnParams(layout, state, inputs, &configure);
   data->FillMnParams(layout);
 }
 
@@ -72,12 +73,14 @@ class ScratchDirectory {
   std::filesystem::path path_;
 };
 
-// The model values of one extrapolation at a batch of lab energies, one component per angle, by the run's point pass.
+// The model values of one extrapolation at a batch of lab energies, one component per angle, by the run's point pass,
+// on the run's level state and inputs (a calculation writes the state, as the run's calculation does).
 class SweepModel {
  public:
-  SweepModel(const Config &sweepConfig, CNuc *compound, const vector_r &params, const ExtrapolationSpecs &specs,
-             std::size_t index)
-      : config_(sweepConfig), compound_(compound), params_(params), specs_(specs), index_(index) {}
+  SweepModel(const Config &sweepConfig, const CNuc *compound, LevelState &state, const LevelInputs &inputs,
+             const vector_r &params, const ExtrapolationSpecs &specs, std::size_t index)
+      : config_(sweepConfig), compound_(compound), state_(state), inputs_(inputs), params_(params), specs_(specs),
+        index_(index) {}
 
   std::vector<std::vector<double>> operator()(const std::vector<double> &energies) const {
     ExtrapolationSpecs s = specs_;
@@ -93,13 +96,14 @@ class SweepModel {
     }
     const ExtrapolationSpec &mine = s.extrapolations.items[index_].spec;
     WorkingCopy data;
-    if (data.MakePoints(config_, compound_, s) == -1) throw std::runtime_error("the points of a sweep could not be made");
-    LayOutParameters(compound_, &data, config_);
+    if (data.MakePoints(config_, compound_, inputs_, s) == -1) throw std::runtime_error("the points of a sweep could not be made");
+    LayOutParameters(compound_, state_, inputs_, &data, config_);
     if (data.Initialize(compound_, config_) == -1) throw std::runtime_error("the points of a sweep could not be initialized");
     data.SetFit(false);
     data.SetErrorAnalysis(false);
     azure2::Results results;
-    AZURECalc calculate(&data, results, compound_, config_);
+    FitterStates states;  // a calculation takes none of them
+    AZURECalc calculate(&data, results, compound_, state_, inputs_, states, config_);
     calculate(params_);
     const Segment *segment = nullptr;
     for (int k = 1; k <= data.Data().NumSegments(); k++)
@@ -115,7 +119,9 @@ class SweepModel {
 
  private:
   const Config &config_;
-  CNuc *compound_;
+  const CNuc *compound_;
+  LevelState &state_;
+  const LevelInputs &inputs_;
   const vector_r &params_;
   const ExtrapolationSpecs &specs_;
   std::size_t index_;
@@ -123,7 +129,7 @@ class SweepModel {
 
 // E_lambda + k Gamma_lambda (k = 0, +-1/2, +-1, +-2, +-4) of the levels of the entrance pair's compound nucleus, as lab
 // energies in [lo, hi]: the observed energies and widths of `observed`, or without it the fit energies alone.
-std::vector<double> Seeds(CNuc *compound, const LevelState &state, int entranceKey, double lo, double hi, const ObservedLevelTable *observed) {
+std::vector<double> Seeds(const CNuc *compound, const LevelState &state, int entranceKey, double lo, double hi, const ObservedLevelTable *observed) {
   std::vector<double> seeds;
   if (!compound->IsPairKey(entranceKey)) return seeds;
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
@@ -172,7 +178,7 @@ bool SessionRefusesAdaptiveGrids(const Config &configure) {
   return true;
 }
 
-std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params) {
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, const CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params) {
   ExtrapolationSpecs specs = Quiet(configure.project->built.extrapolations);
   ScratchDirectory scratch;
   if (!scratch.Ok()) {
@@ -198,7 +204,7 @@ std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, 
     azure2::experiment::AdaptiveGridResult grid;
     try {
       grid = azure2::experiment::RefineGrid(start, x.adaptive.tolerance, x.adaptive.maxPoints,
-                                            SweepModel(sweepConfig, compound, params, specs, i));
+                                            SweepModel(sweepConfig, compound, state, inputs, params, specs, i));
     } catch (const std::exception &e) {
       configure.outStream << "ERROR: extrapolation #" << x.key << ": its adaptive grid could not be refined: " << e.what()
                           << "." << std::endl;
@@ -220,7 +226,7 @@ std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, 
     x.adaptive.on = false;
   }
   std::unique_ptr<WorkingCopy> data(new WorkingCopy);
-  if (data->MakePoints(configure, compound, specs) == -1) return nullptr;
-  LayOutParameters(compound, data.get(), configure);
+  if (data->MakePoints(configure, compound, inputs, specs) == -1) return nullptr;
+  LayOutParameters(compound, state, inputs, data.get(), configure);
   return data;
 }

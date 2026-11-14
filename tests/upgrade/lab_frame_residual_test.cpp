@@ -114,15 +114,17 @@ int main(int argc, char **argv) {
   Config cfg(sink);
   cfg.configfile = argv[1];
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
   RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg);
-  compound.FillMnParams(params, &cfg);
+  compound.Initialize(cfg, state, inputs);
+  compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
     check("T2 initializes", false, sink.str().substr(0, 400));
@@ -138,11 +140,11 @@ int main(int argc, char **argv) {
 
   azure2::Results results;
   auto evaluate = [&](const vector_r &p) {
-    compound.FillCompoundFromParams(p);
+    compound.FillCompoundFromParams(p, state);
     data.FillNormsFromParams(p);
-    data.FillEnergyShiftsFromParams(p, results, &compound, &compound.State(), &cfg);
-    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
-    azure2::EvaluateModel(data, &compound, compound.State(), cfg, results, azure2::LeafValues::Calculate);
+    data.FillEnergyShiftsFromParams(p, results, &compound, &state, &inputs, &cfg);
+    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    azure2::EvaluateModel(data, &compound, state, cfg, results, azure2::LeafValues::Calculate);
   };
   evaluate(p0);
   const std::vector<double> j0 = Jacobians(data);

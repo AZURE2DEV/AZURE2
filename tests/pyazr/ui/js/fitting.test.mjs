@@ -54,8 +54,12 @@ test("kinds in the order of the engine's table, with their docs; the filters", (
 
 test("the job form from the server's job table: waiting rows disabled with their reason", { skip: !TABLE }, () => {
   const choices = f.jobChoices(TABLE);
-  assert.deepEqual(choices.map((k) => k.kind), [...new Set(TABLE.map((r) => r.kind))]);
-  for (const row of TABLE) {
+  // the Fit tab's form offers its own rows; the rate and the ENDF jobs are started from their tabs (a row's `tab`)
+  const own = TABLE.filter((r) => (r.tab || "fit") === "fit");
+  assert.deepEqual(choices.map((k) => k.kind), [...new Set(own.map((r) => r.kind))]);
+  assert.ok(!choices.some((k) => ["rate", "endf_check", "endf_standardize"].includes(k.kind)));
+  assert.deepEqual(f.jobChoices(TABLE, "rate").map((k) => k.kind), ["rate"]);
+  for (const row of own) {
     const m = choices.find((k) => k.kind === row.kind).methods.find((x) => x.method === row.method);
     assert.equal(m.available, row.available);
     if (!row.available) assert.ok(m.reason.includes(row.missing || row.needs), m.reason);

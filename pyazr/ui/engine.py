@@ -200,6 +200,15 @@ class Engine:
             out.append(d)
         return out
 
+    def endf_curves(self, files, x):
+        """ENDF-6 files' values at every data set's points at x (``Material.curves(data, session=s)`` of
+        :mod:`pyazr.endf`), beside the data set's datum times its normalization and its model; ``files``: [(name,
+        absolute path)], each checked inside the root by the server.  See :func:`pyazr.ui.evaluations.curves_answer`."""
+        from .evaluations import curves_answer
+        x = np.asarray(x, float)
+        ev = self.s.evaluate(x)
+        return curves_answer(files, self.s, ev.data, self._dataset_arrays(x, ev))
+
     def _extrapolations(self):
         """The session of the same project and options made for its extrapolations (``extrapolations=True``), made
         on first use and kept with the data session (its external-capture integrals are computed once)."""

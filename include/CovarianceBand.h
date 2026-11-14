@@ -65,21 +65,22 @@ std::vector<std::vector<double>> RemapCovarianceToParamMap(const BandCovariance 
 /// energy shifts excluded).  dXS(g) = sqrt(g^T M g) (SAMMY Eq. IV E4.2); sum
 /// gradient rows first to combine correlated points.
 struct BandData {
-  CNuc *compound;
+  const CNuc *compound;
   std::vector<std::vector<double>> M;
   std::map<Unit *, std::vector<double>> grad;
   /// One-sigma cross-section uncertainty from a gradient vector, \f$\sqrt{g^T M g}\f$.
   double dXS(const std::vector<double> &g) const;
 };
 
-/// Build a BandData from savedCov for the current (best-fit-filled) compound/data.
+/// Build a BandData from savedCov for the current (best-fit-filled) level state and data: the caller's `state` (the
+/// run's, which the final evaluation filled), whose shift functions it computes, and its `inputs`.
 /// False if the analytic sensitivities are unavailable for this model.  THM
 /// (HOES) points get g = J_m + m (ds/dp)/s from ComputeTHMRows (central
 /// differences of the HOES model plus the profiled scale s = 1/n*): the band of
 /// the model as it lies against the data scaled by n*.
 /// `fixedMask` (Minuit order) is the fixed set of the fit -- including an
 /// external param.par's "fixed" flags; null takes the .azr's alone.
-bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool BuildBandData(const CNuc *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask = nullptr);
 

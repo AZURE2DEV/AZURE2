@@ -17,9 +17,10 @@
  * Indexed like the compound's levels: J-group j and level la, both 1-based, and the group's channels ch, 1-based.  The
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in physics/ JpiBlock.
  *
- * Owned by the compound nucleus (CNuc::State); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
- * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write it, readers get it const.  A copy of the compound copies
- * it.  Its shape (levels, channels, capture masks) is set by the compound's set-up.
+ * Owned by whoever evaluates (the program's run, the session, a fit's pooled evaluation, a walker, the rate, ...: a
+ * value, copied from its caller's); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
+ * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write the one they are given, readers get it const.  Its
+ * shape (levels, channels, capture masks) is set by the compound's set-up (CNuc::Fill, Initialize).
  */
 class LevelState {
  public:
@@ -40,10 +41,6 @@ class LevelState {
   double ECGamma(int j, int la, int ch) const { return groups_[j - 1].ecGamma[At(j, la, ch)]; }
   /// The N_f^1/2 normalization of the level's bound-state wave function.
   double SqrtNF(int j, int la) const { return groups_[j - 1].sqrtNF[la - 1]; }
-  /// The level's input energy (MeV, E_x; LevelInputs::E of the inputs this state was transformed with), written
-  /// with it (CNuc::Fill, TransformIn, FillCompoundFromParamsPhysical): the THM line shape tells a ground-state
-  /// transition by it (ThmLevelWidth), so that a fit moving the level does not change what its gamma means.
-  double InputEnergy(int j, int la) const { return groups_[j - 1].inputE[la - 1]; }
   /// Was the channel's input width exactly zero (a zero in the <levels> line, a channel the level does not list, or a
   /// zero in the physical vector handed to CNuc::TransformIn)?  With IGNORE_ZERO_WIDTHS (--ignore-externals, the
   /// default) such a radiative channel has no external part: neither in the observed width (TransformIn,
@@ -88,7 +85,6 @@ class LevelState {
   void SetGamma(int j, int la, int ch, double gamma);
   void SetECGamma(int j, int la, int ch, double gamma) { groups_[j - 1].ecGamma[At(j, la, ch)] = gamma; }
   void SetSqrtNF(int j, int la, double value) { groups_[j - 1].sqrtNF[la - 1] = value; }
-  void SetInputEnergy(int j, int la, double energy) { groups_[j - 1].inputE[la - 1] = energy; }
   void SetZeroInputWidth(int j, int la, int ch, bool zero) { groups_[j - 1].zero[At(j, la, ch)] = zero ? 1 : 0; }
   void SetShift(int j, int la, int ch, double value);
   void SetShiftDerivative(int j, int la, int ch, double value) { groups_[j - 1].d1[At(j, la, ch)] = value; }
@@ -104,7 +100,7 @@ class LevelState {
  private:
   struct Group {
     int numChannels = 0;
-    std::vector<double> E, inputE, sqrtNF, parkNorm, shiftEnergy, d2Energy;  ///< per level
+    std::vector<double> E, sqrtNF, parkNorm, shiftEnergy, d2Energy;  ///< per level
     std::vector<double> gamma, ecGamma, shift, d1, d2;               ///< per level and channel
     std::vector<unsigned char> zero;                                  ///< per level and channel
     std::vector<std::uint64_t> version;                               ///< per level

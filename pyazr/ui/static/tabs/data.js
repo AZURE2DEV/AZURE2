@@ -7,6 +7,7 @@ import { plotOf } from "../plots.js";
 import { renderTable } from "../tables.js";
 import { button, drawPlot, h } from "../ui.js";
 import { FIRST_VIEW, SECTION_TITLES } from "../layout.js";
+import { listColumns, listKinds, usersOf } from "../lists.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel } from "./records.js";
 
 /** The sections the Data tab shows, in the schema's order, with their record kinds. */
@@ -23,21 +24,22 @@ export function sectionsOfView(sections, view, firstView = FIRST_VIEW) {
   return sections.filter(([s]) => !named.includes(s));
 }
 
-/** Up to three fields a record kind is summarised by in the list: its first required fields of a one-word type. */
-export function summaryFields(schema, kinds) {
-  const plain = new Set(["enum", "unit", "reaction_expr", "reference", "nucleus", "integer", "spin_parity", "pair"]);
-  const keys = [];
-  for (const k of kinds) {
-    for (const [key, f] of Object.entries(schema.records[k]?.fields || {})) {
-      if (f.required && plain.has(f.type) && !keys.includes(key) && keys.length < 3) keys.push(key);
-    }
+/** What the engine makes of the records it describes, by name (GET /api/project/describe; none while the project
+ * has an error: the lists then show the records' fields). */
+async function describedRecords(ctx) {
+  try {
+    const d = await ctx.api.get("/api/project/describe", { quiet: true });
+    return Object.fromEntries(Object.values(d).filter(Array.isArray).flat().filter((e) => e && e.name)
+      .map((e) => [e.name, e]));
+  } catch (e) {
+    return {};
   }
-  return keys;
 }
 
 export async function render(ctx, el, args) {
   const [records, problems] = await Promise.all([ctx.api.get("/api/project/records"),
     ctx.api.get("/api/project/validate")]);
+  if (!ctx.kinds) ctx.kinds = await ctx.api.get("/api/kinds");
   const every = dataSections(ctx.schema);
   const selected = args[0] && args[0] !== "+new" ? records.find((r) => r.name === args[0]) : null;
   const sectionOf = (kind) => every.find(([, kinds]) => kinds.includes(kind))?.[0];
@@ -61,32 +63,29 @@ export async function render(ctx, el, args) {
     () => ctx.navigate(`#/data/+new?section=${current}`)));
   el.appendChild(bar);
 
-  // the list of the section's records, with χ² and points per data set from the evaluation
+  // one list per record kind of the group, in words (lists.js): the data sets first, then the records they name
   const evaluated = Object.fromEntries((ctx.evaluation?.datasets || []).map((d) => [d.name, d]));
   const problemsOf = (name) => problems.filter((d) => d.record === name);
-  const rows = records.filter((r) => kinds.includes(r.kind)).map((r) => {
-    const row = { name: r.name, kind: r.kind, line: r.line, problems: problemsOf(r.name).length || "" };
-    for (const k of summaryFields(ctx.schema, kinds)) row[k] = Array.isArray(r.fields[k]) ? r.fields[k].join("; ")
-      : r.fields[k] ?? "";
-    const e = evaluated[r.name];
-    if (e) Object.assign(row, { chi2: e.chi2, n: e.n, norm: e.norm });
-    return row;
-  });
-  const columns = [{ key: "name", title: "name" }];
-  if (kinds.length > 1) columns.push({ key: "kind", title: "kind" });
-  for (const k of summaryFields(ctx.schema, kinds)) columns.push({ key: k, title: k });
-  if (rows.some((r) => r.chi2 !== undefined)) {
-    columns.push({ key: "chi2", title: "χ²", numeric: true, digits: 6, doc: "the program's χ² of the data set" },
-      { key: "n", title: "N", numeric: true, doc: "points used" },
-      { key: "norm", title: "norm", numeric: true, digits: 6, doc: "the normalization in use" });
+  const [described, references] = await Promise.all([describedRecords(ctx), ctx.api.get(
+    "/api/project/references", { quiet: true }).catch(() => [])]);
+  const users = usersOf(references);
+  const list = h("section.panel.list");
+  const mine = records.filter((r) => kinds.includes(r.kind));
+  for (const kind of listKinds(ctx.schema, kinds)) {
+    const rows = mine.filter((r) => r.kind === kind).map((r) => ({ ...r, problems: problemsOf(r.name).length || "" }));
+    if (!rows.length) continue;
+    const columns = [...listColumns({ schema: ctx.schema, kind, rows, described,
+      descriptionFields: ctx.kinds?.description?.fields || {}, users, evaluated }),
+    { key: "problems", title: "⚠", numeric: true, doc: "messages of the engine's validator" },
+    { key: "line", title: "line", numeric: true, doc: "the record's first line in the project file" }];
+    const rec = ctx.schema.records[kind] || {};
+    const table = renderTable(document, { columns, rows, selected: selected?.name, label: `${rec.title || kind}`,
+      withFilter: rows.length > 8, onSelect: (r) => ctx.navigate(`#/data/${encodeURIComponent(r.name)}`) });
+    list.appendChild(h("div.kind-list", { data: { kind } }, h("h3", { title: `record kind ${kind}` },
+      `${rec.title || kind}`, h("span.count", {}, ` ${rows.length}`)), h("p.hint.kind-doc", {}, rec.doc || ""),
+    table.element));
   }
-  columns.push({ key: "problems", title: "⚠", numeric: true, doc: "messages of the engine's validator" },
-    { key: "line", title: "line", numeric: true });
-  const table = renderTable(document, { columns, rows, selected: selected?.name, label: `${current} records`,
-    caption: `${current}: ${kinds.map((k) => ctx.schema.records[k]?.title || k).join(", ")}`,
-    onSelect: (r) => ctx.navigate(`#/data/${encodeURIComponent(r.name)}`) });
-  const list = h("section.panel.list", {}, table.element);
-  if (!rows.length) {
+  if (!mine.length) {
     // an empty group says what belongs there and offers the first one
     const said = kinds.map((k) => `${ctx.schema.records[k]?.title || k}: `
       + `${firstSentence(ctx.schema.records[k]?.doc)}`);
@@ -95,7 +94,7 @@ export async function render(ctx, el, args) {
       () => ctx.navigate(`#/data/+new?section=${current}`), "primary")));
   }
   if (ctx.evalError) list.appendChild(h("p.hint", {}, `No evaluation: ${ctx.evalError.what}`));
-  el.appendChild(list);
+  if (!(ctx.route.params.preview && selected)) el.appendChild(list);  // a linked preview shows the record alone
 
   if (args[0] === "+new") {
     el.appendChild(await newRecordPanel(ctx, kinds, records,

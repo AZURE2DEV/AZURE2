@@ -13,7 +13,9 @@ export const LAYOUT = {
 // The first view (docs/upgrade/web_ui.md section 6, the two depths): the old setup program's path, in its order and
 // words, each tab a view of one of the page's tabs (app.js TABS): `tab` the page's tab, `hash` the route it opens,
 // `part` the first word of the routes it stands for (the Nucleus tab's "pair" or "level"), `sections` the Data tab's
-// groups it shows (null: every group no other view of the tab names).  The expert's view shows TABS as they are.
+// groups it shows (null: every group no other view of the tab names), `when` a condition of the project under which
+// the view is shown ("thm": the project has THM content, the THM tab's own rule).  The expert's view shows TABS as
+// they are.
 export const FIRST_VIEW = [
   { title: "Project", tab: "project", hash: "#/project" },
   { title: "Particle Pairs", tab: "nucleus", part: "pair", hash: "#/nucleus/pair" },
@@ -22,6 +24,13 @@ export const FIRST_VIEW = [
   { title: "Experimental Effects", tab: "data", sections: ["targets"], hash: "#/data?section=targets" },
   { title: "Fit", tab: "fit", hash: "#/fit" },
   { title: "Plot", tab: "results", hash: "#/results" },
+  // shown only when the project has THM content (`when`: app.js shows such a view where the condition's call says so)
+  { title: "Physics", tab: "physics", hash: "#/physics", when: "thm" },
+  { title: "THM", tab: "thm", hash: "#/thm", when: "thm" },
+  // an evaluated file beside the project: over the data, and its format check (the PI: an easy way of checking the
+  // evaluations); the Reaction Rate stays the last tab (his decision)
+  { title: "ENDF", tab: "endf", hash: "#/endf" },
+  { title: "Reaction Rate", tab: "rate", hash: "#/rate" },
 ];
 
 /** The old program's words for the groups of the Data tab (a group without a row is shown by its section's name). */

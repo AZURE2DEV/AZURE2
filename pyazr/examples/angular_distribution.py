@@ -11,12 +11,13 @@ and computes the a_k only for segments declared as angular distributions in the
     declares. No temporary files, works on a live instance.
 
   * ``pyazr.angular_distribution`` -- for arbitrary energies. It writes a
-    temporary model requesting exactly those energies, evaluates it, and cleans
-    up.
+    temporary model requesting exactly those energies (in a temporary
+    directory), evaluates it, and cleans up.
 
-Usage:
-    python angular_distribution.py <model.azr> [--entrance 1] [--exit 2]
-                                   [--order 4] [--emin 0.05] [--emax 1.0] [-n 10]
+Usage (from the repository's root):
+
+    python3 pyazr/examples/angular_distribution.py tests/upgrade/T1/T1.azr [--entrance 1] [--exit 2] \\
+        [--order 4] [--emin 0.05] [--emax 1.0] [-n 8] [--plot ad.png]
 
 The a_0 coefficient is the normalisation, so a distribution with a_0 = 1 and
 everything else zero is isotropic -- which is what a single s-wave resonance
@@ -27,15 +28,17 @@ import argparse
 import os
 import sys
 
-import numpy as np
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-from pyazr import angular_distribution, Session
+import numpy as np  # noqa: E402
+
+from pyazr import angular_distribution, Session  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", help="the .azr model")
+    ap.add_argument("azr", help="the format-3 project (.azr)")
     ap.add_argument("--entrance", type=int, default=1, help="entrance pair key")
     ap.add_argument("--exit", type=int, default=2, dest="exit_pair",
                     help="exit pair key")
@@ -47,8 +50,8 @@ def main():
                     help="highest LAB energy, MeV (default 1.0)")
     ap.add_argument("-n", "--num", type=int, default=8,
                     help="number of energies (default 8)")
-    ap.add_argument("--plot", action="store_true",
-                    help="plot the coefficients against energy (needs matplotlib)")
+    ap.add_argument("--plot", default=None,
+                    help="draw the coefficients against energy into this file (needs matplotlib)")
     args = ap.parse_args()
 
     if not os.path.isfile(args.azr):
@@ -70,18 +73,18 @@ def main():
     energies = np.linspace(args.emin, args.emax, args.num)
     print(f"\nRequesting order {args.order} coefficients for pair "
           f"{args.entrance} -> {args.exit_pair} at {args.num} energies "
-          f"({args.emin} to {args.emax} MeV lab):\n")
+          f"({args.emin} to {args.emax} MeV lab); a_k dimensionless, a_0 = 1:\n")
 
     e_cm, coeffs = angular_distribution(
         args.azr, energies, entrance=args.entrance, exit=args.exit_pair,
         order=args.order)
 
-    header = "  E_lab      E_cm   " + "".join(f"     a_{k}" for k in range(args.order + 1))
+    header = "  E_lab(MeV) E_cm(MeV)" + "".join(f"     a_{k}" for k in range(args.order + 1))
     print(header)
     print("  " + "-" * (len(header) - 2))
     for e_lab, ecm, row in zip(energies, e_cm, coeffs):
         cells = "".join(f"{v:8.4f}" for v in row)
-        print(f"  {e_lab:6.3f} {ecm:9.5f}  {cells}")
+        print(f"  {e_lab:10.3f} {ecm:9.5f}{cells}")
 
     # a_0 is the normalisation; the rest measure how far from isotropic it is.
     anisotropy = np.nanmax(np.abs(coeffs[:, 1:]), axis=1)
@@ -91,6 +94,8 @@ def main():
         print("     or no higher partial wave contributes at these energies.")
 
     if args.plot:
+        import matplotlib
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(7, 4.5))
         for k in range(coeffs.shape[1]):
@@ -102,9 +107,8 @@ def main():
         ax.legend()
         ax.grid(alpha=.3)
         fig.tight_layout()
-        out = "angular_distribution.png"
-        fig.savefig(out, dpi=150)
-        print(f"\n  wrote {out}")
+        fig.savefig(args.plot, dpi=150)
+        print(f"\n  wrote {args.plot}")
 
 
 if __name__ == "__main__":

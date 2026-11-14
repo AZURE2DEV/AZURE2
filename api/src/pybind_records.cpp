@@ -53,7 +53,7 @@ struct ParameterView {
   const AZUREAPI *api;
   int index;  // among all parameters
   const ParameterRecord *record;
-  CNuc *nuc;
+  const CNuc *nuc;
   const DataSet *data;
   const JGroup *group = nullptr;          // level kinds, cbkg
   const ALevel *level = nullptr;          // level kinds
@@ -177,7 +177,7 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object { return py::int_(v.record->levelNumber); }},
       {"level_energy", "MeV", kLevel, false, "the level's energy E_lambda as the session holds it (excitation energy)",
        [](const ParameterView &v) -> py::object {
-         return py::float_(v.nuc->Inputs().E(v.record->jGroup, v.record->level));
+         return py::float_(v.api->inputs().E(v.record->jGroup, v.record->level));
        }},
       {"level_label", "", kLevel, true,
        "the level's label in the project, '<J^pi> <E_x as written>' (Project.levels())",

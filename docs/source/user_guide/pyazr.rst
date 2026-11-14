@@ -380,8 +380,11 @@ out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
 (means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
 widths; ``names`` picks a subset, i.e. the marginal block; ``columns`` names the
 columns of a ``covariance.dat`` from before its ``#columns`` header),
-``write_prior(path, names, mean, cov, basis=None)`` any prior (checked symmetric and
-positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
+``write_prior(path, names, mean, cov, basis=None)`` any prior (refused where the engine's reader would refuse
+the file), ``read_prior`` (the engine's reading: it refuses what the engine refuses) and ``read_covariance_dat``
+read them back.  ``priors.build(s.parameters, parts)`` makes a prior from named parts over the session's
+parameter table (an earlier fit, a width per parameter, correlations, a sampler's chain), checks it and says what
+the engine will do with it (:doc:`prior_builder`).
 
 .. warning::
 
@@ -1260,8 +1263,8 @@ The names of the package
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
 lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
-``system``, ``sources``, ``stopping``, ``physics``, ``endf``, ``covariance`` (:doc:`covariance_builder`),
-``rate`` and ``rate_formats`` (:doc:`reaction_rate`), and the error classes.
+``system``, ``sources``, ``stopping``, ``physics``, ``endf``, ``priors`` (:doc:`prior_builder`), ``covariance``
+(:doc:`covariance_builder`), ``rate`` and ``rate_formats`` (:doc:`reaction_rate`), and the error classes.
 
 .. code-block:: text
 
@@ -1271,8 +1274,8 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    reference resolve_doi aps_doi sfactor_to_cross_section cm_to_lab ChannelWidth WidthTable weisskopf_width Band
    load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
    uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
-   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat covariance rate
-   rate_formats schema validate
+   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat priors covariance
+   rate rate_formats schema validate
    describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
@@ -1419,71 +1422,8 @@ call.
 Examples
 --------
 
-Worked scripts ship in ``pyazr/examples/``:
-
-.. list-table::
-   :widths: 32 68
-   :header-rows: 1
-
-   * - Script
-     - What it shows
-   * - ``print_scheme.py``
-     - Reading a model's level scheme and dataset provenance.
-   * - ``edit_scheme.py``
-     - Adding and removing levels, writing a new ``.azr``.
-   * - ``edit_model.py``
-     - The full edit loop: add/remove resonances *and* data segments,
-       recalculate the external-capture integrals when the data change, and
-       save the edited file.
-   * - ``exfor_fetch.py``
-     - Pulling data from the IAEA EXFOR/NDS web services (cross sections,
-       S-factors, differentials, analyzing powers, levels) and dropping it
-       into a model as new segments — with the DOI of the paper behind the
-       dataset.
-   * - ``deactivate_level.py``
-     - Switching a resonance off without removing it.
-   * - ``transform_widths.py``
-     - Reduced width amplitudes to physical partial widths with ``Session.transform``, beside the naive
-       2γ²P; a chain's samples mapped onto physical values.
-   * - ``dimensionless_widths.py``
-     - θ² and Weisskopf units for a whole fit.
-   * - ``channel_functions.py``
-     - Coulomb functions, penetrability and hard-sphere phase over an
-       energy grid.
-   * - ``ec_integrals.py``
-     - External-capture integrals per pathway, and what caching them buys.
-   * - ``save_fit_to_azr.py``
-     - Writing a fit back into a ``.azr``, verifying it round-trips.
-   * - ``uncertainty_band.py``
-     - Cross-section uncertainty bands from a saved fit covariance.
-   * - ``sensitivities.py``
-     - Which parameters a dataset constrains, as d ln σ / d ln p; and the
-       analytic sensitivities checked against finite differences.
-   * - ``fit_scipy.py``
-     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
-   * - ``fit_iminuit.py``
-     - MIGRAD and HESSE of iminuit on ``Objective``.
-   * - ``fit_emcee.py``
-     - MCMC sampling with ``emcee`` on ``Objective.log_prob``, one session per pool worker.
-   * - ``fit_zeus.py``
-     - The same with ``zeus``.
-   * - ``angular_distribution.py``
-     - Legendre coefficients at chosen energies, with an optional plot.
-   * - ``per_dataset_chi2.py``
-     - Slicing the residual vector to get the χ² of each experiment.
-   * - ``decompose_cross_section.py``
-     - Separating resonance, interference and background contributions at
-       the fitted parameters.
-   * - ``sfactor_extrapolation.py``
-     - An S factor below the measured range, and S(0).
-   * - ``channel_radius_scan.py``
-     - χ² against the channel radius, one in-process session per radius.
-   * - ``reaction_rate.py``
-     - N\ :sub:`A`\ ⟨σv⟩ computed by the engine (``pyazr.rate``), the Gamow
-       window and the band of a fit's covariance (:doc:`reaction_rate`).
-   * - ``covariance_builder.py``
-     - A data set's covariance file from named parts (``pyazr.covariance``,
-       :doc:`covariance_builder`).
+The worked scripts of ``pyazr/examples/``, one task each from start to end, are listed by task with the command that
+runs each in :doc:`pyazr_examples`.
 
 Running in parallel
 -------------------
@@ -1505,8 +1445,7 @@ per walker:
    def log_prob(theta):
        return f.log_prob(theta)
 
-See ``pyazr/examples/fit_emcee.py`` for the full recipe (``fit_zeus.py`` is the older pattern: the data χ² from
-``evaluate`` with priors of its own).
+See ``pyazr/examples/fit_emcee.py`` for the full recipe.
 
 Inside one session the engine uses threads: every evaluation (``evaluate``, the objective, its gradient and
 rows) spreads its data points over ``OMP_NUM_THREADS`` threads, as the command-line χ² does, and so

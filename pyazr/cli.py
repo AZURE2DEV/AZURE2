@@ -404,6 +404,36 @@ def _text_endf_curves(result, v):
     return _table(["data set", "quantity", "from", "covered", "notes"], rows)
 
 
+def _run_endf_to_project(v, ctx):
+    from . import endf
+    material = endf.read(v.file, mat=v.mat)
+    sep = "ame2020" if v.separation_energy is None else v.separation_energy
+    _, report = endf.to_project(material.resonances(isotope=v.isotope, energy_range=v.range), v.new,
+                                separation_energy=sep, material=material, overwrite=v.overwrite)
+    if not ctx.json:
+        return str(report)
+    return {"project": report.path, "separation_energy_MeV": report.separation_MeV,
+            "separation_source": report.separation_source,
+            "mass_checks": [{"nuclide": n, "file_u": f, "ame2020_u": a} for n, f, a in report.mass_checks],
+            "pairs": list(report.pairs), "levels": [dict(vars(lv)) for lv in report.levels],
+            "not_written": list(report.skipped), "notes": list(report.notes)}
+
+
+def _run_endf_write(v, ctx):
+    from . import Session, endf
+    header = v.header  # the JSON object, read by the argument's type
+    rng = (v.low, v.high) if v.low is not None and v.high is not None else None
+    with Session(v.project) as s:
+        written = endf.write(s, v.new, header=header, energy_range_MeV=rng, tolerance=v.tolerance,
+                             number_form=v.number_form, overwrite=v.overwrite)
+    if not ctx.json:
+        return str(written)
+    return {"file": written.path, "sections": [{"mf": a, "mt": b, "lines": c} for a, b, c in written.sections],
+            "grids": {str(k): {"points": g[0], "low_eV": g[1], "high_eV": g[2]} for k, g in written.grids.items()},
+            "mf2_check": {str(k): v for k, v in written.mf2_check.items()}, "losses": list(written.losses),
+            "not_written": list(written.not_written)}
+
+
 def _run_endf_check(v, ctx):
     from . import endf
     result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout)
@@ -519,6 +549,32 @@ COMMANDS = (
             "The evaluation at each data set's points in its quantity and unit (--json: the values beside the "
             "model at the project's start values).",
             run=_run_endf_curves, text=_text_endf_curves, fix="python -m pyazr endf summary FILE lists what it holds"),
+    Command("endf to-project", (Arg("FILE", "file", "an ENDF-6 file with MF=2/MT=151 in LRF=7 (R-Matrix Limited)"),
+                                Arg("NEW", "output", "the format-3 project to write (Brune basis, every level fixed)"),
+                                Arg("--separation-energy", "number", "S of the incident pair, MeV (default: AME2020)"),
+                                Arg("--isotope", "int", "the isotope of MF=2 (0-based)", default=0),
+                                Arg("--range", "int", "the energy range of the isotope (0-based)", default=0),
+                                Arg("--overwrite", "flag", "replace NEW if it exists"),
+                                Arg("--mat", "int", "the material (MAT) of a file that holds several")),
+            "pyazr.endf.to_project",
+            "An evaluation's resonance parameters as a new project: pairs, levels and channels, the conversions and "
+            "what was not written.", run=_run_endf_to_project,
+            fix="python -m pyazr endf summary FILE shows its MF=2"),
+    Command("endf write", (Arg("PROJECT", "project", "the project whose model is written (at its start values)"),
+                           Arg("NEW", "output", "the ENDF-6 file to write"),
+                           Arg("--header", "json-file", "the MF=1 fields: {MAT, NLIB, NVER, LREL, NMOD, ALAB, EDATE, "
+                                                       "AUTH, REF, DDATE, RDATE, LIBRARY, TEXT}"),
+                           Arg("--low", "number", "lowest lab energy of the projectile, MeV (default: the data's)"),
+                           Arg("--high", "number", "highest lab energy of the projectile, MeV (default: the data's)"),
+                           Arg("--tolerance", "number", "relative tolerance of the engine's adaptive grid",
+                               default=1e-3),
+                           Arg("--number-form", "choice", "how numbers are written", default="widest",
+                               choices=("widest", "classic", "e")),
+                           Arg("--overwrite", "flag", "replace NEW if it exists")),
+            "pyazr.endf.write",
+            "The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 from the engine (LRP=2); "
+            "what the file does not carry is listed.", run=_run_endf_write,
+            fix="python -m pyazr endf write --help"),
     Command("endf check", (Arg("FILE", "file", "an ENDF-6 file"),
                            Arg("--program", "choice", "the one checking code to run (default: CHECKR, FIZCON and "
                                "PSYCHE, those found)", choices=("checkr", "fizcon", "psyche", "inter")),
