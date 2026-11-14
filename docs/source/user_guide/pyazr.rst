@@ -262,7 +262,8 @@ parameter vector:
    * - ``apparatus``
      - a number of an apparatus record (a stopping scale, a kernel's parameter)
    * - ``radiative``
-     - a number of a level's ``gamma_decay`` record (``decay_record``, ``decay_part``, ``final_state``)
+     - a number of a level's ``gamma_decay`` record (``decay_record``, ``decay_part``, ``final_state``); its unit is
+       its part's: eV for ``total_width``, 1 for ``branching`` and ``mixing``
 
 A THM segment's free norm is profiled, not a parameter, and has no entry.
 
@@ -957,11 +958,15 @@ integrals integrate.
    c = azr.channel_functions(1, E, l=0)               # radius=0 -> channel radius
    c["F"], c["G"], c["P"], c["S"], c["delta_hs"], c["open"]
 
-   paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
-   paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
+   paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway; pair: the key, E: c.m., MeV
+   paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"], paths[0]["unit"]   # "fm^2" for E1
 
    azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
                        # Coulomb-memo counters of earlier builds, now always 0)
+
+An external-capture integral is in fm^(L+1), L its multipolarity: the pathway's T-matrix element is the final state's
+ANC times ``k_gamma^(L+1/2)`` times the integral.  The pathways come in the engine's order (by final level, then spin
+group); the final state is not part of the answer.
 
 The engine's physics functions need no session: ``pyazr.physics`` has one function per row of the binding's physics
 table (kinematics, Coulomb functions and phase, penetrability, shift function and its energy derivative, hard-sphere

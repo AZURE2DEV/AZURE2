@@ -123,7 +123,8 @@ class DescribedDataset:
 class DescribedExtrapolation:
     """One ``extrapolation`` record as the engine built it (``describe(as_json=True)["extrapolations"]``): ``key``
     its number among the extrapolations (1-based), the pair keys of its first term, the numbers of grid energies and
-    angles, the grid file ("" for a written grid) and whether the grid is adaptive."""
+    angles, the grid file ("" for a written grid), whether the grid is adaptive, the record's ``unit`` and the unit the
+    engine computes the quantity in (``engine_unit``: the unit of a session's model values of it)."""
     key: int
     name: str
     active: bool
@@ -138,6 +139,8 @@ class DescribedExtrapolation:
     grid_file: str
     adaptive: bool
     effects: tuple
+    unit: str = ""
+    engine_unit: str = ""
 
     @classmethod
     def from_json(cls, d):
@@ -146,7 +149,7 @@ class DescribedExtrapolation:
                    observable=d.get("observable", ""), tree=d.get("tree", ""), entrance_key=entrance, exit_key=exit_,
                    terms=tuple(dict(t) for t in d.get("terms", [])), energies=int(d.get("energies", 0)),
                    angles=int(d.get("angles", 0)), grid_file=d.get("grid_file", ""), adaptive=bool(d.get("adaptive")),
-                   effects=tuple(d.get("effects", [])))
+                   effects=tuple(d.get("effects", [])), unit=d.get("unit", ""), engine_unit=d.get("engine_unit", ""))
 
     def reaction(self, pairs=None):
         """The reaction as written (its tree)."""

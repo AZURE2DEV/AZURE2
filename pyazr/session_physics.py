@@ -288,11 +288,19 @@ class SessionPhysics:
     def ec_integrals(self, pair, energies):
         """External-capture radial integrals on an energy grid.
 
-        Every external-capture pathway the compound nucleus generates from this
-        entrance pair is evaluated at every energy.  Returns a list of dicts,
-        one per pathway, each carrying its quantum numbers (``li``, ``lf``,
-        ``si``, ``sf``, ``multipolarity``, ``radiation``) and the complex
-        integral as ``value``.
+        ``pair`` is the entrance pair's key in ``<levels>``, ``energies`` its c.m. energies (MeV).  Every
+        external-capture pathway the compound nucleus generates from this entrance pair is evaluated at every energy.
+        Returns a list of dicts, one per pathway, each carrying its quantum numbers (``li``, ``lf``, ``si``, ``sf``,
+        ``multipolarity``, ``radiation``), ``energy`` (the c.m. energies, MeV), the complex integral as ``value`` and
+        its ``unit``, ``"fm^(L+1)"`` with L the multipolarity (``"fm^2"`` for an E1 or M1 pathway).
+
+        The unit is the one the engine's use of the number gives it: the T-matrix element of the pathway is
+        dimensionless and is the final state's ANC (fm^-1/2) times ``k_gamma^(L+1/2)`` (fm^-(L+1/2)) times this
+        integral, with phases (``Site::ECPathwayAmplitude``, ``AMatrixFunc``).
+
+        The pathways come in the engine's order (by final level, then spin group); the final state each belongs to
+        is not part of the engine's answer, so two pathways to two final states with the same quantum numbers are
+        told apart by their position in the list only.
 
         These integrals are the most expensive part of a capture calculation --
         which is why AZURE2 caches them.  Asking for them twice and watching
@@ -321,5 +329,6 @@ class SessionPhysics:
                 "radiation": "E" if b[5] > 0.5 else "M",
                 "energy": e[:nE],
                 "value": vals[:, 0] + 1j * vals[:, 1],
+                "unit": f"fm^{int(round(b[4])) + 1}",
             })
         return out

@@ -5,6 +5,10 @@
       Project.pairs() does: T3's beta pair (key 4, the engine's pair 2) is "4: beta", not "2: photon"; a channel's
       label carries the key and the kind; T1's photon pairs are "photon" with their keys; a channel's value is named
       by what the row holds: T1's bound 1/2- level holds an ANC (fm^-1/2), T3's beta channel a feeding amplitude.
+  (b) Session.ec_integrals: every pathway carries its unit, fm^(L+1) with L its multipolarity.
+  (c) evaluate(x).data[i].unit in a session of the extrapolations is the engine's unit of the extrapolation's quantity
+      (T1: b for sigma, the unit of Project.describe's engine_unit), as in a session of the data.
+  (d) a gamma_decay parameter's unit is its own part's (total_width eV, branching and mixing 1), not the kind's text.
 
 Run from anywhere:  python3 tests/pyazr/library_answers_test.py
 """
@@ -38,6 +42,7 @@ tmp = tempfile.mkdtemp(prefix="library_answers_")
 try:
     for name in ("T1", "T3"):
         shutil.copytree(os.path.join(ROOT, "tests", "upgrade", name), os.path.join(tmp, name))
+    shutil.copytree(os.path.join(ROOT, "tests", "gamma_decay", "models"), os.path.join(tmp, "gamma_decay"))
     T1 = os.path.join(tmp, "T1", "T1.azr")
     T3 = os.path.join(tmp, "T3", "T3.azr")
 
@@ -69,6 +74,36 @@ try:
     check("T3's beta pair is key 4 and called beta", "  4: beta" in text and "photon" not in text, text[:600])
     check("T3's beta channel: the feeding amplitude B, no unit", "G1 (beta pair 4)        B     =            1 "
           in text, text[:1200])
+
+    # (b) the external-capture integrals' unit
+    print("(b) Session.ec_integrals")
+    with pyazr.Session(T1) as s:
+        paths = s.ec_integrals(1, [0.5, 1.0])
+    check("T1: pathways returned", len(paths) > 0, len(paths))
+    check("every pathway carries unit fm^(L+1)",
+          all(p.get("unit") == f"fm^{p['multipolarity'] + 1}" for p in paths), [p.get("unit") for p in paths])
+
+    # (c) the unit of an extrapolation's model values
+    print("(c) evaluate(x).data[i].unit, extrapolations")
+    described = {e["name"]: e["engine_unit"] for e in pyazr.Project.open(T1).describe(as_json=True)["extrapolations"]}
+    with pyazr.Session(T1, extrapolations=True) as s:
+        data = s.evaluate().data
+    check("T1: every extrapolation has the engine unit of Project.describe",
+          data and all(d.unit == described[d.name] and d.unit for d in data), [(d.name, d.unit) for d in data])
+    check("T1: a sigma extrapolation is in b", any(d.quantity == "sigma" and d.unit == "b" for d in data),
+          [(d.quantity, d.unit) for d in data])
+
+    # (d) a gamma_decay parameter's unit
+    print("(d) the unit of a gamma_decay (radiative) parameter")
+    with pyazr.Session(os.path.join(tmp, "gamma_decay", "record.azr")) as s:
+        radiative = [p for p in s.parameters if p.kind == "radiative"]
+    want = {"total_width": "eV", "branching": "1", "mixing": "1"}
+    check("record.azr has radiative parameters of the three parts",
+          {p.decay_part for p in radiative} == set(want), {p.decay_part for p in radiative})
+    check("each has its part's unit", all(p.unit == want[p.decay_part] for p in radiative),
+          [(p.name, p.unit) for p in radiative])
+    check("the table's units are the records'", all(u == p.unit for u, p in zip(
+        pyazr.Parameters(radiative).units, radiative)), "")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
