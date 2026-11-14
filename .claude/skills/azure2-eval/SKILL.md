@@ -389,6 +389,26 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   segment uses (level-isolation scratch models with the final state switched
   off) only gets a WARNING, no capture into it and no hidden level. A `.sav` from such an old run has that hidden slot in its numbering:
   do not reuse it by name. Test: `tests/ec_final_state_listed`.
+- **External capture into an UNBOUND final state** (E_x above the entrance
+  pair's threshold, e.g. 24Mg(p,g) to 25Al 2.485 MeV, +214 keV; branch
+  `feature/ec-unbound-final`, 2026-11-13, DeBoer "Yes, let's do it"): treated
+  as a narrow resonance, with a NOTE at start-up. Its particle line holds a
+  WIDTH (eV, open channel), not an ANC; the external-capture strength comes
+  from that observed width through the reduced width amplitude (the resonance
+  ANC is fixed by the width, C^2 ~ mu Gamma / hbar^2 k). The exterior is the
+  outgoing wave O(k_f r)/O(k_f a), N_f = 1/(1 + gamma^2 dS/dE at E_f), and the
+  integral of the two continuum functions is regularized beyond R (Abel, by
+  parts); ECTable is bypassed for these terms. Joins the bound treatment
+  continuously at the threshold (`tests/ec_unbound_final` (c)). Valid for
+  Gamma_f << E_f and E_gamma >> Gamma_f; near E_gamma -> 0 the integral grows
+  like (k_i - k_f)^-2 (the "infrared" behaviour, Rolfs & Azuma 1974), and a
+  broad final state needs the line-shape integration (not implemented).
+  OLDER BUILDS treated such a state as BOUND by |E_x - S| without a word:
+  4-25x too little for 12C(p,g1) at E_cm 1.6-0.8 MeV; points below E = E_x
+  were NaN (now 0, also for the internal photon channel). An intEC cache from
+  an older build is not reused (signature marker). Literature and the old
+  behaviour: `R-matrix/AZURE2_code_audit/11-13-26_unbound_ec_literature/`;
+  implementation record `.../11-13-26_ec_unbound_final/`.
 - **Gaussian kernels now reach 5 sigma, not 3** (2026-10-26, audit fix05,
   reported by the 17O+a ODeSA session): every beam-spread, straggling and
   energy-convolution kernel was integrated over +-3 sigma and renormalised, so

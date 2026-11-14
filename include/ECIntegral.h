@@ -80,6 +80,8 @@ class ECIntegral {
   void ResetIntegrals() {
     FW_ = 0.;
     GW_ = 0.;
+    FWc_ = complex(0.0, 0.0);
+    GWc_ = complex(0.0, 0.0);
   };
   /// Evaluate the three radial integrals at one energy.
   void Integrate(double);
@@ -103,12 +105,29 @@ class ECIntegral {
   double chanRad() const { return chanrad_; };
   double FW() const { return FW_; };
   double GW() const { return GW_; };
+  /*!
+   * External-capture radial integrals into an UNBOUND final state (E_f > 0 above the pair's threshold),
+   * treated as a narrow resonance: the final state's exterior is its outgoing wave, normalized at the channel
+   * radius, u_f(r) = O_lf(k_f r) / O_lf(k_f a) with O = G + iF (the resonance ANC is the amplitude of that
+   * wave; Mukhamedzhanov et al., PRC 96, 024623 (2017), eq. 16).  Sets FWc_ = int F_li u_f w dr and
+   * GWc_ = int G_li u_f w dr from a to infinity, w = r^L (times the charge function).  The products of two
+   * continuum functions do not decay; the integral from a to R is done by Gauss-Legendre panels and the one
+   * beyond R by Abel-regularized integration by parts (three terms of the asymptotic series), which is what a
+   * convergence factor exp(-eps r), eps -> 0, gives.  Returns false if R would have to exceed 50000 fm.
+   */
+  bool IntegrateUnbound(double chanrad, double finalEnergy);
   Params params_;
   PPair *pair_;
   double chanrad_;
   const Config *configure_;
   double FW_;
   double GW_;
+  /// The FW/GW integrals of an unbound final state (complex: its exterior is an outgoing wave).
+  complex FWc_ = complex(0.0, 0.0);
+  complex GWc_ = complex(0.0, 0.0);
+  /// Coulomb functions for the unbound-final-state integrals, without the global cache: their many radial
+  /// nodes at each energy would only grow it.
+  std::unique_ptr<CoulFunc> unboundCoul_;
   double epsrel_ = 1e-4;
   /// Above this Sommerfeld parameter an open channel is treated through its threshold limit (CalculateDirect).
   static constexpr double kMaxOpenChannelEta = 100.0;

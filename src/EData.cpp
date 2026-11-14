@@ -2815,6 +2815,12 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
               hash->Add(finalChannel->GetS());
               hash->Add(theCNuc->GetPair(finalChannel->GetPairNum())->GetPairKey());
               pairs->insert(finalChannel->GetPairNum());
+              // An unbound final state was taken as bound by |E_f| before 2026-11-13 and is a narrow resonance
+              // since (ECIntegral::IntegrateUnbound): marked only then, so every other cache keeps its signature.
+              {
+                PPair *fp = theCNuc->GetPair(finalChannel->GetPairNum());
+                if (ecLevel->GetECEnergy() > fp->GetSepE() + fp->GetExE()) hash->Add("unbound final state v1");
+              }
               hash->Add(theECMGroup->IsChannelCapture() ? 1 : 0);
               if (theECMGroup->IsChannelCapture()) {
                 MGroup *chanCap = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());

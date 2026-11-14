@@ -228,3 +228,52 @@ window holds two or more levels of that :math:`J^\pi` is refused as
 ambiguous (before October 2026 the first one in the file was taken silently):
 move the extra level by more than 1 keV, or give the pair the energy of the
 level it decays to.
+
+.. _ec-unbound-final-state:
+
+Capture into an unbound final state
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The final state of a gamma-ray pair may lie above the threshold of the entrance
+particle pair, e.g. :math:`^{24}`\ Mg(p,\ :math:`\gamma`)\ :math:`^{25}`\ Al to the
+:math:`1/2^+` level at :math:`E_x` = 2.485 MeV, 214 keV above the proton threshold
+(Trautvetter and Rolfs, NPA 242, 519 (1975)). Since November 2026 AZURE2 treats such
+a state as a **narrow resonance**, and says so with a NOTE at start-up:
+
+* Its particle channel is open, so its line holds a partial **width** (eV), not an
+  ANC; the strength of its external capture comes from that observed width, through
+  the reduced width amplitude, as for any other level. (For a narrow resonance the
+  ANC is the amplitude of the outgoing wave and is fixed by the width,
+  :math:`C^2 \approx \mu\Gamma/\hbar^2 k`; Mukhamedzhanov et al., PRC 96, 024623
+  (2017).)
+* Outside the channel radius the final state is its **outgoing wave**,
+  :math:`O_{l_f}(k_f r)/O_{l_f}(k_f a)` with :math:`O = G + iF` at the final state's
+  energy above threshold, where a bound state has its Whittaker function. The
+  :math:`N_f` normalization is continued as :math:`\gamma^2\, dS/dE` at that energy,
+  which is the bound-state :math:`N_f` integral written through the shift function.
+  The two treatments join continuously at the threshold.
+* The radial integral of two continuum functions does not converge on its own: it is
+  done to a radius :math:`R` beyond the turning points and continued beyond it by
+  Abel-regularized integration by parts (the limit of a convergence factor
+  :math:`e^{-\epsilon r}`, :math:`\epsilon \to 0`). It grows like
+  :math:`(k_i - k_f)^{-2}` towards the photon threshold (the "infrared" behaviour
+  of the bremsstrahlung theory of Rolfs and Azuma, NPA 227, 291 (1974)), and below
+  :math:`E = E_x` the transition is closed and its cross section is 0.
+
+The narrow-resonance treatment holds while the final state's width is small next
+to its energy above threshold **and** next to the photon energy,
+:math:`E_\gamma \gg \Gamma_f`. A broad final state (the 31.7 keV wide 2.366 MeV
+state of :math:`^{13}`\ N, near the photon threshold) needs the cross section
+integrated over the final state's line shape, which is not implemented. A final
+state closer to the threshold than its outgoing wave can be evaluated
+(:math:`\eta > 100`) is refused with an ERROR; enter it just below the threshold
+as a bound state.
+
+Before November 2026 an unbound final state was treated, without a message, as a
+state **bound** by :math:`|E_x - S|`: its exterior was the Whittaker function at the
+mirror binding energy. For :math:`^{24}`\ Mg + p to 2.485 MeV that gives 1.7 to 5.9
+times too little external capture between :math:`E_{cm}` = 2.0 and 0.8 MeV, and for
+:math:`^{12}`\ C + p to 2.368 MeV 4 to 25 times too little between 1.6 and 0.8 MeV.
+Points below :math:`E = E_x` came out NaN. The cached capture integrals
+(``intEC.dat``) of a model with an unbound final state carry a marker in their
+signature, so an old cache is recomputed rather than reused.
