@@ -179,10 +179,12 @@ The tool
 
 .. code-block:: console
 
-   $ azure2-coulomb-table build table.bin --per-decade 100 --threads 4
-   $ azure2-coulomb-table validate table.bin --n 400000 --threads 4
+   $ azure2-coulomb-table build table.bin --per-decade 100 --threads=N
+   $ azure2-coulomb-table validate table.bin --n 400000 --threads=N
    $ azure2-coulomb-table info table.bin
 
+``--threads=N`` (or ``--threads N``) is the number of threads the machine can give the job; without it the tool
+takes OpenMP's default, every core (``OMP_NUM_THREADS`` limits it).
 ``build`` takes ``--lmax`` (10), ``--eta`` and ``--rho`` ranges (1e-3 to 100),
 ``--per-decade`` (100) and ``--eta-rho-max`` (150). It writes ``FILE.new`` and
 renames it over ``FILE``, so a job that has the old file open keeps reading

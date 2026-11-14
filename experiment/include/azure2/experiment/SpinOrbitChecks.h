@@ -10,7 +10,7 @@ namespace experiment {
 
 /*!
  * The refusals of a spin-orbit term (docs/upgrade/spin_orbit_potential.md section 3.4), written once for the three
- * places that need them: the format-3 build of a `potential` record (BuildPotentials), pyazr's set_nuclear_potential
+ * places that need them: the format-3 build of a `potential` record (BuildPotentials), the pair's set-up (PPair)
  * and the engine's API for channel functions (api/).  A refusal has a code of DiagnosticCodes() and a message; an
  * empty code means allowed.
  */

@@ -13,7 +13,7 @@ namespace experiment {
 
 /*!
  * The hybrid potential of one pair as a project states it: a `potential` record of format 3 (Schema::Build), a
- * section of the old <potential> block (convert/ ReadPotentialBlock) or pyazr's set_nuclear_potential.  An input
+ * section of the old <potential> block (convert/ ReadPotentialBlock); pyazr edits the record in a Project.  An input
  * record; the pair's potential is the value Potential() makes from it.  The old block has no Coulomb radius, matching
  * radius or step: it keeps the defaults below, which are the physics value's (3.5 fm, 15 fm, 0.0275 fm).
  */
@@ -27,7 +27,7 @@ struct HybridPotentialSetting {
   double coulomb_radius_fm = physics::HybridPotential().coulomb_radius_fm;    ///< R_C of the charged sphere (fm)
   double matching_radius_fm = physics::HybridPotential().matching_radius_fm;  ///< r_m (fm)
   double step_fm = physics::HybridPotential().step_fm;                        ///< Numerov step (fm)
-  /// The spin-orbit term (a format-3 record's spin_orbit, pyazr's set_nuclear_potential); the old block has none.
+  /// The spin-orbit term (a format-3 record's spin_orbit); the old block has none.
   std::optional<physics::SpinOrbitTerm> spin_orbit;
   /// The potential of this setting; throws std::invalid_argument when a parameter of its shape, R_C, r_m, the
   /// step or of the spin-orbit term is not positive.

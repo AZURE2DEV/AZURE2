@@ -114,8 +114,8 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
     // than its channels allow at these radii.
     if (-halfDenom > 100.0)
       configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
-                          << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
-                          << "take physical values, calculate_rwa() amplitudes." << std::endl;
+                          << "not reduced-width amplitudes -- a pyazr fit vector (s.parameters.x0, the input of "
+                          << "s.evaluate(x)) holds amplitudes." << std::endl;
     else
       configure.outStream << "  The level is broader than its channels allow at these radii: "
                           << "reduce the widths or enlarge the channel radii." << std::endl;

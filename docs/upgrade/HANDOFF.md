@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-tests-cannot-fail`) — stale names in messages and pages
+
+**Done.** Text only, no logic:
+
+- Engine: the unit-mistake hint of Brune's transformation (`src/CNucTransformMessages.cpp`) named pyazr's removed
+  `calculate()`, `calculate_energies()`, `calculate_rwa()`; it names the fit vector (`s.parameters.x0`,
+  `s.evaluate(x)`). Comments naming the removed `set_nuclear_potential` (`include/Config.h`,
+  `HybridPotentialSettings.h`, `SpinOrbitChecks.h`) name the project's `potential` records and `PPair`.
+- The SRIM refusal (`experiment/src/StoppingChecks.cpp`, `E_STOPPING_DATA`) names `--srim-data-dir=DIR` beside the
+  switch; `experiment/tests/diagnostics_test.cpp` asks for both.
+- Check 39's two messages said "(check 41)".
+- `docs/source/reference/output_files.rst`: the parameter names are the records' (`<data set>.norm`,
+  `<data set>.shift.offset`, `<target>.areal_density`, ...), not `segment_<k>_*`; `docs/source/developer/
+  coulomb_table.rst`: `--threads=N` (the machine's share) instead of `--threads 4`; `docs/upgrade/FOR_THE_OWNER.md`:
+  `s.objective()` and `evaluate(x).chi2` for `fit_objective()` and `segment_chi2()`; `pyazr_on_records.md` and
+  `data_kinds.md` say where `pyazr.masses` moved (the other mentions of `pyazr.nds`/`pyazr.masses` are history).
+- `tools/check_doc_names.py`: every program option and pyazr name the pages' literals show against `AZURE2 --help`,
+  `import pyazr` and the classes; 0 left on the pages (161 options, 328 pyazr names read; two names shown on purpose
+  are listed in the script). Not a consistency check (it needs the build); a line in `tests/CLAUDE.md`.
+
+**Verified.** Greps before and after (in the report); the build with 0 warnings; the consistency test; the injected
+names (an option, a module, a session call) fail the docs check.
+
+**Left.** The binding's private names (`write_output_files`, `data_mode`, `coulomb_functions` in
+`api/src/pybind_api.cpp`) are the engine module's, not pyazr's; the diagnostics table's description of
+`E_STOPPING_DATA` (`experiment/src/Diagnostics.cpp`) still names only the switch, since `tests/schema/schema_v3.json`
+and `format3.rst` copy it.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-7-tests-cannot-fail`) — comparisons of the tests that could not fail
 
 **Done.** A comparison whose failure cannot reach the caller, in `tests/*/check.sh`, `tests/lib/`, `tests/run_tests.sh`
