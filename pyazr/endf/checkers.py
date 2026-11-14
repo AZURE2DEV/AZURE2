@@ -368,8 +368,9 @@ class Candidate:
             stem, _ = os.path.splitext(self.original)
             to = f"{stem}.{self.program}.endf"
         if os.path.exists(to) and not overwrite:
-            raise FormatRefused(what=f"{to} exists", allowed="a path that does not exist, or overwrite=True",
-                                fix=f"Candidate.accept(to='{to}', overwrite=True) replaces it")
+            raise FormatRefused(what=f"{to} exists", allowed="a file name that does not exist yet (an existing file is "
+                                "replaced only when that is asked for)", fix="keep the candidate as a new file, or "
+                                "ask for the existing file to be replaced (overwrite)")
         shutil.copyfile(self.path, to)
         return to
 

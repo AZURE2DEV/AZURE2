@@ -40,9 +40,14 @@ LRP = 2
 #: MF=2 must reproduce MF=3 to this (relative, at every grid point where MF=3 is above 1e-12 of its largest value).
 MF2_TOLERANCE = 1e-5
 ELECTRON_MASS_U = 0.000548579909  # CODATA 2018
-NOT_WRITTEN = ("MF=3/MT=2 and MF=6/MT=2 (charged-particle elastic needs MF=6 LAW=5, pp. 144-147)",
-               "MF=6 of the particle exits (LAW=2 Legendre coefficients, pp. 142-143)",
-               "MF=6/MT=102 (the primary photons to each final state, p. 136)")
+#: Why a section a project's reactions need is not written: (MF, role) -> the reason.  The writer lists every section
+#: that a reaction of the project needs and the file does not hold (``Written.not_written`` and the MF=1 text).
+NOT_BUILT = {(3, "elastic"): "charged-particle elastic scattering: MF=3/MT=2 goes with MF=6 LAW=5 (pp. 144-147, "
+                             "150), which this writer does not write",
+             (6, "elastic"): "LAW=5 of charged-particle elastic scattering (pp. 144-147) is not written",
+             (6, "exit"): "LAW=2 of a two-body exit (p. 143) is not written",
+             (6, "capture"): "the primary photons to each final state (LAW=2, p. 143) and the recoils (p. 136) are "
+                             "not written"}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -255,24 +260,26 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     MF=3 to ``MF2_TOLERANCE``."""
     path = os.path.abspath(path)
     if os.path.exists(path) and not overwrite:
-        raise FormatRefused(what=f"{path} exists", allowed="a new file (write never replaces a file unasked)",
-                            fix="give another path, or overwrite=True")
+        raise FormatRefused(what=f"{path} exists", allowed="a new file (an existing file is replaced only when that is "
+                            "asked for)", fix="write to a file name that does not exist yet, or ask for the "
+                            "existing file to be replaced (overwrite)")
     if number_form not in NUMBER_FORMS:
         raise FormatRefused(what=f"number_form {number_form!r}", allowed=", ".join(NUMBER_FORMS),
-                            fix="number_form='widest' (the default)")
+                            fix="choose the widest form (the default): fixed point where it fits, 8-10 digits")
     h = dict(MAT=9999, NLIB=0, NVER=1, LREL=0, NMOD=1, ALAB="", EDATE="", AUTH="", REF="", DDATE="", RDATE="",
              LIBRARY="AZURE2", TEXT=())
     unknown = set(header or {}) - set(h)
     if unknown:
         raise FormatRefused(what=f"header fields {sorted(unknown)}", allowed=", ".join(h),
-                            fix="give the MF=1 fields by these names")
+                            fix="name the MF=1 fields as listed")
     h.update(header or {})
     if energy_range_MeV is None:
         lab = [e for d in session.evaluate(session.parameters.x0 if x is None else x).data
                for e in np.asarray(d.extra.get("energy_lab", []), float)]
         if not lab:
             raise FormatRefused(what="the session has no data to take an energy range from",
-                                allowed="energy_range_MeV=(low, high), lab MeV", fix="give energy_range_MeV")
+                                allowed="an energy range given with the request (lab MeV of the projectile)",
+                                fix="give the lowest and highest lab energy of the file")
         energy_range_MeV = (min(lab), max(lab))
     lo, hi = (float(v) for v in energy_range_MeV)
     record, losses = from_session(session, x, energy_range_eV=(lo * EV_PER_MEV, hi * EV_PER_MEV))
@@ -301,7 +308,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         raise FormatRefused(what=f"the grid reached max_points={max_points} before the tolerance {tolerance:g} "
                             f"(largest deviation {refined.get('largest_deviation'):.2e} at "
                             f"{refined.get('largest_deviation_at')} MeV)", allowed="a grid that meets the tolerance",
-                            fix="raise max_points, loosen tolerance or narrow energy_range_MeV")
+                            fix="allow more grid points, a looser tolerance or a narrower energy range")
     mf2 = record.rows(number_form)
     sections = {(2, 151): mf2}
     grids, values = {}, {}
@@ -333,7 +340,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             if mf2_check[mt] > MF2_TOLERANCE:
                 raise FormatRefused(what=f"MF=2 as written reproduces MF=3/MT={mt} only to {mf2_check[mt]:.2e}",
                                     allowed=f"agreement to {MF2_TOLERANCE:g} (LRP=2: MF=2 reproduces MF=3)",
-                                    fix=f"the files are kept in {work} for a look; report the project")
+                                    fix=f"report the project to the AZURE2 developers (the files are kept in {work})")
+    # every section a reaction of the project needs, and why it is not written where it is not
+    needed = [(3, 2, "elastic"), (6, 2, "elastic")] + [(mf, mt, "capture" if mt == 102 else "exit")
+                                                       for _, mt, _ in reactions for mf in (3, 6)]
+    not_written = tuple(f"MF={mf}/MT={mt} ({names.reaction_name(mt)}): {NOT_BUILT[(mf, role)]}"
+                        for mf, mt, role in needed if (mf, mt) not in sections)
     # MF=1
     ent = record.pairs[0]
     target_z, target_a = int(round(ent.zb)), int(round(ent.mb * M_NEUTRON_U))
@@ -365,7 +377,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         for jpi, e, k, r, l, wv in losses.photon_widths:
             text.append(f"  {jpi:5s} E_x {e:11.6f} MeV to pair {k} ({r}{l}): {wv:.6g}")
     text += ["", "Not carried by this file:"]
-    for t in losses.items + NOT_WRITTEN:
+    for t in losses.items + not_written:
         text += _wrap("- " + t)
     for t in h["TEXT"]:
         text += _wrap(t) or [""]
@@ -374,4 +386,4 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                     tpid=f" pyazr.endf.write, {os.path.basename(session.file)}")
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
-    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), NOT_WRITTEN)
+    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), not_written)

@@ -134,11 +134,27 @@ for azr in PROJECTS:
             got.setdefault(lv.jpi, []).append(lv.energy_MeV)
         worst = max(abs(a - b) / max(abs(a), 1.0) for k in got for a, b in zip(sorted(orig[k]), sorted(got[k])))
         check(f"{name}: the levels read back from the file: energies to 1e-7 MeV", worst < 1e-7, (orig, got))
-        # (d)
+        # (d) the list of what is not carried, against the file's own reading: every section a reaction of the
+        # project needs (elastic MT=2, each exit, capture MT=102; MF=3 and MF=6) is in the file or named in
+        # not_written, never both; the losses name exactly what the project holds (photon pairs, data sets, THM)
         text = " ".join(" ".join(m.header.text).split())
-        check(f"{name}: MF=1 names LRP=2's statement, the losses and the sections not written",
+        sections = set(m.sections)
+        mts = [2] + [r.mt for r in back.pairs[1:]] + ([102] if any(p.pair_kind == "photon" for p in s.pairs) else [])
+        named = {(mf, mt) for mf in (3, 6) for mt in mts if any(t.startswith(f"MF={mf}/MT={mt} ") for t in
+                                                                  w.not_written)}
+        both = [(mf, mt) for mf in (3, 6) for mt in mts if ((mf, mt) in sections) == ((mf, mt) in named)]
+        check(f"{name}: every section the reactions {mts} need is written or named as not written, never both",
+              not both and len(w.not_written) == len(named), (both, w.not_written))
+        photons = any(p.pair_kind == "photon" for p in s.pairs)
+        expect = [photons, True, bool((project.thm() or {}).get("experiments"))]
+        got_items = [any("photon channels" in t for t in w.losses),
+                     any(t.startswith(f"the {len(s.datasets)} data set(s)") for t in w.losses),
+                     any("Trojan-horse" in t for t in w.losses)]
+        check(f"{name}: the losses name the photon channels, the {len(s.datasets)} data sets and THM exactly when "
+              f"the project has them ({expect})", got_items == expect and len(w.losses) == sum(expect), w.losses)
+        check(f"{name}: MF=1 names LRP=2's statement and every loss and section not written",
               "MF=2 (LRF=7, KRM=4, IFG=1) reproduces" in text and "Not carried by this file" in text and
-              "MF=6/MT=102" in text, text[-800:])
+              all(" ".join(("- " + t).split()) in text for t in w.losses + w.not_written), text[-800:])
         check(f"{name}: MF=1: LRP=2, NSUB of the projectile, EMAX the upper energy", m.header.lrp == 2 and
               m.header.nsub == 10 * (1000 * int(ent["Z1"]) + round(ent["M1"])), (m.header.lrp, m.header.nsub))
         if os.environ.get("AZURE2_ENDF_UTILITIES") and os.environ.get("AZURE2_PREPRO"):
