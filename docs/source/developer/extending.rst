@@ -479,10 +479,12 @@ The two builders make a file the engine reads from named parts; the page's forms
   ``block``); a case in ``tests/pyazr/covariance_builder_test.py`` against a matrix worked by hand.
 - **A prior on the parameters** (``pyazr/priors.py``): one row of ``PART_KINDS`` and one function of ``_BLOCKS``
   that returns the part's ``_Block`` (its parameter names, centres, covariance and notes); a case in
-  ``tests/pyazr/prior_builder_test.py``.
+  ``tests/pyazr/prior_builder_test.py``.  A new type of field also needs its control in ``fieldInput`` of
+  ``pyazr/ui/static/tabs/prior.js`` (the types: ``path:<suffixes>``, ``names``, ``number``, ``integer``, ``pairs``,
+  ``matrix``).
 
-Nothing else: the checks and the notes are made on the whole matrix, and the data covariance's screen
-(``tabs/covariance.js``) reads its table.
+Nothing else: the checks and the notes are made on the whole matrix, and the screens (``tabs/covariance.js``,
+``tabs/prior.js``) read the tables through their routes (``pyazr/ui/utilities.py``, ``pyazr/ui/prior.py``).
 
 Other tables
 ------------

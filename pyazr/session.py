@@ -52,6 +52,15 @@ def _config_output_dir(path):
         line = line[:line.rindex("#")]
     return line.strip(" \n\t\r")
 
+
+def basis_of(options):
+    """The basis of the fit vector of a session with these options (:attr:`Session.options`): 2 Park when
+    ``use_park``, else 1 Brune when ``use_brune``, else 0 standard."""
+    if options.get("use_park"):
+        return 2
+    return 1 if options.get("use_brune") else 0
+
+
 class Session(
         _HybridPotentials,
         session_physics.SessionPhysics,
@@ -520,9 +529,7 @@ class Session(
         """Which amplitudes the fit vector holds: 0 standard (constant boundary
         condition), 1 Brune, 2 Park -- the ``#parametrization`` tag AZURE2 writes
         first in ``param.sav``."""
-        if self.options.get("use_park"):
-            return 2
-        return 1 if self.options.get("use_brune") else 0
+        return basis_of(self.options)
 
     @engine_call
     def refreeze_covariance(self):

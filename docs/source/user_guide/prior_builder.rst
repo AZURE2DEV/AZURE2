@@ -4,7 +4,8 @@ The prior builder
 A prior on the fit parameters -- a multivariate Gaussian over several of them, ``priorCovariance=<file>`` in
 ``<config>`` (:doc:`chi_squared`, "Prior parameter covariance") -- is a file of names, centres and a covariance.
 The builder writes it from named *parts* over the project's parameter table, checks it as the engine will, and says
-what the engine will do with it.  It is ``pyazr.priors.build``.  It has a page of its own beside
+what the engine will do with it.  It is ``pyazr.priors.build`` and, on the web page, **Prior on the parameters…**
+in the Fit tab.  It has a page of its own beside
 :doc:`covariance_builder` (the covariance of a data set's points): the two files hold different things (data rows
 against fit parameters) and are named in different places (a data set's field against a ``<config>`` key).
 
@@ -103,3 +104,27 @@ own): 5 % on both normalizations around 1, 0.05 MeV\ :sup:`1/2` on ``width_1_1``
 first normalization's own prior is replaced.  At the normalizations 1.07 and 0.96 and the width 0.63 the engine's
 term is 2.25, :math:`d^T C^{-1} d` formed by hand (to :math:`10^{-10}`), and the objective is the data
 :math:`\chi^2` plus that term, without the 10 % prior (``tests/pyazr/prior_builder_test.py``).
+
+On the page
+-----------
+
+**Prior on the parameters…**, above the Fit tab's parameter table, opens the builder (``#/prior``; one click in the
+first view as in the expert's).  It shows:
+
+- the file the project names (``priorCovariance``), whether the builder wrote it (it then opens with its parts) or
+  it was written by hand, and **Remove the prior** (the key taken out of ``<config>``; the file stays; Undo puts the
+  key back);
+- the parameter table with a check box per row (name, kind, unit, x, free or fixed, limits, a prior of its own; a
+  filter and "free only");
+- the parts as rows: a kind chosen from the list and **+ part** (a part ``width`` takes the parameters checked),
+  each field as its kind states it: a file chosen among the project folder's files (``param.sav``,
+  ``covariance.dat``, ``chain_<id>.npy``), the checked parameters taken into a names field ("take the checked"), a
+  number box with its unit, a pair of parameters chosen from two lists with its coefficient;
+- **Build**: the engine's refusal (what, allowed, fix, the parts concerned) or the check (eigenvalues, condition
+  number), the notes, the centres and sigmas, the correlation matrix as a heat map (a table without plotly.js), the
+  file's text;
+- **Write and use** with the proposed file name (``prior_parameters.txt``): the file and the key as one edit; Undo
+  removes the file (or puts back the one it replaced) and the key together.  Writing again under the same name is
+  an edit too.
+
+The page computes nothing of the prior: the routes call ``pyazr.priors.build`` on the session's parameter table.

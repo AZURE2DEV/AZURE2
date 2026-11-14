@@ -262,6 +262,19 @@ ROUTES = (
     Route("GET", "/api/rate/grids", V, "server.Server.rate_grids",
           "The named temperature grids of the rate (pyazr.rate.TEMPERATURE_GRIDS, GK) and the rate's units; the rate "
           "is the job rate/engine.", serves=("pyazr.rate.TEMPERATURE_GRIDS",)),
+    # -- the prior builder (pyazr.priors); removing the prior is PATCH /api/project/config {priorCovariance: null}
+    Route("GET", "/api/prior", V, "server.Server.prior_open",
+          "What the prior builder opens with: the priorCovariance key, the parts of the file it names (from the "
+          "file's #pyazr.prior line; hand_written when it has none), a file name to propose, the kinds of part with "
+          "their fields, the project's files.", serves=("pyazr.priors.read_parts", "pyazr.priors.kinds_table")),
+    Route("POST", "/api/prior/build", V, "server.Server.prior_build",
+          "A prior on the fit parameters from parts over the session's parameter table: names, centres, sigmas, the "
+          "correlation matrix, the checks, the engine's refusal and its parts, notes, the file's text.",
+          args=("parts",), serves=("pyazr.priors.build",)),
+    Route("POST", "/api/prior/write", V, "server.Server.prior_write",
+          "Write the prior file at path (relative to the project's directory) and set priorCovariance to it: one "
+          "history entry, which undo takes back with the file.", args=("parts", "path"), kwargs=("rev",),
+          serves=("pyazr.priors.build", "pyazr.Project.set_config")),
     # -- jobs
     Route("GET", "/api/jobs/kinds", V, "server.Server.job_kinds",
           "The job table: kind, method, settings, the package or pyazr call each needs."),

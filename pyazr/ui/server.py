@@ -21,7 +21,7 @@ from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
-from . import utilities
+from . import prior, utilities
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -303,7 +303,7 @@ class Server:
                     "session_options": session_options(session=self.session)}
 
     def parameters(self):
-        rows = self.session_describe()["parameters"]
+        rows = [dict(r) for r in self.session_describe()["parameters"]]  # the session's description stays as built
         for r in rows:
             r["x"] = self.x.get(r["name"]) if r["free"] else None
         return rows
@@ -354,6 +354,17 @@ class Server:
     @staticmethod
     def rate_grids():
         return utilities.rate_grids()
+
+    # -- the prior builder (pyazr/ui/prior.py) ----------------------------------------------------------------------
+
+    def prior_open(self):
+        return prior.prior_open(self.state)
+
+    def prior_build(self, parts):
+        return prior.prior_build(self.state, self.session_describe(), parts)
+
+    def prior_write(self, parts, path, rev=None):
+        return prior.prior_write(self.state, self.session_describe(), parts, path, rev)
 
     # -- jobs -------------------------------------------------------------------------------------------------------
 

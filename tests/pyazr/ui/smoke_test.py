@@ -45,7 +45,8 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          ("first-effects", "data?section=targets"), ("first-calculated", "results?calculated=1"),
          ("expert-project", "project?depth=expert"), ("expert-dataset", "data/{dataset}?depth=expert"),
          # the two utilities: the rate tab (the expert's depth has its link) and a data set's covariance builder
-         ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"))
+         ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"),
+         ("prior", "prior"))
 
 
 def extra_projects():

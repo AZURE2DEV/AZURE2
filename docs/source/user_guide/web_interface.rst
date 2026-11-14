@@ -220,6 +220,9 @@ x or at a fit's or a sampler's best point, with the band of that fit's covarianc
 window per temperature, a comparison table and the table as CSV (:doc:`reaction_rate`).  **Covariance…** on a data set
 of the Data tab opens the covariance builder (``#/covariance/<name>``): the data set's covariance from named parts,
 checked as the engine will read it, written and named on the data set as one edit (:doc:`covariance_builder`).
+**Prior on the parameters…** above the Fit tab's parameter table opens the prior builder (``#/prior``): a prior on
+several fit parameters with their correlations (``priorCovariance``) from named parts, checked as the engine will
+read it, written and named in ``<config>`` as one edit, or removed (:doc:`prior_builder`).
 
 Physics
 -------

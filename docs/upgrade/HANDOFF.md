@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder on the page
+
+- **Done**: the screen `pyazr/ui/static/tabs/prior.js` (`#/prior`, no header link), reached by "Prior on the
+  parameters…" above the Fit tab's parameter table (both depths): the parameter table with check boxes, parts with a
+  control per field type (a select of the project's files, the checked names, number boxes, pairs from two lists),
+  Build (refusal or eigenvalues and condition number, notes, centres and sigmas, the correlation heat map, the
+  file's text), Write and use, Remove the prior (the config route).  Server: `pyazr/ui/prior.py` (`prior_open`,
+  `prior_build`, `prior_write`, `project_files`: the one file-listing helper until `GET /api/files` merges),
+  `pyazr.session.basis_of` (`Session.basis` uses it).  `web_ui.md` section 11.13; `prior_builder.rst` "On the page",
+  `web_interface.rst`, `web_ui_api.rst`, `fitting.rst`, the Developer Guide.
+- **Lines in shared files**: `pyazr/ui/static/app.js` (the import of `tabs/prior.js`; the `TABS` row `prior`),
+  `pyazr/ui/static/tabs/fit.js` (the link, one line in the parameters' bar), `pyazr/ui/server.py` (the import of
+  `prior`; three methods under "the prior builder"), `pyazr/ui/routes.py` (three rows after the rate's grids),
+  `tests/pyazr/ui/smoke_test.py` (`VIEWS`: `("prior", "prior")`), `tests/pyazr/CMakeLists.txt` (the UI test list).
+- **Fixed**: `State.edit_with_files` dropped a write whose text was unchanged (a file rewritten under the name the
+  project already holds) and answered as if written; it now keeps it as one entry (the covariance builder's
+  "Write and use" under its own field's name had the same defect).  `Server.parameters` set `x` to null for fixed
+  rows on the cached session description itself, so a later reader of that description (the prior's table) got no
+  start value for a fixed parameter; it now answers copies.
+- **Verified**: `tests/pyazr/ui/prior_builder_test.py` (new; the injected `edit_with_files` error failed it), the
+  UI tests, the smoke test with its screenshots, `ctest -LE slow`, the consistency test, `docs_build` (numbers in
+  the report).
+
 ## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder in pyazr
 
 - **Done**: `pyazr.priors.build(parameters, parts, directory=)` makes the prior on the fit parameters

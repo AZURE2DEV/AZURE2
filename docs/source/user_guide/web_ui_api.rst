@@ -91,6 +91,10 @@ What the server keeps
 - ``GET /api/covariance/{name}``, ``POST /api/covariance/build``, ``POST /api/covariance/write`` serve the covariance
   builder (``pyazr.covariance``; the write is one history entry with its file); ``GET /api/rate/grids`` the rate's
   temperature grids; the rate itself is the job ``rate``/``engine`` (``pyazr.rate``).
+- ``GET /api/prior``, ``POST /api/prior/build`` (``{"parts": [...]}``), ``POST /api/prior/write`` (``{"parts":
+  [...], "path": ..., "rev": ...}``) serve the prior builder (``pyazr.priors.build`` on the session's parameter
+  table; the write sets ``priorCovariance`` and writes the file as one history entry); removing the prior is ``PATCH
+  /api/project/config`` with ``{"entries": {"priorCovariance": null}}``.
 
 A session from Python
 ---------------------

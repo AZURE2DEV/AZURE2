@@ -62,6 +62,11 @@ program whose `chiSquared.out` the API's numbers are compared with.
   T1 (texts equal, the objective unchanged, Undo byte for byte), a pair in use refused with remove_pair's message and
   removed with its channels, the THM binding energy on T2 (text and objective of a session on the direct edit), the
   amplitude flag, `allowed_channels` with and without `l_max`, a new level with the allowed channels.
+- `prior_builder_test.py`: the prior builder's routes on T1 against `pyazr.priors.build` called directly: the
+  summary, a name refused with what / allowed / fix, a refused matrix not written, the file and the key as one
+  history entry (the text equals `Project.set_config`'s, the term of the server's evaluation a session's and
+  d^T C^-1 d), a second write under the same name one entry whose Undo puts the first file back, Undo and Redo
+  byte for byte, the key removed through the config route.
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails
@@ -251,3 +256,10 @@ Added with the THM tab (each shown failing on 2026-11-14, the file restored afte
   `thm.keys()`; fails `thm_routes_test.py::test_keys_are_the_engines_table`.
 - a killed or interrupted sampler continues from its saved chain: the saved file not looked up; fails
   `sampler_bands_test.py::test_killed_sampler_continues_from_its_saved_chain`.
+
+Added with the prior builder (shown failing on 2026-11-14, the file restored after):
+
+- a file rewritten under the name the text already holds is a history entry: `State.edit_with_files` back to
+  returning without an entry when the text is unchanged; fails `prior_builder_test.py::test_prior_builder`.
+- `GET /api/parameters` leaves the session's description as built: `Server.parameters` back to setting `x` on the
+  cached rows (a fixed row's start became null, its centre nan); fails `prior_builder_test.py::test_prior_builder`.

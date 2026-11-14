@@ -187,7 +187,8 @@ file named under **Configure > Runtime Options** ("Prior Parameter Covariance",
 ``priorCovariance=<file>`` in ``<config>``); it has no table here. See
 :doc:`chi_squared`, "Prior parameter covariance", for the file, the workflow with
 ``pyazr.prior_from_fit`` and how it combines with the priors of this tab (the file's prior replaces a parameter's
-own), and :doc:`prior_builder` for the builder that writes the file from named parts (``pyazr.priors.build``).
+own), and :doc:`prior_builder` for the builder that writes the file from named parts (``pyazr.priors.build``, and
+**Prior on the parameters…** in the Fit tab of the web page).
 
 Controls
 --------
