@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
+
+**Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the
+model and calculation skills, the skills of inference and the evaluation (twelve skills under `.claude/skills/`,
+each with scripts on pyazr's public interface and a self-test run by `ctest`), and the structure of the compound
+system frozen after set-up (the entrance pairs an input of the set-up, the `System` built once and shared,
+`const` readers, `CNuc::MutableLevel` the one writable way in). The entries of the three branches are below.
+
+**How it was checked.**
+- Rehearsal 62 (the lighter regime, once): build with 0 warnings; all projects in three bases (887 / 851 / 887
+  files) identical to the reference tag `tab-t60-1`; of the 624 `run.log` files none differs in anything but the
+  `Threads:` line and the progress bars; the eight fits identical to the base build; `ctest -LE slow`: 262 of 262
+  (the ten skill self-tests among them, 0.8 s to 50 s each).
+- Beside the suite, for the frozen structure: an extrapolation run and a reaction-rate run of T1 on the build
+  before and after: every output file identical.
+- The long suite on rehearsal 57 has ended: the tree against `tab-t50-1`, the eight fits, the prior-centre check,
+  the 142 tests of the web page and pyazr, the 12 slow tests, `run_tests` (168 passed, 0 failed), the spec
+  equivalence (181 equal) and the gate all passed. One test of `ctest -LE slow` failed once in it,
+  `pyazr_azr_layout` (0.3 s); alone it passes on the builds of rehearsals 57 and 62. The cause was not looked
+  for; if it fails again under load, look at its temporary directory and at what else writes under `tests/`.
+
+**What the director changed at the merge.**
+- `tools/check_skills.py`, the rule on removed pyazr names: a call is written `name(`. "calculate (1)" of a
+  menu and the skill's name `azure2-calculate` were reported as the removed function `calculate`; the rule's
+  unit test has the two cases.
+
+**For the next agent.**
+- Reference tag `tab-t62-1`, base build `work/b-trial62` (the tree of this merge without this entry).
+- The skills teach pyazr as it is on this tree. When pyazr's one vector and the views merge, the skills are ported
+  by the two lists the skills' agents left (`work/skills-a/to_port.md`, `work/skills-b/to_port.md`) and every
+  self-test is run again; the checker's rule reads the removed names from the migration table of
+  `docs/source/user_guide/pyazr.rst`, so a new row there finds the places.
+- A new script of a skill must be named in the skill's `selftest.py` (the checker asks it).
+
+**Open, found at this merge (not fixed).**
+- `Session.save_fit` to another directory writes a project that cannot be opened again (the data paths stay
+  relative to the old directory).
+- An engine message still names removed pyazr calls (`calculate()`, `calculate_energies()`, `calculate_rwa()`).
+- `docs/source/reference/output_files.rst` shows `segment_<k>_norm` names.
+- A level with its widths set to zero and the same level removed differ by 3e-8 on T1's capture.
+- `Session.dimensionless_widths` gives no θ² for a fixed channel; `ChannelWidth.jpi` reads "0.5+".
+- A pair record's `entrance` field is now true from `Initialize` on (before: from the data set-up on).
+- Routines the skills had to write themselves and that could live in pyazr (the Fisher matrix, a covariance file
+  writer, a radius scan, a project audit, a decomposition by level): proposed to the PI, nothing added.
+
 ## 2026-11-14 (director, 00:26) — merged: the session class, the options, the sampler's limits, the wheel, the fit
 
 **Merged into `feature/upgrade-4-data`** (each as a merge commit with the tree of the rehearsal it was checked on):
