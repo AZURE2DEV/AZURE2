@@ -347,6 +347,11 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
+- [ ] The page for the median user (`web_ui.md` section 11.11): the original's icon, colours and About; the first
+      view in the old program's path and words with the rare fields (a column of the schema) folded; Calculate with
+      what changed; the run's settings from the engine's `<config>` table (2026-11-14). Still typed: a data file and
+      a covariance (no file list route yet), the columns, a reaction, a grid, the fit job's MINOS parameters; a
+      reference's "new…"; lists as rows.
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the

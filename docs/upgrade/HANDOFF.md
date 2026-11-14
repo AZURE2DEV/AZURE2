@@ -103,6 +103,24 @@ controls send them give the text of the direct `Project.set_config` on the same 
 Errors injected once and seen failing, then removed: a set rare field folded, the change of a calculation with its
 sign reversed, a positional entry's "set" reversed, a pair route marking the wrong view.
 
+**Verified at the end of the branch** (own build `work/b-pagefv`, 0 warnings; three threads): all projects in three
+bases against `tab-t71-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical (tag `tab-pagefv1`); the
+six tasks over HTTP on copies of T1 and T2 through the routes the page's clicks call (`work/pagefv/six_tasks.py`:
+a pair, a level with its allowed channels, a width set free, a data set with its file and a normalisation, a target
+and the data set's reference to it, a covariance removed and given), each text equal to the direct `pyazr.Project`
+call on the same text, and the objective of `POST /api/evaluate` equal to a direct `Session`'s (T1 has no target and
+no covariance file: those two skipped there); `OMP_NUM_THREADS=1 ctest -j1 -LE slow`: 276 of 276 passed (51 min). Not run: the slow tests,
+`tests/run_tests.sh`, a wheel build.
+
+**Open**: the file fields (a data file, a covariance, the prior covariance) are still typed (a list of the project
+folder's files needs the file-list route, `/api/files`, which is not built); the columns, a reaction, a grid and
+the detector's attenuation are typed in the grammar; a reference's "new…"; the fit job's MINOS parameters are
+typed names; the Fit tab is the same in both depths; the pair form's units and partner fields are the page's
+(`UNITS`, `PARTNER` of `tabs/nucleus.js`), parity typed as +1 or -1. **For the PI's eye** (no person has looked):
+the icon's size beside the name (22 px) and in About (32 px); the blue, red and green side by side, light and dark;
+the density of the run settings (four columns); whether the first view's tab names read as the old program's;
+whether "More fields" shows enough or too little of a data set's form; the Plot tab after Calculate.
+
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree
