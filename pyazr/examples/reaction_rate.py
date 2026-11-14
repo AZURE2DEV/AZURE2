@@ -1,128 +1,62 @@
 #!/usr/bin/env python3
-"""A thermonuclear reaction rate from an extrapolated cross section.
+"""The thermonuclear reaction rate N_A<sigma v> of a project, its band and its Gamow window (pyazr.rate).
 
-AZURE2's own mode 5 writes `reactionrates.out`; this does the same integral in
-Python, which is the useful form when the rate has to be recomputed for every
-sample of a posterior, or split by level, or differentiated.
+The engine computes the rate as the program's ``AZURE2 rate`` command does (src/ReactionRate.cpp: sigma on a grid
+with a cluster of points around every level, a spline of ln sigma against ln E, the integral at each temperature);
+nothing is integrated here.  This script prints the rate on the rate tables' temperature grid, the Gamow window of
+each temperature, and, with a fit's parameter file and covariance, the 1-sigma band by linear propagation; it writes
+the table as CSV with its header, and REACLIB sets fitted to it (pyazr.rate_formats).  For a rate per posterior
+sample, ``rate.rate_band(session, draws=..., names=...)`` gives the 16th, 50th and 84th percentiles over them.
 
-    N_A <sigma v> = N_A (8 / pi mu)^(1/2) (kT)^(-3/2)
-                    int_0^inf sigma(E) E exp(-E / kT) dE
+Usage (from the repository's root):
 
-with E and kT in the centre of mass.  Two practical points:
-
-  * The integrand is the Gamow window -- a narrow product of a rising
-    penetrability and a falling Boltzmann factor -- so the grid must resolve it
-    at the lowest temperature of interest, not just at the highest.  The script
-    reports the window it actually integrated over and warns if the grid ends
-    inside it.
-  * A resonance narrower than the grid spacing is simply missed.  The default
-    grid here is uniform; for a real evaluation, refine it around every
-    resonance in the range, or use mode 5, which does that itself.
-
-Usage:
-    python3 reaction_rate.py <file.azr> --entrance 1 --exit 2 \\
-        --emin 0.005 --emax 3.0 --npts 3000 [--params output/param.sav]
+    python3 pyazr/examples/reaction_rate.py tests/upgrade/T1/T1.azr --entrance 1 --exit 2 \\
+        [--params output/param.sav --covariance output/covariance.dat] [--csv rate.csv] [--reaclib rate.reaclib]
 """
-
-from __future__ import annotations
 
 import argparse
 import os
 import sys
-from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-import numpy as np
-
-from pyazr import Project, Session
-
-NA = 6.02214076e23            # 1/mol
-KB = 8.617333262e-2           # MeV / GK
-AMU = 931.49410242            # MeV
-C_CM_S = 2.99792458e10        # cm/s
-BARN_CM2 = 1e-24
-
-T9 = np.array([0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0,
-               3.0, 5.0, 10.0])
+from pyazr import rate, rate_formats, read_covariance_dat  # noqa: E402
 
 
-def entrance_pair(mdl: Project, pair: int):
-    """The particle pair ``pair`` of the project (masses in u, charges)."""
-    for q in mdl.pairs():
-        if q.key == pair and q.kind == 0:
-            return q
-    raise SystemExit(f"no particle pair with key {pair}")
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("azr")
     ap.add_argument("--entrance", type=int, default=1)
-    ap.add_argument("--exit", dest="exit_pair", type=int, default=2)
-    ap.add_argument("--emin", type=float, default=0.005, help="c.m. MeV")
-    ap.add_argument("--emax", type=float, default=3.0, help="c.m. MeV")
-    ap.add_argument("--npts", type=int, default=3000)
-    ap.add_argument("--params", type=Path, default=None)
-    ap.add_argument("--keep", action="store_true",
-                    help="keep the generated .azr instead of removing it")
+    ap.add_argument("--exit", dest="exit_pair", type=int, default=2, help="-1: the total radiative capture")
+    ap.add_argument("--grid", default="table", choices=sorted(rate.TEMPERATURE_GRIDS))
+    ap.add_argument("--params", default=None, help="a parameter file (param.sav) of a fit")
+    ap.add_argument("--covariance", default=None, help="the fit's covariance.dat (with its #columns line)")
+    ap.add_argument("--csv", default=None, help="write the table here")
+    ap.add_argument("--reaclib", default=None, help="write the rate as REACLIB sets here (pyazr.rate_formats)")
     args = ap.parse_args()
 
-    mdl = Project.open(args.azr)
-    q = entrance_pair(mdl, args.entrance)
-    m1, m2 = q.light_mass, q.heavy_mass
-    mu = m1 * m2 / (m1 + m2)          # amu
-    cm2lab = m2 / (m1 + m2)
-
-    step = (args.emax - args.emin) / max(args.npts - 1, 1)
-    for name, r in mdl.records().items():
-        if r.record_kind == "extrapolation":
-            mdl.remove(name)
-    # sigma on a c.m. grid of the entrance pair (the engine takes it to lab energies)
-    mdl.add_extrapolation("grid", reaction=mdl.reaction(args.entrance, args.exit_pair), quantity="sigma", unit="b",
-                          energies=f"range {args.emin!r} {args.emax!r} MeV cm step {step!r}")
-    out = args.azr.with_name("_rate.azr")
-    mdl.save(out)
-
-    stale = args.azr.parent / "output" / "intEC.extrap"
-    if stale.exists():
-        stale.unlink()
-
-    # a session for the extrapolations, with the fit's parameter file (fixed values included) when given
-    with Session(str(out), extrapolations=True, parameter_file=args.params) as azr:
-        x = np.asarray(azr.parameters.x0, float)
-        e = np.asarray(azr.evaluate(x).data[0].energies, float)
-        sig = np.asarray(azr.evaluate(x).data[0].model, float)
-
-    o = np.argsort(e)
-    e, sig = e[o], sig[o]
-    print(f"mu = {mu:.5f} u; sigma on {len(e)} points, "
-          f"{e[0]:.4f}-{e[-1]:.4f} MeV, spacing {np.diff(e).mean()*1e3:.2f} keV")
-
-    v_pref = np.sqrt(8.0 / (np.pi * mu * AMU)) * C_CM_S   # cm/s, times sqrt(MeV)
-    print(f"\n{'T9':>7} {'kT (MeV)':>10} {'NA<sv>':>13} {'E0 (MeV)':>10} "
-          f"{'window':>18}")
-    for t9 in T9:
-        kt = KB * t9
-        w = sig * e * np.exp(-e / kt) * BARN_CM2
-        rate = NA * v_pref * kt ** -1.5 * np.trapezoid(w, e)
-
-        # Gamow peak and its 1/e width, for reporting the window integrated.
-        eta_c = 0.1574854 * q.light[0] * q.heavy[0] * np.sqrt(mu)
-        e0 = (0.5 * eta_c * np.pi * kt) ** (2.0 / 3.0) if eta_c else np.nan
-        dw = 4.0 * np.sqrt(e0 * kt / 3.0) if eta_c else np.nan
-        flag = "  <- grid ends inside" if e[-1] < e0 + dw / 2 else ""
-        print(f"{t9:7.2f} {kt:10.4f} {rate:13.4e} {e0:10.4f} "
-              f"{e0-dw/2:7.3f}-{e0+dw/2:.3f}{flag}")
-
-    print("\nUnits: cm^3 mol^-1 s^-1.  Compare against AZURE2 mode 5, which "
-          "refines\nthe grid around each resonance; a rate that disagrees at "
-          "low T9 usually\nmeans this uniform grid missed a narrow one.")
-    # The grid has to live beside the original, because AZURE2 resolves data
-    # paths relative to the .azr; do not leave it there.
-    if not args.keep:
-        out.unlink(missing_ok=True)
+    with rate.RateSession(args.azr, args.entrance, args.exit_pair, parameter_file=args.params) as s:
+        r = s.rate(grid=args.grid)
+        band = None
+        if args.covariance:
+            C, names, _ = read_covariance_dat(args.covariance)
+            band = rate.rate_band(s, covariance=C, names=names, grid=args.grid)
+    g = rate.gamow_window(args.azr, args.entrance, r.T9)
+    print(f"N_A<sigma v> of {r.reaction} ({r.units['rate']}), parameters: {r.source}")
+    print(f"{'T9':>7} {'rate':>13} {'E0 (MeV)':>9} {'window (MeV)':>17}" + ("  1-sigma band" if band else ""))
+    for i, t in enumerate(r.T9):
+        line = f"{t:7.3g} {r.rate[i]:13.5e} {g['E0'][i]:9.4f} {g['low'][i]:8.4f}-{g['high'][i]:<8.4f}"
+        if band:
+            line += f"  {band.low[i]:.4e} - {band.high[i]:.4e}"
+        print(line)
+    if args.reaclib:
+        fit = rate_formats.fit_reaclib(r)
+        rate_formats.write_reaclib(args.reaclib, fit, rate_formats.species_of(args.azr, args.entrance,
+                                                                             args.exit_pair))
+        print(f"REACLIB: {fit.summary()}; written: {args.reaclib}")
+    if args.csv:
+        rate.write_rate_table(args.csv, r, band=band)
+        print(f"written: {args.csv}")
     return 0
 
 

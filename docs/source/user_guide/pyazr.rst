@@ -1260,7 +1260,8 @@ The names of the package
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
 lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
-``system``, ``sources``, ``stopping``, ``physics`` and ``endf``, and the error classes.
+``system``, ``sources``, ``stopping``, ``physics``, ``endf``, ``covariance`` (:doc:`covariance_builder`),
+``rate`` and ``rate_formats`` (:doc:`reaction_rate`), and the error classes.
 
 .. code-block:: text
 
@@ -1270,7 +1271,8 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    reference resolve_doi aps_doi sfactor_to_cross_section cm_to_lab ChannelWidth WidthTable weisskopf_width Band
    load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
    uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
-   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat schema validate
+   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat covariance rate
+   rate_formats schema validate
    describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
@@ -1477,8 +1479,11 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``channel_radius_scan.py``
      - χ² against the channel radius, one in-process session per radius.
    * - ``reaction_rate.py``
-     - N\ :sub:`A`\ ⟨σv⟩ by integrating the extrapolated cross section
-       over a Maxwell--Boltzmann distribution.
+     - N\ :sub:`A`\ ⟨σv⟩ computed by the engine (``pyazr.rate``), the Gamow
+       window and the band of a fit's covariance (:doc:`reaction_rate`).
+   * - ``covariance_builder.py``
+     - A data set's covariance file from named parts (``pyazr.covariance``,
+       :doc:`covariance_builder`).
 
 Running in parallel
 -------------------

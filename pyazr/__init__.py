@@ -16,6 +16,7 @@ The engine runs in this interpreter (the compiled module ``pyazr._azure2``); a p
 - :class:`Parameters` / :class:`Parameter` -- the parameter table: what each entry of the fit vector is (name, kind,
   unit, start, bounds, owner), from the engine's records (``Session.parameters``): ``of_kind``, ``of_level``,
   ``put``, ``take``, ``read``, ``write``.
+- :mod:`pyazr.covariance` -- a data covariance file from named parts; :mod:`pyazr.rate` -- the engine's reaction rate.
 - :mod:`pyazr.stopping`, :func:`whittaker_wave` -- physics functions; :mod:`pyazr.sources` -- the libraries
   (``nds``: EXFOR and ENSDF; ``masses``: AME2020; ``exfor_coulomb``, ``exfor_sfactor``: EXFOR rules).
 
@@ -85,6 +86,9 @@ try:
                            parameter_label, azr_parameter_slots,
                            write_averaged_azr)
     from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
+    from . import covariance
+    from . import rate
+    from . import rate_formats
     from .schema import schema, validate, describe, predictions
     from .described import kinds
     from .grids import extrapolation_grid, refine_grid
@@ -115,7 +119,8 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "uncertainty_bands", "extrapolation_bands",
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
-           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "covariance", "rate",
+           "rate_formats",
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid",
            "Project", "Record", "Nuisance", "FormatError", "records_from_csv",

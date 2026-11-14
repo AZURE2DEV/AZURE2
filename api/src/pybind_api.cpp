@@ -43,6 +43,9 @@
 #include <gsl/gsl_errno.h>
 #include "pybind_notices.h"
 #include "ProjectOptions.h"
+#include "ReactionRate.h"
+#include "CNucChecks.h"
+#include <optional>
 #include "azure2/io/ConfigSection.h"
 
 namespace py = pybind11;
@@ -75,6 +78,7 @@ py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_
 py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
                            unsigned int maxCalls, const py::object &progress, const py::object &stop);
 void BindFit(py::module_ &m);
+void BindDataRows(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: the view of a session's hybrid potentials
 pybind11::tuple SessionPotentialView(const Config &config, int pair);
@@ -145,7 +149,9 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 class Session {
  public:
-  Session(const std::string &configfile, const RuntimeOptions &opt) :
+  // rateEntrance != 0: a reaction-rate session (the rate's pair keys; exit -1 the total radiative capture), set up as
+  // the program's rate command sets up its run (RunPreparation.cpp, kRate): the levels, no data.
+  Session(const std::string &configfile, const RuntimeOptions &opt, int rateEntrance = 0, int rateExit = 0) :
     config_(nullptr),
     api_(nullptr) {
     // AZURE_REFINE_QUADRATURE: a bad value raises (ValueError), before any allocation
@@ -155,6 +161,12 @@ class Session {
     config_->configfile = configfile;
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
+    if (rateEntrance != 0) {
+      config_->paramMask &= ~Config::CALCULATE_WITH_DATA;
+      config_->paramMask |= Config::CALCULATE_REACTION_RATE;
+      config_->rateParams.entrancePair = rateEntrance;
+      config_->rateParams.exitPair = rateExit;
+    }
 
 
     // The binding is the API: mirror the checks main() performs for a headless run.
@@ -387,6 +399,40 @@ class Session {
   }
   int refreeze_covariance() {
     return api_->RefreezeCovariance();
+  }
+
+  // -- the reaction rate (a session made with rate_entrance) ----------------------------------------------------
+  // N_A<sigma v> at every parameter value of `p` (all parameters, the params_all_rwa() layout), as the program's rate
+  // command computes it (AZUREMain.cpp RunReactionRate): on the temperatures min + i step (i = 0 .. (max - min) / step,
+  // sorted) when `temperature_file` is empty, else on the file's temperatures in its order.  (T9, rate) pairs.
+  std::vector<std::pair<double, double>> reaction_rate(const py::array_t<double, py::array::forcecast> &p,
+                                                       double minTemp, double maxTemp, double tempStep,
+                                                       const std::string &temperatureFile) {
+    if (!(config_->paramMask & Config::CALCULATE_REACTION_RATE))
+      throw py::value_error("reaction_rate: the session was not made for a rate (Session(..., rate_entrance=))");
+    vector_r v = to_vector(p);
+    expect_all(v, "reaction_rate");
+    std::vector<std::pair<double, double>> out;
+    {
+      py::gil_scoped_release release;
+      Config &configure = *config_;
+      configure.rateParams.useFile = !temperatureFile.empty();
+      configure.rateParams.temperatureFile = temperatureFile;
+      configure.rateParams.minTemp = minTemp;
+      configure.rateParams.maxTemp = maxTemp;
+      configure.rateParams.tempStep = tempStep;
+      CNuc *compound = api_->compound();
+      ReactionRate rate(compound, v, configure, configure.rateParams.entrancePair, configure.rateParams.exitPair);
+      if (const std::optional<ObservedLevelTable> observed = compound->ObservedWidthsAt(configure, v))
+        WarnLargeRadiativeWidths(*compound, *observed, configure);
+      if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(configure);
+      if (configure.rateParams.useFile)
+        rate.CalculateFileRates();
+      else
+        rate.CalculateRates();
+      for (const RateData &r : rate.Rates()) out.emplace_back(r.temperature, r.rate);
+    }
+    return out;
   }
   py::array_t<double> calculate_chi2_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
@@ -794,6 +840,7 @@ PYBIND11_MODULE(_azure2, m) {
   BindPhysics(m);  // pybind_physics.cpp: the table of physics functions (physics_functions(), physics_evaluate)
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
   BindFit(m);  // pybind_fit.cpp: the engine's fitters (fitters(), StopRequest)
+  BindDataRows(m);  // pybind_data_rows.cpp: a data set's file as the engine reads it (data_rows)
 
   m.def(
       "parameter_kinds",
@@ -834,13 +881,16 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
       .def_readwrite("base_directory", &RuntimeOptions::base_directory)
       .def_readwrite("options", &RuntimeOptions::options,
-                     "The options of the calculation the call gave, {keyword: bool}; one left out is not given.");
+                     "The options of the calculation the call gave, {keyword: bool}; one left out is not given.")
+;
 
   py::class_<Session>(m, "Session")
-      .def(py::init<const std::string &, const RuntimeOptions &>(),
-           py::arg("configfile"), py::arg("options") = RuntimeOptions(),
+      .def(py::init<const std::string &, const RuntimeOptions &, int, int>(),
+           py::arg("configfile"), py::arg("options") = RuntimeOptions(), py::arg("rate_entrance") = 0,
+           py::arg("rate_exit") = 0,
            "Load ``configfile`` and build the model.  Raises AZURE2Error if "
-           "the file is missing or the model will not initialize.")
+           "the file is missing or the model will not initialize.  rate_entrance (not 0) and rate_exit: a session "
+           "for the reaction rate of those pairs (reaction_rate), set up as the program's rate command.")
       .def("write_output_files", &Session::write_output_files,
            py::call_guard<py::gil_scoped_release>(),
            "Write AZUREOut_*, chiSquared.out and the rest into the output "
@@ -848,6 +898,12 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_external_capture", &Session::calculate_external_capture,
            py::call_guard<py::gil_scoped_release>(),
            "Recompute every external-capture integral from scratch.")
+      .def("reaction_rate", &Session::reaction_rate, py::arg("params"), py::arg("min_temp"), py::arg("max_temp"),
+           py::arg("temp_step"), py::arg("temperature_file"),
+           "N_A<sigma v> (cm^3 mol^-1 s^-1) of a rate session (Session(..., rate_entrance, rate_exit)) at every "
+           "parameter value (params_all_rwa() layout), as the program's rate command: [(T9, rate)] on min_temp + i "
+           "temp_step (GK) up to max_temp, sorted, or on the temperatures of temperature_file in its order when "
+           "that is not empty.")
       .def("option_sources", &Session::option_sources,
            "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
            "<config> key) or 'keyword' (given to the session).")

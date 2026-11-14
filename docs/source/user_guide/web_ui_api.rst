@@ -87,8 +87,10 @@ What the server keeps
   (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET
   /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc): the engine's table of
   the keys its parser reads, ``pyazr.kinds()["thm"]``.
-- Routes that need a pyazr call that does not exist yet (the engine's own fitters, the reaction rate, the level
-  matrix, ...) answer 501 naming that call.
+- Routes that need a pyazr call that does not exist yet (the level matrix, ...) answer 501 naming that call.
+- ``GET /api/covariance/{name}``, ``POST /api/covariance/build``, ``POST /api/covariance/write`` serve the covariance
+  builder (``pyazr.covariance``; the write is one history entry with its file); ``GET /api/rate/grids`` the rate's
+  temperature grids; the rate itself is the job ``rate``/``engine`` (``pyazr.rate``).
 
 A session from Python
 ---------------------

@@ -21,6 +21,7 @@ from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
+from . import utilities
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -338,6 +339,21 @@ class Server:
             merged = self.state.merge_snapshot(self.worker.built_from, self.session_text_built, snapshot)
         self.state.replace_text(rev, merged, what)
         return {"rev": self.state.rev}
+
+    # -- utilities: the covariance builder and the rate's tables (pyazr/ui/utilities.py) ------------------------------
+
+    def covariance_open(self, name):
+        return utilities.covariance_open(self.state, name)
+
+    def covariance_build(self, datasets, parts):
+        return utilities.covariance_build(self.state, datasets, parts)
+
+    def covariance_write(self, datasets, parts, path, rev=None):
+        return utilities.covariance_write(self.state, datasets, parts, path, rev)
+
+    @staticmethod
+    def rate_grids():
+        return utilities.rate_grids()
 
     # -- jobs -------------------------------------------------------------------------------------------------------
 

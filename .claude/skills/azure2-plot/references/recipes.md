@@ -60,7 +60,7 @@ lo, hi = b.interval(1.0)                      # 1σ band (MeV b)
 The ratio of a rate to a reference rate (a compilation, or a previous evaluation) on one T9 grid:
 
 1. Compute N_A⟨σv⟩ with mode 5 (`reactionrates.out`: T9 in GK, rate in cm³ mol⁻¹ s⁻¹) or with
-   `pyazr/examples/reaction_rate.py` per sample.
+   `pyazr.rate` (`pyazr/examples/reaction_rate.py`; `rate_band` for draws).
 2. Interpolate the reference to the same T9 values in log T9 and log rate; never interpolate across a resonance
    threshold with a linear rule.
 3. Plot rate/reference against T9 on a log axis, with the band from the rate samples or from propagation
