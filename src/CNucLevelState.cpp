@@ -31,11 +31,11 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
       std::vector<double> g;
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         levelState_.SetGamma(j, la, ch, p[i]);
-        level->SetECGamma(ch, p[i]);
+        levelState_.SetECGamma(j, la, ch, p[i]);
         g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
+      levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
@@ -222,7 +222,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       // parametrizations.
       std::vector<double> g;
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) g.push_back(levelState_.Gamma(m.j, m.la, ch));
-      theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
+      levelState_.SetSqrtNF(m.j, m.la, SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
     }
   }
 }

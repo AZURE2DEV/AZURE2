@@ -8,7 +8,6 @@
 ALevel::ALevel(const azure2::io::LevelRow &nucLine) :
   level_e_(nucLine.levelE()),
   isinrmatrix_(true),
-  sqrt_nf_factor_(1.0),
   isECLevel_(false),
   ecMultMask_(0),
   ecPairNum_(0) {
@@ -26,7 +25,6 @@ ALevel::ALevel(double energy) :
   energyfixed_(true),
   level_e_(energy),
   isinrmatrix_(false),
-  sqrt_nf_factor_(1.0),
   isECLevel_(false),
   ecMultMask_(0),
   ecPairNum_(0) {};
@@ -132,14 +130,6 @@ double ALevel::GetNFIntegral(int channelNum) const {
 }
 
 /*!
- * Returns the \f$N_f^{1/2}\f$ term for the level.
- */
-
-double ALevel::GetSqrtNFFactor() const {
-  return sqrt_nf_factor_;
-}
-
-/*!
  * Returns the conversion factor from reduced width amplitude to ANC for a given channel number.
  */
 
@@ -151,7 +141,6 @@ double ALevel::GetECConversionFactor(int channelNum) const {
 void ALevel::PadChannels(int n) {
   while ((int)gammas_.size() < n) {
     gammas_.push_back(0.0);
-    ec_gammas_.push_back(0.0);
     channelfixed_.push_back(true);
     gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
     zero_input_.push_back(true);
@@ -194,32 +183,11 @@ void ALevel::AddNFIntegral(double integral) {
 }
 
 /*!
- * This function sets the \f$N_f^{1/2}\f$ term for the level.
- */
-
-void ALevel::SetSqrtNFFactor(double term) {
-  sqrt_nf_factor_ = term;
-}
-
-/*!
  * This function adds a conversion factor from reduced width amplitude to ANC.
  */
 
 void ALevel::AddECConversionFactor(double conversionFactor) {
   ec_conv_factors_.push_back(conversionFactor);
-}
-
-/*!
- * The amplitude with which this level enters external capture as a final state: its Brune (Park) amplitude, the
- * fit amplitude except in the formal basis (CNuc::FillCompoundFromParams; cnuc_split.md section 8).
- */
-
-double ALevel::GetECGamma(int channelNum) const {
-  return ec_gammas_[channelNum - 1];
-}
-
-void ALevel::SetECGamma(int channelNum, double reducedWidth) {
-  ec_gammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!

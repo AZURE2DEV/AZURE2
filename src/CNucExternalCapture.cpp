@@ -150,7 +150,7 @@ complex ExternalReducedWidthOfInputs(CNuc &compound, const JGroup *group, const 
   for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(level->GetGamma(ch));
   for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
     values.finalGamma.push_back(finalLevel->GetGamma(ch));
-  values.finalSqrtNF = finalLevel->GetSqrtNFFactor();
+  values.finalSqrtNF = compound.State().SqrtNF(finalState.first, finalState.second);
   return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
 }
 
@@ -264,8 +264,8 @@ void CNuc::ECFinalStatesFromFormal() {
       ALevel *level = group->GetLevel(levels[lb]);
       if (!level->IsECLevel()) continue;
       const std::vector<double> g(brune.gamma.begin() + lb * nc, brune.gamma.begin() + (lb + 1) * nc);
-      for (std::size_t k = 0; k < nc; k++) level->SetECGamma((int)k + 1, g[k]);
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, group, level, 1.0, g));
+      for (std::size_t k = 0; k < nc; k++) levelState_.SetECGamma(j, levels[lb], (int)k + 1, g[k]);
+      levelState_.SetSqrtNF(j, levels[lb], SqrtNFFactor(*this, group, level, 1.0, g));
     }
   }
 }

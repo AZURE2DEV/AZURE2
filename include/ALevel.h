@@ -18,8 +18,8 @@ class LevelRow;
  *
  * A level carries its set-up data (IDs, fix flags, the external-capture final-state data) and its input values,
  * GetE and GetGamma: what the nuclear input file said, in the engine's basis after CNuc::TransformIn.  The values a
- * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J) are not the
- * level's: they are the compound's LevelState (CNuc::State).
+ * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the
+ * external-capture amplitudes and N_f^1/2) are not the level's: they are the compound's LevelState (CNuc::State).
  *
  * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
  * ObservedLevelTable.
@@ -71,11 +71,6 @@ class ALevel {
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
   /// \f$\int_a^\infty [W_c(kr)/W_c(ka_c)]^2\f$.
   double GetNFIntegral(int) const;
-  /// The \f$N_f^{1/2}\f$ normalization of the bound-state wave function.
-  double GetSqrtNFFactor() const;
-  /// The amplitude with which this level enters external capture as a final state, with which N_f^1/2 is formed:
-  /// its Brune (Park) amplitude in every basis (cnuc_split.md section 8); the fit amplitude except in the formal basis.
-  double GetECGamma(int) const;
   /// The energy (MeV, E_x) with which it enters external capture: its Brune energy at setup (cnuc_split.md section 8).
   double GetECEnergy() const;
   /// Factor converting this channel's reduced width amplitude to an ANC.
@@ -91,8 +86,6 @@ class ALevel {
   void SetZeroInputWidth(int, bool);
   void SetE(double);
   void AddNFIntegral(double);
-  void SetSqrtNFFactor(double);
-  void SetECGamma(int, double);
   void SetECEnergy(double);
   void AddECConversionFactor(double);
   /// Mark the level as an external-capture final state of a pair, with its
@@ -111,7 +104,6 @@ class ALevel {
   int ecPairNum_;
   unsigned char ecMultMask_;
   double level_e_;
-  double sqrt_nf_factor_;
   std::vector<bool> channelfixed_;
   /// Per-channel input convention: true = gamma column was a reduced width
   /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
@@ -119,7 +111,6 @@ class ALevel {
   /// See ZeroInputWidth.
   std::vector<bool> zero_input_;
   vector_r gammas_;
-  vector_r ec_gammas_;
   double ec_energy_ = 0.0;
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;

@@ -564,8 +564,11 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
+        const LevelState &state = compound()->State();
+        double ecNormParam =
+            state.ECGamma(theECMGroup.final_group, theECMGroup.final_level, theECMGroup.final_channel) *
+            state.SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
+            finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -1185,13 +1188,13 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         int fc = ecg->final_channel;
         const ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
         const JGroup *jgf = compound()->GetJGroup(jf);
-        double sqrtNF = finalLevel->GetSqrtNFFactor();
+        double sqrtNF = compound()->State().SqrtNF(jf, lf);
         double conv = finalLevel->GetECConversionFactor(fc);
         complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
                               : point->GetECAmplitude(k, m);
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
-        double gamma_fc = finalLevel->GetECGamma(fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
+        double gamma_fc = compound()->State().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
         complex base = gamma_fc * sqrtNF * conv * ecAmp;
 
         // "effective amplitude" carrying the umatrix_cc factor for the
@@ -1270,7 +1273,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
             Ad -= compound()->State().ShiftDerivative(jf, lf, d);
           if (Ad == 0.0) continue;
-          double gd = finalLevel->GetECGamma(d);
+          double gd = compound()->State().ECGamma(jf, lf, d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
           accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
         }

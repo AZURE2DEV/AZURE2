@@ -384,8 +384,10 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
+        double ecNormParam = compound()->State().ECGamma(theECMGroup.final_group, theECMGroup.final_level,
+                                                         theECMGroup.final_channel) *
+            compound()->State().SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
+            finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

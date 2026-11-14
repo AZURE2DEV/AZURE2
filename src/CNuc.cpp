@@ -641,7 +641,7 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
         g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
+      levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
 }
@@ -698,7 +698,7 @@ bool CNuc::TransformIn(const Config &configure) {
         if (park) levelState_.SetParkNorm(j, la, parkNorm);
         const std::vector<double> g(amp.gamma.begin() + lb * nc, amp.gamma.begin() + (lb + 1) * nc);
         for (std::size_t k = 0; k < nc; k++) theLevel->SetGamma((int)k + 1, g[k]);
-        theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
+        levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
       }
     }
 
@@ -907,7 +907,7 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, Observed
       ObservedLevel &out = table.Level(j, la);
       out.E = levelState_.E(j, la);
       out.iterations = 0;
-      out.sqrtNF = theLevel->GetSqrtNFFactor();
+      out.sqrtNF = levelState_.SqrtNF(j, la);
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) out.gamma[ch - 1] = levelState_.Gamma(j, la, ch);
     }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
