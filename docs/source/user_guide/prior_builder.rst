@@ -43,7 +43,10 @@ kind             what it gives
                  ``fit`` or ``chain`` part is refused (that part has its correlation already).
 ``chain``        the sample mean and covariance of a sampler's chain after its burn-in: ``chain_<id>.npy`` of
                  a sampler job of the web page, with ``chain_<id>.json`` beside it (the names and the burn-in;
-                 ``discard`` overrides it).  A chain does not record its basis: it is taken as the run's.
+                 ``discard`` overrides it).  The summary records the sampled session's parametrization
+                 (``parametrization``: 0, 1, 2 as a prior file's ``#parametrization`` tag); a chain of another
+                 parametrization is refused, one whose summary does not record it (an older chain) is taken as
+                 the run's, with a note.
 ===============  ===========================================================================================
 
 Every parameter is in one part.  The names, kinds, units, fixed marks and limits come from the session's
@@ -55,12 +58,13 @@ a note:
 - refused: a name the parameter table does not have (the close names are said), a parameter in two parts, a part
   that cannot be made (an unknown kind or field, ``sigma`` and ``percent`` both or neither, a percentage of a
   centre 0, a correlation of magnitude 1 or of a parameter in no part, a pair twice, a fit's name its covariance
-  lacks, a chain without its JSON or with fewer draws than parameters), a fit of another parametrization;
+  lacks, a chain without its JSON or with fewer draws than parameters), a fit or a chain of another
+  parametrization;
 - refused when written (``refusal`` is set, the record still shown): a matrix that is not symmetric or not
   positive definite, with the smallest eigenvalue, the condition number and the parts concerned;
 - notes: a parameter the run fixes (the engine marginalizes it), a parameter with a prior of its own (the engine
   replaces it), a centre outside the parameter's limits, a fit without a tag or with a scaled covariance, a chain's
-  basis.
+  parametrization as its sampler recorded it (or that it is not recorded).
 
 The parts are written on the file's ``#pyazr.prior`` comment line, so the builder reopens with them
 (``read_parts``); a file without the line was written by hand or by ``prior_from_fit``.

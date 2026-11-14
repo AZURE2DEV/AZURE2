@@ -41,6 +41,14 @@ What the server keeps
 - **The engine runs in worker processes.**  Evaluations use a session of the current text, built again when the
   text changes; the free parameters' working values ``x`` (``GET``/``PATCH /api/x``, in the fit basis) move without
   a rebuild.  The χ² per data set is the program's (the rows of its ``chiSquared.out``, six significant digits).
+- **The model as a curve**: ``GET /api/evaluation/curve/<name>`` is ``Session.model_curve`` at the working x: per
+  grid point ``e_cm``, ``e_lab``, ``e_x``, ``angle_cm``, ``model`` (the engine's unit, as ``model`` of
+  ``/api/evaluation/data/<name>``) and ``at_data`` (one of the data set's points), the ``branches`` (``start``,
+  ``stop``, ``fixed``: ``angle_lab``, ``angle_cm`` or ``energy_lab``, ``value``), ``variable`` (``energy`` or
+  ``angle``) and ``s_factor`` where offered.  The curves of every data set are made in one session of the
+  extrapolations (their folds on one mesh, as the data's), kept until the text or an energy shift changes them.  A
+  data set that is not one function of one variable, or whose columns give each point its own window, answers 422
+  with ``what``, ``allowed``, ``fix``.
 - **Jobs** (``POST /api/jobs``; the table at ``GET /api/jobs/kinds``): the engine's fitters (``"method":
   "engine_migrad"``, one per row of ``pyazr.kinds()["fitters"]``, through ``Session.fit_with_engine``) and their
   MINOS, recipe fits (scipy L-BFGS-B, iminuit MIGRAD + HESSE) and iminuit's MINOS, the emcee sampler
@@ -109,7 +117,24 @@ What the server keeps
   numbers. The check is the job ``endf_check``/``codes`` (``pyazr.endf.check``; settings ``path``, ``codes``,
   ``timeout``), the rewrite the job ``endf_standardize``/``program`` (``pyazr.endf.standardize``; settings ``path``,
   ``program``, ``mf2``, ``timeout``), whose candidate ``POST /api/endf/accept`` (``{"job_id", "to", "overwrite"}``)
-  keeps; these jobs build no session. A path outside the root is refused (403) before anything reads it.
+  keeps; these jobs build no session. A path outside the root is refused (403) before anything reads it.  The
+  curves route also gives, per data set, its model curve (``curve``) and each file's values on its grid
+  (``on_curve``).
+- **A new project from an ENDF-6 file, and the project as one**: ``POST /api/endf/resonances`` (``{"path",
+  "isotope", "energy_range"}``) is what MF=2 holds (``Material.resonances``: ``text``, ``el_eV``, ``eh_eV``,
+  ``entrance``, ``pairs``, ``groups``) or ``refused``, nothing written; the job ``endf_import``/``to_project``
+  (settings ``path``, ``isotope``, ``energy_range``, ``separation_energy``: ``ame2020`` or MeV, ``name``) runs
+  ``pyazr.endf.to_project`` in a directory of its own (``result.project``: ``report``, ``report_text``, ``text``,
+  ``name``); ``POST /api/endf/keep_project`` (``{"job_id", "to"}``) writes it as a new ``.azr`` of the folder (never
+  over a file; the answer's ``open_path`` is what ``POST /api/project/open`` takes).  ``GET /api/endf/export`` is
+  what a file of the current text at the working x would lose (``pyazr.endf.from_session``: ``losses``,
+  ``photon_widths``, ``not_written``, or ``refused``), the data's ``energy_range_MeV`` and a ``name`` not in use;
+  the job ``endf_write``/``writer`` (settings ``name``, ``mat``, ``authors``, ``lab``, ``date``, ``reference``,
+  ``library``, ``e_low``, ``e_high`` in MeV lab, ``tolerance``, ``number_form``) runs ``pyazr.endf.write`` into a
+  new file of the folder (``result.written``: ``path``, ``sections``, ``grids``, ``mf2_check``, ``losses``,
+  ``not_written``).
+- ``GET /api/describe`` carries ``first_view``: the columns of the lists of data sets (``description``) and of
+  pairs (``pairs``) the page's first view shows (``pyazr/ui/first_view.py``).
 - ``GET /api/prior``, ``POST /api/prior/build`` (``{"parts": [...]}``), ``POST /api/prior/write`` (``{"parts":
   [...], "path": ..., "rev": ...}``) serve the prior builder (``pyazr.priors.build`` on the session's parameter
   table; the write sets ``priorCovariance`` and writes the file as one history entry); removing the prior is ``PATCH

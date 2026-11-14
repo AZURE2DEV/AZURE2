@@ -416,6 +416,29 @@ the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_o
 the extrapolations and every χ² field is ``None``.  ``ev.objective - ev.chi2`` are the priors: on the fitted T2 the
 objective is 297.86, the data χ² 293.94.
 
+``s.model_curve(name, x=None, points=200)`` gives the model of one data set on a fine grid over its range at ``x``
+(a ``pyazr.model_curve.ModelCurve``): per grid point ``energies`` (MeV c.m.), ``energy_lab`` (the beam's lab energy),
+``angles`` (deg c.m.), ``excitation_energies``, ``model`` (in the unit of ``ev.data[i].model``) and ``at_data``
+(True at the data set's own points, which the grid holds besides ``points`` values evenly spaced between the first
+and the last); ``branches``, one per fixed angle of an excitation function or per fixed lab energy of an angular
+distribution.  It is the engine's evaluation of extrapolation records made from the data set's record (its
+reaction, quantity, target, beam, detector, quadrature, ...) at the data's lab energies after the energy shift, in a
+session of the extrapolations opened and closed by the call.  At the data set's points it equals ``ev.data[i].model``
+to rounding where nothing is folded; a folded point (a target, a beam spread, a detector) is integrated on a mesh
+planned from the curve's own points, 2e-3 from the data session's on T2's thin target.
+``pyazr.model_curve.model_curves(s, names)`` makes several data sets' curves in one session (their folds on one
+mesh, as the data's: 4e-9 on T2) and returns a refusal for a data set it cannot draw instead of raising.  Refused
+with ``what``, ``allowed``, ``fix`` (``pyazr.ParameterError``): a data set whose columns give each point its own
+window or order, points that are not one function of one variable.
+
+.. code-block:: python
+
+   c = s.model_curve("cap_g0")                       # T1: capture to the ground state
+   for b in c.branches:
+       plt.plot(c.energies[b.start:b.stop], c.model[b.start:b.stop])
+   d = s.evaluate().dataset("cap_g0")
+   plt.errorbar(d.energies, d.values * d.norm, d.errors * d.norm, fmt="o")
+
 .. code-block:: python
 
    s = pyazr.Session("T2.azr")

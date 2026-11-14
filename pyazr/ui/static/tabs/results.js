@@ -139,8 +139,23 @@ export async function render(ctx, el) {
   };
   el.append(choicePanel(ctx, series, redraw), plots, angular);
   redraw();
+  // the model on a fine grid: each data set's curve, drawn when they have come (the points are drawn at once)
+  fetchCurves(ctx, series).then(() => { if (plots.isConnected) redraw(); });
   el.append(chi2Panel(evaluation, series, recordOf), modelDataPanel(evaluation), outputsPanel(ctx),
     laterPanel());
+}
+
+/** Each data set's model curve (GET /api/evaluation/curve/{name}) into its series (`d.curve`), or the refusal's three
+ * parts (`d.curve.refused`); every curve of the project is made by the server in one session, so these requests after
+ * the first are evaluations only. */
+export async function fetchCurves(ctx, series) {
+  await Promise.all(series.filter((s) => !s.extrapolation).map(async (s) => {
+    try {
+      s.d.curve = await ctx.api.get(pathOf("/api/evaluation/curve", s.d.name), { quiet: true, background: true });
+    } catch (e) {
+      s.d.curve = { refused: e.view || { what: String(e) } };
+    }
+  }));
 }
 
 /** The changes since the last calculation: the totals, then one row per data set (the largest change first), each
@@ -286,12 +301,21 @@ function drawPlots(ctx, el, series, marks) {
     area.dataset.drawn = drawPlot(area, plot, file, { usePlotly: ctx.route.params.plot !== "table", height });
   }
   const orders = chosen.filter((s) => ctx.schema.quantities?.[s.d.quantity]?.columns?.order);
-  panel.appendChild(h("p.hint", {}, "The model line of a data set joins the engine's values at the data points: a "
-    + "resonance narrower than the spacing of the points is not drawn. An extrapolation is drawn on its grid (an "
-    + "adaptive grid is refined by the engine where the model changes). The model on a dense grid between the data "
-    + "points waits for pyazr's Session.evaluate (POST /api/evaluate/grid, docs/upgrade/web_ui.md section 12)."
+  const refused = chosen.filter((s) => s.d.curve?.refused);
+  const waiting = chosen.some((s) => !s.extrapolation && !s.d.curve);
+  panel.appendChild(h("p.hint", {}, "The model of a data set is drawn on a fine grid over its range (pyazr's "
+    + "Session.model_curve: values evenly spaced between its first and last point and at the points, one line per "
+    + "angle of "
+    + "an excitation function or per energy of an angular distribution); a resonance narrower than the grid's "
+    + "spacing is not drawn. The residuals stay at the points. An extrapolation is drawn on its grid."
+    + (waiting ? " The curves are being computed: the model is drawn through the points until they come." : "")
     + (orders.length ? ` Legendre coefficients (${orders.map((s) => s.d.name).join(", ")}) are drawn as one series: `
       + "the order of each point is not in the data arrays (finding 14)." : "")));
+  for (const s of refused) {
+    const r = s.d.curve.refused;
+    panel.appendChild(h("p.hint.curve-refused", { data: { name: s.d.name } }, h("strong", {}, `${s.d.name}: `),
+      `the model through the points: ${r.what || r.message}`, r.fix ? ` (${r.fix})` : ""));
+  }
 }
 
 /** The angular distribution at a chosen c.m. energy: the shown data sets with points at three or more angles. */

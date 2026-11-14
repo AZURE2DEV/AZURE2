@@ -386,16 +386,18 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       `read_prior` reads the file as the engine reads it.  The page's screen `tabs/prior.js` (`#/prior`, from the
       Fit tab; routes `/api/prior`, `/api/prior/build`, `/api/prior/write`; `web_ui.md` section 11.15).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
-      model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
-      model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
+      model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14); the
+      model on a fine grid over each data set (`Session.model_curve`, route `/api/evaluation/curve/{name}`; the Plot
+      and ENDF tabs; `web_ui.md` section 11.16). Lab energy, Legendre orders wait for pyazr (section 12).
 - [ ] The page for the median user (`web_ui.md` section 11.11): the original's icon, colours and About; the first
       view in the old program's path and words with the rare fields (a column of the schema) folded; Calculate with
       what changed; the run's settings from the engine's `<config>` table (2026-11-14). The lists in words, the
       Reaction Rate tab (and Physics, THM on a THM project) in the first view, the files offered and previewed with
       the engine's reading, "new …" of a reference, lists of numbers and MINOS's parameters as boxes, the pair form
       from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
-      reaction, a grid, a composition, the structured fields. The model as a curve on a fine grid waits for a pyazr
-      call (section 11.14).
+      reaction, a grid, a composition, the structured fields. The first view's rough edges repaired (section 11.16:
+      a fit's follow-up buttons by the form's rule, each tab's own jobs, the lists in the old program's columns by
+      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
@@ -433,7 +435,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       their reports read, candidates with their difference; `pyazr endf check|standardize`); the page's screens
       built (the ENDF tab: files over the data with ratios, Check and Correct as jobs, `web_ui.md` 11.13); stage 2
       built (the start model from LRF=7, the engine's two level doors; `pyazr endf to-project`); stage 3 built in
-      part (MF=1, MF=2, MF=3 from the engine, LRP=2; `pyazr endf write`); next: MF=6 of the writer (LAW=2 exits,
+      part (MF=1, MF=2, MF=3 from the engine, LRP=2; `pyazr endf write`); on the page, "New project from a file"
+      (`to_project` as a job, the report before anything is written) and "Export this project" (`write` as a job,
+      the losses before and after; `web_ui.md` 11.16); next: MF=6 of the writer (LAW=2 exits,
       LAW=5 elastic, MT=102 primaries), then stage 5 (MF=32, LTP=1) and stage 6 (`check_resonances`).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).

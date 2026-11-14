@@ -218,6 +218,14 @@ export function chainRows(result) {
     n_eff: result.effective_draws?.[name] ?? null, rhat: result.rhat?.[name] ?? null }));
 }
 
+/** The followers of a job's result shown as buttons, and the kinds folded behind "More": in the first view
+ * (`firstViewOnly`) only those of the kinds the job table marks for it (`first_view`, the rule of the job form),
+ * else all. */
+export function followersShown(followers, firstViewOnly) {
+  const shown = firstViewOnly ? followers.filter((f) => f.first_view) : followers;
+  return { shown, folded: [...new Set(followers.filter((f) => !shown.includes(f)).map((f) => f.kind))] };
+}
+
 /** The view of a finished job: the recipe's own words, its numbers, and what can be done with it. */
 export function resultView(rec, table = []) {
   const r = rec.result || {};
@@ -246,6 +254,19 @@ export function matrixCsv(m) {
 }
 
 /** The job a visit of the tab shows: the one named, else a running one, else the newest. */
+/** The tab of a job (the row of the job table of its kind and method: `JobRow.tab`; "fit" where none says). */
+export function tabOfJob(job, table) {
+  const row = table.find((r) => r.kind === job.kind && r.method === job.method)
+    || table.find((r) => r.kind === job.kind);
+  return row?.tab || "fit";
+}
+
+/** The jobs a tab lists: those of its own rows of the job table (the Fit tab: fits, MINOS, the sampler, the bands;
+ * the ENDF tab's and the Rate tab's jobs are theirs). */
+export function jobsOfTab(jobs, table, tab) {
+  return jobs.filter((j) => tabOfJob(j, table) === tab);
+}
+
 export function jobToShow(jobs, id) {
   if (id) return jobs.find((j) => j.id === id) || null;
   const running = jobs.find((j) => !isFinal(j.state));

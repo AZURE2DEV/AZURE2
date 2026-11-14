@@ -5,8 +5,9 @@
 // list of the project's jobs.  A row of the job table that waits for pyazr is shown with what it waits for.
 
 import { pathOf } from "../api.js";
-import { defaultMethod, factsText, follows, isFinal, jobChoices, progressView, resultView, settingsOf,
-  startPoints } from "../fitting.js";
+import { defaultMethod, factsText, follows, followersShown, isFinal, jobChoices, progressView, resultView,
+  settingsOf, startPoints, tabOfJob } from "../fitting.js";
+import { FIRST_VIEW } from "../layout.js";
 import { plotOf, plotlyFigure } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, drawPlot, h, section, themeColours } from "../ui.js";
@@ -261,7 +262,9 @@ function resultBlock(ctx, rec, table, view) {
     accept.dataset.action = "accept";
     actions.appendChild(accept);
   }
-  for (const f of v.followers) {
+  // the rule of the form: in the first view the followers of the kinds it marks (a fit), the others one click away
+  const { shown: shownFollowers, folded: foldedKinds } = followersShown(v.followers, !ctx.expert && !view.allKinds);
+  for (const f of shownFollowers) {
     // a job another tab starts (the rate: the row's `tab`) opens there, this job's best point as its parameters
     const own = (f.tab || "fit") === "fit";
     actions.appendChild(button(`${f.kind} (${f.method})…`, own
@@ -269,6 +272,13 @@ function resultBlock(ctx, rec, table, view) {
       : `${f.doc}: opens its tab, the parameters this job's best point`,
     own ? () => { view.form = { kind: f.kind, method: f.method, start: `job:${rec.id}` }; ctx.navigate(location.hash); }
       : () => ctx.navigate(`#/${f.tab}?start=${rec.id}`)));
+  }
+  if (foldedKinds.length) {
+    const more = button(`More: ${foldedKinds.join(", ")} …`, "Offer every job that can follow this one, and every "
+      + "kind of job in the form (as the expert's depth does)", () => { view.allKinds = true;
+      ctx.navigate(location.hash); });
+    more.dataset.action = "more-followers";
+    actions.appendChild(more);
   }
   box.appendChild(actions);
   return box;
@@ -308,19 +318,30 @@ async function accept_(ctx, rec) {
   ctx.status(`accept job ${rec.id}: done; the χ² of the project as written is beside the fit's (Undo: Ctrl+Z)`, "ok");
 }
 
-/** The project's jobs, newest first; a click shows one. */
-export function jobsList(ctx, jobs, shown) {
+/** The project's jobs of this tab (or of every tab), newest first; a click shows one.  `others`: the jobs other tabs
+ * started (the ENDF tab's checks, the Rate tab's rates), named by their tab, with `toggle` ("every job" / "this
+ * tab's"). */
+export function jobsList(ctx, jobs, shown, { table = [], others = [], all = false, toggle = null } = {}) {
   const rows = jobs.slice().sort((a, b) => (b.started || 0) - (a.started || 0)).map((j) => ({
     // a running job's numbers are in its panel (followed); the list shows those of ended jobs
-    id: j.id, what: `${j.kind} ${j.method}`, state: j.state, calls: isFinal(j.state) ? j.progress?.calls ?? "" : "",
-    best: isFinal(j.state) ? j.progress?.best ?? "" : "",
+    id: j.id, what: `${j.kind} ${j.method}`, tab: tabOfJob(j, table), state: j.state,
+    calls: isFinal(j.state) ? j.progress?.calls ?? "" : "", best: isFinal(j.state) ? j.progress?.best ?? "" : "",
     rev: j.text_rev, started: j.started ? new Date(j.started * 1000).toLocaleTimeString() : "" }));
-  if (!rows.length) return h("div");
+  // the tabs by the first view's words (FIRST_VIEW of layout.js), the tab's id where it has none
+  const tabs = [...new Set(others.map((j) => tabOfJob(j, table)))]
+    .map((id) => FIRST_VIEW.find((v) => v.tab === id)?.title || id);
+  const switcher = toggle && (others.length || all) ? h("p.hint.jobs-scope", {}, all
+    ? "Every job of the project, of every tab. " : `The jobs of this tab; ${others.length} more started in the `
+      + `tab${tabs.length > 1 ? "s" : ""} ${tabs.join(", ")} are listed there. `, button(all ? "This tab's jobs"
+      : "Every job", all ? "List the Fit tab's jobs only" : "List the jobs of every tab here", toggle)) : null;
+  if (!rows.length) return switcher ? section("Jobs", switcher) : h("div");
   const t = renderTable(document, { rows, rowKey: (r) => r.id, selected: shown?.id, withFilter: false, label: "jobs",
-    caption: "Jobs of this project (GET /api/jobs); a click shows one",
-    columns: [{ key: "id", title: "job" }, { key: "what", title: "recipe" }, { key: "state", title: "state" },
+    caption: all ? "Every job of this project (GET /api/jobs); a click shows one"
+      : "Jobs of this tab (GET /api/jobs); a click shows one",
+    columns: [{ key: "id", title: "job" }, { key: "what", title: "recipe" },
+      ...(all ? [{ key: "tab", title: "tab" }] : []), { key: "state", title: "state" },
       { key: "calls", title: "calls", numeric: true }, { key: "best", title: "best", numeric: true, digits: 8,
         doc: "the best objective (χ² + priors)" }, { key: "started", title: "started" }],
     onSelect: (r) => ctx.navigate(`#/fit/job/${r.id}`) });
-  return section("Jobs", t.element);
+  return section("Jobs", t.element, switcher);
 }

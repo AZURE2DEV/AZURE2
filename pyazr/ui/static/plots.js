@@ -5,7 +5,8 @@
 // dimensions' engine units); the page converts nothing: the numbers drawn are the server's.
 //
 // Rows: a data set against energy or angle (the Data tab's preview); a job's objective against call; the
-// Results tab's series against a chosen x with residuals under the plot; an angular distribution at one energy.
+// Results tab's series against a chosen x with residuals under the plot (the model on its fine grid where the server
+// sent the data set's curve, else through the points); an angular distribution at one energy.
 // A plot unlike these adds a row here (and a step of the self-test).  No DOM in the table itself
 // (tests/pyazr/ui/js/plots.test.mjs, results.test.mjs).
 
@@ -110,10 +111,37 @@ export const X_CHOICES = [
 export const Y_CHOICES = [
   { key: "measured", title: "as measured",
     of: (d) => ({ value: d.value_norm, error: d.error_norm, model: d.model, unit: d.engine_unit,
-      band: d.band ? { lower: d.band.lower, upper: d.band.upper } : null }) },
+      band: d.band ? { lower: d.band.lower, upper: d.band.upper } : null }),
+    curve: (c) => c.model },
   { key: "s_factor", title: "S factor",
-    of: (d) => (d.s_factor ? { ...d.s_factor, title: "S factor", band: d.band?.s_factor || null } : null) },
+    of: (d) => (d.s_factor ? { ...d.s_factor, title: "S factor", band: d.band?.s_factor || null } : null),
+    curve: (c) => c.s_factor?.model || null },
 ];
+
+/** The variable each x choice runs along: a curve along the energy is drawn against E_cm or E_x, one along the angle
+ * against θ_cm. */
+const ALONG = { e_cm: "energy", e_x: "energy", angle_cm: "angle" };
+
+/** The words of a curve branch's fixed coordinate (the server's `fixed`: angle_lab, angle_cm, energy_lab). */
+const FIXED = { angle_lab: ["θ_lab", "deg"], angle_cm: ["θ_cm", "deg"], energy_lab: ["E_lab", "MeV"] };
+
+/**
+ * The model curve of a data set (`d.curve`, the answer of GET /api/evaluation/curve/{name}) as one line per branch
+ * against the x choice `xKey` and the y choice `yc`, or null where it has none to draw: no curve (refused or not
+ * fetched), a curve along another variable than x's, or no values for that y.  The numbers are the server's.
+ */
+export function curveTraces(d, xKey, yc, style) {
+  const c = d.curve;
+  if (!c || c.refused || ALONG[xKey] !== c.variable) return null;
+  const ys = yc.curve ? yc.curve(c) : null;
+  if (!ys || !c[xKey]) return null;
+  return c.branches.map((b) => {
+    const [title, unit] = FIXED[b.fixed] || [];
+    const at = title ? ` (${title} = ${Number(b.value.toPrecision(7))} ${unit})` : "";
+    return { role: "model", name: `${d.name}${at}: model, ${b.stop - b.start} points`,
+      x: c[xKey].slice(b.start, b.stop), y: ys.slice(b.start, b.stop), dash: "solid", ...style };
+  });
+}
 
 /** The residual's axis title: the engine's standardized residual, model m minus the datum d times the norm n, over
  * the error σ times n (the server's `residual` description says it in full). */
@@ -157,6 +185,10 @@ export function resultsPlots(sets, view, { schema, levels = [], title = null } =
     for (const s of group) {
       const d = s.d;
       const all = s.index || [...(d[xc.key] || []).keys()];
+      // the model on its fine grid where the server sent the data set's curve (not for a subset of its points)
+      const curve = view.model !== false && !s.index && !s.extrapolation
+        ? curveTraces(d, xc.key, yc, { color: s.color, marker: s.marker, group: d.name }) : null;
+      if (curve) traces.push(...curve);
       for (const g of groupsAgainst(d, xc.key, all)) {
         const order = [...g.index].sort((a, b) => d[xc.key][a] - d[xc.key][b]);
         const other = X_CHOICES.find((c) => c.key === g.key);
@@ -173,7 +205,7 @@ export function resultsPlots(sets, view, { schema, levels = [], title = null } =
           traces.push({ role: "data", name: `${d.name}${suffix}`, x, y: pick(s.y.value, order),
             error: pick(s.y.error, order), ...style });
         }
-        if (view.model !== false && s.y.model) {
+        if (view.model !== false && s.y.model && !curve) {
           traces.push({ role: "model", name: s.extrapolation ? `${d.name}${suffix}: model on its grid`
             : `${d.name}${suffix}: model at the points`, x, y: pick(s.y.model, order), dash: s.extrapolation
             ? "dash" : "solid", ...style });

@@ -66,6 +66,10 @@ Calculate and compare
    * - ``per_dataset_chi2.py``
      - The χ² of each data set, worst first, and its whitened rows of the objective.
      - ``per_dataset_chi2.py tests/upgrade/T2/T2.azr``
+   * - ``model_curve.py``
+     - The model of every data set on a fine grid over its range (``Session.model_curve``), and the maximum a line
+       through the points misses.
+     - ``model_curve.py tests/upgrade/T2/T2.azr``
    * - ``decompose_cross_section.py``
      - Split a cross section into each level, its interference and the background; one level off or alone.
      - ``decompose_cross_section.py tests/upgrade/T1/T1.azr --level "1/2+ 2.365"``
