@@ -1419,64 +1419,8 @@ call.
 Examples
 --------
 
-Worked scripts ship in ``pyazr/examples/``; each takes the project as its first argument and runs from the
-repository's root on a project of ``tests/`` (the command is in its docstring; ``tests/pyazr/examples_test.py`` runs
-every one):
-
-.. list-table::
-   :widths: 32 68
-   :header-rows: 1
-
-   * - Script
-     - What it shows
-   * - ``print_scheme.py``
-     - The level scheme and the data sets the engine read from a project.
-   * - ``edit_model.py``
-     - Levels and data sets added, removed and switched off with ``Project``; the edited copy calculated.
-   * - ``exfor_fetch.py``
-     - A data set fetched from EXFOR (or a local copy of it) into a project, with its reference.
-   * - ``covariance_builder.py``
-     - A data set's covariance file from named parts (:doc:`covariance_builder`).
-   * - ``project_from_python.py``
-     - A project written record by record from Python (:doc:`project_from_python`).
-   * - ``per_dataset_chi2.py``
-     - The χ² of each data set, worst first, and its whitened rows of the objective.
-   * - ``decompose_cross_section.py``
-     - A cross section split into each level, its interference and the background; a level off or alone.
-   * - ``angular_distribution.py``
-     - Legendre coefficients at chosen energies, with an optional plot.
-   * - ``channel_radius_scan.py``
-     - χ² against a channel radius, one edited copy and one session per radius.
-   * - ``nuclear_potential.py``
-     - The hybrid nuclear potential of a pair: a depth scan, and why a fit vector belongs to its session.
-   * - ``tabulate_cross_sections.py``
-     - σ(E) tabulated on an adaptive grid to a stated interpolation tolerance.
-   * - ``fit_engine.py``
-     - The engine's fit (MIGRAD, HESSE, MINOS) in-process, saved with ``save_fit`` as a project that reopens as the fit.
-   * - ``fit_iminuit.py``
-     - MIGRAD and HESSE of iminuit on ``Objective``.
-   * - ``fit_scipy.py``
-     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
-   * - ``fit_emcee.py``
-     - emcee on ``Objective.log_prob``: autocorrelation times, and the rate per posterior sample.
-   * - ``sensitivities.py``
-     - Which parameters a data set constrains, as d ln σ / d ln p; analytic against finite differences.
-   * - ``uncertainty_band.py``
-     - The 1σ band of an S factor from the fit's covariance, on an extrapolation and on a new grid.
-   * - ``reaction_rate.py``
-     - N\ :sub:`A`\ ⟨σv⟩ computed by the engine, the Gamow window and a band (:doc:`reaction_rate`).
-   * - ``sfactor_extrapolation.py``
-     - An S factor below the measured range, and S(0).
-   * - ``endf_evaluation.py``
-     - An ENDF-6 evaluation beside a project: read, drawn over the data, checked (:doc:`endf`).
-   * - ``channel_functions.py``
-     - Coulomb functions, penetrability, shift and hard-sphere phase over an energy grid.
-   * - ``ec_integrals.py``
-     - External-capture integrals per pathway.
-   * - ``dimensionless_widths.py``
-     - θ² and Weisskopf units for a whole fit.
-   * - ``transform_widths.py``
-     - Reduced-width amplitudes to physical widths with ``Session.transform``, beside the naive 2γ²P; a chain mapped.
+The worked scripts of ``pyazr/examples/``, one task each from start to end, are listed by task with the command that
+runs each in :doc:`pyazr_examples`.
 
 Running in parallel
 -------------------

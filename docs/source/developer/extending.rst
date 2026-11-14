@@ -417,8 +417,8 @@ one) to copy:
 2. Its row in ``ROWS`` of ``tests/pyazr/examples_test.py``: the arguments, one number or text of its output that is
    pinned, ``slow=True`` above about 4 s at one thread, ``needs=`` the optional packages, ``skip=`` the reason a run
    cannot be made here (the network).
-3. Its row in the documentation's list of examples (:doc:`../user_guide/pyazr`, "Examples"): the script and its task
-   in one sentence.
+3. Its row on the page of examples (:doc:`../user_guide/pyazr_examples`), under its task: the script, the task in one
+   sentence, the command.
 
 Check 58 fails for a script without both rows, and for a row whose script is not there.
 

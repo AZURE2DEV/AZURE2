@@ -324,6 +324,9 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
       check 48 (`pyazr3.md` 2.9). Open: the workflow's first run, Windows, the published Coulomb table.
 - [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
+- [x] The experts' examples: every script of `pyazr/examples/` runs from the root on a project of `tests/` and is run
+      by `tests/pyazr/examples_test.py` (one row each, a pinned number); the page `user_guide/pyazr_examples.rst` lists
+      them by task; check 58 keeps the files, the table and the page one set.
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.

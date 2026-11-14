@@ -40,6 +40,13 @@ ROWS = [
         "exfor_t0001003_1: 2 points, chi2 = 799.1"),
     Row("exfor_fetch", [T1, "--entry", "O2599004", "--target", "C-13", "--out", "{out}"], "",
         skip="the IAEA EXFOR and ENSDF services: no network call from a test (the row above runs it offline)"),
+    Row("refusals", [T3], "codes    ['E_REACTION_NOT_ALLOWED', 'E_UNIT_NOT_ALLOWED']"),
+    Row("nuisances", [T1, "el_lab090", "el_lab125", "el_lab160", "--out", "{out}"],
+        "N_shared.value           0.996788 +- 0.00171", slow=True),
+    Row("natural_target", ["tests/natural_target/models/M.azr"],
+        "largest |x3 - (0.6 x1 + 0.4 x2)| / x3 = 0.00e+00"),
+    Row("gamma_decay", ["tests/gamma_decay/models/record.azr"], "level5.total_width                  0.0384894 +- 0.000177 eV"),
+    Row("thm_dataset", [T2], "norm (profiled) = 0.00196953 +- 1.8e-05"),
     Row("covariance_builder", [T1, "el_lab090", "--out", "{out}/T1_cov.azr"],
         "chi2 of el_lab090: 72.8685301 without, 47.34670333 with the covariance", slow=True),
     # calculate and compare

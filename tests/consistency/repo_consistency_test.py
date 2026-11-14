@@ -1436,10 +1436,10 @@ try:
 except OSError as e:
     problems.append(f"check 57: {e}")
 
-# 58. Every example is run and listed (docs/source/user_guide/pyazr.rst, "Examples"): each script of pyazr/examples has
+# 58. Every example is run and listed (docs/source/user_guide/pyazr_examples.rst): each script of pyazr/examples has
 #     a row in ROWS of tests/pyazr/examples_test.py (the table that runs it) and a row of the documentation's list,
 #     and neither names a script that is not there.  A new example is the file and its two rows.
-_examples_page, _examples_test = "docs/source/user_guide/pyazr.rst", "tests/pyazr/examples_test.py"
+_examples_page, _examples_test = "docs/source/user_guide/pyazr_examples.rst", "tests/pyazr/examples_test.py"
 try:
     import ast
     _example_files = {f[:-3] for f in os.listdir(os.path.join(ROOT, "pyazr", "examples"))
@@ -1450,7 +1450,6 @@ try:
                 and isinstance(_node.args[0], ast.Constant):
             _example_rows.add(_node.args[0].value)
     _page = read(_examples_page)
-    _page = _page[_page.index("Worked scripts ship in"):_page.index("Running in parallel\n")]
     _example_listed = set(re.findall(r"^ +\* - ``([A-Za-z0-9_]+)\.py``", _page, re.M))
     for _name in sorted(_example_files - _example_rows):
         problems.append(f"pyazr/examples/{_name}.py has no row in ROWS of {_examples_test} (check 58)")
