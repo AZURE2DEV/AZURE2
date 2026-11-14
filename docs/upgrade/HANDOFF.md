@@ -80,7 +80,10 @@ is gone), `thm_park` (the physical values compared on the R-matrix block, as bef
 pyazr_session_isolation -j1` (each test sets OMP 2, so -j1 keeps 2 threads): 128 of 130, then `pyazr_ui_node` fixed
 (its fixture named `prior_nominal`) and passing alone; `pyazr_objective_object` fails as on the start commit (its
 bound assertion; fixed on e3528379); T1, T2, T3, 13N x 3 bases with this build's program against `b-trial57`: 12 of 12
-identical.  Not run: `pyazr_session_isolation` (3 threads), the slow tests, all projects.
+identical.  On the merge of e3528379 (commit aec3ab3c): `ctest -LE slow -j1` without the four tests that need more
+than two threads (`pyazr_session_isolation`, `pyazr_park_gradient`, `pyazr_parallel_points`, `gsl_quiet`): 250 of 250;
+all projects x 3 bases (tag `tab-pysess3-1`) against `tab-t60-1` and `tab-t57-1`: Brune 887, formal 851, Park 887
+files, all identical.  Not run: the slow tests; those four tests.
 
 **Open**: the Python physics (`transform.py`, `widths.py`, `wigner_widths`, `dimensionless_widths`), `pyazr.system`,
 the mode switch and the session's edits; the libraries; unused bindings (`transform_rwa`, `coulomb_functions`, ... of
