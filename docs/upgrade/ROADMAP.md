@@ -209,6 +209,12 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       it, readers take `CNuc::State()`; `ChannelSpace` keys its memos on the state, the level and its version)
       (`cnuc_split.md` §12.3, step 3 as built). `ALevel` keeps the set-up data and the input values. The stale copy
       the sub-point grids are laid out from was measured and cannot move a grid (step 2b as found).
+- [x] One layout of the level block of the parameter vector: `LevelParameterLayout` (built by `CNuc::Fill`, shared by
+      the copies) is read by every walk of the block (the fills, the start vector, the observed vector, the basis
+      conversion, the index map, the labels, the `gamma_decay` slots, the model data's columns) (`cnuc_split.md`
+      §12.3, step 4 as built, first part).
+- [ ] The copies of the compound replaced by a shared constant compound and a `LevelState` (with the level inputs
+      of a transformation) per owner; `Clone` deleted (`cnuc_split.md` §12.3, step 4, second part: measured, not cut).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

@@ -410,6 +410,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     numChannels.push_back(this->Group(j)->NumChannels());
   }
   levelState_ = LevelState(numLevels, numChannels);
+  parameterLayout_ = std::make_shared<const LevelParameterLayout>(numLevels, numChannels);
 
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
@@ -629,20 +630,16 @@ void CNuc::AddJGroup(JGroup jGroup) {
 void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
   const vector_r &p = gammaDecays_->Empty() ? observed : gammaDecays_->WithPartialWidths(observed);
   if (!gammaDecays_->Empty()) gammaDecayInputs_ = gammaDecays_->NumbersAt(observed);
-  int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      ALevel *level = this->Group(j)->GetLevel(la);
-      level->SetE(p[i]);
-      i++;
-      std::vector<double> g;
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
-        level->SetGamma(ch, p[i]);
-        g.push_back(p[i]);
-        i++;
-      }
-      levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
+  for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
+    const int j = slots.group, la = slots.level;
+    ALevel *level = this->Group(j)->GetLevel(la);
+    level->SetE(p[slots.energy]);
+    std::vector<double> g;
+    for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++) {
+      level->SetGamma(ch, p[slots.amplitude[ch - 1]]);
+      g.push_back(p[slots.amplitude[ch - 1]]);
     }
+    levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
   }
 }
 
@@ -822,13 +819,12 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
 
 void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
-  std::string varname;
-  int energyIndex = 1;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      ALevel *level = this->Group(j)->GetLevel(la);
-      varname = "energy_" + std::to_string(energyIndex);
-      params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, energyIndex));
+  for (const LevelParameterLayout::Slot &slot : this->ParameterLayout().Slots()) {
+    const int j = slot.group, la = slot.level, ch = slot.channel;
+    const ALevel *level = this->Group(j)->GetLevel(la);
+    const std::string varname = LevelParameterLayout::Name(slot);
+    if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy) {
+      params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, slot.levelNumber));
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
         PPair *pair = this->Pair(ir);
@@ -839,32 +835,26 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       // Jakub's Fix: it can create problems with the fit with pyazr and brick
       if (!isUnbound) p.Fix(varname);
       if (level->EnergyFixed() && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
-
-      // Parameter settings will be applied by ParameterLimitsManager during fit
-      int widthIndex = 1;
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
-        varname = "width_" + std::to_string(energyIndex) + "_" + std::to_string(widthIndex);
-        widthIndex++;
-        if (gammaDecays_->AddParameter(params, gammaDecayInputs_, j, la, ch, energyIndex)) continue;  // a gamma_decay record's number
-        params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, energyIndex));
-        // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
-        // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
-        // transformation the input is the parameter.
-        if (this->IsTransformedIn() ? level->ZeroInputWidth(ch) : level->GetGamma(ch) == 0.0) p.Fix(varname);
-        if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
-        // Wigner-limit bounds: GetWignerLimit is gamma^2_W = 3 hbar^2/(2 mu a^2) (MeV), the limit on the reduced width
-        // squared; the fit parameter is the amplitude (MeV^1/2), so the bound is its square root (gamma^2_W itself
-        // would let theta^2 = gamma^2/gamma^2_W run past 1 by a factor gamma^2_W).
-        if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
-          AChannel *channel = this->Group(j)->GetChannel(ch);
-          double wignerLimit = channel->GetWignerLimit();
-          if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
-            double gammaLimit = sqrt(wignerLimit);
-            p.SetLimits(varname, -gammaLimit, gammaLimit);
-          }
-        }
+      continue;
+    }
+    // Parameter settings will be applied by ParameterLimitsManager during fit
+    if (gammaDecays_->AddParameter(params, gammaDecayInputs_, j, la, ch, slot.levelNumber)) continue;  // a gamma_decay record's number
+    params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, slot.levelNumber));
+    // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
+    // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
+    // transformation the input is the parameter.
+    if (this->IsTransformedIn() ? level->ZeroInputWidth(ch) : level->GetGamma(ch) == 0.0) p.Fix(varname);
+    if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
+    // Wigner-limit bounds: GetWignerLimit is gamma^2_W = 3 hbar^2/(2 mu a^2) (MeV), the limit on the reduced width
+    // squared; the fit parameter is the amplitude (MeV^1/2), so the bound is its square root (gamma^2_W itself
+    // would let theta^2 = gamma^2/gamma^2_W run past 1 by a factor gamma^2_W).
+    if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
+      AChannel *channel = this->Group(j)->GetChannel(ch);
+      double wignerLimit = channel->GetWignerLimit();
+      if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
+        double gammaLimit = sqrt(wignerLimit);
+        p.SetLimits(varname, -gammaLimit, gammaLimit);
       }
-      energyIndex++;
     }
   }
   // The isotopic abundances follow, written by WorkingCopy::FillMnParams (AbundanceSamples::AddParameters).
@@ -1020,15 +1010,15 @@ std::optional<ObservedLevelTable> CNuc::ObservedWidthsAt(const Config &configure
 vector_r CNuc::GetTransformParams(const ObservedLevelTable &table) const {
   // The observed values TransformOut computed (physics/ observed_levels, cnuc_split.md section 8): Gamma (eV),
   // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
-  vector_r params;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    const JGroup *theJGroup = this->GetJGroup(j);
-    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      const ObservedLevel &level = table.Level(j, la);
-      params.push_back(level.E);
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
-        params.push_back(gammaDecays_->ValueOr(*this, j, la, ch, level.value[ch - 1]));
-    }
+  const LevelParameterLayout &layout = this->ParameterLayout();
+  vector_r params(layout.Size());
+  for (int i = 0; i < layout.Size(); i++) {
+    const LevelParameterLayout::Slot &slot = layout.Slots()[i];
+    const ObservedLevel &level = table.Level(slot.group, slot.level);
+    params[i] =
+        slot.kind == LevelParameterLayout::Slot::Kind::kEnergy
+            ? level.E
+            : gammaDecays_->ValueOr(*this, slot.group, slot.level, slot.channel, level.value[slot.channel - 1]);
   }
   // The level block only: the caller appends the abundance block of the fit's vector (AbundanceSamples::AppendTo).
   return params;
@@ -1041,21 +1031,13 @@ vector_r CNuc::GetTransformParams(const ObservedLevelTable &table) const {
  * sqrt(J), J = 1 - sum_c gamma^2 dS_c/dE.  Photon and beta amplitudes rescale
  * with the level like the particle ones.  Levels outside the R matrix
  * (external-capture final states) are the same in both and are left alone.
- * The parameter order is that of FillMnParams.
+ * The positions are the layout's (ParameterLayout).
  */
 
 bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) {
   if (from == to) return true;
   const bool toPark = (to == 2);
   if (!((from == 1 && to == 2) || (from == 2 && to == 1))) return false;
-  // Index of each level's energy in the parameter vector (E, then one amplitude per channel, group by group).
-  std::map<std::pair<int, int>, int> energyIndex;
-  int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      energyIndex[{j, la}] = i;
-      i += 1 + this->Group(j)->NumChannels();
-    }
   // physics/ park_from_brune, brune_from_park on each R-matrix block (level_parameters.md Eq. 2.3); the errors
   // scale with the amplitudes, by J^1/2 or J^-1/2.
   const CNucSystem &structure = this->SystemStructure();
@@ -1066,9 +1048,9 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
     const int nc = this->Group(j)->NumChannels();
     std::vector<double> E, gamma, J;
     for (int la : levels) {
-      const int e = energyIndex[{j, la}];
-      E.push_back(p.Value(e));
-      for (int ch = 1; ch <= nc; ch++) gamma.push_back(p.Value(e + ch));
+      const LevelParameterLayout::Level &slots = this->ParameterLayout().Of(j, la);
+      E.push_back(p.Value(slots.energy));
+      for (int ch = 1; ch <= nc; ch++) gamma.push_back(p.Value(slots.amplitude[ch - 1]));
     }
     std::vector<double> out;
     try {
@@ -1080,11 +1062,12 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
       return false;
     }
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
-      const int e = energyIndex[{j, levels[lb]}];
+      const LevelParameterLayout::Level &slots = this->ParameterLayout().Of(j, levels[lb]);
       const double factor = toPark ? std::sqrt(J[lb]) : 1.0 / std::sqrt(J[lb]);
       for (int ch = 1; ch <= nc; ch++) {
-        p.SetValue(e + ch, out[lb * nc + ch - 1]);
-        p.SetError(e + ch, p.Error(e + ch) * factor);
+        const int a = slots.amplitude[ch - 1];
+        p.SetValue(a, out[lb * nc + ch - 1]);
+        p.SetError(a, p.Error(a) * factor);
       }
     }
   }

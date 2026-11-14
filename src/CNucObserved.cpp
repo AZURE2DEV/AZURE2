@@ -40,14 +40,15 @@ std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &config
   return table;
 }
 
-void CNuc::SetFitLevelParameter(int j, int la, int ch, double value) {
+void CNuc::SetFitLevelParameter(const LevelParameterLayout::Slot &slot, double value) {
+  const int j = slot.group, la = slot.level;
   JGroup *group = this->Group(j);
   ALevel *level = group->GetLevel(la);
-  if (ch == 0) {
+  if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy) {
     levelState_.SetE(j, la, value);
   } else {
-    levelState_.SetGamma(j, la, ch, value);
-    levelState_.SetECGamma(j, la, ch, value);
+    levelState_.SetGamma(j, la, slot.channel, value);
+    levelState_.SetECGamma(j, la, slot.channel, value);
   }
   // What FillCompoundFromParams derives from the level's values.
   std::vector<double> g;

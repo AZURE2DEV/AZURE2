@@ -91,13 +91,40 @@ level scheme, of a THM experiment):
 2. Create it with ``AZUREParams::Add`` in ``CNuc::FillMnParams`` or
    ``WorkingCopy::FillMnParams``; every later question asks the record, never
    the name (check 23).
-3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``); the fields
+3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``; a level's
+   number takes it from ``LevelParameterLayout``, above); the fields
    that say what it belongs to are rows of ``ParameterFields()``
    (``api/src/pybind_records.cpp``), which ``pyazr.Parameter`` reads
    (``tests/pyazr/parameter_records_test.py`` fails for a kind no owner field
    describes).
 4. Docs: the kinds table of ``reference/output_files.rst``; a project with
    the kind in ``tests/pyazr/parameter_kinds_test.py``.
+
+A level parameter
+-----------------
+
+A number per level (or per level and channel) that the fit varies beside the
+energy and the amplitudes:
+
+1. ``include/LevelParameterLayout.h`` / ``src/LevelParameterLayout.cpp``: a
+   ``Slot::Kind`` and its slots in the constructor, which fixes where the
+   number sits in the level block, and its name in ``Name``. Every walk of
+   the level block reads the layout (``CNuc::FillMnParams``, the fills from a
+   fit vector and from an observed vector, ``GetTransformParams``,
+   ``ConvertAmplitudeBasis``, ``SetFitLevelParameter``, the level part of
+   ``BuildParamIndexMap``, the labels of ``src/ParameterLabel.cpp``, the
+   ``gamma_decay`` slots, the model data's derivative columns), so none
+   counts positions of its own.
+2. The value: a member of ``LevelState`` (``include/LevelState.h``) and its
+   branch in the fills that switch on the slot's kind
+   (``FillCompoundFromParams``, ``SetFitLevelParameter``), its start value in
+   ``CNuc::FillMnParams`` and its observed value in ``GetTransformParams``.
+3. A parameter kind (below) for its record, its pull-back in
+   ``GradAccum`` (``src/AZUREGrad.cpp``) if the gradient is analytic, and its
+   readers in the matrix functions.
+4. Tests: ``tests/upgrade/level_parameter_layout_test.cpp`` (the layout
+   against the names ``FillMnParams`` gives the block) and the objective's
+   gradient against finite differences.
 
 A term of the objective
 -----------------------
