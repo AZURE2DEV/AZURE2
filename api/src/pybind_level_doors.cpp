@@ -26,11 +26,9 @@
 #include <string>
 #include <vector>
 
-#include "ChannelFunc.h"
-#include "Constants.h"
 #include "CoulombTable.h"
+#include "EngineChannelFunctions.h"
 #include "PPair.h"
-#include "WhitFunc.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/physics/LevelParameters.h"
 #include "azure2/physics/System.h"
@@ -189,19 +187,7 @@ phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
     const double Ec = E - pair->GetSepE() - pair->GetExE();
     const int l = ch.l;
     const int twoJ = pair->SpinOrbitTwoJ(b->J);
-    phys::ChannelValues v;
-    ChannelFunc cf(pair, b->gsl);
-    v.S = cf.Shift(l, twoJ, Ec);
-    if (Ec > 0.0) {
-      v.P = cf.Penetrability(l, twoJ, Ec);
-    } else if (Ec < 0.0) {
-      const double radius = pair->GetChRad();
-      WhitFunc whit(pair);
-      const double W = whit(l, twoJ, radius, std::fabs(Ec));
-      v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
-    }
-    v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
-    return v;
+    return ParticleChannelValues(*pair, l, twoJ, Ec, b->gsl);
   };
 }
 

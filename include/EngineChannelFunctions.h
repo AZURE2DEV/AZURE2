@@ -20,6 +20,17 @@ class LevelState;
  * into CompoundSystem's through the SystemOfCompoundMap of BuildSystemOfCompound.
  */
 
+class PPair;
+
+/*!
+ * The functions of one particle channel of `pair` with orbital l and 2j (PPair::SpinOrbitTwoJ) at the channel energy
+ * Ec (MeV, c.m.): S, dS/dE and P, evaluated on one ChannelFunc in that order (P = ChannelFunc::Penetrability above
+ * threshold, mu a / (hbar^2 W^2) from WhitFunc below it, 0 at threshold).  `gsl`: GSL's Coulomb functions.  The one
+ * implementation of a particle channel's functions: EngineChannelFunctions and the binding's level doors
+ * (api/src/pybind_level_doors.cpp) call it.
+ */
+azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec, bool gsl);
+
 /*!
  * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with
  * the channel energy E_c = (E - S) - e (MeV, c.m.; S = GetSepE(), e = GetExE()), the order in which the collision
