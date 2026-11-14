@@ -652,6 +652,13 @@ engine resolves it (not necessarily ``output/``).
 ``covariance.dat`` spans: level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 9); norms and shifts
 only rescale or move the data and carry no band.
 
+None of these calls writes beside the project.  ``trimmed_model(file, keys=)`` writes the trimmed project into a
+work directory it returns (a new temporary one unless ``workdir=`` names one; the caller removes it);
+``extrapolation_bands`` works in such a directory and removes it at the end (a ``workdir=`` of the caller's is kept,
+so that a second call on the same grid reuses its external-capture integrals); ``sensitivities`` with ``nprocs > 1``
+gives each worker an output directory under a temporary one; ``pyazr.tabulate`` builds its projects in a temporary
+directory, removed at the end.  The project's relative paths are read from ``cwd`` (default: the project's directory).
+
 Masses and separation energies
 ------------------------------
 

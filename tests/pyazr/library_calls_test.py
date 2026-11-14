@@ -10,7 +10,10 @@
   (c) a set-up the engine refuses (T3 with its 2+ levels inactive: the phase-shift data set has no channel) raises
       AZURE2Error whose what/allowed/fix are set, in the message, and whose message quotes the engine's ERROR line;
   (d) a fit vector of the wrong length or with a NaN, given to Session.evaluate and to the Objective's calls, is a
-      ParameterVectorError with its three parts.
+      ParameterVectorError with its three parts;
+  (e) trimmed_model, extrapolation_bands and tabulate write nothing beside the project, not even while they run
+      (a thread watches the directory): trimmed_model's project is in the work directory it returns (a temporary
+      one by default), extrapolation_bands and tabulate remove theirs.
 
 Run from anywhere:  python3 tests/pyazr/library_calls_test.py
 """
@@ -162,6 +165,46 @@ try:
                     check(f"{label} with {what}: three parts, in the message, naming the entry",
                           parts_in_message(e) and label in e.what and all(w in str(e) for w in words),
                           (e.what, e.allowed, e.fix, str(e)))
+
+    # (e) the band and tabulation calls write nothing beside the project
+    print("(e) nothing beside the project")
+    import threading
+    import time
+
+    def watched(call):
+        """(result, files that appeared beside T1 at any time during the call)"""
+        before, seen, done = files(os.path.dirname(T1)), set(), []
+
+        def watch():
+            while not done:
+                seen.update(files(os.path.dirname(T1)) - before)
+                time.sleep(0.01)
+        thread = threading.Thread(target=watch)
+        thread.start()
+        try:
+            result = call()
+        finally:
+            done.append(True)
+            thread.join()
+        return result, sorted(seen | (files(os.path.dirname(T1)) - before))
+
+    left_before = set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_bands_*"))
+                      + glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_tabulate_*")))
+    (path, work), seen = watched(lambda: pyazr.trimmed_model(T1, keys=[1]))
+    check("trimmed_model: nothing beside the project; its project in the work directory it returns",
+          not seen and os.path.dirname(path) == work and not work.startswith(os.path.dirname(T1)), (seen, path, work))
+    shutil.rmtree(work)
+    with pyazr.Session(T1) as s:
+        x0 = s.parameters.x0
+        n_rmatrix = sum(1 for p in s.parameters if not p.fixed and p.kind in ("energy", "width"))
+    bands, seen = watched(lambda: pyazr.extrapolation_bands(T1, keys=[1], params=x0,
+                                                            covariance=np.eye(n_rmatrix) * 1e-6))
+    check("extrapolation_bands: a band, nothing beside the project", list(bands) == [1] and not seen, seen)
+    tables, seen = watched(lambda: pyazr.tabulate(T1, [(1, 2)], 0.5, 1.0, rel_tol=0.05, min_points=5, max_rounds=1))
+    check("tabulate: a table, nothing beside the project", len(tables[(1, 2)].sigma) > 5 and not seen, seen)
+    left = set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_bands_*"))
+               + glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_tabulate_*"))) - left_before
+    check("no temporary directory of theirs left", not left, left)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
