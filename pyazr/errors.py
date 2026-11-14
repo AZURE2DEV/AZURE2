@@ -149,12 +149,12 @@ class FormatRefused(Error, ValueError):
     (``pyazr.endf``); always with its three parts ``what``, ``allowed``, ``fix``.  A malformed file is a
     :class:`FormatError` instead."""
 
-    def __init__(self, message=None, *, what, allowed, fix):
-        text = message or what
-        if what not in text:
+    def __init__(self, message=None, *, what=None, allowed=None, fix=None):
+        text = message or what or ""
+        if what and what not in text:
             text = f"{what}: {text}"
-        text += "" if allowed in text else f"; allowed: {allowed}"
-        text += "" if fix in text else f"; {fix}"
+        text += f"; allowed: {allowed}" if allowed and allowed not in text else ""
+        text += f"; {fix}" if fix and fix not in text else ""
         super().__init__(text, what=what, allowed=allowed, fix=fix)
 
 
