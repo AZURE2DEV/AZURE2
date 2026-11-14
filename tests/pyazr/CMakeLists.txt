@@ -107,10 +107,16 @@ set_tests_properties(pyazr_endf_model PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
 
 # pyazr.endf.write: T1, T2, 13N written and read back (own format check, MF=3 against the engine at the data and at
 # the grid's midpoints, MF=2 back to the levels); the real checking codes print their findings when found.
+# The quick set writes T1 and follows the narrow level; T2 and 13N (minutes: the elastic tables) are in the slow set.
 add_test(NAME pyazr_endf_write
          COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T1 narrow)
 set_tests_properties(pyazr_endf_write PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+add_test(NAME pyazr_endf_write_slow
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T2 13N)
+set_tests_properties(pyazr_endf_write_slow PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     LABELS slow TIMEOUT 3000)
 
 # pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
 # into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when

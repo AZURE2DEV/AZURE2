@@ -127,26 +127,30 @@ def test_export(t1):
     preview = t1.get("/api/endf/export").json()
     s = pyazr.Session(t1.path)
     x0 = np.asarray(s.parameters.x0, float)
-    _, losses = E.from_session(s, x0)
+    record, losses = E.from_session(s, x0)
     assert preview["refused"] is None and preview["losses"] == list(losses.items)
     assert [w["width_eV"] for w in preview["photon_widths"]] == [w[-1] for w in losses.photon_widths]
     lab = [e for d in s.evaluate(x0).data for e in d.extra["energy_lab"]]
     assert preview["energy_range_MeV"] == [min(lab), max(lab)] and preview["name"] == "T1.endf"
-    assert preview["not_written"] == list(E.writer.NOT_WRITTEN)
+    assert preview["not_written"] == list(E.writer.not_written_known(record)) == []
 
-    settings = {"name": "T1.endf", "authors": "pyazr tests", "lab": "TEST", "mat": 625}
+    # a short range and a loose tolerance: the job against the direct call, not the writer's accuracy (its own test)
+    settings = {"name": "T1.endf", "authors": "pyazr tests", "lab": "TEST", "mat": 625, "e_low": 0.3, "e_high": 0.6,
+                "tolerance": 1e-2}
     r = t1.post("/api/jobs", json={"kind": "endf_write", "method": "writer", "settings": settings})
     assert r.status_code == 200, r.text
     job = wait_job(t1, r.json()["id"])
     assert job["state"] == "finished", job
     written = job["result"]["written"]
     direct = os.path.join(tempfile.mkdtemp(), "T1.endf")
-    w = E.write(s, direct, x0, header={"AUTH": "pyazr tests", "ALAB": "TEST", "MAT": 625})
+    w = E.write(s, direct, x0, header={"AUTH": "pyazr tests", "ALAB": "TEST", "MAT": 625},
+                energy_range_MeV=(0.3, 0.6), tolerance=1e-2)
     with open(os.path.join(t1.folder, "T1.endf")) as a, open(direct) as b:
         assert a.read() == b.read(), "the job's file is the direct call's"
     assert written["path"] == "T1.endf" and written["sections"] == [list(x) for x in w.sections]
     assert written["mf2_check"] == {str(k): v for k, v in w.mf2_check.items()}
     assert written["losses"] == list(w.losses) and written["not_written"] == list(w.not_written)
+    assert set(preview["not_written"]) <= set(written["not_written"]), "the preview names nothing the run then wrote"
     assert "T1.endf" in [f["path"] for f in t1.get("/api/endf/files").json()["files"]]
     assert t1.get("/api/endf/export").json()["name"] == "T1_2.endf"
     again = wait_job(t1, t1.post("/api/jobs", json={"kind": "endf_write", "method": "writer",

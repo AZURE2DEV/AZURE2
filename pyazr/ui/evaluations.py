@@ -318,19 +318,22 @@ def keep_project(state, record, to=None):
 
 def export_preview(session, x):
     """What an ENDF-6 file of the session at x would lose, before it is written: ``pyazr.endf.from_session(s, x)``'s
-    losses and photon widths (or its refusal's three parts), and the energy range the writer takes by default (the
-    data's lab energies of the projectile, MeV)."""
+    losses and photon widths (or its refusal's three parts), the sections known not to be written
+    (``pyazr.endf.writer.not_written_known``), and the energy range the writer takes by default (the data's lab
+    energies of the projectile, MeV)."""
     from pyazr import endf
     from pyazr.errors import Error
     lab = [e for d in session.evaluate(x).data for e in np.asarray(d.extra.get("energy_lab", []), float)]
-    out = {"energy_range_MeV": [min(lab), max(lab)] if lab else None, "not_written": list(endf.writer.NOT_WRITTEN)}
+    out = {"energy_range_MeV": [min(lab), max(lab)] if lab else None}
     try:
-        _, losses = endf.from_session(session, x)
+        record, losses = endf.from_session(session, x)
     except Error as e:
-        return dict(out, refused=_parts(e), losses=[], photon_widths=[])
+        return dict(out, refused=_parts(e), losses=[], photon_widths=[], not_written=[])
     widths = [{"jpi": jpi, "energy_MeV": e, "pair": k, "multipole": f"{r}{l}", "width_eV": w}
               for jpi, e, k, r, l, w in losses.photon_widths]
-    return dict(out, refused=None, losses=list(losses.items), photon_widths=widths)
+    # what is known before the run; the job's result lists every section the run then left out (Written.not_written)
+    return dict(out, refused=None, losses=list(losses.items), photon_widths=widths,
+                not_written=list(endf.writer.not_written_known(record)))
 
 
 def write_job(tracker, x0, settings, names):

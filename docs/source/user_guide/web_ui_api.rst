@@ -128,7 +128,8 @@ What the server keeps
   ``name``); ``POST /api/endf/keep_project`` (``{"job_id", "to"}``) writes it as a new ``.azr`` of the folder (never
   over a file; the answer's ``open_path`` is what ``POST /api/project/open`` takes).  ``GET /api/endf/export`` is
   what a file of the current text at the working x would lose (``pyazr.endf.from_session``: ``losses``,
-  ``photon_widths``, ``not_written``, or ``refused``), the data's ``energy_range_MeV`` and a ``name`` not in use;
+  ``photon_widths``, or ``refused``; ``not_written``: the sections known before the run not to be written,
+  ``pyazr.endf.writer.not_written_known``), the data's ``energy_range_MeV`` and a ``name`` not in use;
   the job ``endf_write``/``writer`` (settings ``name``, ``mat``, ``authors``, ``lab``, ``date``, ``reference``,
   ``library``, ``e_low``, ``e_high`` in MeV lab, ``tolerance``, ``number_form``) runs ``pyazr.endf.write`` into a
   new file of the folder (``result.written``: ``path``, ``sections``, ``grids``, ``mf2_check``, ``losses``,

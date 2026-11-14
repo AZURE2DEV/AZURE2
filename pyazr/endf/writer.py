@@ -105,6 +105,16 @@ def _za(z, mass_neutron):
     return 1000 * int(round(z)) + int(round(mass_neutron * M_NEUTRON_U))
 
 
+def not_written_known(record):
+    """The sections known not to be written before the engine computes anything (what a preview can say): elastic
+    scattering of a neutral projectile.  :func:`write` lists the same lines first in ``Written.not_written``."""
+    ent = record.pairs[0]
+    if round(ent.za) > 0 and round(ent.zb) > 0:
+        return ()
+    return tuple(f"MF={mf}/MT=2 ({names.reaction_name(2)}): {NOT_WRITTEN_REASONS[(mf, 'neutral_elastic')]}"
+                 for mf in (3, 6))
+
+
 def _reactions(session, project, record):
     """The reactions the file holds, as :class:`pyazr.endf.engine_values.Reaction`: elastic scattering of a charged
     projectile (MT=2), every particle exit (its MT from the record), capture to every final state (MT=102) and to each
@@ -364,11 +374,11 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                                     allowed=f"agreement to {MF2_TOLERANCE:g} (LRP=2: MF=2 reproduces MF=3)",
                                     fix=f"report the project to the AZURE2 developers (the files are kept in {work})")
     # every section a reaction of the project needs, and why it is not written where it is not
+    # (a neutral projectile's elastic scattering is not LAW=5: known before the run, not_written_known)
     needed = [(mf, r.mt, r.role) for r in reactions if r.role != "final_state" for mf in (3, 6)]
-    if not has_elastic:  # a neutron (uncharged) projectile: elastic scattering is not LAW=5
-        needed = [(3, 2, "neutral_elastic"), (6, 2, "neutral_elastic")] + needed
-    not_written = tuple(f"MF={mf}/MT={mt} ({names.reaction_name(mt)}): {NOT_WRITTEN_REASONS[(mf, role)]}"
-                        for mf, mt, role in needed if (mf, mt) not in written)
+    not_written = not_written_known(record) + tuple(
+        f"MF={mf}/MT={mt} ({names.reaction_name(mt)}): {NOT_WRITTEN_REASONS[(mf, role)]}"
+        for mf, mt, role in needed if (mf, mt) not in written)
     sections = written
     # MF=1
     ent = record.pairs[0]
