@@ -259,12 +259,6 @@ class Channel:
         line = self.inp.readline()
         return json.loads(line) if line else None
 
-    def poll(self):
-        """True when a message waits on standard input (EOF counts: the server is gone or wants us gone)."""
-        import select
-        ready, _, _ = select.select([self.inp], [], [], 0)
-        return bool(ready)
-
 
 def serve_session(channel):
     """The session worker's loop: one request, one answer, until standard input closes."""

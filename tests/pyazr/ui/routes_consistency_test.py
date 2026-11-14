@@ -12,7 +12,8 @@
      a call of it as text);
   5. the app serves exactly the rows (method and path), and the OpenAPI document lists every one of them;
   6. ``import pyazr`` imports neither fastapi nor uvicorn nor pyazr.ui;
-  7. every job row runs a recipe or names the call it waits for;
+  7. every job row runs a recipe or names the call it waits for; the rows of the engine's fitters are its fitter
+     table (pyazr.kinds()["fitters"]);
   8. no file of pyazr/ui names or branches on a data kind, record kind or parameter kind of the engine (a new one
      needs no edit of the UI);
   9. every test of tests/pyazr/ui is registered in tests/pyazr/CMakeLists.txt.
@@ -115,10 +116,36 @@ def test_import_pyazr_does_not_import_the_server():
 
 
 def test_job_rows():
-    from pyazr.ui.jobs import JOBS
-    for row in JOBS:
+    from pyazr.ui.jobs import job_rows
+    rows = job_rows()
+    for row in rows:
         assert (row.run is None) != (row.missing is None), row
-    assert len({(r.kind, r.method) for r in JOBS}) == len(JOBS)
+    assert len({(r.kind, r.method) for r in rows}) == len(rows)
+
+
+def test_engine_rows_are_the_engine_fitter_table():
+    """The job rows of the engine's fitters are made from pyazr.kinds()["fitters"]: one fit row per fitter with its
+    switch, covariance and MINOS columns, a minos setting and a MINOS row (following that fit) exactly where the
+    engine's row allows MINOS; a fitter added to the table appears with no line of the UI changed."""
+    import pyazr
+    from pyazr.ui.jobs import engine_rows, job_rows
+    fitters = pyazr.kinds()["fitters"]
+    rows = {(r.kind, r.method): r for r in job_rows()}
+    fits = [r for r in job_rows() if r.kind == "fit" and r.method.startswith("engine_")]
+    assert sorted(r.method for r in fits) == sorted(f"engine_{n}" for n in fitters)
+    assert fits[0].method == "engine_" + next(n for n, f in fitters.items() if f["option"] == "")
+    for name, f in fitters.items():
+        row = rows[("fit", f"engine_{name}")]
+        facts = dict(row.facts)
+        assert facts["covariance"] == f["covariance"] and facts["MINOS can follow"] == f["minos"], (name, facts)
+        assert f["option"] in facts["program switch"] and f["doc"] in row.doc
+        assert ("minos" in row.defaults()) == f["minos"], name
+        assert (("minos", f"engine_{name}") in rows) == f["minos"], name
+        if f["minos"]:
+            assert rows[("minos", f"engine_{name}")].follows == ("fit", f"engine_{name}")
+    extra = dict(fitters, newfit=dict(fitters["lm"], option="--use-newfit", minos=True))
+    fits2, minos2 = engine_rows(extra)
+    assert "engine_newfit" in [r.method for r in fits2] and "engine_newfit" in [r.method for r in minos2]
 
 
 # Words of the engine's tables that occur in pyazr/ui as something else: argument names of Project.add_level and

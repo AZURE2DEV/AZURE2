@@ -98,8 +98,9 @@ test("the result: the recipe's words, MINOS offered after an iminuit fit", { ski
       errors: {} } };
   const v = f.resultView(rec, TABLE);
   assert.equal(v.message, "MIGRAD: valid minimum");
-  assert.deepEqual(v.followers.map((r) => `${r.kind}/${r.method}`), ["minos/iminuit"]);
-  assert.equal(f.resultView({ ...rec, method: "scipy_lbfgsb" }, TABLE).followers.length, 0);
+  const minos = (view) => view.followers.filter((r) => r.kind === "minos").map((r) => `${r.kind}/${r.method}`);
+  assert.deepEqual(minos(v), ["minos/iminuit"]);
+  assert.equal(minos(f.resultView({ ...rec, method: "scipy_lbfgsb" }, TABLE)).length, 0);
 });
 
 test("the objective against call: its own plot row, log y, numbers as sent", () => {
@@ -122,3 +123,49 @@ test("matrices: rows by name, CSV with the numbers as sent; the job a visit show
   assert.equal(f.jobToShow([...jobs, { id: "run", state: "running", started: 0 }]).id, "run");
   assert.equal(f.jobToShow(jobs, "old").id, "old");
 });
+
+test("the engine's fitters: facts as words, the engine's MINOS offered after its fit, errors said", { skip: !TABLE },
+  () => {
+    const engineFits = TABLE.filter((r) => r.kind === "fit" && r.method.startsWith("engine_"));
+    assert.ok(engineFits.length >= 1 && engineFits.every((r) => r.available), "the engine's rows run");
+    assert.equal(f.jobChoices(TABLE).find((k) => k.kind === "fit").methods[0].method, engineFits[0].method,
+      "the default fit is the engine's");
+    for (const row of engineFits) {
+      const words = f.factsText(row.facts);
+      assert.ok(words.includes(`covariance: ${row.facts.covariance ? "yes" : "no"}`), words);
+      const rec = { id: "e", kind: "fit", method: row.method, state: "converged", best: { objective: 1, x: {} },
+        result: { status: "converged", message: "the engine's: converged", errors: { a: 1 },
+          errors_from: "HESSE after the engine's MIGRAD" } };
+      const v = f.resultView(rec, TABLE);
+      assert.equal(v.errorsFrom, "HESSE after the engine's MIGRAD");
+      assert.deepEqual(v.followers.filter((r) => r.kind === "minos").map((r) => `${r.kind}/${r.method}`),
+        row.facts["MINOS can follow"] ? [`minos/${row.method}`] : []);
+    }
+  });
+
+test("the progress reducer: numbers beyond the four common ones shown by name", () => {
+  const v = f.progressView({ id: "j", state: "running", progress: { calls: 3, objective: 2, best: 1, elapsed: 0.5,
+    stage: "hesse", measure: null } });
+  assert.deepEqual(v.more, [["stage", "hesse"], ["measure", null]]);
+});
+
+test("followers of any method of a kind, offered only with what they take; the sampler's summary rows",
+  { skip: !TABLE }, () => {
+    const fit = { id: "f", kind: "fit", method: "scipy_lbfgsb", state: "converged", best: { objective: 1, x: {} },
+      result: { status: "converged" } };
+    const names = (rec) => f.resultView(rec, TABLE).followers.map((r) => `${r.kind}/${r.method}`);
+    assert.ok(names(fit).includes("sample/emcee"), "the sampler follows any fit");
+    assert.ok(!names(fit).includes("bands/covariance"), "no band without a covariance");
+    const withCov = { ...fit, result: { ...fit.result, covariance: { names: ["a"], matrix: [[1]] } } };
+    assert.ok(names(withCov).includes("bands/covariance"));
+    const sample = { id: "s", kind: "sample", method: "emcee", state: "finished", best: { objective: 1, x: {} },
+      result: { status: "finished", chain: "output/chain_s.npy" } };
+    assert.deepEqual(names(sample).filter((n) => n.startsWith("bands")), ["bands/draws"]);
+    assert.equal(f.follows({ follows: ["fit", null] }, fit), true);
+    assert.equal(f.follows({ follows: ["fit", "engine_lm"] }, fit), false);
+    assert.equal(f.STATES.finished.final, true);
+    const rows = f.chainRows({ quantiles: { a: { "2.5": 1, "16": 2, "50": 3, "84": 4, "97.5": 5 } },
+      mean: { a: 3 }, errors: { a: 1 }, tau: { a: 20 }, effective_draws: { a: 100 }, rhat: { a: 1.01 } });
+    assert.deepEqual(rows[0], { name: "a", mean: 3, sd: 1, "q2.5": 1, q16: 2, q50: 3, q84: 4, "q97.5": 5, tau: 20,
+      n_eff: 100, rhat: 1.01 });
+  });

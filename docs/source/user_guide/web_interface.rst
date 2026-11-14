@@ -63,10 +63,15 @@ model at the working parameters, against energy or angle; **Export data (CSV)** 
 units.  **+ new**, **Duplicate**, **Rename** and **Delete** add, copy, rename (with every reference) and remove
 records; each is one entry of the history.
 
-**Fit.**  On the left the job form, drawn from the server's job table: the kind (fit, MINOS), the method (iminuit's
-MIGRAD with HESSE, scipy's L-BFGS-B; the engine's fitters, the sampler, bands and the rate are listed greyed with the
-pyazr call they wait for), the method's settings with their defaults, the start point (the working parameters, the
-values of the project text, or the best point of a job) and **Run**.  A job runs in its own process on the text of
+**Fit.**  On the left the job form, drawn from the server's job table: the kind (fit, MINOS), the method, the
+method's settings with their defaults, the start point (the working parameters, the values of the project text, or
+the best point of a job) and **Run**.  The methods are first the engine's own fitters, one per row of the engine's
+fitter table (``pyazr.kinds()["fitters"]``, the fits of the command-line program): ``engine_migrad`` (the program's
+default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-gradient``; under the method the
+engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow);
+settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
+on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the rate is
+listed greyed with the pyazr call it waits for.  A job runs in its own process on the text of
 the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
 χ² —).  On the right the job: its calls, the objective (χ² + priors) at the last call and the best so far, the
 time, a plot of the objective against the call (log scale), the last lines of its log, **Stop** (it ends before its
@@ -74,14 +79,33 @@ next objective call and keeps its best point) and **Kill** (at once; the best po
 reload finds a running job again.  When it has ended: the recipe's own words (converged or not), the objective at
 the start and at the best point, the χ² and N at the best point, **Accept into project** (the best point written
 into the project text as one history entry; Undo takes it back; the χ² of the project as written then stands beside
-the fit's, and a difference is said, not hidden), and after an iminuit fit **minos (iminuit)…**, which fills the
-form for a MINOS job from that fit.  Below, the table of every parameter: name, kind (its description on hover),
+the fit's, and a difference is said, not hidden), and after a fit that MINOS can follow (the engine's MIGRAD, with or
+without the gradient, or iminuit's) **minos (…)…**, which fills the form for a MINOS job from that fit's best point.
+An engine fit ends where the same fit of ``Session.fit_with_engine`` and of the program ends; its result says the
+engine's status in its own words (``converged``, ``call_limit``, ``stopped``, ...), its errors are those the program
+writes into ``param.sav``, its covariance HESSE's after MIGRAD and (JᵀJ + priors)⁻¹ after LM and GSL-LM.  While it
+runs, the panel shows the stage (fit, then HESSE and MINOS, whose calls are counted on) and, for LM, its damping;
+**Stop** ends it at the best point it has seen.  Below, the table of every parameter: name, kind (its description
+on hover),
 free or fixed, the unit of x, the working x (a free parameter's value is edited here: Enter sets it, the header's χ²
 follows; **Reset x** goes back to the text's values), the physical value, bounds, prior, and for the job shown its
 best point, errors and MINOS intervals; **compare with start** adds the job's start point.  Filter by kind (the
 kinds the engine lists), by "free only" or by text (``/``).  A fixed value is a value of the project text: it is
 edited in its record (a link where the parameter's name begins with a record's) or level.  After a fit with HESSE,
 the covariance and the correlation as tables and CSV.
+
+After a fit, **sample (emcee)…** fills the form for the sampler from the fit's best point (walkers, stored steps,
+the start walkers' relative spread, thin, seed, the burn-in left out of the summary).  It runs emcee on the
+log-probability −χ²/2 of the objective (zero outside the fit's limits; a start point outside them is refused, naming
+the parameter) in one process; the panel shows the step, the acceptance and a running autocorrelation time τ, and
+**Stop** ends it between steps.  The chain is written to ``output/chain_<id>.npy`` (stored steps × walkers ×
+parameters) with a JSON summary beside it; the page shows, per parameter, the mean, standard deviation, the 2.5,
+16, 50, 84 and 97.5 % quantiles, τ, the effective draws and the split R̂, and the draws' covariance.  A sampler
+started from a sampler job's best point continues its chain.  A chain shorter than about 50 τ is not quoted
+(:doc:`mcmc`).  **bands (covariance)…** after a fit with a covariance computes the 1σ band of the model of every data
+set and extrapolation at the fit's best point (linear propagation over the level parameters, ``pyazr.bands``);
+**bands (draws)…** after a sampler evaluates the model at draws of its chain and takes the 16th, 50th and 84th
+percentiles at each point.
 
 **Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
 server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as on the Data tab, with
@@ -91,7 +115,10 @@ own (**together** draws them in one plot per unit), with the data times the norm
 the model, and under it, on the same x axis, the engine's residuals (m − n·d)/(n·σ), whose squares are the χ² of the
 fit.  The model of a data set is drawn at its points (a resonance narrower than their spacing is not drawn); an
 extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid over a data set's range shows the
-model between its points.  **levels** marks the levels of the project on the excitation-energy axis.  Below:
+model between its points.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
+shades the band of the newest band job of the Fit tab around each series; the head says which job and project text
+it belongs to (the band is around the model at that job's start point: accept the point to see the model line
+inside it), and the CSV holds its edges.  Below:
 angular distributions at a chosen energy, the χ² of every data set as the program's ``chiSquared.out`` splits it
 (with the sum of the squares of the residuals drawn), the model data against their values, and **Write the
 program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and the rest into the project's output
@@ -116,11 +143,11 @@ Not there yet
 -------------
 
 The tab **THM** says which step brings it; the ``<thm>`` section is edited through the API. In the
-Fit tab the engine's own fitters (MIGRAD, LM, their MINOS), the emcee sampler and bands wait for pyazr calls, and a
-fixed parameter is not edited from the table. Adding or removing a particle pair, generating channels from a J^π,
+Fit tab a fixed parameter is not edited from the table.
+Adding or removing a particle pair, generating channels from a J^π,
 the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical
 widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction
-rate and uncertainty bands, and live updates pushed by the server (the page asks every three seconds whether another
+rate, and live updates pushed by the server (the page asks every three seconds whether another
 client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is
 part of the package, so the page loads nothing from the network, and without it the plots appear as tables of their
 numbers.

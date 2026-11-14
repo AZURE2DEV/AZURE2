@@ -307,15 +307,20 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Physics, THM tabs to
       come.
 - [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
-      recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13). The engine's
-      fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`).
+      recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13).
 - [x] The engine's fit as a function (`fit.md`, 2026-11-13): a table of fitters, one function each with `FitControl`
       and `FitResult`, HESSE and MINOS on a `FitResult`, progress as records, a stop request owned by the caller;
       the program's run as named stages; `Session.fit_with_engine` through the same functions, without the GIL.
-      The Fit tab's job for it is still to write (`web_ui.md` section 12, finding 20).
+      The Fit tab runs it (below).
+- [x] The Fit tab, second part: the engine's fitters as jobs, their rows made from `pyazr.kinds()["fitters"]`, with
+      progress, Stop, the engine's status, errors, covariance, MINOS (as a setting and as a job after the fit),
+      Accept and Undo (2026-11-14, `web_ui.md` section 11.6). The emcee sampler (progress, stop between steps, the
+      chain to `output/chain_<id>.npy`, quantiles, split R-hat and τ on the page, a chain continued) and the bands
+      (linear from a fit's covariance, percentiles of a chain's draws; drawn in the Results tab) as jobs
+      (2026-11-14, section 11.7).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
-      model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
-      rate and bands wait for pyazr (`web_ui.md` section 12).
+      model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
+      model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
 - [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
       key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
       provisional `SESSION_OPTIONS` gone (2026-11-13).
