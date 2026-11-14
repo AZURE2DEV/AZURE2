@@ -1462,6 +1462,36 @@ try:
 except (OSError, ValueError, SyntaxError) as e:
     problems.append(f"check 58: {e}")
 
+# 59. The compound nuclei as set up are a CompoundSystem (include/CompoundSystem.h; docs/upgrade/cnuc_split.md section
+#     12): one constant object shared by every evaluation, never copied.  The old name CNuc (in any identifier or file
+#     name), a Clone() of the compound and the pools of compounds (cnuc_pool_) do not come back in the engine, the
+#     binding or their headers.
+OLD_COMPOUND_NAME = re.compile(r"CNuc|cnuc_pool_")
+COMPOUND_CLONE = re.compile(r"\bClone\s*\(")
+_compound_files = 0
+for rel in tracked_files():
+    if not rel.startswith(("src/", "include/", "api/")):
+        continue
+    if "CNuc" in os.path.basename(rel):
+        problems.append(f"{rel}: a file named after CNuc; the compound system is CompoundSystem (check 59)")
+    if not rel.endswith((".cpp", ".h", ".hpp")):
+        continue
+    try:
+        text = read(rel)
+    except (OSError, UnicodeDecodeError):
+        continue
+    _compound_files += 1
+    for number, line in enumerate(text.splitlines(), 1):
+        if OLD_COMPOUND_NAME.search(line):
+            problems.append(f"{rel}:{number}: names {OLD_COMPOUND_NAME.search(line).group(0)}; the compound system is "
+                            "CompoundSystem, shared constant, with a LevelState per owner (check 59)")
+    if rel == "include/CompoundSystem.h" and COMPOUND_CLONE.search(text):
+        problems.append(f"{rel}: CompoundSystem has a Clone(); it is shared constant, never copied (check 59)")
+if not OLD_COMPOUND_NAME.search("const CNuc *c") or not OLD_COMPOUND_NAME.search("std::vector<int> theCNucList") \
+        or not OLD_COMPOUND_NAME.search("cnuc_pool_.top()") or OLD_COMPOUND_NAME.search("const CompoundSystem &c") \
+        or not COMPOUND_CLONE.search("std::unique_ptr<CompoundSystem> Clone() const;"):
+    problems.append("check 59: the old-name pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1476,4 +1506,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
       f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
-      f"{len(_example_files)} examples run and listed")
+      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files")
