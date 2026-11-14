@@ -215,6 +215,10 @@ set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
 # project sets these checks (src/DataCheckFiles.cpp, docs/upgrade/edata_split.md N2).
 add_test(NAME check_files_data COMMAND bash ${CMAKE_SOURCE_DIR}/tests/check_files_data/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(check_files_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
+# The program's commands give the menu's outputs and refuse a wrong command line (tests/cli_commands/check.sh,
+# src/RunRequest.cpp); about 30 s at one thread.
+add_test(NAME cli_commands COMMAND bash ${CMAKE_SOURCE_DIR}/tests/cli_commands/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(cli_commands PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600)
 # Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
 # and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
 find_package(Python3 COMPONENTS Interpreter)

@@ -37,6 +37,7 @@ SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
 SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
 SRC_SWITCHES="$HERE/../../support/src/Environment.cpp"  # the options of the switches that move numbers (their table)
 SRC_FITTERS="$HERE/../../src/Fitters.cpp"  # the fitters' switches (the fitter table, with the fitters not built)
+SRC_RUN="$HERE/../../src/RunRequest.cpp"  # the options of the commands (the table of a run's questions)
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
@@ -53,11 +54,11 @@ fi
 # A flag that takes a value prints as "--flag[=FILE]:".
 printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
-literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" "$SRC_FITTERS" | tr -d '\r' |
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" "$SRC_FITTERS" "$SRC_RUN" | tr -d '\r' |
   grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
 # and the switch options without a value: the "Option" column of the list "Environment switches".
-documented="$( (tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p';
+documented="$( (tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p';
   tr -d '\r' < "$DOC" | sed -n '/^Environment switches$/,$s/^     - ``\(--[a-z][a-z0-9-]*\)``$/\1/p') | sort -u)"
 
 if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then

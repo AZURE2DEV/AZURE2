@@ -91,8 +91,9 @@ if(NOT NO_READLINE)
 endif (NOT NO_READLINE)
 
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
-# two use convert/, linked below)
-set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp)
+# two use convert/, linked below); RunRequest.cpp: the commands and the questions of a run, the command line's reader;
+# RunMenu.cpp: the menu's reader; RunPreparation.cpp: a run request into the Config
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunRequest.cpp RunMenu.cpp RunPreparation.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)

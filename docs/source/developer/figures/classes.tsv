@@ -90,6 +90,8 @@ PosteriorSupport	include/PosteriorSupport.h	the fit's limits as the posterior's 
 nu::Mcmc	numcmc/include/numcmc/mcmc.h	the sampler's run	inference	class	run
 nu::Ensemble	numcmc/include/numcmc/ensemble.h	the walkers of the sampler	inference	class	run
 nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probability	inference	class	run
+RunRequest	include/RunRequest.h	the answers of a program run: command and options, or the menu's	frontends	class	run
+RunMenu	include/RunMenu.h	the text menu: asks the questions of the table	frontends	class	run
 AZUREMain	include/AZUREMain.h	the program's run: its stages in order	frontends	class	run
 Config	include/Config.h	the run: options, paths, the project read	frontends	class	run
 CNuc	include/CNuc.h	compound nuclei and level parameters	frontends	class	evaluation

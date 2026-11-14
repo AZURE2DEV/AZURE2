@@ -209,11 +209,17 @@ AZURE2 reads a `.azr` configuration file describing the compound nucleus,
 channels, levels, and data segments.
 
 ```bash
-./build/src/AZURE2 path/to/config.azr
+./build/src/AZURE2 calculate path/to/config.azr
+./build/src/AZURE2 fit --parameter-file=param.sav path/to/config.azr
+./build/src/AZURE2 rate --rate-entrance=1 --rate-exit=2 --temperature-file=temps.dat path/to/config.azr
 ```
 
-AZURE2 prints its menu (calculate, fit, extrapolate, rate, MCMC) and runs the
-chosen mode; `pyazr` runs the same engine from Python.
+A command (`calculate`, `fit`, `extrapolate`, `minos`, `rate`, `mcmc`) runs one
+calculation with the answers its options give and reads nothing from standard
+input; a missing or wrong option is refused with exit status 2 and the fix.
+Without a command, `AZURE2 path/to/config.azr` prints the menu and asks.
+`AZURE2 --help` lists the commands and their options; `pyazr` runs the same
+engine from Python.
 
 Useful flags (`AZURE2 --help` for the full list):
 
@@ -232,8 +238,9 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
 | `--no-transform`      | Skip the initial parameter transformations. |
 
-A run that fails exits non-zero; piped answers that end at a prompt needing an
-answer stop the run with exit status 1.
+A run that fails exits non-zero; a refused command line exits with 2; piped
+answers to the menu that end at a prompt needing an answer stop the run with
+exit status 1.
 
 ---
 

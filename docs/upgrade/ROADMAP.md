@@ -354,5 +354,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       test lines, from `4bf7aa06:gui/` and `tests/gui/`).
 - [x] `gui/`, `tests/gui/`, `BUILD_GUI`/`USE_QWT`/`BUILD_MACOS_BUNDLE`, Qt/Qwt in CMake, CI, Docker and build scripts
       removed (decision 3, 2026-11-07; branch `feature/upgrade-remove-qt`); `--no-gui` kept, accepted and ignored.
-- [ ] Remove `numcmc/`, readline menus, the GSL fitter (`external/erya`: removed in Phase 5, branch `stopping-wire`).
+- [x] The program takes commands: `AZURE2 calculate|fit|extrapolate|minos|rate|mcmc [options] FILE`, every menu
+      question a named option of one table (`src/RunRequest.cpp`) that the menu, `--help` and `--describe` read; the
+      menu still runs without a command (pyazr3.md decision 3 (a); `tests/cli_commands`).
+- [ ] The tests, examples, skills and pages on the commands; the readline menus removed.
+- [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
+      `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.
