@@ -454,7 +454,9 @@ one) to copy:
 3. Its row on the page of examples (:doc:`../user_guide/pyazr_examples`), under its task: the script, the task in one
    sentence, the command.
 
-Check 58 fails for a script without both rows, and for a row whose script is not there.
+Check 58 fails for a script without both rows, for a row whose script is not there, and for a page of the
+repository's skills (``.claude/skills``) that names an example that is not there: a script folded into another or
+removed leaves the skills too.
 
 A run-time data file of pyazr
 -----------------------------

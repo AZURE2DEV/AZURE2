@@ -121,6 +121,7 @@ same.
 `pyazr.snapshot.place_level_values(project, parameters, pairs, want)` is the lower-level half: it maps the engine's
 pair numbers to the file's keys through `pairs=` (`s.pairs`), places each value by the engine's own (group, level) and
 the channel's (pair key, l, 2s), and refuses any free parameter it cannot place. It does not verify; `save_fit` does.
-`pyazr/examples/save_fit_to_azr.py` does the whole job: it loads a fit from `param.sav` or an `.npz`, optionally changes
-a channel radius (`--radius 1=4.70`, dropping the stale `intEC` caches), writes the `.azr` plus a companion `param.sav`
-with the norms, and fails if the result does not round-trip.
+`pyazr/examples/fit_engine.py` does the whole job: it fits with the engine (MIGRAD, HESSE), writes the `.azr` plus a
+companion `.sav` with `Session.save_fit`, which reopens what it wrote and raises if that is not the fit.  A channel
+radius is a `Project.set_pair(key, radius=)` edit and a new session (the engine checks the signature of a saved
+`intEC` cache and recomputes it).

@@ -1438,7 +1438,8 @@ except OSError as e:
 
 # 58. Every example is run and listed (docs/source/user_guide/pyazr_examples.rst): each script of pyazr/examples has
 #     a row in ROWS of tests/pyazr/examples_test.py (the table that runs it) and a row of the documentation's list,
-#     and neither names a script that is not there.  A new example is the file and its two rows.
+#     and neither names a script that is not there; no page of the repository's skills names an example that is not
+#     there.  A new example is the file and its two rows.
 _examples_page, _examples_test = "docs/source/user_guide/pyazr_examples.rst", "tests/pyazr/examples_test.py"
 try:
     import ast
@@ -1459,6 +1460,19 @@ try:
         problems.append(f"pyazr/examples/{_name}.py has no row in the list of {_examples_page} (check 58)")
     for _name in sorted(_example_listed - _example_files):
         problems.append(f"{_examples_page}: the list names {_name}.py, which is not in pyazr/examples (check 58)")
+    # The repository's skills name examples too: in a paragraph, list item or table row of a skill's page that names
+    # pyazr/examples/ (or says "Examples:"), and in the table of azure2-calculate/references/examples.md, every
+    # script named (`pyazr/examples/x.py` or a bare `x.py`) is a file of pyazr/examples.
+    for _md in sorted(glob.glob(os.path.join(ROOT, ".claude", "skills", "**", "*.md"), recursive=True)):
+        _rel = os.path.relpath(_md, ROOT)
+        _whole = _rel.endswith(os.path.join("azure2-calculate", "references", "examples.md"))
+        for _item in re.split(r"\n\s*\n|\n(?=\s*- )|\n(?=\|)", read(_rel)):  # paragraphs, list items, table rows
+            if not (_whole or "pyazr/examples/" in _item or "Examples:" in _item):
+                continue
+            for _token in re.findall(r"`((?:pyazr/examples/)?[A-Za-z0-9_]+\.py)`", _item):
+                _name = _token.rsplit("/", 1)[-1][:-3]
+                if _name not in _example_files:
+                    problems.append(f"{_rel}: names the example {_token}, which is not in pyazr/examples (check 58)")
 except (OSError, ValueError, SyntaxError) as e:
     problems.append(f"check 58: {e}")
 
