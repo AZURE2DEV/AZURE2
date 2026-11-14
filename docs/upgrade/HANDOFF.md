@@ -29,6 +29,15 @@ strict cookie: "the click ended at ... with the title 'AZURE2 — token needed'"
 **Documents**: web_ui.md (section 8, 11.1 item 2), the user guide's web page (a forward through a gateway must end
 at the server machine's loopback; "the token is needed"), the API page, `tests/pyazr/ui/README.md`.
 
+**The published pages are now built here** (Sphinx 9.1.1 with the two packages of `docs/requirements.txt`,
+installed with the PI's yes). The first build as the workflow runs it (`-W --keep-going`) failed: the format-3
+reference page read `[A-Za-z0-9_-]` as a reference to the target "a-za-z0-9" (two places). The generator's
+escape (`tools/gen_schema_docs.py`, `esc`) now escapes an underscore before any punctuation; the page is
+regenerated (three lines change). New test `docs_build` (`tests/consistency/docs_build_test.py`, in the quick
+suite, about 5 s, skipped without Sphinx): fails on the page as it was, passes now with 54 pages. With `-n`
+(nitpicky) the build lists about thirty `:py:` references without a target (there is no generated Python
+reference to point at): not run by the workflow, left; a decision once pyazr 3.0's reference page exists.
+
 **Open**: the cookie is a session cookie (a restarted browser asks for the token again: the page now says how);
 Firefox and Safari were not run (the rule they follow is the same standard).
 
