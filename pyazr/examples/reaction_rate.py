@@ -89,7 +89,7 @@ def main() -> int:
     if stale.exists():
         stale.unlink()
 
-    with Session(str(out)) as azr:
+    with Session(str(out), extrapolations=True) as azr:  # a session for the extrapolations
         x = np.asarray(azr.parameters.x0, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while
@@ -99,7 +99,6 @@ def main() -> int:
             # case) properly.
             from pyazr.bands import best_fit_params
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
-        azr.extrap_mode()
         e = np.asarray(azr.evaluate(x).data[0].energies, float)
         sig = np.asarray(azr.evaluate(x).data[0].model, float)
 

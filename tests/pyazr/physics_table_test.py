@@ -8,7 +8,7 @@ Each row is tested by a ``row_test("<name>", ...)`` (tests/consistency check 41 
   S-factor conversions);
 - against the engine's own use on tests/13N/13N.azr: the session's channel functions (exact Coulomb routine) and its
   Wigner limits (``Parameter.wigner_limit``);
-- against the Python formula the row replaces (pyazr/transform.py, widths.py, nds.py), over the range given; the
+- against the Python formula the row replaces (nds.py), over the range given; the
   largest relative difference per formula is printed in a table (``python-formula`` lines).
 
 The calling convention of the generated functions (broadcasting, scalars, errors="mask", DomainError with the
@@ -53,7 +53,7 @@ def main():
         import numpy as np
         import mpmath as mp
         import pyazr
-        from pyazr import physics as ph, transform, widths, nds
+        from pyazr import physics as ph, nds
     except Exception as err:  # the skip of the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77
@@ -102,11 +102,6 @@ def main():
         k = ph.wave_number(m1, m2, e)
         row_test("wave_number", f"{label} = (2 mu c^2 E)^1/2 / hbar c (mpmath) to 1e-15",
                  all(rel(k[i], mp_rho(m1, m2, 1, e[i])) <= 1e-15 for i in range(e.size)))
-    mu = 1.00727646688 * 12.0 / 13.00727646688
-    formula("transform.sommerfeld_eta", "sommerfeld_eta", ph.sommerfeld_eta(1, 6, 1.00727646688, 12.0, e),
-            [transform.sommerfeld_eta(1, 6, mu, x) for x in e], "p+12C, E = 0.01-20 MeV")
-    formula("transform.coulomb_rho", "wave_number x radius", 5.0 * ph.wave_number(1.00727646688, 12.0, e),
-            [transform.coulomb_rho(mu, 5.0, x) for x in e], "p+12C, a = 5 fm, E = 0.01-20 MeV")
     # relativistic: sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab, masses in MeV
     elab = np.geomspace(0.05, 50.0, 30)
     ecm = ph.lab_to_cm_energy(4.00150617913, 12.0, elab)
@@ -190,15 +185,6 @@ def main():
         row_test("coulomb_waves", f"method {method}: F, F', G, G' against mpmath on l = 0-6, eta = 0-10, rho = 0.2-20, "
                  f"{text}: largest rel diff {worst:.1e} (<= {tol:g}), {int(np.sum(st != 0))} not computed",
                  worst <= tol and np.all(st == 0), worst)
-    w = ph.coulomb_waves(L, ETA, RHO)
-    py = [transform.coulomb_waves(int(l), float(eta), float(rho)) for l, eta, rho in grid]
-    charged = np.flatnonzero(ETA > 0)
-    for j, k in enumerate(("F", "Fp", "G", "Gp")):
-        formula(f"transform.coulomb_waves ({k})", "coulomb_waves", w[k][charged], [py[i][j] for i in charged],
-                "l 0-6, eta 0.5-10, rho 0.2-20")
-    neutral = np.flatnonzero(ETA == 0)
-    formula("transform.coulomb_waves (F, eta = 0)", "coulomb_waves", w["F"][neutral], [py[i][0] for i in neutral],
-            "l 0-6, eta = 0, rho 0.2-20 (coulsm's F is wrong for l >= 2 at small rho: README)")
     # the recorded COULCC defect (docs/upgrade/HANDOFF.md): l = 1, eta = 0.493, rho = 8.55
     cc = ph.coulomb_waves(1, 0.493, 8.55, method="coulcc")
     sm = ph.coulomb_waves(1, 0.493, 8.55)
@@ -221,22 +207,10 @@ def main():
     row_test("whittaker_wave", "rho W'/W against mpmath to 1e-9",
              all(rel(ww["rho_dlog"][i], Rw[i] * mp.diff(lambda r: mp.whitw(-mp.mpf(Ew[i]), Lw[i] + 0.5, 2 * r),
                                                            mp.mpf(Rw[i])) / refw[i]) <= 1e-9 for i in range(len(wg))))
-    # transform.whittaker(L, z1, z2, red_mass, radius, B) is W_{-eta_b, L+1/2}(2 kappa a): the same function
-    py_w, row_w, where = [], [], "p+12C and a+12C, l = 0-3, a = 5 fm, B = 0.01-10 MeV"
-    for (_, z1, z2, m1, m2, _, _) in pairs[:2]:
-        mu2 = m1 * m2 / (m1 + m2)
-        for l in range(4):
-            for B in np.geomspace(0.01, 10.0, 12):
-                eb = float(mp_eta(z1, z2, m1, m2, B))
-                rho = float(mp_rho(m1, m2, 5.0, B))
-                row_w.append(ph.whittaker_wave(l, eb, rho)["W"])
-                py_w.append(transform.whittaker(l, z1, z2, mu2, 5.0, float(B)))
-    formula("transform.whittaker", "whittaker_wave", py_w, row_w, where)
 
     # ------------------------------------------------------------------ channel functions
     print("channel functions")
     worst = {"P": 0.0, "S": 0.0, "phi": 0.0}
-    py_formula = {"P": ([], []), "S": ([], []), "dS": ([], [])}
     for label, z1, z2, m1, m2, e_lo, e_hi in pairs:
         energies = np.geomspace(e_lo, e_hi, 9)
         for l in range(4):
@@ -249,11 +223,6 @@ def main():
                     worst["P"] = max(worst["P"], rel(P[i], rP))
                     worst["S"] = max(worst["S"], abs(S[i] - float(rS)))
                     worst["phi"] = max(worst["phi"], abs(phi[i] - float(rphi)))
-                mu2 = m1 * m2 / (m1 + m2)
-                py_formula["P"][0].extend(P)
-                py_formula["P"][1].extend(transform.penetrability(l, z1, z2, mu2, a, float(x)) for x in energies)
-                py_formula["S"][0].extend(S)
-                py_formula["S"][1].extend(transform.shift(l, z1, z2, mu2, a, float(x)) for x in energies)
     rng = "p+12C 0.05-20, a+12C 0.3-20, n+16O 0.01-20, 12C+12C 2-20 MeV; l = 0-3; a = 3.5, 5.5 fm"
     row_test("penetrability", f"against mpmath, {rng}: largest rel diff {worst['P']:.1e} (<= 1e-9)", worst["P"] <= 1e-9)
     # S = rho (F F' + G G') / (F^2 + G^2) cancels: with F, G good to 5e-10 (coulsm), S is good to a few 1e-9 absolute
@@ -261,25 +230,18 @@ def main():
     row_test("shift", f"against mpmath, same range: largest abs diff {worst['S']:.1e} (<= 5e-9)", worst["S"] <= 5e-9)
     row_test("hard_sphere_phase", f"atan2(F, G) against mpmath, same range: largest abs diff {worst['phi']:.1e} rad "
              "(<= 1e-9, the precision of coulsm)", worst["phi"] <= 1e-9)
-    formula("transform.penetrability", "penetrability", *py_formula["P"], rng)
-    formula("transform.shift", "shift", *py_formula["S"], rng + " (absolute below |S| = 1e-6)", floor=1e-6)
 
-    dS_worst, dS_py, dS_row = 0.0, [], []
+    dS_worst = 0.0
     for label, z1, z2, m1, m2, e_lo, e_hi in pairs:
-        mu2 = m1 * m2 / (m1 + m2)
         for l in (0, 2):
             for x in np.geomspace(max(e_lo, 0.1), e_hi, 4):
                 d = ph.shift_derivative(l, z1, z2, m1, m2, 5.0, x)
                 ref = mp.diff(lambda E: mp_channel(l, z1, z2, m1, m2, 5.0, E)[1], mp.mpf(x))
                 dS_worst = max(dS_worst, rel(d, ref, 1e-6))
-                dS_row.append(d)
-                dS_py.append(transform.shift_derivative(l, z1, z2, mu2, 5.0, float(x)))
     # the engine's Richardson difference with h = 1e-3 E carries the few-1e-9 noise of S: 9.5e-6 relative at p + 12C,
     # l = 0, 3.42 MeV (the Python formula, mpmath with h = 1e-3 MeV, is right there to 1e-11; docs/upgrade/HANDOFF.md)
     row_test("shift_derivative", f"against mpmath's derivative of S, four pairs, l = 0, 2, a = 5 fm, E = 0.1-20 MeV: "
              f"largest rel diff {dS_worst:.1e} (<= 2e-5, the engine's difference)", dS_worst <= 2e-5)
-    formula("transform.shift_derivative", "shift_derivative", dS_row, dS_py, "four pairs, l = 0, 2, a = 5 fm, "
-            "E = 0.1-20 MeV (absolute below 1e-6 MeV^-1)", floor=1e-6)
 
     # M_l(p) = (B - 1) j_l(pa) - pa j_l'(pa), j_l by mpmath (spherical Bessel through besselj of order l + 1/2)
     jl = lambda l, x: mp.sqrt(mp.pi / (2 * x)) * mp.besselj(l + mp.mpf(1) / 2, x)
@@ -304,18 +266,11 @@ def main():
                 for x in np.array([0.5, 3.0]) + (2.0 if z1 * z2 > 30 else 0)]
         row_test("single_particle_width", f"{label}, l = 1, a = 5 fm = 2 P gamma_W^2 (mpmath) to 1e-9",
                  all(rel(Gsp[i], refs[i]) <= 1e-9 for i in range(2)), (Gsp, refs))
-    formula("widths.teichmann_wigner", "wigner_limit", [ph.wigner_limit(1.00727646688, 12.0, 5.0)],
-            [widths.teichmann_wigner(ph.wigner_limit(1.00727646688, 12.0, 5.0))],
-            "an identity: it returns the engine's limit unchanged")
-    formula("widths.lane_thomas_wigner", "wigner_limit / 1.5", [ph.wigner_limit(1.00727646688, 12.0, 5.0) / 1.5],
-            [widths.lane_thomas_wigner(ph.wigner_limit(1.00727646688, 12.0, 5.0))], "one value (a factor 2/3)")
     eg = np.geomspace(0.01, 20.0, 15)
     for L_ in (1, 2, 3):
         P = ph.photon_penetrability(eg, L_)
         row_test("photon_penetrability", f"L = {L_}: (E / hbar c)^(2L+1) (mpmath) to 1e-14",
                  all(rel(P[i], (mp.mpf(eg[i]) / HC) ** (2 * L_ + 1)) <= 1e-14 for i in range(eg.size)))
-        formula(f"transform photon penetrability (L = {L_})", "photon_penetrability", P,
-                [(x / transform.HBARC) ** (2 * L_ + 1) for x in eg], "E_gamma = 0.01-20 MeV")
 
     # ------------------------------------------------------------------ the engine's own use: 13N
     print("the engine's own use (tests/13N/13N.azr, exact Coulomb routine)")

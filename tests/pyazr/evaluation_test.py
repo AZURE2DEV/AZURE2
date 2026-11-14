@@ -216,7 +216,7 @@ with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "T1x")
     shutil.copytree(os.path.join(TESTS, "upgrade", "T1"), work)
     os.makedirs(os.path.join(work, "output"), exist_ok=True)
-    with Session(os.path.join(work, "T1.azr"), data_mode=False) as s:
+    with Session(os.path.join(work, "T1.azr"), extrapolations=True) as s:
         x = np.asarray(s.parameters.x0, float)
         ev = s.evaluate(x)
         n = int(s._engine.update_segments_rwa(x))  # the engine's forward pass, through the binding

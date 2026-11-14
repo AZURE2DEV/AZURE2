@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The parameter table and the pairs, built from the engine's records (pyazr.Parameters, pyazr.Pair).
+"""The parameter table and the pairs, built from the engine's records (pyazr.Parameters, pyazr.system.Pair).
 
 A session gives each fit parameter and each particle pair as a record with named fields; the fields are one table
 of the engine (api/src/pybind_records.cpp: _azure2.parameter_record_fields(), pair_record_fields()).  Checked:

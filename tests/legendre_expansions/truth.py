@@ -32,7 +32,7 @@ LAB = [5.9, 6.1, 6.3]
 
 def engine(workdir):
     from pyazr import Session
-    with Session(os.path.join(workdir, "m.azr"), cwd=workdir, data_mode=False) as m:
+    with Session(os.path.join(workdir, "m.azr"), cwd=workdir, extrapolations=True) as m:
         grids = m.evaluate().data
     return ({e: np.array(grids[i].extra["legendre"]) for i, e in enumerate(EXPANSIONS)}, grids[5].model,
             grids[5].angles)

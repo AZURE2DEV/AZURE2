@@ -49,7 +49,7 @@ def evaluate(path, transform, where):
     os.makedirs(os.path.join(where, "output")); os.makedirs(os.path.join(where, "checks"))
     local = os.path.join(where, "m.azr")
     Project.open(path).save(local)
-    with Session(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
+    with Session(local, extrapolations=True, use_brune=False, ignore_externals=False, transform=transform) as m:
         x = np.array(m.parameters.x0)
         return [np.array(seg) for seg in [d.model for d in m.evaluate(x).data]]
 

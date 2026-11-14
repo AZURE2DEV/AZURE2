@@ -273,7 +273,7 @@ class Project(NuclearPart):
 
     def session(self, **options):
         """A calculation of the project as it stands: :class:`pyazr.Session` on :attr:`path` with ``options`` (its
-        keyword arguments: ``use_brune``, ``data_mode``, ...).  The engine reads the file, so the project is saved
+        keyword arguments: ``use_brune``, ``extrapolations``, ...).  The engine reads the file, so the project is saved
         first when it has unsaved edits (:attr:`unsaved`); the session's directory is the project's."""
         from .session import Session
         if self.unsaved or self._side_files:

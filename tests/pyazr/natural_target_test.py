@@ -36,7 +36,7 @@ sys.path.insert(0, ROOT)
 
 try:
     from pyazr import Project, Session
-    from pyazr.nuclei import merge_projects
+    from pyazr.system import merge_projects
     import pyazr._azure2  # noqa: F401
 except ImportError as e:  # as the other pyazr tests: no package or engine module -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
@@ -68,7 +68,7 @@ def copy_model(name, work, dest=None):
 
 
 def grids(path, cwd):
-    with Session(path, cwd=cwd, data_mode=False, use_brune=True) as s:
+    with Session(path, cwd=cwd, extrapolations=True, use_brune=True) as s:
         x = np.asarray(s.parameters.x0, float)
         return [np.asarray(v, float) for v in [d.model for d in s.evaluate(x).data]]
 
@@ -123,7 +123,7 @@ def run(work):
     aa = Project.open(merged2)
     check("twin forms a second nucleus", sorted({lv.nucleus for lv in aa.levels()}) == [(7, 13), (7, 14)])
     keys = {(lv.group, lv.level): lv for lv in aa.levels() if lv.active}
-    with Session(merged2, cwd=work, data_mode=False, use_brune=True) as s:
+    with Session(merged2, cwd=work, extrapolations=True, use_brune=True) as s:
         bad = []
         for pp in s.parameters:
             if pp.kind != "energy":

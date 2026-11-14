@@ -226,7 +226,7 @@ def evaluate(session, x=None):
         if has_data:
             raw = session._engine.evaluation_rwa(x)
         else:
-            x = np.asarray(session._mode_free_vector(x), float).ravel()
+            x = np.asarray(x, float).ravel()
             raw = _forward_pass(session._engine, x)
         try:
             if has_data:

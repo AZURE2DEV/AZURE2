@@ -87,7 +87,7 @@ def session(work):
     d = os.path.join(work, "rth")
     shutil.copytree(RTH, d)
     os.makedirs(os.path.join(d, "output"), exist_ok=True)
-    with Session(os.path.join(d, "aC_hs.azr"), data_mode=False) as m:
+    with Session(os.path.join(d, "aC_hs.azr"), extrapolations=True) as m:
         x = m.extrapolations
         names = [n for n, r in Project.open(os.path.join(d, "aC_hs.azr")).records().items()
                  if r.record_kind == "extrapolation"]

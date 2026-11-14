@@ -69,9 +69,9 @@ garbage collector; without it, call ``close()``. A closed session raises if used
 Session options
 ---------------
 
-``Session(file, *, cwd=None, data_mode=True, use_brune=True, ignore_externals=True, transform=True,
+``Session(file, *, cwd=None, extrapolations=False, use_brune=True, ignore_externals=True, transform=True,
 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
-CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``data_mode`` and ``coulomb_table`` are also
+CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``extrapolations`` and ``coulomb_table`` are also
 keys of the project's ``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword given wins over the
 key, the key over the default the signature shows, and a keyword left out is not given.  ``session.options`` holds the
 values in effect, ``session.option_sources`` where each came from (``"default"``, ``"project"``, ``"keyword"``);
@@ -634,7 +634,8 @@ one record whose reaction is the sum of the members':
 
 .. code-block:: python
 
-   from pyazr import merge_projects, Session
+   from pyazr import Session
+   from pyazr.system import merge_projects
 
    report = merge_projects(
        ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
@@ -683,7 +684,7 @@ At a fitted point, without refitting, each number is a component's raw contribut
 
 .. code-block:: python
 
-   azr.extrap_mode()
+   # azr = pyazr.Session(file, extrapolations=True); best its fit vector
    full = azr.evaluate(best).data[0].model
    P, lvl = azr.parameters, "5/2- 6.588"          # a level_label of P.of_kind("energy")
    off  = azr.evaluate(P.put(best, P.of_level(lvl).of_kind("width").free, 0.0)).data[0].model
@@ -882,8 +883,9 @@ Dimensionless widths
 
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf units are the corresponding sanity
 check for capture. AZURE2's Wigner limit (``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
-Teichmann-Wigner sum-rule unit 3ħ²/(2μa²); a θ² quoted against the other common unit, ħ²/(μa²)
-(``lane_thomas_wigner()``), is 1.5 times larger.
+Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); a θ² quoted against the other common
+unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``) is pyazr's one physics
+formula of its own (the engine has none); every other number of the table is the engine's.
 
 The external region, and the caches
 -----------------------------------
@@ -919,8 +921,7 @@ dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math
 ``W`` and ``rho_dlog`` (:math:`\rho W'/W`, the shift function of a closed channel at :math:`\rho = \kappa a`). It
 is the engine's GSL-free function (physics/coulomb), good to :math:`10^{-12}` against mpmath for
 :math:`l \le 10`, :math:`\eta_b \le 1000`, :math:`10^{-4} \le \rho \le 200`; an invalid argument raises
-``ValueError`` naming the element. ``pyazr.whittaker`` (pair, radius and binding energy in MeV) is the older Python
-copy of the engine's GSL path.
+``ValueError`` naming the element.
 
 .. code-block:: python
 
@@ -1307,6 +1308,29 @@ call.
    * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
      - ``s.objective().residuals(x)``, ``.residuals_and_jacobian(x, skip=...)``: the data rows first, then one
        row per prior and constraint
+   * - ``transform_out(levels)``, ``partial_widths(level)``, ``LevelWidthTransformer``, ``levels_from_azr``,
+       ``levels_from_scheme``, ``TransformedLevel``, ``TransformedChannel`` and the classes Level and Channel of
+       ``pyazr.transform``
+     - ``s.transform(x)``: the engine's transformation, one physical value per row of ``s.parameters`` (a chain:
+       one call per sample; ``pyazr/examples/transform_widths.py``)
+   * - ``pyazr.penetrability``, ``shift``, ``shift_derivative``, ``whittaker`` (Python formulas)
+     - ``pyazr.physics.penetrability``, ``.shift``, ``.shift_derivative``, ``.whittaker_wave``; with a session's
+       radius, Coulomb table and potential ``s.channel_functions(pair, e_cm, l)``
+   * - ``teichmann_wigner(g2)``, ``lane_thomas_wigner(g2)``
+     - ``Parameter.wigner_limit`` and ``pyazr.physics.wigner_limit`` (the 3 hbar^2 / (2 mu a^2) unit; the
+       hbar^2 / (mu a^2) unit is 2/3 of it)
+   * - ``pyazr.Pair``, ``pyazr.PairSet``, ``pyazr.LevelScheme``, ``pyazr.SchemeLevel``, ``pyazr.SchemeChannel``,
+       ``pyazr.Nucleus``, ``pyazr.MergeReport``, ``pyazr.merge_projects``, ``pyazr.nucleus_of``,
+       ``pyazr.nucleus_of_pair``, the modules ``pyazr.scheme`` and ``pyazr.nuclei``
+     - the same names in ``pyazr.system`` (``pyazr.system.Pair``, ``pyazr.system.PairSet``,
+       ``pyazr.system.LevelScheme``, ``pyazr.system.SchemeLevel``, ``pyazr.system.SchemeChannel``,
+       ``pyazr.system.Nucleus``, ``pyazr.system.MergeReport``, ``pyazr.system.merge_projects``,
+       ``pyazr.system.nucleus_of``, ``pyazr.system.nucleus_of_pair``; modules ``pyazr.system.scheme``,
+       ``pyazr.system.nuclei``)
+   * - ``s.extrap_mode()``, ``s.data_mode()``, the keyword ``data_mode=`` of ``Session``
+     - ``Session(file, extrapolations=True)``: a session is made for the data sets or for the extrapolations;
+       ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's fit
+       vector to the extrapolation session ``t``
 
 Examples
 --------
@@ -1335,7 +1359,8 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``deactivate_level.py``
      - Switching a resonance off without removing it.
    * - ``transform_widths.py``
-     - Reduced width amplitudes to physical partial widths.
+     - Reduced width amplitudes to physical partial widths with ``Session.transform``, beside the naive
+       2γ²P; a chain's samples mapped onto physical values.
    * - ``dimensionless_widths.py``
      - θ² and Weisskopf units for a whole fit.
    * - ``channel_functions.py``
@@ -1414,16 +1439,22 @@ on an 1845-point extrapolation grid (53 s serial, 56 s over four workers). It is
 ``method="analytic"``, which is one call whatever the parameter count. Reach for it only when the analytic path is
 unavailable and the model is large, and measure rather than assume.
 
-Data mode and extrapolation mode
---------------------------------
+Data sets and extrapolations
+----------------------------
 
-``data_mode()`` (the default) evaluates the active ``dataset`` records — this is what χ² uses. ``extrap_mode()``
-switches to the ``extrapolation`` grids for predictions on arbitrary energies and angles. Both re-initialise the
-engine, so switch sparingly and batch the work.
+A session evaluates one or the other, chosen when it is made: ``Session(file)`` the active ``dataset`` records (what
+χ² uses), ``Session(file, extrapolations=True)`` the ``extrapolation`` grids, for predictions on any energies and
+angles (the program's menu choice 3).  There is no switch of a live session: for both, make two sessions
+(``Session(file, **dict(s.options, extrapolations=True))`` rebuilds the same model for the extrapolations).  The two
+fit vectors differ in their tail (the data sets' nuisances, the extrapolations'); the level parameters and abundances
+lead both, and ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's
+vector to the extrapolation session ``t``.  An extrapolation session has no χ²: its ``evaluate(x)`` has every χ² field
+``None``, ``objective()`` and the fits refuse.  A project without an active extrapolation cannot be made into one (the
+engine does not initialise).
 
-Segment indexing differs between them, and getting it wrong misaligns results silently: in data mode segment *i* is
-``azr.datasets[i]``; in extrapolation mode **only active extrapolations are returned**, so segment *i* is
-``azr.extrapolations.active[i]``.
+Segment indexing differs between them, and getting it wrong misaligns results silently: in a data session segment
+*i* is ``azr.active_datasets[i]``; in an extrapolation session **only active extrapolations are returned**, so
+segment *i* is ``azr.extrapolations.active[i]``.
 
 .. note::
 

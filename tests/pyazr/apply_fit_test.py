@@ -33,6 +33,7 @@ sys.path.insert(0, ROOT)
 try:
     from pyazr import Project, FormatError
     from pyazr import parameters as _params
+    from pyazr import system as pyazr_system
     from pyazr.snapshot import place_level_values
     import pyazr._azure2  # noqa: F401
 except Exception as err:                                  # engine not built
@@ -90,7 +91,7 @@ def parameter(**kw):
 
 def pair(number, key):
     """A Pair carrying just the engine number and file key that matter here."""
-    return _params.Pair(number=number, key=key, ptype=0, is_entrance=False,
+    return pyazr_system.Pair(number=number, key=key, ptype=0, is_entrance=False,
                         J1=0.5, parity1=1, Z1=1, M1=1.0,
                         J2=0.5, parity2=1, Z2=1, M2=1.0,
                         sep_energy=0.0, excitation=0.0, channel_radius=4.0,

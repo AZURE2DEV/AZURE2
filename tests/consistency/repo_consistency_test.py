@@ -443,7 +443,7 @@ for rel, literal in sorted(KNOWN):
 
 
 # 10b. One table of element symbols: physics/'s Elements.h (ElementSymbol, ElementZ; the binding's element_symbols(),
-#      which pyazr.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
+#      which pyazr.system.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
 #      consecutive symbols written out -- is a copy that drifts (src/ParameterLabel.cpp's stopped at Kr).
 ELEMENT_RUN = re.compile(r'\bHe\b["\',\s]{1,6}\bLi\b["\',\s]{1,6}\bBe\b')
 for top in ("src", "include", "api", "io", "experiment", "pyazr"):
@@ -608,10 +608,7 @@ PY_NAME_TEST = re.compile(r'\.(?:startswith|endswith)\(\s*[rbf]*["\']' + STEM.re
                           + r'|\.name\.(?:startswith|endswith)\(\s*[A-Za-z_]')
 PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["\'][^"\']*'
                            r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_)')
-ALLOWED_NAME_TESTS = {
-    # An example script that reads param.par without the engine (pyazr.transform only).
-    ("pyazr/examples/transform_widths.py", 'm = re.match(r"width_'),
-}
+ALLOWED_NAME_TESTS = set()  # (file, text of the line): none today
 name_test_hits = set()
 for top in ("src", "include", "api", "pyazr"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
