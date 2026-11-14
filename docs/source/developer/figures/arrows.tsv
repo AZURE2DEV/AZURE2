@@ -45,13 +45,17 @@ CompoundSystem	PPair	owns	setup		CompoundSystem::pairs_ (std::vector<PPair>)
 CompoundSystem	JGroup	owns	setup		CompoundSystem::jgroups_ (std::vector<JGroup>)
 JGroup	AChannel	owns	setup		JGroup::channels_ (std::vector<AChannel>)
 JGroup	ALevel	owns	setup		JGroup::levels_ (std::vector<ALevel>)
-CompoundSystem	LevelState	makes	setup		CompoundSystem::Fill(const Config &, LevelState &, LevelInputs &, ...) shapes the caller's; Initialize, the fills and the transformations write the state they are given
-CompoundSystem	LevelInputs	makes	setup		CompoundSystem::Fill makes the caller's from the <levels> rows; TransformIn and FillCompoundFromParamsPhysical write the inputs they are given
+CompoundSystem	LevelState	makes	setup		CompoundSystem::Fill(const Config &, LevelState &, LevelInputs &, ...) shapes the set-up's (SetUpCompoundSystem); Initialize, the fills and the transformations write the state they are given
+CompoundSystem	LevelInputs	makes	setup		CompoundSystem::Fill makes the set-up's from the <levels> rows; TransformIn and FillCompoundFromParamsPhysical write the inputs they are given
 CompoundSystem	LevelParameterLayout	reads	setup	const	CompoundSystem::parameterLayout_ (shared_ptr<const LevelParameterLayout>), made once in CompoundSystem::Fill; read by every walk of the level block through CompoundSystem::ParameterLayout()
 CompoundSystem	ObservedLevelTable	makes	setup		CompoundSystem::TransformOut(const Config &) returns it; WriteParametersOut, LevelValue, WarnLargeRadiativeWidths read it
 CompoundSystem	SystemOfCompound	reads	setup	const	CompoundSystem::systemStructure_, systemAllGroups_ (shared_ptr<const SystemOfCompound>), made once by BuildSystemOfCompound(const CompoundSystem &, ...) in CompoundSystem::Fill
 SystemOfCompound	azure2::physics::System	owns	setup		SystemOfCompound::system
 CompoundSystem	azure2::PathwayTable	reads	setup	const	CompoundSystem::pathways_ (shared_ptr<const PathwayTable>), made by BuildPathwayTable(const SystemOfCompound &) in CompoundSystem::BuildPathways
+CompoundSetUp	CompoundSystem	owns	setup		CompoundSetUp::compound (std::unique_ptr<const CompoundSystem>), made finished by SetUpCompoundSystem; handed to the run or the session
+CompoundSetUp	LevelState	owns	setup		CompoundSetUp::state: the owner's levels, made with the compound
+CompoundSetUp	LevelInputs	owns	setup		CompoundSetUp::inputs: the owner's input values, transformed by the last part
+CompoundSystem	CompoundSetUpRequests	reads	setup	const	CompoundSystem::Initialize(..., const CompoundSetUpRequests &) -> BuildPathways: the entrances and capture-A_y pairs the data's set-up handed back
 WorkingCopy	azure2::experiment::DatasetSpec	reads	setup	const	WorkingCopy::Fill(const Config &, const CompoundSystem *, const LevelInputs &, const DataSpecs &)
 WorkingCopy	CompoundSystem	reads	setup	const	WorkingCopy::Fill(const Config &, const CompoundSystem *, ...), WorkingCopy::Initialize(const CompoundSystem *, const Config &)
 WorkingCopy	DataSet	makes	setup		WorkingCopy::Draft() (DataSet &) during the set-up, WorkingCopy::Freeze() at the end of Initialize
@@ -108,17 +112,17 @@ PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
 nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
-AZUREMain	CompoundSystem	owns	frontends		AZUREMain::compound_ (new CompoundSystem in the constructor)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
 AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
 ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
-ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by CompoundSystem::Fill and Initialize in SetUpRun
+ProgramRun	CompoundSystem	owns	frontends		ProgramRun::compound (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in SetUpRun
+ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by SetUpCompoundSystem in SetUpRun
 ProgramRun	LevelInputs	owns	frontends		ProgramRun::inputs (LevelInputs): the run's
 ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
 AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
-AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (new CompoundSystem in AZUREAPI::ReplaceModel, called by Initialize)
-AZUREAPI	LevelState	owns	frontends		AZUREAPI::state_ (std::unique_ptr<LevelState>): the session's, made by CompoundSystem::Fill and Initialize
+AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in AZUREAPI::Initialize and RebuildImpl
+AZUREAPI	LevelState	owns	frontends		AZUREAPI::state_ (std::unique_ptr<LevelState>): the session's, made by SetUpCompoundSystem
 AZUREAPI	LevelInputs	owns	frontends		AZUREAPI::inputs_ (std::unique_ptr<LevelInputs>): the session's
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)
 _azure2::Session	Config	owns	frontends		Session::config_ (new Config in the constructor, api/src/pybind_api.cpp)

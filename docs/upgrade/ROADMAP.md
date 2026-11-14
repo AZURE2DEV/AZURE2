@@ -239,9 +239,13 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       (four `mutable` rows of `allowed_state.tsv` gone). A particle channel's functions are one function
       (`ParticleChannelValues`), called by the engine and the binding's level doors (`cnuc_split.md` §12.3, step 5 as
       built).
-- [ ] One build: `BuildCompoundSystem` returning the finished `shared_ptr<const CompoundSystem>`. Not built: the data's
-      set-up reads the compound between `Fill` and `Initialize`, and the run's log prints the data's set-up between
-      the two (`cnuc_split.md` §12.3, step 5 as built; a decision of the director).
+- [x] One set-up: `SetUpCompoundSystem` (`include/CompoundSystemSetUp.h`) makes the structure, runs the caller's data
+      set-up in the middle (it reads a `const CompoundSystem &` and returns the entrance and capture-A_y requests),
+      finishes the compound and returns it as `std::unique_ptr<const CompoundSystem>` with the owner's levels; the
+      program's run, the sampler and the session (set-up and rebuild) call it, the segments' trees take the
+      structure only (`InspectCompoundStructure`). `Fill`, `Initialize` and the requests are private to it; what the
+      last part writes refuses to be read before it. Every output file, `run.log` included, unchanged
+      (`cnuc_split.md` §12.3, the one set-up as built).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

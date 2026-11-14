@@ -33,10 +33,10 @@ digraph frontends {
   n_CurveSession [label=<<b>CurveSession</b><br/><font point-size="12">the session of the<br/>extrapolations that<br/>draws data sets&#x27; model<br/>curves</font>>, shape=box, style="filled", fillcolor="white"];
   n_Covariance [label=<<b>Covariance</b><br/><font point-size="12">a data covariance<br/>built from named<br/>parts, checked</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
-  n_AZUREMain -> n_CompoundSystem [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_ProgramRun [style=dotted, penwidth=1.6, arrowhead=empty];
   n_ProgramRun -> n_AZURECalc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ProgramRun -> n_CompoundSystem [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_ProgramRun -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_ProgramRun -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_ProgramProgress -> n_AZURECalc [style=dashed, arrowhead=vee, label=" nc"];

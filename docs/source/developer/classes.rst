@@ -82,19 +82,20 @@ inputs they are given (``FillCompoundFromParams`` with
 ``LevelState`` it reads as an argument (the matrix functions hold the one
 they are solved at), and every reader of the input values the
 ``LevelInputs``. ``CompoundSystem`` holds neither: each owner holds its own and hands it
-to the readers -- the program's run and the session (made by ``CompoundSystem::Fill``
-and ``Initialize``, which write the state and inputs they are given), a fit's
+to the readers -- the program's run and the session (made by ``SetUpCompoundSystem`` with the compound), a fit's
 evaluations (copies of the caller's state in ``FitterStates``, their pool a
 ``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
 and a copy per walker), the reaction rate, a limit's conversion and the
 sub-point grids. Where each level's energy and amplitudes sit in the
 parameter vector is the ``LevelParameterLayout`` (``CompoundSystem::ParameterLayout()``,
 built by ``Fill``): every walk of the level block reads it. ``CompoundSystem`` is not
-copied (its copy constructor is deleted): one object, set up by the run or
-the session, is shared constant by every owner, thread and walker; its
+copied (its copy constructor is deleted): one object, made by ``SetUpCompoundSystem``
+(``include/CompoundSystemSetUp.h``) and owned by the run or the session as
+``std::unique_ptr<const CompoundSystem>``, is shared constant by every owner, thread and walker; its
 pairs, groups and channels do not change after the set-up, and the compiler
-holds to it: outside ``CompoundSystem``'s own set-up it is reached through ``const``
-pointers only (``GetPair``, ``GetJGroup``), levels included. Its files: the set-up in
+holds to it: its set-up calls are private to ``SetUpCompoundSystem``, and outside them it is reached through
+``const`` pointers only (``GetPair``, ``GetJGroup``), levels included. Its files: the one set-up in
+``src/CompoundSystemSetUp.cpp``, the set-up calls in
 ``src/CompoundSystemBuild.cpp`` and ``src/ExternalCaptureFinalStates.cpp``, the queries in
 ``src/CompoundSystem.cpp``, the transformations in ``src/LevelTransforms.cpp``, the fills of a state in
 ``src/LevelStateFill.cpp``, the parameter vector in ``src/LevelParameterVector.cpp``, its ``System`` in
@@ -105,8 +106,8 @@ energies and amplitudes, observed widths, ANCs and moments, the external parts)
 are not stored on the levels: ``CompoundSystem::TransformOut`` returns them as an
 ``ObservedLevelTable``, which the reports (``WriteParametersOut``), the model
 data and the observed parameter vector (``CompoundSystem::GetTransformParams``) read. The
-entrance pairs are an input of the set-up
-(``CompoundSystem::RequestEntrance``, collected from the specs by
+entrance pairs are an input of the set-up's last part
+(``CompoundSetUpRequests``, collected by the data's set-up with
 ``RequestDataEntrances`` or ``RequestExtrapolationEntrances``,
 ``src/ProjectSetup.cpp``). ``SystemOfCompound`` is the ``azure2::physics::System``
 of a ``CompoundSystem``, built once by ``CompoundSystem::Fill``, and the

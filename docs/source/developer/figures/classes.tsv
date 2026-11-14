@@ -32,6 +32,8 @@ azure2::experiment::BuiltProject	experiment/include/azure2/experiment/Build.h	wh
 azure2::experiment::DatasetSpec	experiment/include/azure2/experiment/SetupSpecs.h	one data set as built: observable, pairs, nuisances	setup	class	immutable
 Config	include/Config.h	the run: options, paths, the project read, scratch	setup	class	run
 CompoundSystem	include/CompoundSystem.h	compound nuclei as set up: pairs, J groups, levels (read-only after set-up, not copied)	setup	class	immutable
+CompoundSetUp	include/CompoundSystemSetUp.h	the one set-up of the compound and the data: the finished compound and the owner's levels, or the refusing step	setup	class	run
+CompoundSetUpRequests	include/CompoundSystemSetUp.h	what the data's set-up asks of the compound's last part: entrances, capture-A_y pairs	setup	class	immutable
 PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	immutable
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	immutable
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
