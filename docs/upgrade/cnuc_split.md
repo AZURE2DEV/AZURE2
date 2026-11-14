@@ -1776,6 +1776,34 @@ about 180 (`GetFitGamma` 55 in 14 files, `GetFitE` 39 in 15, `GetParkNorm` 14, `
   `parameters.out` the observed values the sampler's set-up left in the compound (the start vector's): it reads a table
   of the start vector now (`AZURECalcMCMC::StartObservedLevels`), the same numbers; a defect, named in the handoff.
 
+*Step 3 as built, second part: the fit set* (branch `feature/upgrade-5-cnuc-level-state-2`, start 50e1fa7c). Measured
+first, calls outside `ALevel.cpp`: 183 in 22 files (`GetFitGamma` 54 in 14 files, `GetFitE` 38 in 15, `GetParkNorm`
+14, `GetShiftFunction` 11, `GetShiftDerivative` 9, `SetFitE`/`SetFitGamma` 8 each, `SetSqrtNFFactor` 7,
+`GetSqrtNFFactor` 6, the rest under 6); the largest groups `AMatrixFunc.cpp` 41, `CNuc.cpp` 28, `RMatrixFunc.cpp` 20,
+`THMMatrixFunc.cpp` 19, `ChannelSpace.cpp` 13.
+- `LevelState` (`include/LevelState.h`, `src/LevelState.cpp`): per level the fit E, γ per channel, the
+  external-capture amplitudes and N_f^½, S_c(E_λ) with the energy it was computed at, dS/dE, d²S/dE² with its energy,
+  Park's J, and a version; per group the per-channel values lie level after level, (λ−1) n_c + (c−1), as in
+  `JpiBlock`. `CNuc` holds one (`levelState_`, shaped at the end of `Fill`, copied with the compound); its fills write
+  it (`FillCompoundFromParams` and `CalcShiftFunctions`, now in `src/CNucLevelState.cpp`, `TransformIn`,
+  `FillCompoundFromParamsPhysical`, `ECFinalStatesFromFormal`, `SetFitLevelParameter`, `ObservedOfFitValues`'s
+  restore); readers take `CNuc::State() const`. The only other writer is `CNuc::CopyFitEnergiesAndAmplitudes`
+  (the sub-point-grid copy and a test: E and γ, nothing derived, as the copy did before).
+- The version changes with the setters that changed the stamp (E, γ, S_c, J, d²S/dE²), from the same process-wide
+  counter (moved from `ALevel.cpp` to `LevelState.cpp`, its `allowed_state.tsv` row with it). `ChannelSpace` keys
+  its three memos on (state address, group, level, version) instead of (level address, stamp): a hit still means
+  the same values, so only whether a memo is rebuilt can differ. The stamp also changed with `SetZeroInputWidth`
+  and `PadChannels`; no memo reads those values, so the version does not follow them.
+- `ThmVertexBoundary` takes the state and the group number; `ThmLevelWidth` takes the level's energy and
+  amplitudes, so the line shape's numerical width derivative perturbs a vector, not a copy of the `ALevel`.
+- `ALevel` keeps its set-up data and its input values (`GetE`, `GetGamma`, `ZeroInputWidth`); the fit set's eleven
+  members and their accessors are deleted (the compiler is the check, as for the report set).
+- What differed from the design: N_f^½ is one slot read both at set-up (`ExternalReducedWidthOfInputs`, after
+  `TransformIn` or `FillCompoundFromParamsPhysical` wrote it) and in the evaluation; it moved whole into the state.
+  `ReactionRate`'s fresh clone copied E and γ it already held: the copy is gone. `CNuc::InvalidateShiftFunctions`,
+  `AZUREAPI::TransformRWAParameters` and `AZUREAPI::TransformAllRWAParametersFull` had no caller and wrote the fit
+  set: deleted.
+
 **Step 4. The parameter vector; the copies replaced.** (≈ 600 lines changed; `CNuc.cpp` −400 into
 `LevelParameterVector.cpp` and `LevelInputs.cpp`; files: `CNuc.*`, `AZUREGrad.cpp`, `AZUREParams.cpp`,
 `ParameterLabel.cpp`, `AZURECalc.*`, `AZURECalcMCMC.*`, `AZUREAPI.*`, `AZUREAPIModelData.cpp`, `AZURE2.cpp`,

@@ -899,9 +899,9 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
         if (!jg->IsInRMatrix()) continue;
         for (int la = 1; la <= jg->NumLevels(); la++) {
           const ALevel *level = jg->GetLevel(la);
-          if (!level->IsInRMatrix() || level->GetParkNorm() > 0.0) continue;
+          if (!level->IsInRMatrix() || lc->State().ParkNorm(j, la) > 0.0) continue;
           std::ostringstream text;
-          text << AZURELabel::Level(jg, level, j, la) << ": J = " << level->GetParkNorm();
+          text << AZURELabel::Level(jg, level, j, la) << ": J = " << lc->State().ParkNorm(j, la);
           labels.push_back(text.str());
         }
       }

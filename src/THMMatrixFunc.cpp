@@ -83,7 +83,7 @@ void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, c
       pwVertex = &vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
       if (pwVertex->empty()) pwVertex->assign(numLevels + 1, complex(0.0, 0.0));
     }
-    const ThmVertexBoundary boundaryOf(configure, compound->GetPair(aa), jg, ch);
+    const ThmVertexBoundary boundaryOf(configure, compound->GetPair(aa), jg, compound->State(), j, ch);
     const complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
     if (dw) {
       // Two components per (s, l): buckets 2 l + k.
@@ -96,30 +96,30 @@ void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, c
       const complex *ak = &dwAt.a[((size_t)pass * dwAt.nl + li) * 2];
       const complex *dk = &dwAt.d[((size_t)pass * dwAt.nl + li) * 2];
       if (coherentJ) {
-        complex b = boundaryOf.At(nullptr, onShellL);
+        complex b = boundaryOf.At(0, onShellL);
         unitVertex[std::make_pair(c->GetS(), 2 * c->GetL())] = std::make_pair(ch, ak[0] * (b - 1.0) - dk[0]);
         unitVertex[std::make_pair(c->GetS(), 2 * c->GetL() + 1)] = std::make_pair(ch, ak[1] * (b - 1.0) - dk[1]);
       }
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        complex boundary = boundaryOf.At(level, onShellL);
-        double g = level->GetFitGamma(ch);
+        complex boundary = boundaryOf.At(la, onShellL);
+        double g = compound->State().Gamma(j, la, ch);
         vertex0[la] += g * (ak[0] * (boundary - 1.0) - dk[0]);
         vertex1[la] += g * (ak[1] * (boundary - 1.0) - dk[1]);
       }
       continue;
     }
     if (coherentJ) {
-      complex b = boundaryOf.At(nullptr, onShellL);
+      complex b = boundaryOf.At(0, onShellL);
       unitVertex[std::make_pair(c->GetS(), c->GetL())] =
           std::make_pair(ch, node < 0 ? point->GetThmFormFactor(j, ch, b) : point->GetThmFormFactor(j, ch, b, node));
     }
     for (int la = 1; la <= numLevels; la++) {
       const ALevel *level = jg->GetLevel(la);
       if (!level->IsInRMatrix()) continue;
-      complex boundary = boundaryOf.At(level, onShellL);
-      (*pwVertex)[la] += level->GetFitGamma(ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
+      complex boundary = boundaryOf.At(la, onShellL);
+      (*pwVertex)[la] += compound->State().Gamma(j, la, ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
                                                             : point->GetThmFormFactor(j, ch, boundary, node));
     }
   }
@@ -139,7 +139,7 @@ complex ThmExitAmplitude(AMatrixFunc &func, const JGroup *jg, int j, int ch, con
   complex amp(0.0, 0.0);
   for (int la = 1; la <= numLevels; la++) {
     if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-    double gEx = jg->GetLevel(la)->GetFitGamma(ch);
+    double gEx = func.compound()->State().Gamma(j, la, ch);
     if (std::fabs(gEx) < kNegligibleExitWidth) continue;
     if (nc) {
       complex gExC = gEx * (*nc)[la];
@@ -304,8 +304,7 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        nc[la] = ThmLineshapeFactor(zeta, level->GetFitE() - inEnergy,
-                                    ThmLevelWidth(compound, jg, level, configure));
+        nc[la] = ThmLineshapeFactor(zeta, compound->State().E(j, la) - inEnergy, ThmLevelWidth(compound, j, la, configure));
       }
     }
 
@@ -421,8 +420,8 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<doubl
       for (int la = 1; la <= jg->NumLevels(); la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        if (!lowest || level->GetFitE() < eMin) {
-          eMin = level->GetFitE();
+        if (!lowest || compound->State().E(j, la) < eMin) {
+          eMin = compound->State().E(j, la);
           lowest = la;
         }
       }
@@ -445,23 +444,21 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<doubl
         if (!level->IsInRMatrix()) continue;
         std::vector<double> &d = ctx.widthDeriv[j - 1][la - 1];
         d.assign(numChannels + 1, 0.0);
-        ALevel copy(*level);
+        std::vector<double> gamma(numChannels);
+        for (int ch = 1; ch <= numChannels; ch++) gamma[ch - 1] = compound->State().Gamma(j, la, ch);
         {
-          const double x0 = level->GetFitE(), h = 1.0e-6 * (std::fabs(x0) + 1.0);
-          copy.SetFitE(x0 + h);
-          double wp = ThmLevelWidth(compound, jg, &copy, configure);
-          copy.SetFitE(x0 - h);
-          double wm = ThmLevelWidth(compound, jg, &copy, configure);
-          copy.SetFitE(x0);
+          const double x0 = compound->State().E(j, la), h = 1.0e-6 * (std::fabs(x0) + 1.0);
+          double wp = ThmLevelWidth(compound, j, la, x0 + h, gamma, configure);
+          double wm = ThmLevelWidth(compound, j, la, x0 - h, gamma, configure);
           d[0] = (wp - wm) / (2.0 * h);
         }
         for (int ch = 1; ch <= numChannels; ch++) {
-          const double x0 = level->GetFitGamma(ch), h = 1.0e-6 * (std::fabs(x0) + 1.0);
-          copy.SetFitGamma(ch, x0 + h);
-          double wp = ThmLevelWidth(compound, jg, &copy, configure);
-          copy.SetFitGamma(ch, x0 - h);
-          double wm = ThmLevelWidth(compound, jg, &copy, configure);
-          copy.SetFitGamma(ch, x0);
+          const double x0 = gamma[ch - 1], h = 1.0e-6 * (std::fabs(x0) + 1.0);
+          gamma[ch - 1] = x0 + h;
+          double wp = ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+          gamma[ch - 1] = x0 - h;
+          double wm = ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+          gamma[ch - 1] = x0;
           d[ch] = (wp - wm) / (2.0 * h);
         }
       }
@@ -588,8 +585,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        nc[la] = ThmLineshapeFactor(zeta, level->GetFitE() - inEnergy,
-                                    ThmLevelWidth(compound(), jg, level, configure()));
+        nc[la] = ThmLineshapeFactor(zeta, compound()->State().E(j, la) - inEnergy,
+                                    ThmLevelWidth(compound(), j, la, configure()));
       }
     }
     bool coherentJ = false;
@@ -724,7 +721,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
     }
     for (int la = 1; la <= numLevels; la++) {
       if (!b.act[la]) continue;
-      double gEx = jg->GetLevel(la)->GetFitGamma(r.ch);
+      double gEx = compound()->State().Gamma(j, la, r.ch);
       complex ncl = b.nc.empty() ? complex(1.0, 0.0) : b.nc[la];
       accum.AddGamma(j, la, r.ch, std::real(std::conj(ampBar) * ncl * av[la]));
       if (std::fabs(gEx) < kNegligibleExitWidth) continue;  // out of the forward sum
@@ -760,9 +757,9 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
     const JGroup *jg = compound()->GetJGroup(j);
     const int numLevels = jg->NumLevels();
     // Bbar (real B) to the level energy it depends on.
-    auto routeB = [&](int ch, const ALevel *level, int la, int lowest, double bBar) {
+    auto routeB = [&](int ch, int la, int lowest, double bBar) {
       if (bBar == 0.0) return;
-      if (rule == ThmVertexBoundary::LEVEL_SHIFT && level) {
+      if (rule == ThmVertexBoundary::LEVEL_SHIFT && la > 0) {
         if (ctx.shiftDeriv) accum.AddE(j, la, bBar * (*ctx.shiftDeriv)[j - 1][la - 1][ch - 1]);
       } else if (rule == ThmVertexBoundary::LOWEST_LEVEL_SHIFT && lowest > 0) {
         if (j - 1 < (int)ctx.lowestShiftDeriv.size() && ch - 1 < (int)ctx.lowestShiftDeriv[j - 1].size())
@@ -772,7 +769,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
       const AChannel *c = jg->GetChannel(ch);
       if (c->GetPairNum() != aa) continue;
-      const ThmVertexBoundary boundaryOf(configure(), compound()->GetPair(aa), jg, ch);
+      const ThmVertexBoundary boundaryOf(configure(), compound()->GetPair(aa), jg, compound()->State(), j, ch);
       const int lowest = boundaryOf.LowestLevel();
       const complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
       if (dw) {
@@ -784,17 +781,17 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
           const Bucket key = std::make_pair(c->GetS(), 2 * c->GetL() + k);
           std::map<Bucket, complex>::const_iterator ub = b.uBar.find(key);
           if (ub != b.uBar.end() && b.unit[key].first == ch && !boundaryOf.OnShell())
-            routeB(ch, nullptr, 0, lowest, std::real(std::conj(ub->second) * ak[k]));
+            routeB(ch, 0, lowest, std::real(std::conj(ub->second) * ak[k]));
           BucketVertices::iterator vbIt = b.vBar.find(key);
           if (vbIt == b.vBar.end()) continue;
           const std::vector<complex> &vb = vbIt->second;
           for (int la = 1; la <= numLevels; la++) {
             const ALevel *level = jg->GetLevel(la);
             if (!level->IsInRMatrix()) continue;
-            const complex boundary = boundaryOf.At(level, onShellL);
-            const double g = level->GetFitGamma(ch);
+            const complex boundary = boundaryOf.At(la, onShellL);
+            const double g = compound()->State().Gamma(j, la, ch);
             accum.AddGamma(j, la, ch, std::real(std::conj(vb[la]) * (ak[k] * (boundary - 1.0) - dk[k])));
-            if (!boundaryOf.OnShell()) routeB(ch, level, la, lowest, std::real(std::conj(vb[la]) * (g * ak[k])));
+            if (!boundaryOf.OnShell()) routeB(ch, la, lowest, std::real(std::conj(vb[la]) * (g * ak[k])));
           }
         }
         continue;
@@ -806,8 +803,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       };
       std::map<Bucket, complex>::const_iterator ub = b.uBar.find(std::make_pair(c->GetS(), c->GetL()));
       if (ub != b.uBar.end() && b.unit[ub->first].first == ch && !boundaryOf.OnShell()) {
-        const complex bf = boundaryOf.At(nullptr, onShellL);
-        routeB(ch, nullptr, 0, lowest, std::real(std::conj(ub->second) * (formFactor(bf + 1.0) - formFactor(bf))));
+        const complex bf = boundaryOf.At(0, onShellL);
+        routeB(ch, 0, lowest, std::real(std::conj(ub->second) * (formFactor(bf + 1.0) - formFactor(bf))));
       }
       BucketVertices::iterator vbIt = b.vBar.find(key);
       if (vbIt == b.vBar.end()) continue;
@@ -815,12 +812,12 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        const complex boundary = boundaryOf.At(level, onShellL);
+        const complex boundary = boundaryOf.At(la, onShellL);
         const complex m = formFactor(boundary);
         accum.AddGamma(j, la, ch, std::real(std::conj(vb[la]) * m));
         if (!boundaryOf.OnShell())
-          routeB(ch, level, la, lowest,
-                 std::real(std::conj(vb[la]) * (level->GetFitGamma(ch) * (formFactor(boundary + 1.0) - m))));
+          routeB(ch, la, lowest,
+                 std::real(std::conj(vb[la]) * (compound()->State().Gamma(j, la, ch) * (formFactor(boundary + 1.0) - m))));
       }
     }
 
@@ -830,8 +827,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix() || b.ncBar[la] == complex(0.0, 0.0)) continue;
-        const double x = level->GetFitE() - inEnergy;
-        const double G = ThmLevelWidth(compound(), jg, level, configure());
+        const double x = compound()->State().E(j, la) - inEnergy;
+        const double G = ThmLevelWidth(compound(), j, la, configure());
         complex dlnx, dlnG(0.0, 0.0);
         if (G > 0.0) {
           const double r2 = x * x + 0.25 * G * G;

@@ -260,7 +260,8 @@ ROUTES = (
 # the API (every row of ROUTES is a pyazr call or a server method; these are files).
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_ROUTES = (
-    ("/", "index.html", "The page; a request with ?token= is answered by a redirect to / that sets the cookie."),
+    ("/", "index.html", "The page; a request with ?token= is answered by a redirect to / that sets the cookie; "
+                        "a browser without the token gets a page that asks for it."),
     ("/static/{path:path}", None, "The page's modules, style sheet and the vendored plotly.js."),
 )
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",

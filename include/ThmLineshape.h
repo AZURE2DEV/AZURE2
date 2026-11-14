@@ -100,17 +100,20 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
 /*!
  * Pole of a level as the line-shape factor uses it: the level energy
  * (compound excitation, MeV) and total width (MeV) of the fit parameters.
- * Under Brune (required by lineshape=on) GetFitE is the observed energy and
+ * Under Brune (required by lineshape=on) the fit energy is the observed one and
  * Gamma = sum_c 2 gamma_c^2 P_c(E_lambda) / (1 + sum_c gamma_c^2 dS_c/dE)
  * over the open particle channels (the normalization over all particle
  * channels), plus the radiative widths, as CNuc::TransformOut writes them to
  * parameters.out (internal part; a ground-state moment and closed channels
  * carry no width).  Under Park (--use-park, which implies Brune) the
  * amplitudes are the observed ones, gamma_Park^2 = gamma_Brune^2 / (1 + sum),
- * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Memoized per thread on
- * the level, its parameters and the parametrization.
+ * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Level `la` of J group `j` (1-based) at fit energy `energy`
+ * (MeV) and amplitudes `gamma` (one per channel, MeV^1/2).
  */
-double ThmLevelWidth(CNuc *compound, const JGroup *jgroup, const ALevel *level, const Config &configure);
+double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::vector<double> &gamma,
+                     const Config &configure);
+/// The same at the compound's fit values (CNuc::State).
+double ThmLevelWidth(CNuc *compound, int j, int la, const Config &configure);
 
 struct ThmExperiment;
 

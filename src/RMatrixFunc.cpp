@@ -124,6 +124,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
   // Groups of another compound nucleus are not part of this point's matrices
   // (Unit::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
+  const LevelState &state = compound()->State();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       const JGroup *theJGroup = compound()->GetJGroup(j);
@@ -139,34 +140,32 @@ void RMatrixFunc::FillMatrices(Site *point) {
         if (!theJGroup->GetLevel(la)->IsInRMatrix()) continue;
         bool hasWidth = false;
         for (int ch = 1; ch <= theJGroup->NumChannels() && !hasWidth; ch++)
-          hasWidth = (theJGroup->GetLevel(la)->GetFitGamma(ch) != 0.0);
+          hasWidth = (state.Gamma(j, la, ch) != 0.0);
         if (!hasWidth) continue;
         coupled.push_back(la);
-        if (std::fabs(theJGroup->GetLevel(la)->GetFitE() - inEnergy) < kRPoleWindow) atPole = true;
+        if (std::fabs(state.E(j, la) - inEnergy) < kRPoleWindow) atPole = true;
       }
       matrix_c poleM;  // the matrix whose inverse gives R, over the coupled levels (filled only at a pole)
       if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
         matrix_c qMatrixInverse;
         for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
           if (!compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) continue;
-          const ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
           vector_c tempVector;
           for (int lap = 1; lap <= compound()->GetJGroup(j)->NumLevels(); lap++) {
             if (!compound()->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) continue;
-            const ALevel *levelp = compound()->GetJGroup(j)->GetLevel(lap);
-            complex sum = (la == lap) ? complex(level->GetFitE() - inEnergy, 0.0) : complex(0.0, 0.0);
+            complex sum = (la == lap) ? complex(state.E(j, la) - inEnergy, 0.0) : complex(0.0, 0.0);
             for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
               if (compound()->GetJGroup(j)->GetChannel(ch)->GetRadType() != 'P') continue;
-              double gammaCh = level->GetFitGamma(ch);
-              double gammaChp = levelp->GetFitGamma(ch);
+              double gammaCh = state.Gamma(j, la, ch);
+              double gammaChp = state.Gamma(j, lap, ch);
               complex channelShift = point->GetLoElement(j, ch) + complex(compound()->GetJGroup(j)->GetChannel(ch)->GetBoundaryCondition(), -1. * pow(point->GetSqrtPenetrability(j, ch), 2.));
               sum -= gammaCh * gammaChp * channelShift;
               if (la == lap)
-                sum += gammaCh * gammaChp * level->GetShiftFunction(ch);
+                sum += gammaCh * gammaChp * state.Shift(j, la, ch);
               else
                 sum += gammaCh * gammaChp *
-                    (level->GetShiftFunction(ch) * (inEnergy - levelp->GetFitE()) - levelp->GetShiftFunction(ch) * (inEnergy - level->GetFitE())) /
-                    (level->GetFitE() - levelp->GetFitE());
+                    (state.Shift(j, la, ch) * (inEnergy - state.E(j, lap)) - state.Shift(j, lap, ch) * (inEnergy - state.E(j, la))) /
+                    (state.E(j, la) - state.E(j, lap));
             }
             // A level without widths (zero row and column) at E = E_lambda: as in
             // AMatrixFunc::FillLevelMatrix, a unit diagonal keeps the matrix regular;
@@ -174,7 +173,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
             if (la == lap && sum == complex(0.0, 0.0)) {
               bool decoupled = true;
               for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels() && decoupled; ch++)
-                decoupled = (level->GetFitGamma(ch) == 0.0);
+                decoupled = (state.Gamma(j, la, ch) == 0.0);
               if (decoupled) sum = 1.0;
             }
             tempVector.push_back(sum);
@@ -210,9 +209,9 @@ void RMatrixFunc::FillMatrices(Site *point) {
                 // Rows by in-R-matrix position: before 2026-11-01 by level number, out of range (undefined) when a
                 // capture final state came before an R-matrix level of the group.
                 temp += matrixInv.inverse()[rowOf[la - 1]][rowOf[lap - 1]] *
-                        compound()->GetJGroup(j)->GetLevel(lap)->GetFitGamma(chp);
+                        state.Gamma(j, lap, chp);
               }
-              rTemp += temp * compound()->GetJGroup(j)->GetLevel(la)->GetFitGamma(ch);
+              rTemp += temp * state.Gamma(j, la, ch);
             }
             if (atPole) rTemp = complex(notFormed, notFormed);  // not finite; the level form is used instead
             this->AddRMatrixElement(j, ch, chp, rTemp);
@@ -228,14 +227,14 @@ void RMatrixFunc::FillMatrices(Site *point) {
       } else {
         if (atPole)
           for (size_t i = 0; i < coupled.size(); i++) {
-            const ALevel *level = theJGroup->GetLevel(coupled[i]);
+            const int level = coupled[i];
             double gammaSum = 0.;
             if (configure().paramMask & Config::USE_RMC_FORMALISM)
               for (int chpp = 1; chpp <= theJGroup->NumChannels(); chpp++)
                 if (theJGroup->GetChannel(chpp)->GetRadType() == 'M' || theJGroup->GetChannel(chpp)->GetRadType() == 'E')
-                  gammaSum += pow(level->GetFitGamma(chpp), 2.0);
+                  gammaSum += pow(state.Gamma(j, level, chpp), 2.0);
             vector_c row(coupled.size(), complex(0.0, 0.0));
-            row[i] = level->GetFitE() - inEnergy - complex(0.0, 1.0) * gammaSum;
+            row[i] = state.E(j, level) - inEnergy - complex(0.0, 1.0) * gammaSum;
             poleM.push_back(row);
           }
         for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
@@ -243,18 +242,17 @@ void RMatrixFunc::FillMatrices(Site *point) {
             complex sum(0.0, 0.0);
             for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
               if (compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) {
-                const ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
-                double gammaCh = level->GetFitGamma(ch);
-                double gammaChp = level->GetFitGamma(chp);
+                double gammaCh = state.Gamma(j, la, ch);
+                double gammaChp = state.Gamma(j, la, chp);
                 // A zero width contributes zero, also at E = E_lambda (not 0/0).
                 if (gammaCh == 0.0 || gammaChp == 0.0) continue;
-                double resenergy = level->GetFitE();
+                double resenergy = state.E(j, la);
                 double gammaSum = 0.;
                 if (configure().paramMask & Config::USE_RMC_FORMALISM)
                   for (int chpp = 1; chpp <= compound()->GetJGroup(j)->NumChannels(); chpp++)
                     if (compound()->GetJGroup(j)->GetChannel(chpp)->GetRadType() == 'M' ||
                         compound()->GetJGroup(j)->GetChannel(chpp)->GetRadType() == 'E')
-                      gammaSum += pow(compound()->GetJGroup(j)->GetLevel(la)->GetFitGamma(chpp), 2.0);
+                      gammaSum += pow(state.Gamma(j, la, chpp), 2.0);
                 sum += gammaCh * gammaChp / (resenergy - inEnergy - complex(0.0, 1.0) * gammaSum);
               }
             }
@@ -283,7 +281,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
         std::vector<std::vector<double>> g;
         for (int la : coupled) {
           std::vector<double> row;
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) row.push_back(theJGroup->GetLevel(la)->GetFitGamma(ch));
+          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) row.push_back(state.Gamma(j, la, ch));
           g.push_back(row);
         }
         if (pole_rl_inv_r_.size() < (size_t)j) {
@@ -386,8 +384,10 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
+        double ecNormParam = compound()->State().ECGamma(theECMGroup.final_group, theECMGroup.final_level,
+                                                         theECMGroup.final_channel) *
+            compound()->State().SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
+            finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

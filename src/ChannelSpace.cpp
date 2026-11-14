@@ -36,18 +36,19 @@ std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg) {
   return f;
 }
 
-const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg) {
+const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg, const LevelState &state, int j) {
   auto &cache = memo.arrays;
   if (cache.size() >= Memo::kMaxGroups && cache.find(jg) == cache.end()) cache.clear();
   LevelArrays &a = cache[jg];
   const int n = jg->NumLevels(), nch = jg->NumChannels();
-  std::vector<std::uint64_t> key(2 + 2 * (size_t)n);
+  std::vector<std::uint64_t> key(4 + 2 * (size_t)n);
   key[0] = n;
   key[1] = nch;
+  key[2] = reinterpret_cast<std::uintptr_t>(&state);
+  key[3] = j;
   for (int i = 0; i < n; i++) {
-    const ALevel *level = jg->GetLevel(i + 1);
-    key[2 + 2 * i] = reinterpret_cast<std::uintptr_t>(level);
-    key[3 + 2 * i] = level->Stamp();
+    key[4 + 2 * i] = i + 1;
+    key[5 + 2 * i] = state.Version(j, i + 1);
   }
   if (key == a.key) return a;
   a.key.swap(key);
@@ -58,11 +59,10 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg) {
   a.S.resize((size_t)n * nch);
   a.SG.resize((size_t)n * nch);
   for (int i = 0; i < n; i++) {
-    const ALevel *level = jg->GetLevel(i + 1);
-    a.E[i] = level->GetFitE();
+    a.E[i] = state.E(j, i + 1);
     for (int c = 0; c < nch; c++) {
-      a.G[(size_t)i * nch + c] = level->GetFitGamma(c + 1);
-      a.S[(size_t)i * nch + c] = level->GetShiftFunction(c + 1);
+      a.G[(size_t)i * nch + c] = state.Gamma(j, i + 1, c + 1);
+      a.S[(size_t)i * nch + c] = state.Shift(j, i + 1, c + 1);
       a.SG[(size_t)i * nch + c] = a.S[(size_t)i * nch + c] * a.G[(size_t)i * nch + c];
     }
   }
@@ -90,7 +90,8 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg) {
  *   energy E_l:  k_l = (J_ll + sum_c g_lc^2 (S'_lc - E_l S''_lc))/2, q_l = -sum_c g_lc^2 S''_lc / 2.
  * Standard: k = e_l / 2 for the energy, nothing for a width.
  */
-const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, int mode, const std::vector<char> &particleIn,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, const LevelState &state, int j, int mode,
+                                                const std::vector<char> &particleIn,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv) {
@@ -103,24 +104,25 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, in
   if (mode != 0)
     for (int c = 0; c < nch && c < (int)particleIn.size(); c++) particle[c] = particleIn[c];
   std::vector<std::uint64_t> key;
-  key.reserve(3 + nch + (size_t)n * (3 + nch));
+  key.reserve(5 + nch + (size_t)n * (4 + nch));
   key.push_back(mode);
   key.push_back(n);
   key.push_back(nch);
+  key.push_back(reinterpret_cast<std::uintptr_t>(&state));
+  key.push_back(j);
   for (int c = 0; c < nch; c++) key.push_back(particle[c]);
   for (int i = 0; i < n; i++) {
-    const ALevel *level = jg->GetLevel(i + 1);
-    key.push_back(reinterpret_cast<std::uintptr_t>(level));
-    key.push_back(level->Stamp());
+    key.push_back(i + 1);
+    key.push_back(state.Version(j, i + 1));
     key.push_back(freeE[i]);
     for (int c = 0; c < nch; c++) key.push_back(freeG[i][c]);
   }
   if (key == ld.key) return ld;
   ld.key.swap(key);
   ld.entries.clear();
-  const LevelArrays &a = CurrentLevelArrays(memo, jg);
+  const LevelArrays &a = CurrentLevelArrays(memo, jg, state, j);
   auto Sp = [&](int i, int c) {
-    if (park) return jg->GetLevel(i + 1)->GetShiftDerivative(c + 1);
+    if (park) return state.ShiftDerivative(j, i + 1, c + 1);
     return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0;
   };
   for (int l = 0; l < n; l++)
@@ -137,15 +139,14 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, in
         if (c < 0) {
           double diag = 1.0;
           if (park) {
-            const ALevel *level = jg->GetLevel(l + 1);
             double s2 = 0.0;
-            diag = level->GetParkNorm();
+            diag = state.ParkNorm(j, l + 1);
             for (int d = 0; d < nch; d++)
               if (particle[d]) {
                 const double g2 = a.G[(size_t)l * nch + d] * a.G[(size_t)l * nch + d];
                 if (g2 == 0.0) continue;
                 diag += g2 * Sp(l, d);
-                s2 += g2 * level->GetShiftSecondDerivative(d + 1);
+                s2 += g2 * state.ShiftSecondDerivative(j, l + 1, d + 1);
               }
             diag -= a.E[l] * s2;
             e.q[l] = -0.5 * s2;
@@ -570,7 +571,8 @@ bool GeneralizedEigen(std::vector<ldouble> &K, std::vector<ldouble> &N, int n, s
 
 }  // namespace
 
-bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f) {
+bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<int> &levels, const Config &configure,
+            FormalLevels &f) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool brune = !park && (configure.paramMask & Config::USE_BRUNE_FORMALISM);
   const bool rmc = (configure.paramMask & Config::USE_RMC_FORMALISM);
@@ -583,17 +585,18 @@ bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &conf
 
   if (mode != 0) {
     // The Brune and Park representations cost an eigen-decomposition: rebuild
-    // only when a parameter they are made of changed (ALevel::Stamp).
+    // only when a parameter they are made of changed (LevelState::Version).
     std::vector<std::uint64_t> &key = f.scratch_;
-    key.resize(4 + 2 * (size_t)n);
+    key.resize(6 + 2 * (size_t)n);
     key[0] = mode;
     key[1] = rmc;
     key[2] = n;
     key[3] = nch;
+    key[4] = reinterpret_cast<std::uintptr_t>(&state);
+    key[5] = j;
     for (int i = 0; i < n; i++) {
-      const ALevel *level = jg->GetLevel(levels[i]);
-      key[4 + 2 * i] = reinterpret_cast<std::uintptr_t>(level);
-      key[5 + 2 * i] = level->Stamp();
+      key[6 + 2 * i] = levels[i];
+      key[7 + 2 * i] = state.Version(j, levels[i]);
     }
     if (f.mode == mode && key == f.key) return false;
     f.key = key;
@@ -607,9 +610,8 @@ bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &conf
   f.gcut.assign((size_t)n * nch, 0.0);
   std::vector<double> E(n);
   for (int i = 0; i < n; i++) {
-    const ALevel *level = jg->GetLevel(levels[i]);
-    E[i] = level->GetFitE();
-    for (int c = 0; c < nch; c++) f.gcut[(size_t)i * nch + c] = Cut(level->GetFitGamma(c + 1));
+    E[i] = state.E(j, levels[i]);
+    for (int c = 0; c < nch; c++) f.gcut[(size_t)i * nch + c] = Cut(state.Gamma(j, levels[i], c + 1));
   }
   f.act.clear();
   f.pos.assign(nch, -1);
@@ -666,10 +668,9 @@ bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &conf
   std::vector<double> S((size_t)n * nch, 0.0);
   std::vector<double> parkNorm(n, 1.0);
   for (int i = 0; i < n; i++) {
-    const ALevel *level = jg->GetLevel(levels[i]);
-    if (park) parkNorm[i] = level->GetParkNorm();
+    if (park) parkNorm[i] = state.ParkNorm(j, levels[i]);
     for (int c = 0; c < nch; c++)
-      if (particle[c]) S[(size_t)i * nch + c] = level->GetShiftFunction(c + 1);
+      if (particle[c]) S[(size_t)i * nch + c] = state.Shift(j, levels[i], c + 1);
   }
   // Reference shifts: Lambda_c = L_c + B_c - Sref_c, K -= Sref_c G_c G_c^T.
   std::vector<double> sref(nch, 0.0);

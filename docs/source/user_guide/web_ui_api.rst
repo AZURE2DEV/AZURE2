@@ -19,9 +19,10 @@ server may read and write; default the project's).  The server binds to a loopba
 anything else; for remote use, forward the port with SSH) and writes its URL also to ``.<name>.ui/url`` beside the
 project (readable by you only).  Stop it with Ctrl-C: its worker processes end with it.
 
-Every request needs the token: the header ``Authorization: Bearer <token>``, or ``?token=<token>`` in the URL
-(which sets a cookie).  ``GET /api/describe`` lists every route with its documentation and the pyazr call behind
-it; ``GET /openapi.json`` is the machine-readable form.
+Every request needs the token: the header ``Authorization: Bearer <token>``, or ``?token=<token>`` in the URL (which
+sets a cookie).  Without it the answer is 401 with ``error``, ``message`` and ``fix`` in JSON (a browser that asks for
+the page gets a page with a field for the token instead).  ``GET /api/describe`` lists every route with its
+documentation and the pyazr call behind it; ``GET /openapi.json`` is the machine-readable form.
 
 What the server keeps
 ---------------------

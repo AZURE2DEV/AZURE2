@@ -196,7 +196,7 @@ void AMatrixFunc::FillMatrices(Site *point) {
         formal_jgroup_[j - 1] = jGroup;
       }
       ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
-      ChannelSpace::Update(jGroup, active_levels_[j - 1], configure(), f);
+      ChannelSpace::Update(jGroup, compound()->State(), j, active_levels_[j - 1], configure(), f);
       if (f.usable) {
         if (this->SolveChannelSpace(j, point, inEnergy)) {
           route_[j - 1] = kRouteChannel;
@@ -249,15 +249,15 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
   }
 
   // Pre-cache gamma values for all levels and channels using pre-allocated buffers
+  const LevelState &state = compound()->State();
   for (int la = 1; la <= numLevels; la++) {
     if (jGroup->GetLevel(la)->IsInRMatrix()) {
-      const ALevel *level = jGroup->GetLevel(la);
-      levelEnergies_[la] = level->GetFitE();
+      levelEnergies_[la] = state.E(j, la);
 
       levelDecoupled_[la] = 1;
       for (int ch = 1; ch <= numChannels; ch++) {
-        levelGammas_[la][ch] = level->GetFitGamma(ch);
-        shiftFunctions_[la][ch] = level->GetShiftFunction(ch);
+        levelGammas_[la][ch] = state.Gamma(j, la, ch);
+        shiftFunctions_[la][ch] = state.Shift(j, la, ch);
         if (fabs(levelGammas_[la][ch]) >= 1.0e-12) levelDecoupled_[la] = 0;
       }
     }
@@ -311,7 +311,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
           if (park) {
             // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
             // with the diagonal overlap J_{lambda lambda} of Eq. (28).
-            if (la == lap) parkOverlap = level->GetParkNorm();
+            if (la == lap) parkOverlap = state.ParkNorm(j, la);
             element = (levelEnergies_[la] - inEnergy) * parkOverlap - sum;
           } else if (la == lap) {
             double resenergy = levelEnergies_[la];
@@ -386,7 +386,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
-      double gamma = jGroup->GetLevel(la)->GetFitGamma(chNum);
+      double gamma = compound()->State().Gamma(jGroupNum, la, chNum);
       if (fabs(gamma) < 1.0e-12) continue;
       gammas[row - 1] = gamma;
     }
@@ -473,9 +473,8 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
         if (row == 0) continue;
         double en = 0.0, ex = 0.0;
         for (std::size_t j = 0; j < nl; j++) {
-          const ALevel *level = jGroup->GetLevel(formal->levels[j]);
-          en += formal->projector[i * nl + j] * level->GetFitGamma(chNum);
-          ex += formal->projector[i * nl + j] * level->GetFitGamma(chpNum);
+          en += formal->projector[i * nl + j] * compound()->State().Gamma(jGroupNum, formal->levels[j], chNum);
+          ex += formal->projector[i * nl + j] * compound()->State().Gamma(jGroupNum, formal->levels[j], chpNum);
         }
         chan_cap_entrance_[row - 1] = en;
         chan_cap_exit_[row - 1] = ex;
@@ -486,8 +485,8 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
         if (row == 0) continue;
         const ALevel *level = jGroup->GetLevel(la);
         if (maskChannel && level->ZeroInputWidth(maskChannel)) continue;
-        chan_cap_entrance_[row - 1] = level->GetFitGamma(chNum);
-        chan_cap_exit_[row - 1] = level->GetFitGamma(chpNum);
+        chan_cap_entrance_[row - 1] = compound()->State().Gamma(jGroupNum, la, chNum);
+        chan_cap_exit_[row - 1] = compound()->State().Gamma(jGroupNum, la, chpNum);
       }
     value = channel ? this->ChannelBilinear(jGroupNum, chan_cap_entrance_.data(), chan_cap_exit_.data())
                     : solvers_[jGroupNum - 1].Bilinear(chan_cap_entrance_, chan_cap_exit_);
@@ -565,8 +564,11 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
+        const LevelState &state = compound()->State();
+        double ecNormParam =
+            state.ECGamma(theECMGroup.final_group, theECMGroup.final_level, theECMGroup.final_channel) *
+            state.SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
+            finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -1186,13 +1188,13 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         int fc = ecg->final_channel;
         const ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
         const JGroup *jgf = compound()->GetJGroup(jf);
-        double sqrtNF = finalLevel->GetSqrtNFFactor();
+        double sqrtNF = compound()->State().SqrtNF(jf, lf);
         double conv = finalLevel->GetECConversionFactor(fc);
         complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
                               : point->GetECAmplitude(k, m);
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
-        double gamma_fc = finalLevel->GetECGamma(fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
+        double gamma_fc = compound()->State().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
         complex base = gamma_fc * sqrtNF * conv * ecAmp;
 
         // "effective amplitude" carrying the umatrix_cc factor for the
@@ -1220,8 +1222,8 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
               if (internalChannel && ignoreZero &&
                   jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
               umatrix_cc += I2 * sqrtPcc *
-                  jgcc->GetLevel(la)->GetFitGamma(ccChN) *
-                  jgcc->GetLevel(lap)->GetFitGamma(ccChpN) *
+                  compound()->State().Gamma(jcc, la, ccChN) *
+                  compound()->State().Gamma(jcc, lap, ccChpN) *
                   this->GetAMatrixElement(jcc, la, lap);
             }
           }
@@ -1234,12 +1236,12 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
                 jgcc->GetLevel(la)->ZeroInputWidth(internalChannel)) continue;
-            double gEn = jgcc->GetLevel(la)->GetFitGamma(ccChN);
+            double gEn = compound()->State().Gamma(jcc, la, ccChN);
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
                   jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
-              double gEx = jgcc->GetLevel(lap)->GetFitGamma(ccChpN);
+              double gEx = compound()->State().Gamma(jcc, lap, ccChpN);
               complex Aval = this->GetAMatrixElement(jcc, la, lap);
               complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]
               aBar[jcc - 1][la - 1][lap - 1] += conj(w) * uBarcc;
@@ -1269,9 +1271,9 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
                                          finalLevel->GetNFIntegral(d)
                                    : 0.0;
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
-            Ad -= finalLevel->GetShiftDerivative(d);
+            Ad -= compound()->State().ShiftDerivative(jf, lf, d);
           if (Ad == 0.0) continue;
-          double gd = finalLevel->GetECGamma(d);
+          double gd = compound()->State().ECGamma(jf, lf, d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
           accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
         }
@@ -1310,10 +1312,10 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
       for (int la = 1; la <= numLevels; la++) {
         if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-        double gammaEn = jg->GetLevel(la)->GetFitGamma(chNum);
+        double gammaEn = compound()->State().Gamma(jNum, la, chNum);
         for (int lap = 1; lap <= numLevels; lap++) {
           if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-          double gammaEx = jg->GetLevel(lap)->GetFitGamma(chpNum);
+          double gammaEx = compound()->State().Gamma(jNum, lap, chpNum);
           complex Aval = this->GetAMatrixElement(jNum, la, lap);
           complex w = pen2 * gammaEn * gammaEx;  // weight of A[la][lap]
 
@@ -1417,9 +1419,10 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
       return jg->GetChannel(d)->GetRadType() == 'P' &&
              compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
     };
+    const LevelState &state = compound()->State();
     for (int r = 1; r <= n; r++) {
-      const ALevel *lr = jg->GetLevel(lev(r));
-      double Er = lr->GetFitE();
+      const int lr = lev(r);
+      double Er = state.E(jNum, lr);
       for (int c = 1; c <= n; c++) {
         double reM = std::real(Mbar[r - 1][c - 1]);
         if (reM == 0.0) continue;
@@ -1427,23 +1430,23 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
           double dJ = 0.0, sumS1 = 0.0;
           for (int d = 1; d <= numChannels; d++) {
             if (!isParticle(d)) continue;
-            double g2 = lr->GetFitGamma(d) * lr->GetFitGamma(d);
+            double g2 = state.Gamma(jNum, lr, d) * state.Gamma(jNum, lr, d);
             if (g2 == 0.0) continue;
-            dJ -= g2 * lr->GetShiftSecondDerivative(d);
-            sumS1 += g2 * lr->GetShiftDerivative(d);
+            dJ -= g2 * state.ShiftSecondDerivative(jNum, lr, d);
+            sumS1 += g2 * state.ShiftDerivative(jNum, lr, d);
           }
-          accum.AddE(jNum, lev(r), reM * ((lr->GetParkNorm() - 1.0) + (Er - inEnergy) * dJ + sumS1));
+          accum.AddE(jNum, lev(r), reM * ((state.ParkNorm(jNum, lr) - 1.0) + (Er - inEnergy) * dJ + sumS1));
         } else {
-          const ALevel *lc = jg->GetLevel(lev(c));
-          double Ec = lc->GetFitE();
+          const int lc = lev(c);
+          double Ec = state.E(jNum, lc);
           double den = Er - Ec;
           double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
           for (int d = 1; d <= numChannels; d++) {
             if (!isParticle(d)) continue;
-            double g = lr->GetFitGamma(d) * lc->GetFitGamma(d);
+            double g = state.Gamma(jNum, lr, d) * state.Gamma(jNum, lc, d);
             if (g == 0.0) continue;
-            double Sr = lr->GetShiftFunction(d), Sc = lc->GetShiftFunction(d);
-            double dSr = lr->GetShiftDerivative(d), dSc = lc->GetShiftDerivative(d);
+            double Sr = state.Shift(jNum, lr, d), Sc = state.Shift(jNum, lc, d);
+            double dSr = state.ShiftDerivative(jNum, lr, d), dSc = state.ShiftDerivative(jNum, lc, d);
             double q = (Sr - Sc) / den;
             Jrc -= g * q;
             dJdEr -= g * (dSr - q) / den;
@@ -1467,26 +1470,26 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
       complex Ld = lambda ? lambda[d - 1] : point->GetLoElement(jNum, d);
       double Bd = (pd && !lambda) ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
       for (int a = 1; a <= n; a++) {
-        const ALevel *la_ = jg->GetLevel(lev(a));
-        double Ea = la_->GetFitE();
-        double ga = la_->GetFitGamma(d);
-        double Sa = pd ? la_->GetShiftFunction(d) : 0.0;
+        const int la_ = lev(a);
+        double Ea = state.E(jNum, la_);
+        double ga = state.Gamma(jNum, la_, d);
+        double Sa = pd ? state.Shift(jNum, la_, d) : 0.0;
         double grad = 0.0;
         for (int c = 1; c <= n; c++) {
-          const ALevel *lc_ = jg->GetLevel(lev(c));
-          double gc = lc_->GetFitGamma(d);
+          const int lc_ = lev(c);
+          double gc = state.Gamma(jNum, lc_, d);
           if (c == a) {
             complex Kaa = pd ? (Ld + Bd - Sa) : Ld;
             grad += -2.0 * ga * std::real(conj(Mbar[a - 1][a - 1]) * Kaa);
-            if (pd) grad += std::real(Mbar[a - 1][a - 1]) * (Ea - inEnergy) * (-2.0 * ga * la_->GetShiftDerivative(d));
+            if (pd) grad += std::real(Mbar[a - 1][a - 1]) * (Ea - inEnergy) * (-2.0 * ga * state.ShiftDerivative(jNum, la_, d));
           } else {
             if (gc == 0.0) continue;
-            double Sc = pd ? lc_->GetShiftFunction(d) : 0.0;
+            double Sc = pd ? state.Shift(jNum, lc_, d) : 0.0;
             complex Kac = pd ? (Ld + Bd - Sa) : Ld;
             complex Kca = pd ? (Ld + Bd - Sc) : Ld;
             grad += -gc * std::real(conj(Mbar[a - 1][c - 1]) * Kac + conj(Mbar[c - 1][a - 1]) * Kca);
             if (pd) {
-              double Ec = lc_->GetFitE();
+              double Ec = state.E(jNum, lc_);
               double delta = (Sa - Sc) / (Ea - Ec);
               grad += -gc * delta * (std::real(Mbar[a - 1][c - 1]) * (Ea - inEnergy) +
                                      std::real(Mbar[c - 1][a - 1]) * (Ec - inEnergy));
@@ -1516,11 +1519,11 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
     la.S.resize((size_t)n * nch);
     la.SG.resize((size_t)n * nch);
     for (int r = 0; r < n; r++) {
-      const ALevel *level = jg->GetLevel(lev(r + 1));
-      la.E[r] = level->GetFitE();
+      const int level = lev(r + 1);
+      la.E[r] = compound()->State().E(jNum, level);
       for (int ch = 0; ch < nch; ch++) {
-        la.G[(size_t)r * nch + ch] = level->GetFitGamma(ch + 1);
-        la.S[(size_t)r * nch + ch] = level->GetShiftFunction(ch + 1);
+        la.G[(size_t)r * nch + ch] = compound()->State().Gamma(jNum, level, ch + 1);
+        la.S[(size_t)r * nch + ch] = compound()->State().Shift(jNum, level, ch + 1);
         la.SG[(size_t)r * nch + ch] = la.S[(size_t)r * nch + ch] * la.G[(size_t)r * nch + ch];
       }
     }
@@ -1530,7 +1533,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
         if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
     levelArraysPtr = &la;
   } else {
-    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg);
+    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), jNum);
   }
   const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
   const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
@@ -1706,7 +1709,7 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
-      solve[row - 1] = jGroup->GetLevel(la)->GetFitGamma(chNum);
+      solve[row - 1] = compound()->State().Gamma(jGroupNum, la, chNum);
     }
     if (n > 0) {
       if (route_[jGroupNum - 1] == kRouteChannel) {
@@ -1885,7 +1888,7 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
     }
     accum.formalUsed = true;
     const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
-    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg).G;
+    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), jNum).G;
     vector_c ga(nch), gb(nch);
     for (const BilinearTerm &t : terms) {
       const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
@@ -2464,7 +2467,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     formal_[j - 1] = ChannelSpace::Cached(ChannelMemo(), jg);
     formal_jgroup_[j - 1] = jg;
     ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
-    ChannelSpace::Update(jg, active_levels_[j - 1], configure(), f);
+    ChannelSpace::Update(jg, compound()->State(), j, active_levels_[j - 1], configure(), f);
     const int n = f.n, nch = f.nch, m = (int)f.act.size();
     const std::vector<double> &ebar = accum.fe[j - 1];
     const std::vector<std::vector<double>> &gbar = accum.fgamma[j - 1];
@@ -2689,9 +2692,9 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
                        : (brune && ch->GetRadType() == 'P');
   }
   const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
-      ChannelMemo(), jg, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
+      ChannelMemo(), jg, compound()->State(), j, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
       (brune && shiftDeriv) ? &(*shiftDeriv)[j - 1] : nullptr);
-  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg);
+  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), j);
   const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
   const double E = this->InEnergy(energyPoint);
   // The channels the terms involve, their solves u_c = A g_c and g_d . u_c.

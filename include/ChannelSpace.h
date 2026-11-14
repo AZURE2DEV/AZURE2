@@ -3,6 +3,7 @@
 
 #include "Constants.h"
 #include <cstdint>
+#include "LevelState.h"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -104,7 +105,7 @@ struct FormalLevels {
    * kernel small, so \f$1 - R\Lambda\f$ cancels less.
    */
   std::vector<double> lamShift;
-  std::vector<std::uint64_t> key;       ///< levels (and their ALevel::Stamp) it was built from
+  std::vector<std::uint64_t> key;       ///< the state, the levels and their LevelState::Version it was built from
   std::vector<std::uint64_t> scratch_;  ///< key of the current parameters (reused)
 };
 
@@ -118,7 +119,7 @@ std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg);
 
 /// The level data LevelMatrixAdjoint reads, per J-group (levels 1..n), kept in the caller's Memo.
 struct LevelArrays {
-  std::vector<std::uint64_t> key;  ///< levels and their ALevel::Stamp
+  std::vector<std::uint64_t> key;  ///< the state, the levels and their LevelState::Version
   int n = 0, nch = 0;
   std::vector<double> E;    ///< fitted level energies (n)
   std::vector<double> G;    ///< fitted widths, n x nch
@@ -128,12 +129,12 @@ struct LevelArrays {
 };
 
 /*!
- * The LevelArrays of J-group `jg` (all its levels) for the current
- * parameters: rebuilt when a level's parameters changed, so the n^2
- * divisions of `inv` are paid once per parameter set, not once per
- * level-matrix adjoint.
+ * The LevelArrays of J-group `jg` (all its levels; number `j` in `state`, the
+ * levels' fit values) for the current parameters: rebuilt when a level's
+ * version changed, so the n^2 divisions of `inv` are paid once per parameter
+ * set, not once per level-matrix adjoint.
  */
-const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg);
+const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg, const LevelState &state, int j);
 
 /*!
  * Derivatives of K and N of a J-group's level matrix with respect to its free
@@ -142,7 +143,7 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg);
  * matrices).
  */
 struct LevelDerivatives {
-  std::vector<std::uint64_t> key;  ///< levels, stamps, formalism and free mask
+  std::vector<std::uint64_t> key;  ///< state, levels, versions, formalism and free mask
   struct Entry {
     int level;  ///< 0-based
     int ch;     ///< 0-based channel, or -1 for the level energy
@@ -157,23 +158,25 @@ struct LevelDerivatives {
  * `freeG`, by level and level/channel) and the current parameters.  `mode`
  * selects the level matrix: 0 standard, 1 Brune (shift-function derivatives
  * from `shiftDeriv` of the group, [level-1][ch-1]), 2 Park (the first and
- * second derivatives and the overlap J the levels hold,
+ * second derivatives and the overlap J of `state`,
  * CNuc::CalcShiftFunctions); `particle` marks the channels with the shift
- * terms (by channel, 0-based).  Kept per thread, rebuilt when a level's stamp
- * or the mask changes.
+ * terms (by channel, 0-based).  `j` is the group's number in `state`.  Kept
+ * per thread, rebuilt when a level's version or the mask changes.
  */
-const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, int mode, const std::vector<char> &particle,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, const LevelState &state, int j, int mode,
+                                                const std::vector<char> &particle,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv);
 
 /*!
- * Brings `f` up to date with the parameters of J-group `jg` (active levels
- * `levels`, 1-based original numbers).  Returns true if it was rebuilt.  The
+ * Brings `f` up to date with the parameters of J-group `jg` (number `j` of
+ * `state`; active levels `levels`, 1-based original numbers).  Returns true if it was rebuilt.  The
  * standard level matrix is rebuilt on every call (it costs what comparing
  * would); the Brune and Park ones only when a parameter they depend on changed.
  */
-bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f);
+bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<int> &levels, const Config &configure,
+            FormalLevels &f);
 
 /*!
  * What the channel-space route keeps between the energies of one thread's tasks: per J group the formal-basis

@@ -18,8 +18,11 @@ ThmVertexBoundary::Rule ThmVertexBoundary::RuleOf(const Config &configure) {
   return CHANNEL_CONSTANT;
 }
 
-ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, int channel)
+ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup,
+                                     const LevelState &state, int j, int channel)
     : rule_(RuleOf(configure)),
+      state_(&state),
+      j_(j),
       channel_(channel),
       l_(jgroup->GetChannel(channel)->GetL()),
       two_j_(pair->SpinOrbitTwoJ(jgroup->GetJ())),
@@ -30,8 +33,8 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair,
   for (int la = 1; la <= jgroup->NumLevels(); la++) {
     const ALevel *level = jgroup->GetLevel(la);
     if (!level->IsInRMatrix()) continue;
-    if (!lowest_ || level->GetFitE() < eMin) {
-      eMin = level->GetFitE();
+    if (!lowest_ || state.E(j, la) < eMin) {
+      eMin = state.E(j, la);
       lowest_ = la;
     }
   }
@@ -42,8 +45,8 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair,
                                 &configure.scratch->ForThisThread().thmShift);
 }
 
-double ThmVertexBoundary::Level(const ALevel *level) const {
-  return rule_ == LEVEL_SHIFT ? level->GetShiftFunction(channel_) : fixed_;
+double ThmVertexBoundary::Level(int la) const {
+  return rule_ == LEVEL_SHIFT ? state_->Shift(j_, la, channel_) : fixed_;
 }
 
 complex ThmVertexBoundary::OnShellAt(double e) {

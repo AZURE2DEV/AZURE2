@@ -14,6 +14,7 @@
 #include "ModelData.h"
 #include "GammaDecayMap.h"
 #include "ObservedLevelTable.h"
+#include "LevelState.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {
@@ -93,10 +94,16 @@ class CNuc {
   std::string RatePairsProblem(int entranceKey, int exitKey) const;
   /// \f$J^\pi\f$ group \p i, 1-based (read-only, as GetPair).
   const JGroup *GetJGroup(int) const;
-  /// Level \p la of J-group \p j, both 1-based, for writing the values that move after set-up: the fit values a
-  /// parameter vector sets, the shift functions, the report slots (ALevel.h).  Its set-up data (IDs, flags, the
-  /// external-capture final state) are written by Fill and Initialize only.
+  /// Level \p la of J-group \p j, both 1-based, for writing its input values after set-up (a gamma_decay record's
+  /// widths, GammaDecayMap.cpp).  Its set-up data (IDs, flags, the external-capture final state) are written by Fill
+  /// and Initialize only.
   ALevel *MutableLevel(int j, int la);
+  /// The levels at the current parameter vector: fit energies and amplitudes, shift functions, Park's J, the
+  /// external-capture amplitudes and N_f^1/2 (LevelState.h).  Written by this class's fills only.
+  const LevelState &State() const { return levelState_; }
+  /// Take the fit energies and amplitudes of `from` (a state of a compound of the same structure), nothing derived
+  /// from them (WorkingCopy::ReplaceSubPointGrids' copy).
+  void CopyFitEnergiesAndAmplitudes(const LevelState &from);
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
@@ -126,9 +133,6 @@ class CNuc {
   /// In the Park formalism also dS/dE and J, and, unless `secondDerivatives`
   /// is false (a chi-squared alone needs none), d^2S/dE^2 for the gradient.
   void CalcShiftFunctions(const Config &, bool secondDerivatives = true);
-  /// Forget every level's cached shift functions (after a change of the
-  /// nuclear potential, which moves them at fixed energy).
-  void InvalidateShiftFunctions(const Config &configure);
   /// Rescale the level amplitudes of a Minuit parameter set between Brune's
   /// and Park's normalizations (gamma_Park = gamma_Brune sqrt J), in place.
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is
@@ -236,7 +240,7 @@ class CNuc {
   void SetUpFormalCaptureMasks(const Config &);
   /// Their projectors from the current fit values (FillCompoundFromParams).
   void FormalCaptureMasksFromParams();
-  bool MaskedLevelCoupled(const JGroup *, int) const;
+  bool MaskedLevelCoupled(int j, int la) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
   std::vector<CaptureMask> captureMasks_;
   /// Whether TransformToBrune prints the warnings of levels that do not convert.
@@ -272,6 +276,8 @@ class CNuc {
   /// FillCompoundFromParamsPhysical's.
   std::vector<std::vector<double>> gammaDecayInputs_;
   bool transformedIn_ = false;
+  /// The levels at the current parameter vector (State); shaped by Fill.
+  LevelState levelState_;
 };
 
 extern double DoubleFactorial(int);

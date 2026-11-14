@@ -211,6 +211,80 @@ def take_screenshots(server, tmp_path, label, shots, result):
             assert os.path.getsize(path) > 10000, f"{path}: no page drawn"
 
 
+def opened_tab(tmp_path, url, done, timeout=60):
+    """Open ``url`` in a headless Chrome that stays up, and poll its tab list (the debugging port's /json) until
+    ``done(tab)`` holds for the page's tab or ``timeout`` seconds pass; the tab's last (url, title).  For what
+    --dump-dom cannot show: where the browser ends after a click and the navigations that follow it."""
+    import httpx
+    from pyazr.ui.server import free_port
+    profile = tmp_path / f"chrome-{time.monotonic_ns()}"
+    profile.mkdir()
+    port = free_port()
+    proc = subprocess.Popen([CHROME, "--headless=new", "--disable-gpu", "--no-first-run",
+                             "--no-default-browser-check", *QUIET_PROFILE, f"--user-data-dir={profile}",
+                             f"--remote-debugging-port={port}", url], stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    last = {}
+
+    def look():
+        try:
+            tabs = httpx.get(f"http://127.0.0.1:{port}/json", timeout=5).json()
+        except (httpx.HTTPError, ValueError):
+            return False
+        pages = [t for t in tabs if t.get("type") == "page"]
+        last.update(pages[0] if pages else {})
+        return bool(pages) and done(pages[0])
+
+    try:
+        uitest.wait_until(look, timeout, step=0.2)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(20)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(10)
+    return last.get("url"), last.get("title")
+
+
+def test_printed_url_followed_from_another_site_opens_the_page(tmp_path):
+    """The printed URL as a link on a page of another site, clicked there (how the URL reaches a user: a chat, a
+    mail, a notebook in the browser): the project's page opens.  With a SameSite=Strict cookie the browser kept the
+    cookie back on the redirect that follows such a click and the server answered 401 to its own link.  The link's
+    page is served on ``localhost`` and the project on ``127.0.0.1``: two sites for the browser.  Then the address
+    without the token in a browser that has no cookie: the page that asks for the token, not JSON."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    server = Served(copy_project("T1", tmp_path), tmp_path / "server.log")
+    link = (f'<!doctype html><title>elsewhere</title><a id="a" href="{server.url}">the printed URL</a>'
+            '<script>setTimeout(() => document.getElementById("a").click(), 200)</script>').encode()
+
+    class Elsewhere(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802  -- the base class's name
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(link)))
+            self.end_headers()
+            self.wfile.write(link)
+
+        def log_message(self, *args):
+            pass
+
+    other = ThreadingHTTPServer(("127.0.0.1", 0), Elsewhere)
+    threading.Thread(target=other.serve_forever, daemon=True).start()
+    try:
+        page = f"http://127.0.0.1:{server.port}/"
+        url, title = opened_tab(tmp_path, f"http://localhost:{other.server_address[1]}/",
+                                lambda tab: tab["url"] == page and tab["title"].endswith("— AZURE2"))
+        assert (url, title) == (page, "T1.azr — AZURE2"), f"the click ended at {url!r} with the title {title!r}"
+        url, title = opened_tab(tmp_path, page, lambda tab: "token" in tab["title"])
+        assert (url, title) == (page, "AZURE2 — token needed"), f"without the token: {url!r}, title {title!r}"
+    finally:
+        other.shutdown()
+        other.server_close()
+        server.stop()
+
+
 if __name__ == "__main__":
     if not CHROME:
         print("skip: no headless Chrome or Chromium found (set CHROME=/path/to/chrome)")

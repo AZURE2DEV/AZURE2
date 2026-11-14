@@ -91,7 +91,7 @@ The rule and its check
   ``tests/consistency/state_scan.py``). A row whose reason starts with
   ``table:`` is permanent: GSL's process-wide error handler, the Coulomb
   tables loaded from files, the cache of input files, the locks of
-  process-wide output streams, the stamp generator of ``ALevel``. A row whose
+  process-wide output streams, the version generator of ``LevelState``. A row whose
   reason is ``pending`` names state still to be moved to its owner: the pools
   and the gradient memo of ``AZURECalc``, the sampler's lazily filled layout
   in ``AZURECalcMCMC``, the session buffer and nuisance objects of
@@ -172,5 +172,6 @@ which must give the same bits as the pooled copy
    The pools and the remaining ``mutable`` members of ``AZURECalc``,
    ``AZURECalcMCMC`` and ``AZUREAPI`` go to their owners (the fitter's
    adapter, the run), and ``CNuc`` becomes an immutable ``CompoundSystem``
-   shared by every evaluation with a per-evaluation ``LevelState``; the
+   shared by every evaluation with a per-evaluation ``LevelState`` (today
+   the one each copy of ``CNuc`` holds, ``CNuc::State``); the
    allow-list then keeps only its ``table:`` rows.

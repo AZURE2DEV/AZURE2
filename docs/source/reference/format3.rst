@@ -66,7 +66,7 @@ Value types
      - the name of another record of the project
    * - ``name``
      - ``<name>``
-     - a name [A-Za-z][A-Za-z0-9_-]\* that is not a record
+     - a name [A-Za-z][A-Za-z0-9\_-]\* that is not a record
    * - ``path``
      - ``<path>``
      - a file path, relative to the project; quoted when it holds blanks
@@ -1146,7 +1146,7 @@ Analyzing power (``dataset``, ``extrapolation``).  A_y of a spin-1/2 projectile;
 phase_shift
 ~~~~~~~~~~~
 
-Phase shift (``dataset``, ``extrapolation``).  The elastic phase shift delta_{J l s} (data_formats.rst, phase shifts).
+Phase shift (``dataset``, ``extrapolation``).  The elastic phase shift delta\_{J l s} (data_formats.rst, phase shifts).
 
 .. list-table::
    :header-rows: 1
@@ -1178,7 +1178,7 @@ Phase shift (``dataset``, ``extrapolation``).  The elastic phase shift delta_{J 
 yield
 ~~~~~
 
-Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer, 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE with int_{E_out}^{E_0} dE/epsilon = N, or on an infinite target (E_out = 1 keV); epsilon the lab stopping per active nucleus (data_kinds.md eqs. 3, 6; energy_grid.md section 5).
+Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer, 1e-24 int\_{E_out}^{E_0} <sigma>/epsilon dE with int\_{E_out}^{E_0} dE/epsilon = N, or on an infinite target (E_out = 1 keV); epsilon the lab stopping per active nucleus (data_kinds.md eqs. 3, 6; energy_grid.md section 5).
 
 .. list-table::
    :header-rows: 1
@@ -1829,13 +1829,13 @@ Diagnostic codes
      - a header without a name, or with more than '<kind> <name>' on its line
    * - ``E_KEY_SYNTAX``
      - error
-     - a field key that is not a letter followed by letters, digits and '_'
+     - a field key that is not a letter followed by letters, digits and '\_'
    * - ``E_WRONG_SECTION``
      - error
      - a record in a section that does not hold its kind
    * - ``E_BAD_NAME``
      - error
-     - a name that is not [A-Za-z][A-Za-z0-9_-]\*
+     - a name that is not [A-Za-z][A-Za-z0-9\_-]\*
    * - ``E_DUPLICATE_NAME``
      - error
      - a name used by two records (one namespace, F3)

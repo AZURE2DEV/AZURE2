@@ -59,12 +59,12 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         const PPair *pair = compound->GetPair(channel->GetPairNum());
         // The Brune boundary/shift block applies only to particle 'P' channels.
         if (pair->GetPType() != 0 || channel->GetRadType() != 'P') continue;
-        if (park && level->ShiftFunctionsValidAt(level->GetFitE())) {
-          tab[j - 1][la - 1][ch - 1] = level->GetShiftDerivative(ch);
+        if (park && compound->State().ShiftsValidAt(j, la, compound->State().E(j, la))) {
+          tab[j - 1][la - 1][ch - 1] = compound->State().ShiftDerivative(j, la, ch);
           continue;
         }
         int l = channel->GetL();
-        double levelEnergy = level->GetFitE();
+        double levelEnergy = compound->State().E(j, la);
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
         double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
                         .ShiftDerivative(l, pair->SpinOrbitTwoJ(jg->GetJ()), resonanceEnergy);
@@ -87,15 +87,15 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || level->GetParkNorm() >= 0.0) continue;
-      const double factor = 2.0 * level->GetParkNorm() / s2;
+      if (!level->IsInRMatrix() || compound->State().ParkNorm(j, la) >= 0.0) continue;
+      const double factor = 2.0 * compound->State().ParkNorm(j, la) / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
         const AChannel *channel = jg->GetChannel(ch);
         if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-        double g = level->GetFitGamma(ch);
-        accum.AddGamma(j, la, ch, factor * (-2.0 * g * level->GetShiftDerivative(ch)));
-        dE -= g * g * level->GetShiftSecondDerivative(ch);
+        double g = compound->State().Gamma(j, la, ch);
+        accum.AddGamma(j, la, ch, factor * (-2.0 * g * compound->State().ShiftDerivative(j, la, ch)));
+        dE -= g * g * compound->State().ShiftSecondDerivative(j, la, ch);
       }
       accum.AddE(j, la, factor * dE);
     }
