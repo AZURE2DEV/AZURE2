@@ -145,18 +145,21 @@ there.
 Sampling settings
 -----------------
 
-**Number of Walkers**
+The program takes them as options of ``AZURE2 mcmc``
+(:doc:`../reference/command_line`); the names below are the setup utility's.
+
+**Number of Walkers** (``--walkers=N``)
    Size of the ensemble. Must exceed the number of free parameters — see
    above. Two to four times that is a reasonable starting point.
 
-**Number of Steps**
+**Number of Steps** (``--steps=N``)
    Steps per walker. The total sample count is walkers × steps.
 
-**Initial Chain Spread (%)**
+**Initial Chain Spread (%)** (``--parameter-spread=P``, default 5)
    Spread of the starting ensemble, as a percentage of each parameter's value.
    Applies to widths.
 
-**Level Energy Spread (keV)**
+**Level Energy Spread (keV)** (``--energy-spread=E``, default 1)
    Spread of the starting ensemble for **level energies**, as an absolute
    energy, capped at 1 keV.
 
@@ -172,15 +175,15 @@ Sampling settings
    since beginning outside it only wastes steps walking back in. A walker
    drawn outside the fit's limits is drawn again ("Limits").
 
-**Number of Threads**
+**Number of Threads** (``--sampler-threads=N``)
    Walkers within a half-ensemble are evaluated in parallel. Results do not
    depend on the thread count: each walker carries its own generator, so a run
    is reproducible for a given seed whatever the threading.
 
-**Fresh Start**
+**Fresh Start** (``--overwrite-samples``)
    Start a new chain, discarding any existing ``samples.mcmc``.
 
-**Use Reduced Widths**
+**Use Reduced Widths** (``--basis=rwa``; ``--basis=physical`` without)
    Sample reduced width amplitudes rather than physical widths. Usually
    preferable — it is the natural fit space, and avoids a transformation at
    every evaluation. Both modes sample the normalizations and energy shifts

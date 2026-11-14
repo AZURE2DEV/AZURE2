@@ -63,7 +63,7 @@ python3 "$AZURE2_SRC/.claude/skills/azure2-fit/scripts/convert_sav_names.py" \
    `.azr`. Make it in a scratch copy so the archive's `output/` is not touched:
    ```bash
    mkdir -p $SCR/output $SCR/checks && cp -rp model.azr data $SCR/ && cd $SCR
-   "$AZURE2_BINARY" calculate <the fit's flags> --no-gui model.azr
+   "$AZURE2_BINARY" calculate <the fit's flags> model.azr
    ```
    The log must say `Creating New param.par File...`. The check requires every level name to match both ways and
    every width that is exactly 0 in one file to be 0 in the other. Widths that are 0 in the `.azr` are fixed and

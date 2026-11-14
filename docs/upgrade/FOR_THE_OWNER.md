@@ -498,7 +498,7 @@ still clears Park). `AZURE2 --describe` prints each option with its value and wh
 true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together
 (`E_CONFIG_OPTIONS_CONTRADICT`, naming both): Park without Brune, Reich-Moore capture with Brune, no convection current
 with the long-wavelength approximation. The converter, `Project.new` and `save_fit` write no key they did not find;
-the web page sets them as any `<config>` entry. Not keys: the fit's settings, the menu's mode, threads, files and
+the web page sets them as any `<config>` entry. Not keys: the fit's settings, the run's command, threads, files and
 directories of the machine, and the environment switches.
 
 **Two combinations are now refused** (the PI, 2026-11-13; James should see this): Reich-Moore capture with Brune on
@@ -807,8 +807,8 @@ citation under every plot, in the CSV and in the Python text, their values those
 
 `pip install .` in a checkout now builds the engine (scikit-build-core runs the CMake files) and installs pyazr with
 its module `_azure2`, the commands `pyazr` and `AZURE2`, the mass table and the web page; `pip wheel .` writes the
-wheel. Before, pip installed a package without its engine. The wheel's program has no readline: its menu reads
-plain lines, and its commands read nothing from standard input. The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
+wheel. Before, pip installed a package without its engine. The wheel's program, like every build, has no menu:
+its commands read nothing from standard input. The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
 (arm64, x86-64) with cibuildwheel, by hand or on a pull request that changes the packaging, and keeps them as the
 run's artifacts: it publishes nothing. What the owner must do to publish:
 
@@ -826,12 +826,11 @@ run's artifacts: it publishes nothing. What the owner must do to publish:
 
 ## Commands instead of the menu
 
-The program takes a command and named options: `AZURE2 <command> [options] FILE`. A command runs one calculation,
-reads nothing from standard input and needs no readline; a missing or wrong option is refused with exit status 2
-and a message that says what is wrong, what the command takes and how to fix it. `AZURE2 --help` lists the commands
-and options; `AZURE2 --describe FILE --json` gives them as data. Without a command the menu still runs as before;
-the menus go once the tests use the commands (your decision 3 (a) of `pyazr3.md`). What a user types instead of the
-menu:
+The program takes a command and named options: `AZURE2 <command> [options] FILE`. A command runs one calculation and
+reads nothing from standard input; a missing or wrong option is refused with exit status 2 and a message that says
+what is wrong, what the command takes and how to fix it. `AZURE2 --help` lists the commands and options first;
+`AZURE2 --describe FILE --json` gives them as data. The menu is gone (your decision 3 (a) of `pyazr3.md`), and with
+it readline: the build no longer needs the library. What a user types instead of the menu:
 
 | Menu answers (piped) | Command line |
 |---|---|
@@ -847,9 +846,18 @@ menu:
 | `6`, blank, blank, `24`, `1000`, blank, blank, `4`, `yes`, `yes` | `AZURE2 mcmc --walkers=24 --steps=1000 --sampler-threads=4 --basis=rwa --overwrite-samples FILE` |
 
 The file names are relative to the project file's directory, as at the menu's prompts. A run by command writes the
-same files as the run by menu with the same answers (`tests/cli_commands`, and the runs of every command on T1, T2,
-T3, 13N and the rate and sampler projects). A new command or a new question is one row of the table in
-`src/RunRequest.cpp` and its line where the answer goes (`src/RunPreparation.cpp`).
+same files as the run by menu with the same answers (shown before the menu went: every command on T1, T2, T3, 13N and
+the rate and sampler projects, all 183 test projects in the three bases, the eight fits). A new command or a new
+option is one row of the table in `src/RunRequest.cpp` and its line where the answer goes
+(`src/RunPreparation.cpp`).
+
+**A user with old scripts.** A script that pipes answers to the menu (`printf '1\n\n\n7\n' | AZURE2 ... FILE`) is now
+refused with exit status 2, a message that lists the commands, and nothing calculated; it does not hang or
+calculate something else. The user replaces the pipe by the command: `python3 tools/menu_to_command.py
+'1\n\n\n7\n'` prints `calculate` (it walks the answers through the menu's questions as the menu read them, and
+says when the answer depends on whether the project has external capture). `--no-readline` and `--no-gui` on the old
+line can stay: both are accepted (`--no-readline` with a one-line notice). Whether `--no-readline` stays accepted
+for good or is refused after a release is yours to decide.
 
 ## For the maintainers to decide
 

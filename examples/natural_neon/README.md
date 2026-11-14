@@ -16,7 +16,7 @@ Calculate with the fitted parameters:
 
 ```
 mkdir -p output checks
-AZURE2 calculate --parameter-file=natural_neon_fit.sav --no-gui natural_neon.azr
+AZURE2 calculate --parameter-file=natural_neon_fit.sav natural_neon.azr
 ```
 
 Data sources:

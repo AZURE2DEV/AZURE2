@@ -132,7 +132,7 @@ Running the suites
 ``tests/run_tests.sh [path/to/AZURE2]``
    The physics regression suite. Every directory ``tests/<name>/`` holding
    ``<name>.azr``, its ``data/`` and ``expected/chiSquared.out`` is run
-   (menu 1, calculate with data, from a clean ``output/``) and its total
+   (``AZURE2 calculate``, from a clean ``output/``) and its total
    :math:`\chi^2`, the :math:`\chi^2` of every segment and every segment's
    point count are compared with the expected file: the counts exactly, the
    :math:`\chi^2` to the relative tolerance ``TOL`` (default
@@ -162,7 +162,7 @@ fails a check instead of stalling the suite. It is sourced by
 
    . "$REPO/tests/lib/guard.sh"
    RUN="$(guard_command 600)"
-   $RUN "$AZURE2_BIN" calculate --no-gui run.azr
+   $RUN "$AZURE2_BIN" calculate run.azr
 
 ``guard_command SECONDS`` gives GNU ``timeout``, Homebrew's ``gtimeout`` or,
 where neither exists, the shell watchdog ``run_guard``, so the limit holds on

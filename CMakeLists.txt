@@ -57,7 +57,6 @@ if(USE_API)
     # subdirectories are added.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
-option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 # The test directories under tests/ (OFF in a wheel build: pyproject.toml, [tool.scikit-build]).
@@ -127,14 +126,12 @@ add_subdirectory(convert)
 
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain
-# "cmake -S . -B build" fails on macOS for two unrelated reasons:
+# "cmake -S . -B build" fails on macOS:
 #
 #   * Apple's clang ships no OpenMP runtime at all.  The compiler needs
 #     "-Xpreprocessor -fopenmp", the runtime comes from the separate libomp
 #     formula, and FindOpenMP cannot infer either for AppleClang -- so
 #     find_package(OpenMP REQUIRED) below fails outright.
-#   * readline is keg-only (macOS ships libedit in its place): Homebrew
-#     leaves it out of the default prefix, so the linker does not see it.
 #
 # Everything here is derived by asking brew, and every value is overridable
 # from the command line, so an explicit -D or a conda/MacPorts toolchain (which
@@ -145,7 +142,7 @@ if(APPLE AND NOT CROSS_COMPILE_WINDOWS)
     if(BREW_EXECUTABLE)
         # Keg-only or not, adding the prefix is harmless and makes the build
         # independent of what the user has linked into /opt/homebrew.
-        foreach(_formula readline gsl libomp)
+        foreach(_formula gsl libomp)
             execute_process(COMMAND ${BREW_EXECUTABLE} --prefix ${_formula}
                             OUTPUT_VARIABLE _prefix
                             OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -184,14 +181,12 @@ if(CROSS_COMPILE_WINDOWS)
     set(CMAKE_C_FLAGS "-static-libgcc")
     set(CMAKE_CXX_FLAGS "-static-libgcc -static-libstdc++")
     
-    # Link winpthread statically; GSL and readline stay dynamic (DLLs copied next to the executable)
+    # Link winpthread statically; GSL stays dynamic (DLLs copied next to the executable)
     set(CMAKE_CXX_STANDARD_LIBRARIES "-static-libgcc -static-libstdc++ -lwsock32 -lws2_32 ${CMAKE_CXX_STANDARD_LIBRARIES}")
     set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic")
     set(CMAKE_SHARED_LINKER_FLAGS "-static-libgcc -static-libstdc++")
 
     set(USE_STAT OFF CACHE BOOL "Disable stat() for Windows" FORCE)
-    # Enable readline for Windows since it's available in MinGW environment
-    set(USE_READLINE ON CACHE BOOL "Enable readline for Windows" FORCE)
     add_definitions(-DWINDOWS_BUILD)
     
     # Set crosscompiling flag for Minuit2
@@ -407,14 +402,6 @@ else()
     message(STATUS "MCMC Bayesian sampling disabled")
 endif()
 
-# readline for the program's menus: decided before the binding and the engine are added, so that both see it (a
-# directory property set after add_subdirectory does not reach that directory).
-if(NOT USE_READLINE)
-    add_definitions(-DNO_READLINE)
-    set(NO_READLINE "TRUE")
-else()
-    set(NO_READLINE "FALSE")
-endif()
 
 # Python module
 if(USE_API)

@@ -3287,7 +3287,7 @@ Examples
 
 The THM cases in ``examples/`` are listed, with their reactions, data sources
 and "file alone" :math:`\chi^2`, in :doc:`../getting_started/examples`. "File
-alone" is the CLI calculation of the file as stored (``AZURE2 calculate --no-gui <name>.azr``), the number to compare against
+alone" is the CLI calculation of the file as stored (``AZURE2 calculate <name>.azr``), the number to compare against
 after a change: the "Total Chi-Squared" line, data plus the norm priors.
 Every direct norm with a quoted error holds its fitted value in the norm
 column and an explicit ``prior_centre 1`` row in ``<parameterSettings>``

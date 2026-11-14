@@ -103,7 +103,7 @@ in brackets where different; N is the number of points. The authoritative list i
 | `li7_tumino2006` | 448.620 (439.149) / 294 |
 | `li6_pizzone2011` | 158.967 (157.041) / 132 |
 
-Command: `build/src/AZURE2 calculate --no-gui <name>.azr`, run
+Command: `build/src/AZURE2 calculate <name>.azr`, run
 from the example directory, under `prlimit` and with `OMP_NUM_THREADS=1`. A different
 value after a rebuild means the engine changed or the module is stale. Find out which
 before fitting.

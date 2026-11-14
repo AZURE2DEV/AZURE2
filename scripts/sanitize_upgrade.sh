@@ -67,7 +67,7 @@ if [ "${SAN_NO_BUILD:-0}" != 1 ]; then
   fi
   # shellcheck disable=SC2086
   cmake -S "$REPO_ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DAZURE2_SANITIZE="$SANFLAG" \
-    -DBUILD_GUI=OFF -DUSE_QWT=OFF -DUSE_READLINE=OFF -DUSE_API=ON -DPYAZR_OUTPUT_DIR="$BUILD/pyazr-module" \
+    -DBUILD_GUI=OFF -DUSE_QWT=OFF -DUSE_API=ON -DPYAZR_OUTPUT_DIR="$BUILD/pyazr-module" \
     "${PB[@]}" ${SAN_CMAKE_ARGS:-} || die "configure failed"
   cmake --build "$BUILD" --parallel ${SAN_JOBS:-} || die "build failed"
 fi

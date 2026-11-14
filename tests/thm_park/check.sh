@@ -255,7 +255,7 @@ if okrun wall && okrun wall.b; then
 fi
 # MCMC (when built): 12 walkers, 100 steps, RWA, 1 % spread, 0.5 keV.
 MCMC='mcmc --walkers=12 --steps=100 --parameter-spread=1 --energy-spread=0.5 --sampler-threads=1 --basis=rwa --overwrite-samples'
-if "$AZURE2_BIN" --help | grep -q '^	mcmc:'; then
+if grep -q '^	mcmc:' <<< "$("$AZURE2_BIN" --help 2>&1)"; then
   stage_wall wall.mcmc
   run wall.mcmc "$MCMC" --use-park
   if grep -q "WARNING: the MCMC starting point is outside Park's parameter space" "$WORK/wall.mcmc/log" &&

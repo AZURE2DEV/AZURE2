@@ -1,16 +1,16 @@
 #ifndef RUNREQUEST_H
 #define RUNREQUEST_H
 
-// What a run of the program is asked to do, and the one table of its questions (docs/source/reference/
-// command_line.rst, "Commands"): the command line reads a request from `AZURE2 <command> [options] FILE`
-// (ReadRunCommand), the text menu fills one by asking (src/RunMenu.cpp), and PrepareRun (src/RunPreparation.cpp) turns
-// it into the run's Config.  A new command is a row of RunCommands() and its case in PrepareRun; a new question is a
-// member of RunRequest and a row of RunQuestions().
+// What a run of the program is asked to do, and the one table of its options (docs/source/reference/
+// command_line.rst, "Commands"): the command line gives a request as `AZURE2 <command> [options] FILE`
+// (ReadRunCommand), and PrepareRun (src/RunPreparation.cpp) turns it into the run's Config.  The program reads nothing
+// from standard input.  A new command is a row of RunCommands() and its case in SelectCalculation
+// (src/RunPreparation.cpp); a new option is a member of RunRequest and a row of RunQuestions().
 
 #include <string>
 #include <vector>
 
-/// The calculation a run does: the commands of the command line, the modes 1 to 6 of the menu.
+/// The calculation a run does: the commands of the command line.
 enum class RunCommand { kCalculate, kFit, kExtrapolate, kMinos, kRate, kMcmc };
 
 /// Every answer of a run.  Paths are as given (relative to the project file's directory, Config::OpenPath).
@@ -23,7 +23,7 @@ struct RunRequest {
   std::string captureFile;          ///< external-capture amplitudes to read; empty: compute them (intEC.dat)
   int rateEntrance = 0;             ///< the rate's entrance pair key
   int rateExit = 0;                 ///< the rate's exit pair key; -1 the total radiative capture
-  bool temperaturesFromFile = false;
+  bool temperaturesFromFile = false;  ///< --temperature-file given (else the minimum, maximum and step)
   std::string temperatureFile;      ///< one temperature per line, GK
   double temperatureMin = 0.;       ///< GK
   double temperatureMax = 0.;       ///< GK
@@ -37,31 +37,29 @@ struct RunRequest {
   bool overwriteSamples = false;    ///< overwrite samples.mcmc (else the sampler continues it)
 };
 
-/// One command: its name on the command line, its number and line in the menu.
+/// One command: its name on the command line and what it computes.
 struct RunCommandRow {
   RunCommand command;
   const char *name;       ///< `AZURE2 <name> FILE`
-  int menuNumber;         ///< its number in the menu (1 to 6)
-  const char *menuText;   ///< its line in the menu, as printed
   const char *help;       ///< what it computes, for --help and --describe
   bool built;             ///< false: this build lacks it (mcmc without the sampler)
 };
 
-/// The commands, in the menu's order.
+/// The commands, in the order --help lists them.
 const std::vector<RunCommandRow> &RunCommands();
 /// The row of `command`.
 const RunCommandRow &RunCommandOf(RunCommand command);
 
-/// The kind of an answer: how the menu asks it and how the command line gives it.
+/// The kind of an answer: how the command line gives it.
 enum class AnswerKind {
-  kFlag,         ///< a yes/no question whose blank answer is no; on the command line a flag without a value
-  kWord,         ///< a question answered yes or no in full; on the command line one of two words (the row's words)
+  kFlag,         ///< a flag without a value: given, yes; left out, no
+  kWord,         ///< one of two words (the row's words): the first is yes, the second no
   kNumber,       ///< a real number in the row's range
   kWholeNumber,  ///< a whole number in the row's range
   kFile,         ///< a file that can be read
 };
 
-/// When a question of its command is asked.
+/// When an option of its command applies.
 enum class AskedWhen {
   kAlways,
   kBandChosen,             ///< with the uncertainty band
@@ -70,15 +68,15 @@ enum class AskedWhen {
   kProjectNeedsCapture,    ///< the project's run has external capture (decided when the project is read)
 };
 
-/// One question of a run: its option, what it takes, which commands ask it, the menu's texts, and where the answer
-/// goes (exactly one of the four members is set, the one of the row's kind).
+/// One option of a run: its name, what it takes, which commands take it, and where the answer goes (exactly one of
+/// the four members is set, the one of the row's kind).
 struct RunQuestion {
-  const char *option;      ///< "--parameter-file"; "" for the menu question the command line answers by other options
+  const char *option;      ///< "--parameter-file"
   AnswerKind kind;
-  unsigned commands;       ///< the commands that take it (bits CommandBit), on the command line
-  unsigned menuAsks;       ///< the commands whose menu asks it
+  unsigned commands;       ///< the commands that take it (bits CommandBit)
   AskedWhen when;
-  bool required;           ///< no default: a command line without it is refused, the menu asks until answered
+  bool required;           ///< no default: a command line without it (where it applies) is refused
+  const char *instead;     ///< for a required option that is one of two ways: the other way ("" for none), for help
   double low;              ///< range of a number (kNumber, kWholeNumber)
   double high;
   bool lowOpen;            ///< the range excludes `low`
@@ -86,13 +84,7 @@ struct RunQuestion {
   double defaultValue;     ///< a number's value when the answer is left blank (not `required`)
   const char *words;       ///< kWord on the command line: "yes-word|no-word"
   const char *value;       ///< the value's name in --help ("FILE", "N", "X")
-  const char *help;
-  // the menu
-  const char *prompt;      ///< as printed
-  int promptWidth;         ///< the prompt's field width (std::setw), 0 none
-  bool blankLineBefore;    ///< a blank line before the prompt
-  const char *endName;     ///< the prompt named when the input ends before a required answer
-  const char *retry;       ///< printed after an answer out of range (kFile: after a file that cannot be read)
+  const char *help;        ///< what it is; its range and default are the row's (printed from them)
   // the answer
   bool RunRequest::*flag;
   int RunRequest::*whole;
@@ -100,40 +92,43 @@ struct RunQuestion {
   std::string RunRequest::*text;
 };
 
-/// The bit of `command` in RunQuestion::commands and menuAsks.
+/// The bit of `command` in RunQuestion::commands.
 constexpr unsigned CommandBit(RunCommand command) { return 1u << static_cast<unsigned>(command); }
 
-/// The questions, in the order the menu asks them.
+/// The options, in the order --help lists them.
 const std::vector<RunQuestion> &RunQuestions();
 /// The option's name: "--name" of "--name=VALUE".
 std::string OptionName(const std::string &argument);
 /// The question whose option is `option` ("--name", without a value), or null.
 const RunQuestion *FindRunQuestion(const std::string &option);
 
-/// A rule between answers: the menu asks again from `first` when it fails, the command line refuses.
+/// A rule between two answers: a command line that breaks it is refused.
 struct RunRule {
-  const char *first;       ///< the option of the question the menu asks again from
-  const char *last;        ///< the option of the question after which the rule is checked
+  const char *first;       ///< the options the rule relates
+  const char *last;
   bool (*holds)(const RunRequest &request);
-  const char *menuMessage; ///< as the menu prints it
-  const char *fix;         ///< how to fix a command line
+  const char *message;     ///< what is wrong
+  const char *fix;         ///< how to fix the command line
 };
 const std::vector<RunRule> &RunRules();
 
-/// Whether `question` is asked in `request` as answered so far (its command and its condition; kProjectNeedsCapture
-/// counts as asked: the project decides, PrepareRun).
+/// Whether `question` applies to `request` (its condition; kProjectNeedsCapture counts as applying: the project
+/// decides, PrepareRun).
 bool QuestionApplies(const RunQuestion &question, const RunRequest &request);
 /// Whether `value` is an answer of the number question `question` (its range).
 bool InRange(const RunQuestion &question, double value);
 
 /// The command line's reader: whether `arguments` (argv without the program's name) give a command; if so, `request`
 /// holds its answers (defaults where an optional answer is not given) and `rest` the arguments that are not the
-/// command's (the program's other options and the project file).  Refuses (std::invalid_argument, the message in
+/// command's (the program's other options and the project file); if not, `rest` is `arguments` (the caller refuses a
+/// run without a command, NoCommandRefusal).  Refuses (std::invalid_argument, the message in
 /// three parts: what, what the command takes, how to fix) an unknown or unbuilt command, an option of another command,
 /// a value that does not parse or is out of range, a missing required answer, a broken rule and a missing project.
 bool ReadRunCommand(const std::vector<std::string> &arguments, RunRequest &request, std::vector<std::string> &rest);
 /// The three lines of a refusal of a command line: what, what `command` takes, how to fix it.
 std::string CommandRefusal(const std::string &what, RunCommand command, const std::string &fix);
+/// The refusal of a run without a command, in three parts.
+std::string NoCommandRefusal();
 /// The refusal of a command option given without a command (for parseOptions).
 std::string CommandOptionWithoutCommand(const RunQuestion &question);
 /// A refused command line: "ERROR: <message>" and the commands' usage line on standard output; returns 2.

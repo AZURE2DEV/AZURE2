@@ -4,7 +4,6 @@
 #include "Config.h"
 #include "ProjectSetup.h"
 #include "RunDiagnostics.h"
-#include "RunMenu.h"
 #include "azure2/io/LevelRows.h"
 
 #include <fstream>
@@ -166,30 +165,14 @@ std::string RequestFileRefusal(const Config &configure, const RunRequest &reques
   return "";
 }
 
-void PrepareRun(Config &configure, RunRequest &request, RunMenu *menu) {
+void PrepareRun(Config &configure, RunRequest &request) {
   SelectCalculation(request.command, configure);
-  const std::vector<RunQuestion> &questions = RunQuestions();
-  const unsigned command = CommandBit(request.command);
-  for (std::size_t i = 0; i < questions.size(); i++) {
-    const RunQuestion &q = questions[i];
-    // The project decides here, after the rate's pairs and before the amplitude file, whether the run has
-    // external capture: for every command, as the menu always did.
-    if (q.when == AskedWhen::kProjectNeedsCapture && !RunHasCapture(configure, request)) {
-      if (!menu && !(request.*q.text).empty()) {
-        configure.outStream << "Notice: " << q.option << "=" << request.*q.text
-                            << " is not used: this run has no external capture." << std::endl;
-        (request.*q.text).clear();
-      }
-      continue;
-    }
-    if (!menu || !(q.menuAsks & command) || !QuestionApplies(q, request)) continue;
-    menu->Ask(q, request);
-    for (const RunRule &rule : RunRules()) {
-      if (std::string(rule.last) != q.option || rule.holds(request)) continue;
-      menu->Refuse(rule);
-      for (std::size_t first = 0; first < questions.size(); first++)
-        if (std::string(rule.first) == questions[first].option) i = first - 1;  // asked again from `first`
-    }
+  // The project decides, once the rate's pairs are known, whether the run has external capture; an amplitude file
+  // given to a run without it is not used.
+  if (!RunHasCapture(configure, request) && !request.captureFile.empty()) {
+    configure.outStream << "Notice: --capture-amplitudes=" << request.captureFile
+                        << " is not used: this run has no external capture." << std::endl;
+    request.captureFile.clear();
   }
   ApplyAnswers(request, configure);
 }

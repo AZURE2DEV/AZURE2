@@ -97,7 +97,7 @@ fi
 echo -e "${YELLOW}Copying DLL files...${NC}"
 
 # List specific DLL files that should be copied
-EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libreadline8.dll libhistory8.dll libtermcap-0.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll"
+EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll"
 
 for dll in $EXPECTED_DLLS; do
     DLL_FOUND=false

@@ -22,8 +22,9 @@ How to do what the setup utility did
        The pages of this guide describe each block through the fields the
        setup utility showed; the field names are those of the file.
    * - Calculate, fit, extrapolate, compute a reaction rate
-     - ``AZURE2 project.azr`` and the menu it prints, or the flags of
-       :doc:`../reference/command_line`; from Python, :doc:`pyazr`.
+     - ``AZURE2 calculate project.azr`` (``fit``, ``extrapolate``,
+       ``minos``, ``rate``, ``mcmc``: :doc:`../reference/command_line`); from
+       Python, :doc:`pyazr`.
    * - Runtime options (Brune, Park, relativistic kinematics, THM, ...)
      - Keys of ``<config>`` in the ``.azr`` (``use_brune=0``, ...;
        :ref:`options-as-config-keys`), or for one run the command-line flags
@@ -37,7 +38,7 @@ How to do what the setup utility did
      - The files in ``output/`` (:doc:`../reference/output_files`) with any
        plotting program, or the arrays ``pyazr`` returns.
    * - MCMC
-     - Option 6 of the command-line menu, with the ``<mcmc>`` block of the
+     - ``AZURE2 mcmc`` (:doc:`../reference/command_line`), with the ``<mcmc>`` block of the
        ``.azr`` file (:doc:`mcmc`), or ``pyazr`` with an external sampler.
 
 The planned browser interface

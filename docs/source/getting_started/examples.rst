@@ -13,10 +13,10 @@ the ``.azr`` from the command line or with ``pyazr``. The THM options are descri
 .. code-block:: bash
 
    cd examples/<name>
-   AZURE2 calculate --no-gui <name>.azr
+   AZURE2 calculate <name>.azr
 
-(menu 1, calculate with data; blank answers take the parameters and the
-external-capture integrals from the project; 7 exits). The number given is
+(the data sets at the project's parameters; the external-capture integrals
+are computed). The number given is
 the ``Total Chi-Squared`` line, data plus norm priors; the data part
 (``Total-Chi-Squared`` of ``output/chiSquared.out``) and the priors are in
 brackets where they differ. Every direct normalization with a quoted error

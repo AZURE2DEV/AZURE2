@@ -2,8 +2,7 @@ digraph frontends {
   graph [rankdir=LR, fontname="Helvetica", fontsize=16, labelloc=t, label="Front ends", nodesep=0.18, ranksep=0.3, newrank=true];
   node [fontname="Helvetica", fontsize=14, margin="0.08,0.04"];
   edge [fontname="Helvetica", fontsize=12];
-  n_RunRequest [label=<<b>RunRequest</b><br/><font point-size="12">the answers of a<br/>program run: command<br/>and options, or the<br/>menu&#x27;s</font>>, shape=box, style="filled", fillcolor="white"];
-  n_RunMenu [label=<<b>RunMenu</b><br/><font point-size="12">the text menu: asks<br/>the questions of the<br/>table</font>>, shape=box, style="filled", fillcolor="white"];
+  n_RunRequest [label=<<b>RunRequest</b><br/><font point-size="12">the answers of a<br/>program run: its<br/>command and options</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain [label=<<b>AZUREMain</b><br/><font point-size="12">the program&#x27;s run: its<br/>stages in order</font>>, shape=box, style="filled", fillcolor="white"];
   n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read</font>>, shape=box, style="filled", fillcolor="white"];
   n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei and<br/>level parameters</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
@@ -26,8 +25,6 @@ digraph frontends {
   n_SessionWorker [label=<<b>SessionWorker</b><br/><font point-size="12">the process that holds<br/>the session</font>>, shape=box, style="filled", fillcolor="white"];
   n_Engine [label=<<b>Engine</b><br/><font point-size="12">session operations for<br/>the routes (in the<br/>worker)</font>>, shape=box, style="filled", fillcolor="white"];
   n_JobTable [label=<<b>JobTable</b><br/><font point-size="12">fits and samplers run<br/>as jobs</font>>, shape=box, style="filled", fillcolor="white"];
-  n_RunMenu -> n_RunRequest [style=dotted, penwidth=1.6, arrowhead=empty];
-  n_RunMenu -> n_Config [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
   n_AZUREMain -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];

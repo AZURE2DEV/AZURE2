@@ -6,7 +6,7 @@ pyazr — the Python Interface
 sockets and no port bookkeeping — the full R-matrix engine, the same code the command-line program runs, becomes
 callable from a script.
 
-This is the route to anything the command-line menu does not offer directly: custom minimizers, external samplers,
+This is the route to anything the program's commands do not offer directly: custom minimizers, external samplers,
 parameter scans, systematic studies over many model variants, and publication figures built from the model rather than
 from exported files.
 
@@ -1522,7 +1522,7 @@ Data sets and extrapolations
 
 A session evaluates one or the other, chosen when it is made: ``Session(file)`` the active ``dataset`` records (what
 χ² uses), ``Session(file, extrapolations=True)`` the ``extrapolation`` grids, for predictions on any energies and
-angles (the program's menu choice 3).  There is no switch of a live session: for both, make two sessions
+angles (the program's ``extrapolate``).  There is no switch of a live session: for both, make two sessions
 (``Session(file, **dict(s.options, extrapolations=True))`` rebuilds the same model for the extrapolations).  The two
 fit vectors differ in their tail (the data sets' nuisances, the extrapolations'); the level parameters and abundances
 lead both, and ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's
@@ -1556,7 +1556,7 @@ u::
 function ``model(xs)`` (one value, or one sequence of values, per abscissa) and returns the grid, the values and
 whether ``max_points`` stopped it.  A session (``pyazr.Session``) in extrapolation mode refuses a project with an
 ``adaptive`` grid: the session evaluates at many parameter vectors, and the grid is made by the extrapolation run
-(menu 3) at one.
+(``extrapolate``) at one.
 
 Frames and units
 ----------------

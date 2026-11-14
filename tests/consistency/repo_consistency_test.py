@@ -148,7 +148,7 @@ check_sizes()
 #    command-line reference.  A flag that is only in the source is a flag only
 #    the person who wrote it knows about.
 main_cpp = read("src/AZURE2.cpp")
-parser = function_body(main_cpp, "bool parseOptions(")
+parser = function_body(main_cpp, "void parseOptions(")
 help_text = function_body(main_cpp, "void printHelp(")
 cli_doc = read("docs/source/reference/command_line.rst")
 

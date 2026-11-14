@@ -8,7 +8,8 @@
 # stops only at the missing project file, exit 255).  The same AZURE_REFINE_QUADRATURE in pyazr raises ValueError
 # (when the compiled module can be imported, PYAZR_ENGINE_DIR; else that case is skipped).  An unknown option is the same
 # kind of error (before, "WARNING: Unknown option" and the run went on: a mistyped --use-gradiant fitted without the
-# gradient), on the command line and in AZURE_OPTIONS_FILE; --no-readline is accepted in every build.
+# gradient), on the command line and in AZURE_OPTIONS_FILE; --no-readline is accepted with a one-line notice (the
+# program has no menu).
 #
 #   ./tests/cli_option_values/check.sh path/to/AZURE2
 
@@ -28,10 +29,10 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# probe ENV ARGS...: run the binary on a project that does not exist; sets $out and $rc
+# probe ENV ARGS...: run the binary (calculate) on a project that does not exist; sets $out and $rc
 probe() {
   local env="$1"; shift
-  (cd "$WORK" && env $env $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" no_such_project.azr < /dev/null > out.txt 2>&1)
+  (cd "$WORK" && env $env $RUN "$AZURE2_BIN" calculate --no-gui --no-readline "$@" no_such_project.azr < /dev/null > out.txt 2>&1)
   rc=$?
   out="$(head -c 20000 "$WORK/out.txt")"
 }
@@ -58,7 +59,7 @@ accepted() {
 }
 
 refused "--max-calls without a value" "--max-calls needs a value: --max-calls=N" "" --max-calls
-refused "--max-calls 50 (a space, not =)" "--max-calls needs a value" "" --max-calls 50
+refused "--max-calls 50 (a space, not =)" "--max-calls needs a value: --max-calls=50" "" --max-calls 50
 refused "--max-calls=x" "--max-calls needs a whole number from 0 to 1000000000, not 'x'" "" --max-calls=x
 refused "--max-calls=" "--max-calls needs a whole number" "" --max-calls=
 refused "--max-calls=-1" "--max-calls needs a whole number" "" --max-calls=-1
@@ -78,6 +79,8 @@ refused "--use-gradiant (unknown)" "Unknown option --use-gradiant\." "" --use-gr
 refused "--use-gradient=1 (unknown)" "Unknown option --use-gradient=1\." "" --use-gradient=1
 refused "an unknown option after good ones" "Unknown option --no-such-flag\." "" --use-brune --no-such-flag --use-lm
 accepted "--no-readline --use-gradient --use-brune" "" --use-gradient --use-brune
+grep -q "^Notice: --no-readline is accepted and ignored" <<< "$out" && ok "--no-readline: one notice line" ||
+  bad "--no-readline: no notice"
 printf -- '--use-gradiant\n' > "$WORK/unknown.txt"
 refused "an unknown option in AZURE_OPTIONS_FILE" "Unknown option --use-gradiant\." "AZURE_OPTIONS_FILE=$WORK/unknown.txt"
 printf -- '--max-calls\n' > "$WORK/options.txt"
