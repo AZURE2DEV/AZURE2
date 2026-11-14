@@ -577,7 +577,7 @@ Pairs, levels with their channels, γ decays (`gamma_decay` records), hybrid pot
 │ 3   a+12C  1  0    particle    75000        eV         [x]    (fixed: project edit)        …       │
 │ Engine: "level 1- 12.4258 MeV: Γ_p = 547.9 eV, ..." (describe)                                    │
 │ γ decays [+]   Potentials [+]   (record forms, from the schema)                                    │
-│ ¹ adding and removing pairs with channel regeneration waits for pyazr (finding 10)                 │
+│ ¹ add_pair, remove_pair (its channels too as a second action), set_pair with B (section 11.10)     │
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -791,7 +791,7 @@ Model options, experiments, channels (binding energies, amplitude flags), diagno
 │ ─ LC09 ─ beam [d] target [15N] spectator [n]  B(x+s) 2.22457 MeV  E_qf 1.55188 MeV               │
 │ distortion [none ▾]  bound state [Whittaker ▾]  optical a+A [global ▾] s+F [plane ▾]              │
 │ coherent background  Jπ  exit  channels  form  Re c0  Im c0  c1                                    │
-│ Channels  pair  B (MeV)  amplitude?   (needs pyazr: finding 11)                                    │
+│ Channels  pair  B (MeV)  amplitude?   (as the session reads them; edited in the Nucleus tab)       │
 │ ─ Diagnostics ─ data set [s11 ▾]  Jπ [1- ▾] [Compute]                                              │
 │ ┌ |M_l|² (vertex) · HOES vs on-shell · line shape |N_C|² and ζ(E) · w(E) · R(E) ────────────────┐ │
 │ └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
@@ -1529,6 +1529,50 @@ diagnostic of the session: its method and its row in `pyazr/session_functions.py
 with no line of the page (an entry in `PAGE` only to put it on another tab or give it status words);
 `routes_consistency_test.py` counts the rows of that table as served.
 
+### 11.10 Pairs and THM columns in the Nucleus tab; what a fit returns in the Fit tab (2026-11-14)
+
+**Nucleus tab** (`tabs/nucleus.js`): every edit is a `Project` call through a project route (revision checked, one
+history entry, Undo by the server's history, the engine's words for a refusal).
+- *Pairs*: a row opens `#/nucleus/pair/<key>`: its numbers as fields of `PATCH /api/project/pairs/{key}`, the fields
+  being that route's arguments read from `GET /api/describe` (`routeArguments`), so `binding_energy` (B) is among
+  them and a field the route gains appears with no line of the page (only its unit, from the page's `UNITS`, would
+  be missing).  **Remove pair** sends `DELETE` (`remove_pair`); its refusal is shown as the engine gave it, and only
+  then **Remove pair … and its channels** appears (`remove_channels: true`): the second, explicit action.  **+ pair**
+  (`#/nucleus/pair/+new`): kind (particle, photon, beta), the partners as `add_pair`'s dicts `{J, parity, Z, mass,
+  g}` (none for a photon's light partner), the route's other arguments as text boxes; numbers are sent as numbers,
+  any other text as typed (pyazr refuses it in its words).  The THM nuclide list of `kinds()` is not offered here:
+  its masses are nuclear masses, the pairs' are atomic.
+- *Channels*: the amplitude flag is a check box per channel row (`PATCH .../channels/{pair}/{l}/{s}`,
+  `width_is_amplitude`; the width is not converted, said in the column's doc); a photon channel's refusal is the
+  engine's.
+- *New level* (`#/nucleus/level/+new`): J (a number), parity, E, energy fixed, `l max`; **Channels** asks `GET
+  /api/project/allowed_channels` (a new route, `Project.allowed_channels`; its row left `PROJECT_NOT_SERVED`) and
+  lists them checked; **Add level** posts the checked ones (width 0, fixed), or `"allowed"` when every one is
+  checked so that a J^π the project has takes its group's channels (`add_level`'s rule).
+- The THM tab's Channels section stays read-only and links each row to the pair or level in the Nucleus tab.
+
+**Fit tab**: an engine fit job's result carries `outcome`, the engine's `notices` (no longer made by the server from
+the log) and, after MINOS, `sides` per parameter (`minos_valid` of pyazr: `{valid, at_limit, call_limit,
+new_minimum}` per side) with `valid` both sides; the fallback fitter's name is the fitter table's `fallback` column
+(the server's constant `FALLBACK_FITTER` is gone).  The page shows the outcome in a box (`ok-box` converged,
+`warn-box` otherwise, with "not converged: the best point is where the fitter stopped"), a warning when a MINOS
+interval is not valid, and the column **MINOS validity** (`fitting.js` `minosValidity`: the flags set per side, one
+word for iminuit's).  The fitter rows' facts add "honours a call limit" and "falls back to" from
+`kinds()["fitters"]`, shown under the method and in the job table.
+
+**Measured.**  T2, engine MIGRAD over HTTP (`work/uiport/fitlimit.py`): with `max_calls` 40 the job ends `ended`,
+outcome `call_limit`, best 7087.924186759944, the engine's notice that the end point is the lowest objective
+evaluated; without a limit `converged` at 297.8603087301522; headless Chrome draws the first in a `warn-box` and
+the second in an `ok-box`.  Routes against the direct `Project` calls (`tests/pyazr/ui/nucleus_routes_test.py`):
+equal texts for add, remove, remove with channels, B, the amplitude flag and a new level; an unused pair leaves T1's
+objective exactly; T2 with B 2.224566 → 2.374566 MeV equals a session on the direct edit (11039.423103526951).  In
+the self-test (`#selftest?edit=1`) a pair is typed into the form, added, removed and both undone with the buttons on
+T1 and T2: the χ² unchanged throughout.
+
+**Extensibility.**  A new argument of `set_pair` or `add_pair`: its route row's `kwargs` (one word) and nothing in
+the page (a unit in `UNITS` if it has one).  A new column of the fitter table: a fact in `engine_rows` (one entry);
+a new outcome word or notice: nothing.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1574,14 +1618,16 @@ None of these changes the decided objects; each is a call or a field to add:
    argument checks, a closed session, a missing working directory, the physics functions' domains, unknown records,
    parameters, levels, kinds, THM experiments) and, for a `FormatError`, from its first diagnostic.  The server's
    error handler (`pyazr/ui/`) can read them instead of putting the whole text in `what`.
-10. **Pairs added and removed, with channel generation**: `add_pair`, `remove_pair`, and the channels a J^π allows from
+10. **Pairs added and removed, with channel generation** (*closed* for the page: the Nucleus tab, section 11.10):
+    `add_pair`, `remove_pair`, and the channels a J^π allows from
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
     *Delivered in pyazr*: `Project.add_pair(kind=, light=, heavy=, separation_energy=, radius=, ...)` (returns the key;
     a pair no level names is held by a pair row, inactive with level ID 0), `Project.remove_pair(key,
     remove_channels=False)` (refused while a level has a channel of it, naming them), `Project.allowed_channels(J,
     parity, l_max=2, multipolarity_max=2, multipolarities_max=2, pairs=None)` (the rule of `LevelsTab::calculateChannels`,
     in the engine: `experiment::AllowedChannels`), `add_level(..., "allowed")`.  The Nucleus tab can call them.
-11. **THM binding energy B and the width-is-amplitude flag** per channel: `set_pair` and `set_channel` have neither.
+11. **THM binding energy B and the width-is-amplitude flag** per channel (*closed* for the page: the Nucleus tab,
+    section 11.10): `set_pair` and `set_channel` have neither.
     *The page shows them read-only* (section 11.8): the session's pair records carry `binding_energy` and its
     parameter rows `width_is_amplitude`.  Wanted: `set_pair(key, binding_energy=...)` and `set_channel(...,
     width_is_amplitude=...)` (or the record fields they are), so that the THM tab edits them as project edits.
@@ -1673,7 +1719,8 @@ priors of nuisances only).
 
 Found while building the Physics tab (step 5):
 
-24. **The session's physics functions as rows** (*closed*: section 11.9): `channel_functions` (and later `level_matrix`) have no row in the
+24. **The session's physics functions as rows** (*closed*: section 11.9): `channel_functions` (and later
+    `level_matrix`) have no row in the
     binding's table; the server writes the row of `channel_functions` by hand (`pyazr/ui/physics.py`
     `SESSION_ROWS`, from its docstring). Wanted: the session's functions described as the physics table describes
     its rows (arguments with unit, domain, example and sweep; returns with units), `J` among them.
@@ -1689,7 +1736,8 @@ Found while building the Physics tab (step 5):
 
 Found while building the THM tab (step 5, second part):
 
-27. **A schema of `<thm>`** (*closed*: `GET /api/thm/keys` serves `pyazr.kinds()["thm"]`, section 11.9): the engine reads its keys with a grammar of if-chains (`ParseThmOptionLine`,
+27. **A schema of `<thm>`** (*closed*: `GET /api/thm/keys` serves `pyazr.kinds()["thm"]`, section 11.9): the engine
+    reads its keys with a grammar of if-chains (`ParseThmOptionLine`,
     `ParseThmExperimentLine` in `src/ThmExperiment.cpp`) and describes none of them as data.  The page's forms come
     from a table written in `pyazr/ui/thm.py` (`KEYS`: value type of the schema, choices, unit, doc), checked against
     the list of keys the engine names when it refuses an unknown one.  Wanted: the keys of the options and of an
@@ -1699,7 +1747,8 @@ Found while building the THM tab (step 5, second part):
     The page replaces `thm.keys()` by `copy.deepcopy(pyazr.kinds()["thm"])` (or `KEYS = pyazr.kinds()["thm"]`); the
     reference page `docs/source/reference/thm_keys.rst` is generated from the same rows.
 28. **The THM calls described as rows** (*closed*: the page's rows and answers are made from
-    `Session.describe()["functions"]`, section 11.9): `thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`,
+    `Session.describe()["functions"]`, section 11.9): `thm_experiments`, `thm_background`, `thm_lineshape`,
+    `thm_vertex`,
     `thm_distortion` return nested dictionaries; `pyazr/ui/thm.py` (`THM_ROWS`, `ANSWERS`) writes their rows from the
     docstrings and turns the answer into fields on the energies with lines (per channel and level, per exit pair),
     facts with units and tables.  Wanted: the rows in the session's description (as finding 24 asks for

@@ -1,8 +1,8 @@
 // The THM tab (docs/upgrade/web_ui.md section 6.7), shown when the project has THM content: the model options of
 // <thm> and its experiments as forms of the form generator (the keys are the engine's table, pyazr.kinds()["thm"],
 // GET /api/thm/keys; a nucleus or global optical potential offered from pyazr's lists), the THM pairs and channels
-// of the session (read-only: pyazr has no edit of them), and the session's THM diagnostics, drawn as the Physics tab
-// draws its functions (functionview.js).
+// of the session (edited in the Nucleus tab), and the session's THM diagnostics, drawn as the Physics tab draws its
+// functions (functionview.js).
 //
 // Every edit is a project edit through the THM routes (PATCH /api/project/thm, PUT and DELETE
 // /api/project/thm/experiments/{name}): one history entry each, refused with the engine's words.  The tab holds no
@@ -172,12 +172,11 @@ function hintOfNames(groups) {
   return h("p.hint", {}, `THM data sets of the project: ${groups.names.join(", ") || "none"}.`);
 }
 
-/** The THM pairs of the session (binding energy B) and their channels (whether the width is an amplitude):
- * read-only. */
+/** The THM pairs of the session (binding energy B) and their channels (whether the width is an amplitude), as the
+ * session reads them; both are edited in the Nucleus tab (a pair's B, a channel's amplitude flag). */
 async function channelsSection(ctx) {
-  const why = "Read-only: the binding energy and the amplitude flag are columns of the pair and channel in <levels>; "
-    + "pyazr's set_pair and set_channel have no argument for them (web_ui.md finding 11), so the page shows what the "
-    + "session reads.";
+  const why = "As the session reads them. A pair's binding energy B is edited with the pair, a channel's amplitude "
+    + "flag with its level, in the Nucleus tab (set_pair, set_channel): one edit each, Undo takes it back.";
   let session;
   try {
     session = await ctx.api.get("/api/session", { quiet: true });
@@ -192,11 +191,13 @@ async function channelsSection(ctx) {
     .map((p) => ({ name: p.name, level: p.level_label, pair: p.pair_key, L: p.L, S: p.S,
       amplitude: p.width_is_amplitude }));
   const pairTable = renderTable(document, { rows: pairs.map((p) => ({ ...p, name: String(p.key) })),
+    onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
     withFilter: false, label: "THM pairs", caption: "THM pairs (a nonzero binding energy)",
     columns: [{ key: "key", title: "pair", numeric: true }, { key: "label", title: "particles (J^π)" },
       { key: "binding_energy", title: "B", unit: "MeV", numeric: true, doc: "the THM binding energy of the pair's "
         + "composite projectile" }, { key: "channel_radius", title: "radius", unit: "fm", numeric: true }] });
   const channelTable = renderTable(document, { rows: channels, label: "THM channels",
+    onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.level)}`),
     caption: "their channels", columns: [{ key: "level", title: "level" }, { key: "pair", title: "pair",
       numeric: true }, { key: "L", title: "l", numeric: true }, { key: "S", title: "s", numeric: true },
     { key: "amplitude", title: "width is an amplitude" }, { key: "name", title: "parameter" }] });

@@ -347,7 +347,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       parser's table (`src/ThmKeys.cpp`, `kinds()["thm"]`); the session's diagnostics described as rows
       (`Session.describe()["functions"]`); the three parts of an error as attributes; the built-in nuclei and the
       global optical potentials in `kinds()`; five small defects (2026-11-14).  The page reads the `<thm>` keys, the
-      session's diagnostics, the error parts and the two lists from them (2026-11-14, `web_ui.md` section 11.9).
+      session's diagnostics, the error parts and the two lists from them (2026-11-14, `web_ui.md` section 11.9); the
+      Nucleus tab adds and removes pairs, edits B and the amplitude flag, and makes a new level from the allowed
+      channels; the Fit tab shows a fit's outcome, notices and MINOS validity per side (section 11.10).
 - [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
       key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
       provisional `SESSION_OPTIONS` gone (2026-11-13).

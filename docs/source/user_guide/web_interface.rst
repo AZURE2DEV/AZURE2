@@ -56,10 +56,19 @@ record it names; the ``<config>`` entries, edited as text (an empty value remove
 the history of edits; the project's text, read-only, with **Replace text** for an edit of the whole; the engine's
 version, build and data files.
 
-**Nucleus.**  The particle pairs (radius, masses, separation energy and excitations can be edited; choose a row);
-the levels; for the chosen level its energy, its fixed and active flags and its channels, whose widths are edited in
-place (Enter sends a width; the status line then shows the χ² before and after, and Undo takes the edit back).  A
-width is written as the file has it (Γ in eV, or an ANC in fm^-1/2 for a bound channel).  The γ-decay and potential
+**Nucleus.**  The particle pairs: choose a row to edit its radius, masses, separation energy, excitations and THM
+binding energy B (the fields are those the server's pair edit takes), or to remove it with **Remove pair** (refused
+while a level has a channel of the pair, in the engine's words; then **Remove pair … and its channels** removes
+those channel rows too, and with them their fit parameters).  **+ pair** adds one: its kind (particle, photon,
+beta), its partners (J, parity, Z, mass in u, g), separation energy, radius and the rest; a pair no level names yet
+is kept in the file by a row of its own.  The levels; **+ level** adds one: J (0.5, 1, ...), parity, E and whether
+its energy is fixed, then **Channels** lists the channels that J^π has with the project's pairs (the engine's rule,
+up to ``l max``), each added with width 0, fixed (with every one checked, a J^π the project has takes its group's
+channels).  For the chosen level its energy, its fixed and active flags and its channels, whose widths are edited in
+place (Enter sends a width; the status line then shows the χ² before and after, and Undo takes the edit back), with
+whether each width is an amplitude.  A width is written as the file has it (Γ in eV, an ANC in fm^-1/2 for a bound
+channel, or an amplitude in MeV^1/2 where the row says so; ticking the amplitude box does not convert the number).  The
+γ-decay and potential
 records are edited with the same forms as the records of the Data tab.
 
 **Data.**  The records of every section of the project file, one group per section (data sets, targets,
@@ -76,7 +85,8 @@ method's settings with their defaults, the start point (the working parameters, 
 the best point of a job) and **Run**.  The methods are first the engine's own fitters, one per row of the engine's
 fitter table (``pyazr.kinds()["fitters"]``, the fits of the command-line program): ``engine_migrad`` (the program's
 default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-gradient``; under the method the
-engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow);
+engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow,
+whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
 on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the rate is
 listed greyed with the pyazr call it waits for.  A job runs in its own process on the text of
@@ -94,7 +104,12 @@ engine's status in its own words (``converged``, ``call_limit``, ``stopped``, ..
 writes into ``param.sav``, its covariance HESSE's after MIGRAD and (JᵀJ + priors)⁻¹ after LM and GSL-LM.  While it
 runs, the panel shows the stage (fit, then HESSE and MINOS, whose calls are counted on) and, for LM, its damping;
 **Stop** ends it at the best point it has seen.  Where LM or GSL-LM cannot run (a data set without an analytic
-Jacobian) the engine runs MIGRAD in its place: the result shows the engine's notice and the fitter that ran.
+Jacobian) the engine runs MIGRAD in its place: the result shows the engine's notice and the fitter that ran.  The
+result shows the fit's outcome in the words every fitter shares: ``converged`` in a green box, anything else
+(``call_limit``, ...) in a warning box saying the best point is not a minimum; and the engine's notices (a call
+limit the fitter ignored, a call limit reached).  After the engine's MINOS the parameter table's column **MINOS
+validity** says for each side whether the crossing was found or why not (``at_limit``, ``call_limit``,
+``new_minimum``).
 Below, the table of every parameter: name, kind (its description on hover), free or fixed, the unit of x,
 the working x (a free parameter's value is edited here: Enter sets it, the header's χ²
 follows; **Reset x** goes back to the text's values), the physical value, bounds, prior, and for the job shown its
@@ -164,10 +179,12 @@ experiments with the data sets that name them and their keys as written; a row o
 target, spectator, Ebeam, background, ps window, distortion, optical potentials, vertexModel, coherent background,
 ...) with "data sets that join", and **Remove**; **+ experiment** adds one.  The forms are the engine's table of the
 keys it reads, so a key the engine gains appears without a change of the page; the beam, target and spectator boxes
-offer the nuclei the engine knows by name and the optical-potential boxes its global sets (``pyazr.kinds()``).  Every change is one edit of the project:
+offer the nuclei the engine knows by name and the optical-potential boxes its global sets (``pyazr.kinds()``).  Every
+change is one edit of the project:
 **Undo** takes it back, and what the engine refuses is shown in its words.  **Channels**: the THM pairs with their
-binding energy B and their channels, with whether a width is an amplitude; these are read from the session and
-cannot be edited here yet.  **Diagnostics**: the session's THM calls at the working parameters: the experiments'
+binding energy B and their channels, with whether a width is an amplitude, as the session reads them; a row opens
+the pair or the level in the Nucleus tab, where both are edited.  **Diagnostics**: the session's THM calls at the
+working parameters: the experiments'
 profiled norms and backgrounds (with their σ and covariance, and the coherent background's parameters), the entrance
 vertex per channel and level, the Coulomb line shape per level, and the distortion factor R(E), each with its form,
 its numbers, its plots (an energy outside the reach of the spectator window is a gap), CSV and Copy as Python, as in
@@ -176,10 +193,9 @@ the Physics tab.  A view is a link: ``#/thm/LC09?fn=thm_vertex``.
 Not there yet
 -------------
 
-In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are not
-edited from the THM tab.
-Adding or removing a particle pair, generating channels from a J^π,
-the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical
+In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are
+edited in the Nucleus tab, not in the THM tab.  The session's options as editable keys, the file browser, EXFOR and
+ENSDF imports, the Wigner limits and physical
 widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction
 rate, and live updates pushed by the server (the page asks every three seconds whether another
 client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is

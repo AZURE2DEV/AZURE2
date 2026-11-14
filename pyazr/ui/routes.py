@@ -100,7 +100,7 @@ ROUTES = (
           "Rename a record with every reference to it.", args=("name", "new")),
     Route("GET", "/api/project/levels", P, "pyazr.Project.levels", "Every level of <levels> with its channels."),
     Route("POST", "/api/project/levels", P, "pyazr.Project.add_level",
-          "Add a level: J, parity (+1/-1), energy (MeV), channels [{pair, l, s, width, fixed}].",
+          "Add a level: J, parity (+1/-1), energy (MeV), channels [{pair, l, s, width, fixed}] or \"allowed\".",
           args=("J", "parity:int", "energy:float", "channels"), kwargs=("fixed",)),
     Route("PATCH", "/api/project/levels/{label:path}/channels/{pair}/{l}/{s}", P, "pyazr.Project.set_channel",
           "Set a channel's width (the row's convention), whether it is fixed, whether the width is an amplitude; s as "
@@ -124,6 +124,10 @@ ROUTES = (
     Route("DELETE", "/api/project/pairs/{key}", P, "pyazr.Project.remove_pair",
           "Remove a pair (refused while a level names it, unless remove_channels).", args=("key:int",),
           kwargs=("remove_channels",)),
+    Route("GET", "/api/project/allowed_channels", P, "pyazr.Project.allowed_channels",
+          "The channels a level of spin J and parity (+1/-1) has with the project's pairs (the engine's rule): "
+          "[{pair, l, s}]; l_max, multipolarity_max, multipolarities_max as Project.allowed_channels takes them.",
+          args=("J:float", "parity:int"), kwargs=("l_max:int", "multipolarity_max:int", "multipolarities_max:int")),
     Route("GET", "/api/project/reaction", P, "pyazr.Project.reaction",
           "The reaction label from pair entrance to pair exit (query).", args=("entrance:int", "exit:int")),
     Route("GET", "/api/project/config", P, "pyazr.Project.config", "The <config> entries."),
@@ -300,7 +304,6 @@ PROJECT_NOT_SERVED = {
     "directory": "a property: the project's directory is in GET /api/project (root)",
     "unsaved": "a property: GET /api/project",
     "add_<kind>": "POST /api/project/records with the kind (Project.add)",
-    "allowed_channels": "a read the Nucleus tab's new-level form will ask for when it is ported to the pair edits",
 }
 
 

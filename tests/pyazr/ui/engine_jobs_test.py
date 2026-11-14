@@ -8,7 +8,10 @@ environment's threads (one under ctest):
      is the objective at the start point;
   2. the engine's MINOS as a job that follows an engine fit, from its best point: asymmetric intervals of every free
      parameter; MINOS as a setting of the fit job gives the same kind of intervals;
-  3. a call limit ends the fit with the engine's status said ("ended", the status "call_limit" in its words);
+  3. a call limit ends the fit with the engine's status said ("ended", the status "call_limit" in its words, the
+     result's outcome "call_limit"; on T2 with a limit of 40 too, where a fit without a limit is "converged"); a
+     fitter that ignores a call limit says so in the result's notices, as the engine's result does; MINOS's
+     validity per side is the engine's; the fitter rows carry the table's "call_limit" and "fallback" columns;
   4. Accept writes the job's end point into the project (one history entry; the χ² of the project as written equals
      the job's χ² at its best point to rounding of the written digits) and Undo restores the start χ² exactly;
   5. on T2, a stop request ends a running engine fit (MIGRAD and LM) within one objective call of the request, with
@@ -114,6 +117,9 @@ def test_engine_minos_follows_an_engine_fit(t3):
     r, _ = direct(t3, "migrad", minos=True)
     assert {n: [m["lower"], m["upper"]] for n, m in with_minos["result"]["minos"].items()} == \
         {n: list(v) for n, v in r.minos.items()}
+    assert {n: m["sides"] for n, m in with_minos["result"]["minos"].items()} == r.minos_valid
+    assert all(m["valid"] == all(v["valid"] for v in m["sides"].values())
+               for m in with_minos["result"]["minos"].values())
     r = t3.post("/api/jobs", json={"kind": "fit", "method": "engine_lm", "settings": {"minos": True}})
     assert r.status_code == 422 and r.json()["allowed"] == ["max_calls"], r.text
 
@@ -123,6 +129,24 @@ def test_call_limit_is_said_in_the_engine_words(t3):
     r, _ = direct(t3, "migrad", max_calls=20)
     assert r.status == "call_limit" and done["state"] == "ended" and "call_limit" in done["result"]["message"]
     assert done["best"]["objective"] == r.objective
+    assert done["result"]["outcome"] == r.outcome == "call_limit" and done["result"]["notices"] == r.notices
+    lm = wait_job(t3, start(t3, method="engine_lm", settings={"max_calls": "20"})["id"])
+    r, _ = direct(t3, "lm", max_calls=20)
+    assert lm["result"]["notices"] == r.notices and r.notices, (lm["result"], r.notices)
+    import pyazr
+    fitters = pyazr.kinds()["fitters"]
+    for row in engine_fit_rows(t3):
+        f = fitters[row["method"].removeprefix("engine_")]
+        assert row["facts"]["honours a call limit"] == f["call_limit"], row
+        assert row["facts"]["falls back to"] == (f["fallback"] or "none"), row
+
+
+def test_t2_call_limit_of_40_is_not_a_convergence(t2):
+    limited = wait_job(t2, start(t2, method="engine_migrad", settings={"max_calls": "40"})["id"])
+    print(f"\n  T2, max_calls 40: state {limited['state']}, outcome {limited['result']['outcome']}, best "
+          f"{limited['best']['objective']!r}, notices {limited['result']['notices']}")
+    assert limited["state"] == "ended" and limited["result"]["outcome"] == "call_limit", limited["result"]
+    assert limited["result"]["valid"] is False
 
 
 def test_accept_then_undo(t3):

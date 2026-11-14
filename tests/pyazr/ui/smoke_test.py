@@ -171,6 +171,13 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert edit["edited"] and edit["undone"], edit
             assert edit["chi2_after"] != edit["chi2_before"] and edit["chi2_back"] == edit["chi2_before"], edit
             assert edit["rev_after"] == edit["rev_before"] + 1 and edit["rev_back"] == edit["rev_after"] + 1, edit
+        pair = result["pair"]  # a pair added with the Nucleus tab's form, removed with its button, both undone
+        print(f"{label}: pair step {pair}")
+        if "skipped" not in pair:
+            assert pair["added"] and pair["removed"] and pair["undone"], pair
+            assert (pair["after_add"], pair["after_remove"], pair["after_undo"]) == (
+                pair["before"] + 1, pair["before"], pair["before"]), pair
+            assert pair["chi2_added"] == pair["chi2_before"] == pair["chi2_back"], pair  # no level names the pair
         fit = result["fit"]  # Run, progress, Stop (or the end), Accept, Undo: the header's chi2 moves and returns
         if "skipped" not in fit:
             assert fit["progress_seen"] and fit["plot"] and fit["ended"] and fit["accepted"] and fit["undone"], fit

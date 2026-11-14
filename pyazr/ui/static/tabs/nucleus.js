@@ -1,18 +1,66 @@
-// The Nucleus tab (docs/upgrade/web_ui.md section 6.2): the particle pairs (edited through set_pair), the levels
-// with their channels (a width, an energy, a fixed flag edited through the project's routes: each edit is one entry
-// of the history that Undo takes back, and the header shows the χ² the engine computes after it), and the records of
-// the sections NUCLEUS_SECTIONS (γ decays, potentials) through the generated forms.
-//
-// Adding and removing pairs waits for pyazr (Project.add_pair, remove_pair): the page has no button for it.
+// The Nucleus tab (docs/upgrade/web_ui.md section 6.2): the particle pairs (added with add_pair, edited with
+// set_pair, the THM binding energy among their numbers, removed with remove_pair), the levels with their channels (a
+// width, an energy, a fixed flag, whether a width is an amplitude; a new level with the channels allowed_channels
+// gives), and the records of the sections NUCLEUS_SECTIONS (γ decays, potentials) through the generated forms.  Every
+// edit is a Project call through the project's routes: one entry of the history that Undo takes back, the header
+// showing the χ² the engine computes after it, a refusal shown in the engine's words.
 
 import { pathOf } from "../api.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, h, section } from "../ui.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel, recordRoute } from "./records.js";
 
-// The editable numbers of a pair, with the units the route documents (PATCH /api/project/pairs/{key}).
-const PAIR_FIELDS = [["radius", "fm"], ["light_mass", "u"], ["heavy_mass", "u"], ["separation_energy", "MeV"],
-  ["light_excitation", "MeV"], ["heavy_excitation", "MeV"]];
+// The units of the pairs' numbers as the routes document them (PATCH and POST /api/project/pairs); the fields
+// themselves are the routes' arguments (GET /api/describe), so a field a route gains is shown with its name alone.
+const UNITS = { radius: "fm", light_mass: "u", heavy_mass: "u", separation_energy: "MeV", light_excitation: "MeV",
+  heavy_excitation: "MeV", binding_energy: "MeV", mass: "u" };
+// A new pair's partners: add_pair's dicts {J, parity, Z, mass (u), g}; a photon pair takes no light partner.
+export const PARTNER = [["J", "spin"], ["parity", "+1 or -1"], ["Z", "charge number"], ["mass", "u"],
+  ["g", "g-factor, default 0"]];
+// add_pair's kinds; the arguments of the route that are not numbers.
+export const PAIR_KINDS = ["particle", "photon", "beta"];
+const STRUCTURED = new Set(["kind", "light", "heavy"]);
+
+/** The arguments of a route of the server's table (GET /api/describe: routes[].arguments), without the path's own
+ * and the revision. */
+export function routeArguments(routes, method, path) {
+  const r = (routes || []).find((x) => x.method === method && x.path === path);
+  const own = new Set((path.match(/\{(\w+)/g) || []).map((m) => m.slice(1)));
+  return r ? r.arguments.map((a) => a.split(":")[0]).filter((a) => !own.has(a) && a !== "rev") : [];
+}
+
+/** A number typed as a number; any other text as typed (pyazr converts it or refuses it with its words). */
+const valueOf = (t) => (t !== "" && Number.isFinite(Number(t)) ? Number(t) : t);
+
+/** The body of POST /api/project/pairs from a new pair's texts ({kind, "light.J", ..., field: text}): the partners
+ * as add_pair's dicts (none for a photon's light partner), the route's other arguments where typed. */
+export function newPairRequest(texts, fields) {
+  const body = { kind: texts.kind || PAIR_KINDS[0] };
+  for (const side of ["light", "heavy"]) {
+    if (side === "light" && body.kind === "photon") continue;
+    const partner = {};
+    for (const [k] of PARTNER) {
+      const t = String(texts[`${side}.${k}`] ?? "").trim();
+      if (t !== "") partner[k] = valueOf(t);
+    }
+    body[side] = partner;
+  }
+  for (const f of fields) {
+    const t = String(texts[f] ?? "").trim();
+    if (!STRUCTURED.has(f) && t !== "") body[f] = valueOf(t);
+  }
+  return body;
+}
+
+/** The body of POST /api/project/levels: J, parity, E (MeV), whether its energy is fixed, and the channels checked
+ * among those allowed_channels gave ({pair, l, s}, width 0, fixed) -- or "allowed" when every one is checked
+ * (add_level then gives a J^π the project has its group's channels). */
+export function newLevelRequest({ J, parity, energy, fixed }, allowed, checked) {
+  const chosen = allowed.filter((c, i) => checked[i]);
+  return { J: valueOf(String(J).trim()), parity: Number(parity), energy: valueOf(String(energy).trim()),
+    fixed: Boolean(fixed), channels: chosen.length === allowed.length && allowed.length ? "allowed"
+      : chosen.map((c) => ({ pair: c.pair, l: c.l, s: c.s, width: 0, fixed: true })) };
+}
 
 export async function render(ctx, el, args) {
   const [pairs, levels, records, problems] = await Promise.all([ctx.api.get("/api/project/pairs"),
@@ -23,40 +71,93 @@ export async function render(ctx, el, args) {
   el.appendChild(msg);
 
   // -- pairs
+  const routes = ctx.describe?.routes || [];
   const pairRows = pairs.map((p) => ({ ...p, j_light: p.two_j_light, j_heavy: p.two_j_heavy }));
   const pairTable = renderTable(document, {
-    rowKey: (r) => String(r.key), label: "pairs", withFilter: false,
-    caption: "Particle pairs (adding and removing pairs waits for pyazr: Project.add_pair, remove_pair)",
+    rowKey: (r) => String(r.key), label: "pairs", withFilter: false, selected: args[0] === "pair" ? args[1] : null,
+    caption: "Particle pairs of <levels>",
     columns: [{ key: "key", title: "key", numeric: true }, { key: "label", title: "pair" },
       { key: "kind", title: "kind", numeric: true, doc: "0 particle, 10 photon, 20 beta (the engine's pair type)" },
       { key: "j_light", title: "2J₁", numeric: true }, { key: "j_heavy", title: "2J₂", numeric: true },
       { key: "light_mass", title: "M₁", unit: "u", numeric: true }, { key: "heavy_mass", title: "M₂", unit: "u",
         numeric: true }, { key: "separation_energy", title: "S", unit: "MeV", numeric: true },
       { key: "heavy_excitation", title: "E_x2", unit: "MeV", numeric: true },
-      { key: "radius", title: "a", unit: "fm", numeric: true }],
-    rows: pairRows, onSelect: (r) => showPair(r),
+      { key: "radius", title: "a", unit: "fm", numeric: true },
+      { key: "binding_energy", title: "B (THM)", unit: "MeV", numeric: true,
+        doc: "the THM binding energy of the Trojan horse whose transferred particle is the light partner (0: none)" }],
+    rows: pairRows, onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
   });
-  const pairEdit = h("div.inline-form");
-  const pairsBox = section("Pairs", pairTable.element, pairEdit);
+  const pairEdit = h("div.pair-edit");
+  const pairsBox = section("Pairs", pairTable.element,
+    button("+ pair", "Add a pair (POST /api/project/pairs: add_pair)", () => ctx.navigate("#/nucleus/pair/+new")),
+    pairEdit);
+  const selectedPair = args[0] === "pair" ? pairs.find((p) => String(p.key) === args[1]) : null;
+  if (selectedPair) showPair(selectedPair);
+  else if (args[0] === "pair" && args[1] === "+new") pairEdit.appendChild(newPairForm());
 
   function showPair(p) {
-    pairEdit.textContent = "";
-    const inputs = PAIR_FIELDS.map(([k, unit]) => {
-      const input = h("input.num", { type: "text", value: String(p[k]), size: 12, "aria-label": `${k} (${unit})` });
-      pairEdit.appendChild(h("label.ctl", {}, h("span.ctl-label", {}, `${k.replace(/_/g, " ")} (${unit})`), input));
-      return [k, input];
+    const fields = routeArguments(routes, "PATCH", "/api/project/pairs/{key}");
+    const inputs = fields.map((k) => {
+      const unit = UNITS[k] || "";
+      const input = h("input.num", { type: "text", value: p[k] === undefined ? "" : String(p[k]), size: 12,
+        "aria-label": unit ? `${k} (${unit})` : k });
+      return [k, input, h("label.ctl", {}, h("span.ctl-label", {}, `${k.replace(/_/g, " ")}${unit ? ` (${unit})`
+        : ""}`), input)];
     });
-    pairEdit.appendChild(button(`Apply to pair ${p.key}`, "set_pair with the changed values", () => {
-      const changed = Object.fromEntries(inputs.filter(([k, i]) => i.value.trim() !== String(p[k]))
-        .map(([k, i]) => [k, Number(i.value)]));
+    const apply = button(`Apply to pair ${p.key}`, "set_pair with the changed values", () => {
+      const changed = Object.fromEntries(inputs.filter(([k, i]) => i.value.trim() !== String(p[k] ?? ""))
+        .map(([k, i]) => [k, valueOf(i.value.trim())]));
       if (!Object.keys(changed).length) return;
       ctx.edit(`set pair ${p.key}`, () => ctx.api.patch(pathOf("/api/project/pairs", p.key), changed), msg)
         .catch(() => {});
-    }, "primary"));
+    }, "primary");
+    const removal = h("div.form-actions");
+    const removeWith = button(`Remove pair ${p.key} and its channels`, "remove_pair(remove_channels=True): the "
+      + "channel rows of the pair go with it, and with them their fit parameters", () => ctx.edit(
+      `remove pair ${p.key} and its channels`, () => ctx.api.del(pathOf("/api/project/pairs", p.key),
+        { remove_channels: true }), msg).then(() => ctx.navigate("#/nucleus"), () => {}));
+    removeWith.dataset.action = "remove-pair-channels";
+    const remove = button(`Remove pair ${p.key}`, "remove_pair: refused while a level has a channel of it (the "
+      + "refusal names them; removing the channels too is the next button)", () => ctx.edit(`remove pair ${p.key}`,
+      () => ctx.api.del(pathOf("/api/project/pairs", p.key), {}), msg).then(() => ctx.navigate("#/nucleus"), () => {
+      if (!removal.contains(removeWith)) removal.appendChild(removeWith);
+    }));
+    remove.dataset.action = "remove-pair";
+    removal.appendChild(remove);
+    pairEdit.append(h("h3", {}, `Pair ${p.key}: ${p.label}`),
+      h("div.inline-form", {}, ...inputs.map(([, , label]) => label), apply), removal);
+  }
+
+  function newPairForm() {
+    const fields = routeArguments(routes, "POST", "/api/project/pairs");
+    const texts = {};
+    const box = (name, label, title, value = "") => {
+      texts[name] = value;
+      const input = h("input.num", { type: "text", value, size: 10, "aria-label": label, title });
+      input.addEventListener("input", () => { texts[name] = input.value; });
+      return h("label.ctl", { title }, h("span.ctl-label", {}, label), input);
+    };
+    const kind = h("select", { "aria-label": "kind" }, PAIR_KINDS.map((k) => h("option", { value: k }, k)));
+    texts.kind = kind.value;
+    kind.addEventListener("change", () => { texts.kind = kind.value; });
+    const partner = (side) => h("div.inline-form", {}, h("span.k", {}, `${side} partner `),
+      ...PARTNER.map(([k, doc]) => box(`${side}.${k}`, `${side} ${k}`, doc)));
+    const others = fields.filter((f) => !STRUCTURED.has(f)).map((f) => box(f, UNITS[f] ? `${f.replace(/_/g, " ")} `
+      + `(${UNITS[f]})` : f.replace(/_/g, " "), f));
+    const add = button("Add pair", "add_pair (POST /api/project/pairs): the engine checks every number", () => ctx.edit(
+      "add a pair", () => ctx.api.post("/api/project/pairs", newPairRequest(texts, fields)), msg)
+      .then((answer) => ctx.navigate(`#/nucleus/pair/${answer?.result ?? ""}`), () => {}), "primary");
+    add.dataset.action = "add-pair";
+    return h("div.new-pair", {}, h("h3", {}, "New pair"), h("p.hint", {}, "A pair no level names yet is kept in "
+      + "<levels> by a row of its own (inactive); a level that names it takes its place. A photon pair has no light "
+      + "partner: the heavy one is the compound nucleus in its final level."),
+    h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "kind"), kind)), partner("light"),
+    partner("heavy"), h("div.inline-form", {}, ...others), h("div.form-actions", {}, add));
   }
 
   // -- levels
   const selectedLevel = args[0] === "level" ? levels.find((l) => l.label === args[1]) : null;
+  const newLevel = args[0] === "level" && args[1] === "+new";
   const levelRows = levels.map((l) => ({ ...l, n: l.channels.length,
     on: l.active ? "on" : "off", efix: l.fixed ? "fixed" : "free" }));
   const levelTable = renderTable(document, {
@@ -69,8 +170,10 @@ export async function render(ctx, el, args) {
     rows: levelRows,
     onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.label)}`),
   });
-  const levelsBox = h("div", {}, section("Levels", levelTable.element));
+  const levelsBox = h("div", {}, section("Levels", levelTable.element, button("+ level", "Add a level with the "
+    + "channels its J^π allows (add_level)", () => ctx.navigate("#/nucleus/level/+new"))));
   if (selectedLevel) levelsBox.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg));
+  if (newLevel) levelsBox.appendChild(newLevelPanel(ctx, pairLabel, msg));
 
   // -- the records of the sections the Nucleus tab claims (γ decays, potentials)
   const kinds = NUCLEUS_SECTIONS.flatMap((s) => ctx.schema.sections[s] || []);
@@ -88,14 +191,16 @@ export async function render(ctx, el, args) {
     recordsBox.appendChild(await newRecordPanel(ctx, kinds, records,
       { onAdded: (r) => ctx.navigate(recordRoute(ctx.schema, r)) }));
   }
-  const record = args[0] && args[0] !== "level" ? mine.find((r) => r.name === args[0]) : null;
+  const record = args[0] && args[0] !== "level" && args[0] !== "pair" ? mine.find((r) => r.name === args[0]) : null;
   if (record) {
     recordsBox.appendChild(await recordPanel(ctx, record, records, problems,
       { onGone: () => ctx.navigate("#/nucleus") }));
   }
-  // what was chosen comes first: a record (or a new one) above the levels; the pairs, rarely edited, last
+  // what was chosen comes first: a record (or a new one) above the levels, a pair above both; the pairs, rarely
+  // edited, last otherwise
   const recordFirst = Boolean(record) || args[0] === "+new";
-  el.append(...(recordFirst ? [recordsBox, levelsBox] : [levelsBox, recordsBox]), pairsBox);
+  const boxes = recordFirst ? [recordsBox, levelsBox] : [levelsBox, recordsBox];
+  el.append(...(args[0] === "pair" ? [pairsBox, ...boxes] : [...boxes, pairsBox]));
 }
 
 /** One level: its energy, fixed and active flags, and its channels with width and fixed flag, each editable. */
@@ -130,7 +235,9 @@ function levelPanel(ctx, level, pairLabel, msg) {
       doc: "the row's convention: a partial width Γ (eV), an ANC (fm^-1/2) or an amplitude (MeV^1/2)",
       render: (r) => widthEditor(r) },
     { key: "fixed", title: "fixed", sortable: false, render: (r) => fixedEditor(r) },
-    { key: "amplitude", title: "amplitude", format: (v) => (v ? "yes" : "") },
+    { key: "amplitude", title: "amplitude", sortable: false, render: (r) => amplitudeEditor(r),
+      doc: "whether the width column is a reduced-width amplitude (MeV^1/2) instead of a partial width or ANC (a "
+        + "particle channel only; the value is not converted: type the width in the new convention)" },
     { key: "line", title: "line", numeric: true },
   ];
   const table = renderTable(document, { columns, rows, rowKey: (r) => r.key, withFilter: false, label: "channels",
@@ -160,6 +267,13 @@ function levelPanel(ctx, level, pairLabel, msg) {
     input.addEventListener("change", send);
     return input;
   }
+  function amplitudeEditor(r) {
+    const flag = h("input", { type: "checkbox", "aria-label": `channel ${r.channel} width is an amplitude` });
+    flag.checked = Boolean(r.amplitude);
+    flag.addEventListener("change", () => chi2Edit(ctx, `amplitude flag of ${level.label} channel ${r.channel}`,
+      () => ctx.api.patch(channelPath(r), { width_is_amplitude: flag.checked }), msg));
+    return flag;
+  }
   function fixedEditor(r) {
     const box2 = h("input", { type: "checkbox", "aria-label": `channel ${r.channel} fixed` });
     box2.checked = r.fixed;
@@ -167,6 +281,59 @@ function levelPanel(ctx, level, pairLabel, msg) {
       () => ctx.api.patch(channelPath(r), { fixed: box2.checked }), msg));
     return box2;
   }
+}
+
+/** A new level: J, parity, E and whether its energy is fixed; the channels its J^π allows with the project's pairs
+ * (GET /api/project/allowed_channels: the engine's rule), each to be checked; Add sends add_level. */
+function newLevelPanel(ctx, pairLabel, msg) {
+  const box = h("section.panel.new-level", { "aria-label": "new level" }, h("h2", {}, "New level"));
+  const J = h("input.num", { type: "text", value: "0.5", size: 6, "aria-label": "J",
+    title: "the spin as a number: 0.5, 1, 1.5, ..." });
+  const parity = h("select", { "aria-label": "parity" }, h("option", { value: "1" }, "+"),
+    h("option", { value: "-1" }, "−"));
+  const energy = h("input.num", { type: "text", value: "", size: 12, "aria-label": "E_λ (MeV)" });
+  const lmax = h("input.num", { type: "text", value: "2", size: 4, "aria-label": "l max" });
+  const fixed = h("input", { type: "checkbox", "aria-label": "energy fixed" });
+  fixed.checked = true;
+  const list = h("div.allowed-channels");
+  let allowed = [];
+  let checks = [];
+  const jValue = () => valueOf(J.value.trim());
+  const channels = button("Channels", "The channels this J^π has with the project's pairs (allowed_channels)",
+    async () => {
+      list.textContent = "";
+      try {
+        allowed = await ctx.api.get(`/api/project/allowed_channels?J=${encodeURIComponent(jValue())}&parity=`
+          + `${parity.value}&l_max=${encodeURIComponent(lmax.value.trim())}`, { quiet: true });
+      } catch (e) {
+        allowed = [];
+        ctx.showError(e, list);
+        return;
+      }
+      checks = allowed.map((c) => {
+        const input = h("input", { type: "checkbox", "aria-label": `channel pair ${c.pair} l ${c.l} s ${c.s}` });
+        input.checked = true;
+        return input;
+      });
+      list.append(h("p.hint", {}, `${allowed.length} channel(s), each added with width 0, fixed; with every one `
+        + "checked, a J^π the project has gets its group's channels."),
+      ...allowed.map((c, i) => h("label.choice", {}, checks[i], ` pair ${c.pair} (${pairLabel[c.pair] ?? ""}), `
+        + `l ${c.l}, s ${c.s}`)));
+    });
+  channels.dataset.action = "allowed-channels";
+  const add = button("Add level", "add_level (POST /api/project/levels)", () => {
+    const body = newLevelRequest({ J: jValue(), parity: parity.value, energy: energy.value, fixed: fixed.checked },
+      allowed, checks.map((c) => c.checked));
+    ctx.edit("add a level", () => ctx.api.post("/api/project/levels", body), msg)
+      .then(() => ctx.navigate("#/nucleus"), () => {});
+  }, "primary");
+  add.dataset.action = "add-level";
+  box.append(h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "J"), J),
+    h("label.ctl", {}, h("span.ctl-label", {}, "parity"), parity),
+    h("label.ctl", {}, h("span.ctl-label", {}, "E_λ (MeV)"), energy),
+    h("label.ctl", {}, fixed, h("span.ctl-label", {}, "energy fixed")),
+    h("label.ctl", {}, h("span.ctl-label", {}, "l max"), lmax), channels), list, h("div.form-actions", {}, add));
+  return box;
 }
 
 /** An edit after which the status line names the χ² before and after (both the engine's, as sent). */

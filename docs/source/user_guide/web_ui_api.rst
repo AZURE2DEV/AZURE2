@@ -66,8 +66,22 @@ What the server keeps
   ``experiment`` argument), in the session worker at the working parameters (the fit vector ``params`` is not an
   argument of the route); an argument with ``"required": false`` may be left out.  An answer adds ``lines`` (a field
   over channels or levels: one list per line, labelled by the fields its row names), ``facts`` (the call's scalars
-  with units) and, for the THM profiles, ``tables``.  The session's own answer of each THM call, as plain data, is ``POST
+  with units) and, for the THM profiles, ``tables``.  The session's own answer of each THM call, as plain data, is
+  ``POST
   /api/session/thm_<call>`` (``experiment``, ``energies``).
+- **Pairs and levels** (the Nucleus tab's routes): ``GET /api/project/pairs``; ``POST /api/project/pairs``
+  (``Project.add_pair``: ``kind``, ``light`` and ``heavy`` as ``{J, parity, Z, mass, g}``, ``separation_energy``,
+  ``radius``, ...; the answer's ``result`` is the new key), ``PATCH /api/project/pairs/<key>`` (``set_pair``, with
+  ``binding_energy`` the THM B), ``DELETE /api/project/pairs/<key>`` (``remove_pair``; refused while a level names
+  the pair unless ``"remove_channels": true``); ``GET /api/project/allowed_channels?J=&parity=`` (the channels a J^π
+  has with the project's pairs: ``[{pair, l, s}]``; ``l_max`` and the photon limits as ``Project.allowed_channels``
+  takes them); ``POST /api/project/levels`` (``channels`` a list or ``"allowed"``); ``PATCH
+  /api/project/levels/<label>/channels/<pair>/<l>/<s>`` (``width``, ``fixed``, ``width_is_amplitude``).
+- **What a fit returns**: an engine fit job's ``result`` has ``outcome`` (the words every fitter shares:
+  ``converged``, ``call_limit``, ...), ``notices`` (the engine's sentences), and after MINOS per parameter ``lower``,
+  ``upper``, ``valid`` and ``sides`` (``{lower, upper}``, each ``{valid, at_limit, call_limit, new_minimum}``); the
+  rows of ``GET /api/jobs/kinds`` carry the fitter table's columns among their ``facts`` (``honours a call limit``,
+  ``falls back to``).
 - **THM** (the THM tab's routes): ``GET /api/project/thm`` (``null`` without a ``<thm>`` section), ``PATCH
   /api/project/thm`` (``{"options": {key: value or null}}``), ``PUT /api/project/thm/experiments/<name>``
   (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET

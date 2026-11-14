@@ -197,6 +197,7 @@ input.wide { max-width: 100%; }
   margin: 0 0 8px; }
 .error-box .k { color: var(--muted); }
 .warn-box { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 6px 10px; margin: 6px 0; }
+.ok-box { border-left: 3px solid var(--ok); padding: 6px 10px; margin: 6px 0; }
 
 /* text, overlay */
 pre.project-text { max-height: 420px; overflow: auto; background: var(--bg); padding: 8px; margin: 4px 0 0; }

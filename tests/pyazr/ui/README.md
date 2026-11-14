@@ -48,7 +48,9 @@ program whose `chiSquared.out` the API's numbers are compared with.
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
   record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
   and undone with the buttons; in the Physics tab the first function, a Coulomb function with elements outside its
-  domain, its table view and the session's channel functions, each with its status line and Python text) and takes a
+  domain, its table view and the session's channel functions, each with its status line and Python text; the
+  Nucleus tab's new pair and new level forms, a pair added with the form, removed with its button and both undone)
+  and takes a
   screenshot per tab (and of the masked Coulomb function)
   (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
 - `thm_routes_test.py`: the THM tab's routes: every diagnostic of `/api/session/functions` and every raw route
@@ -56,6 +58,10 @@ program whose `chiSquared.out` the API's numbers are compared with.
   experiment edits against the program's `chiSquared.out` and Undo; refusals without THM content (the message's
   parts); the keys served as `pyazr.kinds()["thm"]`; the rows as pyazr's rows (`Session.describe()["functions"]`), a
   row added to pyazr's table drawn with no line of the page.
+- `nucleus_routes_test.py`: the Nucleus tab's edits against the same `Project` calls: a pair added and removed on
+  T1 (texts equal, the objective unchanged, Undo byte for byte), a pair in use refused with remove_pair's message and
+  removed with its channels, the THM binding energy on T2 (text and objective of a session on the direct edit), the
+  amplitude flag, `allowed_channels` with and without `l_max`, a new level with the allowed channels.
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails
@@ -213,6 +219,18 @@ Added with the sampler and the bands (each shown failing on 2026-11-14, the file
   test_linear_band_and_band_from_draws_agree`.
 - the band is a closed region (the lower edge drawn back); a band of other points is not drawn: each broken in
   turn; each fails `node_test.py` (`js/results.test.mjs`).
+
+Added with the pair edits and what a fit returns (each shown failing on 2026-11-14, the file restored after):
+
+- a photon pair has no light partner: the check dropped from `newPairRequest`; fails `node_test.py`
+  (`js/nucleus.test.mjs`).
+- MINOS validity per side: the sides swapped in `minosValidity`; fails `node_test.py` (`js/fitting.test.mjs`).
+- the outcome of an engine fit: left out of the job's result; fails
+  `engine_jobs_test.py::test_call_limit_is_said_in_the_engine_words`.
+- `l_max` of `allowed_channels`: dropped from the route's arguments; fails
+  `nucleus_routes_test.py::test_allowed_channels_and_a_new_level`.
+- MINOS's sides from the engine: `minos_valid` left empty in the adapter; fails
+  `engine_jobs_test.py::test_engine_minos_follows_an_engine_fit`.
 
 Added with the page on pyazr's tables (each shown failing on 2026-11-14, the file restored after):
 
