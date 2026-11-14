@@ -2,6 +2,71 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-7-small-repairs-3`, `feature/upgrade-9-webui-new-pyazr` and
+`feature/upgrade-6-program-commands`. The agents' entries follow. Two merge conflicts were resolved by hand:
+`docs/source/user_guide/web_ui_api.rst` (the page branch's new text, with ``pyazr.Project`` as a literal, since
+the pages are now built with `-n`) and `tests/CLAUDE.md` (both added paragraphs kept).
+
+- **The program takes commands**: `AZURE2 calculate|fit|extrapolate|minos|rate|mcmc [options] FILE`. One table
+  (`src/RunRequest.cpp`) holds every question of a run; the menu and the command line both fill one
+  `RunRequest`, and one preparation (`src/RunPreparation.cpp`) turns it into the run. A command reads nothing
+  from standard input. The menus stay until the tests are ported (the next branch). `src/AZURE2.cpp` went from
+  1607 to 958 lines.
+- **The page**: the Nucleus tab adds and removes pairs (a pair in use is refused first, with a second explicit
+  button), sets a pair's THM binding energy and a channel's "width is an amplitude" flag, and offers the
+  channels a J^pi allows; the Fit tab shows how a fit ended (`outcome`, notices, the MINOS sides); the THM keys
+  and the session functions come from pyazr's tables; an error's three parts come from the exception.
+- **Repairs**: a refusal of a level edit is a value with its three parts (`experiment::EditRefusal`), carried
+  to pyazr's exception; `Parameter.jpi` is the engine's text ("1/2+"); `save_fit` into another directory is
+  refused when a covariance file names its data files relatively; the THM set-up refusals name the way on;
+  `pyazr_ec_relativistic` repaired; the pages build with `-n`. The list of functions without a caller is in
+  the repairs entry: nothing deleted.
+
+**Verified on the merged tree** (build `work/b-trial71`, eight threads): 0 warnings; all projects in the three
+bases against `tab-t70-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `work/b-trial70`; 276 of 276 quick tests (with `docs_build`, `cli_commands`, `thm_refusals`,
+`pyazr_ui_nucleus_routes`). The director's own runs (`work/director/spot71/`): a T2 fit (analytic gradient), a
+T2 fit with the band and the scaled covariance (LM) and a 13N fit (LM), each by menu and by command: 49, 52 and
+36 files, all identical, equal exit statuses; `--help` lists the commands; `fit --delta-chi2=1`, `minos`
+without `--delta-chi2` and an unknown command exit 2 with the three parts; `set_pair(1, radius=-1)` and
+`remove_pair` of a pair in use raise with `what`, `allowed`, `fix`; the first parameters of T2 have `jpi`
+"1-"; `save_fit` of T2 into another directory is refused; `pyazr_ec_relativistic` passes. The page agent's T2
+number after a binding-energy edit (11039.423103526951) is the objective, with the prior terms; the
+chi-squared of the same edit is 11034.520562796952: both reproduced, no disagreement.
+
+**The long suite of rehearsal 69** (`work/director/full69.out`): `run_tests.sh` 168 passed, 0 failed; the
+converted-tree gate exit 0 (679 / 643 / 679 files identical to `tab-t68-1`); the model-data thread check and
+the 12-thread check identical; 272 of 272 quick tests; the slow tests 13 of 14, the one failure
+`pyazr_ec_relativistic`, which this merge repairs.
+
+**New reference**: tag `tab-t71-1`, base build `work/b-trial71`.
+
+**The PI on the page and on what comes next (2026-11-14, his words)**: "I kind of like the new WebUI, but I
+think it should have something, like the icon, that refers to the original AZURE2 or the colors. […] it is
+also not as comprehensible for a median user as the previous one, so I would make it more user friendly, like
+writing settings by hand is not the best, the covariance constructor etc." and "Imagine that the experts will
+use skills and do everything through pyazr, for which we can give many example scripts; however, an avarage
+user must open the beautiful UI and not be overwhelmed with the settings and everything, should easily set the
+pairs, the levels and the data. Also, it must be an easy way of checking the evaluations. Can we also add an
+ENDF file reader or exporter? It would be nice for the evaluators. Also, if the ENDF utilities codes are
+installed, it could be able to launch it to check the ENDF file and correct it etc. Also a reaction rate
+utilitiy." **Taken by the director as**: the page serves the average user first (pairs, levels, data, run,
+compare; the rest folded away), the experts are served by pyazr, the skills and example scripts; a covariance
+builder and a reaction-rate utility are built (arithmetic in pyazr, the page calls it); ENDF is designed first
+(what of a project maps to which ENDF section, reader and writer, the checking codes run when found, nothing
+installed), then built from the design.
+
+**Open** (beside the earlier lists): the commands' help marks `--temperature-file` as required though it is
+one of two ways, repeats ranges and lets `--delta-chi2=0` through; the menu accepts a negative rate entrance
+key; `save_fit(relative_to=D)` into another directory writes a T2 snapshot that cannot be opened;
+`LevelEdit.error` repeats `refusal.Text()`; on the page a job's call count includes HESSE's calls and "ended
+without convergence" has the colour of "finished". **For the PI**: whether `--no-readline` stays accepted
+once the menus are gone; whether `--covariance-band` and `--scale-covariance` in an options file apply to
+any command; which functions without a caller go.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands`) — the program takes commands (first milestone)
 
 **Done**: `AZURE2 <command> [options] FILE` with the commands `calculate`, `fit`, `extrapolate`, `minos`, `rate`,
