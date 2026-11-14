@@ -165,7 +165,7 @@ for command in calculate extrapolate; do
   else bad "(b) $command: light vs heavy partner excitation differ, max rel '$w'"; fi
 done
 for seg in 'aa=1_R=2' 'aa=2_R=1' 'aa=1_R=1' 'aa=2_R=2'; do
-  [ -s "$WORK/b_heavy_3/output/AZUREOut_$seg.extrap" ] || bad "(b) no AZUREOut_$seg.extrap"
+  [ -s "$WORK/b_heavy_extrapolate/output/AZUREOut_$seg.extrap" ] || bad "(b) no AZUREOut_$seg.extrap"
 done
 run b_noex "$M/aC_light_noex.azr" extrapolate
 run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" extrapolate   # the same (a,a') extrapolations with the excitation on 12C
