@@ -200,12 +200,12 @@ export async function renderExport(ctx, el, params, { showJob, routeOf, go }) {
   } else {
     lost.append(h("h3", {}, "What the file will not hold"),
       h("ul", {}, ...preview.losses.map((t) => h("li", {}, t)), ...preview.not_written.map((t) => h("li", {}, t))),
-      preview.photon_widths.length ? renderTable(document, { rows: preview.photon_widths.map((w, i) => ({ k: i,
+      ...(preview.photon_widths.length ? [renderTable(document, { rows: preview.photon_widths.map((w, i) => ({ k: i,
         ...w })), rowKey: (r) => r.k, withFilter: false, label: "photon widths",
       caption: "The photon widths, listed in the MF=1 text (MF=2 holds the particle channels)",
       columns: [{ key: "jpi", title: "Jπ" }, { key: "energy_MeV", title: "E_x", unit: "MeV", numeric: true },
         { key: "pair", title: "to pair", numeric: true }, { key: "multipole", title: "multipole" },
-        { key: "width_eV", title: "Γ_γ", unit: "eV", numeric: true, digits: 6 }] }).element : null);
+        { key: "width_eV", title: "Γ_γ", unit: "eV", numeric: true, digits: 6 }] }).element] : []));
   }
   el.appendChild(section("Before writing", lost));
   const range = preview.energy_range_MeV || [];

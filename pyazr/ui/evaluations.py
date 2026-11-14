@@ -424,8 +424,9 @@ def job_rows():
                                  "the data's)"),
                          Setting("e_high", "number", None, "the highest lab energy of the projectile (MeV; empty: "
                                  "the data's)"),
-                         Setting("tolerance", "number", 1e-3, "of the grid: linear interpolation between its "
-                                 "points within this (relative)"),
-                         Setting("number_form", "text", "widest", "widest, classic or e (pyazr.endf.NUMBER_FORMS)")),
+                         Setting("tolerance", "number", 1e-3, "the grid's tolerance: linear interpolation between "
+                                 "its points within this (relative)"),
+                         Setting("number_form", "text", "widest", "the number form: widest, classic or e "
+                                 "(pyazr.endf.NUMBER_FORMS)")),
                facts=(("pyazr call", "pyazr.endf.write"), ("writes", "a new ENDF-6 file of the project folder"))),
     )
