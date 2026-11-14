@@ -23,7 +23,7 @@ For each variant:
   1. the Park and Brune sessions from the same .azr give the same chi2 and
      residuals (rel 1e-9), their free vectors are related by
      gamma_Brune = gamma_Park / sqrt(J) with park_norms (rel 1e-12), and
-     transform_rwa (what save_fit writes) gives the same physical values, the
+     Session.transform (what save_fit writes) gives the same physical values, the
      amplitude inputs as Brune's amplitudes;
   2. objective().residuals_and_jacobian (Park) agrees with central differences of the
      residuals (rel 1e-4 of the largest entry);
@@ -115,12 +115,11 @@ def rel(a, b):
 def level_of(m):
     """Per free parameter: the index of its level in park_norms() order for a
     width, None otherwise."""
-    order = {key: i for i, key in enumerate(m.physical_levels())}
-    out = [None] * len(m.params_rwa)
-    for key, ps in m.parameters.by_physical_level().items():
-        for p in ps:
-            if p.kind == "width" and not p.fixed and p.free_index is not None:
-                out[p.free_index] = order[key]
+    keys = sorted((p.jgroup, p.level) for p in m.parameters.of_kind("energy"))
+    order = {key: i for i, key in enumerate(keys)}
+    out = [None] * len(m.parameters.x0)
+    for p in m.parameters.of_kind("width").free:
+        out[p.free_index] = order[(p.jgroup, p.level)]
     return out
 
 
@@ -154,8 +153,8 @@ with tempfile.TemporaryDirectory() as tmp:
         azr_b = stage(tmp, f"v{k}.brune", block)
         azr_p = stage(tmp, f"v{k}.park", block)
         with Session(azr_b, use_brune=True) as mb, Session(azr_p, use_park=True) as mp:
-            xb = np.asarray(mb.params_rwa, float)
-            xp = np.asarray(mp.params_rwa, float)
+            xb = np.asarray(mb.parameters.x0, float)
+            xp = np.asarray(mp.parameters.x0, float)
             levels = level_of(mp)
             nwidth = sum(lv is not None for lv in levels)
             kinds = [p.kind for p in sorted((p for p in mp.parameters if p.free_index is not None),
@@ -177,8 +176,9 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"x_Brune = x_Park / sqrt(J) for the amplitudes (rel {d:.1e})", d < 1e-12)
             # What save_fit writes: the amplitude-input channels as Brune's
             # amplitudes (the file's convention) in both modes.
-            tb = np.asarray(mb.transform_rwa(xb), float)
-            tp = np.asarray(mp.transform_rwa(xp), float)
+            nr = len(mb.parameters.free.of_kind("energy", "width"))
+            tb = mb.transform(xb)[mb.parameters.free_mask][:nr]
+            tp = mp.transform(xp)[mp.parameters.free_mask][:nr]
             check(f"physical values (save_fit) agree, amplitude inputs as Brune's (rel {rel(tp, tb):.1e})",
                   rel(tp, tb) < 1e-12)
 

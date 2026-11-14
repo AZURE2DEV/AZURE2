@@ -63,7 +63,7 @@ def run(label, sqrt):
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
         a = Session(make_model(work, sqrt), cwd=work)
-        x0 = np.array(a.params_rwa, float)
+        x0 = np.array(a.parameters.x0, float)
         names = [p.name for p in a.parameters if not p.fixed]
         kind = "shift_sqrt" if sqrt else "shift"
         free = [p for p in a.parameters if not p.fixed]

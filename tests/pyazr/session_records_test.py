@@ -65,7 +65,7 @@ def session(work):
     with Session(f3) as m:
         ds, active = m.datasets, m.active_datasets
         chi = {d.name: (d.chi2, d.n) for d in m.evaluate().data}
-        total = m.evaluate(m.params_rwa).chi2
+        total = m.evaluate(m.parameters.x0).chi2
         described = pyazr.describe(f3, as_json=True)["datasets"] if os.getcwd() == os.path.dirname(f3) else None
         check("datasets: the engine's description, the record names in file order",
               type(ds).__name__ == "DescribedDatasets" and [d.name for d in ds] == names, [d.name for d in ds])

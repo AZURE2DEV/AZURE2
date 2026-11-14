@@ -23,6 +23,8 @@ segment whose normalization is freed.
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/inactive_lines_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import glob
 import os
@@ -100,27 +102,28 @@ with tempfile.TemporaryDirectory() as tmp:
           < min(c.line for c in model.level(("1/2+", 20.0)).channels))
 
     with Session(spliced, cwd=work) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         chi2_ref = m.evaluate(x).chi2
         # every engine (jgroup, level) must land on a file level with the
         # same J^pi and energy
         keys = {(lv.group, lv.level): lv for lv in Project.open(spliced).levels() if lv.active}
         bad = []
-        for key, lvls in m.parameters.by_physical_level().items():
-            lv = keys.get((key.jgroup, key.level))
+        for p in m.parameters.of_kind("energy"):
+            key = (p.jgroup, p.level)
+            lv = keys.get(key)
             if lv is None:
                 bad.append(f"{key}: no file level")
                 continue
-            p = lvls[0]
             e = 0.0 if p.level_energy is None else float(p.level_energy)
-            if lv.jpi != key.jpi or abs(lv.energy - e) > 1e-6:
+            jpi = (f"{int(p.J)}" if float(p.J).is_integer() else f"{int(round(2 * p.J))}/2") + ("+" if p.parity > 0 else "-")
+            if lv.jpi != jpi or abs(lv.energy - e) > 1e-6:
                 bad.append(f"{key}: file has {lv.jpi} at {lv.energy}")
         check("every engine level maps to the matching file level", not bad,
               "; ".join(bad[:4]))
 
         # perturb the 1/2+ background pole (the level after the ghost) and
         # snapshot: the values must land on the 20 MeV rows, not the ghost
-        pole = [p for p in m.parameters.widths
+        pole = [p for p in m.parameters.of_kind("width")
                 if p.J is not None and abs(p.J - 0.5) < 1e-9 and p.parity > 0
                 and p.level_energy is not None
                 and abs(p.level_energy - 20.0) < 1e-6 and not p.fixed]
@@ -145,7 +148,7 @@ with tempfile.TemporaryDirectory() as tmp:
     probe_path = probe.save(os.path.join(work, "snap_probe.azr"))
     os.makedirs(os.path.join(work, "output_snap"), exist_ok=True)
     with Session(probe_path, cwd=work) as m2:
-        chi2_back = m2.evaluate(m2.params_rwa).chi2
+        chi2_back = m2.evaluate(m2.parameters.x0).chi2
         check("the snapshot reproduces the perturbed chi-squared",
               np.isclose(chi2_back, chi2_moved, rtol=1e-6),
               f"{chi2_back} vs {chi2_moved} (unperturbed {chi2_ref})")
@@ -161,7 +164,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "output_purged"), exist_ok=True)
     purged_path = purged.save(os.path.join(work, "purged.azr"))
     with Session(purged_path, cwd=work) as m3:
-        chi2_purged = m3.evaluate(m3.params_rwa).chi2
+        chi2_purged = m3.evaluate(m3.parameters.x0).chi2
         check("purging the inactive level changes nothing for the engine",
               np.isclose(chi2_purged, chi2_moved, rtol=1e-9),
               f"{chi2_purged} vs {chi2_moved}")
@@ -185,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "output_seg"), exist_ok=True)
 
     with Session(segazr, cwd=work) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         active = m.active_datasets
         check("active_datasets has one entry per engine segment",
               len(active) == m.nsegments, f"{len(active)} vs {m.nsegments}")
@@ -198,7 +201,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("evaluate().data point counts follow the active segments",
               all(byfile[k][1] == v for k, v in counts.items())
               and set(byfile) == set(counts))
-        norm = m.parameters.norms[0]
+        norm = m.parameters.of_kind("norm")[0]
         seg = m.datasets.by_key(norm.segment_key)
         check("the free norm belongs to meyer_84 by key", seg is not None and "meyer_84" in seg.name)
         moved = x.copy()
@@ -217,7 +220,7 @@ with tempfile.TemporaryDirectory() as tmp:
         sav = os.path.join(work, "moved.sav")
         with open(sav, "w") as fh:
             for i, p in enumerate(m.parameters):
-                v = moved[next(it)] if not m.fixed_params[i] else allrwa[i]
+                v = moved[next(it)] if not p.fixed else allrwa[i]
                 fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
 
     binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made

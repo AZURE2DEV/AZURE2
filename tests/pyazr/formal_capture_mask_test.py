@@ -59,7 +59,7 @@ def worker(work, width, brune, ignore, grad, out):
     write_model(azr, float(width))
     res = {}
     with Session(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
-        x = np.array(a.params_rwa, float)
+        x = np.array(a.parameters.x0, float)
         res["capture"] = np.asarray(a.evaluate(x).data[CAPTURE].model, float).tolist()
         if grad == "1":
             c0, g = a.objective().value_and_grad(x)

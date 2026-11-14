@@ -16,6 +16,8 @@
   8. the working x moves without a rebuild; apply writes it into the text (one history entry).
 
 Run: python3 tests/pyazr/ui/api_test.py (needs fastapi, httpx, the engine; AZURE2_BIN for the program's numbers).
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import hashlib
 import os
@@ -61,7 +63,7 @@ def direct_session(client):
 def test_evaluate_equals_direct_session(t1):
     e = t1.post("/api/evaluate").json()
     s = direct_session(t1)
-    x = np.array(s.params_rwa)
+    x = np.array(s.parameters.x0)
     assert e["objective"] == s.objective()(x)
     assert e["chi2"] == float(s._engine.calculate_chi2_rwa(x))
     models = [d.model for d in s.evaluate(x).data]
@@ -352,7 +354,7 @@ def test_session_options_are_config_keys(t1):
     e = t1.post("/api/evaluate").json()
     import pyazr
     with pyazr.Session(t1.path, use_brune=False) as s:
-        assert e["objective"] == s.objective()(s.params_rwa)
+        assert e["objective"] == s.objective()(s.parameters.x0)
     r1 = rev(t1)
     r = t1.patch("/api/project/config", json={"entries": {"use_park": "1"}, "rev": r1})
     assert r.status_code == 422 and "E_CONFIG_OPTIONS_CONTRADICT" in r.text, r.text

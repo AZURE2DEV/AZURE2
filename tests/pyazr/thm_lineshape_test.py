@@ -191,7 +191,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("2. the engine against the CLI")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
@@ -244,7 +244,7 @@ with tempfile.TemporaryDirectory() as tmp:
     off_dir = project("off1", KINKEYS, one_level=True)
     offk_dir = project("offk1", dict(KINKEYS, lineshape=False), one_level=True)
     with Session(os.path.join(off_dir, "run.azr"), cwd=off_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         m_off = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
         r_off = s.objective().residuals(x)
         try:

@@ -58,7 +58,7 @@ try:
     p.set("yield_1", shift="offset 0.01043168251 MeV fit prior 0 0.0005")
     check("the shift of yield_1 is varied now", p["yield_1"]["shift"] != before, before)
     a = Session(p.save(os.path.join(work, "smooth.azr")), cwd=work)
-    x0 = np.array(a.params_rwa, float)
+    x0 = np.array(a.parameters.x0, float)
     free = [q for q in a.parameters if not q.fixed]
     k = [i for i, q in enumerate(free) if q.kind == "shift"][0]
     step = 1.0e-5  # MeV lab: 21 values over 0.2 keV

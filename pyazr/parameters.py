@@ -3,8 +3,7 @@
 A session hands each fit parameter over as a record with named fields (``Session.parameter_records()``) and each
 particle pair likewise (``Session.pair_records()``).  The fields, their units and the kinds of parameter they describe
 are one table of the engine (``api/src/pybind_records.cpp``; ``pyazr.kinds()["parameter_fields"]`` and
-``["pair_fields"]``): this module types no field name of its own but the few names of earlier pyazr releases kept
-until the session is renamed (``_ALIASES``).
+``["pair_fields"]``): this module types no field name of its own.
 
 - :class:`Parameter`: one record; ``p.name``, ``p.kind``, ``p.unit``, ``p.start``, ``p.fixed``, ``p.free_index``,
   ``p.bounds`` and the fields of its kind (``p.level_label``, ``p.L``, ``p.segment_key``, ``p.prior_sigma``, ...);
@@ -14,7 +13,6 @@ until the session is renamed (``_ALIASES``).
   ``bounds``; ``of_kind``, ``of_level``, ``by_name``, ``free`` select rows (a selection is again a
   :class:`Parameters`); ``put``, ``take`` write and read rows of ``x``; ``read``, ``write`` a parameter file;
   ``table()``, ``to_records()``.
-- :class:`ParameterSet`: :class:`Parameters` with the views of earlier releases (``widths``, ``norms``, ...).
 - :class:`Pair`, :class:`PairSet`: the particle pairs.
 """
 
@@ -65,38 +63,6 @@ def _owner_fields(kind):
     return tuple(r["name"] for r in _field_table("parameter") if r["owner"] and kind in r["kinds"])
 
 
-#: Names of earlier pyazr releases that are not fields of the record, and the field each reads (until the rename of
-#: the session, docs/upgrade/pyazr3.md section 4).
-_ALIASES = {"prior_nominal": "prior_centre", "input_is_rwa": "width_is_amplitude", "density_max": "layout_max",
-            "doppler_max": "layout_max", "sample": "sample_name"}
-
-
-@dataclass(frozen=True)
-class LevelKey:
-    """Identity of one physical R-matrix level (a resonance / pole).
-
-    AZURE2 numbers levels *within* a J-group, so ``level`` alone is ambiguous
-    (every J-group has a level 1).  The unique identity is ``(jgroup, level)``;
-    ``J``/``parity``/``energy`` are carried for readability.  Hashable, so it
-    can key a dict of per-level parameter subsets.
-    """
-    jgroup: int
-    J: float
-    parity: int
-    level: int
-    energy: Optional[float]
-
-    @property
-    def jpi(self) -> str:
-        """The level's J^pi as text, e.g. "3/2-"."""
-        j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
-        return f"{j}{'+' if self.parity > 0 else '-'}"
-
-    def __str__(self):
-        e = "?" if self.energy is None else f"{self.energy:.3f}"
-        return f"{self.jpi}#{self.level}@{e}MeV"
-
-
 class _Record:
     """A read-only record of the engine: its fields are attributes; a field of the table that this record does not
     carry (it describes another kind) reads ``None``."""
@@ -112,8 +78,6 @@ class _Record:
         record = object.__getattribute__(self, "_record")
         if name in record:
             return record[name]
-        if name in _ALIASES and self._which == "parameter":
-            return record.get(_ALIASES[name])
         if name in _field_names(self._which):
             return None
         raise AttributeError(f"{type(self).__name__} has no field {name!r}{close_names(name, record)}; its fields: "
@@ -242,7 +206,7 @@ class Parameters(list):
         """A copy of the start of the fit vector (every free parameter's ``start``, in ``free_index`` order)."""
         if self._x0 is None:
             raise ParameterError("this set of parameters was built without its session, so it has no fit vector; "
-                                 "Session.parameters is the session's table (its x0 is Session.params_rwa).")
+                                 "Session.parameters is the session's table.")
         return self._x0.copy()
 
     @property
@@ -289,11 +253,9 @@ class Parameters(list):
 
     def of_level(self, level):
         """The rows of one level (its energy, widths and gamma_decay numbers), named by its label as
-        :attr:`Parameter.level_label` and ``Project.levels()`` give it (``"3/2- 3.5032"``), by a
-        :class:`LevelKey`, by ``(jgroup, level)`` or by one of its parameters."""
+        :attr:`Parameter.level_label` and ``Project.levels()`` give it (``"3/2- 3.5032"``), by ``(jgroup, level)``
+        or by one of its parameters."""
         if isinstance(level, Parameter):
-            key = (level.jgroup, level.level)
-        elif isinstance(level, LevelKey):
             key = (level.jgroup, level.level)
         elif isinstance(level, tuple):
             key = tuple(level)
@@ -338,17 +300,10 @@ class Parameters(list):
                                  f"names its entries).")
         return x
 
-    def put(self, x, *rows_values):
-        """A copy of the fit vector ``x`` with rows set: ``put(x, rows, values)``, ``rows`` a :class:`Parameter`, a
-        name or a sequence of them (all free), ``values`` one number for all or one per row.
-
-        ``put(x, values)`` sets this set's own free rows (the form of earlier releases; its fixed rows are left out)."""
-        if len(rows_values) == 1:
-            rows, values = [p for p in self if not p.fixed and p.free_index is not None], rows_values[0]
-        elif len(rows_values) == 2:
-            rows, values = self._rows(rows_values[0]), rows_values[1]
-        else:
-            raise ParameterError("put takes (x, rows, values) or (x, values); see help(pyazr.Parameters.put).")
+    def put(self, x, rows, values):
+        """A copy of the fit vector ``x`` with rows set: ``rows`` a :class:`Parameter`, a name or a sequence of them
+        (all free: ``P.of_kind("width").free``), ``values`` one number for all or one per row."""
+        rows = self._rows(rows)
         out = self._vector(x)
         idx = np.array([p.free_index for p in rows], int)
         values = np.asarray(values, float)
@@ -362,17 +317,18 @@ class Parameters(list):
                                  f"them).")
         return out
 
-    def take(self, x, *rows):
-        """The entries of ``x`` of ``rows`` (a :class:`Parameter`, a name or a sequence of them, all free), as an array;
-        ``take(x)`` those of this set's free rows."""
-        chosen = [p for p in self if not p.fixed and p.free_index is not None] if not rows else self._rows(rows[0])
+    def take(self, x, rows):
+        """The entries of ``x`` of ``rows`` (a :class:`Parameter`, a name or a sequence of them, all free:
+        ``P.of_kind("width").free``), as an array."""
+        chosen = self._rows(rows)
         x = self._vector(x)
         return x[np.array([p.free_index for p in chosen], int)] if chosen else np.empty(0)
 
     def read(self, path):
         """The fit vector with the values a parameter file (``param.sav``, ``param.par``) gives its free rows, matched
-        by name; a free row the file lacks keeps its start.  The file's fixed values are not applied (the session's
-        ``load_sav`` puts them into the engine).  Refused: a file of another basis, a file with no name of these rows."""
+        by name; a free row the file lacks keeps its start.  The file's fixed values are not applied: a session opened
+        with ``parameter_file=path`` takes every value of the file, fixed ones included, as the program does.  Refused:
+        a file of another basis, a file with no name of these rows."""
         basis, values = read_parameter_file(path)
         if basis is not None and self._basis is not None and basis != self._basis:
             raise ParameterError(f"{path} holds basis {basis} amplitudes (0 standard, 1 Brune, 2 Park), this session "
@@ -426,56 +382,6 @@ class Parameters(list):
 
     def __repr__(self):
         return f"{type(self).__name__}({len(self)} parameters, {sum(1 for p in self if not p.fixed)} free)"
-
-
-class ParameterSet(Parameters):
-    """:class:`Parameters` with the views of earlier pyazr releases (kept until the session is renamed): one per kind
-    (``energies``, ``widths``, ``norms``, ...: :meth:`Parameters.of_kind`), ``fixed``, ``indices()``, ``values()``,
-    ``wigner_limits()``, ``by_level()``, ``by_physical_level()``."""
-
-    def indices(self):
-        """Free-vector positions of these parameters, in this set's order (fixed ones dropped)."""
-        return [p.free_index for p in self if not p.fixed and p.free_index is not None]
-
-    fixed = property(lambda self: self._select(p for p in self if p.fixed), doc="The parameters held fixed.")
-    energies = property(lambda self: self.of_kind("energy"), doc="The level-energy parameters.")
-    widths = property(lambda self: self.of_kind("width"), doc="The reduced-width parameters.")
-    norms = property(lambda self: self.of_kind("norm"), doc="The data-normalization parameters.")
-    shifts = property(lambda self: self.of_kind("shift"), doc="The constant energy shifts, one per segment.")
-    sqrt_shifts = property(lambda self: self.of_kind("shift_sqrt"), doc="The sqrt(E) shift coefficients (MeV^1/2).")
-    fn_shifts = property(lambda self: self.of_kind("shift_fn"), doc="The shift-function parameters a_j.")
-    abundances = property(lambda self: self.of_kind("abundance"), doc="The isotopic abundances.")
-    screenings = property(lambda self: self.of_kind("screening"), doc="The electron-screening potentials U_e (eV).")
-    densities = property(lambda self: self.of_kind("density"), doc="The fitted areal densities (atoms/cm^2).")
-    dopplers = property(lambda self: self.of_kind("doppler"), doc="The fitted Doppler temperatures (K).")
-    thicknesses = property(lambda self: self.of_kind("thickness"), doc="The fitted sample thicknesses (atoms/barn).")
-    cbkg = property(lambda self: self.of_kind("cbkg"), doc="The THM coherent-background parameters (cbackground=).")
-
-    def values(self, free_only=False):
-        """The parameter values as the project states them (:attr:`Parameter.value`), as a plain list."""
-        return [p.value for p in (self.free if free_only else self)]
-
-    def wigner_limits(self, free_only=False):
-        """Per-parameter Wigner limits (MeV, of the reduced width), ``None`` for a parameter that is not a width."""
-        return [p.wigner_limit for p in (self.free if free_only else self)]
-
-    def by_physical_level(self):
-        """The energy and width parameters grouped by level: ``{LevelKey: ParameterSet}``, ordered by
-        ``(jgroup, level)``.  A level is one resonance / pole, as opposed to the per-J-group level numbering."""
-        groups = {}
-        for p in self:
-            if p.jgroup is None or p.kind not in ("energy", "width"):
-                continue
-            k = LevelKey(p.jgroup, p.J, p.parity, p.level, p.level_energy)
-            groups.setdefault(k, self._select([])).append(p)
-        return dict(sorted(groups.items(), key=lambda kv: (kv[0].jgroup, kv[0].level or 0)))
-
-    def by_level(self, jgroup=None, parity=None, level=None):
-        """All R-matrix parameters (energy + widths) of a J group, parity or level (any given keyword must match)."""
-        return self._select(p for p in self if p.jgroup is not None
-                            and (jgroup is None or p.jgroup == jgroup) and (parity is None or p.parity == parity)
-                            and (level is None or p.level == level))
-
 
 
 @dataclass

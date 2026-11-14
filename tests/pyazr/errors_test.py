@@ -10,7 +10,7 @@ Also checked:
   ``pyazr._azure2.AZURE2Error`` (one class), named "AZURE2Error"; a wrong-length vector is still an ``AZURE2Error``;
 - the engine's notice "Could not write to EC Amplitude File." met by a session whose output directory does not exist
   is a ``pyazr.EngineWarning`` that names the file and the consequence, and no longer a line on standard output;
-- the documented zeros of ``coulomb_functions`` below threshold are kept (S alone at E <= 0).
+- the documented zeros of ``channel_functions`` below threshold are kept (S alone at E <= 0).
 
 Needs the compiled engine; without it exits 77 (ctest: Skipped).  Threads: as the caller's environment sets them.
 
@@ -102,7 +102,7 @@ try:
            pyazr.ParameterKeyError, KeyError,
            ["'skowronski_luna_hpgX'", "did you mean", "Project.records()"])
     expect("penetrability below threshold", lambda: transform.penetrability(0, 1, 6, 0.93, 4.0, -0.1),
-           pyazr.DomainError, ValueError, ["energy = -0.1", "> 0", "Session.coulomb_functions"])
+           pyazr.DomainError, ValueError, ["energy = -0.1", "> 0", "Session.channel_functions"])
     expect("penetrability with L = -1", lambda: transform.penetrability(-1, 1, 6, 0.93, 4.0, 0.5),
            pyazr.DomainZeroDivision, ZeroDivisionError, ["L = -1", "whole number >= 0", "help(pyazr.penetrability)"])
     expect("whittaker below its domain", lambda: transform.whittaker(0, 1, 6, 0.93, 4.0, 0.0),
@@ -138,7 +138,7 @@ try:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pyazr.EngineWarning)
         s = pyazr.Session(azr)
-    x = np.asarray(s.params_rwa, float)
+    x = np.asarray(s.parameters.x0, float)
     n = x.size
     first_free = s.parameters.free[0].name
 
@@ -146,8 +146,8 @@ try:
            pyazr.ParameterKeyError, KeyError, ["'nonexistent'", "the names are Parameter.name", "table()"])
     expect("pairs.by_number of an unknown pair", lambda: s.pairs.by_number(9), pyazr.ParameterKeyError, KeyError,
            ["no pair 9", "the pair numbers", "Session.pairs"])
-    expect("without_level on a J^pi the model does not have", lambda: s.without_level(x, jpi="9/2+"),
-           pyazr.ParameterKeyError, KeyError, ["jpi=9/2+", "the levels:", "Session.physical_levels()"])
+    expect("parameters.of_level of a level the model does not have", lambda: s.parameters.of_level("9/2+ 1.0"),
+           pyazr.ParameterKeyError, KeyError, ["'9/2+ 1.0'", "the levels:", "Parameter.level_label"])
     expect("datasets.by_name of an unknown data set", lambda: s.datasets.by_name("nope"),
            pyazr.ParameterKeyError, KeyError, ["'nope'", "the names:", "Session.datasets"])
     expect("set_channel_radius of an unknown pair", lambda: s.set_channel_radius(9, 4.0),
@@ -155,38 +155,36 @@ try:
     expect("set_channel_radius with a negative radius", lambda: s.set_channel_radius(1, -1.0),
            pyazr.ParameterError, ValueError, ["got -1.0", "positive length in fm", "channel_radius"])
     expect("objective with one parameter too few", lambda: s.objective()(x[:-1]), pyazr.ParameterVectorError,
-           pyazr.AZURE2Error, [f"got {n - 1}", f"expected the free parameter vector ({n} values", "params_rwa"])
+           pyazr.AZURE2Error, [f"got {n - 1}", f"expected the free parameter vector ({n} values", "parameters.x0"])
     expect("evaluate with one parameter too many", lambda: s.evaluate(np.append(x, 1.0)),
            pyazr.ParameterVectorError, ValueError, [f"got {n + 1}", f"({n} values", "Session.parameters.free"])
     bad = x.copy()
     bad[0] = np.nan
     expect("objective with a NaN", lambda: s.objective()(bad), pyazr.ParameterVectorError, RuntimeError,
-           ["entry 0", first_free, "is nan", "must be a finite number", "params_rwa"])
+           ["entry 0", first_free, "is nan", "must be a finite number", "parameters.x0"])
     bad = x.copy()
     bad[-1] = np.inf
     expect("value_and_grad with an infinity", lambda: s.objective().value_and_grad(bad), pyazr.ParameterVectorError,
-           ValueError, [f"entry {n - 1}", "is inf", "finite", "params_rwa"])
-    expect("ParameterSet.put with the wrong number of values",
-           lambda: s.parameters.free.put(x, np.ones(n + 1)),
+           ValueError, [f"entry {n - 1}", "is inf", "finite", "parameters.x0"])
+    expect("Parameters.put with the wrong number of values",
+           lambda: s.parameters.put(x, s.parameters.free, np.ones(n + 1)),
            pyazr.ParameterError, ValueError, ["value(s) for", "one number for all", "set.free"])
     expect("save_fit with an x of the wrong length", lambda: s.save_fit(os.path.join(tmp, "f.azr"), x=x[:-1]),
-           pyazr.ParameterError, ValueError, [f"x has {n - 1} entries", f"{n} free parameters", "params_rwa"])
-    expect("update_sav_from_rwa_params without a param.sav", lambda: s.update_sav_from_rwa_params(x),
-           pyazr.MissingFile, FileNotFoundError, ["param.sav does not exist", "existing param.sav", "save_fit"])
+           pyazr.ParameterError, ValueError, [f"x has {n - 1} entries", f"{n} free parameters", "parameters.x0"])
     E = np.array([0.5, 1.0])
-    expect("coulomb_functions on pair 0", lambda: s.coulomb_functions(0, E), pyazr.ParameterIndexError, IndexError,
+    expect("channel_functions on pair 0", lambda: s.channel_functions(0, E), pyazr.ParameterIndexError, IndexError,
            ["pair 0", "its pairs are", "Session.pairs"])
-    expect("coulomb_functions on pair 9", lambda: s.coulomb_functions(9, E), pyazr.ParameterIndexError, IndexError,
+    expect("channel_functions on pair 9", lambda: s.channel_functions(9, E), pyazr.ParameterIndexError, IndexError,
            ["pair 9", "its pairs are", "Session.pairs"])
-    expect("coulomb_functions with L = -1", lambda: s.coulomb_functions(1, E, L=-1), pyazr.DomainError, ValueError,
-           ["L = -1", "whole number >= 0", "Session.parameters.widths"])
+    expect("channel_functions with L = -1", lambda: s.channel_functions(1, E, l=-1), pyazr.DomainError, ValueError,
+           ["L = -1", "whole number >= 0", "Session.parameters.of_kind('width')"])
     photon = [p.number for p in s.pairs if p.is_photon][0]
-    expect("coulomb_functions on the photon pair", lambda: s.coulomb_functions(photon, E, L=1), pyazr.DomainError,
+    expect("channel_functions on the photon pair", lambda: s.channel_functions(photon, E, l=1), pyazr.DomainError,
            ValueError, [f"pair {photon}", "the particle pairs are", "Session.pairs.particles"])
 
     # documented zeros are kept: a closed channel gives S alone (and the open energy its numbers)
-    cf = s.coulomb_functions(1, np.array([-0.1, 0.5]), L=0)
-    check("coulomb_functions below threshold: F, G, P are 0, S is not (documented)",
+    cf = s.channel_functions(1, np.array([-0.1, 0.5]), l=0)
+    check("channel_functions below threshold: F, G, P are 0, S is not (documented)",
           cf["F"][0] == 0 and cf["G"][0] == 0 and cf["P"][0] == 0 and cf["S"][0] != 0 and cf["P"][1] > 0, cf)
 
     s.close()

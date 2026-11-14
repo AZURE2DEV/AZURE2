@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""A parameter file's FIXED level parameters reach the engine (Session.load_sav).
+"""A parameter file's FIXED level parameters reach the engine (Session(file, parameter_file=path)).
 
 AZURE2's external parameter file sets every parameter it names, fixed level
 energies and widths included (AZUREParams::ReadUserParameters).  pyazr's
 free-vector calls take the fixed values from the session, i.e. from the .azr,
-so `x = full_rwa_from_sav(p)[~fixed]; evaluate().chi2` evaluated a
+so `x = parameters.read(p); evaluate(x).chi2` evaluates a
 different model from the CLI whenever the file's fixed values differed from
 the .azr's -- silently.  11B+alpha, 10-12-26: 10 fixed widths off by up to
 1.6 %, chi2 9925.03 from pyazr against 9868.04 from the CLI at the same file.
@@ -13,9 +13,9 @@ Pinned on tests/identical_pp_res with one width fixed (Project.set_channel), sca
 in the file:
 
   * the free-vector-only route ignores the change (the old behaviour);
-  * load_sav applies it, returns the free vector, and the engine's
-    params_all_rwa carries the file's value;
-  * the chi2 after load_sav is AZURE2's own mode-1 chi2 with the same file
+  * a session made with parameter_file= applies it, its x0 is the free vector,
+    and the engine's params_all_rwa carries the file's value;
+  * the chi2 of that session is AZURE2's own mode-1 chi2 with the same file
     (when a built AZURE2 binary is found next to the module);
   * a file whose #parametrization tag is another basis is refused;
   * the file's names are matched against the run's as AZURE2 matches them
@@ -25,6 +25,8 @@ in the file:
 
 Needs the compiled engine; skips cleanly without it.
 Run from anywhere:  python3 tests/pyazr/sav_fixed_params_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import glob
 import os
@@ -49,6 +51,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from pyazr import Session, Project
+    from pyazr.parameters import read_parameter_file
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -77,13 +80,14 @@ with tempfile.TemporaryDirectory() as tmp:
     sav = os.path.join(work, "fixed.sav")
 
     with Session(azr, cwd=work) as m:
-        names = [p.name for p in m.parameters]
-        fixed = np.asarray(m.fixed_params, bool)
+        P = m.parameters
+        names = P.names
+        fixed = ~P.free_mask
         full0 = np.asarray(m._engine.params_all_rwa(), float)
-        x0 = np.asarray(m.params_rwa, float)
+        x0 = P.x0
         chi2_azr = m.evaluate(x0).chi2
 
-        cand = [i for i, p in enumerate(m.parameters)
+        cand = [i for i, p in enumerate(P)
                 if p.kind == "width" and fixed[i] and full0[i] != 0.0]
         check("the model has a fixed nonzero width to move", bool(cand))
         if not cand:
@@ -94,52 +98,53 @@ with tempfile.TemporaryDirectory() as tmp:
         write_sav(sav, names, full, m.basis)
         print(f"  (moved fixed {names[k]}: {full0[k]:.6g} -> {full[k]:.6g})")
 
-        print("1. the free vector alone cannot carry a fixed value")
-        x_old = m.full_rwa_from_sav(sav)[~fixed]
+        print("1. the fit vector alone cannot carry a fixed value")
+        x_old = P.read(sav)
         chi2_old = m.evaluate(x_old).chi2
         # (the file holds 7 digits, so the free values move by rounding only)
         check("free-vector-only route = the .azr's model",
               np.isclose(chi2_old, chi2_azr, rtol=1e-6), f"{chi2_old} vs {chi2_azr}")
 
-        print("\n2. load_sav takes the file's fixed values into the engine")
-        x = m.load_sav(sav)
-        check("returns the free vector", np.array_equal(x, x_old))
-        check("params_rwa set to it", np.array_equal(np.asarray(m.params_rwa), x))
+    print("\n2. a session made with parameter_file= takes the file's fixed values into the engine")
+    with Session(azr, cwd=work, parameter_file=sav) as m:
+        x = m.parameters.x0
+        check("its x0 is the file's free vector", np.array_equal(x, x_old))
         live = np.asarray(m._engine.params_all_rwa(), float)
-        want = m.read_sav(sav)[names[k]]
+        want = read_parameter_file(sav)[1][names[k]]
         check("engine holds the file's fixed value", live[k] == want,
               f"{live[k]} vs {want}")
         chi2_new = m.evaluate(x).chi2
         check("the chi2 moves with it", not np.isclose(chi2_new, chi2_old, rtol=1e-6),
               f"{chi2_new} vs {chi2_old}")
         print(f"        chi2: .azr fixed values {chi2_old:.6f}, file's {chi2_new:.6f}")
+        basis = m.basis
 
-        print("\n3. a file in another basis is refused")
-        other = os.path.join(work, "other_basis.sav")
-        write_sav(other, names, full, 0 if m.basis != 0 else 1)
-        try:
-            m.load_sav(other)
-            check("refused", False, "no error")
-        except ValueError:
-            check("refused", True)
+    print("\n3. a file in another basis is refused")
+    other = os.path.join(work, "other_basis.sav")
+    write_sav(other, names, full, 0 if basis != 0 else 1)
+    try:
+        Session(azr, cwd=work, parameter_file=other).close()
+        check("refused", False, "no error")
+    except ValueError:
+        check("refused", True)
 
-        print("\n3b. the file's names against the run's (the engine's rule)")
-        import warnings
-        extra = os.path.join(work, "extra_name.sav")
-        write_sav(extra, names + ["no_such_parameter"], list(full) + [1.0], m.basis)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            m.load_sav(extra)
-        said = " ".join(str(w.message) for w in caught)
-        check("a name the project lacks warns, naming it",
-              "W_PARAMETER_FILE_NAMES" in said and "no_such_parameter" in said, said[:300])
-        foreign = os.path.join(work, "foreign.sav")
-        write_sav(foreign, ["segment_1_norm", "other_width"], [1.0, 2.0], m.basis)
-        try:
-            m.load_sav(foreign)
-            check("a file with no name of the run is refused", False, "no error")
-        except ValueError as err:
-            check("a file with no name of the run is refused", "E_PARAMETER_FILE_NO_MATCH" in str(err), str(err)[:300])
+    print("\n3b. the file's names against the run's (the engine's rule)")
+    import warnings
+    extra = os.path.join(work, "extra_name.sav")
+    write_sav(extra, names + ["no_such_parameter"], list(full) + [1.0], basis)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        Session(azr, cwd=work, parameter_file=extra).close()
+    said = " ".join(str(w.message) for w in caught)
+    check("a name the project lacks warns, naming it",
+          "W_PARAMETER_FILE_NAMES" in said and "no_such_parameter" in said, said[:300])
+    foreign = os.path.join(work, "foreign.sav")
+    write_sav(foreign, ["segment_1_norm", "other_width"], [1.0, 2.0], basis)
+    try:
+        Session(azr, cwd=work, parameter_file=foreign).close()
+        check("a file with no name of the run is refused", False, "no error")
+    except ValueError as err:
+        check("a file with no name of the run is refused", "E_PARAMETER_FILE_NO_MATCH" in str(err), str(err)[:300])
 
     print("\n4. the same file through AZURE2 itself")
     binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made
@@ -165,7 +170,7 @@ with tempfile.TemporaryDirectory() as tmp:
         if total is not None:
             print(f"        AZURE2 {total}, pyazr {chi2_new:.6f}")
             # chiSquared.out prints 6 significant digits.
-            check("pyazr after load_sav = AZURE2 mode 1",
+            check("pyazr with parameter_file= = AZURE2 mode 1",
                   np.isclose(total, chi2_new, rtol=2e-6), f"{total} vs {chi2_new}")
 
 print()

@@ -135,7 +135,7 @@ with tempfile.TemporaryDirectory() as tmp:
         levels = [(p.jgroup, p.level, p.J, p.parity, p.value) for p in P if p.kind == "energy"]  # park_norms order
         widths = [p for p in P if p.kind == "width" and p.radiation_type == "P"]
         check(f"{tag}: every width free", all(w.free_index is not None for w in widths))
-        x0 = np.asarray(M.params_rwa, float)
+        x0 = np.asarray(M.parameters.x0, float)
         for w in widths:
             x0[w.free_index] = 0.0
         seen = 0

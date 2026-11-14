@@ -69,13 +69,13 @@ def project(work, name, text):
 
 def chi2_of(d):
     with Session(os.path.join(d, "m.azr"), cwd=d) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         return m.evaluate(x).chi2
 
 
 def values_of(d):
     with Session(os.path.join(d, "m.azr"), cwd=d) as m:
-        return np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.params_rwa, float)).data]])
+        return np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.parameters.x0, float)).data]])
 
 
 base = open(os.path.join(CASE, "models", "aC_data.azr")).read()
@@ -148,7 +148,7 @@ with tempfile.TemporaryDirectory() as work:
     for name, text in (("plain", story), ("beam", with_beam)):
         d = project(work, "g_" + name, text)
         with Session(os.path.join(d, "m.azr"), cwd=d) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             c, g = m.objective().value_and_grad(x)
             worst = 0.0
             for i in range(len(x)):

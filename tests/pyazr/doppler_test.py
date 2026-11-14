@@ -57,7 +57,7 @@ try:
             shutil.copy(os.path.join(tmp, name + ".azr"), work)
             os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
             with Session(os.path.join(work, name + ".azr"), cwd=work) as s:
-                return [np.asarray(v, float) for v in [d.model for d in s.evaluate(np.asarray(s.params_rwa, float)).data]]
+                return [np.asarray(v, float) for v in [d.model for d in s.evaluate(np.asarray(s.parameters.x0, float)).data]]
         def session(name):
             work = os.path.join(tmp, "run_" + name)
             os.makedirs(os.path.join(work, "output"))
@@ -75,15 +75,15 @@ try:
 
         # --- fitted temperature ------------------------------------------------------------------
         with session("grad_fit") as s:
-            dp = s.parameters.dopplers
+            dp = s.parameters.of_kind("doppler")
             by = {p.name: p for p in dp}
             ok = (sorted(by) == ["D0.doppler", "D1.doppler", "D2.doppler"] and all(not p.fixed for p in dp) and
-                  all(p.prior_nominal == 300.0 for p in dp) and
+                  all(p.prior_centre == 300.0 for p in dp) and
                   [by[n].prior_sigma for n in ("D0.doppler", "D1.doppler", "D2.doppler")] == [0.0, 0.0, 20.0] and
-                  abs(by["D0.doppler"].doppler_max - 900.0) < 1e-9 and abs(by["D1.doppler"].doppler_max - 900.0) < 1e-9
-                  and abs(by["D2.doppler"].doppler_max - 363.0) < 1e-9)
+                  abs(by["D0.doppler"].layout_max - 900.0) < 1e-9 and abs(by["D1.doppler"].layout_max - 900.0) < 1e-9
+                  and abs(by["D2.doppler"].layout_max - 363.0) < 1e-9)
             check("three type-9 records: D0, D1 (no prior, grids for 900 K), D2 (prior 20 K, grids for 363 K)", ok, dp)
-            x = np.asarray(s.params_rwa, float)
+            x = np.asarray(s.parameters.x0, float)
             pen0 = s.evaluate(x).terms["Doppler priors"]
             xm = x.copy()
             xm[by["D2.doppler"].free_index] = 320.0

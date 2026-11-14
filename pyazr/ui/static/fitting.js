@@ -59,8 +59,8 @@ export function kindsOf(params, kindsTable = {}) {
     n: params.filter((p) => p.kind === k).length, free: params.filter((p) => p.kind === k && p.free).length }));
 }
 
-const priorOf = (p) => (p.prior_nominal !== undefined && p.prior_nominal !== null
-  ? `${p.prior_nominal} ± ${p.prior_sigma}` : "");
+const priorOf = (p) => (p.prior_centre !== undefined && p.prior_centre !== null
+  ? `${p.prior_centre} ± ${p.prior_sigma}` : "");
 const boundsOf = (b) => (Array.isArray(b) ? `[${b.map((v) => (v === null ? "" : v)).join(", ")}]` : "");
 
 /**

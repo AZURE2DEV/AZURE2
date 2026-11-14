@@ -49,9 +49,9 @@ class ModelDatum:
 
 def model_data(model, params=None) -> List[ModelDatum]:
     """The ``<modelData>`` data of ``model`` (a :class:`pyazr.Session`) at a
-    free RWA vector (default ``model.params_rwa``), one :class:`ModelDatum`
+    fit vector (default ``model.parameters.x0``), one :class:`ModelDatum`
     per datum in file order; empty without the section."""
-    x = np.asarray(model.params_rwa if params is None else params, float)
+    x = np.asarray(model.parameters.x0 if params is None else params, float)
     with session_lock(model):
         terms = model._engine.objective_terms_rwa(x)
     return [ModelDatum(**{k: (float(v) if isinstance(v, float) else v) for k, v in r.items()})

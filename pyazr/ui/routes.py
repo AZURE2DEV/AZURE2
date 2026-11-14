@@ -175,7 +175,7 @@ ROUTES = (
           "(broadcast), errors='mask': the returned fields as lists, the status per element and its words, the "
           f"arguments as used, the Python text of the call; at most {MAX_ELEMENTS} elements per request; runs in the "
           "server's process (no session).", args=("fn",), spread="arguments", serves=("pyazr.physics.functions",)),
-    Route("GET", "/api/system", L, "step 2 (Nucleus tab); today the session's pairs and physical_levels",
+    Route("GET", "/api/system", L, "step 2 (Nucleus tab); today the session's pairs and its levels",
           "The built system: pairs, levels, channels, Wigner limits."),
     Route("POST", "/api/session/channel_functions", S, "engine.Engine.channel_functions",
           "The session's channel functions of a pair (key) at c.m. energies e_cm (MeV): F, Fp, G, Gp, P, S, delta_hs, "

@@ -245,6 +245,68 @@ the band byte for byte against the base build (outputs and standard output, prog
 **Open.** The web UI's job for `fit_with_engine` (`web_ui.md` section 12, finding 20); progress and stop of the band
 and of a session build; `Config::stopFlag` in the set-up loops; the at-limit report after MIGRAD names the start
 values (as before); `--use-nlopt`'s usage line says BOBYQA, the code runs SBPLX (`src/AZURE2.cpp`, not touched).
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-vector`) — pyazr: one parameter vector and one table
+
+**Done.**  Every call of a session takes the fit vector `x`; its start is `Session.parameters.x0`; physical values are
+`Session.transform(x)`.  Gone (no alias): `params_rwa`, `params`, `fixed_params`, `n_rmatrix`, `refresh_parameters`,
+`refresh_pairs`, `physical_levels`, `level_free_width_indices`, `without_level`, `only_level`, `norm_indices`,
+`shift_indices`, `energy_indices`, `transform_rwa`, `transform_all_rwa`, `transform_physical`, `read_sav`,
+`read_sav_basis`, `full_rwa_from_sav`, `load_sav`, `update_rwa_params_from_sav`, `update_sav_from_rwa_params`,
+`coulomb_functions`; `ParameterSet` (its twelve views, `fixed`, `indices`, `values`, `wigner_limits`, `by_level`,
+`by_physical_level`), `LevelKey`, the one-argument `put(x, values)` / `take(x)`, the five old field names
+(`prior_nominal`, `input_is_rwa`, `density_max`, `doppler_max`, `sample`).
+- `Session.transform(x)`: one physical value per row of `parameters` (the binding's `transform_all_rwa` of the full
+  vector; the rows after its block as in `x`, as `AZUREAPI::SetParamsAllRWA` builds them).
+- `Session(file, parameter_file=path)` (`pyazr/parameter_file.py`): the session takes every value of the file, fixed
+  ones included, when it is made and after a mode switch or rebuild (what `load_sav` did, by the engine's name rule);
+  not a `<config>` key (`session_options.NOT_OPTIONS`); in `options` so a worker rebuilds the same model; `save_fit`'s
+  check does not pass it on.  `bands.best_fit_params` makes the session take the file (private
+  `_take_parameter_file`).  `Parameters.read` / `write` are the free-vector files.
+- `describe()["parameters"]` is the records (`Parameter.to_dict()`, infinite bounds `None`); `levels` come from the
+  energy rows.  The web UI's adapter builds its page rows (`x`, `physical_value`, `free`, `x0`) from them, as before.
+- `session.py` 1621 -> 721 lines (its size row dropped): `save_fit` and the snapshot check moved into `snapshot.py`
+  (`save_fit(session, ...)`; the method is a thin `engine_call`), `wigner_widths`, `dimensionless_widths`,
+  `mass_number`, `scattering_lengths`, `park_norms`, `model_gradients`, `ec_integrals`, `ScatteringLength` into
+  `session_physics.py`.  `session_checks.fit_vector` checks a vector's length.
+- The binding's two messages of a wrong vector name `Session.parameters.x0` (`api/src/pybind_api.cpp`, strings only).
+- Ported: 23 binding tests' docstrings say they use `Session._engine` (by script, `work/pysess3/engine_doc.py`); tests,
+  examples, scripts by script (`work/pysess3/port3.py`: 194 `params_rwa`, 23 views, 27 `coulomb_functions` with
+  their keys, 15 field names, 12 `transform_rwa`, 4 `n_rmatrix`) and by hand (`hand3.py` and edits); the example
+  `coulomb_functions.py` is `channel_functions.py`; `deactivate_level.py`, `decompose_cross_section.py` select levels
+  by `level_label` and `Parameters.put`; the page's prior column reads `prior_centre` (`fitting.js`: it read the old
+  name, which the server never sent, so the column was empty).  Pages: `pyazr.rst` (the section "The fit vector and
+  the parameter table" replaces two; the kinds table, which was broken, is a list-table; "Parameter and output
+  files"; 25 rows of the migration table), `api.rst`, `gamma_decay.rst`, `output_files.rst`, `hybrid_potential.rst`,
+  `conventions.rst`, `spin_orbit_potential.rst`, `README.md`, `pyazr/CLAUDE.md`, `pyazr3.md`; the class scheme
+  (`ParameterSet` -> `Parameters`, regenerated, looked at).  The skills are left to the agents rewriting them.
+
+**Measured** (`work/pysess3/measure_transform.py`, at x0 x (1 + 1e-3 cos k)): `transform(x)[free][:n]` equals the
+binding's `transform_rwa(x)` and `transform(x)[:m]` its `transform_all_rwa(full, include_fixed=True)`, bit for bit,
+on T1, T2, T2 Park, T3, 13N, 15N_p_a; the tail equals `x`'s; `parameters.x0` equals `params_values_rwa()` and the
+records' `start`.
+
+**Tests whose assertions changed in more than names** (no tolerance changed): `sav_readers` (the old layout read by
+`Parameters.read` and by a session with `parameter_file=`; the write-back is `Parameters.write`, which writes every
+row, not the file's other columns), `sav_fixed_params` (sessions with `parameter_file=` in place of `load_sav`),
+`extrap_layout` (the caller-set vector part is gone: no settable vector; it checks x0 after the round trip),
+`physical_norm` (the "level block only" length check is now "the tail is x's"), `fixed_width_roundtrip` (check 3:
+one value per parameter), `describe` (the parameters equal the records), `physics_table` (the comparison with
+`coulomb_functions` is gone), `errors` (`without_level`'s wrong call is `of_level`'s; `update_sav_from_rwa_params`'s
+is gone), `thm_park` (the physical values compared on the R-matrix block, as before), `thm_profiled` and
+`thm_coherent_background` (free norms / shifts from the table), `parameter_kinds` (the alias check reads the field).
+
+**Verified** (build `work/b-pysess3`, 0 warnings): the consistency test; `ctest -R pyazr_ -LE slow -E
+pyazr_session_isolation -j1` (each test sets OMP 2, so -j1 keeps 2 threads): 128 of 130, then `pyazr_ui_node` fixed
+(its fixture named `prior_nominal`) and passing alone; `pyazr_objective_object` fails as on the start commit (its
+bound assertion; fixed on e3528379); T1, T2, T3, 13N x 3 bases with this build's program against `b-trial57`: 12 of 12
+identical.  On the merge of e3528379 (commit aec3ab3c): `ctest -LE slow -j1` without the four tests that need more
+than two threads (`pyazr_session_isolation`, `pyazr_park_gradient`, `pyazr_parallel_points`, `gsl_quiet`): 250 of 250;
+all projects x 3 bases (tag `tab-pysess3-1`) against `tab-t60-1` and `tab-t57-1`: Brune 887, formal 851, Park 887
+files, all identical.  Not run: the slow tests; those four tests.
+
+**Open**: the Python physics (`transform.py`, `widths.py`, `wigner_widths`, `dimensionless_widths`), `pyazr.system`,
+the mode switch and the session's edits; the libraries; unused bindings (`transform_rwa`, `coulomb_functions`, ... of
+`_azure2.Session` are still bound).
 
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the raw handle is `Session._engine`
 

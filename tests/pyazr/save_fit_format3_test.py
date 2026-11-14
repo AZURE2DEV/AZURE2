@@ -7,7 +7,7 @@
      priors untouched; verify=True reopens the snapshot and finds the fit's chi^2 and priors (it raised before);
      with a free abundance and a fitted areal density moved off their prior centres too: the snapshot keeps the
      original centres and pays the same priors (the engine took the start value as the centre until 2026-11-13, and
-     verify raised), and Parameter.prior_nominal is the centre written;
+     verify raised), and Parameter.prior_centre is the centre written;
   2. set_nuclear_potential(..., matching_radius=, step=) (fm): the view reports them, the channel functions equal
      those of a record stating them, bit for bit, and save_fit writes them into the format-3 record.
 
@@ -44,7 +44,7 @@ from pyazr import Session, convert_azr, Project  # noqa: E402
 def functions(A, pair=1):
     out = []
     for L in (0, 1, 2):
-        cf = A.coulomb_functions(pair, [0.5, 1.0, 2.0], L=L)
+        cf = A.channel_functions(pair, [0.5, 1.0, 2.0], l=L)
         out += [float(v) for v in cf["P"]] + [float(v) for v in cf["S"]]
     return out
 
@@ -72,13 +72,13 @@ def fitted(work):
     p["s01_int_thin"].set(shift="offset 0 keV fit prior 0 3")  # the offset in keV: written back in keV
     p.save()
     with Session(p.path, cwd=d) as m:
-        x = np.array(m.params_rwa, float)
+        x = np.array(m.parameters.x0, float)
         by_name = {q.name: q for q in m.parameters}
         moved = {"s01_int_thin.norm": 1.0234, "D.value": 0.9871, "s01_int_thin.shift.offset": 0.0012,
                  "G.offset": -0.0007, "s04_thick.shift.sqrt": 0.0013, "G.a0": 0.0042,
                  "natN.isotope.15N": 0.0036, "tgt_s05_implanted.areal_density": 2.1e17}
         iso = by_name["natN.isotope.15N"]
-        check("the abundance's prior_nominal is the centre written (0.0037)", iso.prior_nominal == 0.0037, iso.prior_nominal)
+        check("the abundance's prior_centre is the centre written (0.0037)", iso.prior_centre == 0.0037, iso.prior_centre)
         for name, v in moved.items():
             x[by_name[name].free_index] = v
         out = os.path.join(d, "T2_fit.azr")

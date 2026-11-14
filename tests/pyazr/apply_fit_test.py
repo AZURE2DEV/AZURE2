@@ -162,7 +162,7 @@ out = os.path.join(project, "_snapshot_test.azr")
 sav = os.path.splitext(out)[0] + ".sav"
 try:
     with Session(azr, cwd=project) as m:
-        want = np.asarray(m.transform_rwa(m.params_rwa), float)
+        want = np.asarray(m.transform(m.parameters.x0)[m.parameters.free_mask], float)
         written, savfile = m.save_fit(out)
         check("snapshot written", os.path.exists(written))
         check("companion param.sav written", savfile and os.path.exists(savfile))
@@ -176,7 +176,7 @@ try:
         check("numpy.loadtxt sees only the parameters",
               np.loadtxt(savfile, usecols=(1,)).size == len(m.parameters))
     with Session(out, cwd=project) as back:
-        got = np.asarray(back.transform_rwa(back.params_rwa), float)
+        got = np.asarray(back.transform(back.parameters.x0)[back.parameters.free_mask], float)
     check("every R-matrix value round-trips",
           got.shape == want.shape and np.allclose(got, want, rtol=1e-4),
           f"{int(np.sum(~np.isclose(got, want, rtol=1e-4)))} differ"

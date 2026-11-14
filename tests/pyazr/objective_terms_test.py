@@ -13,6 +13,8 @@ covariance, all non-zero at the test point), tests/norm_groups, tests/shift_fn a
   4. objective() >= evaluate().chi2 (the priors are sums of squares).
 
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/objective_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -54,7 +56,7 @@ for project, azr in MODELS:
         s = Session(os.path.join(d, azr), cwd=d)
         # Off the priors' centres, so that every prior term and its gradient is exercised: each free parameter
         # moved by 2 % of its value (alternating sign), the norms and shifts included.
-        x0 = np.asarray(s.params_rwa, float)
+        x0 = np.asarray(s.parameters.x0, float)
         x = x0 + 0.02 * (np.abs(x0) + 1e-3) * np.where(np.arange(x0.size) % 2 == 0, 1.0, -1.0)
         f = s.objective()(x)
         f2, g = s.objective().value_and_grad(x)

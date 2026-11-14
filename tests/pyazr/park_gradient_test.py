@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
         #     Brune's analytic gradient is established; its finite-difference
         #     agreement calibrates what the same check can resolve for Park.
         with Session(azr_b, use_brune=True) as mb:
-            xb = np.asarray(mb.params_rwa, float)
+            xb = np.asarray(mb.parameters.x0, float)
             xs_b = np.concatenate([np.asarray(s, float).ravel() for s in [d.model for d in mb.evaluate(xb).data]])
             chi_b = mb.objective()(xb)
             hb = 1e-4 * (np.abs(xb) + 1.0)
@@ -114,7 +114,7 @@ with tempfile.TemporaryDirectory() as tmp:
             ref = rel(gb, gfd_b)
             print(f"  (Brune mode: analytic gradient vs finite differences, rel {ref:.1e})")
         with Session(azr, use_park=True) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             xs_p = np.concatenate([np.asarray(s, float).ravel() for s in [d.model for d in m.evaluate(x).data]])
             chi_p = m.objective()(x)
             check(f"{name}: Park cross sections = Brune's", rel(xs_p, xs_b) < 1e-9,
@@ -152,7 +152,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
             # --- the J > 0 wall: scale one level's free widths up until J < 0 and
             #     check the penalty, its gradient, and that the fit objective sees it.
-            widths = [p for p in m.parameters.widths if not p.fixed and p.free_index is not None]
+            widths = [p for p in m.parameters.of_kind("width") if not p.fixed and p.free_index is not None]
             target = widths[0]
             same_level = [p.free_index for p in widths if (p.jgroup, p.level) == (target.jgroup, target.level)]
             for scale in (2.0, 4.0, 8.0, 16.0, 32.0, 64.0):

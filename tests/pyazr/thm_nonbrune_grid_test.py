@@ -128,9 +128,9 @@ with tempfile.TemporaryDirectory() as tmp:
             f.write(f"{e * 18 / 17:.10f} 0 1 0.1\n")
 
     with Session(moved, use_brune=False) as m:
-        p_moved = np.asarray(m.params_rwa, float)
+        p_moved = np.asarray(m.parameters.x0, float)
     with Session(orig, use_brune=False) as o:
-        p_orig = np.asarray(o.params_rwa, float)
+        p_orig = np.asarray(o.parameters.x0, float)
         y = np.asarray(o.evaluate(p_moved).data[0].model, float)
         e_cm = np.asarray(o.energies[0], float)
     with Session(dense, use_brune=False) as d:

@@ -47,10 +47,10 @@ def main() -> int:
     args = ap.parse_args()
 
     with Session(str(args.azr)) as azr:
-        x = np.asarray(azr.params_rwa, float)
+        x = np.asarray(azr.parameters.x0, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while
-            # params_rwa holds only the free ones -- so a length comparison
+            # the fit vector holds only the free ones -- so a length comparison
             # never matches and would silently leave x at the .azr's values.
             # best_fit_params does the mapping (and the extrapolation-mode
             # case) properly.
@@ -64,9 +64,8 @@ def main() -> int:
         # The background: every free width off, leaving hard-sphere scattering
         # and external capture.
         bare_x = x.copy()
-        for p in azr.parameters.widths:
-            if p.free_index is not None:
-                bare_x[p.free_index] = 0.0
+        P = azr.parameters
+        bare_x = P.put(bare_x, P.of_kind("width").free, 0.0)
         bare = np.asarray(azr.evaluate(bare_x).data[i].model, float)
 
         print(f"{args.azr.name}, segment {args.segment}: "
@@ -74,14 +73,16 @@ def main() -> int:
         print(f"\n{'level':>16} {'max |full-off|':>15} {'max |only-bare|':>16} "
               f"{'max |interf.|':>14}")
 
-        for key in azr.physical_levels():
-            # Select by the LevelKey itself.  A (J^pi, energy) pair is
+        widths = P.of_kind("width").free
+        for e in P.of_kind("energy"):
+            # A level by its label (level_label): a (J^pi, energy) pair is
             # ambiguous when a level's energy is fixed and reported as None,
             # which is exactly the case for bound states and background poles.
+            key = e.level_label
             off = np.asarray(azr.evaluate(
-                azr.without_level(x, level=key)).data[i].model, float)
+                P.put(x, P.of_level(key).of_kind("width").free, 0.0)).data[i].model, float)
             only = np.asarray(azr.evaluate(
-                azr.only_level(x, level=key)).data[i].model, float)
+                P.put(x, [w for w in widths if w.level_label != key], 0.0)).data[i].model, float)
             contrib = full - off
             bare_res = only - bare
             interference = contrib - bare_res

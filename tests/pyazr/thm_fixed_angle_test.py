@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("2. the engine against the CLI (theta=50-70)")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}",
               abs(chi2 / cli_chi2 - 1) < 1e-9, f"{chi2} vs {cli_chi2}")

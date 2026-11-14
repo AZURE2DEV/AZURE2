@@ -86,7 +86,7 @@ try:
     with open(path, "w") as f:
         f.write(text + MODEL_DATA)
     m = Session(path)
-    x = np.asarray(m.params_rwa, float)
+    x = np.asarray(m.parameters.x0, float)
     records = pyazr.model_data(m)
     check("three records, in file order", [r.name for r in records] == ["wg_L5", "G_L5", "a_p15N"], records)
     by = {r.name: r for r in records}
@@ -130,7 +130,7 @@ try:
         with open(fpath, "w") as f:
             f.write("\n".join(fit_text) + "\n" + extra)
         fit = Session(fpath)
-        xf = np.asarray(fit.params_rwa, float)
+        xf = np.asarray(fit.parameters.x0, float)
         value, grad = fit.objective().value_and_grad(xf)
         h = 1e-6 * np.maximum(1.0, np.abs(xf))
         obj = fit.objective()

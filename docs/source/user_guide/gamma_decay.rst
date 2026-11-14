@@ -98,7 +98,7 @@ in the objective brings the sum back. ``parameters.out`` ends with a block that 
 :math:`b_f` (the remainder included), :math:`\delta_f` and the partial widths, with a note for a branching at 0.
 
 Wherever parameters are given or returned in observed form (the physical vectors of pyazr's binding:
-``params_values``, ``calculate_chi2_physical``, ``update_segments``; ``Session.transform_rwa``; the MCMC with ``Use Reduced Width Amplitudes: no``; a limit
+``params_values``, ``calculate_chi2_physical``, ``update_segments``; ``Session.transform``; the MCMC with ``Use Reduced Width Amplitudes: no``; a limit
 or nuisance prior in ``<parameterSettings>``), the record's numbers stand at its parameters' places, not partial
 widths: a value set there is the record's :math:`\Gamma_\gamma` (eV), :math:`b_f` or :math:`\delta_f`. A limit on a
 record's number is applied as written; one on a particle width of the record's level is converted as for any level.

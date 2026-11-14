@@ -37,7 +37,7 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
     order : int
         Highest Legendre order to compute.
     params : array_like, optional
-        The free vector (the fit vector, ``Session.params_rwa`` of the model's
+        The free vector (``Session.parameters.x0`` of the model's
         session) to evaluate at. Defaults to the model's own values.
     lab : bool
         Whether ``energies`` are laboratory (default) or centre-of-mass.
@@ -89,7 +89,7 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
 
         with Session(tmp_azr, **azure2_kwargs) as m:
             m.extrap_mode()
-            grids = m.evaluate(m.params_rwa if params is None else params).data
+            grids = m.evaluate(m.parameters.x0 if params is None else params).data
 
         out_e = np.full(energies.size, np.nan)
         out_c = np.full((energies.size, order + 1), np.nan)

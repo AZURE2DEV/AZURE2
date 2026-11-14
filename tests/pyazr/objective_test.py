@@ -21,6 +21,8 @@ engine, so a change to either has to move both.
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/objective_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -65,7 +67,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("1. the per-segment split adds up")
     with Session(azr, cwd=work) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         seg = np.array([d.chi2 for d in m.evaluate(x).data])
         total = m.evaluate(x).chi2
         check("one entry per segment", len(seg) == m.nsegments,
@@ -86,7 +88,7 @@ with tempfile.TemporaryDirectory() as tmp:
               np.isclose(m.objective()(x), total, rtol=1e-12))
 
         print("\n4. a moved normalization is penalised as AZURE2 penalises it")
-        norm = m.parameters.norms[0]
+        norm = m.parameters.of_kind("norm")[0]
         moved = x.copy()
         moved[norm.free_index] = 1.10           # nominal 1.0, sys error 5%
         penalty = float(np.array([d.norm_chi2 for d in m.evaluate(moved).data]).sum())
@@ -102,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
         sav = os.path.join(work, "moved.sav")
         with open(sav, "w") as fh:
             for i, p in enumerate(m.parameters):
-                v = moved[next(it)] if not m.fixed_params[i] else allrwa[i]
+                v = moved[next(it)] if not p.fixed else allrwa[i]
                 fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
 
     import glob
@@ -151,7 +153,7 @@ with tempfile.TemporaryDirectory() as tmp:
     azr = os.path.join(work, "sg.azr")
     sg.save(azr)
     with Session(azr, cwd=work) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         pen = np.array([d.shift_constant_chi2 for d in m.evaluate(x).data])
         chi2 = m.evaluate(x).chi2
         obj = float(m.objective()(x))

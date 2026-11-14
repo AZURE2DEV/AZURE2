@@ -38,7 +38,7 @@ extrapolation (**Calculate Segments Without Data**) or a reaction rate --
 numbers its own test grids 1, 2, ... and does not apply those lines (the run
 log says so): a test segment's energies are the ones its line asks for. Until
 October 2026 data segment *k*'s fitted shift was handed to test segment *k* by
-name and moved its grid. ``pyazr``'s ``load_sav`` does the same in
+name and moved its grid. ``pyazr``'s ``Session(file, parameter_file=path)`` does the same in
 extrapolation mode.
 
 ``param.par`` and ``param.sav`` hold one row per parameter, ``name value

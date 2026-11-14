@@ -30,7 +30,7 @@ Notes
 - Points the engine drops (below a threshold, outside limits) simply do not
   appear in the table; the returned object records the covered range.
 - The engine's own parameters are used unless an ``x`` vector (in the
-  session's ``params_rwa`` space) is given.
+  session's fit vector) is given.
 - This tabulates central values.  The analytic parameter Jacobian could be
   used on the same knots to add uncertainty columns from a fit covariance;
   that is deliberately left to the user (pyazr does not own fitting).
@@ -150,7 +150,7 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
         m.save(run)
         out = {}
         with Session(run, cwd=work, **session_opts) as a:
-            v = np.asarray(a.params_rwa, float) if x is None else np.asarray(x, float)
+            v = a.parameters.x0 if x is None else np.asarray(x, float)
             data = a.evaluate(v).data
             for i, p in enumerate(keys):
                 out[p] = (data[i].energies, data[i].model)

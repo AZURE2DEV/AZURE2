@@ -18,6 +18,8 @@ docs/upgrade/gamma_parametrisation.md), on the projects of tests/gamma_decay/mod
 
 Needs the compiled engine and scipy; skips cleanly without them.  Run from anywhere:
 python3 tests/pyazr/gamma_decay_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -56,7 +58,7 @@ def fit(s):
     params = [p for p in s.parameters if not p.fixed]
     lo = [0.0 if p.kind == "radiative" and p.decay_part in ("branching", "total_width") else -np.inf for p in params]
     hi = [1.0 if p.kind == "radiative" and p.decay_part == "branching" else np.inf for p in params]
-    x0 = np.clip(np.asarray(s.params_rwa, float), np.asarray(lo) + 1e-12, np.asarray(hi) - 1e-12)
+    x0 = np.clip(np.asarray(s.parameters.x0, float), np.asarray(lo) + 1e-12, np.asarray(hi) - 1e-12)
     r = least_squares(lambda x: s.objective().residuals(x), x0, jac=lambda x: s.objective().residuals_and_jacobian(x)[1], bounds=(lo, hi),
                       x_scale="jac", xtol=1e-14, ftol=1e-14, gtol=1e-14)
     _, J = s.objective().residuals_and_jacobian(r.x)
@@ -86,7 +88,7 @@ with tempfile.TemporaryDirectory() as tmp:
         nb = [p.name for p in b.parameters]
         check("the same parameters, by name and kind", na == nb and
               [p.kind for p in a.parameters] == [p.kind for p in b.parameters])
-        ca, cb = a.objective()(a.params_rwa), b.objective()(b.params_rwa)
+        ca, cb = a.objective()(a.parameters.x0), b.objective()(b.parameters.x0)
         check("the same chi^2", abs(ca - cb) <= 1e-12 * abs(ca), f"{ca} {cb}")
         radiative = [p for p in a.parameters if p.kind == "radiative"]
         check("8 radiative numbers: Gamma_gamma, five branchings (one fixed at 0), two mixing ratios",
@@ -100,7 +102,7 @@ with tempfile.TemporaryDirectory() as tmp:
         xp, chi_p, cov_p, names_p = fit(s)
         # b_f of the partial widths (eV) of the five free photon channels, in channel order = FINALS
         def branchings(x):
-            w = np.abs(np.asarray(s.transform_rwa(x), float))
+            w = np.abs(np.asarray(s.transform(x)[s.parameters.free_mask], float))
             photon = [k for k, n in enumerate(names_p) if n.startswith("width_")]
             g = w[photon]
             return g / g.sum()
@@ -139,7 +141,7 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(os.path.join(d, "agent.azr"), cwd=d) as s:
         p = [q for q in s.parameters if q.name == "level5.branching.g+15O[6.7931]"][0]
         check("the session starts from the new branching", abs(p.value - 0.35) < 1e-15, p.value)
-        chi0 = s.objective()(s.params_rwa)
+        chi0 = s.objective()(s.parameters.x0)
         check("the chi^2 rises", chi0 > chi_r + 100, f"{chi0} vs {chi_r}")
         xa, chi_a, _, names_a = fit(s)
         ba = xa[names_a.index("level5.branching.g+15O[6.7931]")]
@@ -168,19 +170,19 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the record's parameters by name, Gamma_gamma in eV",
               "level5.branching.g+15O[6.1763]" in radiative
               and abs(radiative["level5.total_width"].value - 0.0385027) < 1e-15, sorted(radiative))
-        ct, cr = t.objective()(t.params_rwa), s.objective()(s.params_rwa)
+        ct, cr = t.objective()(t.parameters.x0), s.objective()(s.parameters.x0)
         check("the same chi^2 as the twin with partial widths", abs(ct - cr) <= 1e-12 * abs(ct), f"{ct} {cr}")
         p = radiative["level5.branching.g+15O[6.1763]"]
-        x = np.asarray(s.params_rwa, float).copy()
+        x = np.asarray(s.parameters.x0, float).copy()
         x[p.free_index] = 0.55
         c_set = s.objective()(x)
-        check("a branching set in the free vector reads back", abs(s.transform_rwa(x)[p.free_index] - 0.55) < 1e-15)
+        check("a branching set in the free vector reads back", abs(s.transform(x)[s.parameters.free_mask][p.free_index] - 0.55) < 1e-15)
     proj = Project.open(rec)
     lines = [("g+15O[6.1763] 0.55 fit" if l.startswith("g+15O[6.1763]") else l) for l in proj["level5"]["branching"]]
     proj.set("level5", branching=lines)
     proj.save(os.path.join(d, "record_ec_055.azr"))
     with Session(os.path.join(d, "record_ec_055.azr"), cwd=d) as s:
-        c_file = s.objective()(s.params_rwa)
+        c_file = s.objective()(s.parameters.x0)
     check("its chi^2 is that of the project written with it (gamma^ext at the set point)",
           abs(c_set - c_file) <= 1e-10 * abs(c_file) and abs(c_set - cr) > 1.0, f"{c_set} {c_file} {cr}")
 
@@ -201,7 +203,7 @@ with tempfile.TemporaryDirectory() as tmp:
             x = phys.copy()
             x[i] *= 1.2
             # the engine's physical-vector path (the binding: pyazr's API takes the fit vector only)
-            c_vec, c_file = float(s._engine.calculate_chi2_physical(x)), float(f._engine.calculate_chi2_rwa(f.params_rwa))
+            c_vec, c_file = float(s._engine.calculate_chi2_physical(x)), float(f._engine.calculate_chi2_rwa(f.parameters.x0))
             # the twin: level 5's radiative widths x 1.2 in its physical vector
             tn = [p.name for p in t.parameters if not p.fixed]
             xt = np.asarray(t._engine.params_values(), float).copy()

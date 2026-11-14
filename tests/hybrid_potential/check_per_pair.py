@@ -106,7 +106,7 @@ NO_HYBRID = ""      # no record: no pair has a potential
 
 print("1. the project as committed (pair 1's record)")
 with Session(AZR, cwd=HERE) as m:
-    x = np.asarray(m.params_rwa, float)
+    x = np.asarray(m.parameters.x0, float)
     chi2_file = m.evaluate(x).chi2
     check("chi2 from the file equals expected/chiSquared.out", chi2_file, EXPECTED_CHI2, EXPECTED_TOL)
     FILE_CHI2 = chi2_file
@@ -121,7 +121,7 @@ with Session(AZR, cwd=HERE) as m:
 print("\n3. no hybrid at all")
 path = variant("_no_hybrid.azr", NO_HYBRID)
 with Session(path, cwd=HERE) as m:
-    chi2_off = m.evaluate(np.asarray(m.params_rwa, float)).chi2
+    chi2_off = m.evaluate(np.asarray(m.parameters.x0, float)).chi2
     print(f"        baseline chi2 = {chi2_off:.6f}")
     # 1e-4, not the 1e-3 this used to demand. The potential's effect on this
     # project's chi-squared is 2.8e-4 relative (2466827.58 against 2466142.31
@@ -141,13 +141,13 @@ with Session(AZR, cwd=HERE) as m:
     m.set_nuclear_potential(0, enabled=False)
     # Re-read: the potential changes the penetrabilities, which are what map
     # physical widths to reduced-width amplitudes, so the vector is re-derived.
-    x = np.asarray(m.params_rwa, float)
+    x = np.asarray(m.parameters.x0, float)
     check("chi2 with everything off", m.evaluate(x).chi2, chi2_off)
 
 print("\n5. setting a potential through the API equals loading it from a file")
 with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
-    x = np.asarray(m.params_rwa, float)
+    x = np.asarray(m.parameters.x0, float)
     check("chi2 built through the API", m.evaluate(x).chi2, FILE_CHI2)
 
 print("\n6. the Coulomb memo is keyed on the potential, so a change is seen")
@@ -155,17 +155,17 @@ with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     seen = []
     for v0 in (10.0, 20.0, 30.0):
         m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=v0, R=3.6, a=0.6)
-        seen.append(m.evaluate(np.asarray(m.params_rwa, float)).chi2)
+        seen.append(m.evaluate(np.asarray(m.parameters.x0, float)).chi2)
     print("        chi2 at V0 = 10, 20, 30: " + ", ".join(f"{c:.1f}" for c in seen))
     check_true("every depth gives its own answer", len(set(seen)) == 3, str(seen))
     check("V0=20 matches the file", seen[1], FILE_CHI2)
 
 print("\n7. a parameter vector captured before the change no longer fits the model")
 with Session(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
-    stale = np.asarray(m.params_rwa, float)
+    stale = np.asarray(m.parameters.x0, float)
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
     with_stale = m.evaluate(stale).chi2
-    with_fresh = m.evaluate(np.asarray(m.params_rwa, float)).chi2
+    with_fresh = m.evaluate(np.asarray(m.parameters.x0, float)).chi2
     check("re-read vector reproduces the file", with_fresh, FILE_CHI2)
     check_true("the stale vector does not", abs(with_stale - FILE_CHI2) > 1e-3 * FILE_CHI2,
                f"stale {with_stale} vs file {FILE_CHI2}")
