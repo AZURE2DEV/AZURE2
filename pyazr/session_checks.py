@@ -61,8 +61,7 @@ def setup_refused(err, said, project_file):
     errors = [line.strip() for line in said if line.lstrip("* \t").startswith(("ERROR", "Error"))]
     text = str(err).replace("; check the output above.", ".").replace(" (see the ERROR lines above; ", " (")
     text = text.replace(" (see the ERROR above).", ".")
-    name = os.path.basename(project_file)
-    what = f"the engine did not set up {name}: " + ("; ".join(errors) if errors else text)
+    what = f"the engine did not set up {project_file}: " + ("; ".join(errors) if errors else text)
     allowed = "a project whose every set-up check passes (the engine's lines name the one that failed)"
     fix = (f"correct what they name (pyazr.Project.open({project_file!r}) and its edits); Project.validate() lists "
            f"what the validator finds, Project.describe() what the engine makes of each record")
