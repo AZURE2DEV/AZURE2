@@ -408,18 +408,25 @@ A section (MF/MT) of the ENDF writer
 ------------------------------------
 
 ``pyazr.endf.write`` (``pyazr/endf/writer.py``) writes what the engine computes; the module writes records only.
+MF=6 (LAW=2 of the exits, LAW=5 of elastic scattering, the primary photons of MT=102) was added this way.
 
-1. The numbers: an engine quantity on the writer's grid (``_engine_grid``: one extrapolation per reaction in a
-   project of the session's nuclear part, refined by ``pyazr.refine_grid``), or a door of the binding when the
-   engine has no quantity for it (a new file of ``api/src/``, registered in ``BindPhysics``); never a formula in
-   Python.
-2. The records: a branch of ``write`` that fills ``sections[(MF, MT)]`` with a ``RecordWriter``
-   (``records.py``: CONT, LIST, TAB1, TAB2, TEXT), each record laid out as its page of ENDF-102 says (cite it).
-   The directory of MF=1 and the sequence numbers follow from ``sections``.
-3. Its line in ``NOT_WRITTEN`` goes; what the section still cannot carry is a line of ``Losses`` (``model.py``).
-4. Reading it back: the reader's ``read_*`` of the section (the recipe above); a check in
-   ``tests/pyazr/endf_write_test.py`` that the section read back equals the engine at points between the grid's,
-   and the own format check clean on the written file.
+1. The reaction: a role of ``engine_values.Reaction`` made by ``_reactions`` (``writer.py``) from the session's
+   pairs (``"elastic"``, ``"exit"``, ``"capture"``, ``"final_state"``).
+2. The numbers: an engine quantity of an extrapolation in ``engine_values.Sweeps`` (``sigma``, ``legendre`` with
+   the expansion that is the format's own normalisation, ``dsigma_domega`` at angles), on the one energy grid of
+   every section (``Sweeps.energy_grid``: ``grid.refine`` from ``grid.start_grid``, the rule applied to the
+   quantities the file tabulates; a second axis, as the cosines of LAW=5, refined by the same ``grid.refine``). If
+   the engine has no quantity for it, a door of the binding (a new file of ``api/src/``, registered in
+   ``BindPhysics``); never a physics formula in Python. MF=6 needed no door: the ``legendre`` quantity with the
+   expansion ``rsl`` is LAW=2's a_l.
+3. The records: a function of ``sections.py`` that lays the section out as its page of ENDF-102 says (cite it),
+   with a ``RecordWriter`` (``records.py``), and the line of ``write`` that puts it into ``written[(MF, MT)]``.
+   The directory of MF=1 and the sequence numbers follow from the sections.
+4. What it cannot carry: a row of ``NOT_WRITTEN_REASONS`` for a section a reaction needs and the writer leaves out;
+   a line of ``Losses`` (``model.py``) for what the project holds and the file does not.
+5. Reading it back: the reader's ``read_*`` of the section and a branch of ``curves`` (the recipe above; MF=6 needed
+   capture to one final state in ``curves``); checks in ``tests/pyazr/endf_write_test.py`` that the file's values
+   equal the engine at the data's points and between the grid's, and the own format check clean.
 
 A checking code of ``pyazr.endf``
 ---------------------------------

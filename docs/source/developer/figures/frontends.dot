@@ -29,6 +29,7 @@ digraph frontends {
   n_JobTable [label=<<b>JobTable</b><br/><font point-size="12">fits and samplers run<br/>as jobs</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__endf__Material [label=<<b>pyazr::endf::Material</b><br/><font point-size="12">one material of an<br/>ENDF-6 file: sections,<br/>header, curves</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__endf__resonances__LRF7 [label=<<b>pyazr::endf::resonances::LRF7</b><br/><font point-size="12">MF=2 R-Matrix Limited<br/>parameters in the<br/>file&#x27;s units and frame</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_pyazr__endf__engine_values__Sweeps [label=<<b>pyazr::endf::engine_values::Sweeps</b><br/><font point-size="12">the ENDF writer&#x27;s<br/>engine sessions: the<br/>values of MF=3 and<br/>MF=6 on the writer&#x27;s<br/>grids</font>>, shape=box, style="filled", fillcolor="white"];
   n_RateSession [label=<<b>RateSession</b><br/><font point-size="12">a session set up for a<br/>reaction rate, as the<br/>program&#x27;s rate command</font>>, shape=box, style="filled", fillcolor="white"];
   n_Covariance [label=<<b>Covariance</b><br/><font point-size="12">a data covariance<br/>built from named<br/>parts, checked</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
@@ -64,5 +65,6 @@ digraph frontends {
   n_pyazr__endf__Material -> n_pyazr__Session [style=dashed, arrowhead=vee];
   n_pyazr__endf__Material -> n_pyazr__endf__resonances__LRF7 [style=dotted, penwidth=1.6, arrowhead=empty];
   n_pyazr__endf__resonances__LRF7 -> n_pyazr__Session [style=dashed, arrowhead=vee];
+  n_pyazr__endf__engine_values__Sweeps -> n_pyazr__Session [style=dotted, penwidth=1.6, arrowhead=empty];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

@@ -2,6 +2,23 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: MF=6
+
+**Done** (`endf.md` 13.8, 13.9): `pyazr.endf.write` writes MF=6 from the engine on the one energy grid of MF=3:
+LAW=2 of each particle exit (the engine's `legendre` quantity with the expansion `rsl`, which is LAW=2's a_l; the
+residual LAW=4), LAW=5 LTP=12 of charged-particle elastic scattering with sigma_NI in MF=3/MT=2 (cosines per energy,
+`grid.thin`), MF=6/MT=102 (per final state the primary photon, LAW=2 with the yield sigma_f/sigma, and the recoil).
+New files `pyazr/endf/engine_values.py`, `sections.py`; `write(..., elastic_max_cosine=0.98)`, other signatures
+unchanged. Reader: capture to one final state in `curves`; LAW=5 LTP 12-15 interpolates sigma_NI(E_i) P_NI as its
+text said (the code multiplied two interpolations). The channel-spin coupling order measured on the full 3He + 4He
+library file (no MF=3/MF=6 number depends on it; the file's MF=6/MT=600 coefficients are not normalised).
+**Verified how**: `pyazr_endf_write` (curves of the written files against the engine at the data's points and
+between grid points: elastic 3.4e-3, LAW=2 1.1e-3, photons 3.0e-3 at most), `pyazr_endf_model`, `_read`, `_check`,
+the example, the consistency test, the pages built, CHECKR, FIZCON, PSYCHE on the written files (every finding in
+`endf.md` 13.8, all the codes' limits or readings). **Open** (questions for the PI): MF=6 over 200 energies and
+LAW=5 panels over 201 cosines (CHECKR's limits, not the manual's); LTP=12 where sigma_NI changes sign (an outside
+code multiplying two interpolations errs there); a narrow level cannot be written (13.7).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: the loose ends
 
 **Done** (`endf.md` 13.7): the start grid of every written section seeded with the level energies (E_r and
