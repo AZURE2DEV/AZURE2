@@ -271,9 +271,10 @@ as a bound state.
 
 Before November 2026 an unbound final state was treated, without a message, as a
 state **bound** by :math:`|E_x - S|`: its exterior was the Whittaker function at the
-mirror binding energy. For :math:`^{24}`\ Mg + p to 2.485 MeV that gives 1.7 to 5.9
-times too little external capture between :math:`E_{cm}` = 2.0 and 0.8 MeV, and for
-:math:`^{12}`\ C + p to 2.368 MeV 4 to 25 times too little between 1.6 and 0.8 MeV.
+mirror binding energy. For E1 direct capture of :math:`^{24}`\ Mg + p into 2.485 MeV
+that gives 1.75 to 5.3 times too little external capture between :math:`E_{cm}` = 2.0
+and 0.8 MeV (channel radius 4 to 5 fm), and for :math:`^{12}`\ C + p into 2.368 MeV 3.9
+to 25 times too little between 1.6 and 0.8 MeV.
 Points below :math:`E = E_x` came out NaN. The cached capture integrals
 (``intEC.dat``) of a model with an unbound final state carry a marker in their
 signature, so an old cache is recomputed rather than reused.
