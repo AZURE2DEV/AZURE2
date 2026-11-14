@@ -375,6 +375,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       question a named option of one table (`src/RunRequest.cpp`) that the menu, `--help` and `--describe` read; the
       menu still runs without a command (pyazr3.md decision 3 (a); `tests/cli_commands`).
 - [ ] The tests, examples, skills and pages on the commands; the readline menus removed.
+- [ ] ENDF for the evaluators (`endf.md`: the mapping of a project to ENDF-6 MF=2 LRF=7 and the other sections, a
+      measured spike, the checking codes, `pyazr.endf` and the page's screens; design written 2026-11-14): six
+      stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.
