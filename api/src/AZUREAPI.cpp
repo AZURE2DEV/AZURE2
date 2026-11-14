@@ -2,6 +2,7 @@
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
+#include "CompoundSystemSetUp.h"
 #include "AdaptiveExtrapolation.h"
 #include "ChannelFunc.h"
 #include "ModelPass.h"
@@ -40,7 +41,7 @@
 #include <cmath>
 
 AZUREAPI::AZUREAPI(Config &configure) :
-  configure_(configure), data_(nullptr), compound_(nullptr), state_(std::make_unique<LevelState>()),
+  configure_(configure), data_(nullptr), state_(std::make_unique<LevelState>()),
   inputs_(std::make_unique<LevelInputs>()) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
   // input file once and print each setup Note once, not on every rebuild (Config::cacheInputFiles, Note).
@@ -51,7 +52,7 @@ AZUREAPI::AZUREAPI(Config &configure) :
 AZUREAPI::~AZUREAPI() {
   // A session used to be a process, so the OS reclaimed these; in-process the
   // compound nucleus and its data are ~10 MB per model and must be returned.
-  if (compound_ != nullptr) delete compound_;
+  compound_.reset();
   if (data_ != nullptr) delete data_;
 }
 
@@ -117,62 +118,59 @@ int AZUREAPI::Initialize() {
   // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes.
   ReplaceModel();
 
-  // With the session's radius overrides: Initialize runs again on every mode switch.
-  if (compound_->Fill(configure(), *state_, *inputs_, radiusOverrides_) == -1) {
-    return -1;
-  } else if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) {
-    return -1;
-  }
-  if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), inputs(), configure());
-
-  if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
-    // Fill the data object from the segments and data file
-    //   Compound object is passed to the function for pair key verification and
-    //   center of mass conversions, s-factor conversions, etc.
-    // configure().outStream << "Filling Data Structures..." << std::endl;
-    if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound(), inputs()) != 0) {
-        // configure().outStream << "Could not fill data object from file." << std::endl;
-        return -1;
-      } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
-        // configure().outStream << "There is no data provided." << std::endl;
-        return -1;
+  // The compound system with the session's radius overrides (Initialize runs again on every mode switch), the data
+  // set up in the middle, then its last part (CompoundSystemSetUp.h).  The session says nothing of a refusal but the
+  // rate's pairs and the last part's message.
+  const DataSetUpStep dataSetUp = [this](const CompoundSystem &structure,
+                                         const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+    if ((configure().screenCheckMask | configure().fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS)
+      WriteCompoundNucleusCheck(structure, levelInputs, configure());
+    CompoundSetUpRequests requests;
+    if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
+      // Fill the data object from the segments and data file
+      //   Compound object is passed to the function for pair key verification and
+      //   center of mass conversions, s-factor conversions, etc.
+      if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
+        if (data()->Fill(configure(), &structure, levelInputs) != 0) {
+          return std::nullopt;
+        } else if (data()->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {
+          return std::nullopt;
+        }
+        RequestDataEntrances(structure, configure(), requests);
+      } else {
+        if (data()->MakePoints(configure(), &structure, levelInputs) != 0 || SessionRefusesAdaptiveGrids(configure())) {
+          return std::nullopt;
+        } else if (data()->Data().NumSegments() == 0) {
+          return std::nullopt;
+        }
+        RequestExtrapolationEntrances(structure, configure(), requests);
       }
-      RequestDataEntrances(*compound_, configure());
+      if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
+        data()->PrintData(configure());
     } else {
-      if (data()->MakePoints(configure(), compound(), inputs()) != 0 || SessionRefusesAdaptiveGrids(configure())) {
-        return -1;
-      } else if (data()->Data().NumSegments() == 0) {
-        // configure().outStream << "Extrapolation segments produce no data." << std::endl;
-        return -1;
+      // The program's check of the rate's pairs (RunSetUp.cpp): exit -1 is the total radiative capture.
+      const std::string rateProblem =
+          structure.RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
+      if (!rateProblem.empty()) {
+        configure().outStream << rateProblem << std::endl;
+        return std::nullopt;
       }
-      RequestExtrapolationEntrances(*compound_, configure());
+      requests.AddEntrance(structure.GetPairNumFromKey(configure().rateParams.entrancePair));
     }
-    if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
-      data()->PrintData(configure());
-  } else {
-    // The program's check of the rate's pairs (RunSetUp.cpp): exit -1 is the total radiative capture.
-    const std::string rateProblem =
-        compound()->RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
-    if (!rateProblem.empty()) {
-      configure().outStream << rateProblem << std::endl;
-      return -1;
-    } else {
-      compound_->RequestEntrance(compound_->GetPairNumFromKey(configure().rateParams.entrancePair));
-    }
-  }
-
-  // Initialize compound nucleus object, with the capture-A_y terms the data sets need
-  RequestCaptureAyTerms(*compound_, *data());
-  try {
-    compound_->Initialize(configure(), *state_, *inputs_);
-  } catch (GSLException e) {
-    configure().outStream << e.what() << std::endl;
+    // The capture-A_y terms the data sets need, built with the pathway table
+    RequestCaptureAyTerms(structure, *data(), requests);
+    return requests;
+  };
+  CompoundSetUp setUp = SetUpCompoundSystem(configure(), dataSetUp, radiusOverrides_);
+  if (setUp.refusal == CompoundSetUp::Refusal::kFinish) {
+    configure().outStream << setUp.finishError << std::endl;
     configure().outStream << std::endl
                           << "Calculation was aborted." << std::endl;
-    return -1;
   }
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return -1;
+  compound_ = std::move(setUp.compound);
+  *state_ = std::move(setUp.state);  // in place: a manager made later refers to the session's levels
+  *inputs_ = std::move(setUp.inputs);
 
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
@@ -645,10 +643,9 @@ bool AZUREAPI::Rebuild() {
 // The one place compound_ and data_ are replaced (Initialize, RebuildImpl): with them goes everything derived from
 // them and built lazily (the nuisance priors' manager and its parameter list), so it is built again for the new model.
 void AZUREAPI::ReplaceModel() {
-  delete compound_;
+  compound_.reset();
   delete data_;
   data_ = new WorkingCopy();
-  compound_ = new CompoundSystem();
   *state_ = LevelState();  // in place: a manager made later refers to the session's levels
   *inputs_ = LevelInputs();
   nuisance_.reset();
@@ -659,29 +656,34 @@ void AZUREAPI::ReplaceModel() {
 bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   ReplaceModel();
 
-  if (compound_->Fill(configure(), *state_, *inputs_, radii) == -1) return false;
-  if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
-
   // Mirror the branch taken at startup: data mode reads the data segments,
   // extrapolation mode builds its points from <segmentsTest>.
-  if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    if (data()->Fill(configure(), compound(), inputs()) != 0) return false;
-    RequestDataEntrances(*compound_, configure());
-  } else {
-    if (data()->MakePoints(configure(), compound(), inputs()) != 0 || SessionRefusesAdaptiveGrids(configure())) return false;
-    RequestExtrapolationEntrances(*compound_, configure());
-  }
-  if (data()->Data().NumSegments() == 0) return false;
+  const DataSetUpStep dataSetUp = [this](const CompoundSystem &structure,
+                                         const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+    CompoundSetUpRequests requests;
+    if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
+      if (data()->Fill(configure(), &structure, levelInputs) != 0) return std::nullopt;
+      RequestDataEntrances(structure, configure(), requests);
+    } else {
+      if (data()->MakePoints(configure(), &structure, levelInputs) != 0 || SessionRefusesAdaptiveGrids(configure()))
+        return std::nullopt;
+      RequestExtrapolationEntrances(structure, configure(), requests);
+    }
+    if (data()->Data().NumSegments() == 0) return std::nullopt;
 
-  configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
-  RequestCaptureAyTerms(*compound_, *data());
-  try {
-    compound_->Initialize(configure(), *state_, *inputs_);
-  } catch (GSLException e) {
+    configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+    RequestCaptureAyTerms(structure, *data(), requests);
+    return requests;
+  };
+  CompoundSetUp setUp = SetUpCompoundSystem(configure(), dataSetUp, radii);
+  if (setUp.refusal == CompoundSetUp::Refusal::kFinish) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
-    configure().outStream << e.what() << std::endl;
-    return false;
+    configure().outStream << setUp.finishError << std::endl;
   }
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return false;
+  compound_ = std::move(setUp.compound);
+  *state_ = std::move(setUp.state);
+  *inputs_ = std::move(setUp.inputs);
   if (data()->Initialize(compound(), configure()) == -1) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;

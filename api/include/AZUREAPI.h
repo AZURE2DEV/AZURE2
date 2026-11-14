@@ -130,7 +130,7 @@ class AZUREAPI {
   /*!
    * Returns a pointer to the CompoundSystem object.
    */
-  const CompoundSystem *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_.get(); };
   /// The session's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the session's
   /// evaluations and transformations, which are therefore not const; a const method reads them only.
   LevelState &state() { return *state_; }
@@ -509,8 +509,8 @@ class AZUREAPI {
   std::unique_ptr<AZUREParams> nuisanceParams_;
   std::unique_ptr<ParameterLimitsManager> nuisance_;
   bool nuisanceRead_ = false;
-  /// Deletes compound_ and data_, makes empty new ones and drops what was derived from the old ones (the nuisance
-  /// manager): the one place a model is replaced (Initialize, RebuildImpl).
+  /// Drops compound_, deletes data_ and makes an empty new one, and drops what was derived from the old ones (the
+  /// nuisance manager): the one place a model is replaced (Initialize, RebuildImpl).
   void ReplaceModel();
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
@@ -563,7 +563,9 @@ class AZUREAPI {
   // Configuration
   Config &configure_;
   WorkingCopy *data_;
-  CompoundSystem *compound_;  ///< the session's: written by its set-up (Initialize, RebuildImpl) only
+  /// The session's compound system, made finished and constant by its set-up (Initialize, RebuildImpl:
+  /// SetUpCompoundSystem); null before it and after a refused one.
+  std::unique_ptr<const CompoundSystem> compound_;
   std::unique_ptr<LevelState> state_;
   std::unique_ptr<LevelInputs> inputs_;
   // The results of this session's evaluations (results()), written by the (non-const) evaluations.
