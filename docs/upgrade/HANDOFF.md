@@ -2,6 +2,67 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 15:00) — merged: the level inputs out of the compound; the ENDF design note
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 72 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-level-inputs` and `feature/upgrade-8-endf-design`. The agents'
+entries follow. No conflict but this file.
+
+- **The compound, second half of step 4**: what a transformation into the fit's basis reads and writes about
+  the levels is one value, `LevelInputs` (`include/LevelInputs.h`), held by `CNuc::Inputs()`; `ALevel` holds
+  set-up data and the file's values only, its setters and `CNuc::MutableLevel` are gone; the `gamma_decay`
+  fills and the capture projectors are in `LevelState`, so a fill writes a `LevelState` and nothing else of
+  the compound. **Not done**: the readers do not take the state as an argument yet (they ask the compound),
+  and the owners still copy the compound (`Clone` and the pools stay); the memory of a fit per thread is not
+  measured. Both are the next branch's.
+- **ENDF, design only** (`docs/upgrade/endf.md`; no code): the mapping of a project to the R-Matrix Limited
+  format and back, what is lost and what is refused, the checking codes read in their manuals and sources,
+  the calls, the page's screens, six stages. Its spike is outside the repository (`work/endf/`).
+
+**Verified on the merged tree** (build `work/b-trial72`, eight threads): 0 warnings; all projects in the three
+bases against `tab-t71-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `b-trial71`; the quick tests 277 of 277 (one more: `upgrade_level_inputs`); the consistency test
+passes with the design note merged.
+
+**The director's own runs**, `b-trial72` against `b-trial71`, one thread, every output file compared
+(`work/director/spot72/own.sh`, `work/director/spot70/extra.sh`): MINOS and a fit with band and scaled
+covariance (`identical_pp_res`), the rate of the closed p + 12C model on a grid for one exit pair and for all,
+three `gamma_decay` fits (`record.azr` with the gradient and the LM fitter, `partial.azr`), a T1 extrapolation
+with band, the natural-target fits in two fitters, and the sampler's chains of T2 in both bases (8 walkers,
+100 steps): all identical. The ENDF note's central number was read in the spike's own table
+(`work/endf/run/inden_work/compare.txt`): the engine against the library file's MF=3 agrees to the file's
+seven digits from 7.2 MeV up; the first point above threshold differs as the note says, and the engine's
+value there is what the Coulomb barrier of p + 6Li at 0.7 keV gives (exp(-2 pi eta) of order 1e-45).
+
+**New reference**: result tag `tab-t72-1`, base build `work/b-trial72`.
+
+**The PI, 2026-11-14 afternoon** (answers to the director's three questions; his words):
+- on "checking the evaluations": "Checking the evaluation, I mean also checking that ENDF file is correctly
+  formatted using the ENDF tools". Taken as: the design's stage 4 (the checking codes started from the page
+  and from pyazr, their reports read, a corrected file offered as a difference) is wanted, beside the
+  calculation against the data and the comparison with a library's curves. No checking code is installed on
+  this machine and none may be installed without his yes: the stage is built against a stand-in and finds
+  the real codes when they are there.
+- on REACLIB / STARLIB for the rate utility: "Yes, these reaction rate formats would be great!" Passed to
+  the utilities agent as an added part.
+- on `--no-readline` once the menus are gone: "It could be refused". Passed to the commands agent: an
+  unknown option like any other, with the three parts.
+
+**The director's interim choices on the ENDF note's ten decisions** (so that the stages can start; each is
+the note's recommendation and each can be turned by the PI before the writer is built): the module's own
+parser (8); separation energies from AME2020 with the file's Q values and the differences reported (9); no
+program command, `pyazr endf ...` (5); GNDS not now (6); relativistic projects refused on export (4); the
+widest number form by default (2). **Waiting for the PI** because they are his or shape what an evaluator
+hands in: photon channels out of MF=2 with capture pointwise (1; it follows his rule on radiative widths, but
+it is the file's physics content); LRP=2 with full MF=3 (3); committing an 11 kB extract of an ENDF/B-VIII.1
+file as test data (7; fetched data in the repository); covariances from a formal-basis HESSE (10). Stages 1
+(curves), 2 (reader, without the library extract: hand-made files and write-then-read only) and 4 (checkers
+against a stand-in) need none of the waiting ones.
+
+**Open**: the readers and owners of the compound (brief written, launched after this merge); the set-up out
+of `CNuc` and its rename; the page's first view, the covariance builder and the rate tab, the commands'
+second part (three agents at work).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-endf-design`) — ENDF for the evaluators: design and spike
 
 **Done**: `docs/upgrade/endf.md` (no code in the tree): the format from ENDF-102 (2023, cited by printed page); the
