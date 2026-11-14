@@ -52,6 +52,19 @@ public names are a contract.
 4. `python3 tools/gen_physics_docs.py` (the user-guide page; the test fails until it is run).
 Nothing in Python: `pyazr/physics.py` builds the function, its signature and docstring from the row.
 
+## Recipe: add a Project edit
+
+An edit of the nuclear part (`<levels>`, `<config>`, `<thm>`) is the engine's: a function in `experiment/` (the
+`<levels>` rows: `experiment/src/LevelEdits.cpp`, as `SetPair`, `AddPair`, `RemovePair`) that reads the document,
+refuses with one sentence (what was wrong, what is allowed, which call fixes it) and returns line replacements; a
+binding in `api/src/pybind_nuclear_part.cpp` (`*_edits`, keyword arguments, `ValueError` with the reason); one method of
+`NuclearPart` (`pyazr/nuclear_part.py`) that names things (a level by label, a channel by pair, l, s) and hands the
+replacements to `Project._apply`, which validates the whole project as it would stand.  No column, position or grammar
+in Python.  A new column of a pair is a field of `PairChange` / `NewPair` and of `PairInfo` (`LevelTables.h`, read by
+`PairInfoOfRow`), its key in `level_table`'s pair dict and its field of `ProjectPair`.  Test: the edited file gives the
+engine's result of the same edit made by hand (`tests/pyazr/thm_pair_edits_test.py`), add then remove gives the text
+back, each refusal leaves the project unchanged (`tests/pyazr/pair_edits_test.py`).
+
 ## Recipe: use the objective and the evaluation
 
 - A fit or a sampler: `f = s.objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,

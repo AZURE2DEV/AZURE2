@@ -888,6 +888,20 @@ add_test(NAME pyazr_project_nuclear_part
                  ${CMAKE_CURRENT_SOURCE_DIR}/project_nuclear_part_test.py)
 set_tests_properties(pyazr_project_nuclear_part PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The THM columns of <levels> as Project edits: set_pair(binding_energy=) and set_channel(width_is_amplitude=) give
+# the chi-squared of the same edit made by hand on two THM projects; the refusals.
+add_test(NAME pyazr_thm_pair_edits
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_pair_edits_test.py)
+set_tests_properties(pyazr_thm_pair_edits PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Pairs added and removed (Project.add_pair, remove_pair) and the channels a J^pi allows (allowed_channels, the Qt
+# rule): T1's nuclear part built from nothing gives T1's chi-squared; add then remove gives the text back; refusals.
+add_test(NAME pyazr_pair_edits
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/pair_edits_test.py)
+set_tests_properties(pyazr_pair_edits PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # pyazr.stopping: the binding of stopping/ (SRIM-2013 through LunaSRIM) against LunaSRIM's reference values
 # (stopping/tests/data/srim_reference.csv), the same tolerances as the C++ tests.
 add_test(NAME pyazr_stopping

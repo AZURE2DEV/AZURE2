@@ -33,6 +33,7 @@ struct LevelRowLine {
   double width = 0.0;        ///< eV (open channel, photon), fm^-1/2 (closed channel: an ANC), MeV^1/2 with widthIsAmplitude
   bool widthIsAmplitude = false;  ///< gammaIsRWA = 1
   bool fixed = false;             ///< channelFix
+  bool pairRow = false;           ///< a pair row (AddPair): the row of a pair no level names, not a level's
 };
 
 /// One level: the rows of one level of a J^pi group (active rows), or consecutive inactive rows of one level ID.
@@ -94,6 +95,9 @@ struct LevelChange {
 struct ChannelChange {
   std::optional<double> width;  ///< the width column in the row's convention (eV, fm^-1/2, or MeV^1/2 with gammaIsRWA)
   std::optional<bool> fixed;
+  /// gammaIsRWA (column 33): the width column is a reduced-width amplitude (MeV^1/2) instead of a partial width or
+  /// ANC; a particle channel only.  The value is not converted: give the width in the new convention with it.
+  std::optional<bool> widthIsAmplitude;
 };
 /// The pair columns, on every row of the pair (the separation energy also in the entrance-pair copy of the rows whose
 /// entrance pair it is).
@@ -104,6 +108,10 @@ struct PairChange {
   /// The excitation energies (MeV) of the light (e1, the optional last column) and the heavy partner (e2); a light
   /// excitation of 0 is not written on a row that does not write the column.
   std::optional<double> lightExcitation, heavyExcitation;
+  /// The THM binding energy B (MeV, >= 0; 0 = none) of the composite projectile whose transferred particle is the
+  /// pair's light partner (column 32); a particle pair only.  A row that does not write the THM columns gets them
+  /// only for a value other than 0.
+  std::optional<double> bindingEnergy;
 };
 struct NewChannel {
   int pairKey = 0, l = 0, twoS = 0;
@@ -119,6 +127,61 @@ struct NewLevel {
   bool energyFixed = true;
   std::vector<NewChannel> channels;
 };
+
+/// A pair to add: the pair columns of a <levels> row.  A photon pair's light partner is the photon (J 1, parity +1,
+/// Z 0, mass 0, g 0, whatever is given); a beta pair's light partner is the electron or positron as given.
+struct NewPair {
+  int key = 0;   ///< 0: the next free key (one more than the largest)
+  int kind = 0;  ///< pType: 0 particle pair, 10 photon (capture to a level of the compound nucleus), 20 beta
+  int twoJLight = 1, twoJHeavy = 0;  ///< 2j of the light and heavy partner (photon pair: heavy = the final level)
+  int parityLight = 1, parityHeavy = 1;
+  int zLight = 0, zHeavy = 0;
+  double massLight = 0.0, massHeavy = 0.0;  ///< u
+  double gLight = 0.0, gHeavy = 0.0;        ///< g-factors (magnetic moments in nuclear magnetons over j)
+  double lightExcitation = 0.0, heavyExcitation = 0.0;  ///< MeV (photon pair: E_x of the final level)
+  double separationEnergy = 0.0;  ///< MeV
+  double radius = 0.0;            ///< fm, the channel radius (a particle pair; 0 for photon and beta)
+  int externalCapture = 0;        ///< ecMultMask, the external-capture multipole mask (column 31)
+  double bindingEnergy = 0.0;     ///< MeV, the THM binding energy (a particle pair; 0 = none)
+};
+/*!
+ * The <levels> file has no place for a pair but its rows, so a pair no level names yet is held by one row of its own:
+ * inactive (isActive 0) with level ID 0, J 0+, E_x 0, l 0, s 0, width 0 (a "pair row").  ReadLevelRowTable lists its
+ * pair and no level of it; the engine reads it as any inactive row (its pair is part of the system only with
+ * includeAllJPi).  AddLevel removes the pair row of a pair its new rows name.  The pair row goes at the end of the
+ * section; `key` gets the key used.
+ */
+LevelEdit AddPair(const io::Document &doc, const NewPair &pair, int &key);
+/*!
+ * Removes pair `pairKey`: its pair row, and with `removeChannels` the channel rows of the levels that name it.  Refused
+ * while a level names it (without `removeChannels`), naming the levels and channels, and when a level would be left
+ * without a channel (remove the level first).  Data sets and records that name the pair are the validator's to refuse.
+ */
+LevelEdit RemovePair(const io::Document &doc, int pairKey, bool removeChannels);
+
+/// The limits of AllowedChannels (the Qt LevelsTab's spin boxes and their defaults).
+struct ChannelLimits {
+  int lMax = 2;                ///< the largest orbital angular momentum of a particle channel
+  int multipolarityMax = 2;    ///< the largest multipolarity L of a photon channel
+  int multipolaritiesMax = 2;  ///< the most photon channels per photon pair (the lowest multipolarities first)
+};
+/*!
+ * The channels a level of 2J `twoJ` and parity `parity` has with the pairs of the section (keys in `pairKeys`, or all
+ * when empty), in pair order then (s, l) ascending: the rule of the Qt GUI's LevelsTab::calculateChannels.
+ * - particle pair (j1 pi1, j2 pi2): every channel spin s = |j1 - j2| ... j1 + j2 and every whole l = |s - J| ... s + J
+ *   with pi1 pi2 (-1)^l = pi and l <= lMax;
+ * - photon pair (final level J_f): s = J_f and the multipolarities L = 1 ... multipolarityMax with |L - J_f| <= J <=
+ *   L + J_f, at most multipolaritiesMax of them (E or M follows from the parities: the engine's, not a column);
+ * - beta pair (parent j2 pi2): pi = pi2 and J = j2: s = 0 with l = 1 (Gamow-Teller) and l = 0 (Fermi); |J - j2| = 1:
+ *   s = 1, l = 1 (Gamow-Teller).
+ * Refused (`error`) for 2J < 0, a parity other than +1 or -1, negative limits, or an unknown key.
+ */
+struct AllowedChannelList {
+  std::vector<LevelChannelInfo> channels;
+  std::string error;
+};
+AllowedChannelList AllowedChannels(const io::Document &doc, int twoJ, int parity, const ChannelLimits &limits,
+                                   const std::vector<int> &pairKeys);
 
 LevelEdit SetLevel(const io::Document &doc, const LevelAddress &address, const LevelChange &change);
 LevelEdit SetChannel(const io::Document &doc, const LevelAddress &address, const LevelChannelInfo &channel,

@@ -1105,3 +1105,27 @@ as the writer forms them (`SigmaAndS`), read-only views.
   is numpy, scipy is in the extras `web` and `examples`.  `pyazr.__all__` and the user guide's list "The names of the
   package" are compared by the consistency test.  Not done: `tabulate` / `angular_distribution` on given energies,
   `modelavg` / `priors` into `pyazr.bands`.
+
+## 9. The project edits and descriptions the web page lacks: as built
+
+The findings 9-11, 24, 27 and 28 of `web_ui.md` section 12, each as a call of pyazr; the page is ported to them later.
+
+- **THM binding energy and amplitude flag** (finding 11): `Project.set_pair(key, binding_energy=B)` writes column 32
+  on every row of the pair (`experiment::SetPair`, `PairChange::bindingEnergy`; a particle pair, finite B >= 0; a row
+  without the THM columns gets them only for B != 0); `Project.set_channel(level, pair, l, s, width_is_amplitude=)`
+  writes column 33 of the channel's row (`ChannelChange::widthIsAmplitude`; a particle channel; the width is not
+  converted).  `ProjectPair.binding_energy` and `ProjectChannel.amplitude` read them without a session.  Test:
+  `tests/pyazr/thm_pair_edits_test.py` (T2 and o18_lacognata2008: the engine's chi-squared of the edited file equals
+  that of the same edit made by hand in the text, and differs from the unedited one).
+- **Pairs added and removed** (finding 10): `Project.add_pair` (`experiment::AddPair`) writes a *pair row* (inactive,
+  level ID 0) at the end of `<levels>`, since the file holds a pair in its rows only; `ReadLevelRowTable` lists its
+  pair and no level, `AddLevel` removes it once a new level names the pair.  `Project.remove_pair(key,
+  remove_channels=False)` (`experiment::RemovePair`) refuses while a level has a channel of the pair (the levels and
+  channels named); with `remove_channels=True` the channel rows go too, never the last channel of a level; a data set
+  that names the pair is refused by the validator (`E_UNKNOWN_PAIR`).  The default refuses because removing channels
+  removes fit parameters of other levels: asking for it is explicit.  `Project.allowed_channels(J, parity, l_max=2,
+  multipolarity_max=2, multipolarities_max=2, pairs=None)` is the rule of the Qt `LevelsTab::calculateChannels`
+  (`experiment::AllowedChannels`, the rule in its comment); `add_level(..., "allowed")` takes it for a new J^π and
+  the group's channels for an existing one (the levels of a J^π share one set).  Test: `tests/pyazr/pair_edits_test.py`
+  (T1's nuclear part built from an empty `<levels>` gives T1's chi-squared and parameter count; add then remove gives
+  the text back).

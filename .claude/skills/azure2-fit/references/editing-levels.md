@@ -35,8 +35,11 @@ Rules:
   exists, `add_level` clones the group's rows and applies your `width`/`fixed` only to matching (pair, l, s);
   unmentioned channels are added inert (width 0, fixed). A channel outside the set is refused, with the set listed.
   Only for a new J^π do your channels define the group.
-- `add_level` references only a pair that already exists in the file; new particle pairs are added by writing
-  their level rows or by building the project (`azure2-setup`). Removing one channel from a group is not offered.
+- `add_level` references only a pair that already exists in the file: add one with `Project.add_pair(light=dict(J=,
+  parity=, Z=, mass=), heavy=..., separation_energy=, radius=)` (returns its key), remove one with
+  `Project.remove_pair(key)` (refused while a level names it; `remove_channels=True` takes its channel rows with it).
+  `Project.allowed_channels(J, parity, l_max=2)` lists the channels a J^π allows (the Qt rule) and
+  `add_level(J, parity, E, "allowed")` uses them. Removing one channel from a group is not offered.
 - The width column is the width input (Γ in eV for an open channel, an ANC in fm^-1/2 for a closed one; see
   `docs/source/user_guide/levels_channels.rst`), not a reduced-width amplitude. Seed a new channel with a small nonzero
   value and set `fixed=False`: a width of exactly 0 is fixed whatever its flag says (SKILL.md, "Free and fixed").

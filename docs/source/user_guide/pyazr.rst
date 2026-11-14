@@ -486,6 +486,10 @@ the project unchanged, and the lines an edit does not touch keep their bytes.  N
    p.set_pair(1, radius=4.5)                                          # every row of pair 1 (fm)
    p.remove_level(("1/2+", 20))                                       # a background pole
    p.add_level(1.5, +1, 8.6, [dict(pair=1, l=2, s=0.5, width=1000.0)])
+   k = p.add_pair(light=dict(J=0.5, parity=1, Z=1, mass=1.00782503), heavy=dict(J=2, parity=1, Z=6, mass=12.0),
+                  heavy_excitation=4.439, separation_energy=1.9435, radius=3.6)   # p + 12C(2+): its key
+   print(p.allowed_channels(3.5, +1, pairs=[k]))                       # what a 7/2+ allows with it (Qt rule)
+   p.remove_pair(k, remove_channels=True)                             # the pair and its channel rows
    p.add_dataset("roughton", reaction=p.reaction(1, -1), quantity="sigma", unit="b",
                  file="data/roughton.dat", columns="E_lab[MeV] _ value error", norm="1 fixed")
    p.set_config(output_dir="output_variant/")

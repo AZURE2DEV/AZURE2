@@ -129,6 +129,7 @@ bool ReadRows(const io::Document &doc, Rows &t, std::string &why) {
     r.width = row.gamma();
     r.widthIsAmplitude = row.gammaIsRWA() == 1;
     r.fixed = row.channelFix() != 0;
+    r.pairRow = row.isActive() != 1 && row.levelID() == 0;
     out.rows.push_back(r);
   }
   out.tables = LevelTablesOfRows(t.row);
@@ -140,6 +141,10 @@ bool ReadRows(const io::Document &doc, Rows &t, std::string &why) {
   for (std::size_t k = 0; k < out.rows.size(); k++) {
     const LevelRowSlot &slot = out.rows[k].slot;
     const io::LevelRow &row = t.row[k];
+    if (out.rows[k].pairRow) {  // holds a pair, not a level
+      lastInactive = -1;
+      continue;
+    }
     const bool active = slot.group > 0;
     int index = -1;
     if (active) {
@@ -232,6 +237,181 @@ int FindLevel(const LevelRowTable &t, const LevelAddress &a, std::string &why) {
   return -1;
 }
 
+namespace {
+
+// Appends the removals of the row lines `lines` (0-based, ascending) to `e`: contiguous rows with a blank line after
+// them and a blank line (or the tag) before take the blank line with them, so that an added block (AddLevel, AddPair)
+// removed again leaves the section as it was.
+void RemoveRowLines(const io::Document &doc, const Rows &t, std::vector<int> lines, LevelEdit &e) {
+  const int open = (int)t.table.open, close = (int)t.table.close;
+  const bool contiguous = lines.back() - lines.front() + 1 == (int)lines.size();
+  if (contiguous && lines.back() + 1 < close && BlankLine(doc.Line(lines.back() + 1)) &&
+      (lines.front() - 1 == open || BlankLine(doc.Line(lines.front() - 1))))
+    lines.push_back(lines.back() + 1);
+  for (auto it = lines.rbegin(); it != lines.rend(); ++it) e.replacements.push_back({*it, *it + 1, {}});
+}
+
+std::string PairsListed(const Rows &t) {
+  std::string keys;
+  for (const PairInfo &p : t.table.tables.pairs)
+    keys += (keys.empty() ? "" : ", ") + std::to_string(p.key) + " (" + PairLabel(p) + ")";
+  return keys.empty() ? "none" : keys;
+}
+
+bool HalfInteger(int twoJ) { return twoJ >= 0; }
+
+}  // namespace
+
+LevelEdit AddPair(const io::Document &doc, const NewPair &n, int &key) {
+  Rows t;
+  std::string why;
+  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (n.kind != 0 && n.kind != 10 && n.kind != 20)
+    return Refused("a pair's kind is particle (0), photon (10) or beta (20), not " + std::to_string(n.kind));
+  const bool particle = n.kind == 0, photon = n.kind == 10;
+  for (double x : {n.massLight, n.massHeavy, n.gLight, n.gHeavy, n.lightExcitation, n.heavyExcitation,
+                   n.separationEnergy, n.radius, n.bindingEnergy})
+    if (!std::isfinite(x)) return Refused("every number of a pair is finite");
+  if (!HalfInteger(n.twoJLight) || !HalfInteger(n.twoJHeavy))
+    return Refused("a spin is a multiple of 1/2, >= 0 (2j given: " + std::to_string(n.twoJLight) + ", " +
+                   std::to_string(n.twoJHeavy) + ")");
+  if (std::abs(n.parityLight) != 1 || std::abs(n.parityHeavy) != 1) return Refused("a parity is +1 or -1");
+  if (!(n.massHeavy > 0.0) || (!photon && !(n.massLight > 0.0)))
+    return Refused("the masses of a pair's partners are > 0 (u; a photon's is 0, given by the pair kind)");
+  if (particle && !(n.radius > 0.0))
+    return Refused("the channel radius of a particle pair is a number > 0 (fm), not " + ShortestNumberText(n.radius));
+  if (!particle && n.radius != 0.0) return Refused("a photon or beta pair has no channel radius: give 0 or none");
+  if (n.lightExcitation < 0.0 || n.heavyExcitation < 0.0) return Refused("an excitation energy is >= 0 (MeV)");
+  if (!particle && n.lightExcitation != 0.0) return Refused("only a particle pair's light partner can be excited");
+  if (n.bindingEnergy < 0.0 || (!particle && n.bindingEnergy != 0.0))
+    return Refused("the THM binding energy is >= 0 (MeV) and belongs to a particle pair");
+  if (n.externalCapture < 0) return Refused("the external-capture mask is a whole number >= 0");
+  int maxKey = 0;
+  for (const io::LevelRow &r : t.row) maxKey = std::max(maxKey, r.ir());
+  key = n.key > 0 ? n.key : maxKey + 1;
+  if (n.key < 0) return Refused("a pair key is a whole number >= 1 (0 or none: the next free key)");
+  if (PairRow(t, key) >= 0)
+    return Refused("pair key " + std::to_string(key) + " is taken (the pairs: " + PairsListed(t) +
+                   "); give another key or none for the next free one (" + std::to_string(maxKey + 1) + ")");
+  // The unused columns aa and entranceSepE as the first row writes them (the engine reads neither).
+  const std::string aa = t.row.empty() ? "1" : t.text[0].Token(Column("aa"));
+  const std::string entranceSepE = t.row.empty() ? ShortestNumberText(n.separationEnergy)
+                                                 : t.text[0].Token(Column("entranceSepE"));
+  auto spin = [](int twoJ) { return ShortestNumberText(0.5 * twoJ); };
+  const std::vector<std::string> columns = {
+      "0", "1", "0", "1", aa, std::to_string(key), "0", "0", "0", "0", "1", "0",
+      photon ? "1" : spin(n.twoJLight), photon ? "1" : std::to_string(n.parityLight), spin(n.twoJHeavy),
+      std::to_string(n.parityHeavy), ShortestNumberText(n.heavyExcitation), photon ? "0" : ShortestNumberText(n.massLight),
+      ShortestNumberText(n.massHeavy), photon ? "0" : std::to_string(n.zLight), std::to_string(n.zHeavy), entranceSepE,
+      ShortestNumberText(n.separationEnergy), "0", "0", "0.0", std::to_string(n.kind), ShortestNumberText(n.radius),
+      photon ? "0" : ShortestNumberText(n.gLight), ShortestNumberText(n.gHeavy), std::to_string(n.externalCapture)};
+  std::string line;
+  for (const std::string &c : columns) line += (line.empty() ? "" : " ") + c;
+  if (n.bindingEnergy != 0.0) line += "  " + ShortestNumberText(n.bindingEnergy) + " 0";
+  if (n.lightExcitation != 0.0) line += " " + ShortestNumberText(n.lightExcitation);
+  std::vector<std::string> lines{line, ""};
+  const int close = (int)t.table.close;
+  if (close - 1 > (int)t.table.open && !BlankLine(doc.Line(close - 1))) lines.insert(lines.begin(), "");
+  LevelEdit e;
+  e.replacements.push_back({close, close, lines});
+  return e;
+}
+
+LevelEdit RemovePair(const io::Document &doc, int pairKey, bool removeChannels) {
+  Rows t;
+  std::string why;
+  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (PairRow(t, pairKey) < 0)
+    return Refused("no pair has the key " + std::to_string(pairKey) + " (the pairs: " + PairsListed(t) + ")");
+  std::vector<int> lines;
+  std::string users, bare;
+  for (const LevelEntry &l : t.table.levels) {
+    std::string named;
+    int others = 0;
+    for (int r : l.rows) {
+      if (t.table.rows[r].channel.pairKey != pairKey) {
+        others++;
+        continue;
+      }
+      const LevelChannelInfo &c = t.table.rows[r].channel;
+      named += (named.empty() ? "" : "; ") + std::string("l = ") + std::to_string(c.l) + ", s = " +
+               (c.twoS % 2 ? std::to_string(c.twoS) + "/2" : std::to_string(c.twoS / 2));
+      lines.push_back(t.table.rows[r].line);
+    }
+    if (named.empty()) continue;
+    users += (users.empty() ? "" : ", ") + std::string("'") + l.label + "' (" + named + ")";
+    if (others == 0) bare += (bare.empty() ? "" : ", ") + std::string("'") + l.label + "'";
+  }
+  const std::string label = PairLabel(*PairByKey(pairKey, t.table.tables.pairs));
+  if (!users.empty() && !removeChannels)
+    return Refused("pair " + std::to_string(pairKey) + " (" + label + ") is a channel of the levels " + users +
+                   "; a pair is removed when no level names it: remove those levels or channels first, or remove "
+                   "the channels with the pair (remove_channels=True)");
+  if (!bare.empty())
+    return Refused("pair " + std::to_string(pairKey) + " (" + label + ") is the only channel of the levels " + bare +
+                   "; a level keeps at least one channel: remove those levels first (remove_level)");
+  for (std::size_t r = 0; r < t.row.size(); r++)
+    if (t.table.rows[r].pairRow && t.row[r].ir() == pairKey) lines.push_back(t.table.rows[r].line);
+  std::sort(lines.begin(), lines.end());
+  LevelEdit e;
+  // Each run of consecutive lines is removed as a block (with its blank line, as RemoveLevel does).
+  for (std::size_t a = 0; a < lines.size();) {
+    std::size_t b = a + 1;
+    while (b < lines.size() && lines[b] == lines[b - 1] + 1) b++;
+    RemoveRowLines(doc, t, std::vector<int>(lines.begin() + a, lines.begin() + b), e);
+    a = b;
+  }
+  std::sort(e.replacements.begin(), e.replacements.end(),
+            [](const LineReplacement &x, const LineReplacement &y) { return x.first > y.first; });
+  return e;
+}
+
+AllowedChannelList AllowedChannels(const io::Document &doc, int twoJ, int parity, const ChannelLimits &limits,
+                                   const std::vector<int> &pairKeys) {
+  AllowedChannelList out;
+  Rows t;
+  if (!ReadRows(doc, t, out.error)) return out;
+  if (twoJ < 0 || std::abs(parity) != 1) {
+    out.error = "a level has 2J >= 0 and parity +1 or -1";
+    return out;
+  }
+  if (limits.lMax < 0 || limits.multipolarityMax < 0 || limits.multipolaritiesMax < 0) {
+    out.error = "l_max, multipolarity_max and multipolarities_max are whole numbers >= 0";
+    return out;
+  }
+  for (int k : pairKeys)
+    if (!PairByKey(k, t.table.tables.pairs)) {
+      out.error = "no pair has the key " + std::to_string(k) + " (the pairs: " + PairsListed(t) + ")";
+      return out;
+    }
+  for (const PairInfo &p : t.table.tables.pairs) {
+    if (!pairKeys.empty() && std::find(pairKeys.begin(), pairKeys.end(), p.key) == pairKeys.end()) continue;
+    if (p.kind == 0) {
+      for (int twoS = std::abs(p.twoJHeavy - p.twoJLight); twoS <= p.twoJHeavy + p.twoJLight; twoS += 2)
+        for (int twoL = std::abs(twoS - twoJ); twoL <= twoS + twoJ; twoL += 2) {
+          const int l = twoL / 2;
+          if (twoL % 2 == 0 && p.lightParity * p.heavyParity * (l % 2 ? -1 : 1) == parity && l <= limits.lMax)
+            out.channels.push_back({p.key, l, twoS});
+        }
+    } else if (p.kind == 20) {
+      if (p.heavyParity == parity && p.twoJHeavy == twoJ) {
+        out.channels.push_back({p.key, 1, 0});
+        out.channels.push_back({p.key, 0, 0});
+      } else if (p.heavyParity == parity && std::abs(p.twoJHeavy - twoJ) == 2) {
+        out.channels.push_back({p.key, 1, 2});
+      }
+    } else {
+      int count = 0;
+      for (int L = 1; L <= limits.multipolarityMax && count < limits.multipolaritiesMax; L++)
+        if (std::abs(2 * L - p.twoJHeavy) <= twoJ && twoJ <= 2 * L + p.twoJHeavy) {
+          out.channels.push_back({p.key, L, p.twoJHeavy});
+          count++;
+        }
+    }
+  }
+  return out;
+}
+
 LevelEdit SetLevel(const io::Document &doc, const LevelAddress &address, const LevelChange &change) {
   Rows t;
   std::string why;
@@ -263,9 +443,15 @@ LevelEdit SetChannel(const io::Document &doc, const LevelAddress &address, const
     const LevelChannelInfo &c = t.table.rows[r].channel;
     listed += (listed.empty() ? "" : "; ") + ChannelText(c);
     if (c.pairKey != channel.pairKey || c.l != channel.l || c.twoS != channel.twoS) continue;
+    if (change.widthIsAmplitude && t.row[r].pType() != 0)
+      return Refused("level '" + level.label + "', " + ChannelText(channel) +
+                     ": a photon or beta channel has no reduced-width amplitude input (the flag is for a particle "
+                     "channel); set width_is_amplitude on a channel of a particle pair");
     std::map<int, std::map<int, std::string>> byRow;
     if (change.width) byRow[r][Column("gamma")] = ShortestNumberText(*change.width);
     if (change.fixed) byRow[r][Column("channelFix")] = Flag(*change.fixed);
+    if (change.widthIsAmplitude && (*change.widthIsAmplitude || t.text[r].hasThm))
+      byRow[r][Column("gammaIsRWA")] = Flag(*change.widthIsAmplitude);
     return RowEdits(t, byRow);
   }
   return Refused("level '" + level.label + "' has no row for " + ChannelText(channel) + " (its channels: " + listed + ")");
@@ -289,6 +475,12 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
     if (x && !(std::isfinite(*x) && *x >= 0.0)) return Refused("an excitation energy is a number >= 0 (MeV)");
   if (change.radius && t.row[first].pType() != 0)
     return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it has no channel radius");
+  if (change.bindingEnergy && t.row[first].pType() != 0)
+    return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it cannot be the entrance pair of "
+                   "a THM experiment, so it has no THM binding energy; set binding_energy on a particle pair");
+  if (change.bindingEnergy && !(std::isfinite(*change.bindingEnergy) && *change.bindingEnergy >= 0.0))
+    return Refused("the THM binding energy " + ShortestNumberText(*change.bindingEnergy) +
+                   " MeV is out of range: it is a number >= 0 (MeV; 0 = none), B of the Trojan horse a = x + s");
   std::map<int, std::map<int, std::string>> byRow;
   for (std::size_t r = 0; r < t.row.size(); r++) {
     const io::LevelRow &row = t.row[r];
@@ -301,6 +493,8 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
       if (change.heavyExcitation) tokens[Column("e2")] = ShortestNumberText(*change.heavyExcitation);
       if (change.lightExcitation && (*change.lightExcitation != 0.0 || t.text[r].hasE1))
         tokens[Column("e1")] = ShortestNumberText(*change.lightExcitation);
+      if (change.bindingEnergy && (*change.bindingEnergy != 0.0 || t.text[r].hasThm))
+        tokens[Column("bindingE")] = ShortestNumberText(*change.bindingEnergy);
     }
     if (change.separationEnergy && row.aa() == pairKey)
       byRow[(int)r][Column("entranceSepE")] = ShortestNumberText(*change.separationEnergy);
@@ -393,6 +587,11 @@ LevelEdit AddLevel(const io::Document &doc, const NewLevel &n) {
   if (close - 1 > (int)t.table.open && !BlankLine(doc.Line(close - 1))) lines.insert(lines.begin(), "");
   LevelEdit e;
   e.replacements.push_back({close, close, lines});
+  // The pair rows of the pairs the new rows name: the pair is now held by a level.
+  std::set<int> named;
+  for (const auto &rc : rows) named.insert(t.row[rc.first].ir());
+  for (std::size_t r = t.row.size(); r-- > 0;)
+    if (t.table.rows[r].pairRow && named.count(t.row[r].ir())) RemoveRowLines(doc, t, {t.table.rows[r].line}, e);
   return e;
 }
 
@@ -404,14 +603,8 @@ LevelEdit RemoveLevel(const io::Document &doc, const LevelAddress &address) {
   if (k < 0) return Refused(why);
   std::vector<int> lines;
   for (int r : t.table.levels[k].rows) lines.push_back(t.table.rows[r].line);
-  // Contiguous rows with a blank line after them and a blank line (or the tag) before: the blank line goes too.
-  const int open = (int)t.table.open, close = (int)t.table.close;
-  const bool contiguous = lines.back() - lines.front() + 1 == (int)lines.size();
-  if (contiguous && lines.back() + 1 < close && BlankLine(doc.Line(lines.back() + 1)) &&
-      (lines.front() - 1 == open || BlankLine(doc.Line(lines.front() - 1))))
-    lines.push_back(lines.back() + 1);
   LevelEdit e;
-  for (auto it = lines.rbegin(); it != lines.rend(); ++it) e.replacements.push_back({*it, *it + 1, {}});
+  RemoveRowLines(doc, t, lines, e);
   return e;
 }
 

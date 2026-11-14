@@ -1508,10 +1508,18 @@ None of these changes the decided objects; each is a call or a field to add:
    three parts; the parts are not attributes, so the server keeps the whole text in `what`.
 10. **Pairs added and removed, with channel generation**: `add_pair`, `remove_pair`, and the channels a J^π allows from
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
+    *Delivered in pyazr*: `Project.add_pair(kind=, light=, heavy=, separation_energy=, radius=, ...)` (returns the key;
+    a pair no level names is held by a pair row, inactive with level ID 0), `Project.remove_pair(key,
+    remove_channels=False)` (refused while a level has a channel of it, naming them), `Project.allowed_channels(J,
+    parity, l_max=2, multipolarity_max=2, multipolarities_max=2, pairs=None)` (the rule of `LevelsTab::calculateChannels`,
+    in the engine: `experiment::AllowedChannels`), `add_level(..., "allowed")`.  The Nucleus tab can call them.
 11. **THM binding energy B and the width-is-amplitude flag** per channel: `set_pair` and `set_channel` have neither.
     *The page shows them read-only* (section 11.8): the session's pair records carry `binding_energy` and its
     parameter rows `width_is_amplitude`.  Wanted: `set_pair(key, binding_energy=...)` and `set_channel(...,
     width_is_amplitude=...)` (or the record fields they are), so that the THM tab edits them as project edits.
+    *Delivered in pyazr*: `Project.set_pair(key, binding_energy=B)` (a particle pair, B >= 0, every row of the pair)
+    and `Project.set_channel(level, pair, l, s, width=, width_is_amplitude=)` (a particle channel); without a session,
+    `Project.pairs()[k].binding_energy` and `Project.level(label).channel(pair, l, s).amplitude` read them.
 12. **Outputs of a physics function described in its row** (names, units, which argument is the natural axis), so
     the Physics tab can draw it without a per-function plot.  **Closed**: every row of `/api/physics` has its
     arguments (unit, kind, domain, bounds, default, choices), its returned fields with units and `axis`; the two

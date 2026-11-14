@@ -335,6 +335,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
+- [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
+      the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
+      channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule) (2026-11-14).  The page is
+      ported to them by a later step.
 - [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
       key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
       provisional `SESSION_OPTIONS` gone (2026-11-13).

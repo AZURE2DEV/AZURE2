@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — pyazr edits the web page lacks
+
+**Done** (`docs/upgrade/pyazr3.md` section 9, `web_ui.md` section 12 findings 10 and 11):
+
+- The THM columns as Project edits: `Project.set_pair(key, binding_energy=B)` (column 32 on every row of a particle
+  pair, B >= 0) and `Project.set_channel(..., width_is_amplitude=)` (column 33 of a particle channel's row);
+  `ProjectPair.binding_energy`, `.light_parity`.
+- Pairs added and removed: `Project.add_pair` (a pair row, inactive with level ID 0, holds a pair no level names;
+  `add_level` removes it), `Project.remove_pair(key, remove_channels=False)` (refused while a level names the pair),
+  `Project.allowed_channels(J, parity, ...)` (the Qt `LevelsTab` rule, `experiment::AllowedChannels`),
+  `add_level(..., "allowed")`.  The page's route table serves `add_pair`, `remove_pair` and the new keywords
+  (`pyazr/ui/routes.py`: rows only; `allowed_channels` listed as not served yet).
+
+**Verified**: `tests/pyazr/thm_pair_edits_test.py` (T2, o18_lacognata2008: chi-squared of the call's edit equals that
+of the hand edit, exactly), `tests/pyazr/pair_edits_test.py` (T1 built from an empty `<levels>`: chi2 482.27523961726723
+and 13 parameters as T1), `project_nuclear_part`, `inactive_lines`, `level_grouping`, `light_excitation`,
+`zero_width_level`, the UI's api/server/static/routes/thm tests, `experiment_*` and `io_*`; T1, T2, T3, 13N, 17O,
+18O_p_a_thm, 6Li_d, 7Li_p_a and the THM toy in the three bases against the base build's engine: identical.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the Fit tab's loose ends
 
 **Done** (`docs/upgrade/web_ui.md` sections 11.6 and 11.7, the departures updated):
