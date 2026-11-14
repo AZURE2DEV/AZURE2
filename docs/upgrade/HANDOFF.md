@@ -41,8 +41,8 @@ engines): screen text, exit code, output and check files identical to `b-trial78
 refusal of `HasFormalECFinalBlocks` and of `GetBoundaryCondition` removed, `upgrade_compound_setup` 2 failures
 (removed). At the end: all projects x 3 bases (`tab-setup1-T`) Brune 887, formal 851, Park 887 files, all identical
 to `tab-t74-1`; own runs by command (`extra.sh`: eight fits, the sampler in both bases, `gamma_decay`, MINOS, band,
-rate) 16 of 16 identical to `b-trial78`; T2 fit at 1 and 4 threads, 14 files identical; `OMP_NUM_THREADS=1 ctest -LE slow -j2` 293 of 293;
-docs_build 60 pages.
+rate) 16 of 16 identical to `b-trial78`; T2 fit at 1 and 4 threads, 14 files identical;
+`OMP_NUM_THREADS=1 ctest -LE slow -j2` 293 of 293; docs_build 60 pages.
 
 **Open / found**: the probably-unmeant differences above (sampler: no check files, no blank line; rebuild: no rate
 branch, model data alone refused) are kept; `tests/upgrade/node_count --plan` crashes (segmentation fault) in
