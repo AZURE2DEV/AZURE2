@@ -885,10 +885,10 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
     if (filled) {
       lc->CalcShiftFunctions(configure());
       for (int j = 1; j <= lc->NumJGroups(); j++) {
-        JGroup *jg = lc->GetJGroup(j);
+        const JGroup *jg = lc->GetJGroup(j);
         if (!jg->IsInRMatrix()) continue;
         for (int la = 1; la <= jg->NumLevels(); la++) {
-          ALevel *level = jg->GetLevel(la);
+          const ALevel *level = jg->GetLevel(la);
           if (!level->IsInRMatrix() || level->GetParkNorm() > 0.0) continue;
           std::ostringstream text;
           text << AZURELabel::Level(jg, level, j, la) << ": J = " << level->GetParkNorm();

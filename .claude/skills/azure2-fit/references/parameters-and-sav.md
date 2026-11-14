@@ -12,12 +12,13 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   appearance in `<levels>`, then the group's levels in file order), not in raw file order and not by `levelID`.
   `width_<N>_<c>` is channel `c` of the J-group's channel set, in the order of that level's channel lines. Only active
   levels are counted.
-- **Segment parameters**: `segment_<key>_norm`, `segment_<key>_energy_shift`, `segment_<key>_energy_shift_sqrt`
-  (and the shift-function terms), where `<key>` is the 1-based position of the `<segmentsData>` line counting every
-  line, active or not (`Segment.key`, matching `Parameter.segment_key`; `WorkingCopy::FillMnParams`).
-- **Consequence**: deactivating, removing or adding a level renames every later level parameter, and removing or
-  inserting a `<segmentsData>` line renames every later segment parameter. A `param.sav` written before the edit then
-  puts every later value on the wrong parameter, without an error.
+- **Nuisance parameters** are named after the record that owns them (project format 3): a data set's norm
+  `<data set>.norm`, its shift `<data set>.shift.offset` and √E term `<data set>.shift.sqrt`, a group's shared value
+  `<group>.value` or `<group>.offset`, a target's `<target>.areal_density` (`s01_int_thin.norm`, `G.offset`,
+  `tgt_s05_implanted.areal_density` on `tests/upgrade/T2`). `s.objective().names` lists the free ones; a
+  parameter file of an old project is renamed with `AZURE2 --convert-params` (`docs/source/reference/command_line.rst`).
+- **Consequence**: deactivating, removing or adding a level renames every later level parameter. A `param.sav` written
+  before the edit then puts every later value on the wrong parameter, without an error.
 - Old builds used `j=<J>_la=<L>_energy` and `j=<J>_la=<L>_ch=<C>_rwa`; convert such files first
   (`references/legacy-params.md`).
 
@@ -37,26 +38,28 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 
 ## Loading a parameter file in pyazr
 
-- **Use `x = m.load_sav(path)`**, not a slice of `full_rwa_from_sav`. The CLI's parameter-file reader also sets fixed
+- **Use `s.load_sav(path)`**, not a slice of `full_rwa_from_sav`. The CLI's parameter-file reader also sets fixed
   level energies and widths. pyazr's free-vector calls (`evaluate(x)`, `objective()(x)`,
   `transform_rwa`, `save_fit`, ...) take every fixed value from the session, that is from the `.azr`. So
-  `x = m.full_rwa_from_sav(sav)[~fixed]` evaluates a different model whenever the `.sav`'s fixed values differ from the
+  `s.full_rwa_from_sav(sav)[~fixed]` evaluates a different model whenever the `.sav`'s fixed values differ from the
   `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths were never updated). In one case
   10 fixed widths off by up to 1.6 % gave χ² = 9925.03 against the CLI's 9868.04; with `load_sav` every `AZUREOut_*`
   line and `chiSquared.out` matched the CLI exactly.
-- `load_sav` pushes the whole file into the engine (the binding's `set_params_all_rwa`), sets `m.params_rwa` and returns the
-  free vector; `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the free/fixed
-  split (the CLI frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with another basis.
-- `extrap_mode()` and `data_mode()` re-initialise the engine from the `.azr`: call `load_sav` again after switching.
+- `load_sav` pushes the whole file into the engine (the binding's `set_params_all_rwa`), sets the session's values and
+  returns the free vector; `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the
+  free/fixed split (the CLI frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with
+  another basis.
+- A session of the extrapolations (`pyazr.Session(path, data_mode=False)`) is built from the `.azr`: load the
+  parameter file into it as well.
 
 ## Which physical level is `energy_<N>`?
 
-- pyazr's `m.parameters` names need not equal the names in a `param.sav` written from another file: in one model
+- pyazr's `s.parameters` names need not equal the names in a `param.sav` written from another file: in one model
   pyazr's `energy_39` was the 14.72 MeV level while the `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr showed
   the `.azr` seed, `param.sav` the fit). Identify a `param.sav` name by (a) `parameters.out`, which lists
   `J = ... E_level = ...` blocks in the same order, or (b) a one-line CLI probe: change that entry in a scratch copy,
   run mode 1, and see which `E_level` or width line changed.
-- `m.parameters` is the engine's records, one row per parameter (`print(m.parameters.table())`: name, kind, unit,
+- `s.parameters` is the engine's records, one row per parameter (`print(s.parameters.table())`: name, kind, unit,
   start, free, bounds, what it belongs to). A `**WARNING: Denominator less than zero while transforming` printed
   while it is built concerns the transformation of the start values, not the table: cross-check with a plain
   `evaluate(x).data[i].energies` or the CLI before concluding the parameters are corrupted.
@@ -64,7 +67,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   J-group).
 - **A `Parameter`'s `pair` is the engine's pair number**, which counts particle pairs in the order `<levels>` first
   mentions them, not the file's pair key. In one model engine pair 1 is file key 2 and file key 1 is engine pair 6.
-  When calling `pyazr.snapshot.place_level_values` directly, pass `pairs=m.pairs`, or it cannot translate.
+  When calling `pyazr.snapshot.place_level_values` directly, pass `pairs=s.pairs`, or it cannot translate.
 
 ## Remapping after a level edit
 
@@ -73,25 +76,20 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   2.7 × 10⁸ instead of about 7.7 × 10⁵). After one level was switched off in another, 279 names became 271 and
   `energy_31` named the next level. Inserting a background pole into a 367-parameter model matched 327 names by name
   and started the fit at χ² = 3 × 10⁹.
-- Safe options: (a) bake the fit into `<levels>` (`m.save_fit`) before the structural edit and seed only the
+- Safe options: (a) bake the fit into the project (`s.save_fit`) before the structural edit and seed only the
   `segment_*` lines afterwards; or (b) remap by physical identity (kind, level energy, J^π, pair key, l, radiation
   type; segment key for normalizations), let genuinely new parameters keep the value the new `.azr` carries, and check
   that every mapped pair has identical values before trusting the map. To list names on both models:
-  `[p.name for p in m.parameters if p.kind in ("energy", "width")]`.
+  `[p.name for p in s.parameters if p.kind in ("energy", "width")]`.
 
-## Segment keys: removing or inserting a `<segmentsData>` line
+## Data sets: removing or renaming one
 
-`AZUREParams::ReadUserParameters` matches an external parameter file by exact name across all parameters, fixed or
-free, and calls `SetValue()` on any match, with no warning on a stale one. Deleting an earlier line shifts every later
-key down by one. Two failures seen in one archive fit, both loaded and fitted without a message:
-
-1. a remap script renamed `segment_N_norm` past the cut but not `segment_N_energy_shift`, so one segment's fixed
-   energy calibration was applied to its neighbour;
-2. a remap regex anchored at the line start missed every `segment_N_norm`, because those lines are indented in
-   `param.sav` while `segment_N_energy_shift` lines are not.
-
-Remap every per-segment family by the same shifted key and verify it directly (diff the rows on both sides of the
-edit). Better: deactivate instead of deleting (`references/drop-dataset.md`).
+In project format 3 a data set's parameters carry its record name (`s04_thick.norm`), so removing a data set
+renames nothing else; renaming the record (`Project.rename`) renames its parameters, and a parameter file written
+before keeps the old name, which then matches nothing, without a message. A parameter file of a format-1 or -2
+project used `segment_<key>_*` names keyed by line position, where deleting a line shifted every later key: convert
+such a file with `AZURE2 --convert-params` against the old project before anything else. Deactivate rather than
+delete (`references/drop-dataset.md`).
 
 ## Two levels of one J^π closer than 1 keV
 
@@ -105,12 +103,12 @@ round-trip through a `.azr`; rmfit's bake guard reports it as lost keys.
 
 ## Limits and priors written by the Qt GUI
 
-The `<parameterSettings>` of the Fitting tab of released builds' Qt GUI names `Level N` as `energy_N` and `Level N Channel M` as `width_N_M` in the
-engine's numbering, and marks the block `# level numbering: engine` (`docs/source/user_guide/fitting.rst`).
-builds before 2026-10-21 (expires: 2027-02-01) numbered GUI settings by model row (inactive levels counted, widths by
-global channel row) while the engine read engine numbers, so after a GUI save of a file not sorted by J, parity and
-energy, or with an inactive level ahead of active ones, limits and priors landed on other levels (a prior centred on
-the 3.52 MeV level acted on the 5.0 MeV one, χ² +21,904). A current build reads an unmarked block in whichever
-numbering makes more value columns equal the parameters' current values (tie: engine). To audit an old file: is
-`Level N Channel M` (M = global channel-line row) the engine's `width_N_M`? The GUI keeps settings only for the
-parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
+The `<parameterSettings>` of the Fitting tab of released builds' Qt GUI names `Level N` as `energy_N` and `Level N
+Channel M` as `width_N_M` in the engine's numbering, and marks the block `# level numbering: engine`
+(`docs/source/user_guide/fitting.rst`). builds before 2026-10-21 (expires: 2027-02-01) numbered GUI settings by model
+row (inactive levels counted, widths by global channel row) while the engine read engine numbers, so after a GUI save of
+a file not sorted by J, parity and energy, or with an inactive level ahead of active ones, limits and priors landed on
+other levels (a prior centred on the 3.52 MeV level acted on the 5.0 MeV one, χ² +21,904). A current build reads an
+unmarked block in whichever numbering makes more value columns equal the parameters' current values (tie: engine). To
+audit an old file: is `Level N Channel M` (M = global channel-line row) the engine's `width_N_M`? The GUI keeps settings
+only for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.

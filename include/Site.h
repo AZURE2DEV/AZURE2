@@ -172,7 +172,7 @@ class Site {
   void CoulombAt(int slot, complex &direct, complex &exchange) const;
   /// f_C at c.m. energy `energy` (MeV) and c.m. angle `angle` (deg) of `pair` scattering elastically: `direct`
   /// (symmetrized for an identical pair without spin-dependent exchange) and `exchange` (0 unless spin-dependent).
-  static void CoulombAmplitudesAt(PPair *pair, double energy, double angle, complex &direct, complex &exchange,
+  static void CoulombAmplitudesAt(const PPair *pair, double energy, double angle, complex &direct, complex &exchange,
                                   bool &spinDependent);
   /// The reader's angular row at its slot `slot` (1-based; 0: its own energy): P_L(cos theta) with the Q coefficients
   /// of its effect, at the slot's energy where the detector's lab transform makes it depend on the energy
@@ -332,16 +332,16 @@ class Site {
   /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.
   complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
   /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
-  void ConvertExcitationEnergy(PPair *);
+  void ConvertExcitationEnergy(const PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
-  bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
+  bool RelativisticLabToCM(const PPair *entrancePair, const PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
   /// dOmega_lab/dOmega_cm of a particle at the point, not stored (the RATIO frame factors).
-  double CalculateCrossSectionConversionFactor(PPair *, PPair *);
+  double CalculateCrossSectionConversionFactor(const PPair *, const PPair *);
   /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients at c.m. energy
   /// `cmEnergy` (MeV); false: Q as entered.
-  bool QLabBoostAt(double cmEnergy, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
+  bool QLabBoostAt(double cmEnergy, const PPair *entrancePair, const PPair *exitPair, double &g, double &gb) const;
   /// dOmega_lab/dOmega_cm of a photon at the point (the RATIO frame factors).
-  double CalculateCrossSectionGammaConversionFactor(PPair *);
+  double CalculateCrossSectionGammaConversionFactor(const PPair *);
   /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
   void AddLegendreP(double);
   /// Drop the stored polynomials, so they can be recomputed after an energy shift.

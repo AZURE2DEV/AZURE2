@@ -23,7 +23,7 @@ class ShftFunc {
   /*!
    * The ShftFunc object is created with reference to a particle pair.
    */
-  ShftFunc(PPair *pPair) {
+  ShftFunc(const PPair *pPair) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
     radius_ = (double)pPair->GetChRad();
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);

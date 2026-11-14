@@ -4,6 +4,7 @@ one curve; maximal same-sign runs, n >= 3, coherent chi2 (sum r)^2/n >= 25).  Ea
 extent (min 10 keV) on a 2 keV grid; runs wider than MAX_SPAN are trends (listed, not mapped).  The map is smoothed (sigma 6 keV) and
 cut into regions at its local minima; a region = one basin, ranked by integral.  Residual convention r = (fit - data)/sigma:
 "model low" = runs with r < 0.  usage: rank_map.py resid.npz out.txt [parameters.out fit.azr]   (the last two list the model's levels in each region)"""
+import argparse
 import sys
 import numpy as np
 from collections import defaultdict
@@ -23,6 +24,12 @@ def detector_labels(ang, gap=2.0):
     return lab
 
 MIN_RUN, MIN_SCORE, MAX_SPAN, MINW, DE, SIG = 3, 25.0, 0.6, 0.010, 0.002, 0.006
+_ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+_ap.add_argument("resid", help="the table of dump_residuals.py (.npz)")
+_ap.add_argument("out", nargs="?", help="the ranked regions (text; default standard output)")
+_ap.add_argument("parameters", nargs="?", help="parameters.out of the fit (lists the model's levels per region)")
+_ap.add_argument("azr", nargs="?", help="the fitted project (with parameters: which levels are fixed)")
+_ap.parse_args()
 z = np.load(sys.argv[1]); out = open(sys.argv[2], "w") if len(sys.argv) > 2 else sys.stdout
 key, name, ex, ang, res = z["key"], z["name"], z["ex"], z["ang"], z["res"]
 curves = {}
@@ -85,7 +92,7 @@ if len(sys.argv) > 4:
     for line in open(sys.argv[3]):
         m = re.match(r"J =\s*(\S+)\s+E_level =\s*(\S+)", line)
         if m:
-            J = m.group(1); jpi = J.replace("0.5", "1/2").replace("1.5", "3/2").replace("2.5", "5/2").replace("3.5", "7/2").replace("4.5", "9/2").replace("5.5", "11/2").replace("6.5", "13/2")
+            J = m.group(1); j2 = int(round(2 * float(J[:-1]))); jpi = (f"{j2}/2" if j2 % 2 else f"{j2 // 2}") + J[-1]
             cur = dict(jpi=jpi, e=float(m.group(2)), g=0.0); levels.append(cur); continue
         m = re.search(r"G\s+=\s+(\S+) keV", line)
         if m and cur is not None: cur["g"] += float(m.group(1))

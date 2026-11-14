@@ -42,22 +42,29 @@ branch). §3 replaces the "Skills" section of `CLAUDE.md` when Phase 0 rewrites 
 6. One owner skill per task; others link to it. Repo and user-level skills never share a name or description.
 7. A description is at most 600 characters, names its triggers, and says when to use a sibling skill instead.
 8. No personal absolute paths (`/groups/...`, `/Users/...`); use environment variables.
-9. `tools/check_skills.py` enforces 4, 5, 6, 8 and that docs links resolve, in pre-commit and CI.
+9. `tools/check_skills.py` enforces 4, 5, 6, 8, 10, 11 and that docs links resolve, in pre-commit and CI.
+10. No skill names a removed pyazr name (the column "earlier name" of the migration table of
+    `docs/source/user_guide/pyazr.rst`), except in a "builds before" version note.
+11. A script of a skill is a tool: argument parser, `--help`, a docstring saying what it reads and writes, exit codes,
+    pyazr's public names only. Every `scripts/*.py` is run by the skill's `scripts/selftest.py` (PASS/FAIL lines,
+    exit 1 on a failure, 77 without the engine, under 120 s at one thread; longer: `selftest_slow.py`, label
+    `slow`), registered in ctest by `tests/skills/CMakeLists.txt` as `skill_<name>`.
 
-The skill set (Phase 0):
+The skill set:
 
 | Skill | Use it to | Replaces |
 |---|---|---|
-| azure2-setup | build a project: ENSDF levels, AME masses, EXFOR data, conventions, channel radii, first checks | azr-project-builder, nds-explorer, parts of azure2-eval |
-| azure2-calculate | observables at any E and θ, extrapolation, S(0), rates, decomposition | parts of azure2-eval |
-| azure2-fit | free/fixed, staged fits, nuisances, priors, multiple starts, convergence, editing levels and background poles | parts of azure2-eval, azure2-legacy-params, azure2-drop-dataset |
-| azure2-check | decide whether a result can be trusted: pulls, residual structure, χ²/ν, limits, Wigner limits, radius and background-pole sensitivity, grid convergence, thread independence, frames and units | scattered "golden rules" |
-| azure2-uncertainty | Hessian, profile likelihood, sampling on the objective, bands on observables and rates, systematic axes and their combination | data-covariance, parts of azure2-eval |
+| azure2-setup | build a project: pairs and masses, levels and channels, data sets as format-3 records (which quantity), EXFOR/ENSDF, conventions, the audit | azr-project-builder, nds-explorer, parts of azure2-eval |
+| azure2-calculate | observables on the data or any grid, S(0), rates, decomposition (scripts extrapolate, decompose) | parts of azure2-eval |
+| azure2-fit | free/fixed, staged fits, nuisances, priors, multiple starts, the engine's fitters and least squares on the Jacobian (scripts lsq_fit, engine_fit), convergence, editing levels and background poles | parts of azure2-eval, azure2-legacy-params, azure2-drop-dataset |
+| azure2-check | trust: χ² reproduction, pulls, Wigner limits and level norms, channel-radius scan with refits, grids, threads, --validate/--describe (scripts chi2_report, widths_check, radius_scan) | scattered "golden rules" |
+| azure2-uncertainty | Fisher information, covariance (HESSE, LM), profile likelihood and MINOS, posterior sampling (NUTS on the gradient, emcee) and convergence, bands from draws and from the covariance, data covariance files, systematic axes and their combination (scripts fisher, write_covariance, profile_scan, sample_nuts, sample_emcee, mcmc_stats, draw_bands) | data-covariance, parts of azure2-eval |
 | azure2-plot | publication figures: excitation functions with pulls, angular distributions, S factor with bands and decomposition, rate ratios | plotting notes |
-| azure2-targets | materials, solid/implanted/gas targets, stopping and straggling, resolution, Doppler, stopping-scale nuisance | target notes |
+| azure2-targets | materials, solid/implanted/gas targets, SRIM stopping (the stopping library) and straggling, resolution, Doppler, stopping-scale nuisance | target notes |
 | azure2-thm | THM projects: HOES and OES data, vertex models, DWBA, kernel, normalization | THM notes outside the repo |
-| azure2-resonance-search | gated search for missing or misassigned levels | repo resonance-search (renamed) |
+| azure2-resonance-search | gated search for missing or misassigned levels; level add, removal, move and sign tests refitted with Δχ², AIC, BIC, F test and held-out data (script level_test) | repo resonance-search (renamed) |
 | azure2-exchange | conventions, GNDS/ENDF export, rmfit and SAMMY parameters | ferdinand-gnds |
+| azure2-evaluation | the procedure of a whole evaluation: stages, gates, owner skills, records, stop conditions, the final report | (new) |
 
 `rmfit-campaign` stays separate, trimmed to its procedure (its 1,700-line refinement log goes; ~15 rules lifted).
 General user-level skills (uncertainty-audit, prc-figures, data-auditor, physics-referee) are linked, not copied.

@@ -104,7 +104,7 @@ class ECIntegral {
    * The PPair object is used to create new instances of the CoulFunc and
    * WhitFunc objects.
    */
-  ECIntegral(PPair *pPair, const Config &configure);
+  ECIntegral(const PPair *pPair, const Config &configure);
   /*!
    * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
@@ -137,13 +137,13 @@ class ECIntegral {
   /// Whittaker functions of this pair.
   WhitFunc *whitfunction() const { return params_.whitFunc.get(); };
   /// The pair this integral belongs to.
-  PPair *pair() const { return pair_; };
+  const PPair *pair() const { return pair_; };
   double FW() const { return FW_; };
   double GW() const { return GW_; };
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;
-  PPair *pair_;
+  const PPair *pair_;
   const Config *configure_;
   double FW_;
   double GW_;

@@ -55,10 +55,10 @@ struct ParameterView {
   const ParameterRecord *record;
   CNuc *nuc;
   const DataSet *data;
-  JGroup *group = nullptr;          // level kinds, cbkg
-  ALevel *level = nullptr;          // level kinds
-  AChannel *channel = nullptr;      // width, radiative; cbkg: the entrance channel
-  AChannel *exitChannel = nullptr;  // cbkg
+  const JGroup *group = nullptr;          // level kinds, cbkg
+  const ALevel *level = nullptr;          // level kinds
+  const AChannel *channel = nullptr;      // width, radiative; cbkg: the entrance channel
+  const AChannel *exitChannel = nullptr;  // cbkg
   const Segment *segment = nullptr;          // segment kinds
   const TargetEffect *effect = nullptr;      // screening, density, doppler
   const ApparatusParam *apparatus = nullptr;  // apparatus

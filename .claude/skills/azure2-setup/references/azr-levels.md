@@ -1,8 +1,9 @@
 # The `<levels>` block: pairs, levels and channels
 
-This reference gives the line format of the `<levels>` block of an `.azr` project and the rules the engine applies
-to it, so that a project can be written or audited by hand. The authoritative column table is
-`docs/source/reference/data_formats.rst` ("Project Files"); `pyazr.Project` edits rows through the engine's writer (`io/LevelRowText.h`).
+This reference gives the line format of the `<levels>` block of an `.azr` project and the rules the engine applies to
+it, so that a project can be written or audited by hand. The authoritative column table is
+`docs/source/reference/data_formats.rst` ("Project Files"); `pyazr.Project` edits rows through the engine's writer
+(`io/LevelRowText.h`).
 
 ## 1. There is no pairs section
 
@@ -52,9 +53,9 @@ total excitation is e1 + e2. On a THM entrance line field 32 is the binding ener
 `gammaIsRWA` flag (azure2-thm). Engines that read 31 columns ignore column 32 silently and open the pair at the
 wrong threshold.
 
-Token map for hand parsing (0-based, whitespace split): `t0` J, `t1` parity, `t2` E_x, `t3` energy-fixed flag,
-`t5` pair key (the file's key, not pyazr's engine pair number), `t6` 2S, `t7` 2L, `t8` levelID, `t10`
-channel-fixed flag, `t11` gamma. Prefer `Project.levels()` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair`, `c.l`, `c.s`, `c.width`) and `pairs()`.
+Token map for hand parsing (0-based, whitespace split): `t0` J, `t1` parity, `t2` E_x, `t3` energy-fixed flag, `t5` pair
+key (the file's key, not pyazr's engine pair number), `t6` 2S, `t7` 2L, `t8` levelID, `t10` channel-fixed flag, `t11`
+gamma. Prefer `Project.levels()` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair`, `c.l`, `c.s`, `c.width`) and `pairs()`.
 
 ## 3. Rules the engine applies without telling you
 
@@ -109,9 +110,6 @@ cross section is off by up to 14 % (`tests/hard_sphere`). Consequences:
 - With the key on, deactivating a level removes the resonance and keeps the partial wave; all levels off gives the
   pure hard-sphere + Coulomb curve. With it off, a J^π disappears with its levels.
 - Capture and β pairs get nothing from it.
-- builds before 2026-10-31 (expires: 2027-02-01): a level with all widths 0 sitting exactly on a data energy made
-  the level matrix singular and removed its J^π group at that point (NaN or a GSL exception). Keep such levels off
-  data energies on those builds.
 
 ## 7. External-capture final states
 
@@ -121,23 +119,27 @@ cross section is off by up to 14 % (`tests/hard_sphere`). Consequences:
   segment uses only draws a warning. Test: `tests/ec_final_state_listed`.
 - The final state is the level of its J^π within 1 keV of the pair's E_x. Two such levels stop the run
   (`tests/ec_final_state_ambiguous`): move the extra level, or set the pair's energy to the level it decays to.
-- builds before 2026-10-26 (expires: 2027-02-01): a missing final state was created silently as a hidden level with
-  free 0.1 MeV^½ amplitudes, and because it existed only when external capture was on, every later `energy_N` /
-  `width_N_c` name shifted by one between runs. A `.sav` from such a run has that hidden slot in its numbering: do
-  not reuse it by name.
+- **Does a transition need external capture?** Direct (external) capture runs from the channel radius outward with an
+  amplitude proportional to the final state's ANC; it dominates non-resonant capture to a loosely bound state, and
+  matters little for capture to a deeply bound state with a small ANC. Switch it on per photon pair with `ecMultMask`
+  (E1, M1, E2 bits; `ignore_externals` is another switch, of the resonant external widths); take the ANC from a transfer
+  measurement or a structure calculation with its error, never from the fit alone; then measure its share: the `bare`
+  column of azure2-calculate's `decompose.py` (every resonance's widths zeroed, the final states' ANCs kept) is the
+  direct capture alone. The capture operator (long-wavelength or exact, convection current) and the hybrid nuclear
+  potential of the external wave: azure2-calculate (its physics-options reference).
 
 ## 8. Verifying a newly built file
 
-1. CLI mode 3 first: `printf '3\nn\n\n\n7\n' | "$AZURE2_BINARY" --no-gui --no-readline new.azr` needs no data and
-   prints the compound-nucleus construction, boundary conditions and parameter transformation; it shows the real
-   error message where pyazr only says "could not initialize".
-2. pyazr needs at least one `<segmentsData>` line (its default is data mode); add one before loading from Python.
-3. Read the transformation warnings. "Denominator less than zero while transforming" means a seed width exceeds what
-   the level shift can absorb; "radiative width larger than 10% of the particle width" means an unphysical seed
-   Γ_γ. The seed is wrong, not the model.
-4. `pyazr.masses.mass_check(project)`, then `output/chiSquared.out` as usual.
+1. `AZURE2 --validate new.azr` (exit 2 with an error) and `scripts/audit_project.py new.azr`.
+2. A calculation of the extrapolations needs no data: `printf '3\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline new.azr`
+   prints the compound-nucleus construction, boundary conditions and the parameter transformation with the engine's
+   own messages.
+3. Read the transformation warnings. "Denominator less than zero while transforming" means an observed width larger
+   than the level can have at that radius (the message gives 2P/(dS/dE), the largest); "radiative width larger than
+   10% of the particle width" an unphysical seed Γ_γ. The seed is wrong, not the model.
+4. Then a calculation with data, and `output/chiSquared.out`.
 
 ## 9. Not covered here
 
-- β-delayed pairs (`pType = 20`) use `j3 pi3 e3` with semantics not exercised here.
-- `<targetInt>` is written empty by a builder; copy a block from `tests/13N/13N.azr` and edit it (azure2-targets).
+- β pairs (`pType = 20`) use `j3 pi3 e3`; `tests/upgrade/T3` has one (a Gamow-Teller channel).
+- Targets, beams and detectors are records of `<targets>` (azure2-targets).

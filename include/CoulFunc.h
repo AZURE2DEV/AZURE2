@@ -93,7 +93,7 @@ struct CoulRadialMemo {
 class CoulFunc {
  public:
   /// Build for a particle pair, with that pair's hybrid nuclear potential if it has one.
-  CoulFunc(PPair *pPair, bool useGSLFunctions);
+  CoulFunc(const PPair *pPair, bool useGSLFunctions);
   /// Charge number of the first particle.
   int z1() const;
   /// Charge number of the second particle.

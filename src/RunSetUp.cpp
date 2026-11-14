@@ -11,6 +11,7 @@
 #include "CNucChecks.h"
 #include "CNucReport.h"
 #include "CaptureAyRequests.h"
+#include "ProjectSetup.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "GSLException.h"
@@ -51,6 +52,7 @@ int SetUpRun(ProgramRun &run) {
         run.configure.outStream << "There is no data provided." << std::endl;
         return -1;
       }
+      RequestDataEntrances(*run.compound, run.configure);
     } else {
       if (const int made = run.data->MakePoints(run.configure, run.compound); made != 0) {
         if (made != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
@@ -59,6 +61,7 @@ int SetUpRun(ProgramRun &run) {
         run.configure.outStream << "Extrapolation segments produce no data." << std::endl;
         return -1;
       }
+      RequestExtrapolationEntrances(*run.compound, run.configure);
     }
     // The capture-A_y terms the data sets need are built with the pathway table (CNuc::Initialize below).
     RequestCaptureAyTerms(*run.compound, *run.data);
@@ -75,7 +78,7 @@ int SetUpRun(ProgramRun &run) {
       run.configure.outStream << rateProblem << std::endl;
       return -1;
     } else {
-      run.compound->GetPair(run.compound->GetPairNumFromKey(run.configure.rateParams.entrancePair))->SetEntrance();
+      run.compound->RequestEntrance(run.compound->GetPairNumFromKey(run.configure.rateParams.entrancePair));
     }
   }
 

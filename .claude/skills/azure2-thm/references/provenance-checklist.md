@@ -26,7 +26,7 @@ data file.
 
 ## Telling HOES from on-shell-equivalent
 
-Signs of a **HOES yield** (fit as a THM segment, code + 10):
+Signs of a **HOES yield** (fit as a THM data set: `thm <experiment>`, `norm profiled`):
 
 - points below the entrance threshold (a penetrability-corrected σ vanishes there);
 - the excitation function stays finite or rises toward threshold;
@@ -34,7 +34,7 @@ Signs of a **HOES yield** (fit as a THM segment, code + 10):
   (17O: the f-wave 5⁻ at 0.6× the p-wave 3⁻; on shell it would be invisible);
 - arbitrary units, and a fit "by the modified R-matrix".
 
-Signs of an **on-shell-equivalent** set (fit as an ordinary segment with a free norm):
+Signs of an **on-shell-equivalent** set (fit as an ordinary data set with a fitted norm):
 
 - "penetrability effects included / corrected", "normalised to direct data";
 - absolute units (mb, MeV b); an EXFOR quantity such as SIG or SFC with DERIV;

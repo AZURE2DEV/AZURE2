@@ -36,7 +36,7 @@ std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg) {
   return f;
 }
 
-const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg) {
+const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg) {
   auto &cache = memo.arrays;
   if (cache.size() >= Memo::kMaxGroups && cache.find(jg) == cache.end()) cache.clear();
   LevelArrays &a = cache[jg];
@@ -45,7 +45,7 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg) {
   key[0] = n;
   key[1] = nch;
   for (int i = 0; i < n; i++) {
-    ALevel *level = jg->GetLevel(i + 1);
+    const ALevel *level = jg->GetLevel(i + 1);
     key[2 + 2 * i] = reinterpret_cast<std::uintptr_t>(level);
     key[3 + 2 * i] = level->Stamp();
   }
@@ -58,7 +58,7 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg) {
   a.S.resize((size_t)n * nch);
   a.SG.resize((size_t)n * nch);
   for (int i = 0; i < n; i++) {
-    ALevel *level = jg->GetLevel(i + 1);
+    const ALevel *level = jg->GetLevel(i + 1);
     a.E[i] = level->GetFitE();
     for (int c = 0; c < nch; c++) {
       a.G[(size_t)i * nch + c] = level->GetFitGamma(c + 1);
@@ -90,7 +90,7 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg) {
  *   energy E_l:  k_l = (J_ll + sum_c g_lc^2 (S'_lc - E_l S''_lc))/2, q_l = -sum_c g_lc^2 S''_lc / 2.
  * Standard: k = e_l / 2 for the energy, nothing for a width.
  */
-const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode, const std::vector<char> &particleIn,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, int mode, const std::vector<char> &particleIn,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv) {
@@ -109,7 +109,7 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode
   key.push_back(nch);
   for (int c = 0; c < nch; c++) key.push_back(particle[c]);
   for (int i = 0; i < n; i++) {
-    ALevel *level = jg->GetLevel(i + 1);
+    const ALevel *level = jg->GetLevel(i + 1);
     key.push_back(reinterpret_cast<std::uintptr_t>(level));
     key.push_back(level->Stamp());
     key.push_back(freeE[i]);
@@ -137,7 +137,7 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode
         if (c < 0) {
           double diag = 1.0;
           if (park) {
-            ALevel *level = jg->GetLevel(l + 1);
+            const ALevel *level = jg->GetLevel(l + 1);
             double s2 = 0.0;
             diag = level->GetParkNorm();
             for (int d = 0; d < nch; d++)
@@ -570,7 +570,7 @@ bool GeneralizedEigen(std::vector<ldouble> &K, std::vector<ldouble> &N, int n, s
 
 }  // namespace
 
-bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f) {
+bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool brune = !park && (configure.paramMask & Config::USE_BRUNE_FORMALISM);
   const bool rmc = (configure.paramMask & Config::USE_RMC_FORMALISM);
@@ -591,7 +591,7 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
     key[2] = n;
     key[3] = nch;
     for (int i = 0; i < n; i++) {
-      ALevel *level = jg->GetLevel(levels[i]);
+      const ALevel *level = jg->GetLevel(levels[i]);
       key[4 + 2 * i] = reinterpret_cast<std::uintptr_t>(level);
       key[5 + 2 * i] = level->Stamp();
     }
@@ -607,7 +607,7 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
   f.gcut.assign((size_t)n * nch, 0.0);
   std::vector<double> E(n);
   for (int i = 0; i < n; i++) {
-    ALevel *level = jg->GetLevel(levels[i]);
+    const ALevel *level = jg->GetLevel(levels[i]);
     E[i] = level->GetFitE();
     for (int c = 0; c < nch; c++) f.gcut[(size_t)i * nch + c] = Cut(level->GetFitGamma(c + 1));
   }
@@ -666,7 +666,7 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
   std::vector<double> S((size_t)n * nch, 0.0);
   std::vector<double> parkNorm(n, 1.0);
   for (int i = 0; i < n; i++) {
-    ALevel *level = jg->GetLevel(levels[i]);
+    const ALevel *level = jg->GetLevel(levels[i]);
     if (park) parkNorm[i] = level->GetParkNorm();
     for (int c = 0; c < nch; c++)
       if (particle[c]) S[(size_t)i * nch + c] = level->GetShiftFunction(c + 1);

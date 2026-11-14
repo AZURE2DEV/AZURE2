@@ -82,7 +82,7 @@ struct ECTermStore {
 class ECTable {
  public:
   /// The integral ECIntegral(finalPair, configure)(...) returns, from the table.
-  static complex Integral(PPair *finalPair, const Config &configure,
+  static complex Integral(const PPair *finalPair, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture, const ChannelTable *table = nullptr, int finalPairNum = 0);

@@ -18,7 +18,7 @@ ThmVertexBoundary::Rule ThmVertexBoundary::RuleOf(const Config &configure) {
   return CHANNEL_CONSTANT;
 }
 
-ThmVertexBoundary::ThmVertexBoundary(const Config &configure, PPair *pair, JGroup *jgroup, int channel)
+ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, int channel)
     : rule_(RuleOf(configure)),
       channel_(channel),
       l_(jgroup->GetChannel(channel)->GetL()),
@@ -28,7 +28,7 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, PPair *pair, JGrou
       channelFunc_(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)) {
   double eMin = 0.0;
   for (int la = 1; la <= jgroup->NumLevels(); la++) {
-    ALevel *level = jgroup->GetLevel(la);
+    const ALevel *level = jgroup->GetLevel(la);
     if (!level->IsInRMatrix()) continue;
     if (!lowest_ || level->GetFitE() < eMin) {
       eMin = level->GetFitE();
@@ -50,7 +50,7 @@ complex ThmVertexBoundary::OnShellAt(double e) {
   return complex(channelFunc_.Shift(l_, two_j_, e), channelFunc_.Penetrability(l_, two_j_, e));
 }
 
-double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
+double ThmVertexBoundary::ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
                                              ThmShiftMemo *memo) {
   const double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
   // Continuous through threshold, and at it (ChannelFunc).
@@ -73,7 +73,7 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, int two_j, doub
 
 bool ThmVertexAllowsPair(CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTHM() || !compound->IsPairKey(segment.GetEntranceKey())) return true;
-  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (!pair->GetHybridPotential()) return true;
   configure.outStream << "ERROR (E_THM_HYBRID_POTENTIAL): " << (isTest ? "test segment #" : "segment #") << key
                       << " (THM): entrance pair " << segment.GetEntranceKey()

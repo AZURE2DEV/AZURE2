@@ -133,7 +133,7 @@ struct LevelArrays {
  * divisions of `inv` are paid once per parameter set, not once per
  * level-matrix adjoint.
  */
-const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg);
+const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg);
 
 /*!
  * Derivatives of K and N of a J-group's level matrix with respect to its free
@@ -162,7 +162,7 @@ struct LevelDerivatives {
  * terms (by channel, 0-based).  Kept per thread, rebuilt when a level's stamp
  * or the mask changes.
  */
-const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode, const std::vector<char> &particle,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, int mode, const std::vector<char> &particle,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv);
@@ -173,7 +173,7 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode
  * standard level matrix is rebuilt on every call (it costs what comparing
  * would); the Brune and Park ones only when a parameter they depend on changed.
  */
-bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f);
+bool Update(const JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f);
 
 /*!
  * What the channel-space route keeps between the energies of one thread's tasks: per J group the formal-basis

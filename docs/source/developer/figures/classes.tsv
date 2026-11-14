@@ -31,7 +31,7 @@ azure2::experiment::Format3Project	experiment/include/azure2/experiment/ProjectR
 azure2::experiment::BuiltProject	experiment/include/azure2/experiment/Build.h	what Schema::Build makes of the records	setup	class	immutable
 azure2::experiment::DatasetSpec	experiment/include/azure2/experiment/SetupSpecs.h	one data set as built: observable, pairs, nuisances	setup	class	immutable
 Config	include/Config.h	the run: options, paths, the project read, scratch	setup	class	run
-CNuc	include/CNuc.h	compound nuclei: pairs, J groups, levels at the vector	setup	class	evaluation
+CNuc	include/CNuc.h	compound nuclei: pairs and J groups (read-only after set-up), levels at the vector	setup	class	evaluation
 PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	immutable
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	evaluation
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable

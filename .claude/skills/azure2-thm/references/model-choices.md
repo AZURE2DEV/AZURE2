@@ -55,7 +55,7 @@ raise `pyazr.FormatError` (a `ValueError`) on a refusal.
 - A d spectator at 30–50 MeV/c cuts gives 0.5–1.4 MeV.
 
 **`weight[k]=<file>`**
-- w(E) multiplying the THM model of segment k before folding (log-linear
+- w(E) multiplying the THM model of one data set (its `thm_weight` field) before folding (log-linear
   interpolation).
 - The hook for an external R(E) (finite-range DWBA, CDCC). The built-in R(E) is
   `distortion=`.
@@ -189,7 +189,7 @@ everything below except `theta`, `background` and `cbackground`.
 - Two identical 0⁺ bosons fuse only through even-J natural-parity levels. THM can
   populate odd-J or unnatural-parity levels by transfer (12C+12C 0.877 MeV 1⁻).
   - AZURE2 keeps l = J with a Bose-symmetry warning and cannot average l = J ± 1.
-  - Workaround: a second, identical entrance pair for the on-shell segments. Odd-J
+  - Workaround: a second, identical entrance pair for the on-shell data sets. Odd-J
     levels couple to the THM pair only; allowed levels couple to both with the same
     width. Cost: the second channel enters the level matrix twice (χ² 110.69 → 111.65
     near the Wigner limit).

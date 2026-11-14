@@ -144,7 +144,7 @@ void AMatrixFunc::ClearMatrices() {
       continue;
     }
 
-    JGroup *jg = compound()->GetJGroup(j);
+    const JGroup *jg = compound()->GetJGroup(j);
     const int numLevels = jg->NumLevels();
     const int numChannels = jg->NumChannels();
 
@@ -187,7 +187,7 @@ void AMatrixFunc::FillMatrices(Site *point) {
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   const bool channelSpace = !level_only_ && ChannelSpace::Enabled(configure());
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    JGroup *jGroup = compound()->GetJGroup(j);
+    const JGroup *jGroup = compound()->GetJGroup(j);
     if (!jGroup->IsInRMatrix() || jGroup->GetNucleus() != activeNucleus_) continue;
     route_[j - 1] = kRouteLevel;
     if (channelSpace) {
@@ -228,7 +228,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
     for (int r = 0; r < act; ++r) M[r].assign(act, complex(0.0, 0.0));
   }
   // Cache JGroup pointer to avoid repeated calls
-  JGroup *jGroup = compound()->GetJGroup(j);
+  const JGroup *jGroup = compound()->GetJGroup(j);
   int numLevels = jGroup->NumLevels();
   int numChannels = jGroup->NumChannels();
 
@@ -251,7 +251,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
   // Pre-cache gamma values for all levels and channels using pre-allocated buffers
   for (int la = 1; la <= numLevels; la++) {
     if (jGroup->GetLevel(la)->IsInRMatrix()) {
-      ALevel *level = jGroup->GetLevel(la);
+      const ALevel *level = jGroup->GetLevel(la);
       levelEnergies_[la] = level->GetFitE();
 
       levelDecoupled_[la] = 1;
@@ -265,10 +265,10 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
 
   for (int la = 1; la <= numLevels; la++) {
     if (jGroup->GetLevel(la)->IsInRMatrix()) {
-      ALevel *level = jGroup->GetLevel(la);
+      const ALevel *level = jGroup->GetLevel(la);
       for (int lap = 1; lap <= numLevels; lap++) {
         if (jGroup->GetLevel(lap)->IsInRMatrix()) {
-          ALevel *levelp = jGroup->GetLevel(lap);
+          const ALevel *levelp = jGroup->GetLevel(lap);
           complex sum(0.0, 0.0);
           double parkOverlap = 0.0;
           for (int ch = 1; ch <= numChannels; ch++) {
@@ -282,7 +282,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
             sum += gammaCh * gammaChp * loElement;
 
             // Cache channel pointer and radiation type to avoid repeated calls
-            AChannel *channel = jGroup->GetChannel(ch);
+            const AChannel *channel = jGroup->GetChannel(ch);
             char radType = channel->GetRadType();
 
             if ((radType == 'M' || radType == 'E') &&
@@ -360,7 +360,7 @@ void AMatrixFunc::InvertMatrices() {
         // widths no longer gets here (FillLevelMatrix); say so once if
         // anything else does.
         if (configure().FirstTime("singular level matrix")) {
-          JGroup *jg = compound()->GetJGroup(j);
+          const JGroup *jg = compound()->GetJGroup(j);
           std::cerr << "Warning: singular level matrix of J-group " << jg->GetJ() << (jg->GetPi() < 0 ? "-" : "+")
                     << " at E_x = " << std::setprecision(10) << lastInEnergy_
                     << " MeV; the group is left out at that energy (reported once)." << std::endl;
@@ -380,7 +380,7 @@ void AMatrixFunc::InvertMatrices() {
 const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
   vector_r &gammas = gamma_vectors_[jGroupNum - 1][chNum - 1];
   if (!gamma_valid_[jGroupNum - 1][chNum - 1]) {
-    JGroup *jGroup = compound()->GetJGroup(jGroupNum);
+    const JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
     gammas.assign(active_levels_[jGroupNum - 1].size(), 0.0);
     for (int la = 1; la < (int)map.size(); la++) {
@@ -458,7 +458,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
   complex value(0.0, 0.0);
   const bool channel = (route_[jGroupNum - 1] == kRouteChannel);
   if (channel || solver_valid_[jGroupNum - 1]) {
-    JGroup *jGroup = compound()->GetJGroup(jGroupNum);
+    const JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
     const int n = (int)active_levels_[jGroupNum - 1].size();
     chan_cap_entrance_.assign(n, complex(0.0, 0.0));
@@ -473,7 +473,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
         if (row == 0) continue;
         double en = 0.0, ex = 0.0;
         for (std::size_t j = 0; j < nl; j++) {
-          ALevel *level = jGroup->GetLevel(formal->levels[j]);
+          const ALevel *level = jGroup->GetLevel(formal->levels[j]);
           en += formal->projector[i * nl + j] * level->GetFitGamma(chNum);
           ex += formal->projector[i * nl + j] * level->GetFitGamma(chpNum);
         }
@@ -484,7 +484,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
       for (int la = 1; la < (int)map.size(); la++) {
         const int row = map[la];
         if (row == 0) continue;
-        ALevel *level = jGroup->GetLevel(la);
+        const ALevel *level = jGroup->GetLevel(la);
         if (maskChannel && level->ZeroInputWidth(maskChannel)) continue;
         chan_cap_entrance_[row - 1] = level->GetFitGamma(chNum);
         chan_cap_exit_[row - 1] = level->GetFitGamma(chpNum);
@@ -564,7 +564,7 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
       }
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
-        ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
+        const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
         double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
             finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
@@ -724,7 +724,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
   // (0 = full, 1 = E1, 2 = E2); E1/E2 select electric channels of that L.
   auto includeInternal = [&](const azure2::InternalRow *mg) -> bool {
     if (xsComponent == 0) return true;
-    AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
+    const AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
     return ex->GetRadType() == 'E' && ex->GetL() == xsComponent;
   };
   auto includeEC = [&](const azure2::ExternalRow *ecg) -> bool {
@@ -765,7 +765,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       for (int m = 1; m <= numM; m++) {
         const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
         if (!includeInternal(mg)) continue;
-        JGroup *jg = compound()->GetJGroup(mg->group);
+        const JGroup *jg = compound()->GetJGroup(mg->group);
         int gi = findGroup(jg->GetJ(),
                            jg->GetChannel(mg->ch)->GetL(),
                            jg->GetChannel(mg->chp)->GetL());
@@ -923,9 +923,9 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     for (int k = 1; k <= nK; k++) {
       for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
         const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
-        JGroup *jg = compound()->GetJGroup(mg->group);
-        AChannel *en = jg->GetChannel(mg->ch);
-        AChannel *ex = jg->GetChannel(mg->chp);
+        const JGroup *jg = compound()->GetJGroup(mg->group);
+        const AChannel *en = jg->GetChannel(mg->ch);
+        const AChannel *ex = jg->GetChannel(mg->chp);
         if (jg->GetJ() == segJ && en->GetL() == segL && en == ex) {
           complex expCP = point->GetExpCoulombPhase(mg->group, mg->ch);
           complex expCP2 = expCP * expCP;
@@ -955,7 +955,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //   CT = const (no T dependence).
     // The standard case (entrance==exit pair, or gamma exit) with external-capture interferences, and the
     // inelastic-particle UPOS / normal-angular-distribution case.
-    PPair *exitPairDiff = compound()->GetPair(exitPairNum);
+    const PPair *exitPairDiff = compound()->GetPair(exitPairNum);
     // Identical entrance pair: x4 / x2 for elastic, (1+delta_12) otherwise,
     // mirroring GenMatrixFunc::CalculateCrossSection.
     double rtFactor = 1.0, itFactor = 1.0;
@@ -1087,8 +1087,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
           const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
-          AChannel *en = compound()->GetJGroup(mg->group)->GetChannel(mg->ch);
-          AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
+          const AChannel *en = compound()->GetJGroup(mg->group)->GetChannel(mg->ch);
+          const AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
           if (en == ex) {
             int l = en->GetL();
             complex B = cI * mg->stat_spin_factor * readerCoulomb(en->GetS()) * angles->RowP(rowSlot, l);
@@ -1184,8 +1184,8 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         int jf = ecg->final_group;
         int lf = ecg->final_level;
         int fc = ecg->final_channel;
-        ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
-        JGroup *jgf = compound()->GetJGroup(jf);
+        const ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
+        const JGroup *jgf = compound()->GetJGroup(jf);
         double sqrtNF = finalLevel->GetSqrtNFFactor();
         double conv = finalLevel->GetECConversionFactor(fc);
         complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
@@ -1205,7 +1205,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           int jcc = ccMg->group;
           int ccChN = ccMg->ch;
           int ccChpN = ccMg->chp;
-          JGroup *jgcc = compound()->GetJGroup(jcc);
+          const JGroup *jgcc = compound()->GetJGroup(jcc);
           int ccLevels = jgcc->NumLevels();
           complex sqrtPcc = point->GetSqrtPenetrability(jcc, ccChN);  // single sqrtP
 
@@ -1264,7 +1264,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         const bool parkFinal = park && finalLevel->IsInRMatrix();
         int numD = parkFinal ? jgf->NumChannels() : numNF;
         for (int d = 1; d <= numD; d++) {
-          PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
+          const PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
           double Ad = (d <= numNF) ? azure2::physics::bound_state_coefficient(pd->GetChRad(), pd->GetRedMass()) *
                                          finalLevel->GetNFIntegral(d)
                                    : 0.0;
@@ -1289,7 +1289,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       int jNum = mg->group;
       int chNum = mg->ch;
       int chpNum = mg->chp;
-      JGroup *jg = compound()->GetJGroup(jNum);
+      const JGroup *jg = compound()->GetJGroup(jNum);
 
       complex uphase = point->GetExpCoulombPhase(jNum, chNum) *
           point->GetExpHardSpherePhase(jNum, chNum) *
@@ -1333,7 +1333,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
   // === A -> M lemma + structural E / gamma, once per JGroup. ===
   for (int jNum = 1; jNum <= compound()->NumJGroups(); jNum++) {
     if (!aBarUsed[jNum - 1]) continue;
-    JGroup *jg = compound()->GetJGroup(jNum);
+    const JGroup *jg = compound()->GetJGroup(jNum);
     const matrix_c &A = this->GetAMatrix(jNum);
     const matrix_c &Ab = aBar[jNum - 1];
     int n = (int)A.size();
@@ -1391,7 +1391,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
   auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
-  JGroup *jg = compound()->GetJGroup(jNum);
+  const JGroup *jg = compound()->GetJGroup(jNum);
   const int n = (int)Mbar.size();
   if (n == 0) return;
   // Structural energy gradient.  The (E_r - inE) delta term gives
@@ -1418,7 +1418,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
              compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
     };
     for (int r = 1; r <= n; r++) {
-      ALevel *lr = jg->GetLevel(lev(r));
+      const ALevel *lr = jg->GetLevel(lev(r));
       double Er = lr->GetFitE();
       for (int c = 1; c <= n; c++) {
         double reM = std::real(Mbar[r - 1][c - 1]);
@@ -1434,7 +1434,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
           }
           accum.AddE(jNum, lev(r), reM * ((lr->GetParkNorm() - 1.0) + (Er - inEnergy) * dJ + sumS1));
         } else {
-          ALevel *lc = jg->GetLevel(lev(c));
+          const ALevel *lc = jg->GetLevel(lev(c));
           double Ec = lc->GetFitE();
           double den = Er - Ec;
           double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
@@ -1467,13 +1467,13 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
       complex Ld = lambda ? lambda[d - 1] : point->GetLoElement(jNum, d);
       double Bd = (pd && !lambda) ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
       for (int a = 1; a <= n; a++) {
-        ALevel *la_ = jg->GetLevel(lev(a));
+        const ALevel *la_ = jg->GetLevel(lev(a));
         double Ea = la_->GetFitE();
         double ga = la_->GetFitGamma(d);
         double Sa = pd ? la_->GetShiftFunction(d) : 0.0;
         double grad = 0.0;
         for (int c = 1; c <= n; c++) {
-          ALevel *lc_ = jg->GetLevel(lev(c));
+          const ALevel *lc_ = jg->GetLevel(lev(c));
           double gc = lc_->GetFitGamma(d);
           if (c == a) {
             complex Kaa = pd ? (Ld + Bd - Sa) : Ld;
@@ -1516,7 +1516,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
     la.S.resize((size_t)n * nch);
     la.SG.resize((size_t)n * nch);
     for (int r = 0; r < n; r++) {
-      ALevel *level = jg->GetLevel(lev(r + 1));
+      const ALevel *level = jg->GetLevel(lev(r + 1));
       la.E[r] = level->GetFitE();
       for (int ch = 0; ch < nch; ch++) {
         la.G[(size_t)r * nch + ch] = level->GetFitGamma(ch + 1);
@@ -1699,7 +1699,7 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = raw_solves_[jGroupNum - 1][chNum - 1];
   if (!raw_solve_valid_[jGroupNum - 1][chNum - 1]) {
     AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
-    JGroup *jGroup = compound()->GetJGroup(jGroupNum);
+    const JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
     const int n = (int)active_levels_[jGroupNum - 1].size();
     solve.assign(n, complex(0.0, 0.0));
@@ -1771,13 +1771,13 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
  * condition for the particle channels of the Brune and Park level matrices.
  */
 const std::vector<complex> &AMatrixFunc::KernelLambda(Site *point, int j) {
-  JGroup *jg = compound()->GetJGroup(j);
+  const JGroup *jg = compound()->GetJGroup(j);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   const int nch = jg->NumChannels();
   kernel_scratch_.resize(nch);
   for (int d = 1; d <= nch; d++) {
-    AChannel *ch = jg->GetChannel(d);
+    const AChannel *ch = jg->GetChannel(d);
     complex l = point->GetLoElement(j, d);
     const bool particle = park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
                                : (brune && ch->GetRadType() == 'P');
@@ -1874,7 +1874,7 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
     // E Re(Mbar) are summed here (resolved once per pass), and the kernel
     // G Lambda(E) G^T is differentiated now, through the rank-one terms:
     //   gammabar_{l d} -= Re(conj(Lambda_d) ((Mbar + Mbar^T) g_d)_l).
-    JGroup *jg = compound()->GetJGroup(jNum);
+    const JGroup *jg = compound()->GetJGroup(jNum);
     const int nch = jg->NumChannels();
     const double inEnergy = this->InEnergy(energyPoint);
     std::vector<double> &K = accum.lmK[jNum - 1], &N = accum.lmN[jNum - 1];
@@ -1962,7 +1962,7 @@ bool AMatrixFunc::BilinearAdjoint(Site *point, int jGroupNum, int chNum, complex
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return false;
   // Solved in channel space (FillMatrices) or as a level matrix (InvertMatrices).
   if (route_[jGroupNum - 1] != kRouteChannel && !solver_valid_[jGroupNum - 1]) return false;
-  JGroup *jg = compound()->GetJGroup(jGroupNum);
+  const JGroup *jg = compound()->GetJGroup(jGroupNum);
   if (!jg->IsInRMatrix()) return false;
   for (int la = 1; la <= jg->NumLevels(); la++)
     if (!jg->GetLevel(la)->IsInRMatrix()) return false;
@@ -2435,7 +2435,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
   // <X_K, dK> - <X_N, dN> = LMA(X_K - X_N, 0) + LMA(X_N, 1) with a zero kernel.
   for (int j = 1; j <= compound()->NumJGroups() && j <= (int)accum.lmUsed.size(); j++) {
     if (!accum.lmUsed[j - 1]) continue;
-    JGroup *jg = compound()->GetJGroup(j);
+    const JGroup *jg = compound()->GetJGroup(j);
     const int n = (int)std::lround(std::sqrt((double)accum.lmK[j - 1].size()));
     matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
     for (int r = 0; r < n; r++)
@@ -2452,7 +2452,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     accum.lmUsed[j - 1] = 0;
   }
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    JGroup *jg = compound()->GetJGroup(j);
+    const JGroup *jg = compound()->GetJGroup(j);
     if (!jg->IsInRMatrix() || j > (int)accum.fe.size()) continue;
     bool any = false;
     for (size_t k = 0; k < accum.fe[j - 1].size() && !any; k++) {
@@ -2673,7 +2673,7 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
   if (!channel && !solver_valid_[j - 1]) return false;
   // The standard level matrix in channel space has the cheaper formal adjoint.
   if (channel && (*formal_[j - 1]).identity) return false;
-  JGroup *jg = compound()->GetJGroup(j);
+  const JGroup *jg = compound()->GetJGroup(j);
   const int n = (int)active_levels_[j - 1].size(), nch = jg->NumChannels();
   if (n == 0 || n != jg->NumLevels()) return false;
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
@@ -2684,7 +2684,7 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
   std::vector<char> &particle = la_particle_;
   particle.assign(nch, 0);
   for (int c = 0; c < nch; c++) {
-    AChannel *ch = jg->GetChannel(c + 1);
+    const AChannel *ch = jg->GetChannel(c + 1);
     particle[c] = park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
                        : (brune && ch->GetRadType() == 'P');
   }

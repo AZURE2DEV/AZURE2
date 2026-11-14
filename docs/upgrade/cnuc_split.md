@@ -1528,8 +1528,9 @@ project (the web UI: 130 kB per session and per pooled copy for `natural_neon`, 
    `internal_channels`, `external_reduced_width`, `capture_mask`, through `src/CNuc*.cpp` and `GammaDecayMap.cpp`).
    It does not call the convention part (`level_parameters()`, `convention_transform`, `project_channels`,
    `recoupling_coefficient`): no project states a convention, so there is nothing to convert. It rebuilds the
-   `System` from `CNuc` at every use (twelve calls of `BuildSystemFromCNuc`, one per `TransformIn`, `TransformToBrune`,
-   `ObservedWidths`, `ConvertAmplitudeBasis`, set-up), since the structure it reads can still be written.
+   `System` from `CNuc` at every use (twelve calls of `BuildSystemFromCNuc` counted here, nine in the engine at
+   e9e37a18; one per `TransformIn`, `TransformToBrune`, `ObservedWidths`, `ConvertAmplitudeBasis`, set-up), since
+   the structure it reads can still be written.
 5. §2.1 lists `ScatteringLengthConstraints` and `HasScatteringLengthConstraints` on `CNuc`: gone. `CNuc.h` still calls
    `ReadAbundances` "TEMPORARY (step 3d)".
 
@@ -1634,6 +1635,39 @@ estimates from §12.1.
 - Byte-identical because: the `System` is a function of `Fill`'s structure only (radii, hybrid potential, pairs,
   groups, channels, R-matrix flags), all fixed when `Fill` returns, so one build equals each of the twelve; the entrance
   set, if equal (the comparison commit shows it), gives the same pathway table and external-capture set-up.
+
+*Step 1 as built* (branch `feature/upgrade-5-cnuc-frozen`). Measured first on the start commit (e9e37a18):
+
+| what | design (6e8d000b) | code at the start | after |
+|---|---|---|---|
+| `SetEntrance` calls in the engine | 6 | 6 (and 2 in tests) | 0 |
+| `BuildSystemFromCNuc` calls in the engine | 12 | 9 (and 5 in tests) | 2, in `CNuc::Fill` |
+| dead members of §12.4 item 5 | 5 | all 5 present | deleted |
+| `CNuc.cpp` / `CNuc.h` lines | 1,527 / 327 | 1,527 / 327 | 1,526 / 350 |
+
+The six `SetEntrance` calls: `WorkingCopy.cpp` 4, `AZUREMain.cpp` 1, `AZUREAPI.cpp` 1; the nine builds: `CNuc.cpp` 5,
+`CNucExternalCapture.cpp` 2, `CNucPathways.cpp` 1, `GammaDecayMap.cpp` 1.
+
+- The entrances: `RequestDataEntrances` and `RequestExtrapolationEntrances` (`src/ProjectSetup.cpp`) request the
+  entrance pair of every term (leading and components) of the active data sets or extrapolations with
+  `CNuc::RequestEntrance`; a rate run requests its entrance pair. The comparison commit (37ac9885) kept the old flags
+  and aborted on a difference at the pathway build and at the end of `WorkingCopy::Initialize`: all projects × 3 bases
+  ran without an abort and identical. The program runs only menu 1 there: the extrapolation path was compared by
+  the C++ tests that load projects without data (`upgrade_capture_ay_requests`, no abort); the rate path and the
+  binding's sessions were not compared (the binding's tests of that run failed on an unrelated mismatch of the
+  Python sources).
+- The `System`: two are built once, at the end of `Fill` (`SystemStructure`, `SystemAllGroups`); a failure of the build
+  is kept and rethrown by each reader, so a refused project stops where it did.
+- The structure read-only: the design's check (the non-`const` `GetPair`/`GetJGroup` abort after set-up, the tree run)
+  cannot be a run-time check: a reader on a non-`const` `CNuc *` calls the non-`const` overload, so it would abort in
+  every reader. The compiler does it instead: the public accessors return `const` pointers only, the set-up writes
+  through the private `Pair`/`Group`, and the level values that move after set-up (fit values, shift functions,
+  report slots; the `gamma_decay` input widths at set-up) through `CNuc::MutableLevel`, whose callers outside the class
+  are `TargetSetup.cpp`, `ReactionRate.cpp` (the sub-point-grid and rate copies), `GammaDecayMap.cpp` and two tests.
+  The design had missed that the levels are reached through `GetJGroup` and written after set-up.
+- Found on the way: `WorkingCopy::InitializeLeaves` flagged entrance pairs during `WorkingCopy::Initialize`, after
+  the pathway table was built (the comparison showed it never added one); `tests/upgrade/channel_table_test.cpp`
+  changed a channel radius after set-up (it fills a second compound with the radius override now).
 
 **Step 2. Abundances, THM coherent values and the two penalties out of `CNuc`.** (≈ 350 lines moved; `CNuc.h/.cpp`,
 `ProjectSetup.cpp`, `Objective.cpp/.h`, `AZUREGrad.cpp`, `ParameterLabel.cpp`, `ModelPass.cpp`, `WorkingCopy.*`,

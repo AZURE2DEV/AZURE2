@@ -1069,6 +1069,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete data;
         return -1;
       }
+      RequestDataEntrances(*compound, configure);
     } else {
       if (const int made = data->MakePoints(configure, compound); made != 0) {
         if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
@@ -1081,6 +1082,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete data;
         return -1;
       }
+      RequestExtrapolationEntrances(*compound, configure);
     }
 
     // Initialize compound nucleus, with the capture-A_y terms the data sets need

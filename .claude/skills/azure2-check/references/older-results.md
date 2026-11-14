@@ -70,3 +70,65 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
   total as their model value.
 - builds before 2026-10-08 (expires: 2027-02-01): free-vector entry points accepted a short vector silently.
 - builds before 2026-11-03 (expires: 2027-02-01): the `.azr` was re-parsed on every call.
+
+## Failed points
+
+- builds before 2026-11-01 (expires: 2027-02-01): a failed point was a silent 0 in the CLI objective and pre-pass, a
+  failed or NaN term of a SUM or natural-target composite was left out of the sum, and a failed RATIO denominator
+  gave 0, so χ² looked normal; on such a build a composite segment with exact zeros or a low SUM is a candidate.
+
+## Levels
+
+- builds before 2026-10-31 (expires: 2027-02-01): a level with all widths 0 sitting exactly on a data energy made
+  the level matrix singular and removed its J^π group at that point (NaN or a GSL exception). Keep such levels off
+  data energies on those builds.
+- builds before 2026-10-26 (expires: 2027-02-01): a missing final state was created silently as a hidden level with
+  free 0.1 MeV^½ amplitudes, and because it existed only when external capture was on, every later `energy_N` /
+  `width_N_c` name shifted by one between runs. A `.sav` from such a run has that hidden slot in its numbering: do
+  not reuse it by name.
+
+## EXFOR conversion
+
+- builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
+  the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
+  angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.
+
+## Targets, beams and detectors
+
+- builds before 2026-10-01 (expires: 2027-02-01) converted a shared σ_b lab → c.m. once per segment named, so a line
+  naming N segments (or a convolved SUM/RATIO) applied σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its
+  own beam. Symptom: A shared line under-smoothed every segment it names
+- builds before 2026-09-28 (expires: 2027-02-01): the GUI's compound ERYA fetch returned the average-atom ε. An
+  equation written by such a GUI is consistent only with all atoms cm⁻²; scale it by (x+y)/x for the active density.
+- builds before 2026-09-11 (expires: 2027-02-01) mis-estimated level widths when building the narrow-resonance
+  lattice, which can invert which Γ the data prefer; redo any fit of a narrow level through a target or beam kernel
+  made with them.
+- builds before 2026-11-05 (expires: 2027-02-01): a build that knows `doppler T` or `transmission n` but not the fit
+  form reads the first number and ignores the rest without a message.
+- builds before 2026-10-29 (expires: 2027-02-01): the first evaluation of a session at a shift of exactly 0 used the
+  `.azr`'s nonzero shift on segments with target-effect sub-points.
+- builds before 2026-10-26 (expires: 2027-02-01): (a) sub-points of lab-frame differential segments with any
+  sub-point effect moved to the wrong angle (by the full lab − c.m. difference) whenever the segment's energy shift
+  was active, and the shift derivatives were wrong with it; (b) under a sqrt or function shift each sub-point moved by
+  s(E_sub), stretching the window by 1 + ds/dE. Refit exposed segments.
+- builds before 2026-10-26 (expires: 2027-02-01): kernels stopped at ±3 σ_b, so points 2–3 σ_b from a
+  resonance 10³ times above its surroundings came out 2–4 % low; refit such segments on a current build.
+- builds before 2026-10-11 (expires: 2027-02-01) have this; on a
+  current build set
+- builds before 2026-10-25 (expires: 2027-02-01) applied Q per c.m. order
+for particle exits, a few per cent off, and changed results even with every Q = 1.
+
+## Bases and parameter files
+
+- builds before 2026-11-01 (expires: 2027-02-01) crashed instead ("z is not finite in log_Gamma"). (a Brune file with no
+  standard equivalent)
+- builds before 2026-10-27 (expires: 2027-02-01): with `--no-brune` the formal eigenvalues went to a J^π group's
+  levels in file order, so a group listed out of energy order had energies, widths and fix flags permuted (cross
+  sections unaffected). Suspect any old non-Brune fit whose `param.par` `energy_N` values are out of step with the
+  file's levels.
+- builds before 2026-11-04 (expires: 2027-02-01) wrote `param.fit` and `param.mcmc` without the tag. Before resuming
+  a Park fit from such a file, prepend
+  `    #parametrization       2.0000000e+00       0.0000000e+00`; otherwise every amplitude, fixed ones included, is
+  multiplied by √J_λ again. Brune and standard runs are unaffected.
+- builds before 2026-10-08 (expires: 2027-02-01): a few builds wrote the tag as a plain `parametrization` row, which
+  shifts any positional reader by one line; strip it or prefix it with `#`.

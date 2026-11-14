@@ -20,41 +20,53 @@ background poles, grids, thread count). The theory of the χ² is in `docs/sourc
   Target and resolution kernels: `azure2-targets`. A general audit of an uncertainty budget: the user-level
   `uncertainty-audit` skill; a referee-style read of the physics: `physics-referee`.
 
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/chi2_report.py` | per data set χ², the largest point, pulls within 1σ/2σ, same-sign runs; χ²/ν, terms |
+| `scripts/widths_check.py` | θ² (both forms), W.u. of photons, the norm J of every level; flags |
+| `scripts/radius_scan.py` | the channel-radius scan: a project copy and a refit per radius, walked outward |
+| `scripts/selftest.py` | runs the three on `tests/upgrade/T1` |
+
+```bash
+S=.claude/skills/azure2-check/scripts
+python3 $S/chi2_report.py model.azr --params output/param.sav --chisquared-out output/chiSquared.out
+python3 $S/widths_check.py model.azr --params output/param.sav --background-above 20
+python3 $S/radius_scan.py model.azr --params output/param.sav --pair 1 --radii 4.5 5.0 5.5 6.0 --table radius.txt
+```
+
 ## The checklist
 
 Run the items in order. Each says what it detects.
 
-1. **The number reproduces.** `cat output/chiSquared.out`: a finite total χ² and the expected number of points N per
-   segment. From pyazr, `m.evaluate(x).chi2` (data term only) or `m.objective()(x)` (data plus
-   penalties) must reproduce the model's recorded total; record that total whenever the `.azr` changes. A jump
-   concentrated in a few data sets means one of: a stale `output/intEC.extrap`; a `param.sav` whose segment-keyed
-   norm or shift names no longer match an edited `<segmentsData>` (renumbering: `azure2-fit`); or ill-conditioning
-   in a background level that a `save_fit` round trip's own numerical noise exposes. After a fit, confirm that
-   `param.sav` was rewritten and read `parameters.out`.
-2. **Per-data-set χ² and pulls.** `m.evaluate(x).data[i].chi2` (or `pyazr/examples/per_dataset_chi2.py`) and the pulls
-   (data − fit)/σ from `m.evaluate(x).data[i].residuals`. A total that is acceptable can hide one set at χ²/N = 10. Report the per-set
-   table with every result.
-3. **Residual structure.** Pulls that keep one sign over a run of adjacent energies or angles are a model defect,
-   not noise. Rank such runs and treat them with `azure2-resonance-search` before adding any structure by hand.
-4. **χ²/ν.** With ν = N − (number of free parameters, including normalizations and shifts). A χ²/ν well above 1 with
-   no structure means underestimated errors; scale the parameter covariance by it (Birge ratio,
-   `--scale-covariance`) rather than ignoring it. A χ²/ν far below 1 means overestimated or double-counted errors
-   (a scale error in both the covariance and the norm prior: `azure2-uncertainty`).
-5. **Physical limits.** Dimensionless reduced widths θ² ≤ 1 for particle channels and γ-ray strengths of at most a
-   few Weisskopf units for γ channels (section "Wigner and Weisskopf limits"). θ² > 1 is unphysical.
-6. **Background poles.** A pole whose observed widths sit against their ceiling (level-shift factor J → 0) is
-   saturated: its widths are unconstrained and the minimum is flat along that direction. Test with caps (section
-   "Saturated background poles").
-7. **Channel radius.** Refit at two or three radii a_c (one directory per radius, warm-started from the converged
-   neighbour). A result that moves by more than its statistical error carries a radius systematic; report it.
-8. **Level significance.** Each level's Δχ² (section "Is a level needed?").
-9. **Grid convergence.** An extrapolated curve, a rate, or a folded (target-integrated, convolved) point is a
-   quadrature on a grid. Halve the grid spacing (or double the sub-points) and recompute; the quantity must move by
-   less than the tolerance you quote. Kernel sub-point grids: `azure2-targets`; extrapolation grids: `azure2-calculate`.
-10. **Thread independence.** Results do not depend on `OMP_NUM_THREADS`. Recompute the total at 1 and 8 threads;
-    they agree to the cross-compiler level (about 1e-5 relative) or better. A larger difference is a bug: report it.
-11. **Frames and units.** Section "Frames and units" below; check every number that crosses a file or code boundary.
-12. **Data definitions** before structure. Section "Data and their definitions".
+1. **The project is what was meant.** `AZURE2 --validate model.azr` (or `pyazr.validate(path)`): every diagnostic as
+   `file:line: record.field: severity code: message`, exit 2 with an error; `AZURE2 --describe model.azr` (or
+   `--record NAME`): what the engine made of each data set (observable, reaction tree with pair keys, rows kept inside
+   the windows, effects, parameters) and the options with their source; `AZURE2 --print-predictions model.azr`: the
+   expression each data set evaluates. A warning code (`W_...`) is a decision to make, not noise
+   (`docs/source/reference/format3.rst`, "Diagnostics").
+2. **The number reproduces.** `chi2_report.py --chisquared-out output/chiSquared.out` compares pyazr's data χ² with
+   the program's (agreement 1e-6 on T1). `ev.chi2` is the data χ² only; the objective adds every prior
+   (`ev.objective`, `ev.terms`). Record the total whenever the project changes. A jump concentrated in a few data
+   sets: a stale capture cache, a `param.sav` whose data-set parameter names no longer match the records (renamed or
+   removed data sets), or an ill-conditioned background level.
+3. **Per-data-set χ² and pulls.** The table of `chi2_report.py`; report it with every result. A good total can hide
+   one set at χ²/N = 10. A data set whose largest point carries most of its χ² is a data question.
+4. **Residual structure.** A long run of pulls of one sign (column `run`) over adjacent energies is a model defect,
+   not noise: azure2-resonance-search before adding structure by hand.
+5. **χ²/ν**, ν = N − free parameters (norms and shifts included). Well above 1 without structure: underestimated
+   errors (scale the covariance by it, `--scale-covariance`); far below 1: overestimated or double-counted errors.
+6. **Physical limits.** θ² ≤ 1 for particle channels, a few W.u. for γ channels, J not far below 0.5 for levels
+   below the background poles (section "Wigner and Weisskopf limits").
+7. **Background poles.** Saturated poles (section below).
+8. **Channel radius.** The scan with refits (section "Channel radius").
+9. **Level significance.** Each level's Δχ² (section "Is a level needed?").
+10. **Grid convergence.** An extrapolated curve, a rate or a folded point is a quadrature: halve the step (or raise
+    the data set's `quadrature points`) and recompute; the quantity must move less than the tolerance you quote.
+11. **Thread independence.** The data χ² at `OMP_NUM_THREADS=1` and 8 agree to rounding (a few units in the last
+    place); a larger difference is a defect: report it.
+12. **Frames and units** (table below) and **data definitions** (section below) before any new structure.
 
 ## Tolerance for "the numbers do not match"
 
@@ -71,22 +83,19 @@ one that grows into a failed fit, and then investigate which parameter moved, no
 - **A `nan` point or `Total-Chi-Squared: nan` is a failed calculation.** The log holds
   `WARNING: the calculation failed at segment K (...), E_lab ... : <error>`, printed once per run. Test hook for such
   paths: `AZURE_TEST_FAIL_E=<E_lab in MeV>` (with `AZURE_TEST_FAIL_EXIT=<pair key>`).
-  Builds before 2026-11-01 (expires: 2027-02-01): a failed point was a silent 0 in the CLI objective and pre-pass, a
-  failed or NaN term of a SUM or natural-target composite was left out of the sum, and a failed RATIO denominator
-  gave 0, so χ² looked normal; on such a build a composite segment with exact zeros or a low SUM is a candidate.
-- **One point near a channel threshold can make χ² explode** (10³⁰ to 10⁷²). The Coulomb functions fail when a
-  point's c.m. energy, after the segment's energy shift and including every sub-point of a convolution or target
-  integration, lies within a few keV of another charged-particle channel's threshold
-  (`docs/source/reference/troubleshooting.rst`, "Threshold Effects"). It may appear only for some parameter sets or
-  only on some builds. Diagnose: sort `chiSquared.out` by segment χ²; in that segment's `AZUREOut_*.out` find the row
-  whose fit column (column 4) is absurd; convert its E_c.m. to E_x and compare with every particle threshold. Fix:
-  write a new data file without the point (keep the original; never edit a file a running job reads), repoint the
-  segment, verify with a mode-1 run. List the other points within 5 keV of a threshold and watch them in the next fit.
+- **One point near a channel threshold can make χ² explode** (10³⁰ to 10⁷²). The Coulomb functions fail when a point's
+  c.m. energy, after the segment's energy shift and including every sub-point of a convolution or target integration,
+  lies within a few keV of another charged-particle channel's threshold (`docs/source/reference/troubleshooting.rst`,
+  "Threshold Effects"). It may appear only for some parameter sets or only on some builds. Diagnose: sort
+  `chiSquared.out` by segment χ²; in that segment's `AZUREOut_*.out` find the row whose fit column (column 4) is absurd;
+  convert its E_c.m. to E_x and compare with every particle threshold. Fix: write a new data file without the point
+  (keep the original; never edit a file a running job reads), repoint the data set (`Project.set(name, file=...)`),
+  verify with a mode-1 run. List the other points within 5 keV of a threshold and watch them in the next fit.
 - **Run a plain calculate before submitting a fit** after a structural edit combined with a reparametrization (a
   remapped `param.sav`, a fresh `save_fit` snapshot): CLI mode 1 with the new parameter file, or
-  `m.objective()(m.params_rwa)`, in a throwaway output directory. Compare with the old total corrected for exactly what
-  changed (the removed segment's χ² and N from the old `chiSquared.out`). It costs seconds and catches a corrupted
-  start before a multi-day job runs on it.
+  `s.objective()(s.parameters.read("new.sav"))`, in a throwaway output directory. Compare with the old total corrected
+  for exactly what changed (the removed data set's χ² and N from the old `chiSquared.out`). It costs seconds and catches
+  a corrupted start before a multi-day job runs on it.
 - **A start far above the baseline is wrong even when the cause is known.** If the calculate check is orders of
   magnitude above the known total because of a deliberate change (a corrected energy shift with norms still fitted
   to the old value), re-seed the affected norms (the n* formula, `docs/source/user_guide/chi_squared.rst`) before
@@ -95,22 +104,19 @@ one that grows into a failed fit, and then investigate which parameter moved, no
 
 ## Wigner and Weisskopf limits
 
-`m.dimensionless_widths(x)` returns θ² for every particle channel and W.u. for every γ channel at any parameter
-vector (`docs/source/user_guide/pyazr.rst`, "Dimensionless widths"; `pyazr/examples/dimensionless_widths.py <azr>
-[--params output/param.sav]`):
+`scripts/widths_check.py` prints, at any parameter vector, θ² = Γ/Γ_W (Γ_W = 2P_l(E_λ)γ²_W, eV) and
+θ²_formal = γ²/γ²_W (γ²_W = 3ħ²/(2μa_c²), MeV) of every particle channel, the Weisskopf estimate and W.u. of every
+photon channel, and the norm J of every level; it flags θ² > 1, more than 100 W.u., and J < 0.3 below
+`--background-above`. In Python:
 
 ```python
-t = m.dimensionless_widths(best)          # WidthTable of ChannelWidth rows
-print(t.photons.nonzero.table())          # filters: .particles .photons .free .nonzero
+t = s.dimensionless_widths(x)            # a WidthTable of ChannelWidth rows
+print(t.photons.nonzero.table())         # filters: .particles .photons .free .nonzero
 [c for c in t.particles if c.theta2 and c.theta2 > 1]
 ```
 
-Each row carries `theta2` (= Γ/Γ_W), `theta2_formal` (= γ²/γ²_W), `wigner_width` (Γ_W, eV), `wigner_gamma2` (γ²_W,
-MeV) and, for photons, `e_gamma`, `weisskopf`, `wu`. Closed (sub-threshold) channels have `is_open = False` and no
-Γ_W: AZURE2 gives an ANC there. `m.wigner_widths(x)` returns `{free_index: Γ_W}`; `weisskopf_width(rad, L, E_γ, A)`
-and `m.mass_number` are separate. The Wigner limit exists in two forms; never mix them, and never divide by
-`wigner_limit` twice. Details, the Weisskopf estimates and the 1.5 factor between conventions:
-`references/widths.md`.
+Closed channels (`is_open` False) carry an ANC and no Γ_W. The two forms of the limit, the 1.5 between conventions,
+the Weisskopf estimates and the level norm J (saturated levels): `references/widths.md`.
 
 ## Saturated background poles
 
@@ -128,28 +134,24 @@ Syntax and a worked example: `references/background-pole-saturation.md`.
 
 ## Is a level needed? Is a new one warranted?
 
-- **Existing level.** Rank by frozen Δχ²: recompute χ² with each level switched off at fixed parameters
-  (`m.without_level(x, jpi=..., energy=...)`). For the candidates, refit with the level removed
-  (`Project.remove_level` or `Project.set_level(level, active=False)`, then refit). The frozen Δχ² is an upper bound; the refit Δχ² is the
-  value to report. Report both, and which data sets' χ² move: a level supported by one data set is a different claim
-  from one supported by all.
-- **New level or channel.** Add it (`add_level`, or free one more channel of an existing level), refit the subset it
-  can affect, and weigh Δχ² against the parameters spent and the physical limits (θ² ≤ 1; a few W.u.). Candidate
-  sweeps run in parallel sessions. The gated search procedure is `azure2-resonance-search`.
+- **Existing level.** Rank by frozen Δχ²: the χ² with the level's free widths zeroed at fixed parameters
+  (`P.put(x, [p for p in P.of_level(label).of_kind("width") if not p.fixed], 0.0)`; azure2-calculate's
+  `decompose.py` does the same for the model). The frozen Δχ² is an upper bound; the refit Δχ² (the level removed with
+  `Project.remove_level`, or deactivated with `Project.set_level(level, active=False)`, then refit) is the value to
+  report, with the data sets whose χ² moved.
+- **New level or channel.** Add it, refit, and weigh Δχ² against the parameters spent and the limits above. The gated
+  search, significance tests and interference signs: azure2-resonance-search.
 
-## Channel-radius sensitivity
+## Channel radius
 
-`m.set_channel_radius(pair, r)` on a live session, or `Project.set_pair(pair, radius=r)` and `save()` to
-persist it. The radius is the matching surface: AZURE2 rebuilds the compound nucleus and data, recomputes
-penetrabilities, shift functions, boundary conditions, Wigner limits and every external-capture integral (the API
-does not reuse `output/intEC*`). A reduced width means something different at another radius, so the model is no
-longer fitted: refit before reading anything. For a scan, one directory per radius (own `output/`, `data`
-symlinked), walk outward, warm-start each radius from its converged neighbour; starting all from one point biases
-the ends. `set_channel_radius` raises if the rebuilt model does not carry the requested radius, and overrides persist
-through every rebuild (other radii, nuclear-potential changes, `data_mode()`/`extrap_mode()`).
-Builds before 2026-11-02 (expires: 2027-02-01): a second `set_channel_radius` undid the first, and so did a
-nuclear-potential change or a mode switch; write every radius into the `.azr` and open a fresh session instead.
-Sampling a_c inside a likelihood: `azure2-uncertainty`.
+A reduced width means something else at another radius, so a χ² at a new radius means nothing before a refit.
+`scripts/radius_scan.py` writes one copy of the project per radius (`Project.set_pair(pair, radius=a)`, its own
+output directory, so that no capture cache of another radius is reused), refits each with `least_squares` on the
+objective's rows and Jacobian (or the program's fitter, `--fitter engine-lm`), and walks outward from the project's
+radius so that every fit starts from its converged neighbour. Report: the objective against a_c, the radii where it is
+within 1 (or the Δχ² of your interval) of the minimum, and how the quantities you quote (S(0), a width, a rate) move
+over that range: that spread is the radius systematic. A minimum at the end of the scan wants a wider scan; a scan
+flat to a fraction of a unit says the data do not choose a_c (state the radius used). Sampling a_c: azure2-uncertainty.
 
 ## Data and their definitions
 
@@ -211,17 +213,13 @@ The conventions every number crossing a file boundary must respect (the referenc
 Name the frame and unit in every column header, variable and plot axis you write. Details of target and straggling
 quantities (some are c.m.): `azure2-targets`.
 
-## Builds, constants and logs
+## Constants and logs
 
 - **Physical constants are CODATA 2018** (ħc = 197.3269804 MeV fm, u = 931.49410242 MeV, α = 1/137.035999084,
-  m_e = 0.51099895 MeV, π to double precision). Builds before 2026-11-05 (expires: 2027-02-01) used π = 3.141592650
-  (1.1e-9 low; a 1/√(2π) normalization inherits half of it, so a comparison with a closed form cannot be tighter than
-  about 6e-10) and CODATA 2006 or rounded constants. Results move by 1e-9 to 1e-5 relative between the two, more near
-  a kinematic edge: a rerun of an archived fit does not reproduce χ² to the last digit, and that is not a model change.
-- **Torn progress bars in multi-threaded logs are cosmetic.** Builds before 2026-11-06 (expires: 2027-02-01) let
-  every OpenMP thread redraw the external-capture bars, leaving fragments such as `Segment #\r\tSegment #1111 [****`;
-  results and `intEC.dat` are identical at 1 and 8 threads. A script that diffs two run logs drops lines that contain
-  `\r` or `Segment #` (as `tests/light_excitation` does).
+  m_e = 0.51099895 MeV). A rerun of a fit archived with older constants does not reproduce χ² to the last digit
+  (1e-9 to 1e-5 relative); that is not a model change.
+- **Results of older builds**: what each build range computed differently, and what to recompute:
+  `references/older-results.md`.
 
 ## Pointers
 

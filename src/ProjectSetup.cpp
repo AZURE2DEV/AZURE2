@@ -87,6 +87,25 @@ std::vector<std::pair<int, int>> ProjectReactionPairs(const Config &configure, b
   return pairs;
 }
 
+namespace {
+// Every entrance pair key of the active items of `items` that names a pair of `compound`, requested as an entrance.
+template <class Items> void RequestEntrancesOf(CNuc &compound, const Items &items) {
+  auto add = [&compound](int entranceKey, int) {
+    if (compound.IsPairKey(entranceKey)) compound.RequestEntrance(compound.GetPairNumFromKey(entranceKey));
+  };
+  for (const auto &item : items)
+    if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
+}
+}  // namespace
+
+void RequestDataEntrances(CNuc &compound, const Config &configure) {
+  RequestEntrancesOf(compound, configure.project->built.data.datasets.items);
+}
+
+void RequestExtrapolationEntrances(CNuc &compound, const Config &configure) {
+  RequestEntrancesOf(compound, configure.project->built.extrapolations.extrapolations.items);
+}
+
 bool ProjectHasThmData(const Config &configure) {
   for (const auto &item : configure.project->built.data.datasets.items)
     if (item.spec.active && item.spec.reaction.thm) return true;

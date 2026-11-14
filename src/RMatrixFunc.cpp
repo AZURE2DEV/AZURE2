@@ -126,7 +126,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
-      JGroup *theJGroup = compound()->GetJGroup(j);
+      const JGroup *theJGroup = compound()->GetJGroup(j);
       // The R-matrix has a pole at the energy of every level with a width (standard formalism: the formal energy;
       // Brune: the observed one, where the level's row of the real level matrix vanishes).  An energy on or next to
       // one (the adaptive sub-point grid of a target effect places a node exactly there) is solved in the level
@@ -149,11 +149,11 @@ void RMatrixFunc::FillMatrices(Site *point) {
         matrix_c qMatrixInverse;
         for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
           if (!compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) continue;
-          ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
+          const ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
           vector_c tempVector;
           for (int lap = 1; lap <= compound()->GetJGroup(j)->NumLevels(); lap++) {
             if (!compound()->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) continue;
-            ALevel *levelp = compound()->GetJGroup(j)->GetLevel(lap);
+            const ALevel *levelp = compound()->GetJGroup(j)->GetLevel(lap);
             complex sum = (la == lap) ? complex(level->GetFitE() - inEnergy, 0.0) : complex(0.0, 0.0);
             for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
               if (compound()->GetJGroup(j)->GetChannel(ch)->GetRadType() != 'P') continue;
@@ -228,7 +228,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
       } else {
         if (atPole)
           for (size_t i = 0; i < coupled.size(); i++) {
-            ALevel *level = theJGroup->GetLevel(coupled[i]);
+            const ALevel *level = theJGroup->GetLevel(coupled[i]);
             double gammaSum = 0.;
             if (configure().paramMask & Config::USE_RMC_FORMALISM)
               for (int chpp = 1; chpp <= theJGroup->NumChannels(); chpp++)
@@ -243,7 +243,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
             complex sum(0.0, 0.0);
             for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
               if (compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) {
-                ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
+                const ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
                 double gammaCh = level->GetFitGamma(ch);
                 double gammaChp = level->GetFitGamma(chp);
                 // A zero width contributes zero, also at E = E_lambda (not 0/0).
@@ -385,7 +385,7 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
       }
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
-        ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
+        const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
         double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
             finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active

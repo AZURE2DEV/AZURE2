@@ -30,14 +30,14 @@ void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherP
  * 1 / sqrt(N_f) as the engine has always formed it (no check of N_f > 0: a Park norm at or below 0 is reported where
  * it is computed).
  */
-double SqrtNFFactor(CNuc &compound, JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma);
+double SqrtNFFactor(CNuc &compound, const JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma);
 
 /*!
  * The final state of external capture through the photon channel `channel`: the first external-capture level whose
  * pair is the channel's, when its multipolarity flag (column 31) covers the channel's E1, M1 or E2; (group, level),
  * 1-based, or (0, 0) when the channel has no external part.
  */
-std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, AChannel *channel);
+std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, const AChannel *channel);
 
 /// The numbers gamma^ext of one photon channel depends on (Eqs. 2 and 4), as values.
 struct ExternalCaptureInputs {
@@ -62,7 +62,7 @@ struct ExternalCaptureSlopes {
  * integrals are ECIntegral's direct ones with the run's per-thread scratch.  With `slopes`, also its derivatives,
  * from the same integrals.  Zero unless E1, E2 or M1 into a final state.
  */
-complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel, std::pair<int, int> finalState,
+complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChannel *channel, std::pair<int, int> finalState,
                                const ExternalCaptureInputs &in, const Config &configure,
                                ExternalCaptureSlopes *slopes = nullptr);
 
@@ -71,7 +71,7 @@ complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel,
  * and amplitudes are its input values (initial) or its transform slots (Brune values of the fit parameters), the
  * final state's likewise, with its stored N_f^(-1/2).
  */
-complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChannel *channel, bool initial,
+complex ExternalReducedWidth(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel, bool initial,
                              const Config &configure);
 
 #endif

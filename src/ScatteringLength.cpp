@@ -50,7 +50,7 @@ std::vector<Channel> Channels(CNuc *compound, int pairKey) {
   std::vector<Channel> out;
   if (!compound->IsPairKey(pairKey)) return out;
   const int pairNum = compound->GetPairNumFromKey(pairKey);
-  PPair *pair = compound->GetPair(pairNum);
+  const PPair *pair = compound->GetPair(pairNum);
   if (pair->GetPType() != 0) return out;
   const double j1 = pair->GetJ(1), j2 = pair->GetJ(2);
   const int parity = pair->GetPi(1) * pair->GetPi(2);
@@ -66,7 +66,7 @@ std::vector<Channel> Channels(CNuc *compound, int pairKey) {
     probe.SetNucleus(pair->GetNucleus(), pair->GetNucleusZ(), pair->GetNucleusA());
     const int j = compound->IsJGroup(probe);
     if (j > 0) {
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       const int ch = jg->IsChannel(AChannel(0, s, pairNum, 'P'));
       if (ch > 0) {
         c.jGroup = j;
@@ -116,7 +116,7 @@ bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex
 
 std::string ResolveConstraint(CNuc *compound, Constraint &c) {
   if (!compound->IsPairKey(c.pairKey)) return "no particle pair with key " + std::to_string(c.pairKey);
-  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(c.pairKey));
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(c.pairKey));
   if (pair->GetPType() != 0) return "pair " + std::to_string(c.pairKey) + " is not a particle pair";
   std::vector<Channel> all = Channels(compound, c.pairKey);
   if (c.s < 0.0) {
@@ -190,7 +190,7 @@ std::string Report(CNuc *compound, const Config &configure) {
       << std::right << std::setw(10) << "x" << std::setw(16) << "Re a0 (fm)" << std::setw(16) << "Im a0 (fm)"
       << "  note" << std::endl;
   for (int aa = 1; aa <= compound->NumPairs(); aa++) {
-    PPair *pair = compound->GetPair(aa);
+    const PPair *pair = compound->GetPair(aa);
     if (pair->GetPType() != 0) continue;
     for (const Channel &ch : Channels(compound, pair->GetPairKey())) {
       Value v = Evaluate(compound, configure, ch);

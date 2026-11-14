@@ -51,9 +51,11 @@ The set-up objects, immutable
      task (``NodeState``, ``include/NodeTable.h``), the shared angular rows
      (``RowSet``), the ``ChannelTable``; all held as
      ``std::shared_ptr<const ...>`` or ``SharedTable``.
-   - The parts of ``CNuc`` that do not move with the parameters: the
-     ``PathwayTable``, the model data, the ``gamma_decay`` set (each a
-     ``std::shared_ptr<const ...>`` that ``CNuc::Clone`` shares).
+   - The parts of ``CNuc`` that do not move with the parameters: the two
+     ``CNucSystem`` of the structure, the ``PathwayTable``, the model data,
+     the ``gamma_decay`` set (each a ``std::shared_ptr<const ...>`` that
+     ``CNuc::Clone`` shares), and the pairs, groups and channels, which are
+     copied but read through ``const`` pointers only after the set-up.
 
 The per-evaluation objects
    - ``WorkingCopy`` (``include/WorkingCopy.h``): what an evaluation changes

@@ -57,6 +57,7 @@
 #include <vector>
 
 #include "AZURECalc.h"
+#include "ProjectSetup.h"
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
@@ -194,6 +195,7 @@ struct Model {
     compound = new CNuc();
     data = new WorkingCopy();
     if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
+    RequestDataEntrances(*compound, cfg);
     RequestCaptureAyTerms(*compound, *data);  // as AZUREMain: a capture A_y's terms, built with the pathway table
     compound->Initialize(cfg);
     compound->FillMnParams(params, &cfg);

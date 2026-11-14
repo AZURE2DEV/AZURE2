@@ -107,7 +107,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
     for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
         if (!theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) continue;
-        ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+        const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
         int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
         const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey());
@@ -130,7 +130,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
             hash->Add(group.s);
             for (int ecm = 1; ecm <= group.num_external; ecm++) {
               const azure2::ExternalRow &pathway = P.External(group, ecm);
-              AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
+              const AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
               hash->Add(pathway.l);
               hash->Add(pathway.mult);
               hash->Add((int)pathway.rad_type);
@@ -142,7 +142,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
               hash->Add(pathway.channel_capture ? 1 : 0);
               if (pathway.channel_capture) {
                 const azure2::InternalRow &chanCap = P.internal[pathway.cc_row];
-                AChannel *initial = theCNuc->GetJGroup(chanCap.group)->GetChannel(chanCap.chp);
+                const AChannel *initial = theCNuc->GetJGroup(chanCap.group)->GetChannel(chanCap.chp);
                 hash->Add(initial->GetL());
                 hash->Add(initial->GetS());
               }
@@ -258,7 +258,7 @@ std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
   WalkECAmplitudes(*this, leaves, theCNuc, &hash, &pairs);
 
   for (std::set<int>::const_iterator it = pairs.begin(); it != pairs.end(); ++it) {
-    PPair *pair = theCNuc->GetPair(*it);
+    const PPair *pair = theCNuc->GetPair(*it);
     hash.Add("pair");
     hash.Add(pair->GetPairKey());
     hash.Add(pair->GetPType());
@@ -462,7 +462,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
         for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
           if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-            ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+            const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
             int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
             if (ecLevel->GetECPairNum() == ir) {
               if (!usePrevious) {
@@ -566,7 +566,7 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
         for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
           if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-            ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+            const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
             int ir = theCNuc->GetPairNumFromKey(Draft().segments_[leaf.first].TermExitKey(leaf.second));
             if (ecLevel->GetECPairNum() == ir) {
               if (!usePrevious) {

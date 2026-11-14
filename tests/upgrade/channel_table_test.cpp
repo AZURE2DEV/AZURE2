@@ -90,7 +90,7 @@ void CheckProject(const std::string &azr) {
   // a pair with a spin-orbit term: rows of l >= 1 differ between j = l - 1/2 and l + 1/2 above threshold, and no row
   // is found under the other j's key (the key holds 2J)
   for (int p = 1; p <= compound.NumPairs(); p++) {
-    PPair *pair = compound.GetPair(p);
+    const PPair *pair = compound.GetPair(p);
     if (pair->SpinOrbitTwoJ(0.5) == azure2::physics::kNoSpinOrbit) continue;
     const ChannelTable::Row *a = one->Find({p, 1, 1, 1.0}), *b = one->Find({p, 1, 3, 1.0});
     check("spin-orbit pair " + std::to_string(p) + ": p1/2 and p3/2 rows differ", a && b && a->P != b->P && a->S != b->S);
@@ -104,9 +104,12 @@ void CheckProject(const std::string &azr) {
   check("built from a previous table == built from scratch (bits)", SameTable(*fromPrevious, *fromScratch, more));
   check("built from a previous table computes only the new rows",
         fromPrevious->Computed() == fromPrevious->Size() - one->Size());
-  PPair *first = compound.GetPair(keys.front().pair);
-  first->SetChRad(first->GetChRad() + 0.5);
-  auto changed = ChannelTable::Build(&compound, cfg, keys, one.get());
+  // The same project with the first key's pair at another channel radius (the structure is fixed after set-up: a
+  // radius is changed by filling the compound again with the override, as the API's SetRadius does).
+  CNuc moved;
+  moved.Fill(cfg, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
+  moved.Initialize(cfg);
+  auto changed = ChannelTable::Build(&moved, cfg, keys, one.get());
   check("a previous table of another channel radius is not reused", changed->Computed() == changed->Size());
 }
 

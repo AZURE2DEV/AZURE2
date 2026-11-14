@@ -1,139 +1,67 @@
 # Dropping a data set from a fit, and bringing it back
 
-Removing one or more `<segmentsData>` segments from a fit (leave-one-out, uncertainty runs, a speed-up variant, a
-set judged unusable) must change exactly that segment's contribution to the objective and nothing else. This page
-gives the rule (deactivate, never delete), where the change must be recorded, how to make it, and the numerical check
-that proves it did what was intended.
+Removing one or more data sets from a fit (leave-one-out, held-out data, uncertainty runs, a set judged unusable)
+must change exactly that set's contribution to the objective and nothing else. This page gives the rule
+(deactivate, never delete), where the change must be recorded, how to make it, and the check that proves it.
 
 ## The rule: deactivate, never delete
 
-Set the segment's include flag (first token of its `<segmentsData>` line) from `1` to `0` and leave the line where it
-is. Everything else in the project is keyed to a segment's position:
+Set the data set's `active` field to `no` and leave the record where it is:
 
-| keyed by segment position | what happens if a line is deleted |
-|---|---|
-| `segment_<key>_norm`, `segment_<key>_energy_shift` in `param.sav` | every later segment silently takes its neighbour's norm and shift |
-| `<targetInt>` key lists (`"60-63"`, `"9-12,107"`) | target and resolution functions land on the wrong data |
-| `chiSquared.out`, `normalizations.out`, `shifts.out` row labels | every table quoted so far changes numbering |
-| readme notes, plot scripts, watcher scripts | refer to the wrong data with no error |
+```python
+p = pyazr.Project.open("model.azr")
+p.set("s04_thick", active="no")
+p.save("model_no_s04.azr")              # in the same directory: the data paths stay relative
+```
 
-A key is the 1-based position among all lines, inactive ones included. A deactivated line keeps its key and everyone
-else's. If a line really must be deleted, remap every per-segment parameter family (`references/parameters-and-sav.md`,
-"Segment keys").
-
-With the line only deactivated, an existing `param.sav` is safe to reuse as is: `AZUREParams::ReadUserParameters`
-matches entries by name, so the dropped segment's `segment_<key>_*` lines match nothing and are ignored. Do not clean
-them out of the file: a filtered file is one more thing that can be wrong, and leaving them makes re-activation a
-one-character change.
+A deactivated record keeps its name, its parameters' names (`s04_thick.norm`) and its place in every table, so
+an existing parameter file stays valid (its lines for the inactive set match nothing and are ignored) and
+re-activation is a one-word change. A record that is deleted takes its own parameters with it; a group
+(`normgroup`, `shiftgroup`) whose first member is deleted hands its shared value to the next member.
 
 ## The drop must reach the model being run
 
-A fit directory accumulates variant `.azr` files (uncertainty model, extrapolation model, polarization variant,
-campaign seed, GUI copy). Deactivating a segment in one of them does nothing for the others, and a variant built later
-from the master inherits the master's flag. This is how a segment believed dropped returns in a day-long refit. Before
-submitting anything, list which files have the segment active:
+A fit directory accumulates variant projects (uncertainty model, extrapolation model, campaign seed). Deactivating
+a data set in one of them does nothing for the others, and a variant built later from the master inherits the
+master's field. Before a long run, list which projects have it active:
 
 ```bash
-# which .azr files in this fit have segment KEY active?
-KEY=103
-for f in *.azr */*.azr; do python3 - "$f" $KEY <<'PY'
-import re,io,sys
-c=io.open(sys.argv[1],encoding='latin-1').read(); k=int(sys.argv[2])
-m=re.search(r'<segmentsData>(.*?)</segmentsData>',c,re.DOTALL)
-rows=[l.split() for l in m.group(1).split('\n') if l.split()] if m else []
-if len(rows)>=k:
-    t=rows[k-1]; f=[x for x in t if x.endswith('.dat')]
-    print("%-40s key %d active=%s  %s"%(sys.argv[1],k,t[0],f[0] if f else '?'))
-PY
-done
+for f in *.azr */*.azr; do python3 -c "import pyazr, sys
+print(sys.argv[1], pyazr.Project.open(sys.argv[1]).describe(sys.argv[2]).splitlines()[0])" "$f" s04_thick; done
 ```
 
-Decide where the drop is recorded as the fit's state. If it is a property of the analysis ("this data set is not
-used"), change the master `.azr` (in a new dated directory, or after a `.bak_pre_*` copy) and say so in the readme,
-so every later variant inherits it. If it is a property of one run ("off for the uncertainty runs only"), it belongs in
-that run's `.azr`, and the readme says that the master still has it on.
+Decide where the drop is recorded as the fit's state: a property of the analysis ("this set is not used") goes in
+the master project and its readme; a property of one run goes in that run's project only, and the readme says the
+master still has it on.
 
-## Doing it
+## Verify: the difference is exactly the dropped data set
 
-Edit by position and assert what you are touching. `.azr` files are Latin-1; read and write them as such.
+Evaluate both projects at the same values (the fitted project written by `save_fit` carries them):
 
 ```python
-import re, io
-KEY, EXPECT = 103, "nToF_2023_Ecorr"          # key and a substring of its data file
-c = io.open("model.azr", encoding="latin-1").read()
-m = re.search(r'(<segmentsData>)(.*?)(</segmentsData>)', c, re.DOTALL)
-rows = m.group(2).split('\n'); key = 0
-for i, l in enumerate(rows):
-    if l.split():
-        key += 1
-        if key == KEY:
-            assert EXPECT in l and l.split()[0] == '1', l      # right line, currently active
-            j = l.index('1'); rows[i] = l[:j] + '0' + l[j+1:]  # flip the flag only, keep spacing
-io.open("model_noKEY.azr", "w", encoding="latin-1").write(
-    c[:m.start(2)] + '\n'.join(rows) + c[m.end(2):])
+with pyazr.Session("model.azr") as a, pyazr.Session("model_no_s04.azr") as b:
+    ea, eb = a.evaluate(a.objective().x0), b.evaluate(b.objective().x0)
+    d = ea.dataset("s04_thick")
+    print(ea.objective - eb.objective, d.chi2 + d.norm_chi2 + d.shift_chi2)
 ```
 
-In pyazr (format 3) the same edit is `Project.set("<data set>", active="no")`; when a data file appears in several
-data sets (angles, energy windows), check afterwards that exactly the intended data sets changed.
-
-What needs no change, and what might:
-
-- **`<targetInt>`**: leave it. An entry bound only to inactive segments costs nothing. An entry shared with segments
-  that stay active (`"6,102"`) must stay.
-- **`<segmentsTest>`**: independent of data segments.
-- **External-capture cache**: `output/intEC.dat` depends on the active segment set only if the dropped segment was a
-  capture segment. If it was, delete `intEC.*` in the output directory before running.
-- **Output directory**: give the variant its own (first path line of the `.azr`), so it cannot overwrite the reference
-  run it is compared against.
-
-## Verify: the difference is exactly the dropped segment
-
-Run mode 1 of the new `.azr` with the same parameter file as the reference and compare `chiSquared.out`. Use the same
-file, not a blank one: with a blank file both runs use the nominal norms, not the fitted ones
-(`references/normalizations-and-shifts.md`).
-
-```python
-def chi(f):
-    o = {}
-    for l in open(f):
-        p = l.split(',')
-        if p[0].strip().isdigit(): o[int(p[0])] = (float(p[1]), int(p[2]), float(p[3]))
-    return o
-ref, new = chi("output/chiSquared.out"), chi("output_noKEY/chiSquared.out")
-assert KEY in ref and KEY not in new
-tot = lambda x: sum(v[0] for v in x.values())
-print("total %.3f -> %.3f, expected %.3f" % (tot(ref), tot(new), tot(ref) - ref[KEY][0]))
-print("max change in a remaining segment:", max(abs(new[k][0]-ref[k][0]) for k in new))
-print("max norm change:", max(abs(new[k][2]-ref[k][2]) for k in new))
-```
-
-Pass criteria: the dropped key is absent; the segment count and `Total-N` fall by exactly that segment's; the total
-falls by exactly that segment's χ²; no remaining segment and no normalization moves beyond the file's printing
-precision. Worked case (key 103, 45 points, χ² = 44.770): 75 → 74 segments, 4654 → 4609 points, total
-10,790.481 → 10,745.712 against an expected 10,745.710; largest change elsewhere 0.011, largest norm change 10⁻⁷.
-
-Anything else means the edit touched more than the flag: a shifted key, a different parameter file, different CLI
-flags, or a different binary. If the dropped segment had a penalized norm (`normErr != 0`), its `Norm-Chi-Squared`
-leaves the total too; compare `Total-Norm-Chi-Squared` as well.
+Pass: the two numbers agree to rounding, and no remaining data set's `chi2` or `norm` moves. If the dropped set
+shares a data covariance with sets that stay, the remaining sets' χ² changes too (the whitening joined them): the
+check is then on the sum over the joined group, and the covariance file must still list the dropped set's data
+file (`azure2-uncertainty`, data covariances). External-capture caches (`output/intEC.*`) depend on the active
+capture sets: delete them when a capture set changes.
 
 ## The refit afterwards
 
-- Modes 2 and 3 ask `Calculate cross-section uncertainty band? (y/n)` before the parameter-file prompt. Scripted
-  input is `2 / n / param.sav / <blank EC> / 7`. Confirm `Reading User Parameter File...` in the log; `Creating New
-  param.par File...` means the file was ignored and the fit started from `<levels>`.
-- The first χ² the fit prints must equal the verified mode-1 total. If it does not, stop the job: it did not start
-  where you think.
-- Flags (`--use-brune`, `--ignore-externals`, ...) are CLI-only: copy them from the reference run's job script.
-- Run it on a batch node, not on a login node.
+The first objective the refit reports must equal the verified one; if not, it did not start where you think. Use
+the same options (`<config>` keys of the project, `docs/source/reference/command_line.rst`) as the reference run.
 
 ## Record it
 
-In the fit's readme: which key, which data file, why it was dropped, in which `.azr` files it is off (and in which it
-is deliberately still on), and the verification numbers. "Segment 103 disabled" without saying where is how the
-confusion starts.
+In the fit's readme: which data set, why it was dropped, in which projects it is off (and in which deliberately
+still on), and the verification numbers.
 
 ## Bringing a data set back
 
-Flip the flag to `1` in the same place. Its `segment_<key>_*` entries are still in `param.sav` if they were left
-alone, so it returns with its last fitted norm and shift. Verify in reverse: the total rises by that segment's own χ²
-at those parameters.
+Set `active` to `yes` in the same place. Its parameters return with the values in the record (or the parameter
+file). Verify in reverse: the objective rises by that set's own contribution at those values.
