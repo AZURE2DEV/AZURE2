@@ -197,6 +197,8 @@ py::dict ThmKeyKindDict(const ThmKeyKind &kind, const std::vector<Key> &keys) {
 }  // namespace
 
 void BindNuclearPart(py::module_ &m) {
+  m.def("jpi_text", &ex::JpiText, py::arg("two_j"), py::arg("parity"),
+        "J^pi as the engine writes it (experiment::JpiText): two_j = 2J, parity +1 or -1; \"1/2+\", \"2-\".");
   m.def("level_table", &LevelTable, py::arg("doc"),
         "The <levels> section as levels and pairs (experiment::ReadLevelRowTable): {'levels': [dicts with label, "
         "two_j, parity, jpi, energy_text, energy (MeV), fixed, active, ids, group and level (the engine's indices, 0 "

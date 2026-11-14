@@ -425,6 +425,9 @@ stays):
   energies given as an argument.
 - `modelavg`, `priors`, `bands` → `pyazr.bands` and `Parameters.read/write`.
 - The 20 bindings pyazr does not use (section 1.2) and the old-format words of the docstrings go.
+- `Parameter.jpi` reads the engine's J^pi text, `"1/2+"`, not `"0.5+"` (a field of the engine's record table,
+  `experiment::JpiText`, as `ChannelWidth.jpi`, `ProjectLevel.jpi` and `ScatteringLength.jpi`); a script that compared
+  with `"0.5+"` compares with `"1/2+"`.
 
 ### 2.4 Arrays: one rule
 

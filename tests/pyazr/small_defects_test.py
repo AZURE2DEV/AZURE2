@@ -8,7 +8,7 @@ items of 2026-11-14):
       still raises the ImportError that says how to build it;
   (c) `pyazr ui FILE --json` prints its URL document and keeps serving (it exited with status 2 at once: uvicorn's
       log set-up asked the captured standard output whether it is a terminal); an interrupt ends it with status 0;
-  (d) ChannelWidth.jpi is the engine's J^pi text ("1/2+", not "0.5+");
+  (d) ChannelWidth.jpi, Parameter.jpi and ScatteringLength.jpi are the engine's J^pi text ("1/2+", not "0.5+");
   (e) a pair record's is_entrance: on T1 the proton pair is an entrance, the photon pairs are not.
 The message of Project.set_pair(1, radius=-1) (the value and what to give) is a case of errors_test.py.
 
@@ -128,6 +128,12 @@ try:
             jpis = {r.jpi for r in rows}
             check(f"ChannelWidth.jpi as the engine writes J^pi ({sorted(jpis)})",
                   jpis and all("/" in j or "." not in j for j in jpis) and "1/2+" in jpis, str(jpis))
+            pjpis = {q.jpi for q in s.parameters if q.jpi is not None}
+            check(f"Parameter.jpi as the engine writes J^pi, the text of ChannelWidth.jpi ({sorted(pjpis)})",
+                  pjpis and all("." not in j for j in pjpis) and "1/2+" in pjpis and jpis <= pjpis, str(pjpis))
+            sl = {v.jpi for v in s.scattering_lengths()}
+            check(f"ScatteringLength.jpi as the engine writes J^pi ({sorted(sl)})",
+                  sl and all("." not in j for j in sl), str(sl))
             entrance = {r["key"]: r["is_entrance"] for r in s.pairs.records()} if hasattr(s.pairs, "records") else \
                 {q.key: q.is_entrance for q in s.pairs}
             check("is_entrance: the proton pair yes, the photon pairs no", entrance == {1: True, 2: False, 3: False},
