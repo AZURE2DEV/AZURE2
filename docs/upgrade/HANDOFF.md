@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-one-setup`) — the set-up of the compound and the data, once
+
+**The five set-up sequences side by side** (start b2650269; measured by reading, before any change). The places:
+the program's run (`SetUpRun`, `src/RunSetUp.cpp`), the sampler (`runMCMC`, `src/AZURE2.cpp`), the session's first
+set-up (`AZUREAPI::Initialize`) and its rebuild (`AZUREAPI::RebuildImpl`, `api/src/AZUREAPI.cpp`), the trees of the
+segments (`azure2::ProjectPredictions`, `src/Predictions.cpp`). Every one makes the compound by `Fill`, then the
+data's set-up reads the half-built compound, then the entrance and capture-A_y requests, then `Initialize`.
+
+Step by step (run / sampler / session / rebuild / trees):
+- "Filling Compound Nucleus..." before `Fill`: run, sampler. Radius overrides to `Fill`: the session's (rebuild: the
+  candidate set). `Fill` refused: run and sampler "Could not fill compound nucleus from file.", session and rebuild
+  silent, trees a line "project: <levels> cannot be set up". No pairs or no J^π groups: refused by the four ("No
+  nuclear data exists. Calculation not possible." in run and sampler); the trees refuse no pairs only.
+- Compound check file: run, session; **not the sampler**, not the rebuild.
+- Rate: run and session check `RatePairsProblem` and request the rate's entrance; the sampler has no rate; **the
+  rebuild has no rate branch** (a rate session would make points).
+- Data: "Filling Data Structures..." in run (not for a rate) and sampler. `WorkingCopy::Fill` with data, else
+  `MakePoints` (session and rebuild: also the adaptive-grid refusal); the trees make both, each into its own copy, a
+  failure a line. Refused: "Could not fill data object from file." (run, sampler) unless refused with its reason.
+  Empty: "There is no data provided." (no segments and no model data) or "Extrapolation segments produce no data."
+  (run, sampler; the session the same tests, silent); **the rebuild one test, no segments** (model data alone refused).
+- Then the entrance requests of the data sets or extrapolations, the data check file (run: not before an adaptive
+  grid's refinement; session; **not the sampler**, not the rebuild), the capture-A_y requests (all four).
+- Rebuild only: `USE_PREVIOUS_INTEGRALS` cleared before `Initialize`, set again on its failure.
+- `Initialize` refused: run and session the message, a blank line, "Calculation was aborted."; the sampler **without
+  the blank line**; the rebuild the message only; the trees never finish the compound.
+
+Meant: the session's silence (it sets `USE_API`; the program never does); a rebuild writes no check files; the trees
+need the pairs only and never the finished compound. Probably not meant, kept as they are (each would change a
+screen text or a refusal): the sampler writes neither check file and prints no blank line before "Calculation was
+aborted."; the rebuild has no rate branch and refuses a project of model data alone that the session's first set-up
+accepts. None of these is an order that one function cannot keep: each is a step of the caller's own data set-up or
+of its own messages.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-curve-export`) — the model as a curve; ENDF in and out
 
 `web_ui.md` section 11.16 has the whole; user guide `web_interface.rst`, `web_ui_api.rst`, `endf.rst`, `pyazr.rst`,
