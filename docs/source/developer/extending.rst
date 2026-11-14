@@ -333,12 +333,13 @@ A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports
 a project that may be absent, as the THM tab) and one row of ``TABS`` in
 ``pyazr/ui/static/app.js``; add its view to ``VIEWS`` of
 ``tests/pyazr/ui/smoke_test.py``. A function of the session drawn by a tab is
-a row of the session's functions naming that tab in ``tab`` (the THM
-diagnostics: ``THM_ROWS`` and their answers ``ANSWERS`` in
-``pyazr/ui/thm.py``, an operation of ``Engine``, a route row); the tab draws
-it with ``functionview.js``. A key of ``<thm>`` is one entry of ``KEYS`` in
-``pyazr/ui/thm.py`` (``tests/pyazr/ui/thm_routes_test.py`` fails for an
-experiment key the engine reads and the table lacks). No test fails when a tab module is left out
+a row of the session's functions (``Session.describe()["functions"]``,
+``pyazr/session_functions.py``) and its entry in ``PAGE`` of
+``pyazr/ui/physics.py`` or ``pyazr/ui/thm.py`` naming that tab in ``tab`` (a
+row without an entry is drawn by the Physics tab); the server walks the
+session's answer by the row's ``path`` and ``lines`` and the tab draws it with
+``functionview.js``. A key of ``<thm>`` is one row of ``src/ThmKeys.cpp``,
+served as ``pyazr.kinds()["thm"]``: nothing in the page. No test fails when a tab module is left out
 of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).

@@ -1,6 +1,7 @@
 // What the THM tab (tabs/thm.js) computes itself: whether a project has THM content, the schema of a form (the key
-// table with the keys it lacks as text fields), the members of each experiment, and the request of an experiment
-// form (the keys changed and the data sets that join).  Everything else it shows is the server's.
+// table with the keys it lacks as text fields; the names offered from pyazr's lists), the members of each experiment,
+// and the request of an experiment form (the keys changed and the data sets that join).  Everything else it shows is
+// the server's.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mod } from "./common.mjs";
@@ -48,4 +49,16 @@ test("an experiment form's edit: the keys changed (null removes one) and the dat
   assert.deepEqual(t.experimentEdit({ Ebeam: "60", ps: null, [t.JOIN]: "s3  s4" }),
     { keys: { Ebeam: "60", ps: null }, datasets: ["s3", "s4"] });
   assert.deepEqual(t.experimentEdit({ Ebeam: "60" }), { keys: { Ebeam: "60" }, datasets: [] });
+});
+
+test("a nucleus and a global optical potential are offered from pyazr's lists (GET /api/kinds), by the grammar", () => {
+  const choices = t.choicesOf({ nuclides: { d: {}, "15N": {} }, optical_potentials: { kd03: {}, ancai06: {} } });
+  const ctx = { choices };
+  const beam = forms.WIDGETS.text({ type: "text", grammar: "<nucleus>" }, "15N", ctx).controls[0];
+  assert.deepEqual(beam.list, ["d", "15N"]);
+  const optical = forms.WIDGETS.text({ type: "text", grammar: "plane | <global set>[:extrapolate] | <parameters>" },
+    "", ctx).controls[0];
+  assert.deepEqual(optical.list, ["kd03", "ancai06"]);
+  assert.deepEqual(forms.WIDGETS.text({ type: "text", grammar: "all | thmin-thmax" }, "", ctx).controls[0].list, []);
+  assert.deepEqual(t.choicesOf(null), { "<nucleus>": [], "<global set>": [] });
 });

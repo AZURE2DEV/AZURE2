@@ -54,7 +54,10 @@ function checkForm(row, axis) {
   assert.ok(typeof ax.from === "number" && typeof ax.to === "number" && ax.from < ax.to, `${row.name}: axis ${ax}`);
   if (!integerAxis) assert.equal(ax.points, p.DEFAULT_POINTS);
   for (const a of row.arguments) {
-    if (a.default === null || a.default === undefined) assert.ok(a.name in req.arguments, `${row.name}: ${a.name}`);
+    // a required argument (a row's own `required`, else one without a default) is always sent
+    if (a.required ?? (a.default === null || a.default === undefined)) {
+      assert.ok(a.name in req.arguments, `${row.name}: ${a.name}`);
+    }
   }
   assert.equal(req.lines.length, 1);
 }

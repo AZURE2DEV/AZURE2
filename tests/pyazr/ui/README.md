@@ -51,6 +51,11 @@ program whose `chiSquared.out` the API's numbers are compared with.
   domain, its table view and the session's channel functions, each with its status line and Python text) and takes a
   screenshot per tab (and of the masked Coulomb function)
   (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
+- `thm_routes_test.py`: the THM tab's routes: every diagnostic of `/api/session/functions` and every raw route
+  `/api/session/thm_*` against the direct `Session` call on T2 and two THM copies of `tests/18O_p_a_thm`; option and
+  experiment edits against the program's `chiSquared.out` and Undo; refusals without THM content (the message's
+  parts); the keys served as `pyazr.kinds()["thm"]`; the rows as pyazr's rows (`Session.describe()["functions"]`), a
+  row added to pyazr's table drawn with no line of the page.
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails
@@ -209,11 +214,22 @@ Added with the sampler and the bands (each shown failing on 2026-11-14, the file
 - the band is a closed region (the lower edge drawn back); a band of other points is not drawn: each broken in
   turn; each fails `node_test.py` (`js/results.test.mjs`).
 
+Added with the page on pyazr's tables (each shown failing on 2026-11-14, the file restored after):
+
+- the error body carries pyazr's parts: `parts_of` returning None for every part; fails
+  `thm_routes_test.py::test_no_thm_content_refuses`.
+- the rows are pyazr's: the fit vector left among the arguments; fails
+  `thm_routes_test.py::test_diagnostic_rows_are_pyazrs_rows`.
+- a line's numbers are walked by the row: the elements of `lines.over` taken in reverse; fails
+  `thm_routes_test.py::test_t2_diagnostics_equal_the_session`.
+- the nuclides offered: `choicesOf` reading `optical_potentials` for `<nucleus>`; fails `node_test.py`
+  (`js/thm.test.mjs`).
+
 Added with the THM tab (each shown failing on 2026-11-14, the file restored after):
 
 - the THM answers carry the session's numbers: `norm_sigma` taken from the last sigma instead of the first; fails
   `thm_routes_test.py::test_distortion_lineshape_and_coherent_background_equal_the_session[cbkg]`.
-- the key table has every key of an experiment line the engine reads: the row `theta` renamed; fails
-  `thm_routes_test.py::test_key_table_has_every_key_the_engine_reads`.
+- the keys served are the engine's table: (since the page reads pyazr's tables) a key dropped from the answer of
+  `thm.keys()`; fails `thm_routes_test.py::test_keys_are_the_engines_table`.
 - a killed or interrupted sampler continues from its saved chain: the saved file not looked up; fails
   `sampler_bands_test.py::test_killed_sampler_continues_from_its_saved_chain`.

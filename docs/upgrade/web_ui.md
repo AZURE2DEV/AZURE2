@@ -382,7 +382,7 @@ Route → pyazr call: request → response.
 - `GET`/`PATCH /api/project/config` → `config`, `set_config`.
 - `GET`/`PATCH /api/project/thm`, `PUT`/`DELETE .../thm/experiments/{name}` → `thm`, `set_thm`,
   `set_thm_experiment`, `remove_thm_experiment`.  `GET /api/thm/keys` → the keys of `<thm>` as record kinds of a
-  schema (`pyazr/ui/thm.py` `KEYS`; the engine has no table of them, finding 27).
+  schema: `pyazr.kinds()["thm"]`, the engine's table (`src/ThmKeys.cpp`) as it is.
 - `POST /api/project/undo`, `/redo`; `GET /api/project/history` → the server's history: → rev; (rev, time, what).
 - `POST /api/project/apply` → missing (finding 8): the values of x written into the text: x by name, rev → rev.
 
@@ -418,13 +418,15 @@ Route → pyazr call: request → response.
   `channel_functions` is **served** in the session worker (adapter `Engine.channel_functions`, the budget as the
   other session routes), with the same bound of 20000 energies; `level_matrix` stays 501 (no engine call).
 - `GET /api/session/functions`, `POST /api/session/functions/{fn}` → the session's functions as rows of the shape of
-  `/api/physics` (`pyazr/ui/physics.py` `SESSION_ROWS`; finding 24) and a call of one answered as `/api/physics/{fn}`
-  answers (status -2 where the channel is closed, the Python text opening a session on the project file).
+  `/api/physics`: pyazr's rows (`Session.describe()["functions"]`) with the page's own part (`PAGE` of
+  `pyazr/ui/physics.py` and `thm.py`), and a call of one (`Engine.session_function`, by the row's name) answered as
+  `/api/physics/{fn}` answers (status -2 where the channel is closed, the Python text opening a session on the
+  project file).
   **Served** (the Physics tab; the THM diagnostics below are rows of it too, drawn by the THM tab).
 - `POST /api/session/thm_experiments`, `/thm_background`, `/thm_lineshape`, `/thm_vertex`, `/thm_distortion` →
   `Session.thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`, `thm_distortion`: the session's
   answer as plain data, at the working x.  **Served** (adapter `Engine.thm_*`); the same calls as rows of the shape
-  of `/api/physics` (`pyazr/ui/thm.py` `THM_ROWS`) through `/api/session/functions/{fn}` (section 11.8).
+  of `/api/physics` through `/api/session/functions/{fn}` (sections 11.8, 11.9).
 - `GET /api/stopping`, `POST /api/stopping/{fn}` → `kinds()["stopping"]`, `pyazr.stopping.evaluate`: the rows of
   the binding's stopping table (the shape of the physics rows, a text argument `formula` first, SRIM's `citation`)
   and a call of one, answered as `/api/physics/{fn}` answers, with the citation. **Served** (the same generic
@@ -464,8 +466,9 @@ pyazr's classes (`pyazr3.md` 2.5) map to statuses; the body keeps the three part
 | an unknown record, level, job | 404 | the names that exist (as pyazr's "did you mean") |
 | a path outside the root | 403 | the root |
 
-The page shows `what` as the message, `allowed` and `fix` beneath it. pyazr 3.0 designs the three parts as text of
-one message; the API needs them as fields of the exception (finding 9).
+The page shows `what` as the message (`message` where `what` is null), `allowed` and `fix` beneath it.  The three
+parts are `e.what`, `e.allowed`, `e.fix` of pyazr's error (carried from a worker with the class and the message);
+they are null where the message is the engine's own text, and the server takes no message apart.
 
 ### 4.4 Jobs
 
@@ -755,9 +758,9 @@ as np`, `import pyazr`, the axis as `np.linspace` / `np.geomspace` / `np.arange`
 `np.array([...]).reshape(-1, 1, ...)`, and `result, status = pyazr.physics.<fn>(..., errors="mask")`; shown under the
 plot and copied by the button. The test runs the text and compares the arrays with the route's bit for bit.
 
-**The session's functions.** `channel_functions` (pair, l, radius, J, `e_cm` the axis) is a row of the same shape in
-`pyazr/ui/physics.py` (`SESSION_ROWS`: the session's methods have no table in the binding; a finding), served by
-`POST /api/session/channel_functions` in the session worker. When the project does not build, the form is drawn and
+**The session's functions.** `channel_functions` (pair, `e_cm` the axis, l, radius, J) is pyazr's row
+(`Session.describe()["functions"]`), served by `POST /api/session/functions/channel_functions` in the session worker
+(section 11.9). When the project does not build, the form is drawn and
 the plot area shows the engine's refusal (what / allowed / fix) with "the functions above need no project"; the
 free functions keep working. Its Python text opens a session on the project file.
 
@@ -1472,13 +1475,59 @@ energies), so its row has a bound of 1000 energies per request (about 20 s) inst
 5. *The diagnostics run at the working x*; the Python text opens a session on the saved file and says that
    `params=x` gives another point.
 
-**Extensibility as built.** A new key of `<thm>`: one entry in `KEYS` of `pyazr/ui/thm.py` (value type of the
+**Extensibility as built** (before section 11.9, which removed `KEYS`, `THM_ROWS` and `ANSWERS`). A new key of
+`<thm>`: one entry in `KEYS` of `pyazr/ui/thm.py` (value type of the
 schema, choices, doc; the test fails for an experiment key the engine reads and the table lacks); until then the
 page shows it as a text field.  A new THM diagnostic of the session: a row in `THM_ROWS` (arguments of the kinds
 `ARGUMENT_KINDS` knows, returns with units and `lines`, facts) and its function in `ANSWERS`, an adapter operation
 `Engine.<name>` and a route row; nothing in the page.  A new tab: a module `tabs/<name>.js` with `render` (and
 `shown` if it is about part of a project) and one row of `TABS`; a session function drawn by it names the tab in
 its row's `tab`.
+
+### 11.9 The page on pyazr's tables (2026-11-14): THM keys, session functions, error parts, lists
+
+The page's own copies of tables pyazr serves are gone.
+
+- **The `<thm>` keys**: `pyazr/ui/thm.py` `keys()` is `pyazr.kinds()["thm"]` (the engine's table, `src/ThmKeys.cpp`,
+  the one its parser reads); the hand-written table and the test that compared it with the engine's refusal are
+  gone (`tests/pyazr/ui/thm_routes_test.py` checks that the route serves the table as it is and that a key added to
+  it is served).
+- **The session's functions**: the rows of `GET /api/session/functions` are pyazr's
+  (`Session.describe()["functions"]`, `pyazr/session_functions.py`) in the shape the page draws (`physics.page_row`):
+  every argument but the fit vector (kind `vector`: the server gives the working x), each marked `required` from the
+  method's signature (`engine.required_arguments`: a row's `default` None does not tell an optional `J` from a
+  required `pair`); the fields of shape `axis` but the axis's echo and the status field (`returns`); the top-level
+  scalars and texts (`facts`).  A call goes to `Engine.session_function(fn, arguments, x)`, which calls the session's
+  method by the row's name (with `params=x` where the row has `at_x`); `physics.answer_parts` walks the answer by the
+  row: a field with `lines` gives one list per element of `lines.over`, labelled by the fields of `lines.label` with
+  their values and units (`pair 2, jgroup 1, level 1, J 0.5, pi 1, E_level 0.609 MeV, Gamma 0.19047 MeV`; the page
+  formats no J^pi).  What stays the page's (`PAGE` of `physics.py` and of `thm.py`): the tab, the group, the bound of
+  one request (1000 energies for the distortion), the field that echoes the axis (`E` of the THM calls), the status
+  field and its code (`open` → -2, `reached` → -3; else -1 where a field is not finite) with its words, the fields
+  left off the first plot, and the two answers made into tables (`thm_experiments`, `thm_background`).
+  `channel_functions` gains its argument `J` (a pair with a spin-orbit term) and `thm_vertex` its `strict`.
+- **Errors**: `errors.parts_of` reads `e.what`, `e.allowed`, `e.fix`; a worker sends them with the class names and
+  the message (`WorkerError.parts`); the body carries them, null where pyazr has none (the engine's own texts, as
+  "no THM experiment 'none' in use"), and the page shows `message` then.  The messages are unchanged.
+- **Lists**: the THM key forms offer the nuclide names of `kinds()["nuclides"]` in the beam, target and spectator
+  boxes and the global sets of `kinds()["optical_potentials"]` in the optical-potential boxes (a free-text field
+  whose grammar names `<nucleus>` or `<global set>`: `forms.js` `suggestionsOf`, `tabs/thm.js` `choicesOf`).  The
+  masses of that nuclide list are not used for pairs (they are the THM code's nuclear masses).
+
+**Measured** (`work/uiport/capture.py`, `compare.py`: the JSON of every session-function route and of every raw THM
+route, before and after, on T1, T2 (LC09), two THM copies of `tests/18O_p_a_thm` (Coulomb distortion with the line
+shape; coherent background), `examples/f19_pag_thm` and `examples/o18_lacognata2010` (DW vertex); 96 answers): the
+raw routes are identical (36 of 36); in the 60 answers of the function routes every returned array, status, table
+and fact value is identical, and the refusals have the same status and message.  What differs: the line labels
+(above), the order of the vertex's facts (window before model), `norm` added to the background's facts, `J: null`
+in the arguments of `channel_functions` and `strict: false` in those of `thm_vertex`, the order of
+`channel_functions`'s keywords in the Python text, and the `units` of the two table answers (empty: the tables carry
+their columns).
+
+**Extensibility as built.** A new key of `<thm>`: a row of `src/ThmKeys.cpp`, nothing in the page.  A new
+diagnostic of the session: its method and its row in `pyazr/session_functions.py`; the Physics tab lists and draws it
+with no line of the page (an entry in `PAGE` only to put it on another tab or give it status words);
+`routes_consistency_test.py` counts the rows of that table as served.
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
@@ -1519,6 +1568,7 @@ None of these changes the decided objects; each is a call or a field to add:
 9. **The three parts of an error as fields** (`what`, `allowed`, `fix`) of the exception, not only its text.
    *Partly delivered*: pyazr's error classes (`pyazr.errors`, each also the builtin it was) and messages that say the
    three parts; the parts are not attributes, so the server keeps the whole text in `what`.
+   *Closed* (section 11.9): the error body's `what`, `allowed`, `fix` are these attributes, carried from the worker.
    *Delivered in pyazr*: `e.what`, `e.allowed`, `e.fix` on every `pyazr.Error` (None where the message is the
    engine's own text, as an `AZURE2Error` from C++); set where the message is built from the parts (the session's
    argument checks, a closed session, a missing working directory, the physics functions' domains, unknown records,
@@ -1623,7 +1673,7 @@ priors of nuisances only).
 
 Found while building the Physics tab (step 5):
 
-24. **The session's physics functions as rows**: `channel_functions` (and later `level_matrix`) have no row in the
+24. **The session's physics functions as rows** (*closed*: section 11.9): `channel_functions` (and later `level_matrix`) have no row in the
     binding's table; the server writes the row of `channel_functions` by hand (`pyazr/ui/physics.py`
     `SESSION_ROWS`, from its docstring). Wanted: the session's functions described as the physics table describes
     its rows (arguments with unit, domain, example and sweep; returns with units), `J` among them.
@@ -1639,7 +1689,7 @@ Found while building the Physics tab (step 5):
 
 Found while building the THM tab (step 5, second part):
 
-27. **A schema of `<thm>`**: the engine reads its keys with a grammar of if-chains (`ParseThmOptionLine`,
+27. **A schema of `<thm>`** (*closed*: `GET /api/thm/keys` serves `pyazr.kinds()["thm"]`, section 11.9): the engine reads its keys with a grammar of if-chains (`ParseThmOptionLine`,
     `ParseThmExperimentLine` in `src/ThmExperiment.cpp`) and describes none of them as data.  The page's forms come
     from a table written in `pyazr/ui/thm.py` (`KEYS`: value type of the schema, choices, unit, doc), checked against
     the list of keys the engine names when it refuses an unknown one.  Wanted: the keys of the options and of an
@@ -1648,7 +1698,8 @@ Found while building the THM tab (step 5, second part):
     description and reader in one row), in the shape of `KEYS`, equal to it today (`tests/pyazr/thm_keys_test.py`).
     The page replaces `thm.keys()` by `copy.deepcopy(pyazr.kinds()["thm"])` (or `KEYS = pyazr.kinds()["thm"]`); the
     reference page `docs/source/reference/thm_keys.rst` is generated from the same rows.
-28. **The THM calls described as rows**: `thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`,
+28. **The THM calls described as rows** (*closed*: the page's rows and answers are made from
+    `Session.describe()["functions"]`, section 11.9): `thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`,
     `thm_distortion` return nested dictionaries; `pyazr/ui/thm.py` (`THM_ROWS`, `ANSWERS`) writes their rows from the
     docstrings and turns the answer into fields on the energies with lines (per channel and level, per exit pair),
     facts with units and tables.  Wanted: the rows in the session's description (as finding 24 asks for

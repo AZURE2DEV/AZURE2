@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — the page reads pyazr's tables
+
+**Done** (`web_ui.md` section 11.9; findings 9, 24, 27, 28 closed):
+
+- `<thm>` keys: `pyazr/ui/thm.py` `keys()` is `pyazr.kinds()["thm"]`; the page's table `KEYS` and its test are gone.
+- The session's functions: `GET /api/session/functions` serves pyazr's rows (`Session.describe()["functions"]`)
+  through `physics.page_row` (the fit vector left out, `required` from the method's signature); a call goes to
+  `Engine.session_function` by the row's name; `physics.answer_parts` walks the answer by the rows' `path` and
+  `lines`.  `SESSION_ROWS`, `THM_ROWS` and the shaping of `ANSWERS` are gone; `PAGE` (in `physics.py`, `thm.py`)
+  keeps the tab, group, bound, status field and words, hidden fields and the two table answers.
+- Errors: the body's `what`, `allowed`, `fix` are `e.what`, `e.allowed`, `e.fix` (carried from the worker); null
+  for the engine's own texts (the page shows `message`).
+- The THM key forms offer `kinds()["nuclides"]` and `["optical_potentials"]` by name.
+
+**Verified**: the JSON of the 60 session-function answers and 36 raw THM answers before and after on T1, T2, two THM
+copies of `tests/18O_p_a_thm`, `examples/f19_pag_thm`, `examples/o18_lacognata2010` (`work/uiport/capture.py`,
+`compare.py`): every array, status, table and fact value identical, the raw routes identical; the labels, the facts'
+order and the arguments as used differ (listed in 11.9).  `tests/pyazr/ui` whole (16 files; the smoke test with
+headless Chrome), `tests/pyazr/thm_keys_test.py`, the consistency test, `docs_build` (55 pages); the HTTP walk on
+T1, T2, T3, 13N (`work/uiport/walk/walk.py`, a copy of the director's walk66: the χ² equal to the expected values, a
+fit and a band job each, a radius edit and Undo restoring the χ² exactly, the function routes).  Five injected
+errors each failed their test (README of `tests/pyazr/ui`).
+
+**Open**: the pairs and the THM columns in the Nucleus tab, what a fit returns in the Fit tab (the next commit).
+
 ## 2026-11-14 (director, 13:05) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 69 (a true merge of the rehearsal branch; its tree

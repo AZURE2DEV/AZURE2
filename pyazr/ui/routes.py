@@ -205,17 +205,18 @@ ROUTES = (
           f"the spectator-F channel; at most {MAX_ELEMENTS} energies.", args=("experiment", "energies")),
     Route("GET", "/api/thm/keys", V, "server.Server.thm_keys",
           "The keys of <thm> (the options, an experiment's) as record kinds of a schema: value type, choices, unit, "
-          "doc (pyazr/ui/thm.py KEYS: the engine describes them by its grammar only)."),
+          "doc (pyazr.kinds()['thm'], the engine's table of the keys its parser reads).", serves=("pyazr.kinds",)),
     Route("GET", "/api/session/functions", V, "server.Server.session_functions",
-          "The session's functions as rows of the shape of /api/physics (pyazr/ui/physics.py SESSION_ROWS and the THM "
-          "diagnostics of pyazr/ui/thm.py: the session's methods have no table in the binding); a row with `tab` is "
-          "drawn by that tab."),
+          "The session's functions as rows of the shape of /api/physics: pyazr's rows "
+          "(Session.describe()['functions']: arguments, returned fields with units) with the page's own fields (tab, "
+          "group, status words, the bound of one request); the fit vector is not an argument (the working x); a row "
+          "with `tab` is drawn by that tab.",
+          serves=("pyazr.Session.describe",)),
     Route("POST", "/api/session/functions/{fn}", V, "server.Server.session_function_call",
           "A session function on {\"arguments\": {...}} (one value each, the axis a list or {from, to, points, "
           "spacing}) in the session worker, answered as /api/physics/{fn} answers (returns, units, status, its words, "
           "the arguments as used, the Python text; a THM call's facts and tables).", args=("fn",), spread="arguments",
-          serves=("engine.Engine.channel_functions", "engine.Engine.thm_experiments", "engine.Engine.thm_background",
-                  "engine.Engine.thm_lineshape", "engine.Engine.thm_vertex", "engine.Engine.thm_distortion")),
+          serves=("engine.Engine.session_function",)),
     Route("POST", "/api/outputs", V, "server.Server.outputs",
           "Write the program's output files at the working x (pyazr's write_outputs) and copy them into the "
           "project's output directory (<config> output_dir): the files written.", kwargs=("rev",),

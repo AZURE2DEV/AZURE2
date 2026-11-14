@@ -162,7 +162,9 @@ coulombIntegral, spectatorEnergy), each with its choices and the engine's defaul
 (``spectatorEnergy[2]``, one pair's spectator energy) is set under "other key".  **Experiments**: the table of the
 experiments with the data sets that name them and their keys as written; a row opens the form of its keys (beam,
 target, spectator, Ebeam, background, ps window, distortion, optical potentials, vertexModel, coherent background,
-...) with "data sets that join", and **Remove**; **+ experiment** adds one.  Every change is one edit of the project:
+...) with "data sets that join", and **Remove**; **+ experiment** adds one.  The forms are the engine's table of the
+keys it reads, so a key the engine gains appears without a change of the page; the beam, target and spectator boxes
+offer the nuclei the engine knows by name and the optical-potential boxes its global sets (``pyazr.kinds()``).  Every change is one edit of the project:
 **Undo** takes it back, and what the engine refuses is shown in its words.  **Channels**: the THM pairs with their
 binding energy B and their channels, with whether a width is an amplitude; these are read from the session and
 cannot be edited here yet.  **Diagnostics**: the session's THM calls at the working parameters: the experiments'

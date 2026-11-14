@@ -12,6 +12,7 @@ set's rows of the objective (``Evaluation.data[i].rows``) splits data sets joine
 (web_ui.md section 2.2, finding 5).  The file has the program's six significant digits.
 """
 import dataclasses
+import inspect
 import os
 import time
 
@@ -272,7 +273,20 @@ class Engine:
         out = self.s.channel_functions(pair, np.asarray(e_cm, float), l, radius, J)
         return {k: np.asarray(v).tolist() for k, v in out.items()}
 
-    # -- the THM experiments (pyazr/session_thm.py); the routes' rows are pyazr/ui/thm.py's -------------------------
+    def session_function(self, fn, arguments, x=None):
+        """A function of the session's table (``Session.describe()["functions"]``) by name, on ``arguments`` (checked
+        by :func:`pyazr.ui.physics.session_request`), at the fit vector x where its row depends on it (``at_x``):
+        the session's answer as plain data."""
+        from pyazr.session_functions import SESSION_FUNCTIONS
+        row = SESSION_FUNCTIONS[fn]
+        kwargs = dict(arguments)
+        if row["axis"] in kwargs:
+            kwargs[row["axis"]] = np.asarray(kwargs[row["axis"]], float)
+        if row["at_x"]:
+            kwargs["params"] = np.asarray(x, float)
+        return _tree(getattr(self.s, fn)(**kwargs))
+
+    # -- the THM experiments (pyazr/session_thm.py) as raw routes ----------------------------------------------------
 
     def thm_experiments(self, x):
         """Every THM experiment as a chi-squared evaluation at x profiles it (``Session.thm_experiments``): by name,
@@ -305,6 +319,13 @@ class Engine:
         written, _ = self.s.save_fit(path, np.asarray(x, float), param_sav=False, relative_to=self.s.cwd)
         with open(written, "rb") as f:
             return f.read().decode("utf-8", "surrogateescape")
+
+
+def required_arguments(fn):
+    """The arguments of the session's method ``fn`` that have no default (a row's ``default`` None says none)."""
+    from pyazr import Session
+    signature = inspect.signature(getattr(Session, fn))
+    return {n for n, p in signature.parameters.items() if n != "self" and p.default is inspect.Parameter.empty}
 
 
 def _energies(energies, what):

@@ -124,7 +124,8 @@ the open project and its edit history (``State``), the jobs (``JobTable``)
 and a session worker (``SessionWorker``): the session lives in a separate
 process, where ``Engine`` (``engine.py``) owns a ``pyazr.Session``. Every route
 of its API is one row of ``ROUTES`` (``routes.py``); the functions of the
-session are rows of the physics table's shape (``physics.py``, and the THM
-diagnostics and the keys of ``<thm>`` in ``thm.py``). The page
+session are pyazr's rows (``Session.describe()["functions"]``) with the page's
+own part of each (``PAGE`` in ``physics.py`` and ``thm.py``), and the keys of
+``<thm>`` are ``pyazr.kinds()["thm"]``. The page
 (``pyazr/ui/static``) holds no state of the project and computes no physical
 number.
