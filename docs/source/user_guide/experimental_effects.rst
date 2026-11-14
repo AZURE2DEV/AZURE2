@@ -153,7 +153,7 @@ Gaussian distribution of beam energies about each data point,
    Y(E_0) = \frac{\int K(E'; E_0)\, \sigma(E')\, dE'}{\int K(E'; E_0)\, dE'},
    \qquad K \propto \exp\!\left[-\frac{(E' - E_0)^2}{2\,\sigma_b(E_0)^2}\right],
 
-integrated over :math:`E_0 \pm 3\sigma_b` and normalised by the kernel's own
+integrated over :math:`E_0 \pm 5\sigma_b` and normalised by the kernel's own
 integral, so a constant cross section is reproduced exactly.
 
 **sigma [MeV, lab]**
@@ -182,8 +182,8 @@ integral, so a constant cross section is reproduced exactly.
    form, an exact rewrite
    :math:`\sigma_{\rm lab}(x) = \sigma_{\rm cm}(F x)/F` with
    :math:`F = m_t/(m_p + m_t)` of the segment's entrance pair. Before October
-   2026 the constant-sigma kernel was also not normalised over its
-   :math:`\pm 3\sigma_b` window, so convolved segments came out 0.27 % low;
+   2026 the constant-sigma kernel was also integrated over only
+   :math:`\pm 3\sigma_b` and not normalised, so convolved segments came out 0.27 % low;
    the normalised kernel removes that.
 
 Target Integration
