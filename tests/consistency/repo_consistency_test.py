@@ -608,10 +608,7 @@ PY_NAME_TEST = re.compile(r'\.(?:startswith|endswith)\(\s*[rbf]*["\']' + STEM.re
                           + r'|\.name\.(?:startswith|endswith)\(\s*[A-Za-z_]')
 PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["\'][^"\']*'
                            r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_)')
-ALLOWED_NAME_TESTS = {
-    # An example script that reads param.par without the engine (pyazr.transform only).
-    ("pyazr/examples/transform_widths.py", 'm = re.match(r"width_'),
-}
+ALLOWED_NAME_TESTS = set()  # (file, text of the line): none today
 name_test_hits = set()
 for top in ("src", "include", "api", "pyazr"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):

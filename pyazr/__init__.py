@@ -65,18 +65,11 @@ from . import stopping
 from . import physics
 from .physics import whittaker_wave
 from .outputs import fitted_norms
-# nds also defines a Level, but transform.Level owns the name here; reach the
-# other one as pyazr.nds.Level.
 from .nds import (ExforData, ExforDataset, GroundState, Gamma,
                   Reference, search_exfor, fetch_exfor, fetch_levels,
                   fetch_gammas, fetch_ground_state, reference, resolve_doi,
                   aps_doi, sfactor_to_cross_section, cm_to_lab)
-from .widths import (ChannelWidth, WidthTable, weisskopf_width,
-                     teichmann_wigner, lane_thomas_wigner)
-from .transform import (Channel, Level, TransformedChannel, TransformedLevel,
-                        transform_out, partial_widths, LevelWidthTransformer,
-                        levels_from_azr, levels_from_scheme,
-                        penetrability, shift, shift_derivative, whittaker)
+from .widths import ChannelWidth, WidthTable, weisskopf_width
 from .angular import angular_distribution
 from .tabulate import tabulate, TabulatedCrossSection
 from .nuclei import (Nucleus, MergeReport, merge_projects, nucleus_of,
@@ -109,11 +102,7 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",
            "fetch_gammas", "fetch_ground_state", "reference", "resolve_doi",
            "aps_doi", "sfactor_to_cross_section", "cm_to_lab",
-           "ChannelWidth", "WidthTable", "weisskopf_width", "teichmann_wigner", "lane_thomas_wigner",
-           "Channel", "Level", "TransformedChannel", "TransformedLevel",
-           "transform_out", "partial_widths", "LevelWidthTransformer",
-           "levels_from_azr", "levels_from_scheme",
-           "penetrability", "shift", "shift_derivative", "whittaker",
+           "ChannelWidth", "WidthTable", "weisskopf_width",
            "Nucleus", "MergeReport", "merge_projects", "nucleus_of",
            "nucleus_of_pair",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",

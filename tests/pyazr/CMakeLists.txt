@@ -73,12 +73,17 @@ add_test(NAME pyazr_hybrid_derivative
                  ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_derivative_test.py)
 set_tests_properties(pyazr_hybrid_derivative PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Parameter.wigner_limit is AZURE2's 3 hbar^2 / (2 mu a^2); teichmann_wigner() returns it unchanged
-# (it multiplied by 1.5 again before 2026-10-27, audit item 19) and lane_thomas_wigner() gives hbar^2/(mu a^2).
+# Parameter.wigner_limit is AZURE2's 3 hbar^2 / (2 mu a^2), and pyazr.physics.wigner_limit gives the same number.
 add_test(NAME pyazr_wigner_convention
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/wigner_convention_test.py)
 set_tests_properties(pyazr_wigner_convention PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The Weisskopf estimate, pyazr's one physics formula without an engine counterpart, against its closed form.
+add_test(NAME pyazr_weisskopf
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/weisskopf_test.py)
+set_tests_properties(pyazr_weisskopf PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
 # Inactive <levels> and <segmentsData> lines must not shift pyazr's level
 # numbering or its per-segment penalties off the engine's.

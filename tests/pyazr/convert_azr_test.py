@@ -9,7 +9,7 @@ tests/convert/fixtures:
   2. a session on the conversion gives the chi-squared of a session on the tree's project (the committed
      conversion), to 1e-12;
   3. pyazr reads format 3 only: a session (azure2), Project.open and the functions that take a path (tabulate,
-     angular_distribution, model_average's writer, levels_from_azr, merge_projects) refuse the original, the same
+     angular_distribution, model_average's writer, merge_projects) refuse the original, the same
      file with format=2, the format-3 project with an old <segmentsData> appended, an empty file and a file that is
      not a project, each with one FormatError: the engine's message (io::NotFormat3Message), the conversion named
      where there is one;
@@ -107,7 +107,6 @@ for project, azr, hybrid in CASES:
                      "tabulate": lambda: pyazr.tabulate(path, [(1, 1)], 1.0, 2.0),
                      "angular_distribution": lambda: pyazr.angular_distribution(path, [1.0]),
                      "write_averaged_azr": lambda: pyazr.write_averaged_azr(path, os.path.join(d, "avg.azr"), {}),
-                     "levels_from_azr": lambda: pyazr.levels_from_azr(path),
                      "merge_projects": lambda: pyazr.merge_projects([path], os.path.join(d, "merged.azr"))}
             for name, call in calls.items():
                 try:
