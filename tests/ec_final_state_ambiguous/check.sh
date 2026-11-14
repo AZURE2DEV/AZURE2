@@ -104,7 +104,7 @@ make_pairs_old() {  # NAME
          }
        }' "$HERE/../convert/fixtures/tests/13N/13N.azr" > "$WORK/$1/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$BASE/expected/chiSquared.out")"
 near() { awk -v a="$1" -v b="$2" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(a != "" && d < 1e-5) }'; }

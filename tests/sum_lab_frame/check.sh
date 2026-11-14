@@ -36,7 +36,7 @@ le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^[0-9.]+([eE][-+]?[0-9]+)?$/
 
 # run DIR MODEL MODE KINFLAG [FLAGS] [ENV...] -> $WORK/DIR
 run() {
-  local dir="$WORK/$1" model="$2" mode="$3" kin="$4" flags="${5:-}"
+  local dir="$WORK/$1" model="$2" command="$3" kin="$4" flags="${5:-}"
   shift 5 2> /dev/null || shift $#
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
@@ -44,7 +44,7 @@ run() {
   [ "$kin" = 1 ] && echo 1 > "$dir/kinflag.dat"
   # shellcheck disable=SC2086
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$mode\n\n\n7\n" | run_limited 300 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 300 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 # block FILE N -> the N-th blank-line-separated block of an output file (segments with the same pairs share a file)
 block() { awk -v blk="$2" 'BEGIN { RS = ""; FS = "\n" } NR == blk { print }' "$1"; }
@@ -60,8 +60,8 @@ maxrel() {
 }
 
 # ---- (a) extrapolations ------------------------------------------------------------------------------------------
-run lab extrap 3 1
-run cm extrap 3 0
+run lab extrap extrapolate 1
+run cm extrap extrapolate 0
 f3="$WORK/lab/output/AZUREOut_aa=2_R=3.extrap"; f5="$WORK/lab/output/AZUREOut_aa=2_R=5.extrap"
 c3="$WORK/cm/output/AZUREOut_aa=2_R=3.extrap"; c5="$WORK/cm/output/AZUREOut_aa=2_R=5.extrap"
 if [ -s "$f3" ] && [ -s "$f5" ] && [ -s "$c3" ] && [ -s "$c5" ]; then
@@ -94,7 +94,7 @@ else
 fi
 
 # ---- (b) a SUM data segment under an energy shift ---------------------------------------------------------------
-run plain plain_data 1 1
+run plain plain_data calculate 1
 p3="$WORK/plain/output/AZUREOut_aa=2_R=3.out"; p5="$WORK/plain/output/AZUREOut_aa=2_R=5.out"
 if [ -s "$p3" ] && [ -s "$p5" ]; then
   # data/sum.dat: the data grid (unshifted lab energies and angles) with the sum of the fitted lab values, 1 % errors
@@ -102,7 +102,7 @@ if [ -s "$p3" ] && [ -s "$p5" ]; then
     awk '{ v = $5 + $6; printf "%.10g  %.10g  %.12e  %.12e\n", $1, $2, v, 0.01 * v }' > "$WORK/sum.dat"
   nd="$(wc -l < "$WORK/sum.dat" | tr -d ' ')"
   mkdir -p "$WORK/sumdata/data" && cp "$WORK/sum.dat" "$WORK/sumdata/data/sum.dat"   # run() merges models/data in
-  run sumdata sum_data 1 1
+  run sumdata sum_data calculate 1
   chi="$(awk -F, 'NR > 1 && $1 + 0 == 1 { gsub(/ /, "", $2); print $2 }' "$WORK/sumdata/output/chiSquared.out")"
   if [ -z "$chi" ]; then
     bad "(b) no chi2 for the SUM data segment"; tail -5 "$WORK/sumdata/run.log"
@@ -121,7 +121,7 @@ gradcheck() {  # NAME ENV...
   # data off the model (a few % per point), so chi2 and its gradient are not at the rounding floor
   mkdir -p "$WORK/$name/data"
   awk '{ printf "%s  %s  %.12e  %s\n", $1, $2, $3 * (1 + 0.02 * (NR % 5 - 2)), $4 }' "$WORK/sum.dat" > "$WORK/$name/data/sum.dat"
-  run "$name" sum_free 2 0 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7 "$@"
+  run "$name" sum_free fit 0 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7 "$@"
   awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
          for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
          print idx, a, f, j }' "$WORK/$name/run.log" | sort -n > "$WORK/$name.rows"

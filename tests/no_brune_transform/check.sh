@@ -36,7 +36,7 @@ run() {
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$HERE/../$proj/data" "$dir/data"
   cp "$HERE/../$proj/$proj.azr" "$dir/"
-  (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$@" "$proj.azr" > run.log 2>&1)
+  (cd "$dir" && "$AZURE2_BIN" calculate --no-gui "$@" "$proj.azr" > run.log 2>&1)
   rc=$?
 }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }

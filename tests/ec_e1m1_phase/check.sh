@@ -45,7 +45,7 @@ run() {  # run CASE MASK
   mkdir -p "$d/output" "$d/checks" "$d/data"
   cp "$HERE/models/data/dsdo.dat" "$d/data/"
   sed 's/\r$//' "$HERE/models/$1_$2.azr" > "$d/t.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   awk '{ sub(/\r$/, "") } NF >= 5 { printf "%.4f %.1f %.10e\n", $1, $3, $4 }' "$d/output/AZUREOut_aa=1_R=3.out" 2> /dev/null > "$d.fit"
 }
 # compare CASE MASK COLUMN LABEL: every row of the run against column COLUMN of the case's truth; the difference is

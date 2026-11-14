@@ -16,7 +16,7 @@ usage:
   convert_sav_names.py OLD NEW --check PAR      convert, then compare NEW with
                                                 PAR, a param.par written by
                                                 the CURRENT build from the
-                                                same .azr (mode 1, blank
+                                                same .azr (`calculate`, blank
                                                 parameter file)
 Exit status: 0 ok, 1 nothing to convert, 2 check failed.
 """

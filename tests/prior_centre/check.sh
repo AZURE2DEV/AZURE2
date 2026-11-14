@@ -49,7 +49,7 @@ run() {
     n == 3 && $1 == "norm" { $0 = "    norm           " $2 " fit prior " c " 15%" }
     {print}
   ' "$SRC/15N_p_a.azr" > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 2000000 > run.log)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 2000000 > run.log)
   echo "$d"
 }
 # old NAME ROW [inactive2]: the original (tests/convert/fixtures) with a prior_centre row, segment 2 inactive when the
@@ -83,7 +83,7 @@ dz="$(run shift0 0.9950877877494786 0)"; cz="$(total "$dz")"
 dh="$(run shift 0.9950877877494786 0.005)"; ch="$(total "$dh")"
 dy="$(run off2 0.9950877877494786 "" inactive2)"; cy="$(total "$dy")"
 dx="$(old stale "segment_2_norm prior_centre 1" inactive2)"
-(cd "$dx" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 2000000 > run.log); cx="$(total "$dx")"
+(cd "$dx" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 2000000 > run.log); cx="$(total "$dx")"
 du="$(old unknown "segment_9_norm prior_centre 1")"
 dt="$(old typo "segment_3_nrom prior_centre 1")"
 db="$(old bad "segment_3_norm prior_centre abc")"

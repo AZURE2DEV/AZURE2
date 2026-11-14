@@ -100,9 +100,9 @@ pair at the same point.  The five angles share one normalization parameter,
 ``aC_RTH.norm``, with its 3 % prior.  If the five angles were five files, five
 data sets would name one ``normalization`` record.
 
-A calculation (menu 1) gives χ² = 38.98 for the 65 points at the starting
+A calculation (``calculate``) gives χ² = 38.98 for the 65 points at the starting
 normalization 1; a fit of the three energies, three widths and the
-normalization (menu 2, ``--use-gradient``) ends at χ² = 18.52 with the
+normalization (``fit --use-gradient``) ends at χ² = 18.52 with the
 normalization at 1.0176 (normalization penalty 0.35), against the 1.02 the
 data were made with.  The output file ``AZUREOut_aa=1_R=1.out`` holds the
 model ratio and the data ratio in its columns 4 and 6; ``.extrap`` the

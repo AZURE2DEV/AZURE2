@@ -69,7 +69,7 @@ make_model() {
       print "    quadrature     points 20 width_multiplier 20 per_width 50"; next }
     !skip { print }' "$BASE/thick_target_resonance.azr" > "$WORK/$1/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 # yields NAME -> "E fit" rows of both segments (total-capture output file)
 yields() { awk '{ sub(/\r$/, "") } NF >= 5 { print $1, $4 }' "$WORK/$1/output/AZUREOut_aa=1_TOTAL_CAPTURE.out" 2> /dev/null; }
 # maxrel A-FILE B-FILE -> the largest |a/b - 1| over paired rows

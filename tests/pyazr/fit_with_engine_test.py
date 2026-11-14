@@ -52,8 +52,8 @@ def copy_project(src, dst, project, extra_dirs=(), edit=None):
     return path
 
 
-def run_program(azr, flags, menu):
-    proc = subprocess.run([os.environ["AZURE2_BIN"], "--no-readline", *flags, os.path.basename(azr)], input=menu,
+def run_program(azr, flags, command):
+    proc = subprocess.run([os.environ["AZURE2_BIN"], *command, *flags, os.path.basename(azr)], stdin=subprocess.DEVNULL,
                           text=True, cwd=os.path.dirname(azr), capture_output=True, timeout=3000)
     out = os.path.join(os.path.dirname(azr), "output")
     total = re.findall(r"^Total Chi-Squared: (\S+)", proc.stdout, re.M)
@@ -151,27 +151,27 @@ def main():
                             "<parameterSettings>\n" + nuisance_row + "\n</parameterSettings>", 1)
 
     cases = [
-        # label, source dir, project, extra dirs, edit, program flags, menu, method, minos, max_calls, band file
+        # label, source dir, project, extra dirs, edit, program flags, command, method, minos, max_calls, band file
         # T2 has THM data: the program's plain fit of it is migrad-gradient; Minuit's numerical gradient on 13N.
         ("13N migrad", os.path.join(TESTS, "13N"), "13N.azr", (), None, ["--covariance-band", "--max-calls=300"],
-         "2\n\n\n\n7\n", "migrad", False, 300, True),
-        ("T2 migrad-gradient", t2, "T2.azr", (), None, ["--use-gradient", "--covariance-band"], "4\n1\n\n\n\n7\n",
+         ["fit"], "migrad", False, 300, True),
+        ("T2 migrad-gradient", t2, "T2.azr", (), None, ["--use-gradient", "--covariance-band"], ["minos", "--delta-chi2=1"],
          "migrad-gradient", True, None, False),
-        ("T2 lm", t2, "T2.azr", (), None, ["--use-lm", "--covariance-band"], "2\n\n\n\n7\n", "lm", False, None, True),
-        ("T2 gsl-lm", t2, "T2.azr", (), None, ["--use-gsl-lm", "--covariance-band"], "2\n\n\n\n7\n", "gsl-lm",
+        ("T2 lm", t2, "T2.azr", (), None, ["--use-lm", "--covariance-band"], ["fit"], "lm", False, None, True),
+        ("T2 gsl-lm", t2, "T2.azr", (), None, ["--use-gsl-lm", "--covariance-band"], ["fit"], "gsl-lm",
          False, None, True),
-        ("T2 with a nuisance prior on energy_1, lm", t2, "T2.azr", (), with_prior, ["--use-lm"], "2\n\n\n\n7\n", "lm",
+        ("T2 with a nuisance prior on energy_1, lm", t2, "T2.azr", (), with_prior, ["--use-lm"], ["fit"], "lm",
          False, None, False),
         ("data covariance with relvector terms, migrad-gradient", os.path.join(TESTS, "data_covariance"), "rel.azr",
          (os.path.join(TESTS, "angle_mapping", "data"),), None, ["--use-gradient", "--max-calls=400"],
-         "2\n\n\n\n7\n", "migrad-gradient", False, 400, False),
+         ["fit"], "migrad-gradient", False, 400, False),
     ]
     with tempfile.TemporaryDirectory() as tmp:
         only = os.environ.get("FIT_WITH_ENGINE_CASES", "")  # a word of the labels: run those cases only
-        for k, (label, src, project, extra, edit, flags, menu, method, minos, calls, band) in enumerate(cases):
+        for k, (label, src, project, extra, edit, flags, command, method, minos, calls, band) in enumerate(cases):
             if only and only not in label:
                 continue
-            prog = run_program(copy_project(src, os.path.join(tmp, f"p{k}"), project, extra, edit), flags, menu)
+            prog = run_program(copy_project(src, os.path.join(tmp, f"p{k}"), project, extra, edit), flags, command)
             with pyazr.Session(copy_project(src, os.path.join(tmp, f"s{k}"), project, extra, edit)) as s:
                 r = s.fit_with_engine(method, minos=minos, max_calls=calls)
                 compare(label, prog, r, s, np, band_file=band, minos=minos,

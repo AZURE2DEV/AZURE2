@@ -2,6 +2,108 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands-2`) — the commands, second part: the menu removed
+
+**Done**:
+
+- **Ported to the commands** every piped menu answer (`printf ... |`, `input=` of Python, a menu file on standard
+  input, answers built in shell variables): about 330 places in 230 files — `tests/` 270 (the `check.sh` scripts and
+  their helpers), `tests/pyazr` 27, `.claude/skills` 13, `docs` 10, `scripts` 4, `tools` 2 (`run_one.sh`,
+  `convert_tree.sh`), `examples` 1; `pyazr/` starts no program (nothing to port). By scripts (in
+  `work/commands2/`: `port_shell.py` for literal answers, `port_modevar.py`/`port_menuvar.py`/`port_inputvar.py` for
+  run functions that took a menu number, `port_literals.py` for answer strings passed as arguments,
+  `port_python.py` for subprocess calls), which all translate through `tools/menu_to_command.py` (kept: it is what a
+  user with old scripts runs), and by hand where answers came from variables. A run function that took a menu
+  number takes the command's name (`run plain calculate ""`). The distinct answer strings, most used first:
+
+  | Answers | Command | Places |
+  |---|---|---|
+  | `1\n\n\n7\n` | `calculate` | 108 + |
+  | `2\n\n\n7\n`, `2\n\n\n\n7\n`, `2\nn\n\n\n`, `2\n\n\n`, `2\nn\n\n\n7\n` | `fit` | 43 |
+  | `3\n\n\n7\n`, `3\nn\n\n\n7\n`, `3\n\n`, `3\nn\n\n7\n` | `extrapolate` | 21 |
+  | `1\n%s\n\n7\n` "$par" and the like | `calculate ${par:+--parameter-file="$par"}` | 9 |
+  | `1\n\n%s\n7\n` "$ec" | `calculate ${ec:+--capture-amplitudes="$ec"}` (projects with external capture) | 5 |
+  | `1\n<file>\n\n7\n`, `3\nn\n<file>\n\n7\n`, `2\nn\n<file>\n\n7\n` | `... --parameter-file=<file>` | 20 |
+  | `4\n1\nn\n\n\n7\n`, `4\n1\n\n\n\n7\n` | `minos --delta-chi2=1` | 3 |
+  | `5\n...\nyes\ntemperatures.dat\n` | `rate --rate-entrance=N --rate-exit=M --temperature-file=temperatures.dat` | 7 |
+  | `6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n` and five others | `mcmc --walkers=... --basis=... --overwrite-samples` | 9 |
+
+  Not mapped by the scripts (listed, ported by hand or rewritten): the answers of the menu tests (`cli_yes_no`,
+  `cli_eof`, `cli_commands`), `'%s\n\n\n7\n' "$mode"` and similar (a menu number in a variable; 30 functions), the
+  answers with `--covariance-band` already on the line (`fixed_param_par`: the band question was not asked).
+
+- **Tests that checked the menu itself**, and what they measure now:
+  - `tests/cli_yes_no` (the y/n trap: a parameter-file name given to the band question): an answer cannot reach the
+    wrong question — `extrapolate --parameter-file=fit.par` reads the file; `--covariance-band=fit.par` and a bare
+    `fit.par` are refused (exit 2, three parts); a missing required answer of minos, rate (pairs, temperatures) and
+    mcmc is refused naming it; a run without a command is refused whatever its input; nothing is calculated.
+  - `tests/cli_eof` (the menu at end of input): the program reads no input — calculate and fit run to the end with an
+    input that never ends (`yes`) and with a closed one; a run without a command is refused at once with any input;
+    every required option of minos, rate and mcmc left out in turn is refused naming it (what the end of input at a
+    required prompt became).
+  - `tests/cli_commands` (by command = by menu): every command runs with the old answers on its input and writes its
+    files; a calculation from the fit's parameter file gives the fit's chi-squared; the refusals (now with
+    `--delta-chi2=0`, a negative `--rate-entrance`, no command); `--help` lists the commands first, prints each range
+    once and marks the temperatures as one of two ways; `tools/menu_to_command.py` on nine answer strings and three
+    it refuses. The equality with the menu is shown once by this branch's runs below.
+  - `tests/cli_option_values`: options are probed with `calculate`; `--no-readline` is refused (command line and
+    options file). `tests/thm_park`: the sampler's presence from `--help`, not from the menu's text.
+  - Three run functions read the program's exit status as `${PIPESTATUS[1]}` behind the `printf`: now `[0]`
+    (`thm_park`, `mcmc_park_start`, `mcmc_classification` and nine `thm_*` tests).
+
+- **Removed**: `src/RunMenu.cpp`, `include/RunMenu.h` (the prompts, `askYesNo`, `getInputLine`, the history file
+  `.azure_history`); readline (`USE_READLINE`, `NO_READLINE`, the link, the Windows DLLs and the expected-DLL list of
+  `scripts/build_windows.sh`, the macOS Homebrew formula, the wheel's option, `scripts/build_crc.csh`'s option, the
+  key `readline` of `_azure2.build_info()` and `pyazr.describe()["build"]`); the menu's members of the table
+  (`menuAsks`, prompts, retry texts, menu numbers and lines; the question "temperatures from a file?", which
+  `--temperature-file` answers). The class `RunMenu` from the class tables and the figure `frontends`.
+  `PrepareRun(configure, request)` has no menu argument.
+- **A run without a command** is refused before the project is read: `ERROR: No command: AZURE2 runs a calculation
+  only when a command names it (it reads nothing from standard input).` / the commands / how to give one (and
+  `tools/menu_to_command.py`), exit 2. `--help` starts with the commands.
+- **`--no-readline` refused** (the PI's decision, relayed by the director; its own commit): an unknown option with
+  the three parts, exit 2, also in an options file.
+- **The help's defects**: `--temperature-file` and the three range options are `RequiredOr(...)` rows (help: "required,
+  or instead --temperature-min, --temperature-max and --temperature-step"; JSON `instead`); ranges are no longer
+  written in the help texts (printed once, from the row); `--delta-chi2` must be above 0 (`Above(0.)`);
+  `--rate-entrance` at least 1. Each has a line in `tests/cli_commands/check.sh`. An option's value written after a
+  space (`--max-calls 50 FILE`) is refused as two project files, now naming `--max-calls=50`.
+- **`--covariance-band` and `--scale-covariance` in an options file** keep today's behaviour: they apply to every
+  command, as they did to the menu (`--help` says so).
+- **Documents**: `reference/command_line.rst` (commands only; "Scripts written for the menu" with the table of
+  answers → commands; `--no-readline` out of the options table), the first-run page (`getting_started/examples.rst`),
+  `installation.rst`, `extending.rst` ("A command of the program, or an option of a command"), `architecture.rst`,
+  `mcmc.rst` (the settings' options), `graphical_interface.rst`, `chi_squared.rst`, `output_files.rst`,
+  `pyazr.rst`, `data_formats.rst`, `troubleshooting.rst`, `segments.rst`, `coulomb_table.rst`,
+  `ratio_to_rutherford.rst`, `contributing.rst`, `natural_neon.rst`, `thm_implementation.rst`; `README.md`,
+  `CLAUDE.md`, `tests/CLAUDE.md`, `pyazr/CLAUDE.md`, `FOR_THE_OWNER.md` (the table checked against the final names;
+  what a user with old scripts does), `ROADMAP.md`, `project_format3.md`; the skills `azure2-calculate`,
+  `azure2-plot`, `azure2-thm`, `azure2-fit`, `azure2-check`, `azure2-setup`, `azure2-uncertainty`, `rmfit-campaign`.
+
+**Verified** (build `work/b-commands2`, 0 warnings, at each commit that changed code):
+- *The port, with the menu still in the program* (tag `tab-c2a`): `ctest -LE slow` (one thread) 274 of 276 — the
+  two failures were `cli_commands` (the porting script had put a command into its refusal checks; rewritten) and
+  `repo_consistency` (sources edited while it ran; passes on its own); all projects in the three bases against
+  `tab-t71-1`: every output file identical (679 / 643 / 679), the 208 run logs of each base differ, and only by the
+  menu, its prompts and timed progress (`work/commands2/logcmp.sh`: 624 of 624 logs equal beyond those); the eight
+  fits (`work/commands2/fits_vs_base2_commands.sh`, a copy of the director's script: base by menu, this build by
+  `fit`) identical.
+- *Without the menu* (tag `tab-c2b`, the last code commit but the light_excitation fix): the same 679 / 643 / 679
+  output files identical and 624 of 624 logs equal beyond the menu; the eight fits identical (T2 297.86030873 /
+  297.860308551, 13N 28100.1722989 / 28100.1722579, layer 39.1892502168, stopping 71.6692095305 / 71.6691982523);
+  `ctest -LE slow` 275 of 276 (`repo_consistency`: `--no-readline` not yet among its removed flags; fixed, passes);
+  every `tests/*/check.sh` (145, three side by side, one thread each): 144 passed, `light_excitation` failed on a
+  folder still named by the menu number (fixed; passes alone). `cli_eof`, `cli_yes_no`, `cli_option_values`,
+  `cli_help` pass.
+- Shown failing once (injected, then removed): the range of `--walkers` written into its help text again
+  (`cli_commands`: "a range in the help text"); `--delta-chi2` back to "at least 0" (`--delta-chi2=0` ran and wrote
+  outputs); "y" dropped from `menu_to_command.py`'s yes words (its band answer failed).
+
+**Open**: `.github/workflows/build.yml` still passes `-DUSE_READLINE` (CMake ignores an unknown cache variable with a
+warning) and installs the readline packages: not touched (CI); the director or the owner removes them. The design
+notes `pyazr3.md` and `cnuc_split.md` keep their historical command lines. `tests/level_at_threshold` reads
+`${PIPESTATUS[0]}` of a subshell (the status of `head`, not of the program): as before, not changed.
+
 ## 2026-11-14 (director, 16:30) — merged: the page's first view, the original's face, the run settings
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 73 (a true merge of the rehearsal branch; its tree

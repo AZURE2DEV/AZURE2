@@ -67,11 +67,11 @@ case.
 - A `check.sh` starts a run with a command and its named options, e.g.
   `"$AZURE2_BIN" fit --parameter-file=start.sav project.azr < /dev/null`
   (`docs/source/reference/command_line.rst`, "Commands"; `AZURE2 --help`).
-  A command reads nothing from standard input, and a missing answer is
-  refused (exit 2) instead of taking the next line of a script.  The piped
-  menu answers (`printf '2\nn\n\n\n' | AZURE2 --no-readline ...`) of the
-  older tests still work; `tests/cli_eof` and `tests/cli_commands` check the
-  menu itself and that a command gives the menu's outputs.
+  The program reads nothing from standard input and has no menu: a missing
+  answer is refused (exit 2), and so is a run without a command.  A shell
+  function that runs several calculations takes the command as an argument
+  (`run NAME calculate ...`), not a menu number; `tests/cli_eof`,
+  `tests/cli_yes_no` and `tests/cli_commands` check the refusals.
 - Keep fixtures small: trim data files to the points the test needs. Keep
   every file under 1 MB.
 - pyazr tests print `skip:` and exit 77 when `pyazr`/`_azure2` cannot be

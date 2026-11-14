@@ -34,7 +34,7 @@ run() {  # NAME MODEL [ENV...]: menu 1 of models/MODEL in $WORK/NAME
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
   ln -s "$HERE/models/data" "$WORK/$name/data"
   cp "$HERE/models/$model" "$WORK/$name/"
-  (cd "$WORK/$name" && printf '1\n\n\n7\n' | env "$@" $(guard_command 900) "$AZURE2_BIN" --no-gui --no-readline "$model" > run.log 2>&1)
+  (cd "$WORK/$name" && env "$@" $(guard_command 900) "$AZURE2_BIN" calculate --no-gui "$model" > run.log 2>&1)
 }
 
 # ---- 1. the identity on one mesh
@@ -59,8 +59,8 @@ fi
 mkdir -p "$WORK/grad/output" "$WORK/grad/checks"
 ln -s "$HERE/models/data" "$WORK/grad/data"
 cp "$HERE/models/fit.azr" "$WORK/grad/"
-(cd "$WORK/grad" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" \
-   --use-gradient --no-gui --no-readline fit.azr > grad.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" fit \
+   --use-gradient --no-gui fit.azr > grad.log 2>&1)
 line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/grad/grad.log" | sed -n 1p)"
 relJ="$(echo "$line" | grep -o 'relJ [-0-9.e+]*' | cut -d' ' -f2)"
 if [ -n "$relJ" ] && awk -v r="$relJ" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 < 1e-5) }'; then

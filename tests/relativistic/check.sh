@@ -36,16 +36,16 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# run BIN NAME MODEL MODE -> $WORK/NAME
+# run BIN NAME MODEL COMMAND -> $WORK/NAME
 run() {
   local bin="$1" dir="$WORK/$2"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$3.azr" "$dir/t.azr"
   cp -r "$HERE/models/data" "$dir/"
-  (cd "$dir" && printf "$4\n\n\n7\n" | run_limited 300 "$bin" --no-coulomb-table --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$bin" "$4" --no-coulomb-table --no-gui t.azr > run.log 2>&1)
 }
-for m in na_hs pa_hs; do run "$AZURE2_BIN" "$m" "$m" 3; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" 3; done
-for m in he5 he5_ang pa_ang li7pn_ang; do run "$AZURE2_BIN" "$m" "$m" 1; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" 1; done
+for m in na_hs pa_hs; do run "$AZURE2_BIN" "$m" "$m" extrapolate; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" extrapolate; done
+for m in he5 he5_ang pa_ang li7pn_ang; do run "$AZURE2_BIN" "$m" "$m" calculate; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" calculate; done
 for d in na_hs na_hs_rel pa_hs pa_hs_rel he5 he5_rel he5_ang he5_ang_rel pa_ang pa_ang_rel li7pn_ang li7pn_ang_rel; do
   if ! ls "$WORK/$d/output/"AZUREOut_* > /dev/null 2>&1; then bad "$d: no output"; tail -15 "$WORK/$d/run.log"; fi
 done
@@ -59,7 +59,7 @@ fi
 # (h) a 7Li(p,n) lab angle between the relativistic (44.60 deg) and non-relativistic maxima at 1.90 MeV (these masses):
 #     refused with relativistic=1 (until 2026-10-29 converted with the non-relativistic angle and Jacobian, 9.5 % off,
 #     silently), converted without it
-run "$AZURE2_BIN" li7pn_edge li7pn_edge 1; run "$AZURE2_BIN" li7pn_edge_rel li7pn_edge_rel 1
+run "$AZURE2_BIN" li7pn_edge li7pn_edge calculate; run "$AZURE2_BIN" li7pn_edge_rel li7pn_edge_rel calculate
 if grep -q "beyond the kinematic maximum 44\.[0-9]*.*relativistic kinematics" "$WORK/li7pn_edge_rel/run.log" &&
    ! ls "$WORK/li7pn_edge_rel/output/"AZUREOut_* > /dev/null 2>&1 && ls "$WORK/li7pn_edge/output/"AZUREOut_* > /dev/null 2>&1; then
   ok "(h) 7Li(p,n) at 1.90 MeV, 44.9 deg: refused at the relativistic maximum (44.60 deg with these masses) with relativistic=1, converted without (Marion-Young 44.93 deg)"
@@ -73,7 +73,7 @@ mkdir -p "$WORK/hyb/output" "$WORK/hyb/checks"
 awk '{ print } /^<\/config>$/ { print "<potentials>\npotential n4He\n    pair            n+4He\n    coulomb_radius  2.5 fm"
                                  print "    central         woods_saxon depth 40 MeV radius 2.5 fm diffuseness 0.6 fm\n</potentials>" }' \
   "$HERE/models/na_hs_rel.azr" > "$WORK/hyb/t.azr"
-(cd "$WORK/hyb" && printf "3\n\n\n7\n" | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/hyb" && run_limited 120 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
 if grep -q "E_POTENTIAL_RELATIVISTIC: potential n4He: a hybrid potential cannot be combined with relativistic=1" "$WORK/hyb/run.log" &&
    ! ls "$WORK/hyb/output/"AZUREOut_* > /dev/null 2>&1; then
   ok "(g) relativistic=1 with the hybrid Coulomb functions stops with an ERROR"
@@ -84,8 +84,8 @@ fi
 # (f) non-relativistic models byte-identical to a reference build
 if [ -n "$REF_BIN" ]; then
   for m in na_hs pa_hs he5 he5_ang pa_ang; do
-    mode=1; case "$m" in na_hs|pa_hs) mode=3;; esac
-    run "$REF_BIN" "ref_$m" "$m" "$mode"
+    command=calculate; case "$m" in na_hs|pa_hs) command=extrapolate;; esac
+    run "$REF_BIN" "ref_$m" "$m" "$command"
     same=1
     for f in "$WORK/$m/output/"AZUREOut_*; do  # no cmp on the Windows runners
       g="$WORK/ref_$m/output/$(basename "$f")"; [ -f "$g" ] && [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$g")" ] || same=0; done

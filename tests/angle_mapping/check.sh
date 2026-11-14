@@ -49,7 +49,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME MODE "FLAGS" [VAR=VALUE ...] -> a fresh copy of the project in $WORK/NAME, run there
 run() {
-  local name="$1" mode="$2" flags="$3"
+  local name="$1" command="$2" flags="$3"
   shift 3
   local dir="$WORK/$name"
   rm -rf "$dir"
@@ -57,12 +57,12 @@ run() {
   cp -r "$HERE/data" "$dir/"
   cp "$HERE/angle_mapping.azr" "$dir/t.azr"
   (cd "$dir" && for v in "$@"; do export "$v"; done &&
-   printf "$mode\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 
 # ---- (a), (b) the shared solves against each unit's own -------------------------------------------
-run plain 1 ""
-run planchk 1 "" AZURE_PLAN_CHECK=1
+run plain calculate ""
+run planchk calculate "" AZURE_PLAN_CHECK=1
 n="$(ls "$WORK/plain/output" | wc -l | tr -d ' ')"
 if [ "$n" -lt 3 ] || [ ! -s "$WORK/plain/output/chiSquared.out" ]; then
   bad "calculation wrote no output ($n files)"; tail -5 "$WORK/plain/run.log"
@@ -95,7 +95,7 @@ rows() {
 gradcheck() {  # NAME "FLAGS" [VAR=VALUE ...]
   local name="$1" flags="$2"
   shift 2
-  run "$name" 2 "--use-gradient $flags" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+  run "$name" fit "--use-gradient $flags" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
     AZURE_GRAD_CHECK_H=1e-8 "$@"
   rows "$name" > "$WORK/$name.rows"
 }

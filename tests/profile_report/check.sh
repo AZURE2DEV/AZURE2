@@ -26,11 +26,11 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME INPUT [ENV...]: T1 in $WORK/NAME; the profile (standard error) in err.log
 run() {
-  local dir="$WORK/$1" input="$2"; shift 2
+  local dir="$WORK/$1" command="$2"; shift 2
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$HERE/../upgrade/T1/data" "$HERE/../upgrade/T1/T1.azr" "$dir/"
   (cd "$dir" && for kv in "$@"; do export "$kv"; done &&
-     printf "$input" | $RUN "$AZURE2_BIN" --no-gui --no-readline --max-calls=2 T1.azr > run.log 2> err.log)
+     $RUN "$AZURE2_BIN" $command --no-gui --max-calls=2 T1.azr > run.log 2> err.log)
 }
 # reports FILE: one line per report, "<label>: <stages, comma-separated>"
 reports() {
@@ -39,7 +39,7 @@ reports() {
        END { if (l != "") print l ": " s }' "$1"
 }
 
-run calc '1\n\n\n7\n' AZURE_PROFILE=1
+run calc calculate AZURE_PROFILE=1
 r="$(reports "$WORK/calc/err.log")"
 first="$(echo "$r" | sed -n 1p)"; second="$(echo "$r" | sed -n 2p)"
 case "$first" in "set-up: "*"E-dependent values"*) ok "(a) menu 1: the set-up's report holds the energy-dependent values" ;;
@@ -49,7 +49,7 @@ case "$second" in "calculation: evaluation,points,"*) grep -q "E-dependent" <<< 
     || ok "(a) menu 1: a 'calculation' report with the evaluation's stages only" ;;
   *) bad "(a) menu 1: second report '$second'" ;; esac
 
-run fit '2\n\n\n7\n' AZURE_PROFILE=1
+run fit fit AZURE_PROFILE=1
 r="$(reports "$WORK/fit/err.log")"
 n="$(echo "$r" | grep -c '^evaluation: ')"
 case "$(echo "$r" | sed -n 1p)" in "set-up: "*"E-dependent values"*)
@@ -58,7 +58,7 @@ case "$(echo "$r" | sed -n 1p)" in "set-up: "*"E-dependent values"*)
     || bad "(b) menu 2: $n evaluation report(s); $(echo "$r" | grep '^evaluation: ' | sed -n 1p)" ;;
   *) bad "(b) menu 2: first report '$(echo "$r" | sed -n 1p)'" ;; esac
 
-run plain '1\n\n\n7\n'
+run plain calculate
 grep -q '^\[profile\]' "$WORK/plain/err.log" && bad "(c) a report without AZURE_PROFILE" || ok "(c) no report without AZURE_PROFILE"
 
 echo

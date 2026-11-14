@@ -41,16 +41,14 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME AZR MODE FLAGS [env...] -> $WORK/NAME (mode 1 calculate, 2 fit)
 run() {
-  local name="$1" azr="$2" mode="$3" flags="$4"; shift 4
+  local name="$1" azr="$2" command="$3" flags="$4"; shift 4
   local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$SRC/data" "$dir/data"
   [ -d "$WORK/fitdata" ] && ln -s "$WORK/fitdata" "$dir/fitdata"
   cp "$azr" "$dir/t.azr"
-  local input='1\n\n\n7\n'
-  [ "$mode" = 2 ] && input='2\nn\n\n\n'
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$input" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=1_R=1.out"; }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
@@ -58,7 +56,7 @@ chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | sed
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a / b - 1; if (d < 0) d = -d; exit !(d < t) }'; }
 
 # data from the truth, N = 1.1e18 (lab value = model_cm x data_lab / data_cm, as tests/target_density)
-run true "$WORK/true.azr" 1 ""
+run true "$WORK/true.azr" calculate ""
 if [ -s "$(out true)" ]; then
   mkdir -p "$WORK/fitdata"
   awk 'NR == FNR { if (NF >= 7) { k++; m[k] = $4; d[k] = $6 } next }
@@ -69,14 +67,14 @@ else
 fi
 
 # (a)
-run fit "$WORK/fit.azr" 2 "--use-gradient"
+run fit "$WORK/fit.azr" fit "--use-gradient"
 n="$(par fit tgt_meyer_84.areal_density)"; c="$(chi fit Total-Chi-Squared)"
 if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
   ok "(a) a SUM segment under a fitted density: N $n from 1e18 (truth 1.1e18), chi2 $c"
 else bad "(a) a SUM segment under a fitted density: N ${n:-missing}, chi2 ${c:-missing}"; tail -3 "$WORK/fit/run.log"; fi
 
 # (b)
-run grad "$WORK/fit.azr" 2 "--use-gradient" AZURE_GRAD_CHECK=exit
+run grad "$WORK/fit.azr" fit "--use-gradient" AZURE_GRAD_CHECK=exit
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 if grep -q "density 0/1;.*density 0/1" <<< "$line"; then ok "(b) d chi2/d N on the working copies = the analytic and Jacobian paths"
 else bad "(b) gradient check: ${line:-no [grad-check] line}"; grep -m3 "density" "$WORK/grad/run.log"; fi

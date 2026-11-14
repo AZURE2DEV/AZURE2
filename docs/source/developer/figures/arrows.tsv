@@ -98,8 +98,6 @@ AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (Posterio
 PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
 nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
-RunMenu	RunRequest	makes	frontends		RunMenu::Ask(question, RunRequest &) fills it; ReadRunCommand fills it from the command line
-RunMenu	Config	reads	frontends	nonconst	RunMenu::configure_ (Config &): its output stream, the project's directory; PrepareRun sets the Config from the RunRequest
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
 AZUREMain	CNuc	owns	frontends		AZUREMain::compound_ (new CNuc in the constructor)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)

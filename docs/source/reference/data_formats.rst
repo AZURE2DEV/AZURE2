@@ -706,7 +706,7 @@ engine on the same project (``AZURE2 --convert`` reports the rest):
 
 * A data file that cannot be read refuses a run with data (``E_DATA_FILE``);
   the old engine skipped that data set with a warning and fitted the others.
-  A run without data (extrapolations, menu 3, and pyazr calls that only
+  A run without data (extrapolations, ``extrapolate``, and pyazr calls that only
   extrapolate) does not read the data files: one that cannot be read is the
   warning ``W_DATA_FILE_NOT_READ``.  ``--validate`` and ``--describe`` require
   them.
@@ -927,7 +927,7 @@ are converted to MeV (deg).  The same forms describe an angle grid
       energies   file "grids/gamow_window.txt" keV cm
 
 ``adaptive lo hi <unit> <frame> tolerance t max_points n start_step s``
-   A grid made by the extrapolation run (menu 3) at the run's parameters, for
+   A grid made by the extrapolation run (``extrapolate``) at the run's parameters, for
    a narrow resonance that a uniform grid would need a tiny step everywhere
    for::
 

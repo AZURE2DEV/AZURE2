@@ -195,7 +195,7 @@ scripts/bench_upgrade.sh                                 # time and peak RSS, ap
 ```
 
 A calculation of `T2.azr` (menu 1) takes 2.4 s on one thread without a Coulomb table. Run AZURE2 by hand from a
-copy of this directory: `printf '1\n\n\n7\n' | $AZURE2_BINARY --no-gui --no-readline T2.azr` (menu 1 =
+copy of this directory: `$AZURE2_BINARY calculate --no-gui T2.azr` (menu 1 =
 calculate, 2 = fit).
 
 Files: `make_t2.py` (generator, the truth), `truth.json` (the truth as written by it), `T2_true.azr`, `T2.azr`,

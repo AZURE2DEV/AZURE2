@@ -38,7 +38,7 @@ variant() {
     inbda && (/^$/ || /^<\/data>/) { if (fields != "") print fields; inbda = 0 }
     { print }
     /^<targets>$/ && records != "" { print records }' "$HERE/16N.azr" > "$WORK/$1/m.azr"
-  (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
 }
 refused() { grep -q "$2" "$WORK/$1/run.log" && [ ! -s "$WORK/$1/output/chiSquared.out" ]; }
 ran() { grep -q '^Total' "$WORK/$1/output/chiSquared.out" 2> /dev/null && ! grep -qi nan "$WORK/$1/output/chiSquared.out"; }
@@ -47,7 +47,7 @@ ran() { grep -q '^Total' "$WORK/$1/output/chiSquared.out" 2> /dev/null && ! grep
 mkdir -p "$WORK/a/output" "$WORK/a/checks"
 cp -r "$HERE/data" "$WORK/a/"
 sed 's/^    reaction       16N(b-,a)12C$/    reaction       16N(b-,g)16C[total]/' "$HERE/16N.azr" > "$WORK/a/m.azr"
-(cd "$WORK/a" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/a" && run_limited 600 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
 if refused a "needs its decay pair as the exit pair"; then ok "(a) exit -1: refused"
 else bad "(a) exit -1: $(grep -m1 ERROR "$WORK/a/run.log")"; fi
 
@@ -75,7 +75,7 @@ awk '{ print } /^<targetInt>$/ { print "1 \"1\" 20 1 0.02 0 0 \"\" 0 0 0 0 \"\" 
 (cd "$WORK/eold" && "$AZURE2_BIN" --convert m.azr "$WORK/econv/m.azr" --to 3 --exact-grids > convert.log 2>&1)
 grep -q "^    energy_resolution 0.02 MeV lab$" "$WORK/econv/m.azr" 2> /dev/null \
   && ok "(e) the old line converts to the detector's energy resolution" || bad "(e) conversion: $(tail -1 "$WORK/eold/convert.log")"
-(cd "$WORK/econv" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/econv" && run_limited 600 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
 same=0; n=0
 for f in "$WORK/e/output/"*; do
   case "$(basename "$f")" in param.par) continue ;; esac

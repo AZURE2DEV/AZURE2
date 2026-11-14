@@ -1504,7 +1504,7 @@ every shift function recomputed (`CalcShiftFunctions` without second derivatives
 A copy needs only the (b) part, 10–17 % of the bytes; the rest is set-up the copy could share. (Since step 4, second
 part, a copy also writes `LevelInputs` where it transforms: the sampler's physical mode, the limits' conversion, the
 rate's resonances and the sub-point-grid copy.) A calculation makes
-almost no copies: the program at one thread (`printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline`, under `gdb` with a
+almost no copies: the program at one thread (`AZURE2 calculate --no-gui`, under `gdb` with a
 counting breakpoint) cloned 1 (T2), 0 (13N) and 1 (`natural_neon`) times, against 0.23 s, 8.0 s and 1.35 s of wall
 time; `FillCompoundFromParams` ran 3 times, `CalcShiftFunctions` once. A fit keeps one copy per thread in a pool
 (`cnuc_pool_`), and the sampler one per concurrent walker plus one per snapshot (every 10 steps). The end of `CNuc`

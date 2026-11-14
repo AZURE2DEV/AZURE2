@@ -65,7 +65,7 @@ make_model() {
     /^<\/data>$|^<\/extrapolations>$/ { skip = 0 }
     !skip { print }' "$BASE/be7p_fit.azr" > "$WORK/$name/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 phases() { awk '{ sub(/\r$/, "") } NF >= 5 { printf "%.10f %.10f\n", $1, $4 }' "$WORK/$1/output/AZUREOut_aa=1_R=1.out" 2> /dev/null; }
 maxdiff() { paste "$1" "$2" | awk 'BEGIN { m = 0 } { d = $2 - $4; if (d < 0) d = -d; if (d > m) m = d } END { printf "%.3e", m }'; }
 

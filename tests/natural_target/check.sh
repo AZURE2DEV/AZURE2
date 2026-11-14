@@ -37,11 +37,11 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME MODEL ROUTE(true|false) FLAGS [MODE] -> outputs in $WORK/NAME/output; returns 1 when nothing was written
 run() {
-  local dir="$WORK/$1" mode="${5:-3}"
+  local dir="$WORK/$1" command="${5:-extrapolate}"
   mkdir -p "$dir/output" "$dir/checks"
   sed "1,2s/^\(true\|false\) #Perform A-Matrix/$3 #Perform A-Matrix/" "$2" > "$dir/t.azr"
   for f in data.dat data_enr.dat; do [ -f "$WORK/$f" ] && cp "$WORK/$f" "$dir/"; done
-  (cd "$dir" && printf "$mode\n\n\n7\n" | run_limited 600 "$AZURE2_BIN" $4 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" "$command" $4 --no-gui t.azr > run.log 2>&1)
 }
 # block FILE N -> the N-th blank-line-separated block of an output file (segments with the same pair keys share a file)
 block() { awk -v blk="$2" 'BEGIN { RS = ""; FS = "\n" } NR == blk { print }' "$1"; }
@@ -144,7 +144,7 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ e = 1.0 + (NR - 1) * 0.002; v = 0.6 * $2 + 0.4 * $4; printf "%.6f 0 %.12e %.12e\n", e, v, 0.001 * v }' > "$WORK/data.dat"
   # the analytic gradient of the free abundances against finite differences
   (cd "$WORK" && mkdir -p gradcheck/output gradcheck/checks && cp data.dat gradcheck/ && cp "$M/M_data.azr" gradcheck/t.azr &&
-   cd gradcheck && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+   cd gradcheck && AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
   if grep -q "abundance" "$WORK/gradcheck/run.log"; then
     line="$(grep "abundance" "$WORK/gradcheck/run.log" | sed -n 1p)"
     if grep -Eq "abundance[^0-9]*0/[0-9]+" <<< "$line"; then ok "gradient check: abundances agree with finite differences ($line)"; else bad "gradient check: $line"; fi
@@ -179,17 +179,17 @@ RECORDS
   (cd "$WORK" && mkdir -p gradcheck_ng/output gradcheck_ng/checks && cp data.dat gradcheck_ng/ &&
    awk -v recs="$WORK/ng_data.txt" '/^<data>$/ { print; while ((getline l < recs) > 0) print l; skip = 1; next }
         /^<\/data>$/ { skip = 0 } skip { next } { print }' "$M/M_data.azr" > gradcheck_ng/t.azr &&
-   cd gradcheck_ng && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+   cd gradcheck_ng && AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
   line="$(grep "components with relative" "$WORK/gradcheck_ng/run.log" | sed -n 1p)"
   if grep -q "norm 0/1 .*Jacobian path:.* norm 0/1" <<< "$line"; then ok "normalization group over a natural SUM and a plain segment: norm gradient agrees with finite differences"
   else bad "normalization group gradient check: $line"; fi
   # two samples: data_enr.dat = 0.1 sigma_A + 0.9 sigma_B; four free abundances, two sum-to-one priors
   paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ e = 1.0 + (NR - 1) * 0.002; v = 0.1 * $2 + 0.9 * $4; printf "%.6f 0 %.12e %.12e\n", e, v, 0.001 * v }' > "$WORK/data_enr.dat"
   (cd "$WORK" && mkdir -p gradcheck2/output gradcheck2/checks && cp data.dat data_enr.dat gradcheck2/ && cp "$M/M_samples_data.azr" gradcheck2/t.azr &&
-   cd gradcheck2 && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+   cd gradcheck2 && AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
   line="$(grep "abundance" "$WORK/gradcheck2/run.log" | sed -n 1p)"
   if grep -Eq "abundance[^0-9]*0/4" <<< "$line"; then ok "gradient check with two samples: 4 abundances agree with finite differences"; else bad "gradient check with two samples: $line"; fi
-  run "fit2" "$M/M_samples_data.azr" true "" 2 || true
+  run "fit2" "$M/M_samples_data.azr" true "" fit || true
   sav="$WORK/fit2/output/param.sav"
   if [ -s "$sav" ]; then
     v="$(awk '$1 == "natural.isotope.12C" || $1 == "natural.isotope.13C" || $1 == "enr.isotope.12C" || $1 == "enr.isotope.13C" { printf "%s ", $2 }' "$sav")"
@@ -198,7 +198,7 @@ RECORDS
     bad "two-sample fit wrote no param.sav"; tail -8 "$WORK/fit2/run.log"
   fi
   # a fit from 0.5 / 0.5 must find 0.6 / 0.4
-  run "fit" "$M/M_data.azr" true "" 2 || true
+  run "fit" "$M/M_data.azr" true "" fit || true
   sav="$WORK/fit/output/param.sav"
   if [ -s "$sav" ]; then
     a13="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$sav")"; a14="$(awk '$1 == "natural.isotope.13C" { print $2 }' "$sav")"
@@ -215,7 +215,7 @@ RECORDS
   grep -q '12C 0.5 fit prior 0.5 0.002$' "$WORK/M_prior.azr" || bad "the abundance prior was not written into M_prior.azr"
   for mz in migrad lm gsl; do
     case $mz in migrad) fl="--use-gradient" ;; lm) fl="--use-lm" ;; gsl) fl="--use-gsl-lm" ;; esac
-    run "prior_$mz" "$WORK/M_prior.azr" true "$fl" 2 || true
+    run "prior_$mz" "$WORK/M_prior.azr" true "$fl" fit || true
   done
   pm="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$WORK/prior_migrad/output/param.sav" 2>/dev/null)"
   for mz in lm gsl; do

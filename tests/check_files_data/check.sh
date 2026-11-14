@@ -33,7 +33,7 @@ awk '/^<config>/ { inside = 1; n = 0; print; next }
      /^<\/config>/ { inside = 0 }
      inside { n++; if (n >= 6 && n <= 9) sub(/^none/, "file") }
      { print }' "$HERE/../upgrade/T1/T1.azr" > "$WORK/T1.azr"
-(cd "$WORK" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline T1.azr > run.log 2>&1)
+(cd "$WORK" && $RUN "$AZURE2_BIN" calculate --no-gui T1.azr > run.log 2>&1)
 [ -f "$WORK/output/chiSquared.out" ] || { bad "the calculation wrote no chiSquared.out"; tail -20 "$WORK/run.log"; }
 
 # file and its line count

@@ -81,7 +81,7 @@ ones are a defect to report.
   parameter preceded the flagged one (a fixed ground-state energy is enough): a parameter at its own nominal value
   paid a large penalty and MIGRAD pulled another parameter toward that nominal (+12,460 instead of +4 in one case; a γ
   width at its nominal paid +273,466). On such builds do not use nuisance entries on level parameters. Test on any
-  build: mode 1 with the external parameter file, and compare the log's `Total Chi-Squared` (with penalties) with
+  build: `calculate` with the external parameter file, and compare the log's `Total Chi-Squared` (with penalties) with
   `chiSquared.out` (data only); `tests/nuisance_level_index` guards it.
 - Limits and priors written by the Qt GUI, and their level numbering: `references/parameters-and-sav.md`.
 
@@ -105,12 +105,12 @@ ones are a defect to report.
   copy `param.fit` to `restart_<n>.sav` and run mode 2 again from it. Guard it: at most 15 restarts, and stop when two
   passes die within 10 minutes of starting (the node is out of memory; resubmit elsewhere).
 - A restart resets Minuit's covariance, so the first few hundred evaluations rebuild the gradient (brief χ²
-  excursions are expected). If the last snapshot fell on a bad probe, verify it with a mode-1 calculation before
+  excursions are expected). If the last snapshot fell on a bad probe, verify it with a `calculate` run before
   trusting the restart (`param.fit`: `docs/source/reference/output_files.rst`).
 - **The autosaved point can be a line-search or gradient probe** (one crashed run's last autosave printed
   χ² = 8.5 × 10⁴⁰). Check the log's χ² at the last multiple of 100 evaluations and restart from `param.fit` only if
   that value is on the plateau. Otherwise restart from a finished fit's `param.sav`, or from the interim
-  `parameters.out` (physical values, written into `<levels>` and verified with a mode-1 run). Taking only the
+  `parameters.out` (physical values, written into `<levels>` and verified with a `calculate` run). Taking only the
   `segment_*` lines of `param.fit` is always safe (a norms-only first stage handing over to the second).
   Builds before 2026-09-30 (expires: 2027-02-01) wrote the unfitted input energies and widths into `param.fit`, so a
   restart began far off (290,000 against 26,646).

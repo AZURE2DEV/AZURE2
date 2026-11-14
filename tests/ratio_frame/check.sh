@@ -48,14 +48,14 @@ le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <
 
 # run DIR MODEL MODE KINFLAG [FLAGS] [ENV...] -> $WORK/DIR (a data/ directory placed there beforehand is kept)
 run() {
-  local dir="$WORK/$1" model="$2" mode="$3" kin="$4" flags="${5:-}"
+  local dir="$WORK/$1" model="$2" command="$3" kin="$4" flags="${5:-}"
   shift 5 2> /dev/null || shift $#
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
   [ "$kin" = 1 ] && echo 1 > "$dir/kinflag.dat"
   # shellcheck disable=SC2086
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$mode\n\n\n7\n" | run_limited 600 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 600 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 # block FILE N -> the N-th blank-line-separated block (segments with the same pairs share a file, in file order)
 block() { awk -v blk="$2" 'BEGIN { RS = ""; FS = "\n" } NR == blk { print }' "$1"; }
@@ -82,7 +82,7 @@ reldiff() {
 # R=3 file: T1, T6 (c.m.), T8 (integrated), R1 .. R7 ; R=5 file: T2, T4 (30 deg), T5 (0 deg), T7 (c.m.), T9 ; R=2: T3
 particle_checks() {  # TAG MODEL
   local tag="$1" model="$2" dir="$WORK/$2"
-  run "$model" "$model" 3 1
+  run "$model" "$model" extrapolate 1
   local a="$dir/output/AZUREOut_aa=2_R=3.extrap" b="$dir/output/AZUREOut_aa=2_R=5.extrap" c="$dir/output/AZUREOut_aa=2_R=2.extrap"
   if [ ! -s "$a" ] || [ ! -s "$b" ] || [ ! -s "$c" ]; then bad "$tag $model: an extrapolation output is missing"; tail -5 "$dir/run.log"; return; fi
   local p="$WORK/$model"
@@ -118,7 +118,7 @@ fi
 
 # ---- (c) gamma ratios ----------------------------------------------------------------------------------------------
 # R=2 file: G1, G2 (90 deg), RG1, RG2 ; R=1 file: G3 (60 deg), G4, RG3
-run gamma gamma 3 1
+run gamma gamma extrapolate 1
 ga="$WORK/gamma/output/AZUREOut_aa=1_R=2.extrap"; gb="$WORK/gamma/output/AZUREOut_aa=1_R=1.extrap"
 if [ -s "$ga" ] && [ -s "$gb" ]; then
   p="$WORK/gamma"
@@ -137,7 +137,7 @@ else
 fi
 
 # ---- (d) the c.m. output of a lab RATIO test segment is the same ratio ---------------------------------------------
-run particle_cm particle 3 0
+run particle_cm particle extrapolate 0
 pa="$WORK/particle_cm/output/AZUREOut_aa=2_R=3.extrap"
 if [ -s "$pa" ] && [ -s "$WORK/particle.r5" ]; then
   rows "$pa" 5 > "$WORK/particle_cm.r5"
@@ -156,7 +156,7 @@ if [ -s "$WORK/particle_rel.t1" ] && [ -s "$WORK/particle_rel.t3" ]; then
       "$WORK/t3lab" "$WORK/t1lab" > "$WORK/ratio.dat"
   nd="$(wc -l < "$WORK/ratio.dat" | tr -d ' ')"
   mkdir -p "$WORK/rdata/data" && cp "$WORK/ratio.dat" "$WORK/rdata/data/ratio.dat"
-  run rdata ratio_data 1 1
+  run rdata ratio_data calculate 1
   chi="$(awk -F, 'NR > 1 && $1 + 0 == 1 { gsub(/ /, "", $2); print $2 }' "$WORK/rdata/output/chiSquared.out")"
   if [ -z "$chi" ]; then
     bad "(e) no chi2 for the RATIO data segment"; tail -5 "$WORK/rdata/run.log"
@@ -168,7 +168,7 @@ if [ -s "$WORK/particle_rel.t1" ] && [ -s "$WORK/particle_rel.t3" ]; then
   # (f): data off the model (a few % per point) so chi2 and its gradient are not at the rounding floor
   mkdir -p "$WORK/rfree/data"
   awk '{ printf "%s  %s  %.12e  %s\n", $1, $2, $3 * (1 + 0.02 * (NR % 5 - 2)), $4 }' "$WORK/ratio.dat" > "$WORK/rfree/data/ratio.dat"
-  run rfree ratio_free 2 0 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
+  run rfree ratio_free fit 0 "--use-gradient" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7
   awk '/^\[grad-check\] idx / { a = f = ""; for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1) }
          print a, f }' "$WORK/rfree/run.log" > "$WORK/rows"
   nrows="$(wc -l < "$WORK/rows" | tr -d ' ')"
@@ -189,7 +189,7 @@ fi
 # FC: in c.m. data the term's angle is the fixed angle itself, FC = T1 / T3.  FL: in lab data the term's 60 deg lab
 # is converted with the term's pair, theta_cm = 60 + asin((m1/m2) sin 60) = 75.4606 deg (the angle of T4, computed in
 # make_models.py (deleted; README.md: how the models were made)), and J = sin^2(60) / sin^2(theta_cm) cos(theta_cm - 60), so FL = T2 / (T4 / J).
-run fixed_angle fixed_angle 3 1
+run fixed_angle fixed_angle extrapolate 1
 fa="$WORK/fixed_angle/output/AZUREOut_aa=2_R=3.extrap"; fb="$WORK/fixed_angle/output/AZUREOut_aa=2_R=2.extrap"
 if [ -s "$fa" ] && [ -s "$fb" ]; then
   p="$WORK/fixed"

@@ -57,7 +57,7 @@ run() {
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$REF/data" "$dir/data"
   cp "$2" "$dir/t.azr"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$dir/output/chiSquared.out" ]; then
     bad "$1: no chiSquared.out written"; tail -15 "$dir/run.log"; return 1
   fi

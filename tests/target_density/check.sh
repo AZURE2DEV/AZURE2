@@ -35,16 +35,14 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME AZR MODE FLAGS [env...] -> $WORK/NAME (mode 1 calculate, 2 fit)
 run() {
-  local name="$1" azr="$2" mode="$3" flags="$4"; shift 4
+  local name="$1" azr="$2" command="$3" flags="$4"; shift 4
   local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$SRC/data" "$dir/data"
   [ -d "$WORK/fitdata" ] && ln -s "$WORK/fitdata" "$dir/fitdata"
   cp "$azr" "$dir/t.azr"
-  local input='1\n\n\n7\n'
-  [ "$mode" = 2 ] && input='2\nn\n\n\n'
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$input" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=1_R=1.out"; }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
@@ -52,7 +50,7 @@ chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | sed
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a / b - 1; if (d < 0) d = -d; exit !(d < t) }'; }
 
 # ---- data from the truth, N = 1.1e18 --------------------------------------------------------
-run true "$HERE/true.azr" 1 ""
+run true "$HERE/true.azr" calculate ""
 if [ -s "$(out true)" ]; then
   mkdir -p "$WORK/fitdata"
   awk 'NF >= 7' "$(out true)" > "$WORK/true_rows"
@@ -72,7 +70,7 @@ fi
 # ---- 1. fits recover the density --------------------------------------------------------------
 for v in "fit:--use-gradient" "fit_lm:--use-lm" "fit_gsl:--use-gsl-lm"; do
   name="${v%%:*}"; flags="${v#*:}"
-  run "$name" "$HERE/fit.azr" 2 "$flags"
+  run "$name" "$HERE/fit.azr" fit "$flags"
   n="$(par "$name" tgt_meyer_84.areal_density)"; c="$(chi "$name" Total-Chi-Squared)"
   if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
     ok "$name ($flags): N $n from 1e18 (truth 1.1e18), chi2 $c"
@@ -80,13 +78,13 @@ for v in "fit:--use-gradient" "fit_lm:--use-lm" "fit_gsl:--use-gsl-lm"; do
 done
 
 # ---- 2. the gradient ------------------------------------------------------------------------
-run grad "$HERE/fit.azr" 2 "--use-gradient" AZURE_GRAD_CHECK=exit
+run grad "$HERE/fit.azr" fit "--use-gradient" AZURE_GRAD_CHECK=exit
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 if grep -q "density 0/1;.*density 0/1" <<< "$line"; then ok "d chi2/d N: finite differences = the Jacobian path ($line)"
 else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/run.log"; fi
 
 # ---- 3. a prior -------------------------------------------------------------------------------
-run prior "$HERE/fit_prior.azr" 2 "--use-gradient"
+run prior "$HERE/fit_prior.azr" fit "--use-gradient"
 n="$(par prior tgt_meyer_84.areal_density)"; dc="$(chi prior Total-Density-Chi-Squared)"
 if [ -n "$n" ] && [ -n "$dc" ] && awk -v n="$n" -v s="$dc" 'BEGIN { p = ((n - 1e18) / 2e16)^2; d = s - p; if (d < 0) d = -d
        exit !(n ~ /^ *[-+]?\.?[0-9]/ && n > 1.0e18 && n < 1.1e18 && d <= 1e-4 * (p + 1)) }'; then
@@ -94,7 +92,7 @@ if [ -n "$n" ] && [ -n "$dc" ] && awk -v n="$n" -v s="$dc" 'BEGIN { p = ((n - 1e
 else bad "prior fit: N ${n:-missing}, Total-Density-Chi-Squared ${dc:-missing}"; tail -5 "$WORK/prior/run.log"; fi
 
 # ---- 4. a density group -----------------------------------------------------------------------
-run group "$HERE/fit_group.azr" 2 "--use-gradient"
+run group "$HERE/fit_group.azr" fit "--use-gradient"
 n="$(par group t.areal_density)"; n2="$(awk '$1 ~ /areal_density/ && $1 != "t.areal_density" { print $1 }' "$WORK/group/output/param.sav")"; c="$(chi group Total-Chi-Squared)"
 if [ -n "$n" ] && [ -z "$n2" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
   ok "a density group: one parameter, N $n from both segments, chi2 $c"
@@ -118,9 +116,9 @@ else bad "densityfit without target integration was not refused"; tail -3 "$WORK
 # ---- 6. a value beyond the grids ----------------------------------------------------------------
 # a parameter file that puts the group's density above its grid_max (1.5e18): the calculation uses the grid's end and
 # says so once, naming the parameter by its format-3 name and the field to widen
-run over "$HERE/fit_group.azr" 1 ""
+run over "$HERE/fit_group.azr" calculate ""
 printf '    t.areal_density   2.0000000e+18   1.0000000e+16\n' > "$WORK/over/over.sav"
-(cd "$WORK/over" && printf '1\nover.sav\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/over" && run_limited 900 "$AZURE2_BIN" calculate --parameter-file=over.sav --no-gui t.azr > run.log 2>&1)
 said="$(grep -c "WARNING: t.areal_density = 2e+18 is outside \[1e+16, 1.5e+18\], the range its sub-point grids span; the calculation uses the nearest end.  Give the target's areal_density a larger grid_max." "$WORK/over/run.log")"
 if [ "$said" = 1 ] && ! grep -q "density_[0-9]\|densityfit" "$WORK/over/run.log"; then
   ok "a density beyond grid_max: one warning naming t.areal_density and grid_max"

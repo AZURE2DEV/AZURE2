@@ -70,8 +70,8 @@ run() {
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   [ -z "${TABLE:-}" ] || printf '%b' "$TABLE" > "$d/ps.dat"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log;
+   echo "${PIPESTATUS[0]}" > status)
 }
 # worst relative difference of the model columns of two runs (energies must agree)
 worst() {

@@ -90,9 +90,9 @@ one that grows into a failed fit, and then investigate which parameter moved, no
   `chiSquared.out` by segment χ²; in that segment's `AZUREOut_*.out` find the row whose fit column (column 4) is absurd;
   convert its E_c.m. to E_x and compare with every particle threshold. Fix: write a new data file without the point
   (keep the original; never edit a file a running job reads), repoint the data set (`Project.set(name, file=...)`),
-  verify with a mode-1 run. List the other points within 5 keV of a threshold and watch them in the next fit.
+  verify with a `calculate` run. List the other points within 5 keV of a threshold and watch them in the next fit.
 - **Run a plain calculate before submitting a fit** after a structural edit combined with a reparametrization (a
-  remapped `param.sav`, a fresh `save_fit` snapshot): CLI mode 1 with the new parameter file, or
+  remapped `param.sav`, a fresh `save_fit` snapshot): `AZURE2 calculate` with the new parameter file, or
   `s.objective()(s.parameters.read("new.sav"))`, in a throwaway output directory. Compare with the old total corrected
   for exactly what changed (the removed data set's χ² and N from the old `chiSquared.out`). It costs seconds and catches
   a corrupted start before a multi-day job runs on it.

@@ -1,5 +1,5 @@
-// The table of the program's commands and of the questions of a run, and the command line's reader of a run request
-// (include/RunRequest.h).  The menu (src/RunMenu.cpp) reads the same rows.
+// The table of the program's commands and of the options of a run, and the command line's reader of a run request
+// (include/RunRequest.h).
 #include "RunRequest.h"
 
 #include <cmath>
@@ -22,29 +22,25 @@ constexpr unsigned kRate = CommandBit(RunCommand::kRate);
 constexpr unsigned kMcmc = CommandBit(RunCommand::kMcmc);
 constexpr unsigned kEvery = kCalculate | kFit | kExtrapolate | kMinos | kRate | kMcmc;
 
-/// A row of the question table, written by name: the kind's constructor, then what differs from its defaults.
+/// A row of the option table, written by name: the kind's constructor, then what differs from its defaults.
 struct Row {
   RunQuestion q;
   Row(const char *option, AnswerKind kind, const char *value, const char *help) {
-    q = RunQuestion{option, kind, 0u, 0u, AskedWhen::kAlways, false, -kInfinity, kInfinity, false, false, 0.,
-                    "", value, help, "", 0, false, "", "", nullptr, nullptr, nullptr, nullptr};
+    q = RunQuestion{option, kind, 0u, AskedWhen::kAlways, false, "", -kInfinity, kInfinity, false, false, 0., "", value,
+                    help, nullptr, nullptr, nullptr, nullptr};
   }
-  /// The commands that take it on the command line and the commands whose menu asks it.
-  Row &Commands(unsigned taken, unsigned asked) { q.commands = taken; q.menuAsks = asked; return *this; }
+  /// The commands that take it.
+  Row &Commands(unsigned taken) { q.commands = taken; return *this; }
   Row &When(AskedWhen when) { q.when = when; return *this; }
   Row &Required() { q.required = true; return *this; }
+  /// Required, or the other way `other` (help names both).
+  Row &RequiredOr(const char *other) { q.required = true; q.instead = other; return *this; }
   Row &Default(double value) { q.defaultValue = value; return *this; }
   Row &AtLeast(double low) { q.low = low; return *this; }
   Row &Above(double low) { q.low = low; q.lowOpen = true; return *this; }
   Row &AtMost(double high) { q.high = high; return *this; }
   Row &NotZero() { q.excludesZero = true; return *this; }
   Row &Words(const char *words) { q.words = words; return *this; }
-  /// The menu's prompt as printed: its text, field width, a blank line before it, the name an end of input gives.
-  Row &Prompt(const char *prompt, int width, const char *endName) {
-    q.prompt = prompt; q.promptWidth = width; q.endName = endName; return *this;
-  }
-  Row &BlankLineBefore() { q.blankLineBefore = true; return *this; }
-  Row &Retry(const char *retry) { q.retry = retry; return *this; }
   Row &Into(bool RunRequest::*member) { q.flag = member; return *this; }
   Row &Into(int RunRequest::*member) { q.whole = member; return *this; }
   Row &Into(double RunRequest::*member) { q.number = member; return *this; }
@@ -54,95 +50,57 @@ struct Row {
 std::vector<RunQuestion> MakeQuestions() {
   using K = AnswerKind;
   using W = AskedWhen;
-  const char *kPositive = "Please enter a positive number.";
+  const char *kRange = "--temperature-min, --temperature-max and --temperature-step";
   std::vector<Row> rows = {
       Row("--delta-chi2", K::kNumber, "X", "MINOS: the rise of chi-squared that bounds each interval (Minuit's Up; "
                                            "1 for one standard deviation of one parameter)")
-          .Commands(kMinos, kMinos).Required().AtLeast(0.)
-          .Prompt("Allowed Chi-Squared Variance: ", 30, "Allowed Chi-Squared Variance").Retry(kPositive)
-          .Into(&RunRequest::deltaChi2),
+          .Commands(kMinos).Required().Above(0.).Into(&RunRequest::deltaChi2),
       Row("--covariance-band", K::kFlag, "", "write the cross-section uncertainty band from the parameter covariance "
                                              "(this fit's, else the covariance.dat a fit saved)")
-          .Commands(kCalculate | kFit | kExtrapolate | kMinos, kFit | kExtrapolate | kMinos)
-          .Prompt("Calculate cross-section uncertainty band?", 0, "").Into(&RunRequest::covarianceBand),
+          .Commands(kCalculate | kFit | kExtrapolate | kMinos).Into(&RunRequest::covarianceBand),
       Row("--scale-covariance", K::kFlag, "", "with --covariance-band: inflate the covariance by the reduced "
                                               "chi-squared when it exceeds 1 (Birge ratio)")
-          .Commands(kFit | kMinos, kFit | kMinos).When(W::kBandChosen)
-          .Prompt("Scale covariance to reduced chi-squared = 1?", 0, "").Into(&RunRequest::scaleCovariance),
+          .Commands(kFit | kMinos).When(W::kBandChosen).Into(&RunRequest::scaleCovariance),
       Row("--parameter-file", K::kFile, "FILE", "start from the parameters of FILE (a param.sav), applied by name; "
                                                 "without it, from the <levels> of the project")
-          .Commands(kEvery, kEvery).BlankLineBefore()
-          .Prompt("External Parameter File (leave blank for new file): ", 0, "").Into(&RunRequest::parameterFile),
+          .Commands(kEvery).Into(&RunRequest::parameterFile),
       Row("--rate-entrance", K::kWholeNumber, "N", "the entrance pair key of the reaction rate")
-          .Commands(kRate, kRate).Required().NotZero()
-          .Prompt("Reaction Rate Entrance Pair: ", 38, "Reaction Rate Entrance Pair")
-          .Retry("Please enter an integer greater than zero.").Into(&RunRequest::rateEntrance),
+          .Commands(kRate).Required().AtLeast(1.).Into(&RunRequest::rateEntrance),
       Row("--rate-exit", K::kWholeNumber, "N", "the exit pair key of the reaction rate; -1 the total radiative "
                                                "capture of the entrance pair")
-          .Commands(kRate, kRate).Required().AtLeast(-1.).NotZero()
-          .Prompt("Reaction Rate Exit Pair: ", 38, "Reaction Rate Exit Pair")
-          .Retry("Please enter an integer greater than zero, or -1 for the total radiative capture.")
-          .Into(&RunRequest::rateExit),
-      Row("", K::kWord, "", "the rate's temperatures from a file (--temperature-file) or from a minimum, maximum and "
-                            "step (--temperature-min, --temperature-max, --temperature-step)")
-          .Commands(kRate, kRate).Required()
-          .Prompt("Use temperatures from file (yes/no): ", 38, "Use temperatures from file")
-          .Retry("Please type 'yes' or 'no'.").Into(&RunRequest::temperaturesFromFile),
+          .Commands(kRate).Required().AtLeast(-1.).NotZero().Into(&RunRequest::rateExit),
       Row("--temperature-file", K::kFile, "FILE", "the rate's temperatures, GK, one per line")
-          .Commands(kRate, kRate).When(W::kTemperaturesFromFile).Required()
-          .Prompt("Temperature File Name: ", 38, "Temperature File Name").Into(&RunRequest::temperatureFile),
-      Row("--temperature-min", K::kNumber, "T", "the rate's lowest temperature, GK (without --temperature-file)")
-          .Commands(kRate, kRate).When(W::kTemperaturesInRange).Required().AtLeast(0.)
-          .Prompt("Reaction Rate Min Temp [GK]: ", 38, "Reaction Rate Min Temp").Retry(kPositive)
+          .Commands(kRate).When(W::kTemperaturesFromFile).RequiredOr(kRange).Into(&RunRequest::temperatureFile),
+      Row("--temperature-min", K::kNumber, "T", "the rate's lowest temperature, GK")
+          .Commands(kRate).When(W::kTemperaturesInRange).RequiredOr("--temperature-file").AtLeast(0.)
           .Into(&RunRequest::temperatureMin),
-      Row("--temperature-max", K::kNumber, "T", "the rate's highest temperature, GK (without --temperature-file)")
-          .Commands(kRate, kRate).When(W::kTemperaturesInRange).Required().AtLeast(0.)
-          .Prompt("Reaction Rate Max Temp [GK]: ", 38, "Reaction Rate Max Temp").Retry(kPositive)
+      Row("--temperature-max", K::kNumber, "T", "the rate's highest temperature, GK")
+          .Commands(kRate).When(W::kTemperaturesInRange).RequiredOr("--temperature-file").AtLeast(0.)
           .Into(&RunRequest::temperatureMax),
-      Row("--temperature-step", K::kNumber, "T", "the rate's temperature step, GK (without --temperature-file)")
-          .Commands(kRate, kRate).When(W::kTemperaturesInRange).Required().AtLeast(0.)
-          .Prompt("Reaction Rate Temp Step [GK]: ", 38, "Reaction Rate Temp Step").Retry(kPositive)
+      Row("--temperature-step", K::kNumber, "T", "the rate's temperature step, GK")
+          .Commands(kRate).When(W::kTemperaturesInRange).RequiredOr("--temperature-file").AtLeast(0.)
           .Into(&RunRequest::temperatureStep),
       Row("--capture-amplitudes", K::kFile, "FILE", "read the external-capture amplitudes from FILE (an intEC.dat of "
                                                     "an earlier run, checked against its signature) instead of "
                                                     "computing them; used only when the run has external capture")
-          .Commands(kEvery & ~kRate, kEvery & ~kRate).When(W::kProjectNeedsCapture).BlankLineBefore()
-          .Prompt("External Capture Amplitude File (leave blank for new file): ", 0, "")
-          .Into(&RunRequest::captureFile),
-      Row("--walkers", K::kWholeNumber, "N", "the sampler's walkers, 2 to 1000")
-          .Commands(kMcmc, kMcmc).Required().AtLeast(2.).AtMost(1000.)
-          .Prompt("Number of Walkers (2-1000): ", 38, "Number of Walkers")
-          .Retry("Please enter an integer between 2 and 1000.").Into(&RunRequest::walkers),
-      Row("--steps", K::kWholeNumber, "N", "the sampler's steps, 100 to 10000000")
-          .Commands(kMcmc, kMcmc).Required().AtLeast(100.).AtMost(10000000.)
-          .Prompt("Number of Steps (100-10000000): ", 38, "Number of Steps")
-          .Retry("Please enter an integer between 100 and 10000000.").Into(&RunRequest::steps),
-      Row("--parameter-spread", K::kNumber, "P", "the walkers' initial spread, percent of each parameter, above 0 "
-                                                 "and up to 50")
-          .Commands(kMcmc, kMcmc).Default(5.).Above(0.).AtMost(50.)
-          .Prompt("Initial Parameter Spread % (0.001-50) [default=5]: ", 38, "")
-          .Retry("Please enter a number between 0.001 and 50, or press Enter for default (5%).")
-          .Into(&RunRequest::parameterSpread),
+          .Commands(kEvery & ~kRate).When(W::kProjectNeedsCapture).Into(&RunRequest::captureFile),
+      Row("--walkers", K::kWholeNumber, "N", "the sampler's walkers")
+          .Commands(kMcmc).Required().AtLeast(2.).AtMost(1000.).Into(&RunRequest::walkers),
+      Row("--steps", K::kWholeNumber, "N", "the sampler's steps")
+          .Commands(kMcmc).Required().AtLeast(100.).AtMost(10000000.).Into(&RunRequest::steps),
+      Row("--parameter-spread", K::kNumber, "P", "the walkers' initial spread, percent of each parameter")
+          .Commands(kMcmc).Default(5.).Above(0.).AtMost(50.).Into(&RunRequest::parameterSpread),
       // Absolute, not a percentage: level energies scattered by a percentage of their value put walkers on unrelated
       // resonance structures, and the ensemble never contracts.
-      Row("--energy-spread", K::kNumber, "E", "the walkers' initial spread of a level energy, keV, above 0 and up to 1")
-          .Commands(kMcmc, kMcmc).Default(1.).Above(0.).AtMost(1.)
-          .Prompt("Level Energy Spread keV (0.001-1) [default=1]: ", 38, "")
-          .Retry("Please enter a number between 0.001 and 1, or press Enter for default (1 keV).")
-          .Into(&RunRequest::energySpread),
-      Row("--sampler-threads", K::kWholeNumber, "N", "the sampler's threads (1 or more)")
-          .Commands(kMcmc, kMcmc).Required().AtLeast(1.)
-          .Prompt("Number of Threads (1 or more): ", 38, "Number of Threads")
-          .Retry("Please enter a positive integer.").Into(&RunRequest::samplerThreads),
+      Row("--energy-spread", K::kNumber, "E", "the walkers' initial spread of a level energy, keV")
+          .Commands(kMcmc).Default(1.).Above(0.).AtMost(1.).Into(&RunRequest::energySpread),
+      Row("--sampler-threads", K::kWholeNumber, "N", "the sampler's threads")
+          .Commands(kMcmc).Required().AtLeast(1.).Into(&RunRequest::samplerThreads),
       Row("--basis", K::kWord, "rwa|physical", "the sampled parameters: reduced width amplitudes (rwa) or the "
                                                "project's physical parameters")
-          .Commands(kMcmc, kMcmc).Required().Words("rwa|physical")
-          .Prompt("Use Reduced Width Amplitudes (yes/no): ", 38, "Use Reduced Width Amplitudes")
-          .Retry("Please type 'yes' or 'no'.").Into(&RunRequest::reducedWidthAmplitudes),
-      Row("--overwrite-samples", K::kWord, "", "overwrite samples.mcmc; without it the sampler appends to the file")
-          .Commands(kMcmc, kMcmc)
-          .Prompt("Overwrite existing samples.mcmc? (yes/no) [default=no]: ", 38, "")
-          .Retry("Please type 'yes' or 'no', or press Enter for default (no).").Into(&RunRequest::overwriteSamples),
+          .Commands(kMcmc).Required().Words("rwa|physical").Into(&RunRequest::reducedWidthAmplitudes),
+      Row("--overwrite-samples", K::kFlag, "", "overwrite samples.mcmc; without it the sampler appends to the file")
+          .Commands(kMcmc).Into(&RunRequest::overwriteSamples),
   };
   std::vector<RunQuestion> questions;
   for (const Row &r : rows) questions.push_back(r.q);
@@ -158,18 +116,16 @@ bool BothPairsDiffer(const RunRequest &r) { return r.rateEntrance != r.rateExit;
 
 /// The option of `q` as written with its value ("--walkers=N", "--covariance-band").
 std::string Written(const RunQuestion &q) {
-  // a kWord row without words is a flag on the command line (its default is "no")
-  const bool takesValue = q.kind != AnswerKind::kFlag && !(q.kind == AnswerKind::kWord && !*q.words);
-  return std::string(q.option) + (takesValue ? std::string("=") + q.value : "");
+  return std::string(q.option) + (q.kind != AnswerKind::kFlag ? std::string("=") + q.value : "");
 }
 
-bool TakesValue(const RunQuestion &q) { return Written(q) != q.option; }
+bool TakesValue(const RunQuestion &q) { return q.kind != AnswerKind::kFlag; }
 
 /// "--a, --b=N" of the options `command` takes.
 std::string OptionsOf(RunCommand command) {
   std::string list;
   for (const RunQuestion &q : RunQuestions())
-    if (*q.option && (q.commands & CommandBit(command))) list += (list.empty() ? "" : ", ") + Written(q);
+    if (q.commands & CommandBit(command)) list += (list.empty() ? "" : ", ") + Written(q);
   return list.empty() ? std::string("no options") : list;
 }
 
@@ -229,7 +185,7 @@ void ReadValue(const RunQuestion &q, const std::string &argument, RunCommand com
     }
     case AnswerKind::kNumber:
     case AnswerKind::kWholeNumber: {
-      // the menu's reading of a number (operator>>), and nothing after it
+      // a number as operator>> reads it, and nothing after it
       std::istringstream in(value);
       double x = 0.;
       int n = 0;
@@ -300,17 +256,17 @@ const std::vector<RunCommandRow> &RunCommands() {
   constexpr bool kSampler = false;
 #endif
   static const std::vector<RunCommandRow> commands = {
-      {RunCommand::kCalculate, "calculate", 1, "Calculate Segments From Data",
+      {RunCommand::kCalculate, "calculate",
        "calculate the data sets of the project at their data points from the parameters (no fit)", true},
-      {RunCommand::kFit, "fit", 2, "Fit Segments From Data",
+      {RunCommand::kFit, "fit",
        "fit the parameters to the data sets, then calculate them (param.sav, covariance.dat)", true},
-      {RunCommand::kExtrapolate, "extrapolate", 3, "Calculate Segments Without Data",
+      {RunCommand::kExtrapolate, "extrapolate",
        "calculate the extrapolations of the project (no data)", true},
-      {RunCommand::kMinos, "minos", 4, "Perform MINOS Error Analysis",
+      {RunCommand::kMinos, "minos",
        "fit, then the MINOS interval of every free parameter at --delta-chi2", true},
-      {RunCommand::kRate, "rate", 5, "Calculate Reaction Rate",
+      {RunCommand::kRate, "rate",
        "the reaction rate of one entrance and exit pair over a grid of temperatures", true},
-      {RunCommand::kMcmc, "mcmc", 6, "Perform MCMC Bayesian Sampling",
+      {RunCommand::kMcmc, "mcmc",
        "sample the posterior of the parameters with the ensemble sampler (samples.mcmc)", kSampler},
   };
   return commands;
@@ -331,7 +287,7 @@ std::string OptionName(const std::string &argument) { return argument.substr(0, 
 
 const RunQuestion *FindRunQuestion(const std::string &option) {
   for (const RunQuestion &q : RunQuestions())
-    if (*q.option && option == q.option) return &q;
+    if (option == q.option) return &q;
   return nullptr;
 }
 
@@ -377,7 +333,7 @@ bool ReadRunCommand(const std::vector<std::string> &arguments, RunRequest &reque
       throw std::invalid_argument(arguments[words.front()] + " is not a command of AZURE2 (and a run takes one " +
                                   "project file).\n       The commands: " + names + ".\n       Give one of them " +
                                   "before the project file: AZURE2 <command> [options] FILE (AZURE2 --help lists " +
-                                  "them); without a command, give the project file alone for the menu.");
+                                  "them).");
     rest = arguments;
     return false;
   }
@@ -389,15 +345,22 @@ bool ReadRunCommand(const std::vector<std::string> &arguments, RunRequest &reque
   request = RunRequest();
   request.command = command;
   std::string project;
+  std::size_t projectAt = 0;  // its place among the arguments
   std::set<const RunQuestion *> given;
   for (std::size_t i = 0; i < arguments.size(); i++) {
     const std::string &argument = arguments[i];
     if (i == words.front()) continue;
     if (argument.compare(0, 2, "--") != 0) {
-      if (!project.empty())
-        Refuse("Two project files: " + project + " and " + argument + ".", command,
-                                            std::string("Give one: AZURE2 ") + row->name + " [options] FILE.");
+      if (!project.empty()) {
+        // "--max-calls 50 FILE": the first word is an option's value written after a space
+        const std::string &before = projectAt > 0 ? arguments[projectAt - 1] : std::string();
+        const bool value = before.compare(0, 2, "--") == 0 && before.find('=') == std::string::npos;
+        Refuse("Two project files: " + project + " and " + argument + "." +
+                   (value ? " " + before + " needs a value: " + before + "=" + project + " (with '=')." : ""),
+               command, std::string("Give one: AZURE2 ") + row->name + " [options] FILE.");
+      }
       project = argument;
+      projectAt = i;
       continue;
     }
     const RunQuestion *q = FindRunQuestion(OptionName(argument));
@@ -415,11 +378,11 @@ bool ReadRunCommand(const std::vector<std::string> &arguments, RunRequest &reque
   if (project.empty())
     Refuse(std::string("The command ") + row->name + " needs the project file.", command,
                                         std::string("Give it last: AZURE2 ") + row->name + " [options] FILE.");
-  // the menu's "temperatures from a file?" is answered by --temperature-file
+  // the temperatures come from a file when --temperature-file is given, else from the minimum, maximum and step
   request.temperaturesFromFile = given.count(FindRunQuestion("--temperature-file")) != 0;
   std::string missing;
   for (const RunQuestion &q : RunQuestions()) {
-    if (!*q.option || !(q.commands & CommandBit(command))) continue;
+    if (!(q.commands & CommandBit(command))) continue;
     const bool applies = QuestionApplies(q, request);
     if (given.count(&q) && !applies)
       Refuse(std::string(q.option) + " is used only " + WhenName(q.when) + ".", command,
@@ -442,11 +405,21 @@ bool ReadRunCommand(const std::vector<std::string> &arguments, RunRequest &reque
     const RunQuestion *first = FindRunQuestion(rule.first), *last = FindRunQuestion(rule.last);
     if (!(first->commands & last->commands & CommandBit(command))) continue;
     if (!rule.holds(request))
-      Refuse(std::string(rule.first) + " and " + rule.last + ": " + rule.menuMessage,
+      Refuse(std::string(rule.first) + " and " + rule.last + ": " + rule.message,
                                           command, rule.fix);
   }
   rest.push_back(project);
   return true;
+}
+
+std::string NoCommandRefusal() {
+  std::string names;
+  for (const RunCommandRow &c : RunCommands())
+    if (c.built) names += (names.empty() ? "" : ", ") + std::string(c.name);
+  return "No command: AZURE2 runs a calculation only when a command names it (it reads nothing from standard "
+         "input).\n       The commands: " + names + ".\n       Give one before the project file: AZURE2 <command> "
+         "[options] FILE (AZURE2 --help lists the commands and their options; tools/menu_to_command.py turns the "
+         "answers of an old menu script into the command).";
 }
 
 std::string CommandOptionWithoutCommand(const RunQuestion &question) {
@@ -465,23 +438,23 @@ int CommandError(const std::string &message) {
 
 std::string RunCommandsHelp() {
   std::ostringstream out;
-  out << "Commands: AZURE2 <command> [options] FILE runs one calculation and reads nothing from standard input"
+  out << "Syntax: AZURE2 <command> [options] FILE" << std::endl
       << std::endl
-      << "(without a command, AZURE2 FILE asks for the command and its answers in a menu):" << std::endl;
+      << "Commands (each runs one calculation of the project FILE and reads nothing from standard input):"
+      << std::endl;
   for (const RunCommandRow &c : RunCommands()) {
     if (!c.built) continue;
     std::string head = std::string("\t") + c.name + ":";
-    out << head << std::string(head.size() < 25 ? 25 - head.size() : 1, ' ') << c.help << " (menu " << c.menuNumber
-        << ")." << std::endl
+    out << head << std::string(head.size() < 25 ? 25 - head.size() : 1, ' ') << c.help << "." << std::endl
         << std::string(25, ' ') << "Options: " << OptionsOf(c.command) << "." << std::endl;
   }
   out << "The options of the commands (each is refused by a command that does not take it):" << std::endl;
   for (const RunQuestion &q : RunQuestions()) {
-    if (!*q.option || CommandsOf(q).empty()) continue;
+    if (CommandsOf(q).empty()) continue;
     std::string text = std::string(TakesValue(q) ? std::string("=") + q.value + ": " : "") + q.help;
     if (q.kind == AnswerKind::kNumber || q.kind == AnswerKind::kWholeNumber) text += "; " + RangeText(q);
     if (q.required)
-      text += "; required";
+      text += *q.instead ? std::string("; required, or instead ") + q.instead : std::string("; required");
     else if (q.number)
       text += "; default " + Number(q.defaultValue);
     text += " (" + CommandsOf(q) + ").";
@@ -496,17 +469,18 @@ std::string RunCommandsJson() {
   bool firstCommand = true;
   for (const RunCommandRow &c : RunCommands()) {
     if (!c.built) continue;
-    out << (firstCommand ? "\n  " : ",\n  ") << "{\"name\": " << JsonText(c.name) << ", \"menu\": " << c.menuNumber
+    out << (firstCommand ? "\n  " : ",\n  ") << "{\"name\": " << JsonText(c.name)
         << ", \"help\": " << JsonText(c.help) << ", \"options\": [";
     firstCommand = false;
     bool firstOption = true;
     for (const RunQuestion &q : RunQuestions()) {
-      if (!*q.option || !(q.commands & CommandBit(c.command))) continue;
+      if (!(q.commands & CommandBit(c.command))) continue;
       const bool number = q.kind == AnswerKind::kNumber || q.kind == AnswerKind::kWholeNumber;
       out << (firstOption ? "\n   " : ",\n   ") << "{\"option\": " << JsonText(q.option)
           << ", \"written\": " << JsonText(Written(q))
           << ", \"kind\": " << JsonText(TakesValue(q) ? KindName(q.kind) : "flag")
           << ", \"required\": " << (q.required ? "true" : "false")
+          << ", \"instead\": " << (*q.instead ? JsonText(q.instead) : "null")
           << ", \"default\": " << (q.number && !q.required ? JsonNumber(q.defaultValue) : "null")
           << ", \"low\": " << (number ? JsonNumber(q.low) : "null")
           << ", \"low_included\": " << (number && !q.lowOpen ? "true" : "false")

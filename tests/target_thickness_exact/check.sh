@@ -68,7 +68,7 @@ awk '
   /^<data>$|^<extrapolations>$|^<targets>$/ { print; if ($0 == "<data>") print ENVIRON["DS"]; if ($0 == "<targets>") print ENVIRON["TGT"]; skip = 1; next }
   /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
   !skip { print }' "$BASE/thick_target_resonance.azr" > "$WORK/m/t.azr"
-(cd "$WORK/m" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/m" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 OUT="$WORK/m/output/AZUREOut_aa=1_TOTAL_CAPTURE.out"
 # block K of the output file -> "E_cm fit" rows
 block() { awk -v k="$1" 'BEGIN { RS = ""; FS = "\n" } NR == k { print }' "$OUT" 2> /dev/null | awk '{ sub(/\r$/, "") } NF >= 5 { printf "%.10f %.12e\n", $1, $4 }'; }

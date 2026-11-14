@@ -59,8 +59,7 @@ PY
 }
 # run NAME THREADS: the extrapolation run (menu 3) of $WORK/NAME/m.azr
 run() {
-  (cd "$WORK/$1" && rm -rf output/* checks/* && printf '3\nn\n\n\n7\n' |
-     OMP_NUM_THREADS="$2" run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$WORK/$1" && rm -rf output/* checks/* && OMP_NUM_THREADS="$2" run_limited 600 "$AZURE2_BIN" extrapolate --no-gui m.azr > run.log 2>&1)
 }
 OUT=output/AZUREOut_aa=1_R=2.extrap
 

@@ -44,16 +44,16 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# run NAME SRCDIR PROJECT MENU [FLAGS...]: PROJECT of SRCDIR under $WORK/NAME with the menu answers MENU; sets $rc
+# run NAME SRCDIR PROJECT COMMAND [FLAGS...]: PROJECT of SRCDIR under $WORK/NAME run by COMMAND; sets $rc
 # and $chi2 (the printed total chi-squared, empty if none).
 run() {
-  local name="$1" src="$2" proj="$3" menu="$4"; shift 4
+  local name="$1" src="$2" proj="$3" command="$4"; shift 4
   local dir="$WORK/$name"
   mkdir -p "$dir"
   cp -R "$src/data" "$dir/data"
   cp "$src/$proj" "$dir/"
   mkdir -p "$dir/output" "$dir/checks"
-  (cd "$dir" && printf "$menu" | "$AZURE2_BIN" --no-gui --no-readline "$@" "$proj" > run.log 2>&1)
+  (cd "$dir" && "$AZURE2_BIN" $command --no-gui "$@" "$proj" > run.log 2>&1)
   rc=$?
   chi2="$(awk '/^Total Chi-Squared:/ { v = $3 } END { print v }' "$dir/run.log")"
 }
@@ -61,8 +61,8 @@ run() {
 # same A B: the two chi-squared agree to 1e-5 relative.
 same() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a > 0 && b > 0 && d <= 1e-5 * a) }'; }
 
-FIT='2\n\n\n\n7\n'
-CALC='1\n\n\n7\n'
+FIT=fit
+CALC=calculate
 MODES="plain --use-gradient --use-lm --use-gsl-lm"
 flag() { [ "$1" = plain ] || echo "$1"; }
 

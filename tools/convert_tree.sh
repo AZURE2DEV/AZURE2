@@ -108,7 +108,7 @@ old_engine_folder() {
     local rel="${f#$work/}" log
     log="$OUT/$(dirname "$top")/${rel%.azr}.oldengine.log"
     ( cd "$(dirname "$f")" && rm -rf output checks && mkdir -p output checks &&
-      printf '1\n\n\n7\n' | OMP_NUM_THREADS=1 timeout 900 "$BIN" --no-gui --no-readline "$(basename "$f")" 2>&1 |
+      OMP_NUM_THREADS=1 timeout 900 "$BIN" calculate --no-gui "$(basename "$f")" 2>&1 |
         head -c 2000000 > "$log" )
   done
   rm -rf "$work"

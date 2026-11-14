@@ -79,7 +79,7 @@ project() {
 run() {
   local par=""
   [ -z "${2:-}" ] || { cp "$2" "$1/start.par"; par="start.par"; }
-  (cd "$1" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+  (cd "$1" && $RUN "$AZURE2_BIN" calculate ${par:+--parameter-file="$par"} --no-gui run.azr 2>&1 \
      | head -c 1000000 > log)
   [ -s "$1/output/AZUREOut_aa=1_R=2.out" ] || { echo "  FAIL  no output in $(basename "$1")"; tail -3 "$1/log" | sed 's/^/        /'; exit 1; }
 }

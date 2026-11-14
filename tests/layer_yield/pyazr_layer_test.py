@@ -125,7 +125,7 @@ def main():
         if not bin_:
             print("  skip  4. (AZURE2_BIN not set)")
         else:
-            subprocess.run([bin_, "--no-gui", "--no-readline", "p.azr"], input="1\n\n\n7\n", text=True, cwd=tmp,
+            subprocess.run([bin_, "calculate", "--no-gui", "p.azr"], stdin=subprocess.DEVNULL, text=True, cwd=tmp,
                            capture_output=True, timeout=600)
             rows = closed.blocks(os.path.join(tmp, "output", "AZUREOut_aa=1_R=2.out"))
             cli = [row[3] for row in rows[0]] if rows else []

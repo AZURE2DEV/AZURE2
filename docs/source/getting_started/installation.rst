@@ -23,9 +23,6 @@ them.
 
 **Optional:**
 
-- **Readline** -- line editing at the prompts of the menu (``USE_READLINE``);
-  the commands (``AZURE2 fit FILE``, :doc:`../reference/command_line`) read no
-  input and do not need it
 - **pybind11** -- the ``_azure2`` module that ``pyazr`` drives
   (``USE_API``); without it CMake warns and builds no module
 
@@ -83,9 +80,6 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - ``USE_MCMC``
      - ON
      - MCMC Bayesian sampling with the bundled ``numcmc``.
-   * - ``USE_READLINE``
-     - ON
-     - Readline for console input.
    * - ``BUILD_TESTING``
      - ON
      - Add the test directories under ``tests/`` (off in a wheel build).
@@ -127,7 +121,7 @@ builds and installs it with its engine from a checkout:
    pip install ".[web]"      # plus the web page's server (fastapi, uvicorn, scipy)
 
 ``pyproject.toml`` builds with scikit-build-core, which runs CMake with the
-option set of a wheel (``BUILD_TESTING`` and ``USE_READLINE`` off) and
+option set of a wheel (``BUILD_TESTING`` off) and
 builds two targets. The compilers, CMake 3.16 or later, ``pkg-config`` and
 GSL listed above must be installed; pip fetches
 scikit-build-core and pybind11 itself. ``pip wheel . -w dist`` writes the
@@ -138,8 +132,8 @@ wheel instead of installing it. The wheel holds:
 - its data files: the AME2020 mass table and the web page's files (with the
   vendored plotly);
 - two commands on the ``PATH``: ``pyazr`` (:doc:`../user_guide/pyazr_command_line`;
-  the same as ``python -m pyazr``) and the program ``AZURE2``, built without
-  readline (its menu reads plain lines; its commands read no input);
+  the same as ``python -m pyazr``) and the program ``AZURE2`` (its commands,
+  :doc:`../reference/command_line`);
 - the licence files: AZURE2's (GPL-3.0), the notice of the SRIM-2013 data
   files, plotly's.
 

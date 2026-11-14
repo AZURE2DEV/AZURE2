@@ -53,7 +53,7 @@ run() {
   # Relative to the run directory: read from stdin, a POSIX /tmp/... path is
   # not translated by MSYS and the native Windows binary cannot open it.
   [ -z "$par" ] || { cp "$par" "$d/start.par"; par="start.par"; }
-  (cd "$d" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate ${par:+--parameter-file="$par"} --no-gui run.azr 2>&1 \
      | head -c 2000000 > run.log)
   grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$d/run.log" | awk '{print $3}'
 }
@@ -103,7 +103,7 @@ fi
 # (e) the MCMC applies the same prior (the shared configuration, step 5)
 d="$WORK/b"
 # Only the set-up is needed (the priors are reported, and flushed, before sampling starts): stop after 30 s.
-(cd "$d" && printf '6\n\n24\n100\n\n0.5\n1\nno\nyes\n' | timeout 30 "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+(cd "$d" && timeout 30 "$AZURE2_BIN" mcmc --walkers=24 --steps=100 --energy-spread=0.5 --sampler-threads=1 --basis=physical --overwrite-samples --no-gui run.azr 2>&1 \
    | head -c 5000000 | tr '\r' '\n' > mcmc.log)
 if grep -q "Nuisance priors from <parameterSettings>: 1 level/background parameter" "$d/mcmc.log"; then
   echo "  ok    (e) MCMC: the nuisance prior of <parameterSettings> is applied"

@@ -392,13 +392,12 @@ prior is on the reduced-width amplitudes.
 
 **Workflow: fit A, then B.**
 
-1. Fit A with the uncertainty band on (``--covariance-band``, or "y" at the
-   band prompt): the fit writes ``output/param.sav`` and ``output/covariance.dat``.
+1. Fit A with the uncertainty band on (``fit --covariance-band``): the fit writes ``output/param.sav`` and ``output/covariance.dat``.
    ``covariance.dat`` holds the covariance of the **free level energies and
    reduced-width amplitudes** only (normalizations, shifts and the other nuisance
    parameters are not in it), in ``param.sav`` order and space; since
    2026-11-05 its first line ``#columns <names>`` names the columns. A fit with
-   ``--scale-covariance`` (or "y" at the scaling prompt) multiplied it by the
+   ``--scale-covariance`` multiplied it by the
    reduced χ² when that exceeded 1 (a ``#scaled`` line says by how much).
 2. Write the prior file with pyazr (no engine needed)::
 

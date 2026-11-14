@@ -65,8 +65,7 @@ run() {
   local dir="$WORK/$1" ec="${2:-}"
   [ -n "$ec" ] && ec="../$(basename "$ec")"
   shift 2 || shift $#
-  (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" |
-    $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
+  (cd "$dir" && $RUN "$AZURE2_BIN" calculate ${ec:+--capture-amplitudes="$ec"} --no-gui "$@" 13N.azr > run.log 2>&1)
 }
 
 chi2() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }

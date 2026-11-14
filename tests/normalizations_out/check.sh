@@ -30,7 +30,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/normalizations_out.XXXXXX")"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 fields() { awk -F, 'NR > 1 { print NF }' "$1" | sort -n | uniq -c | awk '{ printf "%s rows x %s fields; ", $1, $2 }'; }
 
 # ---- (a) 13N, one varied norm -----------------------------------------------------------------------------------

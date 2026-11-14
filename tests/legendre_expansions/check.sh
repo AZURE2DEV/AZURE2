@@ -39,16 +39,16 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS [flags]: menu 1 (calculation) or 3 (extrapolation)
+# run NAME COMMAND THREADS [flags]: calculate or extrapolate
 run() {
-  local name="$1" menu="$2" threads="$3"; shift 3
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf '%s\n\n\n7\n' "$menu" |
-     env OMP_NUM_THREADS="$threads" $(guard_command 300) "$AZURE2_BIN" --no-gui --no-readline "$@" m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"; shift 3
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     env OMP_NUM_THREADS="$threads" $(guard_command 300) "$AZURE2_BIN" "$command" --no-gui "$@" m.azr > run.log 2>&1)
 }
 
 # ---- 1. the CLI's coefficients against the projection
 setup ex "$HERE/models/extrap.azr"
-run ex 3 "$OMP_NUM_THREADS"
+run ex extrapolate "$OMP_NUM_THREADS"
 if res="$("$PY" "$HERE/truth.py" cli "$WORK/ex/output" 2>&1)"; then ok "$res"; else bad "CLI coefficients: $res"; fi
 
 # ---- 2. pyazr, full precision
@@ -64,7 +64,7 @@ fi
 
 # ---- 3. the same rows in five expansions: five equal chi^2
 setup data "$HERE/models/data.azr"
-run data 1 1 && cp -r "$WORK/data/output" "$WORK/data_1"
+run data calculate 1 && cp -r "$WORK/data/output" "$WORK/data_1"
 chi="$WORK/data_1/chiSquared.out"
 n="$(awk -F, 'NR > 1 && $1 ~ /^[0-9]+$/ { print $2 }' "$chi" 2>/dev/null | sort -u | wc -l)"
 segs="$(awk -F, 'NR > 1 && $1 ~ /^[0-9]+$/' "$chi" 2>/dev/null | wc -l)"
@@ -75,7 +75,7 @@ else
 fi
 
 # ---- 4. 1 and 2 threads
-run data 1 2
+run data calculate 2
 if [ -s "$chi" ] && diff -r "$WORK/data_1" "$WORK/data/output" > /dev/null; then
   ok "data at 1 and 2 threads: every output identical"
 else
@@ -86,8 +86,8 @@ fi
 edited "$HERE/models/data.azr" "$WORK/grad.azr" sed -E 's/^(2\.5  -1  11\.05  1  1  [0-9]  [0-9]  [0-9]  3  1  )1 /\10 /' ||
   bad "edit: free widths"
 setup grad "$WORK/grad.azr"
-(cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" --use-gradient --no-gui \
-   --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" fit --use-gradient --no-gui \
+   m.azr > run.log 2>&1)
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"

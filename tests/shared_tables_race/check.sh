@@ -62,7 +62,7 @@ awk -v recs="$WORK/records.txt" '
 fit() {  # NAME THREADS
   local dir="$WORK/$1"
   rm -rf "$dir"; cp -R "$WORK/model" "$dir"; mkdir -p "$dir/output" "$dir/checks"
-  (cd "$dir" && printf '2\n\n\n\n7\n' | OMP_NUM_THREADS="$2" "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && OMP_NUM_THREADS="$2" "$AZURE2_BIN" fit --no-gui t.azr > run.log 2>&1)
   echo $?
 }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
@@ -82,8 +82,8 @@ fi
 mapped="$(grep -c . "$WORK/model/data/xs_40_lin_mislabelled.dat")"
 for r in $(seq 1 "$REPEATS"); do
   dir="$WORK/g$r"; rm -rf "$dir"; cp -R "$WORK/model" "$dir"; mkdir -p "$dir/output" "$dir/checks"
-  (cd "$dir" && printf '2\n\n\n\n7\n' | OMP_NUM_THREADS="$THREADS" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 \
-     "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && OMP_NUM_THREADS="$THREADS" AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 \
+     "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
   st=$?
   if [ "$st" != 0 ] || grep -qE "AddressSanitizer|ThreadSanitizer|terminate called|Abort" "$dir/run.log"; then
     bad "gradient check $r ($THREADS threads): exit $st"; grep -m1 -A12 -E "ERROR: AddressSanitizer|WARNING: ThreadSanitizer|terminate called" "$dir/run.log"

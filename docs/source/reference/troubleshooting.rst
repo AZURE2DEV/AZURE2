@@ -100,7 +100,7 @@ a level with no width in any channel is not treated as a resonance.
 
 **Solution**: Look at ``output/cross_section_grid.dat`` (E_cm, σ, S-factor), which
 is exactly the grid the rate integrated, and at ``parameters.out`` for the observed
-widths; compare with a fine mode-3 extrapolation integrated externally (the
+widths; compare with a fine ``extrapolate`` run integrated externally (the
 regression test ``tests/reaction_rate`` does this with its ``truth.py``). Older
 builds (before 2026-10-26) splined σ itself and set σ = 0 below 1 keV, which made
 charged-particle rates about 1 % low at low temperature and neutron (1/v) rates

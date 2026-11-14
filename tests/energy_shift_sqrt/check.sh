@@ -33,7 +33,7 @@ relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d 
 mkdir -p "$WORK/calc/output" "$WORK/calc/checks"
 cp -R "$HERE/data" "$WORK/calc/data"
 cp "$HERE/energy_shift_sqrt.azr" "$WORK/calc/t.azr"
-(cd "$WORK/calc" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/calc" && $RUN "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 if [ ! -f "$WORK/calc/output/chiSquared.out" ]; then
   bad "calculation produced no chiSquared.out"; tail -20 "$WORK/calc/run.log"; exit 1
 fi
@@ -66,7 +66,7 @@ fit_variant() {  # NAME EXTRA_FLAGS
     /^<\/data>/ { skip = 0 }
     skip { next }
     { print }' "$HERE/energy_shift_sqrt.azr" > "$dir/t.azr"
-  (cd "$dir" && printf '2\n\n\n\n7\n' | $RUN "$AZURE2_BIN" $2 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && $RUN "$AZURE2_BIN" fit $2 --no-gui t.azr > run.log 2>&1)
   if [ ! -f "$dir/output/param.sav" ]; then
     bad "$1: fit produced no param.sav"; tail -20 "$dir/run.log"; return
   fi

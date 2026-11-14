@@ -67,10 +67,10 @@ install.strip = true
 wheel.packages = ["pyazr"]
 wheel.exclude = ["pyazr/CLAUDE.md", "pyazr/examples/**", "**/__pycache__/**"]
 wheel.license-files = ["LICENSE", "stopping/data/srim/README.md", "pyazr/ui/static/vendor/plotly-LICENSE.txt"]
-# The CMake option set of a wheel: no tests, no readline (the program's menus read plain lines).  The sampler numcmc
+# The CMake option set of a wheel: no tests.  The sampler numcmc
 # stays on: it is vendored and static (nothing to install or ship), and the module's SamplerLogProbability
 # (api/src/pybind_evaluation.cpp) needs it.
-cmake.define = { BUILD_TESTING = "OFF", USE_MCMC = "ON", USE_READLINE = "OFF", USE_API = "ON" }
+cmake.define = { BUILD_TESTING = "OFF", USE_MCMC = "ON", USE_API = "ON" }
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"

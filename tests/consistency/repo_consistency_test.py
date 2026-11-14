@@ -148,7 +148,7 @@ check_sizes()
 #    command-line reference.  A flag that is only in the source is a flag only
 #    the person who wrote it knows about.
 main_cpp = read("src/AZURE2.cpp")
-parser = function_body(main_cpp, "bool parseOptions(")
+parser = function_body(main_cpp, "void parseOptions(")
 help_text = function_body(main_cpp, "void printHelp(")
 cli_doc = read("docs/source/reference/command_line.rst")
 
@@ -175,7 +175,7 @@ handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-pa
                    "--record"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
-removed = {"--use-api"}
+removed = {"--use-api", "--no-readline"}
 
 for flag in sorted(flags):
     if flag not in cli_doc:

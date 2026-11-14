@@ -38,7 +38,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/lab_frame_fold.XXXXXX")"
 echo "lab_frame_fold: $AZURE2_BIN"
 cp -r "$HERE/models/." "$WORK/"
 mkdir -p "$WORK/output" "$WORK/checks"
-(cd "$WORK" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline lab_fold.azr > run.log 2>&1)
+(cd "$WORK" && run_limited 600 "$AZURE2_BIN" calculate --no-gui lab_fold.azr > run.log 2>&1)
 OUT="$WORK/output/AZUREOut_aa=1_R=2.out"
 [ -s "$OUT" ] || { echo "  FAIL  no output"; tail -5 "$WORK/run.log"; echo "lab_frame_fold: FAIL"; exit 1; }
 
@@ -49,7 +49,7 @@ reach() {  # NAME OFFSET: the folded data set with a fitted offset (prior 0.3 Me
     "s/^    detector       det_wide\$/    detector       det_wide\n    shift          offset $2 MeV fit prior 0 0.3/" ||
     { echo "  FAIL  (d) the variant $1 was not made"; REACH_FAILS=$((REACH_FAILS + 1)); return; }
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"; cp -r "$WORK/data" "$WORK/$1/"; cp "$WORK/$1.azr" "$WORK/$1/t.azr"
-  (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 }
 reach reach0 0
 reach reach32 -0.32

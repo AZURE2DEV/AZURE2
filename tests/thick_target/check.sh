@@ -54,7 +54,7 @@ make_model() {
   cp -r "$BASE/data" "$WORK/$1/"
   awk '{ sub(/\r$/, "") } /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 } { '"$2"' } { print }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 # seg1 NAME -> "E fit" rows of segment 1 (block 1 of the p -> gamma output file)
 seg1() { awk 'BEGIN { RS = ""; FS = "\n" } NR == 1 { print }' "$WORK/$1/output/AZUREOut_aa=1_R=2.out" | awk 'NF >= 5 { print $1, $4 }'; }

@@ -64,17 +64,16 @@ N=0.15; T_K=300; SIG=0.0001; M1=1.008665; M2=12; TOL=2e-4
 "$PY" -I "$HERE/make_models.py" "$HERE/../reaction_rate/models/n12C.azr" "$WORK/models" || { bad "models not built"; exit 1; }
 
 run() {
-  local dir="$WORK/$1" input
+  local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$WORK/models/data" "$dir/data"
   cp "$WORK/models/$2.azr" "$dir/t.azr"
-  if [ "$3" = 3 ]; then input='3\n\n\n7\n'; else input='1\n\n\n7\n'; fi
-  (cd "$dir" && printf "$input" | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" "$3" --no-gui t.azr > run.log 2>&1)
 }
 an() { "$PY" -I "$HERE/analyze.py" "$@"; }
 
-run truth truth 3
-for m in bare dop dopg gauss dopT dopgT; do run $m $m 1; done
+run truth truth extrapolate
+for m in bare dop dopg gauss dopT dopgT; do run $m $m calculate; done
 
 # (a)
 for k in T G; do
@@ -110,10 +109,10 @@ if gt "$w" 0.01; then ok "(c) transforming the broadened sigma instead is off by
 else bad "(c) the other order is only $w off: the check does not discriminate"; fi
 
 # (d) gradient check
-run gcalc grad 1
+run gcalc grad calculate
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$WORK/models/data" "$WORK/fit/data"; cp "$WORK/models/grad.azr" "$WORK/fit/t.azr"
-(cd "$WORK/fit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-grid-replacement --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/fit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
 chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/fit/run.log")"
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/gcalc/output/chiSquared.out")"
 if [ -n "$chi" ] && [ -n "$want" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then
@@ -139,7 +138,7 @@ fi
 # (e) refusals: NAME:the text of the run's ERROR
 for v in "refuse_zero:D.doppler: error E_OUT_OF_RANGE" "refuse_missing:D.doppler: error E_NOT_A_NUMBER"; do
   name="${v%%:*}"; want="${v#*:}"
-  run "$name" "$name" 1
+  run "$name" "$name" calculate
   if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(e) refused: $name"
   else bad "(e) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
@@ -151,11 +150,11 @@ fit() {  # fit <name> <model> <flags>: mode 2, no parameter file
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$WORK/models/data" "$dir/data"
   cp "$WORK/models/$2.azr" "$dir/t.azr"
-  (cd "$dir" && printf '2\nn\n\n\n' | run_limited 900 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" fit $3 --no-gui t.azr > run.log 2>&1)
 }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
 chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | sed -n 1p; }
-run dop450 dop450 1
+run dop450 dop450 calculate
 if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.azr" "$WORK/dop450" "$WORK/models"; then
   for v in "fit_grad:--use-gradient" "fit_lm:--use-lm"; do
     name="${v%%:*}"; flags="${v#*:}"
@@ -170,8 +169,8 @@ else bad "(f) fit data not built"; fi
 # (g) gradient check with the temperatures free
 mkdir -p "$WORK/gfit/output" "$WORK/gfit/checks"; ln -s "$WORK/models/data" "$WORK/gfit/data"
 cp "$WORK/models/grad_fit.azr" "$WORK/gfit/t.azr"
-(cd "$WORK/gfit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-grid-replacement --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/gfit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
 awk '{ sub(/\r$/, "") }
      /^\[grad-check\] idx / { a = f = j = ""
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
@@ -204,7 +203,7 @@ else bad "(h) prior fit: D.doppler '${t}', Total-Doppler-Chi-Squared '${dc}'"; t
 for v in "refuse_nosigma:D.doppler: error E_PRIOR_SYNTAX" "refuse_sigma:D.doppler: error E_PRIOR_SYNTAX" \
          "refuse_tmax:Tmax \"200\" must be a temperature above T" "refuse_negT:D.doppler: error E_OUT_OF_RANGE"; do
   name="${v%%:*}"; want="${v#*:}"
-  run "$name" "$name" 1
+  run "$name" "$name" calculate
   if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(i) refused: $name ($(grep -m1 -o "ERROR: .*" "$WORK/$name/run.log" | cut -c1-120))"
   else bad "(i) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
@@ -213,7 +212,7 @@ done
 # (j) plain Doppler models byte-identical to a reference build (optional)
 if [ -n "${REF_AZURE2:-}" ]; then
   ref="$AZURE2_BIN"; AZURE2_BIN="$REF_AZURE2"
-  for m in dop dopg dopT dopgT; do run "ref_$m" "$m" 1; done
+  for m in dop dopg dopT dopgT; do run "ref_$m" "$m" calculate; done
   AZURE2_BIN="$ref"
   same=0; diff=0
   for m in dop dopg dopT dopgT; do

@@ -45,8 +45,7 @@ setup() {
 }
 # run NAME THREADS: a calculation (menu 1) of $WORK/NAME/m.azr
 run() {
-  (cd "$WORK/$1" && rm -rf output/* checks/* && printf '1\n\n\n7\n' |
-     OMP_NUM_THREADS="$2" run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$WORK/$1" && rm -rf output/* checks/* && OMP_NUM_THREADS="$2" run_limited 600 "$AZURE2_BIN" calculate --no-gui m.azr > run.log 2>&1)
 }
 # convert NAME: $WORK/NAME/m.azr -> m3.azr (exact grids) with its report
 convert() {
@@ -200,8 +199,7 @@ fi
 
 # ---- 7. extrapolations without the data files
 run3() {
-  (cd "$WORK/$1" && rm -rf output/* checks/* && printf '3\nn\n\n\n7\n' |
-     OMP_NUM_THREADS=1 run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$WORK/$1" && rm -rf output/* checks/* && OMP_NUM_THREADS=1 run_limited 600 "$AZURE2_BIN" extrapolate --no-gui m.azr > run.log 2>&1)
 }
 if [ -f "$WORK/new/m.azr" ]; then
   # T2 has no extrapolation: one is added (15N(p,a)12C on a list of lab energies)

@@ -83,7 +83,7 @@ std::string ThreadsJson(const ThreadsInForce &threads) {
 
 int OptionError(const std::string &message) {
   std::cout << "ERROR: " << message << std::endl
-            << "\tSyntax: AZURE2 <options> configfile  (AZURE2 --help lists the options)" << std::endl;
+            << "\tSyntax: AZURE2 <command> [options] FILE  (AZURE2 --help lists the commands and options)" << std::endl;
   return 2;
 }
 

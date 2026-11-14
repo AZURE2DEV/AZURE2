@@ -368,7 +368,7 @@ def write_format3(binary, workdir, azr, text):
 def run_engine(binary, workdir, azr):
     os.makedirs(os.path.join(workdir, "output"), exist_ok=True)
     os.makedirs(os.path.join(workdir, "checks"), exist_ok=True)
-    r = subprocess.run([binary, "--no-gui", "--no-readline", azr], input="1\n\n\n7\n", cwd=workdir,
+    r = subprocess.run([binary, "calculate", "--no-gui", azr], stdin=subprocess.DEVNULL, cwd=workdir,
                        capture_output=True, text=True, timeout=600)
     return r.stdout + r.stderr
 

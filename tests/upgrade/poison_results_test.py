@@ -52,10 +52,10 @@ PROJECTS = {"T1": "T1.azr", "T2": "T2.azr", "T3": "T3.azr"}
 MODEL_PROJECTS = {"natural_neon": ("natural_neon", "natural_neon.azr"), "transmission": ("transmission_yield", "conv.azr"),
                   "natural_transmission": ("transmission_yield", "natT.azr")}
 TESTS = os.path.normpath(os.path.join(HERE, ".."))
-MENUS = {"calc": "1\n\n\n7\n", "extrap": "3\n\n\n7\n"}
-FIT = ("T1", "2\nn\n\n\n7\n", ["--max-calls=30"])
+COMMANDS = {"calc": ["calculate"], "extrap": ["extrapolate"]}
+FIT = ("T1", ["fit"], ["--max-calls=30"])
 RATE_DIR = os.path.normpath(os.path.join(HERE, "..", "reaction_rate"))
-RATE_MENU = "5\n\n1\n2\nyes\ntemperatures.dat\n"  # no parameter file, entrance 1, exit 2, temperatures from a file
+RATE = ["rate", "--rate-entrance=1", "--rate-exit=2", "--temperature-file=temperatures.dat"]  # pairs 1 -> 2, a file
 
 
 def run_rate(binary, poison, tmp):
@@ -66,7 +66,7 @@ def run_rate(binary, poison, tmp):
     for sub in ("output", "checks"):
         os.makedirs(os.path.join(d, sub))
     env = dict(os.environ, AZURE_POISON_RESULTS="1" if poison else "0")
-    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", "t.azr"], input=RATE_MENU, cwd=d,
+    r = subprocess.run([binary, *RATE, "--no-gui", "--no-coulomb-table", "t.azr"], stdin=subprocess.DEVNULL, cwd=d,
                        env=env, capture_output=True, text=True, timeout=1800)
     out = {}
     for f in sorted(os.listdir(os.path.join(d, "output"))):
@@ -75,7 +75,7 @@ def run_rate(binary, poison, tmp):
     return r.returncode, out
 
 
-def run_cli(binary, project, menu, extra, poison, tmp, src=None, azr=None):
+def run_cli(binary, project, command, extra, poison, tmp, src=None, azr=None):
     d = tempfile.mkdtemp(dir=tmp)
     src = src or os.path.join(HERE, project)
     for f in os.listdir(src):
@@ -91,8 +91,8 @@ def run_cli(binary, project, menu, extra, poison, tmp, src=None, azr=None):
         # A fit bounded by --max-calls is reproducible at one thread only: Minuit2's call counter is not atomic, so
         # with several threads the same fit can run one more iteration (docs/upgrade/fit_threads.md, cause B).
         env["OMP_NUM_THREADS"] = "1"
-    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, azr or PROJECTS[project]],
-                       input=menu, cwd=d, env=env, capture_output=True, text=True, timeout=1800)
+    r = subprocess.run([binary, *command, "--no-gui", "--no-coulomb-table", *extra, azr or PROJECTS[project]],
+                       stdin=subprocess.DEVNULL, cwd=d, env=env, capture_output=True, text=True, timeout=1800)
     out = {}
     for f in sorted(os.listdir(os.path.join(d, "output"))):
         with open(os.path.join(d, "output", f), "rb") as fh:
@@ -144,13 +144,13 @@ def main():
     binary = up.find_binary(args.binary)
     problems, known = [], set()
     with tempfile.TemporaryDirectory() as tmp:
-        runs = [(p, name, menu, []) for p in args.projects for name, menu in MENUS.items()
+        runs = [(p, name, command, []) for p in args.projects for name, command in COMMANDS.items()
                 if not (name == "extrap" and p == "T2")]  # T2 has no <segmentsTest>
         if FIT[0] in args.projects:
             runs.append((FIT[0], "fit", FIT[1], FIT[2]))
-        for project, name, menu, extra in runs:
-            rc0, plain = run_cli(binary, project, menu, extra, False, tmp)
-            rc1, poisoned = run_cli(binary, project, menu, extra, True, tmp)
+        for project, name, command, extra in runs:
+            rc0, plain = run_cli(binary, project, command, extra, False, tmp)
+            rc1, poisoned = run_cli(binary, project, command, extra, True, tmp)
             if rc0 != rc1:
                 problems.append(f"{project} {name}: exit {rc0} without, {rc1} with poisoning")
             if not plain:
@@ -180,8 +180,8 @@ def main():
         shutil.copytree(os.path.join(TESTS, "natural_neon", "data"), os.path.join(made, "data"), dirs_exist_ok=True)
         for name, (rel, azr) in MODEL_PROJECTS.items():
             src = made if rel == "transmission_yield" else os.path.join(TESTS, rel)
-            rc0, plain = run_cli(binary, name, MENUS["calc"], [], False, tmp, src, azr)
-            rc1, poisoned = run_cli(binary, name, MENUS["calc"], [], True, tmp, src, azr)
+            rc0, plain = run_cli(binary, name, COMMANDS["calc"], [], False, tmp, src, azr)
+            rc1, poisoned = run_cli(binary, name, COMMANDS["calc"], [], True, tmp, src, azr)
             if rc0 != rc1:
                 problems.append(f"{name} calc: exit {rc0} without, {rc1} with poisoning")
             if "chiSquared.out" not in plain:

@@ -35,7 +35,7 @@ mkdir -p "$WORK/scr" && cp "$TESTS/electron_screening/grad.azr" "$WORK/scr/" && 
 run() {
   local d="$WORK/$1.$4"
   mkdir -p "$d" && cp -r "$2/." "$d/" && rm -rf "$d/output" "$d/checks" && mkdir -p "$d/output" "$d/checks"
-  (cd "$d" && printf '1\n\n\n7\n' | AZURE_PLAN_CHECK=$4 "$BIN" --no-gui --no-readline "$3" > run.log 2>&1; echo $? > rc)
+  (cd "$d" && AZURE_PLAN_CHECK=$4 "$BIN" calculate --no-gui "$3" > run.log 2>&1; echo $? > rc)
 }
 for p in "T1:$TESTS/upgrade/T1:T1.azr" "T2:$TESTS/upgrade/T2:T2.azr" "T3:$TESTS/upgrade/T3:T3.azr" "13N:$TESTS/13N:13N.azr" \
          "natural_neon:$TESTS/natural_neon:natural_neon.azr" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr" "conv:$WORK/ty:conv.azr" \

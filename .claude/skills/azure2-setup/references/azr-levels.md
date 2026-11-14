@@ -131,7 +131,7 @@ cross section is off by up to 14 % (`tests/hard_sphere`). Consequences:
 ## 8. Verifying a newly built file
 
 1. `AZURE2 --validate new.azr` (exit 2 with an error) and `scripts/audit_project.py new.azr`.
-2. A calculation of the extrapolations needs no data: `printf '3\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline new.azr`
+2. A calculation of the extrapolations needs no data: `AZURE2 extrapolate new.azr`
    prints the compound-nucleus construction, boundary conditions and the parameter transformation with the engine's
    own messages.
 3. Read the transformation warnings. "Denominator less than zero while transforming" means an observed width larger

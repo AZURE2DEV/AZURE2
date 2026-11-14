@@ -44,7 +44,7 @@ run() {
   mkdir -p "$d/output" "$d/checks"
   cp -r "$HERE/projects/data" "$d/"
   cp "$HERE/projects/$p.azr" "$d/"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" "$p.azr" > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui "$@" "$p.azr" > log 2>&1)
 }
 # row FILE N COL -> column COL of the N-th non-blank line
 # (\r stripped first: Windows writes CRLF, and a bare "\r" line has NF = 1)

@@ -38,11 +38,11 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS [flags]: menu 1 (calculation), 2 (fit) or 3 (extrapolation) of $WORK/NAME/m.azr
+# run NAME COMMAND THREADS [flags]: calculate, fit or extrapolate of $WORK/NAME/m.azr
 run() {
-  local name="$1" menu="$2" threads="$3"; shift 3
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf '%s\nn\n\n\n7\n' "$menu" |
-     OMP_NUM_THREADS="$threads" run_limited 600 "$AZURE2_BIN" --no-gui --no-readline "$@" m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"; shift 3
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     OMP_NUM_THREADS="$threads" run_limited 600 "$AZURE2_BIN" "$command" --no-gui "$@" m.azr > run.log 2>&1)
 }
 total() { awk '/Total-Chi-Squared:/ { print $2 }' "$1" | tail -1; }
 
@@ -63,15 +63,15 @@ else
 fi
 
 # ---- 2. 1 and 2 threads; a short fit
-run story 1 1 && cp -r "$WORK/story/output" "$WORK/story_1"
-run story 1 2
+run story calculate 1 && cp -r "$WORK/story/output" "$WORK/story_1"
+run story calculate 2
 start="$(total "$WORK/story_1/chiSquared.out")"
 if [ -s "$WORK/story_1/chiSquared.out" ] && diff -r "$WORK/story_1" "$WORK/story/output" > /dev/null; then
   ok "story: calculation at 1 and 2 threads, every output identical (chi^2 $start)"
 else
   bad "story: outputs differ between 1 and 2 threads (or none: $(grep -m1 ERROR "$WORK/story/run.log"))"
 fi
-run story 2 2 --max-calls=150
+run story fit 2 --max-calls=150
 fitted="$(total "$WORK/story/output/chiSquared.out")"
 if [ -n "$fitted" ] && awk -v a="$fitted" -v b="$start" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a < b) }'; then
   ok "story: a fit of 150 calls lowers the chi^2 ($start -> $fitted)"
@@ -90,7 +90,7 @@ narrow s_adapt sfactor 'keV*b' "adaptive 0.05 0.25 MeV cm tolerance 1e-3 max_poi
 narrow x_adapt sigma b "adaptive 0.05 0.25 MeV cm tolerance 1e-3 max_points 4000 start_step 0.05"
 narrow s_dense sfactor 'keV*b' "range 0.05 0.25 MeV cm step 0.0001"
 narrow x_dense sigma b "range 0.05 0.25 MeV cm step 0.0001"
-for n in s_adapt x_adapt s_dense x_dense; do run "$n" 3 "$OMP_NUM_THREADS"; done
+for n in s_adapt x_adapt s_dense x_dense; do run "$n" extrapolate "$OMP_NUM_THREADS"; done
 if [ -s "$WORK/s_adapt/$OUT" ] && [ -s "$WORK/x_adapt/$OUT" ] && [ -s "$WORK/s_dense/$OUT" ] && [ -s "$WORK/x_dense/$OUT" ]; then
   # E_cm (column 1), sigma (column 4, b) and S (column 5, MeV b) of every grid, sigma or sfactor alike; S x 1000 in keV b
   res="$(python3 - "$WORK" "$OUT" <<'PY'
