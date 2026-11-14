@@ -43,29 +43,6 @@ struct CompoundNucleus {
   int A = 0;
 };
 
-/// The isotopic abundance of one compound nucleus's target in one sample.
-struct SampleAbundance {
-  double abundance = 1.0;   ///< current value (a fit parameter when vary is set)
-  double nominal = 1.0;     ///< the centre of the prior as written, else the value read (parameter_kinds.md section 4)
-  double sigma = 0.0;       ///< prior width; 0 = no prior
-  bool vary = false;
-  bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
-  std::string isotope;  ///< format 3: the isotope as written, which names the parameter ("" = the old name)
-};
-
-/// A sample: one set of isotopic (or stoichiometric) abundances, one entry per
-/// compound nucleus.  The <abundances> block holds one unnamed sample (the
-/// lines without a "<name>:" prefix) and any number of named ones; a segment
-/// chooses its sample with "natural 1" (the unnamed, or the only, sample) or
-/// "natural <name>".  Each sample has its own sum-to-one penalty width: the
-/// block's "<name>: sum <s>" line, else the config's abundanceSumSigma.
-struct AbundanceSample {
-  std::string name;                      ///< "" for the unnamed sample
-  std::vector<SampleAbundance> entries;   ///< index nucleus-1
-  double sumSigma = -1.0;                ///< < 0: use the config's abundanceSumSigma
-  double sumCentre = 1.0;                ///< the centre of the sum-to-one prior: as written, else 1
-};
-
 class CNuc {
  public:
   // -- structure ------------------------------------------------------------
@@ -76,10 +53,6 @@ class CNuc {
   const CompoundNucleus *GetNucleus(int) const;
   /// "Z=10 A=23" style label of nucleus \p i.
   std::string NucleusLabel(int) const;
-  /// Did the project carry an <abundances> block?  Only then are the
-  /// abundances Minuit parameters (one per nucleus and sample, after the
-  /// level block), so a project without the block keeps its parameter layout.
-  bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
   /// The model data (ModelData.h): the rows of the objective's term T9, read by Fill.
   const ModelDataSet &GetModelData() const { return *modelData_; }
   /// The gamma_decay records (GammaDecayMap.h), read by Fill; empty without <gammaDecays>.
@@ -94,34 +67,6 @@ class CNuc {
     if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
     gammaDecayFills_[r] = std::move(fill);
   }
-  /// Number of samples the <abundances> block defines (0 without the block).
-  int NumSamples() const { return (int)samples_.size(); }
-  /// Sample \p s, 1-based.
-  AbundanceSample *GetSample(int s) { return &samples_[s - 1]; }
-  const AbundanceSample *GetSample(int s) const { return &samples_[s - 1]; }
-  /// 1-based index of the sample with this name, 0 if there is none.
-  int FindSample(const std::string &name) const;
-  /// The sample "natural 1" means: the unnamed one if present, else the only one; 0 if ambiguous or none.
-  int DefaultSample() const;
-  /// Number of abundance parameters FillMnParams emits: samples x nuclei with the block, else 0.
-  int NumAbundanceParams() const { return hasAbundanceBlock_ ? (int)(samples_.size() * nuclei_.size()) : 0; }
-  /// 1-based ordinal of the abundance parameter of (sample, nucleus), both 1-based: samples are blocks of nuclei.
-  int AbundanceOrdinal(int sample, int nucleus) const { return (sample - 1) * (int)nuclei_.size() + nucleus; }
-  /// The (sample, nucleus) of a 1-based abundance ordinal.
-  void AbundanceOf(int ordinal, int &sample, int &nucleus) const;
-  /// Minuit name: "abundance_<Z>_<A>" for the unnamed sample, "abundance_<sample>_<Z>_<A>" otherwise.
-  std::string AbundanceParamName(int sample, int nucleus) const;
-  /// Current abundance of nucleus \p nucleus in sample \p sample (1 when there is no block).
-  double GetAbundance(int sample, int nucleus) const;
-  /// Sum of the current abundances of one sample.
-  double AbundanceSum(int sample) const;
-  /// The sum-to-one width of a sample: its own "sum" line, else \p globalSumSigma.
-  double SampleSumSigma(int sample, double globalSumSigma) const;
-  /// The abundance penalty added to chi-squared, summed over samples: every
-  /// entry with a prior contributes ((w - w0)/sigma)^2, and each sample whose
-  /// width s is > 0 contributes ((sum w) - c)^2 / s^2, c its centre (1 unless written).
-  double AbundancePenalty(double globalSumSigma) const;
-  double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int) const;
@@ -187,13 +132,6 @@ class CNuc {
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is
   /// not level-wise (either side standard) or a level has J <= 0.
   bool ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &, int from, int to, const Config &);
-  /// Park formalism: the penalty added to chi-squared for levels whose
-  /// overlap J = 1 - sum gamma^2 dS/dE is not positive, sum (J/kParkNormScale)^2
-  /// over J < 0.  Zero for every valid parameter set, and in Brune mode.
-  double ParkNormPenalty();
-  /// Scale of the Park J > 0 penalty: a level at J = -kParkNormScale costs one
-  /// unit of chi-squared, so the wall is steep on the scale of J but smooth.
-  static constexpr double kParkNormScale = 1.0e-3;
   /// External reduced width amplitude for one channel.
 
   // -- parameter transformations --------------------------------------------
@@ -276,14 +214,6 @@ class CNuc {
   /// writes the fitted parameters into the object it runs on.
   CNuc *Clone() const;
 
-  /// Current values of the THM coherent backgrounds (`cbackground=`,
-  /// ThmCoherentBackground in ThmExperiment.h), in parameter order: the data
-  /// own the parameters (WorkingCopy::FillThmCoherentFromParams), the HOES model
-  /// (THMMatrixFunc) reads them here, on the compound it is handed.  Empty
-  /// without the key.
-  const std::vector<double> &ThmCoherentValues() const { return thmCoherentValues_; }
-  void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
-
  private:
   /// The set-up's writable views of the structure (Fill, AddHardSphereGroups, ParseExternalCapture, Initialize).
   PPair *Pair(int);
@@ -315,11 +245,6 @@ class CNuc {
   std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
-  /// TEMPORARY (step 3d, src/ProjectSetup.cpp): the old <abundances> section through SetAbundances.
-  int ReadAbundances(const Config &);
-  /// The abundances of the samples from their spec into samples_; -1 (with the reader's message) when the reader
-  /// stopped.
-  int SetAbundances(const Config &, const azure2::experiment::AbundanceSpecs &);
   /// The pathway table (Initialize) and the capture-A_y requests it is built with.
   std::shared_ptr<const azure2::PathwayTable> pathways_;
   std::vector<std::pair<int, int> > captureAyRequests_;
@@ -331,8 +256,6 @@ class CNuc {
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;
-  std::vector<AbundanceSample> samples_;
-  bool hasAbundanceBlock_ = false;
   /// Setup state, shared by the copies (Clone).
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
@@ -342,7 +265,6 @@ class CNuc {
   /// FillCompoundFromParamsPhysical's.
   std::vector<std::vector<double>> gammaDecayInputs_;
   bool transformedIn_ = false;
-  std::vector<double> thmCoherentValues_;
 };
 
 extern double DoubleFactorial(int);

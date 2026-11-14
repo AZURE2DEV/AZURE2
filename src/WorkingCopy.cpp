@@ -198,17 +198,17 @@ static bool BetaDelayedAllowed(CNuc *theCNuc, Segment &segment, int key, bool is
   return false;
 }
 
-static bool NaturalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
+static bool NaturalAllowed(const AbundanceSamples &samples, Segment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
   if (token == "0") return true;   // not a natural segment
-  if (!theCNuc->HasAbundanceBlock()) {
+  if (!samples.Present()) {
     configure.outStream << "ERROR: " << what << " #" << key << " is a sample (abundance-weighted) segment, but the project has no "
                         << "<abundances> block (one line per compound nucleus: [<sample>:] <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
     return false;
   }
   // "1" = the unnamed sample (or the only one); anything else names a sample of the block.
-  int sample = (token == "1") ? theCNuc->DefaultSample() : theCNuc->FindSample(token);
+  int sample = (token == "1") ? samples.Default() : samples.Find(token);
   if (sample == 0) {
     configure.outStream << "ERROR: " << what << " #" << key << ": sample \"" << token
                         << "\" is not in the <abundances> block";
@@ -229,7 +229,6 @@ static bool NaturalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest
   }
   return true;
 }
-
 
 /*!
  * The WorkingCopy object has a private attribute containing the number of iterations needed to find the best fit parameters.
@@ -310,7 +309,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
           const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
-          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!NaturalAllowed(Data().Abundances(), NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
@@ -455,7 +454,7 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           const PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
-          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!NaturalAllowed(Data().Abundances(), NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
@@ -802,6 +801,7 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       segmentStates_(other.segmentStates_),
       effectValues_(other.effectValues_),
       thmCoherentValues_(other.thmCoherentValues_),
+      abundances_(other.abundances_),
       units_(other.units_),
       slots_(other.slots_),
       slotBlock_(other.slotBlock_),

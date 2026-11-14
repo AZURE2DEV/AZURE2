@@ -169,8 +169,10 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      levels (``ALevel``), from the ``<levels>`` rows
      (``ProjectLevelSection``, ``src/ProjectSetup.cpp``).
    * ``WorkingCopy::Fill`` (data sets) or ``WorkingCopy::MakePoints``
-     (extrapolations), ``src/WorkingCopy.cpp``: the segments and their
-     points from the specs, the target effects
+     (extrapolations), ``src/WorkingCopy.cpp``: first the samples of the
+     ``<abundances>`` block (``AbundanceSamples``, held by the ``DataSet``;
+     ``WorkingCopy::SetAbundanceSamples``, ``src/ProjectSetup.cpp``), then the
+     segments and their points from the specs, the target effects
      (``WorkingCopy::SetUpTargetEffects``, ``src/TargetSetup.cpp``: the
      kernels, the shared energy mesh of each compound nucleus by
      ``PlanMesh``, ``include/MeshPlanner.h``, and the slots of the folded
@@ -186,7 +188,10 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      (``CNuc::TransformIn``) and the pathway table (``CNuc::BuildPathways``,
      for the requested entrance pairs).
    * ``CNuc::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
-     parameters out in ``AZUREParams``, each with its ``ParameterRecord``.
+     parameters out in ``AZUREParams``, each with its ``ParameterRecord``: the
+     level block, then the abundance block (``AbundanceSamples::AddParameters``,
+     the one place that writes the abundances into a parameter vector and
+     reads them back), then the data's parameters.
    * ``WorkingCopy::Initialize``: the energy-dependent values of every
      point and slot (``CalcEDependentValues``: channel functions through the
      stage's ``ChannelTable``, Legendre rows, Coulomb amplitudes), the
@@ -200,7 +205,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
 3. **Hand-over of a parameter vector.** ``CNuc::FillCompoundFromParams``
    puts the vector's level parameters into the levels;
    ``WorkingCopy::FillNormsFromParams`` and
-   ``WorkingCopy::FillEnergyShiftsFromParams`` set norms, energy shifts and
+   ``WorkingCopy::FillEnergyShiftsFromParams`` set norms, energy shifts,
+   the isotopic abundances, the THM coherent backgrounds and the
    apparatus parameters, re-place the slots of shifted folds where the shift
    leaves their reach (``WorkingCopy::ReplaceSubPointGrids``) and end with
    ``WorkingCopy::BeginEvaluation``, which sizes the caller's ``Results``.

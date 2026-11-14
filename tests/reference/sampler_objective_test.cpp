@@ -187,6 +187,7 @@ struct Fit {
     if (!useRWA) {
       CNuc *c = m.compound->Clone();
       c->FillCompoundFromParamsPhysical(full);
+      m.data->FillAbundancesFromVector(full);
       c->TransformIn(m.cfg);
       AZUREParams p;
       c->FillMnParams(p, &m.cfg);

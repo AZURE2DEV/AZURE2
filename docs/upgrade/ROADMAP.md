@@ -200,6 +200,9 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 *Design of the last steps, six branches: `cnuc_split.md` §12 (2026-11-13); it replaces the "Remaining" list above.*
 - [x] The structure frozen after set-up: the entrance pairs an input of the set-up, the `System` built once in `Fill`,
       the pairs, groups and channels read through `const` pointers only (`cnuc_split.md` §12.3, step 1 as built).
+- [x] Abundances, THM coherent values and the two penalties out of `CNuc`: the samples in the `DataSet`, the values in
+      the working copy, one place for the abundance block of the parameter vectors (`AbundanceSamples`), the Park
+      wall and the abundance penalties the bodies of their objective terms (`cnuc_split.md` §12.3, step 2 as built).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

@@ -1,6 +1,6 @@
 // The set-up input of a project (ProjectSetup.h): the format-3 project as Config::ReadConfigFile read it once (records
 // -> Validate -> <levels> tables -> Schema::Build, Config::project).  The engine's set-up (WorkingCopy::Fill,
-// MakePoints, CNuc::SetAbundances) consumes its specs.
+// MakePoints, WorkingCopy::SetAbundanceSamples) consumes its specs.
 #include "ProjectSetup.h"
 
 #include "CNuc.h"
@@ -31,20 +31,28 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 
 }  // namespace
 
+int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &configure, const CNuc &compound) {
+  std::vector<std::pair<int, int> > nucleiZA;
+  for (int k = 1; k <= compound.NumNuclei(); k++) nucleiZA.push_back({compound.GetNucleus(k)->Z, compound.GetNucleus(k)->A});
+  const int read = Draft().abundances_.Set(messages, configure.project->built.abundances, nucleiZA);
+  abundances_ = Data().Abundances().StartValues();
+  return read;
+}
+
 int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
+  if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
   if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
   // Every refusal of the set-up prints its ERROR line before it returns: that line ends the run (WorkingCopy.h).
   return this->Fill(configure, theCNuc, configure.project->built.data) == 0 ? 0 : kFillRefused;
 }
 
 int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc) {
+  if (SetAbundanceSamples(configure.outStream, configure, *theCNuc) == -1) return -1;
   ReportUnreadDataFiles(configure, false);
   return this->MakePoints(configure, theCNuc, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
 }
 
-int CNuc::ReadAbundances(const Config &configure) {
-  return this->SetAbundances(configure, configure.project->built.abundances);
-}
+
 
 bool ProjectLevelSection(const Config &configure, azure2::io::LevelSection &out) {
   if (!configure.project->levelSection) return false;

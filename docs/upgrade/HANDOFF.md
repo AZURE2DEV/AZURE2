@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-passengers`) — abundances, THM values, penalties out of `CNuc`
+
+**Measured first** (start commit adfb0118): 17 calls outside `CNuc` put the abundance block into a vector or read it
+back (`GetTransformParams` / `FillCompoundFromParamsPhysical`: `AZUREAPI.cpp` 7, `AZURECalcMCMC.cpp` 4,
+`ParameterLimitsManager.cpp` 2, `SamplerSupport.cpp`, `AZURE2.cpp`, `TargetSetup.cpp`, `ReactionRate.cpp`); the THM
+coherent values were held twice (`THMMatrixFunc.cpp` read the `CNuc` copy at 2 places); `CNuc.cpp` / `CNuc.h`
+1,526 / 350 lines (1,355 / 272 after).
+
+**Done**, in four commits that can each be merged:
+- 71ef224a: one place for the abundance block of the parameter vectors, `AbundanceSamples`
+  (`include/AbundanceSamples.h`, `src/AbundanceSamples.cpp`): `AddParameters` (fit's vector), `AppendTo` (observed
+  vector: the block of the fit's vector it was made from), `ReadFrom` (either); `GetTransformParams` returns the
+  level block and its seven callers that hand out an observed vector append the block; still on `CNuc`'s storage.
+- 2e17e299 (comparison): the samples in the `DataSet` (`WorkingCopy::SetAbundanceSamples`, first step of the data
+  set-up), the values in the working copy (`AbundanceValues`, `FillAbundancesFromVector`), the THM coherent values
+  handed to the HOES model from the working copy (`SolveAtOneEnergy`, `HoesCrossSection`, `ThmAdjointContext`); the
+  compound's copies kept and compared at every read, abort on a difference.  It found two places where only the compound
+  had been filled: the session's `SetParamsAllRWA` and three `Transform...RWAParameters` functions, and the sampler's
+  reference test; both read the block into the working copy now.
+- 278cb042: the compound's copies and the comparison deleted; `WorkingCopy::FillMnParams` writes the abundance block
+  first, at the old position (`DataSet::GetAbundanceParamOffset`).
+- 531a2eab: `ParkTerm` and `AbundanceTerm` compute their penalties themselves (`CNuc::ParkNormPenalty`,
+  `AbundanceSamples::Penalty`/`SumPenalty` deleted; `kParkNormScale` in `Objective.h`).
+
+**Verified how** (build `work/b-cnuc2`, 2 threads, 0 warnings): every commit the consistency test, the projects near
+the change (T1, T2, T3, 13N, natural_neon, natural_target/models, data_covariance, angle_mapping,
+thm_coherent_background/toy, 18O_p_a_thm) x 3 bases identical to the reference, and the tests near it.  The comparison
+commit: ctest -LE slow (the two aborts above, fixed; then those tests pass), the eight fits of
+`work/director/fits_vs_base2.sh` identical to `work/b-trial62`, angle_mapping fitted with free abundances
+(`--use-gradient`, `--use-lm`) and T2 sampled (8 walkers x 100 steps, both bases) identical to `b-trial62`, no abort.
+The last commit: all projects x 3 bases 887 / 851 / 887 identical to `tab-t62-1` (51 `run.log` files differ in
+`Segment #` progress lines only); ctest -LE slow 262 of 262; the eight fits identical; the angle_mapping fits and the
+T2 chains identical to `b-trial62` (`work/cnuc2/extra.sh`).  An error injected into `AbundanceSamples::ReadFrom` and
+into the Park wall made park_chi2_fallback, pyazr_natural_target and pyazr_park_gradient fail.
+
+**Open.** The reader's messages of the `<abundances>` block print at the data set-up now (after "Filling Data
+Structures..."), and a rate run does not read the block; no project prints one.  The pair record's `abundance` field
+reads the session's working copy (`api/src/pybind_records.cpp`: the pair fields take the working copy).
+
 ## 2026-11-14 (director, 02:02) — merged: pyazr's one parameter vector, the skills on it, the Fit tab's engine fitters
 
 **Merged into `feature/upgrade-4-data`** with the tree of rehearsal 63 (verified as one tree):

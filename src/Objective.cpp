@@ -102,7 +102,10 @@ class NuisanceTerm : public ObjectiveTerm {
   }
 };
 
-// T6: Park formalism, every level's overlap J kept positive.
+// T6: Park formalism, every level's overlap J = 1 - sum_c gamma_c^2 dS_c/dE kept positive: the sum over the R-matrix
+// levels of (J/kParkNormScale)^2 for J < 0 (zero for every valid parameter set).  A level with J <= 0 has no standard
+// R-matrix counterpart (its Brune reduced widths would be imaginary), and nothing in the level matrix itself keeps a
+// minimizer out of that region, so this is the wall.  The shift functions must be current (CNuc::CalcShiftFunctions).
 class ParkTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -110,13 +113,29 @@ class ParkTerm : public ObjectiveTerm {
   // The sampler: a support, J < 0 has no R-matrix meaning (decision D2); inside it the wall is 0.
   void AddForSampler(const ObjectiveContext &, double &) const override {}
   bool ExcludesForSampler(const ObjectiveContext &c) const override {
-    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && c.compound->ParkNormPenalty() > 0.0;
+    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && Wall(*c.compound) > 0.0;
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
-    const double parkPenalty = c.compound->ParkNormPenalty();
+    const double parkPenalty = Wall(*c.compound);
     chi2 += parkPenalty;
     c.results.objective.park = parkPenalty;
+  }
+
+ private:
+  static double Wall(const CNuc &compound) {
+    double penalty = 0.0;
+    for (int j = 1; j <= compound.NumJGroups(); j++) {
+      const JGroup *group = compound.GetJGroup(j);
+      if (!group->IsInRMatrix()) continue;
+      for (int la = 1; la <= group->NumLevels(); la++) {
+        const ALevel *level = group->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        const double parkNorm = level->GetParkNorm();
+        if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
+      }
+    }
+    return penalty;
   }
 };
 
@@ -146,21 +165,43 @@ class TargetPriorTerm : public ObjectiveTerm {
   Kind kind_;
 };
 
-// T7: isotopic abundances, their priors and the sum-to-one term.
+// T7: isotopic abundances (the samples of DataSet::Abundances at the working copy's values), summed over samples:
+// every entry with a prior adds ((w - w0)/sigma)^2, and each sample whose width s is > 0 adds ((sum w) - c)^2 / s^2,
+// c the sum's centre (1 unless written).
 class AbundanceTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
   std::string Name() const override { return "abundances"; }
   // The sampler: the per-nucleus priors are normalised Gaussian log-priors (ForEachDiagonalPrior); the sum-to-one
   // term, which couples them, is here.
+  // (Adding the full term there counted the per-nucleus priors twice: an abundance's posterior 1/sqrt(2) too narrow.)
   void AddForSampler(const ObjectiveContext &c, double &chi2) const override {
-    if (c.compound->HasAbundanceBlock()) chi2 += c.compound->AbundanceSumPenalty(c.config.abundanceSumSigma);
+    if (c.data->Data().Abundances().Present()) chi2 += Penalty(c, Parts::kSumsOnly);
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (!c.compound->HasAbundanceBlock()) return;
-    const double abundancePenalty = c.compound->AbundancePenalty(c.config.abundanceSumSigma);
+    if (!c.data->Data().Abundances().Present()) return;
+    const double abundancePenalty = Penalty(c, Parts::kPriorsAndSums);
     chi2 += abundancePenalty;
     c.results.objective.abundance = abundancePenalty;
+  }
+
+ private:
+  enum class Parts { kSumsOnly, kPriorsAndSums };
+  static double Penalty(const ObjectiveContext &c, Parts parts) {
+    const AbundanceSamples &samples = c.data->Data().Abundances();
+    const std::vector<double> &values = c.data->AbundanceValues();
+    double penalty = 0.0;
+    for (int s = 1; s <= samples.NumSamples(); s++) {
+      const AbundanceSample &sample = samples.Sample(s);
+      for (int i = 1; parts == Parts::kPriorsAndSums && i <= (int)sample.entries.size(); i++) {
+        const SampleAbundance &e = sample.entries[i - 1];
+        const double w = values[samples.Ordinal(s, i) - 1];
+        if (e.sigma > 0.0 && !e.priorReplaced) penalty += pow((w - e.nominal) / e.sigma, 2.0);
+      }
+      const double sig = samples.SumSigma(s, c.config.abundanceSumSigma);
+      if (sig > 0.0) penalty += pow((samples.Sum(values, s) - sample.sumCentre) / sig, 2.0);
+    }
+    return penalty;
   }
 };
 
@@ -373,9 +414,8 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
           break;
         }
         case ParamKind::Abundance: {
-          SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
-          had = e.sigma > 0.0;
-          e.priorReplaced = true;
+          had = ds.Abundances().Sample(d.sample).entries[d.nucleus - 1].sigma > 0.0;
+          ds.ReplaceAbundancePrior(d.sample, d.nucleus);
           break;
         }
         default:  // levels and THM coherent background: a nuisance prior, skipped by index
@@ -387,8 +427,8 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
   return replaced;
 }
 
-void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
-                     vector_r *jac) {
+void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+                     vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
     residuals.push_back(r);
     if (!jac || !pmap) return;
@@ -406,7 +446,7 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
   };
   // Park: r = J/s for J < 0; dJ/dgamma_c = -2 gamma_c S'_c, dJ/dE = -sum_c gamma_c^2 S''_c (AddParkPenaltyGradient).
   if (config.paramMask & Config::USE_PARK_FORMALISM) {
-    const double s = CNuc::kParkNormScale;
+    const double s = kParkNormScale;
     for (int j = 1; j <= compound->NumJGroups(); j++) {
       const JGroup *jg = compound->GetJGroup(j);
       if (!jg->IsInRMatrix()) continue;
@@ -437,18 +477,19 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
   for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound))
     appendRow(row.r, nullptr, &row.d);
   // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
-  if (compound->HasAbundanceBlock()) {
-    for (int smp = 1; smp <= compound->NumSamples(); smp++) {
-      const double s = compound->SampleSumSigma(smp, config.abundanceSumSigma);
+  const AbundanceSamples &samples = data.Data().Abundances();
+  if (samples.Present()) {
+    for (int smp = 1; smp <= samples.NumSamples(); smp++) {
+      const double s = samples.SumSigma(smp, config.abundanceSumSigma);
       if (!(s > 0.0)) continue;
       std::vector<std::pair<int, double>> direct;
       if (pmap)
-        for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+        for (int k = 1; k <= samples.NumParams(); k++) {
           int sample, nucleus;
-          compound->AbundanceOf(k, sample, nucleus);
+          samples.Of(k, sample, nucleus);
           if (sample == smp) direct.push_back({pmap->AbundanceIndex(k), 1.0 / s});
         }
-      appendRow((compound->AbundanceSum(smp) - compound->GetSample(smp)->sumCentre) / s, nullptr, &direct);
+      appendRow((samples.Sum(data.AbundanceValues(), smp) - samples.Sample(smp).sumCentre) / s, nullptr, &direct);
     }
   }
 }
