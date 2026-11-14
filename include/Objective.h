@@ -30,6 +30,10 @@
  *   T9     the model data (ModelData.h): measured scattering lengths;
  *   T10    the prior parameter covariance.
  */
+/// Scale of Park's J > 0 wall (T6): a level at J = -kParkNormScale costs one unit of chi-squared, so the wall is steep
+/// on the scale of J but smooth.
+constexpr double kParkNormScale = 1.0e-3;
+
 struct ObjectiveContext {
   CNuc *compound;
   WorkingCopy *data;

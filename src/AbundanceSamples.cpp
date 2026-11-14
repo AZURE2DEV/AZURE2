@@ -108,37 +108,6 @@ double AbundanceSamples::Sum(const std::vector<double> &values, int sample) cons
   return sum;
 }
 
-double AbundanceSamples::Penalty(const std::vector<double> &values, double globalSumSigma) const {
-  if (!present_) return 0.0;
-  double penalty = 0.0;
-  for (unsigned int s = 0; s < samples_.size(); s++) {
-    for (int i = 0; i < numNuclei_; i++) {
-      const SampleAbundance &e = samples_[s].entries[i];
-      const double w = values[Ordinal((int)s + 1, i + 1) - 1];
-      if (e.sigma > 0.0 && !e.priorReplaced) penalty += pow((w - e.nominal) / e.sigma, 2.0);
-    }
-    const double sig = this->SumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->Sum(values, (int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
-  }
-  return penalty;
-}
-
-/*!
- * The sum-to-one part of Penalty alone: ((sum_i w_i) - c)^2 / s^2 per sample with s > 0.  The sampler's likelihood
- * uses this, because the per-nucleus priors (w0, sigma) are its normalised Gaussian log-priors
- * (ForEachDiagonalPrior); adding the full Penalty there counted that prior twice and made the posterior width of an
- * abundance 1/sqrt(2) too narrow.
- */
-double AbundanceSamples::SumPenalty(const std::vector<double> &values, double globalSumSigma) const {
-  if (!present_) return 0.0;
-  double penalty = 0.0;
-  for (unsigned int s = 0; s < samples_.size(); s++) {
-    const double sig = this->SumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->Sum(values, (int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
-  }
-  return penalty;
-}
-
 void AbundanceSamples::AddParameters(const std::vector<double> &values, AZUREParams &params) const {
   if (!present_) return;
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();

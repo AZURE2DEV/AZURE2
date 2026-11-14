@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "Objective.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
 #include "GradEnergyTasks.h"
@@ -26,7 +27,6 @@
 #include "THMMatrixFunc.h"
 #include "PointFold.h"
 #include <cstring>
-#include <iostream>
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -81,7 +81,7 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
-  const double s2 = CNuc::kParkNormScale * CNuc::kParkNormScale;
+  const double s2 = kParkNormScale * kParkNormScale;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     const JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
@@ -103,7 +103,7 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 }
 
 /*!
- * Gradient of the abundance penalty (AbundanceSamples::Penalty): the prior
+ * Gradient of the abundance term of the objective (T7): the prior
  * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
  * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */

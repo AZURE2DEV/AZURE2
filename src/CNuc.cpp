@@ -1312,29 +1312,6 @@ void CNuc::InvalidateShiftFunctions(const Config &configure) {
 }
 
 /*!
- * Park formalism: sum over the R-matrix levels of (J/kParkNormScale)^2 for
- * J < 0.  CalcShiftFunctions must have run for the current parameters.  A
- * level with J <= 0 has no standard R-matrix counterpart (its Brune reduced
- * widths would be imaginary), and nothing in the level matrix itself keeps a
- * minimizer out of that region, so this is the wall.
- */
-
-double CNuc::ParkNormPenalty() {
-  double penalty = 0.0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->Group(j);
-    if (!theJGroup->IsInRMatrix()) continue;
-    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      ALevel *theLevel = theJGroup->GetLevel(la);
-      if (!theLevel->IsInRMatrix()) continue;
-      double parkNorm = theLevel->GetParkNorm();
-      if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
-    }
-  }
-  return penalty;
-}
-
-/*!
  * Returns a pointer to the particle pair specified by a position in the PPair vector.
  */
 

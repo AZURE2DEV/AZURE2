@@ -280,7 +280,7 @@ class AZUREAPI {
    * R-matrix level at the given non-fixed RWA parameters, in the order of
    * CNuc::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
    * formalism.  A fit must keep them positive; CalculateChi2RWA adds
-   * CNuc::ParkNormPenalty for any that are not.
+   * Park's wall (the objective's term T6) for any that are not.
    */
   vector_r ParkNorms(const vector_r &rwaParams) const;
 

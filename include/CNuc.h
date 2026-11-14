@@ -132,13 +132,6 @@ class CNuc {
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is
   /// not level-wise (either side standard) or a level has J <= 0.
   bool ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &, int from, int to, const Config &);
-  /// Park formalism: the penalty added to chi-squared for levels whose
-  /// overlap J = 1 - sum gamma^2 dS/dE is not positive, sum (J/kParkNormScale)^2
-  /// over J < 0.  Zero for every valid parameter set, and in Brune mode.
-  double ParkNormPenalty();
-  /// Scale of the Park J > 0 penalty: a level at J = -kParkNormScale costs one
-  /// unit of chi-squared, so the wall is steep on the scale of J but smooth.
-  static constexpr double kParkNormScale = 1.0e-3;
   /// External reduced width amplitude for one channel.
 
   // -- parameter transformations --------------------------------------------

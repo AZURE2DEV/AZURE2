@@ -291,12 +291,12 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
 vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
 
 /*!
- * \brief Gradient of CNuc::ParkNormPenalty with respect to the level energies and
+ * \brief Gradient of Park's J > 0 wall (the objective's term T6) with respect to the level energies and
  * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
  * has J < 0; a no-op outside the Park formalism.
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
-/// Gradient of the isotopic-abundance priors and sum-to-one penalty (AbundanceSamples::Penalty), into the accumulator.
+/// Gradient of the isotopic-abundance priors and sum-to-one penalty (the objective's term T7), into the accumulator.
 void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
 /*!

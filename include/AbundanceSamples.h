@@ -78,11 +78,6 @@ class AbundanceSamples {
   double Value(const std::vector<double> &values, int sample, int nucleus) const;
   /// The sum of the current abundances of one sample.
   double Sum(const std::vector<double> &values, int sample) const;
-  /// The abundance penalty of chi-squared, summed over samples: every entry with a prior contributes
-  /// ((w - w0)/sigma)^2, and each sample whose width s is > 0 contributes ((sum w) - c)^2 / s^2, c its centre.
-  double Penalty(const std::vector<double> &values, double globalSumSigma) const;
-  /// The sum-to-one terms alone (the sampler: the per-nucleus priors are its normalised log-priors).
-  double SumPenalty(const std::vector<double> &values, double globalSumSigma) const;
 
   // -- the abundance block of the parameter vectors ----------------------------------------------------------------
   /// Writes the block into the fit's vector: one parameter per (sample, nucleus) at \p values, with its record, a
