@@ -25,7 +25,7 @@ std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &config
   std::vector<double> sqrtNF;
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
-      sqrtNF.push_back(this->Group(j)->GetLevel(la)->GetSqrtNFFactor());
+      sqrtNF.push_back(levelState_.SqrtNF(j, la));
   std::optional<ObservedLevelTable> table = this->EmptyObservedTable();
   try {
     this->TransformToBrune(configure, Messages::kQuiet, *table);
@@ -36,7 +36,7 @@ std::optional<ObservedLevelTable> CNuc::ObservedOfFitValues(const Config &config
   std::size_t k = 0;
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
-      this->Group(j)->GetLevel(la)->SetSqrtNFFactor(sqrtNF[k++]);
+      levelState_.SetSqrtNF(j, la, sqrtNF[k++]);
   return table;
 }
 
@@ -44,15 +44,15 @@ void CNuc::SetFitLevelParameter(int j, int la, int ch, double value) {
   JGroup *group = this->Group(j);
   ALevel *level = group->GetLevel(la);
   if (ch == 0) {
-    level->SetFitE(value);
+    levelState_.SetE(j, la, value);
   } else {
-    level->SetFitGamma(ch, value);
-    level->SetECGamma(ch, value);
+    levelState_.SetGamma(j, la, ch, value);
+    levelState_.SetECGamma(j, la, ch, value);
   }
   // What FillCompoundFromParams derives from the level's values.
   std::vector<double> g;
-  for (int c = 1; c <= group->NumChannels(); c++) g.push_back(level->GetFitGamma(c));
-  level->SetSqrtNFFactor(SqrtNFFactor(*this, group, level, 1.0, g));
+  for (int c = 1; c <= group->NumChannels(); c++) g.push_back(levelState_.Gamma(j, la, c));
+  levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, group, level, 1.0, g));
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
   if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
 }

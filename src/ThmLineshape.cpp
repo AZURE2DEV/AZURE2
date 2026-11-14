@@ -63,21 +63,30 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma) {
   return std::exp(2.0 * zeta * angle);
 }
 
-double ThmLevelWidth(CNuc *compound, const JGroup *jgroup, const ALevel *level, const Config &configure) {
+double ThmLevelWidth(CNuc *compound, int j, int la, const Config &configure) {
+  const JGroup *jgroup = compound->GetJGroup(j);
+  std::vector<double> gamma(jgroup->NumChannels());
+  for (int ch = 1; ch <= jgroup->NumChannels(); ch++) gamma[ch - 1] = compound->State().Gamma(j, la, ch);
+  return ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+}
+
+double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::vector<double> &gammas,
+                     const Config &configure) {
+  const JGroup *jgroup = compound->GetJGroup(j);
+  const ALevel *level = jgroup->GetLevel(la);
   const int numChannels = jgroup->NumChannels();
   const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
   // Park's amplitudes are the observed ones: Gamma = 2 P gamma^2 with no
   // 1 + sum gamma^2 dS/dE (Brune's gamma^2 / (1 + sum) is Park's gamma^2).
   const bool park = !!(configure.paramMask & Config::USE_PARK_FORMALISM);
-  const double energy = level->GetFitE();
 
 
   double particle = 0.0, radiative = 0.0, normSum = 0.0;
   for (int ch = 1; ch <= numChannels; ch++) {
     const AChannel *channel = jgroup->GetChannel(ch);
     const PPair *pair = compound->GetPair(channel->GetPairNum());
-    double gamma = level->GetFitGamma(ch);
+    double gamma = gammas[ch - 1];
     if (gamma == 0.0) continue;
     double localEnergy = energy - pair->GetSepE() - pair->GetExE();
     char type = channel->GetRadType();

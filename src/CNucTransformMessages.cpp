@@ -137,7 +137,7 @@ void WarnExternalExceedsTotal(const CNuc &compound, const Config &configure, int
 }
 
 void WarnParkNormNotPositive(const CNuc &compound, const Config &configure, int j, int la) {
-  configure.outStream << "**WARNING: Park norm J = " << compound.GetJGroup(j)->GetLevel(la)->GetParkNorm()
+  configure.outStream << "**WARNING: Park norm J = " << compound.State().ParkNorm(j, la)
                       << " is not positive" << std::endl
                       << "    " << LevelLabel(compound, j, la) << std::endl
                       << "  The widths of this level exceed what the channel radii allow; no"

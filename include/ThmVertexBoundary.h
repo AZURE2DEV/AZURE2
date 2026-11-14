@@ -3,6 +3,7 @@
 
 #include "ChannelFunc.h"
 #include "Constants.h"
+#include "LevelState.h"
 #include "azure2/physics/HybridPotential.h"
 
 #include <optional>
@@ -57,7 +58,7 @@ struct ThmShiftMemo {
  *    channel constant of the R matrix is tied to the first level read);
  *  - perlevel: the shift S_c(E_lambda) of each level under Brune (mrmpy
  *    vertex_boundary="per_level"; Tumino et al. 2021 eq. 51) -- the value
- *    CNuc::CalcShiftFunctions stores on the level -- and the channel
+ *    CNuc::CalcShiftFunctions stores in the level state -- and the channel
  *    boundary constant B_c without Brune;
  *  - onshell: the log-derivative of the outgoing wave itself,
  *    L_c(E) = S_c(E) + i P_c(E) at the energy of the point (Tribble et al.
@@ -79,8 +80,10 @@ class ThmVertexBoundary {
   /// The rule of a configuration (perlevel without Brune is CHANNEL_CONSTANT).
   static Rule RuleOf(const Config &configure);
 
-  /// Channel `channel` (1-based) of J group `jgroup`; `pair` is its particle pair.
-  ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, int channel);
+  /// Channel `channel` (1-based) of J group `jgroup` (number `j`, 1-based); `pair` is its particle pair; `state`
+  /// the levels' fit values (CNuc::State), which the object reads while it is used.
+  ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, const LevelState &state, int j,
+                    int channel);
 
   Rule rule() const { return rule_; }
   bool OnShell() const { return rule_ == ON_SHELL; }
@@ -88,15 +91,15 @@ class ThmVertexBoundary {
   /// Index (1-based) of the lowest in-R-matrix level of the J group, 0 if none.
   int LowestLevel() const { return lowest_; }
 
-  /// The real B of `level` (a level of this J group); not for ON_SHELL.
-  double Level(const ALevel *level) const;
+  /// The real B of level `la` (1-based) of this J group; not for ON_SHELL.
+  double Level(int la) const;
   /// The real B of a term without a level; not for ON_SHELL.
   double LevelFree() const { return fixed_; }
 
-  /// B for `level` (nullptr: a term without a level), given the on-shell value.
-  complex At(const ALevel *level, complex onShell) const {
+  /// B for level `la` (1-based; 0: a term without a level), given the on-shell value.
+  complex At(int la, complex onShell) const {
     if (rule_ == ON_SHELL) return onShell;
-    return complex(level ? Level(level) : LevelFree(), 0.0);
+    return complex(la > 0 ? Level(la) : LevelFree(), 0.0);
   }
   /// L_c(E) = S_c(E) + i P_c(E) at c.m. energy E above the pair's threshold (the channel functions keep their last
   /// values, so the call is not const).
@@ -108,6 +111,8 @@ class ThmVertexBoundary {
 
  private:
   Rule rule_;
+  const LevelState *state_;
+  int j_;
   int channel_;
   int l_;
   int two_j_;  ///< the channel's 2J key (PPair::SpinOrbitTwoJ)

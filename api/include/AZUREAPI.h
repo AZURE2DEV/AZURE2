@@ -229,10 +229,6 @@ class AZUREAPI {
    */
   vector_r calculated_conv(int i) const { return calculatedConv_[i]; };
   /*!
-   * Transform RWA parameters to physical values
-   */
-  vector_r TransformRWAParameters(const vector_r &p) const;
-  /*!
    * Transform all RWA parameters to physical values.  Returns the non-fixed
    * ones, or with includeFixed every parameter: a fixed width holds its
    * reduced-width amplitude, so its physical value follows the level's other
@@ -240,9 +236,6 @@ class AZUREAPI {
    * from the whole vector.
    */
   vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false) const;
-  /// As TransformAllRWAParameters, but returns every R-matrix parameter's
-  /// physical value, fixed ones included (the <levels> block of a snapshot).
-  vector_r TransformAllRWAParametersFull(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters

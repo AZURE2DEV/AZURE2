@@ -2,6 +2,54 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-state-2`) — the fit set out of `ALevel` (`LevelState`)
+
+**Measured first** (start 50e1fa7c), calls of the fit set's accessors outside `ALevel.cpp`: 183 in 22 files.
+
+| accessor | calls / files | accessor | calls / files |
+|---|---|---|---|
+| `GetFitGamma` | 54 / 14 | `GetFitE` | 38 / 15 |
+| `SetFitGamma`, `SetFitE` | 8 / 6 each | `GetParkNorm`, `SetParkNorm` | 14 / 9, 2 / 1 |
+| `GetShiftFunction`, `SetShiftFunction` | 11 / 5, 2 / 1 | `GetShiftDerivative`, `...SecondDerivative` | 9 / 5, 4 / 4 |
+| `GetSqrtNFFactor`, `SetSqrtNFFactor` | 6 / 5, 7 / 3 | `GetECGamma`, `SetECGamma` | 4 / 2, 3 / 3 |
+| the two energies' accessors, derivative setters | 7 | `InvalidateShiftFunctions`, `Stamp` | 3 / 2, 3 / 1 |
+
+By file: `AMatrixFunc.cpp` 41, `CNuc.cpp` 28, `RMatrixFunc.cpp` 20, `THMMatrixFunc.cpp` 19, `ChannelSpace.cpp` 13, the
+rest 8 or fewer.
+
+**Done** (two commits, each built with 0 warnings and run on the per-commit set):
+- `LevelState` (`include/LevelState.h`, `src/LevelState.cpp`) holds per level the fit E and γ, the external-capture
+  amplitudes and N_f^½, S_c(E_λ) with its energy, dS/dE, d²S/dE² with its energy, Park's J and a version; `CNuc`
+  holds one (`State() const`), shaped by `Fill`. Its fills write it (`FillCompoundFromParams` and
+  `CalcShiftFunctions` moved to `src/CNucLevelState.cpp`; `TransformIn`, `FillCompoundFromParamsPhysical`,
+  `ECFinalStatesFromFormal`, `SetFitLevelParameter`, `ObservedOfFitValues`' restore); the only public writer is
+  `CopyFitEnergiesAndAmplitudes` (the sub-point-grid copy). All 183 readers read the state; `ALevel` lost the eleven
+  members, their 26 accessors and its stamp, and keeps the set-up data and input values.
+- `ChannelSpace`'s three memos key on (state address, group, level, version); the version generator moved with its
+  `allowed_state.tsv` row (`src/ALevel.cpp` → `src/LevelState.cpp`, same count). `ThmVertexBoundary` takes the state;
+  `ThmLevelWidth` takes E and γ, so the line-shape width derivative perturbs a vector.
+- By a script (regex, `work/cnuc4` scratch): `RMatrixFunc.cpp` (`(compound()->GetJGroup(j)|theJGroup)->GetLevel(L)->
+  GetFitGamma(C)` → `state.Gamma(j, L, C)`, same for `GetFitE`: 24 lines with the hand edits), `AZUREGrad.cpp` (8
+  lines) and `Objective.cpp` (5 lines) (`level->GetX(c)` → `compound->State().X(j, la, c)`); the rest by hand.
+- Deleted without a caller, writing the fit set: `CNuc::InvalidateShiftFunctions`, `AZUREAPI::TransformRWAParameters`,
+  `AZUREAPI::TransformAllRWAParametersFull`. Left (no fit set): `Rebuild`, `SetRadius`, `SetData`, `SetExtrap`,
+  `GetNormalizationIndices`, `GetEnergyShiftIndices`, `norms_errors`, `GetCurrentNorms`,
+  `HybridPotentialSettings::ConfiguredPairs`.
+- `CNuc.cpp` 1355 → 1135 lines; size rows lowered to the file + 20: `CNuc.cpp` 1155, `AZUREAPI.cpp` 1554,
+  `AZURECalc.cpp` 1437 (`AZURE2.cpp` 1620 lines, row 1639 kept: within the margin).
+
+**Verified how** (build `work/b-cnuc4`, 2 threads): consistency test; all projects × 3 bases against `tab-t66-1`
+(tag `tab-cnuc4-1`): 887 / 851 / 887 identical; the eight fits of `fits_vs_base2.sh` identical to `work/b-trial66`;
+`angle_mapping` (gradient, LM) and T2 sampled in both bases identical; T2 Park gradient, 13N Park LM, T2 formal
+gradient fits identical; `OMP_NUM_THREADS=1 ctest -LE slow -j1` without `gsl_quiet`, `pyazr_park_gradient`,
+`pyazr_parallel_points`, `pyazr_upgrade_thread_independence`, `channel_table_unit`: 264 of 264 passed (3221 s). Injected: the
+version never changing (`LevelState::Touch` empty) made the three Park/formal fits differ (13, 7, 13 files); removed.
+
+**Open.** Steps 4 and 5 of `cnuc_split.md` §12.3 (the `LevelState` pool, `LevelInputs`, `CompoundSystem`). The two
+defects kept as they were: the RWA chain's snapshot `parameters.out` (`StartObservedLevels`) and the sub-point-grid
+copy's stale N_f^½ (both unchanged; the copy still takes only E and γ). `pyazr_ec_relativistic` (label slow) fails
+with this build and with `b-trial65` alike: it parses a float from a line that now prints `Objective(...)`.
+
 ## 2026-11-14 (director, 10:38) — merged: the engine's fit path
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 67 (a true merge of the rehearsal branch; its tree

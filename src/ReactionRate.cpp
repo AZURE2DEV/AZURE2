@@ -104,15 +104,7 @@ RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.entranceKey = entranceKey;
   try {
-    std::unique_ptr<CNuc> g(compound->Clone());
-    for (int j = 1; j <= compound->NumJGroups(); j++)
-      for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
-        const ALevel *from = compound->GetJGroup(j)->GetLevel(la);
-        ALevel *to = g->MutableLevel(j, la);
-        to->SetFitE(from->GetFitE());
-        for (int ch = 1; ch <= compound->GetJGroup(j)->NumChannels(); ch++)
-          to->SetFitGamma(ch, from->GetFitGamma(ch));
-      }
+    std::unique_ptr<CNuc> g(compound->Clone());  // the copy holds the compound's fit values (CNuc::State)
     g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
     gc.inputWidthsArePhysical = true;
     return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, g.get());

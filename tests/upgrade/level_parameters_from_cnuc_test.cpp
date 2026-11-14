@@ -196,12 +196,19 @@ void CheckProject(const std::string &name, const std::string &azr) {
   ObservedLevelTable outF;
   {
     CNuc &cn = refF->compound;
+    std::vector<int> numLevels, numChannels;
+    for (int j = 1; j <= cn.NumJGroups(); j++) {
+      numLevels.push_back(cn.GetJGroup(j)->NumLevels());
+      numChannels.push_back(cn.GetJGroup(j)->NumChannels());
+    }
+    LevelState loaded(numLevels, numChannels);
     for (int j = 1; j <= cn.NumJGroups(); j++)
       for (int la = 1; la <= cn.GetJGroup(j)->NumLevels(); la++) {
-        ALevel *lev = cn.MutableLevel(j, la);
-        lev->SetFitE(lev->GetE());
-        for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) lev->SetFitGamma(ch, lev->GetGamma(ch));
+        const ALevel *lev = cn.GetJGroup(j)->GetLevel(la);
+        loaded.SetE(j, la, lev->GetE());
+        for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) loaded.SetGamma(j, la, ch, lev->GetGamma(ch));
       }
+    cn.CopyFitEnergiesAndAmplitudes(loaded);
     outF = cn.TransformOut(refF->cfg);
   }
 
@@ -237,7 +244,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     {
       const JGroup *g = refP->compound.GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++)
-        parkJ.add(pp.park_norm[la], g->GetLevel(map.levelOfBlockLevel[b][la])->GetParkNorm(), 1.0);
+        parkJ.add(pp.park_norm[la], refP->compound.State().ParkNorm(map.groupOfBlock[b], map.levelOfBlockLevel[b][la]), 1.0);
     }
 
     // (a) formal.  External capture as the engine's TransformIn computes it: final states in earlier groups are
