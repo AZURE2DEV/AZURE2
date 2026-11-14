@@ -6,6 +6,7 @@
 // showing the χ² the engine computes after it, a refusal shown in the engine's words.
 
 import { pathOf } from "../api.js";
+import { pairColumns } from "../lists.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, h, section } from "../ui.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel, recordRoute } from "./records.js";
@@ -72,20 +73,11 @@ export async function render(ctx, el, args) {
 
   // -- pairs
   const routes = ctx.describe?.routes || [];
-  const pairRows = pairs.map((p) => ({ ...p, j_light: p.two_j_light, j_heavy: p.two_j_heavy }));
+  if (!ctx.kinds) ctx.kinds = await ctx.api.get("/api/kinds");
   const pairTable = renderTable(document, {
     rowKey: (r) => String(r.key), label: "pairs", withFilter: false, selected: args[0] === "pair" ? args[1] : null,
-    caption: "Particle pairs of <levels>",
-    columns: [{ key: "key", title: "key", numeric: true }, { key: "label", title: "pair" },
-      { key: "kind", title: "kind", numeric: true, doc: "0 particle, 10 photon, 20 beta (the engine's pair type)" },
-      { key: "j_light", title: "2J₁", numeric: true }, { key: "j_heavy", title: "2J₂", numeric: true },
-      { key: "light_mass", title: "M₁", unit: "u", numeric: true }, { key: "heavy_mass", title: "M₂", unit: "u",
-        numeric: true }, { key: "separation_energy", title: "S", unit: "MeV", numeric: true },
-      { key: "heavy_excitation", title: "E_x2", unit: "MeV", numeric: true },
-      { key: "radius", title: "a", unit: "fm", numeric: true },
-      { key: "binding_energy", title: "B (THM)", unit: "MeV", numeric: true,
-        doc: "the THM binding energy of the Trojan horse whose transferred particle is the light partner (0: none)" }],
-    rows: pairRows, onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
+    caption: "Particle pairs of <levels>", columns: pairColumns(ctx.kinds.pairs?.fields, pairs),
+    rows: pairs, onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
   });
   const pairEdit = h("div.pair-edit");
   const pairsBox = section("Pairs", pairTable.element,
@@ -168,8 +160,7 @@ export async function render(ctx, el, args) {
     columns: [{ key: "jpi", title: "Jπ" }, { key: "energy", title: "E_λ", unit: "MeV", numeric: true,
       value: (r) => r.energy, format: (v, r) => r.energy_text },
     { key: "efix", title: "energy" }, { key: "on", title: "active" }, { key: "n", title: "channels", numeric: true },
-    { key: "nucleus", title: "nucleus", format: (v) => (Array.isArray(v) ? `Z ${v[0]}, A ${v[1]}` : "") },
-    { key: "label", title: "label" }],
+    { key: "nucleus", title: "nucleus", format: (v) => (Array.isArray(v) ? `Z ${v[0]}, A ${v[1]}` : "") }],
     rows: levelRows,
     onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.label)}`),
   });

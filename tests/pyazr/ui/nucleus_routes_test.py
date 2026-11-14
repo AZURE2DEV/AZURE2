@@ -12,7 +12,11 @@ against the same pyazr call made directly on a copy of the text:
   4. a channel's "width is an amplitude" flag (PATCH .../channels/{pair}/{l}/{s}): the text equals
      Project.set_channel's; a photon channel's refusal comes with the engine's message;
   5. the channels a J^pi allows (GET /api/project/allowed_channels) equal Project.allowed_channels; a new level with
-     them ("allowed") gives the text of Project.add_level.
+     them ("allowed") gives the text of Project.add_level;
+  6. the lists in words on T2: the pairs carry their partners by name, J^pi and kind in words (the engine's label
+     split at its "+"), every field of a pair has its words in pyazr.kinds()["pairs"]; the references
+     (GET /api/project/references) equal Project.references; a record the engine does not describe (a target) is
+     refused by GET /api/project/describe/{name} with the records that use it, not answered with another entry.
 
 Run: python3 tests/pyazr/ui/nucleus_routes_test.py
 """
@@ -166,3 +170,23 @@ def test_allowed_channels_and_a_new_level(t1):
 
 if __name__ == "__main__":
     uitest.run(__file__)
+
+
+def test_lists_in_words_pairs_references_description(t2):
+    import pyazr
+    pairs = t2.get("/api/project/pairs").json()
+    assert [(p["light_name"], p["heavy_name"], p["light_jpi"], p["heavy_jpi"], p["kind_name"]) for p in pairs][:2] == [
+        ("p", "15N", "1/2+", "1/2-", "particle"), ("a", "12C", "0+", "0+", "particle")]
+    words = pyazr.kinds()["pairs"]
+    assert set(pairs[0]) == set(words["fields"]), "every field of a pair has its words"
+    assert all(f["title"] and "_" not in f["title"] for f in words["fields"].values())
+    assert set(words["partner_fields"]) == {"J", "parity", "Z", "mass", "g"}
+    direct = pyazr.Project.open(t2.path)
+    references = t2.get("/api/project/references").json()
+    assert references == direct.references()
+    assert {"record": "s01_int_thin", "field": "target", "name": "tgt_s01_int_thin", "epoch": ""} in references
+    refused = t2.get("/api/project/describe/tgt_s01_int_thin")
+    assert refused.status_code >= 400 and "s01_int_thin.target" in refused.text, refused.text
+    described = t2.get("/api/project/describe/s01_int_thin").json()
+    assert described["name"] == "s01_int_thin"
+    assert set(pyazr.kinds()["description"]["fields"]) <= set(described) | {"angle_window_deg"}

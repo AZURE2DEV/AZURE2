@@ -110,6 +110,7 @@ table.grid th { position: sticky; top: 0; background: var(--panel); font-weight:
   border-bottom: 1px solid var(--line); }
 table.grid th[aria-sort="ascending"]::after { content: " ▲"; font-size: 9px; }
 table.grid th[aria-sort="descending"]::after { content: " ▼"; font-size: 9px; }
+table.grid td.clip { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; }
 table.grid td.wrap { white-space: normal; min-width: 20ch; overflow-wrap: break-word; }
 table.grid .num { text-align: right; font-family: var(--font-mono); font-size: 12px; }
 table.grid th.num { font-family: var(--font-ui); font-size: 13px; }
@@ -277,3 +278,8 @@ table.settings-group caption { text-align: left; font-weight: 600; padding: 4px 
 table.settings-group th { text-align: left; font-weight: 500; width: 26%; vertical-align: top; padding: 4px 8px 4px 0; }
 table.settings-group td { vertical-align: top; padding: 4px 8px 4px 0; border-top: 1px solid var(--grid); }
 table.settings-group th { border-top: 1px solid var(--grid); }
+
+/* the lists of a group of records, one per kind (lists.js) */
+.kind-list + .kind-list { margin-top: 10px; }
+.kind-list h3 { margin: 2px 0 0; font-size: 14px; }
+.kind-list .kind-doc { margin: 0 0 4px; }

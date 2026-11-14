@@ -91,6 +91,79 @@ class ProjectPair:
     heavy_parity: int
     light_parity: int = 1
     binding_energy: float = 0.0
+    light_name: str = ""
+    heavy_name: str = ""
+    light_jpi: str = ""
+    heavy_jpi: str = ""
+    kind_name: str = ""
+
+    BUILT_BY = "Project.pairs()"
+    # The words of each field (pyazr.kinds()["pairs"]): ``title`` (the old setup program's column head where it had
+    # the column), ``unit``, ``doc``; ``list``: a column of the list of pairs; ``rare``: a column shown only where a
+    # pair sets it (a value other than 0).
+    FIELDS = {
+        "key": {"title": "Key", "unit": "", "doc": "the pair's key in <levels> (data sets and levels name it)"},
+        "label": {"title": "Pair", "unit": "", "doc": "light + heavy partner, as the engine names the pair"},
+        "light": {"title": "Light (Z, A)", "unit": "", "doc": "the light partner's charge and mass numbers"},
+        "light_name": {"title": "Light particle", "unit": "", "doc": "the light partner", "list": True},
+        "light_jpi": {"title": "Light Jπ", "unit": "", "doc": "the light partner's spin and parity",
+                      "list": True},
+        "light_mass": {"title": "Light M", "unit": "u", "doc": "the light partner's mass", "list": True},
+        "heavy": {"title": "Heavy (Z, A)", "unit": "", "doc": "the heavy partner's charge and mass numbers"},
+        "heavy_name": {"title": "Heavy particle", "unit": "", "doc": "the heavy partner", "list": True},
+        "heavy_jpi": {"title": "Heavy Jπ", "unit": "", "doc": "the heavy partner's spin and parity",
+                      "list": True},
+        "heavy_mass": {"title": "Heavy M", "unit": "u", "doc": "the heavy partner's mass", "list": True},
+        "light_excitation": {"title": "Light excitation energy", "unit": "MeV",
+                             "doc": "the light partner's excitation energy", "list": True, "rare": True},
+        "heavy_excitation": {"title": "Excitation energy", "unit": "MeV",
+                             "doc": "the heavy partner's excitation energy (the final level of a photon pair)",
+                             "list": True},
+        "separation_energy": {"title": "Separation energy", "unit": "MeV",
+                              "doc": "S: the pair opens at E_x = S + the partners' excitation energies",
+                              "list": True},
+        "kind": {"title": "Pair type number", "unit": "",
+                 "doc": "0 particles, 10 photon, 20 beta (the <levels> column)"},
+        "kind_name": {"title": "Pair type", "unit": "", "doc": "particle, photon or beta", "list": True},
+        "threshold": {"title": "Threshold", "unit": "MeV", "doc": "the compound nucleus's E_x where the pair opens"},
+        "radius": {"title": "Channel radius", "unit": "fm", "doc": "the matching radius of the R-matrix",
+                   "list": True},
+        "two_j_light": {"title": "Light 2J", "unit": "", "doc": "twice the light partner's spin"},
+        "two_j_heavy": {"title": "Heavy 2J", "unit": "", "doc": "twice the heavy partner's spin"},
+        "heavy_parity": {"title": "Heavy parity", "unit": "", "doc": "+1 or -1"},
+        "light_parity": {"title": "Light parity", "unit": "", "doc": "+1 or -1"},
+        "binding_energy": {"title": "THM binding energy", "unit": "MeV",
+                           "doc": "B of the Trojan horse whose transferred particle is the light partner (0: none)",
+                           "list": True, "rare": True},
+    }
+    # The fields of a new pair's partner (add_pair's dicts ``light`` and ``heavy``), with the same words; ``values``
+    # where the field is a choice.
+    PARTNER_FIELDS = {
+        "J": {"title": "Spin J", "unit": "", "doc": "the partner's spin, a multiple of 1/2 (1/2, 0.5, 1, ...)"},
+        "parity": {"title": "Parity", "unit": "", "doc": "the partner's parity", "values": [1, -1],
+                   "labels": ["+", "-"]},
+        "Z": {"title": "Z", "unit": "", "doc": "the partner's charge number"},
+        "mass": {"title": "M", "unit": "u", "doc": "the partner's mass"},
+        "g": {"title": "g-factor", "unit": "", "doc": "the partner's g-factor (magnetic moment / (J nuclear "
+              "magnetons)); 0 when not needed", "default": 0},
+    }
+    # add_pair's kinds, in the order the <levels> numbers them.
+    KINDS = {"particle": 0, "photon": 10, "beta": 20}
+
+
+_KIND_NAMES = {number: name for name, number in ProjectPair.KINDS.items()}
+
+
+def _partner_names(label):
+    """The light and the heavy partner as the engine's pair label names them (``"a+12C[4.43891]"``: the light
+    partner, then "+", then the heavy one; no partner's name holds a "+")."""
+    light, _, heavy = label.partition("+")
+    return light, heavy
+
+
+def _jpi(two_j, parity):
+    """J^pi as a level writes it: ``"1/2+"``, ``"0+"``."""
+    return (f"{two_j // 2}" if two_j % 2 == 0 else f"{two_j}/2") + ("+" if parity > 0 else "-")
 
 
 def _level_name(level):
@@ -132,7 +205,7 @@ def _partner(which, d):
     """(2j, parity, Z, mass, g) of a pair partner given as ``{J, parity, Z, mass, g}``."""
     if not isinstance(d, dict) or not {"J", "parity", "Z", "mass"} <= set(d):
         raise ValueError(f"{which} is a dict {{J, parity, Z, mass (u), g (default 0)}}, not {d!r}")
-    unknown = set(d) - {"J", "parity", "Z", "mass", "g"}
+    unknown = set(d) - set(ProjectPair.PARTNER_FIELDS)
     if unknown:
         raise ValueError(f"{which}: unknown keys {sorted(unknown)} (the keys: J, parity, Z, mass, g)")
     return (_two_s(d["J"]), int(d["parity"]), int(d["Z"]), float(d["mass"]), float(d.get("g", 0.0)))
@@ -189,7 +262,9 @@ class NuclearPart:
         return [ProjectPair(d["key"], d["label"], d["kind"], tuple(d["light"]), tuple(d["heavy"]), d["light_mass"],
                      d["heavy_mass"], d["light_excitation"], d["heavy_excitation"], d["separation_energy"],
                      d["threshold"], d["radius"], d["two_j_light"], d["two_j_heavy"], d["heavy_parity"],
-                     d["light_parity"], d["binding_energy"])
+                     d["light_parity"], d["binding_energy"], *_partner_names(d["label"]),
+                     _jpi(d["two_j_light"], d["light_parity"]), _jpi(d["two_j_heavy"], d["heavy_parity"]),
+                     _KIND_NAMES.get(d["kind"], str(d["kind"])))
                 for d in self._level_table()["pairs"]]
 
     def reaction(self, entrance, exit):
@@ -301,7 +376,7 @@ class NuclearPart:
         "pair row": inactive, level ID 0), which :meth:`levels` does not list and :meth:`add_level` removes once a
         level names the pair.  Every number is checked by the engine (:class:`pyazr.FormatError` with the reason);
         a key in use is refused."""
-        kinds = {"particle": 0, "photon": 10, "beta": 20}
+        kinds = ProjectPair.KINDS
         if kind not in kinds:
             raise ValueError(f"kind is one of {', '.join(kinds)}, not {kind!r}")
         if kind == "photon" and light is not None:

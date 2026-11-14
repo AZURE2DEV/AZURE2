@@ -91,7 +91,8 @@ export function columnHead(column) {
 
 /**
  * Build a table element.
- *   columns: [{key, title, unit, numeric, digits, format(v,row), value(row), render(row) -> Node, sortable}]
+ *   columns: [{key, title, unit, doc, numeric, digits, format(v,row), value(row), render(row) -> Node, sortable,
+ *     wrap (a long text wraps), clip (a long text is cut, the whole on hover)}]
  *   rows: the data; rowKey(row): a row's identity; selected: the key of the selected row
  *   onSelect(row): a row chosen by click, Enter or the arrow keys; filter: the initial filter text
  *   caption: the table's caption (read by screen readers, shown above it)
@@ -173,6 +174,7 @@ export function renderTable(doc, { columns, rows, rowKey = (r) => r.name, select
         const td = doc.createElement("td");
         if (c.numeric) td.className = "num";
         if (c.wrap) td.className = "wrap";
+        if (c.clip) td.className = "clip";
         if (c.render) {
           const node = c.render(row);
           if (node) td.appendChild(node);
@@ -180,6 +182,7 @@ export function renderTable(doc, { columns, rows, rowKey = (r) => r.name, select
           td.textContent = cellText(row, c);
           const raw = c.value ? c.value(row) : row[c.key];
           if (c.digits && typeof raw === "number") td.title = String(raw);
+          if (c.clip) td.title = td.textContent;  // a long text is cut at the column's width; the whole on hover
         }
         tr.appendChild(td);
       }
@@ -189,7 +192,9 @@ export function renderTable(doc, { columns, rows, rowKey = (r) => r.name, select
       });
       body.appendChild(tr);
     }
-    count.textContent = shown.length === data.length ? `${data.length} rows` : `${shown.length} of ${data.length} rows`;
+    const rowsOf = (n) => `${n} row${n === 1 ? "" : "s"}`;
+    count.textContent = shown.length === data.length ? rowsOf(data.length)
+      : `${shown.length} of ${rowsOf(data.length)}`;
   }
   function choose(row) {
     current = rowKey(row);

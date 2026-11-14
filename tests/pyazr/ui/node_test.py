@@ -2,8 +2,8 @@
 description of forms.js, sorting and filtering of tables.js, the revision and error handling of api.js, the plot
 table of plots.js, the Fit tab's rows, job form and progress views of fitting.js, the Physics tab's rules of
 physicsform.js.  The engine's schema, the server's job table and the function tables (the physics rows, the
-stopping rows, the session's rows, the bound of a request) are written to files for them (AZURE2_UI_SCHEMA, AZURE2_UI_JOBS,
-AZURE2_UI_FUNCTIONS).
+stopping rows, the session's rows, the bound of a request) and pyazr's tables of a pair's and a description's fields are
+written to files for them (AZURE2_UI_SCHEMA, AZURE2_UI_JOBS, AZURE2_UI_FUNCTIONS, AZURE2_UI_KINDS).
 
 Needs ``node`` (version 18 or later: ``node --test``) on PATH or named by the environment variable NODE; without it,
 or without the engine module, prints ``skip: <reason>`` and exits 77.  Nothing is installed: the tests use node's own
@@ -49,7 +49,11 @@ def main():
             json.dump({"tables": [list(pyazr.kinds()["physics"].values()), list(pyazr.kinds()["stopping"].values()),
                                   list(session_rows().values())],
                        "max_elements": MAX_ELEMENTS}, f)
-        env = dict(os.environ, AZURE2_UI_SCHEMA=schema, AZURE2_UI_JOBS=jobs, AZURE2_UI_FUNCTIONS=functions)
+        kinds = os.path.join(tmp, "kinds.json")
+        with open(kinds, "w") as f:
+            json.dump({k: pyazr.kinds()[k] for k in ("pairs", "description")}, f)
+        env = dict(os.environ, AZURE2_UI_SCHEMA=schema, AZURE2_UI_JOBS=jobs, AZURE2_UI_FUNCTIONS=functions,
+                   AZURE2_UI_KINDS=kinds)
         proc = subprocess.run([node, "--test", *tests], env=env, capture_output=True, text=True, timeout=300)
     out = proc.stdout + proc.stderr
     failed = [line for line in out.splitlines() if line.startswith("not ok")]

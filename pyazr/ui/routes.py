@@ -88,6 +88,9 @@ ROUTES = (
     Route("GET", "/api/project/describe/{name}", P, "pyazr.Project.describe",
           "What the engine makes of one record.", args=("name",), fixed={"as_json": True}),
     Route("GET", "/api/project/records", P, "pyazr.Project.records", "Every record: kind, name, line, fields."),
+    Route("GET", "/api/project/references", P, "pyazr.Project.references",
+          "Every reference of a record to another (record, field, name, epoch): which data sets use a target, a "
+          "beam, a detector, a shared normalization or energy scale."),
     Route("POST", "/api/project/records", P, "pyazr.Project.add",
           "Add a record: kind, name, fields ({key: text or number or list}).", args=("kind", "name"),
           spread="fields"),
