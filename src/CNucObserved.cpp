@@ -44,14 +44,14 @@ void CNuc::SetFitLevelParameter(int j, int la, int ch, double value) {
   JGroup *group = this->Group(j);
   ALevel *level = group->GetLevel(la);
   if (ch == 0) {
-    level->SetFitE(value);
+    levelState_.SetE(j, la, value);
   } else {
-    level->SetFitGamma(ch, value);
+    levelState_.SetGamma(j, la, ch, value);
     level->SetECGamma(ch, value);
   }
   // What FillCompoundFromParams derives from the level's values.
   std::vector<double> g;
-  for (int c = 1; c <= group->NumChannels(); c++) g.push_back(level->GetFitGamma(c));
+  for (int c = 1; c <= group->NumChannels(); c++) g.push_back(levelState_.Gamma(j, la, c));
   level->SetSqrtNFFactor(SqrtNFFactor(*this, group, level, 1.0, g));
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
   if (captureMaskSetup_) this->FormalCaptureMasksFromParams();

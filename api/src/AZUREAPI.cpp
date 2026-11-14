@@ -913,7 +913,7 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
     const JGroup *jg = localCompound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++)
-      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(jg->GetLevel(la)->GetParkNorm());
+      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(localCompound->State().ParkNorm(j, la));
   }
   return out;
 }

@@ -91,7 +91,7 @@ The rule and its check
   ``tests/consistency/state_scan.py``). A row whose reason starts with
   ``table:`` is permanent: GSL's process-wide error handler, the Coulomb
   tables loaded from files, the cache of input files, the locks of
-  process-wide output streams, the stamp generator of ``ALevel``. A row whose
+  process-wide output streams, the version generator of ``LevelState``. A row whose
   reason is ``pending`` names state still to be moved to its owner: the pools
   and the gradient memo of ``AZURECalc``, the sampler's lazily filled layout
   in ``AZURECalcMCMC``, the session buffer and nuisance objects of

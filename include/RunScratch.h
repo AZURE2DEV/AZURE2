@@ -21,8 +21,8 @@ namespace azure2 {
  * function at those arguments (GSL or own Coulomb functions, a nuclear potential, the Coulomb table, relativistic
  * kinematics).  The pooled copies of a fit (evaluation, gradient, residual Jacobian) need the same values at the
  * same parameters.  An entry is what the computation returns, so a hit changes nothing.  The Coulomb table is fixed
- * within a run (PPair::FunctionSettings), so the key holds whether it is used, not its file.  Cleared by
- * CNuc::InvalidateShiftFunctions (a new nuclear potential) and when it grows past kMax.
+ * within a run (PPair::FunctionSettings), so the key holds whether it is used, not its file.  Cleared when it grows
+ * past kMax.
  */
 struct ShiftDerivativeMemo {
   struct Key {

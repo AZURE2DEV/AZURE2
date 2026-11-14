@@ -404,6 +404,12 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   if (this->NumNuclei() > 1)
     for (int j = 1; j <= this->NumJGroups(); j++) this->Group(j)->SetNucleusLabelled(true);
   this->BuildSystems(configure);
+  std::vector<int> numLevels, numChannels;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    numLevels.push_back(this->Group(j)->NumLevels());
+    numChannels.push_back(this->Group(j)->NumChannels());
+  }
+  levelState_ = LevelState(numLevels, numChannels);
 
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
@@ -689,7 +695,7 @@ bool CNuc::TransformIn(const Config &configure) {
         // The bound-state normalization of an external-capture final state is defined with Brune's reduced widths
         // gamma_obs^2 / J, so with Park's amplitudes it becomes 1 / sqrt(J + sum_c A_c gamma_obs^2) (see
         // CalcShiftFunctions).
-        if (park) theLevel->SetParkNorm(parkNorm);
+        if (park) levelState_.SetParkNorm(j, la, parkNorm);
         const std::vector<double> g(amp.gamma.begin() + lb * nc, amp.gamma.begin() + (lb + 1) * nc);
         for (std::size_t k = 0; k < nc; k++) theLevel->SetGamma((int)k + 1, g[k]);
         theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
@@ -865,32 +871,6 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
 }
 
 /*!
- * Fills the CNuc object from the Minuit parameter array.
- */
-
-void CNuc::FillCompoundFromParams(const vector_r &params) {
-  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, params);  // GammaDecayMap.h
-  int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      ALevel *level = this->Group(j)->GetLevel(la);
-      level->SetFitE(p[i]);
-      i++;
-      std::vector<double> g;
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
-        level->SetFitGamma(ch, p[i]);
-        level->SetECGamma(ch, p[i]);
-        g.push_back(p[i]);
-        i++;
-      }
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
-    }
-  }
-  if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
-  if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
-}
-
-/*!
  * Performs the final parameter transformations from formal to physical parameters.
  */
 
@@ -916,8 +896,8 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, Observed
     this->CalcShiftFunctions(configure);
     for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-        ALevel *theLevel = this->Group(j)->GetLevel(la);
-        if (messages == Messages::kPrint && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
+        const ALevel *theLevel = this->Group(j)->GetLevel(la);
+        if (messages == Messages::kPrint && theLevel->IsInRMatrix() && levelState_.ParkNorm(j, la) <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
       }
   }
   // Every level first as a copy of its fit values; the formal basis then converts the levels of the R-matrix.
@@ -925,10 +905,10 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, Observed
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
       const ALevel *theLevel = this->Group(j)->GetLevel(la);
       ObservedLevel &out = table.Level(j, la);
-      out.E = theLevel->GetFitE();
+      out.E = levelState_.E(j, la);
       out.iterations = 0;
       out.sqrtNF = theLevel->GetSqrtNFFactor();
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) out.gamma[ch - 1] = theLevel->GetFitGamma(ch);
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) out.gamma[ch - 1] = levelState_.Gamma(j, la, ch);
     }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
@@ -943,8 +923,8 @@ void CNuc::TransformToBrune(const Config &configure, Messages messages, Observed
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma, B(nc);
       for (int la : levels) {
-        E.push_back(theJGroup->GetLevel(la)->GetFitE());
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetFitGamma((int)k + 1));
+        E.push_back(levelState_.E(j, la));
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(j, la, (int)k + 1));
       }
       for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
       const phys::LevelSet converted = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
@@ -1055,191 +1035,6 @@ vector_r CNuc::GetTransformParams(const ObservedLevelTable &table) const {
 }
 
 /*!
- * This function is called for each iteration to calculate the shift
- * functions at new level energies when the Brune parametrization is used.
- *
- * In the Park formalism the first and second energy derivatives at the level
- * energies are numerical (ChannelFunc::ShiftDerivative, CoulFunc::PEShift_d2E,
- * ShftFunc), four
- * and five more shift functions per channel and level, most of a serial
- * evaluation at new parameters.  They are taken after the shift functions, for
- * all levels at once and in parallel; the Coulomb functions are computed at
- * every call (physics/coulomb, no memo), so the values do not depend on the
- * number of threads.  Channels of a level that differ only in
- * the channel spin share one derivative, and the working copies of a fit share
- * them through the run's exact-argument memo (RunScratch::shiftDerivatives).
- */
-
-void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
-  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  struct Derivative {
-    ALevel *level;
-    PPair *pair;
-    int ch, l, two_j;  ///< two_j: the channel's 2J key (PPair::SpinOrbitTwoJ)
-    double energy;
-    bool first, second;
-    double d1, d2;
-    int source;  ///< an earlier entry of the same level, pair and l (another channel spin), or -1
-  };
-  std::vector<Derivative> derivatives;
-  struct Moved {
-    JGroup *group;
-    ALevel *level;
-    double energy;
-    bool recompute, second;
-  };
-  std::vector<Moved> levels;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    if (this->Group(j)->IsInRMatrix()) {
-      JGroup *theJGroup = this->Group(j);
-      for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-        ALevel *theLevel = theJGroup->GetLevel(la);
-        if (theLevel->IsInRMatrix()) {
-          const double levelEnergy = theLevel->GetFitE();
-          // The shift functions depend on the level energy alone, and a
-          // minimizer moves one parameter at a time, so most levels have not
-          // moved since the last call.  Park's J below depends on the widths
-          // too and is always refreshed.
-          const bool recompute = !theLevel->ShiftFunctionsValidAt(levelEnergy);
-          // d^2S/dE^2 (Park) enters only the gradient: the numerical second
-          // derivative costs five shift functions per channel, so a chi-squared
-          // alone leaves it out, and a later call that asks for it fills it in.
-          const bool second = park && secondDerivatives && !theLevel->ShiftSecondDerivativesValidAt(levelEnergy);
-          const int firstOfLevel = (int)derivatives.size();
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            PPair *thePair = this->Pair(theChannel->GetPairNum());
-            if (thePair->GetPType() == 0) {
-              if (!recompute && !second) continue;
-              int lValue = theChannel->GetL();
-              const bool parkP = park && theChannel->GetRadType() == 'P';
-              double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-              if (recompute) {
-                // S as everywhere else (ChannelFunc: continuous through threshold).
-                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
-              }
-              if (parkP && (recompute || second)) {
-                // Channels that differ only in the channel spin share the derivative.
-                int source = -1;
-                for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
-                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue && derivatives[k].two_j == thePair->SpinOrbitTwoJ(theJGroup->GetJ())) source = k;
-                derivatives.push_back({theLevel, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, recompute, second, 0.0, 0.0, source});
-              }
-            } else {
-              theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
-            }
-          }
-          levels.push_back({theJGroup, theLevel, levelEnergy, recompute, second});
-        }
-      }
-    }
-  }
-
-  // Park: dS/dE and d^2S/dE^2, in parallel (see above); a GSL error is
-  // carried out of the parallel region and rethrown.
-  const bool gslCoulomb = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
-  const int numDerivatives = (int)derivatives.size();
-  azure2::ShiftDerivativeMemo &memo = configure.scratch->shiftDerivatives;
-  std::exception_ptr error;
-#ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic, 1) if (numDerivatives > 1 && !omp_in_parallel())
-#endif
-  for (int k = 0; k < numDerivatives; k++) {
-    try {
-      Derivative &d = derivatives[k];
-      if (d.source >= 0) continue;
-      const double threshold = d.pair->GetSepE() + d.pair->GetExE();
-      const double resonanceEnergy = d.energy - threshold;
-      CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
-                              theCoulombFunction.UsesTable(), d.pair->FunctionSettings().relativistic, d.pair->GetRedMass(),
-                              d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
-      bool need1 = d.first, need2 = d.second;
-      {
-        std::lock_guard<std::mutex> lock(memo.mutex);
-        auto it = memo.values.find(key);
-        if (it != memo.values.end()) {
-          if (need1 && it->second.has1) {
-            d.d1 = it->second.d1;
-            need1 = false;
-          }
-          if (need2 && it->second.has2) {
-            d.d2 = it->second.d2;
-            need2 = false;
-          }
-        }
-      }
-      if (!need1 && !need2) continue;
-      // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
-      // under Brune); d^2S/dE^2 from the branch the level is on.
-      if (need1) {
-        ChannelFunc channelFunc(d.pair, gslCoulomb);
-        d.d1 = channelFunc.ShiftDerivative(d.l, d.two_j, resonanceEnergy);
-      }
-      if (need2) {
-        if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(d.pair);
-          d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.two_j, d.energy);
-        } else {
-          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.two_j, d.pair->GetChRad(), resonanceEnergy);
-        }
-      }
-      std::lock_guard<std::mutex> lock(memo.mutex);
-      if (memo.values.size() >= azure2::ShiftDerivativeMemo::kMax) memo.values.clear();
-      azure2::ShiftDerivativeMemo::Value &v = memo.values[key];
-      if (need1) {
-        v.has1 = true;
-        v.d1 = d.d1;
-      }
-      if (need2) {
-        v.has2 = true;
-        v.d2 = d.d2;
-      }
-    } catch (...) {
-#ifdef _OPENMP
-#pragma omp critical(calc_shift_functions_error)
-#endif
-      if (!error) error = std::current_exception();
-    }
-  }
-  if (error) std::rethrow_exception(error);
-  for (Derivative &d : derivatives) {
-    if (d.source >= 0) {
-      d.d1 = derivatives[d.source].d1;
-      d.d2 = derivatives[d.source].d2;
-    }
-    if (d.first) d.level->SetShiftDerivative(d.ch, d.d1);
-    if (d.second) d.level->SetShiftSecondDerivative(d.ch, d.d2);
-  }
-
-  for (const Moved &m : levels) {
-    ALevel *theLevel = m.level;
-    JGroup *theJGroup = m.group;
-    if (m.recompute) theLevel->SetShiftFunctionsEnergy(m.energy);
-    if (m.second) theLevel->SetShiftSecondDerivativesEnergy(m.energy);
-    if (park) {
-      // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
-      double parkNorm = 1.0;
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        if (theChannel->GetRadType() == 'P' && this->Pair(theChannel->GetPairNum())->GetPType() == 0)
-          parkNorm -= pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetShiftDerivative(ch);
-      }
-      theLevel->SetParkNorm(parkNorm);
-      // N_f^{1/2} multiplies the level's reduced width amplitude wherever
-      // it serves as an external-capture final state.  It is defined with
-      // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
-      // in here keeps gamma * N_f^{1/2} the same number in both
-      // parametrizations.
-      std::vector<double> g;
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) g.push_back(theLevel->GetFitGamma(ch));
-      theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
-    }
-  }
-}
-
-/*!
  * Converts a parameter set read from a file written in the other alternative
  * parametrization.  Brune -> Park multiplies every amplitude of a level by
  * sqrt(J), J = 1/(1 + sum_c gamma~^2 dS_c/dE); Park -> Brune divides by
@@ -1294,21 +1089,6 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
     }
   }
   return true;
-}
-
-/*!
- * Forgets the cached shift functions of every level and the run's shift-derivative memo.
- */
-
-void CNuc::InvalidateShiftFunctions(const Config &configure) {
-  {
-    azure2::ShiftDerivativeMemo &memo = configure.scratch->shiftDerivatives;
-    std::lock_guard<std::mutex> lock(memo.mutex);
-    memo.values.clear();
-  }
-  for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
-      this->Group(j)->GetLevel(la)->InvalidateShiftFunctions();
 }
 
 /*!

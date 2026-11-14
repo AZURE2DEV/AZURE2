@@ -258,7 +258,7 @@ The two routes agree to about :math:`10^{-13}` of the largest bilinear form
 (``AZURE_CHANNEL_VERIFY=1`` compares them, and both with an extended-precision
 LU of the level matrix, at every channel-route solve).  The formal
 representation is cached per thread and J-group and rebuilt when a level's
-parameters change (``ALevel::Stamp``).
+parameters change (``LevelState::Version``).
 
 **Gradient.**  In the formal representation the adjoint of a bilinear term
 :math:`\beta F_{ab}` is :math:`O(n c)`: with :math:`u_c = A_f \Gamma_c` and
@@ -304,8 +304,8 @@ argument (``ShiftDerivativeMemo``, in the run's scratch).  It computes
 :math:`S''`, which only the gradient needs, only when asked: a chi-squared
 alone (``AZURECalc::operator()``, ``Chi2On``, ``ResidualsOnly``, MCMC) leaves it
 out, and the next gradient fills it in for the levels that moved
-(``ALevel::ShiftSecondDerivativesValidAt``).  The gradient's table of
-:math:`S'` (``BuildShiftDerivTable``) is read from the levels instead of being
+(``LevelState::SecondDerivativesValidAt``).  The gradient's table of
+:math:`S'` (``BuildShiftDerivTable``) is read from the level state instead of being
 differentiated again.  With the rows in place the analytic-gradient minimizer
 takes Park's gradient from the residual Jacobian as for the other formalisms
 (``AZURECalc::GradientFromJacobian``, which adds the gradient of the

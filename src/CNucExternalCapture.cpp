@@ -248,13 +248,14 @@ void CNuc::ECFinalStatesFromFormal() {
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
-    JGroup *group = this->Group(r.structure->map.groupOfBlock[b]);
+    const int j = r.structure->map.groupOfBlock[b];
+    JGroup *group = this->Group(j);
     const std::vector<int> &levels = r.structure->map.levelOfBlockLevel[b];
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
-      E.push_back(group->GetLevel(la)->GetFitE());
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
+      E.push_back(levelState_.E(j, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(j, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, b, E, gamma, B, cf, options);
@@ -345,12 +346,12 @@ void CNuc::FormalCaptureMasksFromParams() {
     // level, so T is the identity on its row and column and Pi = P exactly (external_capture.md section 7).
     bool coupled = false;
     for (std::size_t lb = 0; lb < n && !coupled; lb++)
-      if (masked[lb]) coupled = MaskedLevelCoupled(group, mask.levels[lb]);
+      if (masked[lb]) coupled = MaskedLevelCoupled(mask.group, mask.levels[lb]);
     if (!coupled) continue;
     std::vector<double> E, gamma, B(nc);
     for (int la : mask.levels) {
-      E.push_back(group->GetLevel(la)->GetFitE());
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
+      E.push_back(levelState_.E(mask.group, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(mask.group, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, s.block, E, gamma, B, cf, options);
@@ -377,10 +378,11 @@ bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, i
   return false;
 }
 
-/// Has level `la` of `group` a particle amplitude other than zero (current fit values)?
-bool CNuc::MaskedLevelCoupled(const JGroup *group, int la) const {
+/// Has level `la` of J-group `j` a particle amplitude other than zero (current fit values)?
+bool CNuc::MaskedLevelCoupled(int j, int la) const {
+  const JGroup *group = this->GetJGroup(j);
   for (int ch = 1; ch <= group->NumChannels(); ch++)
-    if (group->GetChannel(ch)->GetRadType() == 'P' && group->GetLevel(la)->GetFitGamma(ch) != 0.0) return true;
+    if (group->GetChannel(ch)->GetRadType() == 'P' && levelState_.Gamma(j, la, ch) != 0.0) return true;
   return false;
 }
 
