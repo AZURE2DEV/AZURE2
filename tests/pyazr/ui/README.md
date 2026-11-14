@@ -12,7 +12,8 @@ program whose `chiSquared.out` the API's numbers are compared with.
 - `server_test.py`: a real server process on a free port above 20000 over HTTP; killed and stopped, its workers
   checked gone by PID; the user guide's session (`docs/source/user_guide/web_ui_api.rst`) run against it.
 - `routes_consistency_test.py`: the route table, the app, the OpenAPI document, pyazr and the adapter agree.
-- `static_test.py`: the page's files as served: the token exchanged for a cookie by a redirect, the
+- `static_test.py`: the page's files as served: the token exchanged for a cookie by a redirect (lax, named for the
+  port), the page that asks a browser for a missing or wrong token, the
   Content-Security-Policy, every file the page loads present and tracked, plotly.js's hash and licence, a widget per
   value type of the schema, no engine kind named in the page's modules, lines of at most 120 columns (the vendored
   directory excepted: minified third-party code), the file-head route inside the root.
@@ -110,6 +111,9 @@ file restored from git after each):
   `static_test.py::test_every_file_the_page_loads_exists_and_is_tracked`.
 - a Content-Security-Policy on every answer: the header line removed from the guard; the token leaves the address
   bar: the redirect of the page's row disabled; each fails `static_test.py::test_page_served_with_token_cookie_and_csp`.
+- the printed URL works as a link on another site: the cookie set `samesite="strict"`; fails
+  `smoke_test.py::test_printed_url_followed_from_another_site_opens_the_page` (the click ends at "AZURE2 — token
+  needed") and the cookie's assertion of `static_test.py`.
 - no engine kind named in the page: `tabs/data.js` spells `"dataset"`; fails
   `static_test.py::test_no_engine_kind_is_spelled_in_the_page`.
 - the vendored plotly.js is the checked bundle: one word of its banner changed; fails

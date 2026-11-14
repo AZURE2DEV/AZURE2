@@ -30,7 +30,15 @@ address only.  Start it there with a fixed port and forward that port:
 
 and open the printed URL (``http://127.0.0.1:28400/?token=...``) in the browser of your laptop.  Every other user of
 the remote machine can reach its loopback ports: the token is what keeps them out of your project, so do not share
-the URL.
+the URL.  The forward must end at the loopback address **of the machine the server runs on**
+(``127.0.0.1:28400`` as seen from that machine): a forward that reaches the machine by its network name from a
+gateway (``28400:remote:28400`` in a session on the gateway) finds nothing listening.  Through a gateway, either
+log in to the remote machine with the gateway as jump host (``ssh -J user@gateway -L
+28400:127.0.0.1:28400 user@remote``) or forward in two steps.
+
+**If the browser shows "the token is needed"**, the address was opened without its ``?token=...`` part (a bookmark
+of the page, a browser restarted since) or with the token of another server: paste the token into the field of that
+page, or open the printed URL again.  Several projects served on one machine keep separate cookies (one per port).
 
 What the page shows
 -------------------

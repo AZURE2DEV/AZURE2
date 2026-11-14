@@ -35,14 +35,56 @@ def page_sources():
     return sorted(out)
 
 
+def test_browser_without_token_gets_a_page_that_asks_for_it(tmp_path):
+    """A navigation (GET accepting HTML, outside /api) without the token or with a wrong one: a page with a field
+    for the token, not the JSON refusal; the field's form is the printed URL's door (GET /?token=)."""
+    from pyazr.ui.server import cookie_name
+    html = {"Authorization": "", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+    with make_client(copy_project("T1", tmp_path)) as client:
+        for path, sentence in (("/", "opened without its token"), ("/?token=nope", "not this server's")):
+            asked = client.get(path, headers=html, follow_redirects=False)
+            assert asked.status_code == 401 and asked.headers["content-type"].startswith("text/html"), path
+            assert sentence in asked.text and '<form method="get" action="/">' in asked.text, asked.text
+            assert 'name="token"' in asked.text and TOKEN not in asked.text
+            assert "form-action 'self'" in asked.headers["content-security-policy"]
+            assert "script-src" not in asked.headers["content-security-policy"] and "<script" not in asked.text
+            assert "set-cookie" not in asked.headers
+        # a program (no HTML asked for) and the API keep the JSON refusal with its three parts
+        for path, headers in (("/", {"Authorization": ""}), ("/api/project", html)):
+            refused = client.get(path, headers=headers)
+            assert refused.status_code == 401 and refused.json()["error"] == "Unauthorized", path
+            assert "?token=<token>" in refused.json()["fix"]
+        # what the form sends is the printed URL
+        taken = client.get(f"/?token={TOKEN}", headers=html, follow_redirects=False)
+        assert taken.status_code == 303 and taken.headers["location"] == "/"
+    assert cookie_name("127.0.0.1:28701") == "azure2_ui_token_28701" and cookie_name("[::1]:9000").endswith("_9000")
+    assert cookie_name("localhost") == cookie_name("[::1]") == cookie_name("") == "azure2_ui_token_80"
+
+
+def test_two_servers_on_one_host_keep_their_own_cookies(tmp_path):
+    """A browser has one cookie jar per host whatever the port: the cookie of the server on one port is not read as
+    the token of the server on another (it was: opening a second project logged the first one out)."""
+    with make_client(copy_project("T1", tmp_path)) as client:
+        client.cookies.set("azure2_ui_token_9000", "anotherServersToken")
+        client.cookies.set("azure2_ui_token", "theNameBeforeThePortWasPartOfIt")
+        assert client.get("/", headers={"Authorization": ""}).status_code == 401
+        client.cookies.set("azure2_ui_token_80", TOKEN)
+        assert client.get("/", headers={"Authorization": ""}).status_code == 200
+        assert client.get("/", headers={"Authorization": "", "Host": "127.0.0.1:9000"}).status_code == 401
+
+
 def test_page_served_with_token_cookie_and_csp(tmp_path):
     with make_client(copy_project("T1", tmp_path)) as client:
         bare = client.get("/", headers={"Authorization": ""})
         assert bare.status_code == 401
         first = client.get(f"/?token={TOKEN}", headers={"Authorization": ""}, follow_redirects=False)
         assert first.status_code == 303 and first.headers["location"] == "/"
-        assert "azure2_ui_token=" in first.headers["set-cookie"] and "HttpOnly" in first.headers["set-cookie"]
-        client.cookies.set("azure2_ui_token", TOKEN)
+        # the cookie is named for the port (two servers on one machine do not overwrite each other's) and is lax:
+        # a strict one is kept back when the printed URL is followed from another site, and the redirect then fails
+        cookie = first.headers["set-cookie"]
+        assert cookie.startswith(f"azure2_ui_token_80={TOKEN};") and "HttpOnly" in cookie, cookie
+        assert "samesite=lax" in cookie.lower(), cookie
+        client.cookies.set("azure2_ui_token_80", TOKEN)
         page = client.get("/", headers={"Authorization": ""})
         assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
         csp = page.headers["content-security-policy"]

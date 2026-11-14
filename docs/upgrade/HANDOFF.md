@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 10:50, branch `feature/upgrade-6-ui-token-link`) — the page's printed URL works as a link
+
+**Met by the PI**: the printed URL (`http://127.0.0.1:<port>/?token=...`) opened as a link answered
+`{"error": "Unauthorized", "message": "the token is missing or wrong"}`. Cause: the token's cookie was
+`SameSite=Strict`; a browser keeps a strict cookie back on a navigation that starts on another site and on the
+redirect that follows it (`/?token=` answers 303 to `/`), so the redirect arrived without the cookie. Typed into
+the address bar the same URL worked. Reproduced in headless Chrome (the link on `localhost`, the page on
+`127.0.0.1`: the click ended on the refusal) before the change and gone after it.
+
+**Changed** (`pyazr/ui/server.py`, nothing else of pyazr):
+- the cookie is `SameSite=Lax`. Safe while every GET route only reads: a lax cookie goes with a navigation from
+  elsewhere and with nothing else, and a request that changes something carries an `Origin` header, which the
+  guard checks. **Rule for a new route: a GET changes nothing** (web_ui.md 11.1 item 2).
+- the cookie's name carries the port (`azure2_ui_token_<port>`, `cookie_name`): a browser has one cookie jar per
+  host whatever the port, so two servers with their own random tokens logged each other out (found while reading;
+  shown by `static_test.py::test_two_servers_on_one_host_keep_their_own_cookies`).
+- a browser's navigation without the token or with a wrong one gets a small page ("the token is needed", a field
+  for the token, no script, its own policy) instead of raw JSON; programs and `/api` keep the JSON refusal.
+
+**Tests**: `static_test.py` (the cookie's attributes and name, the token page, two servers);
+`smoke_test.py::test_printed_url_followed_from_another_site_opens_the_page` (label `browser`; fails with the
+strict cookie: "the click ended at ... with the title 'AZURE2 — token needed'"). Run: `static`, `api`, `server`,
+`smoke` of `tests/pyazr/ui/` with the engine of the reference build (Python and documents only changed).
+
+**Documents**: web_ui.md (section 8, 11.1 item 2), the user guide's web page (a forward through a gateway must end
+at the server machine's loopback; "the token is needed"), the API page, `tests/pyazr/ui/README.md`.
+
+**Open**: the cookie is a session cookie (a restarted browser asks for the token again: the page now says how);
+Firefox and Safari were not run (the rule they follow is the same standard).
+
 ## 2026-11-14 (director, 10:38) — merged: the engine's fit path
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 67 (a true merge of the rehearsal branch; its tree
