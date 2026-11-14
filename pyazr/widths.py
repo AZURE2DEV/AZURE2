@@ -104,7 +104,7 @@ class ChannelWidth:
     fixed: bool
     jgroup: int
     level: int
-    jpi: str
+    jpi: str                        # the level's J^pi as the engine writes it: "1/2+", "2-"
     level_energy: float             # excitation energy of the level (MeV)
     pair: int
     L: int

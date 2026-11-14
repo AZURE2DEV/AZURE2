@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — the `<thm>` keys as a table, the session's diagnostics as rows, error parts, lists, small defects
+
+**Done** (`docs/upgrade/pyazr3.md` section 9, `web_ui.md` section 12 findings 9, 24, 27, 28):
+
+- The `<thm>` keys: `src/ThmKeys.cpp` (`ThmOptionKeys()`, `ThmExperimentKeys()`: each key's description and reader in
+  one row; the readers moved out of `ThmExperiment.cpp`, the small value readers in `include/ThmText.h`);
+  `pyazr.kinds()["thm"]` serves them in the shape of `pyazr/ui/thm.py`'s `KEYS` (equal today); the reference page
+  `docs/source/reference/thm_keys.rst` is generated (`tools/gen_thm_keys_docs.py`).
+- `Session.describe()["functions"]`: `channel_functions` and the five THM calls as rows (`pyazr/session_functions.py`),
+  with each returned field's path, shape and lines; the answers unchanged.
+- `e.what`, `e.allowed`, `e.fix` on `pyazr.Error` (13 of the table's wrong calls carry them; a `FormatError` from its
+  first diagnostic).
+- `kinds()["nuclides"]`, `kinds()["optical_potentials"]`.
+- `save_fit` to another directory (paths rebased, verified there), `python -m pyazr --help` without the engine,
+  `pyazr ui --json` serves, `set_pair`'s refusals name the value, `ChannelWidth.jpi` "1/2+", `is_entrance` documented.
+
+**Verified**: `thm_keys_test`, `session_functions_test`, `small_defects_test` (its checks fail on the start commit's
+pyazr: run there), `errors_test`, `describe_test`, `cli_test`, `project_nuclear_part`, `save_fit_format3`, the THM
+ctests (36 of 36 with `-LE slow -R thm|describe|...`), the consistency test, `check_skills`; the THM projects of
+`examples/` (9) and 12 projects of `tests/` in the three bases against the base build: identical files (a timing in
+one run.log).
+
+**Open**: the page (`pyazr/ui/thm.py` `KEYS`, `THM_ROWS`, `ANSWERS`; `pyazr/ui/physics.py` `SESSION_ROWS`; the
+server's error handler) is ported to these calls by a later step.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — pyazr edits the web page lacks
 
 **Done** (`docs/upgrade/pyazr3.md` section 9, `web_ui.md` section 12 findings 10 and 11):

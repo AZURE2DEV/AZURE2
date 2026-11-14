@@ -468,11 +468,24 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
       keys += (keys.empty() ? "" : ", ") + std::to_string(p.key) + " (" + PairLabel(p) + ")";
     return Refused("no pair has the key " + std::to_string(pairKey) + " (the pairs: " + keys + ")");
   }
-  for (const std::optional<double> &x : {change.radius, change.lightMass, change.heavyMass})
-    if (x && !(std::isfinite(*x) && *x > 0.0)) return Refused("a channel radius and a mass are positive numbers");
-  if (!Finite(change.separationEnergy)) return Refused("a separation energy is a finite number (MeV)");
-  for (const std::optional<double> &x : {change.lightExcitation, change.heavyExcitation})
-    if (x && !(std::isfinite(*x) && *x >= 0.0)) return Refused("an excitation energy is a number >= 0 (MeV)");
+  const std::string pair = "pair " + std::to_string(pairKey) + ": ";
+  struct Positive {
+    const std::optional<double> &value;
+    const char *what, *unit;
+  };
+  for (const Positive &x : {Positive{change.radius, "channel radius", "fm"}, Positive{change.lightMass, "light mass", "u"},
+                            Positive{change.heavyMass, "heavy mass", "u"}})
+    if (x.value && !(std::isfinite(*x.value) && *x.value > 0.0))
+      return Refused(pair + "the " + x.what + " " + ShortestNumberText(*x.value) + " " + x.unit +
+                     " is out of range: it is a number > 0 (" + x.unit + "); give a positive " + x.what);
+  if (!Finite(change.separationEnergy))
+    return Refused(pair + "the separation energy " + ShortestNumberText(*change.separationEnergy) +
+                   " MeV is out of range: it is a finite number (MeV)");
+  for (const Positive &x : {Positive{change.lightExcitation, "light excitation energy", "MeV"},
+                            Positive{change.heavyExcitation, "heavy excitation energy", "MeV"}})
+    if (x.value && !(std::isfinite(*x.value) && *x.value >= 0.0))
+      return Refused(pair + "the " + x.what + " " + ShortestNumberText(*x.value) +
+                     " MeV is out of range: it is a number >= 0 (MeV, 0 for the ground state); give it in MeV");
   if (change.radius && t.row[first].pType() != 0)
     return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it has no channel radius");
   if (change.bindingEnergy && t.row[first].pType() != 0)

@@ -3059,8 +3059,9 @@ factors.
 
 The rules are in ``CheckThmExperiments`` and ``CheckThmCoulombConsistency``
 (``src/ThmExperiment.cpp``), called by ``Config::ReadThmBlock``
-(``src/ConfigThm.cpp``) and by the GUI's THM workspace, which also read the
-global keys with one function, ``ParseThmOptionLine``; ``pyazr.Project``
+(``src/ConfigThm.cpp``), which reads every key by its row of one table
+(``src/ThmKeys.cpp``: ``ParseThmOptionLine``, ``ParseThmExperimentLine``;
+:doc:`../reference/thm_keys`, ``pyazr.kinds()["thm"]``); ``pyazr.Project``
 applies them in ``set_thm_experiment`` and ``set_thm`` through the engine
 (``_azure2.check_format3_thm``, the same parser without the files the section
 names). Files without these

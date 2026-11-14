@@ -15,6 +15,7 @@
 
 #include "ThmBlockEdits.h"
 #include "ThmExperiment.h"
+#include "ThmKeys.h"
 #include "azure2/experiment/LevelEdits.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/ConfigSection.h"
@@ -159,6 +160,38 @@ py::list ThmReplacements(const io::Document &doc, std::size_t open, const std::v
       out.push_back({line, line, {e.text}});
   }
   return Replacements(out);
+}
+
+// A key of <thm> as a field of a record kind of the schema (the shape pyazr.schema() gives a field).
+py::dict ThmKeyField(const ThmKeyRow &r) {
+  py::dict f;
+  f["type"] = r.type;
+  f["doc"] = r.doc;
+  f["required"] = false;
+  if (!r.title.empty() || !r.unit.empty()) f["title"] = r.title;
+  if (!r.unit.empty()) f["unit"] = r.unit;
+  if (!r.values.empty()) f["values"] = r.values;
+  if (!r.defaultValue.empty()) f["default"] = r.defaultValue;
+  if (!r.grammar.empty()) f["grammar"] = r.grammar;
+  if (!r.presentWith.empty()) {
+    py::dict when;
+    when["if"] = "field_present";
+    when["field"] = r.presentWith;
+    when["text"] = r.presentWith + " is given";
+    f["applies_when"] = when;
+  }
+  return f;
+}
+
+template <class Key>
+py::dict ThmKeyKindDict(const ThmKeyKind &kind, const std::vector<Key> &keys) {
+  py::dict fields;
+  for (const Key &k : keys) fields[py::str(k.row.key)] = ThmKeyField(k.row);
+  py::dict d;
+  d["title"] = kind.title;
+  d["doc"] = kind.doc;
+  d["fields"] = fields;
+  return d;
 }
 
 }  // namespace
@@ -422,6 +455,18 @@ void BindNuclearPart(py::module_ &m) {
       py::arg("doc"), py::arg("name"), py::arg("value"), py::kw_only(), py::arg("remove") = false,
       "The replacements that set a <config> entry (io::ConfigEdits) or, with remove, remove a key.");
 
+  m.def(
+      "thm_keys",
+      []() {
+        py::dict out;
+        out[py::str(ThmOptionKind().name)] = ThmKeyKindDict(ThmOptionKind(), ThmOptionKeys());
+        out[py::str(ThmExperimentKind().name)] = ThmKeyKindDict(ThmExperimentKind(), ThmExperimentKeys());
+        return out;
+      },
+      "The keys of <thm> as two record kinds of a schema, '<thm>' (the global options) and 'experiment' (the keys of "
+      "an experiment[<name>] line): {kind: {title, doc, fields: {key: {type, doc, required, title, unit, values, "
+      "default, grammar, applies_when}}}}, from the tables the engine's parser reads (ThmOptionKeys, "
+      "ThmExperimentKeys).");
   m.def(
       "thm_entries",
       [](const io::Document &doc) {

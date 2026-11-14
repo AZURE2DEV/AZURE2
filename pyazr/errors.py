@@ -18,7 +18,10 @@ older pyazr keeps catching it:
 - :class:`MissingFile` (``FileNotFoundError``): a project, working directory or parameter file that does not exist.
 
 A message says (1) what was wrong with the value given, (2) what is allowed, (3) which call shows or fixes it, and
-names objects by their label.  An engine notice that a session meets (the engine printed it on standard output before)
+names objects by their label.  Where the message is built from these three parts, they are attributes too:
+``e.what``, ``e.allowed``, ``e.fix`` (texts; ``None`` where a message is not built from parts, as the engine's own
+messages); a :class:`FormatError` takes them from its first diagnostic of severity error (the validator's ``message``,
+``allowed`` and ``fix``).  An engine notice that a session meets (the engine printed it on standard output before)
 is a :class:`EngineWarning` with the file concerned and the consequence (``warnings.warn``; turn it into an error with
 ``warnings.simplefilter("error", pyazr.EngineWarning)``).
 
@@ -35,7 +38,19 @@ __all__ = ["Error", "FormatError", "ParameterError", "ParameterKeyError", "Param
 
 
 class Error(Exception):
-    """The base of every error pyazr raises on purpose (``except pyazr.Error`` catches them all)."""
+    """The base of every error pyazr raises on purpose (``except pyazr.Error`` catches them all).
+
+    ``what`` (what was wrong with the value given), ``allowed`` (what is allowed) and ``fix`` (which call shows or
+    fixes it): the three parts of the message where it is built from them, else ``None``.  They are given as keyword
+    arguments, ``Error(message, what=..., allowed=..., fix=...)``; the message is the text as written."""
+
+    what = None
+    allowed = None
+    fix = None
+
+    def __init__(self, *args, what=None, allowed=None, fix=None):
+        super().__init__(*args)
+        self.what, self.allowed, self.fix = what, allowed, fix
 
 
 class FormatError(Error, ValueError):
@@ -46,10 +61,14 @@ class FormatError(Error, ValueError):
     syntax-only ``fix``; ``codes`` the codes in order.  The message is the engine's text, one line per diagnostic.
     """
 
-    def __init__(self, message, diagnostics=()):
+    def __init__(self, message, diagnostics=(), **parts):
         self.diagnostics = list(diagnostics)
         lines = [message] + ["  " + _diagnostic_text(d) for d in self.diagnostics]
-        super().__init__("\n".join(lines))
+        first = next((d for d in self.diagnostics if d.get("severity", "error") == "error"), None)
+        if first is not None and not parts:
+            parts = {"what": first.get("message") or None, "allowed": first.get("allowed") or None,
+                     "fix": first.get("fix") or None}
+        super().__init__("\n".join(lines), **parts)
 
     @property
     def codes(self):
@@ -115,8 +134,8 @@ class SessionClosed(Error, RuntimeError):
 class MissingFile(Error, FileNotFoundError):
     """A file or directory that a call needs does not exist; a ``FileNotFoundError`` too, with ``filename`` set."""
 
-    def __init__(self, path, message):
-        super().__init__(2, message, str(path))  # errno ENOENT, as FileNotFoundError
+    def __init__(self, path, message, **parts):
+        super().__init__(2, message, str(path), **parts)  # errno ENOENT, as FileNotFoundError
 
     def __str__(self):
         return self.strerror

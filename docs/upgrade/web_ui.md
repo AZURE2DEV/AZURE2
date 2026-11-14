@@ -1506,6 +1506,11 @@ None of these changes the decided objects; each is a call or a field to add:
 9. **The three parts of an error as fields** (`what`, `allowed`, `fix`) of the exception, not only its text.
    *Partly delivered*: pyazr's error classes (`pyazr.errors`, each also the builtin it was) and messages that say the
    three parts; the parts are not attributes, so the server keeps the whole text in `what`.
+   *Delivered in pyazr*: `e.what`, `e.allowed`, `e.fix` on every `pyazr.Error` (None where the message is the
+   engine's own text, as an `AZURE2Error` from C++); set where the message is built from the parts (the session's
+   argument checks, a closed session, a missing working directory, the physics functions' domains, unknown records,
+   parameters, levels, kinds, THM experiments) and, for a `FormatError`, from its first diagnostic.  The server's
+   error handler (`pyazr/ui/`) can read them instead of putting the whole text in `what`.
 10. **Pairs added and removed, with channel generation**: `add_pair`, `remove_pair`, and the channels a J^π allows from
     the pairs and `l_max` (Qt's `LevelsTab` rules; `add_level` takes channels as given).
     *Delivered in pyazr*: `Project.add_pair(kind=, light=, heavy=, separation_energy=, radius=, ...)` (returns the key;
@@ -1609,6 +1614,9 @@ Found while building the Physics tab (step 5):
     binding's table; the server writes the row of `channel_functions` by hand (`pyazr/ui/physics.py`
     `SESSION_ROWS`, from its docstring). Wanted: the session's functions described as the physics table describes
     its rows (arguments with unit, domain, example and sweep; returns with units), `J` among them.
+    *Delivered in pyazr* (with 28): `Session.describe()["functions"]["channel_functions"]` (`pyazr/session_functions.py`):
+    its arguments (`J` among them) and returns in the physics rows' shape.  `SESSION_ROWS` of `pyazr/ui/physics.py`
+    can be made from it (the page's own fields `group`, `op`, `broadcast` added there).
 25. **A status per element from the session's functions**: `channel_functions` returns `open` and 0 where the
     channel is closed; the tab turns `open` into status -2. Finding 12's remaining items (the level matrix, the
     transfer functions on potentials, structured stopping rows, the rate) stand; its "page code" is built (11.5).
@@ -1623,11 +1631,23 @@ Found while building the THM tab (step 5, second part):
     from a table written in `pyazr/ui/thm.py` (`KEYS`: value type of the schema, choices, unit, doc), checked against
     the list of keys the engine names when it refuses an unknown one.  Wanted: the keys of the options and of an
     experiment line as record kinds of `pyazr.schema()` (or `kinds()["thm"]`), read by the parser itself.
+    *Delivered in pyazr*: `pyazr.kinds()["thm"]`, the rows of `src/ThmKeys.cpp` the parser reads (each key's
+    description and reader in one row), in the shape of `KEYS`, equal to it today (`tests/pyazr/thm_keys_test.py`).
+    The page replaces `thm.keys()` by `copy.deepcopy(pyazr.kinds()["thm"])` (or `KEYS = pyazr.kinds()["thm"]`); the
+    reference page `docs/source/reference/thm_keys.rst` is generated from the same rows.
 28. **The THM calls described as rows**: `thm_experiments`, `thm_background`, `thm_lineshape`, `thm_vertex`,
     `thm_distortion` return nested dictionaries; `pyazr/ui/thm.py` (`THM_ROWS`, `ANSWERS`) writes their rows from the
     docstrings and turns the answer into fields on the energies with lines (per channel and level, per exit pair),
     facts with units and tables.  Wanted: the rows in the session's description (as finding 24 asks for
     `channel_functions`) and the arrays per line, so that the server reshapes nothing.
+    *Delivered in pyazr*: `Session.describe()["functions"]` has a row per THM call (arguments with unit and kind;
+    returned fields with unit, `path` in the answer, `shape`, and `lines` -- the list a field runs over and the fields
+    that label one line, e.g. `{"over": "channels[].levels[]", "label": ["jgroup", "channel", "J", "pi", "l", "s",
+    "level"]}`).  The answers are unchanged; a test checks on four THM set-ups that every key of every answer is a path
+    of its row.  `THM_ROWS` of `pyazr/ui/thm.py` can drop its argument and return lists (from the rows' `arguments`
+    and `returns`) and keep only its page fields (`tab`, `op`, `max_elements`, `status_words`, `shown`); `ANSWERS`
+    can drop `_lineshape` and `_vertex`'s loops by walking `lines.over` and labelling a line from `lines.label`, and
+    `_distortion` (every return is a top-level key of shape `axis`); `_experiments` and `_background` stay tables.
 
 ## 13. Decisions for the PI
 

@@ -323,7 +323,11 @@ def _build_kinds():
             "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
             "options": options, "physics": physics, "stopping": stopping, "fitters": fitters, "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
-            "objects": objects}
+            "objects": objects, "thm": engine.thm_keys(),
+            "nuclides": {n: {"Z": z, "A": a, "mass": m} for n, z, a, m in engine.thm_nuclides()},
+            "optical_potentials": {g["name"]: {"projectiles": g["projectiles"], "reference": g["reference"],
+                                               "a_range": list(g["a_range"]), "e_range": list(g["e_range"])}
+                                   for g in engine.thm_global_opticals()}}
 
 
 def kinds():
@@ -361,6 +365,16 @@ def kinds():
       option (the program's switch, "" for the default), gradient, residual_rows, bounds, covariance, minos,
       progress_label, doc;
     - ``errors``: pyazr's error classes with their bases;
+    - ``thm``: the keys of the ``<thm>`` section as two record kinds, ``"<thm>"`` (the global options) and
+      ``"experiment"`` (the keys of an ``experiment[<name>]`` line): title, doc, ``fields`` by key (type of the schema,
+      doc, required, title with the unit, unit, values of an enum, default, grammar of a text, applies_when), read
+      from the tables the engine's parser reads (``src/ThmKeys.cpp``); :meth:`pyazr.Project.set_thm` and
+      ``set_thm_experiment`` take these keys;
+    - ``nuclides``: the built-in nuclei a ``<thm>`` experiment names by name (``beam=18O``), by name: ``Z``, ``A`` and
+      the nuclear ``mass`` in u (AME2020); any other nucleus is written ``Z,A,mass``;
+    - ``optical_potentials``: the global optical potentials ``opticalAA=`` / ``opticalSF=`` take by name: the
+      ``projectiles``, the ``reference``, the target mass numbers ``a_range`` and lab energies ``e_range`` (MeV) of
+      the fit (``:extrapolate`` uses one outside them);
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 
     Read from the engine's tables at the first call (``AZURE2 --schema``, the parameter-kind table, the binding's
@@ -375,6 +389,7 @@ def kinds():
 
 def describe_session(session):
     """What one :class:`pyazr.Session` session holds, as plain data (``Session.describe()``); see there."""
+    from .session_functions import session_functions
     s = session
     parameters = []
     for p in s.parameters:  # the records, as Session.parameters holds them; an infinite bound is None (JSON)
@@ -411,4 +426,5 @@ def describe_session(session):
         "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
         "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
         "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if not p["fixed"])),
+        "functions": session_functions(),
     }, default=float))

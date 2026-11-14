@@ -211,7 +211,9 @@ class Session(
     def describe(self):
         """What this session holds, as plain data: project, options and option_sources (where each came from),
         Coulomb table, pairs, levels, data sets, extrapolations, parameters (their records: name, kind, unit, x,
-        free, bounds, owner fields).
+        free, bounds, owner fields), and ``functions``: the session's diagnostic calls (``channel_functions`` and the
+        THM calls) described as rows -- arguments with unit, kind, bounds and default, returned fields with unit,
+        the axis, and where each array sits in the answer (:mod:`pyazr.session_functions`).
         The keys: :func:`pyazr.described.describe_session`."""
         from .described import describe_session
         return describe_session(self)

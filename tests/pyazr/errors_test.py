@@ -45,6 +45,9 @@ except Exception as err:  # pragma: no cover
     sys.exit(77)
 
 
+WITH_PARTS = []  # the labels of the wrong calls whose error carries its three parts as attributes
+
+
 def expect(label, call, cls, builtin, parts):
     """Run ``call``; it must raise ``cls`` (also a ``builtin`` and a pyazr.Error) whose text holds every one of
     ``parts`` (what was wrong, what is allowed, which call helps)."""
@@ -59,6 +62,13 @@ def expect(label, call, cls, builtin, parts):
         check(f"{label}: the message has its three parts", not missing, f"missing {missing} in: {text[:400]}")
         check(f"{label}: the message names no repr of an object", "ProjectLevel(" not in text and len(text) < 800,
               text[:200])
+        parts_given = [getattr(e, k, None) for k in ("what", "allowed", "fix")]
+        if any(p is not None for p in parts_given):
+            WITH_PARTS.append(label)
+            # a FormatError's parts are its first diagnostic's fields; every other error's parts are its own text
+            check(f"{label}: e.what, e.allowed and e.fix are the message's three parts",
+                  all(parts_given) and (isinstance(e, pyazr.FormatError) or all(p in text for p in parts_given)),
+                  f"{parts_given} / {text[:300]}")
         return text
     check(f"{label}: raises {cls.__name__}", False, "no exception")
     return ""
@@ -105,7 +115,8 @@ try:
     expect("Project.set_pair of an unknown pair", lambda: project.set_pair(9, radius=4.0), pyazr.FormatError,
            ValueError, ["pair 9", "no pair has the key 9", "the pairs: 1 ("])
     expect("Project.set_pair with a negative radius", lambda: project.set_pair(1, radius=-1.0), pyazr.FormatError,
-           ValueError, ["pair 1", "a channel radius and a mass are positive numbers"])
+           ValueError, ["pair 1", "the channel radius -1 fm is out of range", "a number > 0 (fm)",
+                        "give a positive channel radius"])
     expect("whittaker_wave with rho <= 0", lambda: pyazr.whittaker_wave(0, 1.0, [1.0, -1.0]),
            pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.physics.whittaker_wave)"])
     expect("penetrability below threshold", lambda: pyazr.physics.penetrability(0, 1, 6, 1.00728, 12.0, 5.0, -0.1),
@@ -195,5 +206,8 @@ try:
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
+# The calls whose messages are built from three parts carry them as attributes (pyazr3.md section 2.5).
+check(f"the three parts as attributes on {len(WITH_PARTS)} of the wrong calls (at least 8)", len(WITH_PARTS) >= 8,
+      str(WITH_PARTS))
 print(f"{'FAILED: ' + str(len(failures)) if failures else 'all ok'}")
 sys.exit(1 if failures else 0)

@@ -248,7 +248,9 @@ class Parameters(list):
         for kind in kinds:
             if kind not in known:
                 raise ParameterKeyError(f"no parameter kind {kind!r}{close_names(kind, known)}; the kinds are "
-                                        f"{listed(known, 20)} (pyazr.kinds()['parameters']).")
+                                        f"{listed(known, 20)} (pyazr.kinds()['parameters']).",
+                                        what=f"no parameter kind {kind!r}", allowed=f"the kinds are {listed(known, 20)}",
+                                        fix="pyazr.kinds()['parameters']")
         return self._select(p for p in self if p.kind in kinds)
 
     def of_level(self, level):
@@ -265,7 +267,10 @@ class Parameters(list):
         if not rows:
             labels = list(dict.fromkeys(p.level_label for p in self if p.level_label))
             raise ParameterKeyError(f"no level {level!r} among these parameters{close_names(level, labels)}; the "
-                                    f"levels: {listed(labels, 10)} (Parameter.level_label, Project.levels()).")
+                                    f"levels: {listed(labels, 10)} (Parameter.level_label, Project.levels()).",
+                                    what=f"no level {level!r} among these parameters",
+                                    allowed=f"the levels: {listed(labels, 10)}",
+                                    fix="Parameter.level_label, Project.levels()")
         return self._select(rows)
 
     def by_name(self, name):
@@ -278,7 +283,9 @@ class Parameters(list):
         names = self.names
         raise ParameterKeyError(f"no parameter named {name!r} among the {len(names)} of this set"
                                 f"{close_names(name, names)}; the names are Parameter.name, e.g. "
-                                f"{listed(names, 6)}; print(parameters.table()) lists them all.")
+                                f"{listed(names, 6)}; print(parameters.table()) lists them all.",
+                                what=f"no parameter named {name!r}", allowed=f"the names are Parameter.name, e.g. {listed(names, 6)}",
+                                fix="print(parameters.table()) lists them all")
 
     # -- the fit vector ---------------------------------------------------------------------------------------------
 

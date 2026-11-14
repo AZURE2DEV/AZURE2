@@ -107,9 +107,14 @@ otherwise look up in the sources:
    k["physics"]            # the physics functions the compiled module binds (group, examples, sweeps)
    k["stopping"]           # the stopping functions as rows of the same shape, each with SRIM's citation
    k["errors"]             # the error classes below, with their bases
+   k["thm"]                # the keys of <thm>: "<thm>" options and "experiment" keys as record kinds
+                           # (type, values, default, unit, grammar, doc), the rows the engine's parser reads
+   k["nuclides"]           # the built-in nuclei of a THM experiment (beam=18O): Z, A, nuclear mass (u)
+   k["optical_potentials"] # the global optical potentials (opticalAA=kd03): projectiles, reference, ranges
    s = pyazr.Session("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
-                           # parameters (name, kind, unit, value, free), options in effect, output directory
+                           # parameters (name, kind, unit, value, free), options in effect, output directory,
+                           # "functions": channel_functions and the THM calls described as rows
 
 ``kinds()`` is read from the engine's own tables (the schema of ``AZURE2 --schema``, the parameter-kind table, the
 binding's option table, the names the binding registers): a data kind or a parameter kind added to the engine appears
@@ -144,6 +149,15 @@ A message says what was wrong with the value given, what is allowed, and which c
    pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
    every entry must be a finite number.  Session.parameters.x0 is such a vector (the start values);
    Session.parameters.free names its entries in order.
+
+Where a message is built from these three parts they are also attributes of the error, ``e.what``, ``e.allowed`` and
+``e.fix`` (texts, each a part of the message; ``None`` where the message is the engine's own text); a
+``pyazr.FormatError`` takes them from its first diagnostic (the validator's ``message``, ``allowed`` and ``fix``)::
+
+   try:
+       s.channel_functions(1, 0.5, l=-1)
+   except pyazr.DomainError as e:
+       print(e.what, "|", e.allowed, "|", e.fix)
 
 A notice of the engine that a session meets -- an external-capture amplitude file that cannot be written because the
 output directory does not exist, a normalization or shift file that cannot be written -- is a ``pyazr.EngineWarning``

@@ -194,20 +194,16 @@ struct ThmOptionLine {
   int pairKey = 0;       ///< the key of spectatorEnergy[<pair key>] (unused for spectatorEnergy=)
   bool perPair = false;  ///< spectatorEnergy[<pair key>]= (else spectatorEnergy=)
 };
-/// Parses `key=value` (key and value trimmed) of a global <thm> key; false if
-/// the key is unknown or the value is not one AZURE2 takes.
+/// Parses `key=value` (key and value trimmed) of a global <thm> key by its row of
+/// ThmOptionKeys() (ThmKeys.h); false if the key is unknown or the value is not
+/// one AZURE2 takes.
 bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out);
 
 /*!
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
- * same name.  Returns "" or what is wrong.  Keys: background, beam, target, spectator, Ebeam, lineshape (on|off), ps
- * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
- * table:file), psNodes, distortion (none | coulomb | optical | table:file),
- * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
- * boundState, theta (all | thmin-thmax, degrees, 0 <= thmin <= thmax <= 180),
- * vertexModel (pw | dw), spectatorAngles ([cm:]thmin-thmax | [cm:]table:file),
- * spectatorAngleNodes.
+ * same name.  Returns "" or what is wrong.  The keys, their grammar and their
+ * readers are the rows of ThmExperimentKeys() (ThmKeys.h).
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 

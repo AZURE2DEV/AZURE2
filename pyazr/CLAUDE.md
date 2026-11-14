@@ -30,7 +30,9 @@ public names are a contract.
   which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are
   `EngineWarning`.  A new error derives from the class above and from the builtin the call raised before; its
   message says what was wrong, what is allowed and which call shows or fixes it (`tests/pyazr/errors_test.py`
-  holds the table of wrong calls).
+  holds the table of wrong calls); give the three parts as keywords too, `Error(message, what=, allowed=, fix=)`, each
+  a substring of the message (the test checks it), so that a caller (the web page) reads them as `e.what`,
+  `e.allowed`, `e.fix` (a `FormatError` takes them from its first diagnostic).
   The argument checks of the session's calls live in `session_checks.py`, not in `session.py`.
 - An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
   `Config::outStream` passes through that buffer); every other line still goes to standard output.
@@ -64,6 +66,15 @@ in Python.  A new column of a pair is a field of `PairChange` / `NewPair` and of
 `PairInfoOfRow`), its key in `level_table`'s pair dict and its field of `ProjectPair`.  Test: the edited file gives the
 engine's result of the same edit made by hand (`tests/pyazr/thm_pair_edits_test.py`), add then remove gives the text
 back, each refusal leaves the project unchanged (`tests/pyazr/pair_edits_test.py`).
+
+## Recipe: describe a session call
+
+A diagnostic of the session (as `channel_functions`, the THM calls of `session_thm.py`) is a method where it
+computes and one row of `SESSION_FUNCTIONS` (`pyazr/session_functions.py`): arguments (kind, unit, domain, default,
+example, sweep), returns with unit, `path` in the answer, `shape` and, under a list, `lines` (what one line is, the
+fields that label it).  `Session.describe()["functions"]` serves the rows; the answer of the call is not reshaped for
+them.  Its case in `tests/pyazr/session_functions_test.py` runs the call and fails while a key of the answer is not a
+path of the row, or a path of the row never appears.
 
 ## Recipe: use the objective and the evaluation
 
@@ -211,7 +222,9 @@ does not need the user's live state uses pyazr directly.
   (`THM_ROWS` in `thm.py`; arguments of a kind `ARGUMENT_KINDS` of `static/physicsform.js` knows, returns with
   units and `lines`, `facts`), and its function in `ANSWERS` that turns the adapter's answer into fields, lines,
   status, facts and tables; the tab draws it with `static/functionview.js`.  Test it against the direct call in
-  `tests/pyazr/ui/thm_routes_test.py`.  A key of `<thm>` is an entry of `KEYS` (`thm.py`).
+  `tests/pyazr/ui/thm_routes_test.py`.  A key of `<thm>` is a row of
+  `src/ThmKeys.cpp` (its description and its reader), served as `pyazr.kinds()["thm"]`; `KEYS` (`thm.py`) equals it
+  today (`tests/pyazr/thm_keys_test.py`) and is replaced by it when the page is ported.
 - A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`.
 - **A job kind or a recipe** (a new fitter, MINOS of another library, a sampler): a function `(tracker, x0, settings,
   names) -> (status, message, extra)` in `jobs.py` that calls `tracker.value` / `tracker.grad` (or `tracker(x)` for

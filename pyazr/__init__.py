@@ -54,40 +54,48 @@ if _os.environ.get("PYAZR_ENGINE_DIR"):
 from .errors import (Error, FormatError, ParameterError, ParameterKeyError, ParameterIndexError,
                      ParameterVectorError, EngineError, AZURE2Error, DomainError, DomainZeroDivision, SessionClosed,
                      MissingFile, EngineWarning)
-from .session import Session
-from .session_physics import ScatteringLength
-from .objective import Objective
-from .evaluate import Evaluation, EvaluatedData
-from .parameters import Parameter, Parameters, NuclearPotential
-from . import system
-from .convert import convert_azr, convert_params
-from . import sources
-from . import stopping
-from . import physics
-from .physics import whittaker_wave
-from .outputs import fitted_norms
-from .sources.nds import (ExforData, ExforDataset, GroundState, Gamma,
-                  Reference, search_exfor, fetch_exfor, fetch_levels,
-                  fetch_gammas, fetch_ground_state, reference, resolve_doi,
-                  aps_doi, sfactor_to_cross_section, cm_to_lab)
-from .widths import ChannelWidth, WidthTable, weisskopf_width
-from .angular import angular_distribution
-from .tabulate import tabulate, TabulatedCrossSection
-from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
-                    live_parameters, step_sizes, sensitivities, trimmed_model,
-                    uncertainty_bands, extrapolation_bands)
-from .modelavg import (Variant, Averaged, ModelAverage, model_average,
-                       parameter_label, azr_parameter_slots,
-                       write_averaged_azr)
-from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
-from .schema import schema, validate, describe, predictions
-from .described import kinds
-from .grids import extrapolation_grid, refine_grid
-from .model_data import ModelDatum, model_data
-from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolation,
-                        DescribedExtrapolations)
-from .project import Project, Record, Nuisance, FormatError, records_from_csv
-from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
+# The engine-dependent objects.  Without the compiled module only the command line's own help can run
+# (`python -m pyazr --help`, `pyazr commands`: cli.py imports nothing of the engine); any other use raises the
+# ImportError that says how to build it.
+try:
+    from .session import Session
+    from .session_physics import ScatteringLength
+    from .objective import Objective
+    from .evaluate import Evaluation, EvaluatedData
+    from .parameters import Parameter, Parameters, NuclearPotential
+    from . import system
+    from .convert import convert_azr, convert_params
+    from . import sources
+    from . import stopping
+    from . import physics
+    from .physics import whittaker_wave
+    from .outputs import fitted_norms
+    from .sources.nds import (ExforData, ExforDataset, GroundState, Gamma,
+                      Reference, search_exfor, fetch_exfor, fetch_levels,
+                      fetch_gammas, fetch_ground_state, reference, resolve_doi,
+                      aps_doi, sfactor_to_cross_section, cm_to_lab)
+    from .widths import ChannelWidth, WidthTable, weisskopf_width
+    from .angular import angular_distribution
+    from .tabulate import tabulate, TabulatedCrossSection
+    from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
+                        live_parameters, step_sizes, sensitivities, trimmed_model,
+                        uncertainty_bands, extrapolation_bands)
+    from .modelavg import (Variant, Averaged, ModelAverage, model_average,
+                           parameter_label, azr_parameter_slots,
+                           write_averaged_azr)
+    from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
+    from .schema import schema, validate, describe, predictions
+    from .described import kinds
+    from .grids import extrapolation_grid, refine_grid
+    from .model_data import ModelDatum, model_data
+    from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolation,
+                            DescribedExtrapolations)
+    from .project import Project, Record, Nuisance, FormatError, records_from_csv
+    from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
+except ImportError:
+    import sys as _sys
+    if _os.path.basename(_sys.argv[0] if _sys.argv else "") not in ("-m", "pyazr", "__main__.py"):
+        raise
 
 __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
