@@ -88,6 +88,13 @@ ROUTES = (
     Route("GET", "/api/project/describe/{name}", P, "pyazr.Project.describe",
           "What the engine makes of one record.", args=("name",), fixed={"as_json": True}),
     Route("GET", "/api/project/records", P, "pyazr.Project.records", "Every record: kind, name, line, fields."),
+    Route("GET", "/api/project/records/{name}/preview", V, "server.Server.field_preview",
+          "What the engine makes of the record with one field set to a value (a file), on a copy of the project: "
+          "its description (rows read and kept, their range) or the refusal.", args=("name",),
+          kwargs=("field", "value")),
+    Route("GET", "/api/project/references", P, "pyazr.Project.references",
+          "Every reference of a record to another (record, field, name, epoch): which data sets use a target, a "
+          "beam, a detector, a shared normalization or energy scale."),
     Route("POST", "/api/project/records", P, "pyazr.Project.add",
           "Add a record: kind, name, fields ({key: text or number or list}).", args=("kind", "name"),
           spread="fields"),
@@ -237,7 +244,9 @@ ROUTES = (
           serves=("pyazr.stopping.evaluate",)),
     Route("GET", "/api/sources/exfor", L, "step 2 (Data tab); today pyazr.search_exfor", "EXFOR search."),
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),
-    Route("GET", "/api/files", L, "step 2 (the file browser); no pyazr call", "Files inside the root."),
+    Route("GET", "/api/files", V, "server.Server.files",
+          "The files of the project's directory (path relative to the project, size, kind: project, table with its "
+          "columns, text, binary), never outside the root."),
     Route("GET", "/api/files/{path:path}", V, "server.Server.file_head",
           "The first rows (query: rows, 1 to 200, default 20) of a text file inside the root, as written; a line is "
           "read to 4096 bytes (cut lines listed in cut).", args=("path",),

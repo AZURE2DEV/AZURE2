@@ -48,7 +48,18 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"),
          # the ENDF tab: the project folder's ENDF-6 files over the data, and the first one's check (the self-test's)
          ("expert-endf", "endf?depth=expert&files={endf_files}"),
-         ("expert-endf-check", "endf/check?depth=expert&file={endf}"))
+         ("expert-endf-check", "endf/check?depth=expert&file={endf}"),
+         # the first view's Reaction Rate tab, and its Physics tab (shown there on a project with THM content: T2)
+         ("first-rate", "rate"), ("first-physics", "physics"), ("first-dataset", "data/{dataset}"),
+         # a file of the folder previewed in a data set's file field (as the field's change shows it)
+         ("first-file-preview", "data/{dataset}?field=file&preview=data/{file}"),
+         # "new …" of a data set's detector: the form of a new detector
+         ("first-new-detector", "data/+new?kind=detector&section=targets"),
+         # the Fit tab: the first view (a fit; MINOS, the sampler and the bands one click away) and MINOS's form with
+         # the free parameters as check boxes
+         ("first-fit", "fit"), ("fit-minos", "fit?job=minos&method=iminuit"),
+         # the form of a new pair: the partners' fields and the pair's in pyazr's words, the parity a choice
+         ("first-new-pair", "nucleus/pair/+new"))
 # The ENDF-6 files copied into each project's folder (tests/pyazr/data/endf: a hand-written p + 12C file and an
 # extract of the ENDF/B-VIII.1 3He + 4He evaluation, in a subdirectory), and the stand-in of the checking codes the
 # server finds (tests/pyazr/endf_standin, linked under the codes' names; its report has findings).
@@ -184,13 +195,32 @@ def test_selftest_and_screenshots(name, tmp_path):
         first = [s for s in result["steps"] if s["depth"] == "first"]
         titles = [s["tab"] for s in first if not s["route"].startswith("#/data/") and s["route"] != "Calculate"]
         assert titles == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
-                          "Plot"], titles
+                          "Plot", "Physics", "THM", "Reaction Rate"], titles
+        # Physics and THM are in the first view's tab bar exactly where the project has THM content (T2, not T1)
+        shown = first[-1]["tabsShown"]
+        with_thm = label != "T1"
+        assert shown == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
+                         "Plot", *(["Physics", "THM"] if with_thm else []), "Reaction Rate"] \
+            or label not in ("T1", "T2"), shown
         assert all(s["depth"] == "expert" for s in result["steps"] if s not in first), "a view not in its depth"
+        # the Fit tab's two depths (the PI's decision): a fit first, the other kinds one click away; all in the expert's
+        fit_first = next(s for s in first if s["route"] == "#/fit")
+        fit_expert = next(s for s in result["steps"] if s["route"] == "#/fit" and s["depth"] == "expert")
+        assert fit_first["jobKinds"] == ["fit"] and fit_first["moreKinds"], fit_first
+        assert {"fit", "minos", "sample", "bands"} <= set(fit_expert["jobKinds"]) and not fit_expert["moreKinds"], \
+            fit_expert
         if result["chi2"] is not None:
             opened = [s for s in first if s["route"].startswith("#/data/")]
             assert opened and opened[0]["forms"] == 1 and opened[0]["folded"] == 1 and opened[0]["tab"] == "Segments", \
                 opened
             assert [s["tab"] for s in first if s["route"] == "Calculate"] == ["Plot", "Plot"], first
+            # the data set's file typed again: the folder's files offered, its first rows and the engine's reading
+            preview = result["preview"]
+            assert preview["offered"] > 0 and preview["head"] and preview["text"].startswith("The engine reads"), \
+                preview
+            # "new …" of its target opens the form of a new target (a choice, never a name typed)
+            assert preview["newRoute"].startswith("#/data/+new?kind=target") and preview["newKind"] == "target", \
+                preview
         thm = [s for s in result["steps"] if s["route"].startswith("#/thm")]
         listed = thm[0]["tabListed"]
         assert listed == (label != "T1") or label not in ("T1", "T2"), thm[0]
@@ -240,12 +270,12 @@ def test_selftest_and_screenshots(name, tmp_path):
         assert "the report counts 3 errors, 0 warnings" in endf["headings"][1], endf
         over = next(s for s in result["steps"] if s["route"].startswith("#/endf?files="))
         assert over["plot"] == "plotly" if label == "T1" else over["plot"] is None, over
-        take_screenshots(server, tmp_path, label, shots, result)
+        take_screenshots(server, tmp_path, label, shots, result, azr)
     finally:
         server.stop()
 
 
-def take_screenshots(server, tmp_path, label, shots, result):
+def take_screenshots(server, tmp_path, label, shots, result, azr):
     """One screenshot per view (the routes of VIEWS filled from the self-test's own routes)."""
     routes = [s["route"] for s in result["steps"]]
     fill = {"label": next((r.split("/", 3)[3] for r in routes if r.startswith("#/nucleus/level/")), None),
@@ -256,6 +286,9 @@ def take_screenshots(server, tmp_path, label, shots, result):
             "endf_files": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf?files=")), None),
             "endf": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf/check?file=")
                           and "(checked)" not in r), None)}
+    data = os.path.join(os.path.dirname(azr), "data")  # a data file of the project for the preview's view
+    fill["file"] = (sorted(n for n in os.listdir(data) if n.endswith(".dat")) or [None])[-1] \
+        if os.path.isdir(data) else None
     sets = [("light", 1400, 900)]
     if os.environ.get("AZURE2_UI_SHOTS") == "all":
         sets = [(t, w, h) for t in ("light", "dark") for (w, h) in ((1400, 900), (1000, 700))]

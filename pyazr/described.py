@@ -324,6 +324,7 @@ def _build_kinds():
             "options": options, "physics": physics, "stopping": stopping, "fitters": fitters, "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
             "objects": objects, "thm": engine.thm_keys(), "config": _config_kind(engine),
+            "pairs": _pairs_kind(), "description": _description_kind(),
             "nuclides": {n: {"Z": z, "A": a, "mass": m} for n, z, a, m in engine.thm_nuclides()},
             "optical_potentials": {g["name"]: {"projectiles": g["projectiles"], "reference": g["reference"],
                                                "a_range": list(g["a_range"]), "e_range": list(g["e_range"])}
@@ -365,6 +366,24 @@ def _config_kind(engine):
             "directories, the checks), then the key=value lines the engine reads.", "fields": fields}
 
 
+def _pairs_kind():
+    """The particle pairs of a project (:class:`pyazr.ProjectPair`): the words of its fields, of a new pair's
+    partners and its kinds."""
+    from .nuclear_part import ProjectPair
+    return {"doc": _first_line(ProjectPair.__doc__), "built_by": ProjectPair.BUILT_BY,
+            "fields": {k: dict(v) for k, v in ProjectPair.FIELDS.items()},
+            "partner_fields": {k: dict(v) for k, v in ProjectPair.PARTNER_FIELDS.items()},
+            "arguments": {k: dict(v) for k, v in ProjectPair.ARGUMENTS.items()},
+            "kinds": list(ProjectPair.KINDS)}
+
+
+def _description_kind():
+    """A data set's description (:meth:`pyazr.Project.describe`): the words of its entries."""
+    from .project import DESCRIPTION_FIELDS, Project
+    return {"doc": _first_line(Project.describe.__doc__), "built_by": "Project.describe(name, as_json=True)",
+            "fields": {k: dict(v) for k, v in DESCRIPTION_FIELDS.items()}}
+
+
 def kinds():
     """What kinds of thing the engine and pyazr know, as plain data (``pyazr.kinds()``).
 
@@ -377,6 +396,10 @@ def kinds():
       (None: they depend on the data set; see ``data_outputs``);
     - ``data_outputs``: the numbers a point carries beside its model value (``Evaluation.data[i].extra``): unit
       (``"model"``: the data set's engine unit), when (the data sets it applies to), doc, per_point;
+    - ``pairs``: the particle pairs of a project (``Project.pairs()``): ``fields`` with title, unit, doc and whether
+      the list of pairs shows them; ``partner_fields``: a new pair's partner (``add_pair``'s ``light``, ``heavy``);
+      ``kinds``: the pair kinds;
+    - ``description``: the entries of a data set's description (``Project.describe(name, as_json=True)``) in words;
     - ``objects``: pyazr's objects of a fit and a calculation (``Objective``, ``Evaluation``, ``EvaluatedData``):
       what builds each and its fields with a line of doc;
     - ``parameters``: the kinds of fit parameter (``Parameter.kind``), in their order in the vector: unit (of the

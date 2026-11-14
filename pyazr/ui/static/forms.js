@@ -56,6 +56,12 @@ export function suggestionsOf(field, ctx) {
   return Object.entries(ctx.choices || {}).filter(([token]) => grammar.includes(token)).flatMap(([, names]) => names);
 }
 
+/** The value of a reference's choice "new …": choosing it opens the form of a new record of the kind referred to
+ * (formview.js calls ctx.onNewRecord), never a value sent. */
+export const NEW_RECORD = "+new";
+/** The choice "new …" of a reference to records of `kinds` (one per kind, by the kind's name). */
+const newRecordChoice = (kinds) => (kinds || []).map((k) => ({ value: `${NEW_RECORD}:${k}`, label: `new ${k} …` }));
+
 /** Names of the project's records of the given kinds (for references). */
 function recordNames(ctx, kinds) {
   return (ctx.records || []).filter((r) => (kinds || []).includes(r.kind)).map((r) => r.name);
@@ -73,7 +79,13 @@ export const WIDGETS = {
     controls: [input("v", t, { numeric: true, placeholder: f.min !== undefined ? `integer ≥ ${f.min}` : "integer" })],
     compose: (v) => v.v.trim(),
   }),
-  number_list: (f, t) => whole(f, t, { numeric: true }),
+  // a list of numbers: one box per number and two empty ones for more (an emptied box removes its number)
+  number_list: (f, t) => {
+    const numbers = tokenize(t);
+    const controls = [...numbers, "", ""].map((v, i) => input(`n${i}`, v, { numeric: true,
+      placeholder: i < numbers.length ? "" : "+", ariaLabel: `${f.title || "number"} ${i + 1}` }));
+    return { controls, compose: (v) => join(controls.map((c) => String(v[c.name] ?? "").trim())) };
+  },
   unit: (f, t, ctx) => {
     const units = unitsOf(f, ctx);
     if (!units.length) return whole(f, t);
@@ -107,12 +119,14 @@ export const WIDGETS = {
   }),
   reference: (f, t, ctx) => {
     const [name, epoch] = String(t ?? "").split("@");
-    const controls = [select("v", name, ["", ...recordNames(ctx, f.refers_to)], { reference: f.refers_to })];
+    const controls = [select("v", name, ["", ...recordNames(ctx, f.refers_to), ...newRecordChoice(f.refers_to)],
+      { reference: f.refers_to })];
     if (f.epoch) controls.push(input("epoch", epoch ?? "", { placeholder: "epoch", label: "@" }));
     return { controls, compose: (v) => (v.v ? (v.epoch ? `${v.v}@${v.epoch}` : v.v) : "") };
   },
   name: (f, t) => whole(f, t),
-  path: (f, t) => whole(f, t, { path: true }),
+  // a file of the project folder: the folder's files offered (ctx.files, GET /api/files), a typed path kept
+  path: (f, t, ctx) => whole(f, t, { path: true, list: (ctx?.files || []).map((x) => x.path) }),
   text: (f, t, ctx) => whole(f, t, { list: suggestionsOf(f, ctx) }),
   formula: (f, t) => whole(f, t, { mono: true }),
   spin: (f, t, ctx) => whole(f, t, { list: ctx.spins || [] }),
@@ -158,7 +172,8 @@ function nuisanceWidget(f, t, ctx) {
   const units = unitsOf(f, ctx);
   if (f.or_refers_to) {
     own.controls.push(select("ref", ref, [{ value: "", label: "own value" },
-      ...shared.map((s) => ({ value: s, label: `shared: ${s}` }))], { rerender: true, reference: f.or_refers_to }));
+      ...shared.map((s) => ({ value: s, label: `shared: ${s}` })), ...newRecordChoice(f.or_refers_to)],
+    { rerender: true, reference: f.or_refers_to }));
   }
   if (!ref) {
     own.controls.push(input("value", value, { numeric: true, placeholder: "value", disabled: mode === "profiled" }));

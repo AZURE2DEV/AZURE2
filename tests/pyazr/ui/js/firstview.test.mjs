@@ -14,12 +14,14 @@ const project = await mod("tabs/project.js");
 const schema = engineSchema();
 const skipNoSchema = schema ? false : "the engine's schema was not given (AZURE2_UI_SCHEMA)";
 
-const TABS = ["project", "nucleus", "data", "fit", "results", "physics", "thm"].map((id) => ({ id, title: id }));
+const TABS = ["project", "nucleus", "data", "fit", "results", "physics", "thm", "rate"].map((id) => ({ id, title: id }));
 
 test("the first view is the old program's path; the expert's is the page's tabs as they are", () => {
   const first = layout.shownTabs(false, TABS);
   assert.deepEqual(first.map((t) => t.title), ["Project", "Particle Pairs", "Levels and Channels", "Segments",
-    "Experimental Effects", "Fit", "Plot"]);
+    "Experimental Effects", "Fit", "Plot", "Physics", "THM", "Reaction Rate"]);
+  // Physics and THM only where the project has THM content (app.js shows a view with `when` by its condition)
+  assert.deepEqual(first.filter((t) => t.when).map((t) => [t.title, t.when]), [["Physics", "thm"], ["THM", "thm"]]);
   for (const t of first) assert.ok(t.row && t.hash.startsWith(`#/${t.tab}`), t);
   assert.deepEqual(layout.shownTabs(true, TABS).map((t) => t.tab), TABS.map((t) => t.id));
 });
@@ -35,7 +37,8 @@ test("a route marks the view it belongs to", () => {
   assert.equal(on("data", ["s01"], "data"), "Segments");
   assert.equal(on("data", [], "a_new_section"), "Segments");
   assert.equal(on("results", []), "Plot");
-  assert.equal(on("physics", []), undefined);
+  assert.equal(on("physics", []), "Physics");
+  assert.equal(on("rate", []), "Reaction Rate");
 });
 
 test("the Data tab's views split its groups; a group the schema gains goes to Segments", () => {

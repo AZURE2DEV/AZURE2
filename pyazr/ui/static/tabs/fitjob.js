@@ -33,16 +33,39 @@ export const SETTING_WIDGETS = {
       title: s.doc });
     return { el: input, read: () => input.value.trim() };
   },
-  names: (s, typed) => {
-    const input = h("input.mono", { type: "text", size: 36, value: typed ?? "", placeholder: "every free parameter",
-      "aria-label": s.name });
-    return { el: input, read: () => input.value.trim() };
+  // a list of free parameters: a check box per free parameter of the working x (ctx.freeNames, GET /api/x), none
+  // ticked meaning every one; a text box only where the free parameters are not known
+  names: (s, typed, ctx) => {
+    const free = ctx?.freeNames || [];
+    if (!free.length) {
+      const input = h("input.mono", { type: "text", size: 36, value: typed ?? "", placeholder: "every free parameter",
+        "aria-label": s.name });
+      return { el: input, read: () => input.value.trim() };
+    }
+    const chosen = new Set(String(typed ?? "").split(/\s+/).filter(Boolean));
+    const boxes = free.map((n) => {
+      const box = h("input", { type: "checkbox", "aria-label": `${s.name}: ${n}`, value: n });
+      box.checked = chosen.has(n);
+      return box;
+    });
+    const read = () => boxes.filter((b) => b.checked).map((b) => b.value).join(" ");
+    const count = h("span.hint", {});
+    const say = () => { const n = boxes.filter((b) => b.checked).length; count.textContent = n ? `${n} chosen`
+      : "none ticked: every free parameter"; };
+    const el = h("details.name-choice", {}, h("summary", {}, count), h("div.name-boxes", {},
+      boxes.map((b) => h("label.choice", {}, b, ` ${b.value}`))));
+    el.addEventListener("change", say);
+    say();
+    return { el, read };
   },
 };
 
 /** The job form: kind, method (those that wait for pyazr disabled, with the reason), settings, start, threads, Run. */
 export function jobForm(ctx, table, job, view) {
-  const choices = jobChoices(table);
+  const every = jobChoices(table);
+  // the first view: the kinds the job table marks (first_view: a fit); the others one click away
+  const folded = ctx.expert || view.allKinds ? [] : every.filter((k) => !k.firstView && k.available);
+  const choices = every.filter((k) => !folded.includes(k));
   const form = view.form;
   const kind = choices.find((k) => k.kind === form.kind && k.available) || choices.find((k) => k.available);
   const method = defaultMethod(kind, form.method);
@@ -61,7 +84,7 @@ export function jobForm(ctx, table, job, view) {
 
   const typed = form.typed || {};
   const widgets = method.settings.map((s) => {
-    const w = SETTING_WIDGETS[s.type] ? SETTING_WIDGETS[s.type](s, typed[s.name])
+    const w = SETTING_WIDGETS[s.type] ? SETTING_WIDGETS[s.type](s, typed[s.name], ctx)
       : { el: h("span.warn-box", {}, `no widget for the setting type ${s.type}`), read: () => "" };
     w.el.addEventListener("change", () => { form.typed = { ...(form.typed || {}), [s.name]: w.read() }; });
     return [s, w];
@@ -99,8 +122,19 @@ export function jobForm(ctx, table, job, view) {
     h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "start"), startSelect),
       h("span.hint", { title: "each job runs with one thread of the server's budget (pyazr ui --threads)" },
         `threads: 1 of ${budget.threads ?? "?"} (${budget.job_slots ?? "?"} job slot(s))`), h("span.spacer"), run),
-    jobTable(table));
+    folded.length ? moreKinds(ctx, folded, view) : null,
+    ctx.expert ? jobTable(table) : null);
   return box;
+}
+
+/** The first view's one click to the other kinds of job (MINOS, the sampler, the bands, ...): the job form then
+ * offers every kind, as the expert's depth does. */
+function moreKinds(ctx, folded, view) {
+  const more = button(`More: ${folded.map((k) => k.kind).join(", ")} …`, "Offer every kind of job in the form "
+    + "(the errors of a fit, a posterior, the uncertainty bands)", () => { view.allKinds = true;
+    ctx.navigate(location.hash); });
+  more.dataset.action = "more-kinds";
+  return h("div.more-kinds", {}, more);
 }
 
 /** Every row of the server's job table with what it runs or what it waits for (the rows that wait are not runs). */

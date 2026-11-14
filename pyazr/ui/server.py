@@ -18,6 +18,36 @@ import sys
 import time
 
 from .errors import Conflict, NotFound, Refused
+
+FILES_MAX = 2000  # the files GET /api/files lists at most
+FILES_DEPTH = 4  # how deep below the project's directory it looks
+GLANCE_BYTES = 4096  # what it reads of a file to say what it holds
+
+
+def _inside(path, root):
+    full = os.path.realpath(path)
+    return os.path.commonpath([full, root]) == root
+
+
+def _glance(full):
+    """What a file holds at a glance (its first bytes): ``{"kind": project | table | text | binary}``, a table with
+    the number of numbers on its first line that is not a comment (``#``, ``!``) or empty."""
+    if full.endswith(".azr"):
+        return {"kind": "project"}
+    with open(full, "rb") as f:
+        head = f.read(GLANCE_BYTES)
+    if b"\0" in head:
+        return {"kind": "binary"}
+    for line in head.decode("utf-8", "replace").splitlines()[:-1] or head.decode("utf-8", "replace").splitlines():
+        words = line.replace(",", " ").split()
+        if not words or words[0][0] in "#!":
+            continue
+        try:
+            [float(w) for w in words]
+        except ValueError:
+            return {"kind": "text"}
+        return {"kind": "table", "columns": len(words)}
+    return {"kind": "text"}
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
@@ -116,6 +146,47 @@ class Server:
                 lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
             more = bool(f.read(1))
         return {"path": path, "lines": lines, "more": more, "cut": cut}
+
+    def files(self):
+        """The files of the project's directory (and of its subdirectories, to :data:`FILES_DEPTH` levels; not the
+        program's ``output`` and ``checks``, nor hidden ones), at most :data:`FILES_MAX`: each with its path relative
+        to the project (as a record's field names it), its size in bytes and what it holds at a glance (``kind``:
+        ``project`` for a ``.azr``, ``table`` with ``columns`` when its first line that is not a comment is numbers,
+        ``text``, ``binary``).  Whether a data set can read it is the engine's answer: :meth:`field_preview`."""
+        with self.state.lock:
+            top = self.state.directory
+            hidden = {"output", "checks"}
+            out, more = [], False
+            for here, dirs, names in os.walk(top):
+                depth = os.path.relpath(here, top).count(os.sep) + (here != top)
+                dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (here == top and d in hidden)
+                                 and depth < FILES_DEPTH and _inside(os.path.join(here, d), self.state.root))
+                for name in sorted(names):
+                    full = os.path.join(here, name)
+                    if name.startswith(".") or not os.path.isfile(full) or not _inside(full, self.state.root):
+                        continue
+                    if len(out) == FILES_MAX:
+                        more = True
+                        break
+                    out.append(dict(path=os.path.relpath(full, top).replace(os.sep, "/"),
+                                    size=os.path.getsize(full), **_glance(full)))
+                if more:
+                    break
+            return {"directory": top, "files": out, "more": more}
+
+    def field_preview(self, name, field, value):
+        """What the engine makes of the record ``name`` with its field ``field`` set to ``value`` (a file, say), on a
+        copy of the project (the project is not changed): the record's description (rows read and kept, their energy
+        range, the reader's error) or the engine's refusal with its three parts."""
+        from pyazr import Project
+        with self.state.lock:
+            copy = Project(self.state.project.to_bytes(), self.state.path)
+        self.state.check_paths([value])
+        copy.set(name, **{field: value})
+        try:
+            return {"name": name, "field": field, "value": value, "description": copy.describe(name, as_json=True)}
+        except ValueError as e:  # a record the engine does not describe: the edit is accepted, nothing to read
+            return {"name": name, "field": field, "value": value, "description": None, "note": str(e)}
 
     def outputs(self, rev=None):
         """Write the program's output files at the working x and copy them into the project's output directory

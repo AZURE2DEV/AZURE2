@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-lists`) — the page's lists in words, its controls not typed
+
+`web_ui.md` section 11.14 has the whole; the user guide `web_interface.rst`, `web_ui_api.rst`, the Developer Guide
+`extending.rst` are updated.
+
+- **The PI's decisions of 2026-11-14**: the Reaction Rate tab is in the first view as its last tab; the Fit tab's
+  first view offers fits, MINOS, the sampler and the bands one click away; the first view is the default also for a
+  returning user (the expert's depth is remembered only when the user switched to it; nothing else stores it); on a
+  project with THM content Physics and THM join the first view after Plot.  REACLIB's defaults (5 %, azr2) stay.
+- **Lists in words**: Experimental Effects and Segments show one list per record kind under its title, data sets
+  first (reaction, observable, file, energy range, angle window, points, active, normalization with fitted/fixed and
+  the shared record, χ²), the others by the fields they set with the schema's titles and "Used by" (the engine's
+  references: new `Project.references`, `GET /api/project/references`); the pairs in the old program's columns
+  (`ProjectPair.FIELDS`, new fields `light_name`, `heavy_name`, `light_jpi`, `heavy_jpi`, `kind_name`;
+  `kinds()["pairs"]`); the description's words `pyazr.project.DESCRIPTION_FIELDS` (`kinds()["description"]`); the
+  levels' label once.  `Project.describe(name)` of a target returned a key of the options ("use_brune"): it now
+  refuses as documented.
+- **The model as a curve**: not built.  It needs a pyazr call (a data set's extrapolation record on a fine grid,
+  over `bands.trimmed_model` and a session of the extrapolations; measured on T2: 0.04 s); written in 11.14.
+- **Files**: `GET /api/files` (`Server.files`), a preview `GET /api/project/records/{name}/preview?field=&value=`
+  (`Server.field_preview`: the engine's reading on a copy).  **For the ENDF screens** (`tabs/endf.js`): switch the
+  small file list to `GET /api/files` (answer `{directory, files: [{path, size, kind, columns?}], more}`), and a text
+  box to `withFiles(ctx, input)` of `ui.js` (the files as the box's choices).
+- **Controls**: a reference's "new …"; a list of numbers as boxes; MINOS's parameters as check boxes; the pair form
+  from `kinds()["pairs"]`; the Fit tab's kinds of the first view `jobs.py FIRST_VIEW_KINDS`.  Where a tab is
+  registered is unchanged (`app.js TABS`); the first view's tabs `layout.js FIRST_VIEW` (rows with `when`, app.js
+  `CONDITIONS`); a record's buttons `tabs/records.js recordPanel` (now with `watchFiles`).
+- **Verified**: see the report of the branch (node tests, `tests/pyazr/ui/` whole, the smoke test's screenshots read,
+  the consistency test, the documents built, `ctest -LE slow`).  No C++ changed: no project comparison.
+- **Open**: the columns, a reaction, a grid, a composition and the structured fields are typed; a list of numbers
+  grows by two boxes per Apply; the model curve (above); the pairs' and the data sets' lists are wider than 1400
+  pixels on T2 (the table scrolls).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-7-examples`) — the experts' examples: measured, repaired, tested, listed
 
 The 27 scripts of `pyazr/examples/` as they stand on `19c55dad`, each run once from a copy of the repository's

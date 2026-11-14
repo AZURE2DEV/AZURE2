@@ -4,7 +4,7 @@
 
 import { describeForm } from "../forms.js";
 import { renderForm } from "../formview.js";
-import { button, diagnosticLine, h } from "../ui.js";
+import { button, diagnosticLine, errorBox, h } from "../ui.js";
 import { pathOf } from "../api.js";
 
 /** The sections of the project file the Nucleus tab shows (by the schema's section names); the Data tab shows all
@@ -25,12 +25,16 @@ export function recordRoute(schema, record) {
 /** The context the forms need: the schema, the records (for references), pair labels, spins, diagnostics. */
 export async function formContext(ctx, records, diagnostics = []) {
   if (!ctx.pairs) ctx.pairs = await ctx.api.get("/api/project/pairs");
+  const files = await ctx.api.get("/api/files", { quiet: true }).then((r) => r.files, () => []);
   const labels = ctx.pairs.map((p) => p.label);
   const spins = ["0", "1/2", "1", "3/2", "2", "5/2", "3", "7/2", "4"];
   return {
     schema: ctx.schema, records, pairLabels: labels, spins,
     spinParities: spins.flatMap((j) => [`${j}+`, `${j}-`]), diagnostics,
-    foldRare: !ctx.expert, showMeaning: !ctx.expert,
+    foldRare: !ctx.expert, showMeaning: !ctx.expert, files,
+    // a reference's "new …": the form of a new record of that kind, in the tab and group that holds the kind
+    onNewRecord: (kind) => ctx.navigate(`#/${tabOfKind(ctx.schema, kind)}/+new?kind=${encodeURIComponent(kind)}`
+      + `&section=${encodeURIComponent(ctx.schema.records[kind]?.sections?.[0] || "")}`),
   };
 }
 
@@ -60,6 +64,13 @@ export async function recordPanel(ctx, record, records, problems, { onGone } = {
       record.name), { fields: changed }), msg),
   });
   formEl.onrevert = () => ctx.navigate(location.hash);
+  const preview = h("div.file-preview");
+  watchFiles(ctx, formEl, record.kind, preview, record.name);
+  const asked = ctx.route?.params || {};  // a link to the preview of a file in a field: ?field=file&preview=<path>
+  if (asked.preview && asked.field) {
+    preview.appendChild(filePreview(ctx, asked.preview, { name: record.name, field: asked.field }));
+    slotOf(formEl, asked.field)?.after(preview);
+  }
   const described = h("aside.describe", { "aria-label": "the engine's description" }, h("h3", {}, "The engine reads"));
   panel.appendChild(h("div.form-and-description", {}, formEl, described));
   ctx.api.get(pathOf("/api/project/describe", record.name), { quiet: true })
@@ -88,6 +99,52 @@ export async function recordPanel(ctx, record, records, problems, { onGone } = {
     actionsBox.append(yes, button("Cancel", "Keep it", () => { actionsBox.textContent = ""; }));
     yes.focus();
   }
+}
+
+/** Preview a file chosen or typed in a field of the schema's type `path` (data file, covariance, weights): its
+ * first rows as written, and, for a record that exists, what the engine makes of the record with that file (GET
+ * /api/project/records/{name}/preview: the rows read and kept and their range, or the refusal's three parts) --
+ * before Apply, the project unchanged. */
+function watchFiles(ctx, formEl, kind, box, name) {
+  const fields = ctx.schema.records[kind]?.fields || {};
+  formEl.addEventListener("change", (e) => {
+    const slot = e.target.closest?.("[data-field]");
+    const key = slot?.dataset.field;
+    if (!key || fields[key]?.type !== "path" || e.target.tagName !== "INPUT") return;
+    const value = e.target.value.trim().replace(/^"|"$/g, "");
+    box.textContent = "";
+    slot.after(box);  // under the field it previews
+    if (value) box.appendChild(filePreview(ctx, value, name ? { name, field: key } : null));
+  });
+}
+
+const slotOf = (formEl, key) => formEl.querySelector(`[data-field="${key}"]`);
+
+/** The preview of one file: its first rows, the engine's reading of `record` ({name, field}) with it. */
+export function filePreview(ctx, path, record) {
+  const box = h("section.panel.file-rows", {}, h("h3", {}, `Preview: ${path}`));
+  const read = h("div.file-read");
+  const pre = h("pre.file-head", {}, "…");
+  box.append(read, pre);
+  ctx.api.get(`${pathOf("/api/files", ...path.split("/"))}?rows=8`, { quiet: true })
+    .then((r) => { pre.textContent = r.lines.join("\n") + (r.more ? "\n…" : ""); })
+    .catch((e) => { pre.textContent = e.view ? e.view.what : String(e); });
+  if (record) {
+    const q = new URLSearchParams({ field: record.field, value: path }).toString();
+    ctx.api.get(`${pathOf("/api/project/records", record.name)}/preview?${q}`, { quiet: true })
+      .then((r) => { read.appendChild(readingLine(r.description)); })
+      .catch((e) => { if (e.view) read.appendChild(errorBox(e.view)); else read.textContent = String(e); });
+  }
+  return box;
+}
+
+/** What the engine read of a data set's file, in one line (the description's words, kinds()["description"]). */
+function readingLine(d) {
+  if (!d) return h("p.hint", {}, "The engine reads this file when the project is evaluated.");
+  const range = Array.isArray(d.kept_E_lab_MeV) ? ` from ${d.kept_E_lab_MeV[0]} to ${d.kept_E_lab_MeV[1]} MeV (lab)`
+    : "";
+  return h(d.rows_error ? "div.warn-box" : "div.ok-box", {}, `The engine reads ${d.rows_read} rows, keeps `
+    + `${d.rows_kept}${range}.${d.rows_error ? ` ${d.rows_error}` : ""}`);
 }
 
 /** The engine's description of a record (a JSON object) as a definition list; nested values compactly. */
@@ -139,12 +196,16 @@ export async function newRecordPanel(ctx, kinds, records, { onAdded } = {}) {
     const kind = kindSelect.value;
     const form = describeForm(ctx.schema, kind, {}, fctx);
     body.appendChild(h("p.hint", {}, form.doc));
-    body.appendChild(renderForm(document, form, fctx, {
+    const formEl = renderForm(document, form, fctx, {
       nameInput: true, applyLabel: "Add",
       onApply: (name, fields) => ctx.edit(`add ${kind} ${name}`, () => ctx.api.post("/api/project/records",
         { kind, name, fields }), msg).then(() => onAdded && onAdded({ kind, name })),
-    }));
+    });
+    const preview = h("div.file-preview");
+    watchFiles(ctx, formEl, kind, preview, null);
+    body.append(formEl);
   };
+  if (kinds.includes(ctx.route?.params?.kind)) kindSelect.value = ctx.route.params.kind;  // ?kind=: "new …"
   kindSelect.addEventListener("change", draw);
   draw();
   return panel;

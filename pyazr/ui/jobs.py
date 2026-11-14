@@ -650,6 +650,11 @@ def job_row(kind, method):
     raise NotFound(f"no job {kind}/{method} (the job table: {', '.join(known)})", known=known)
 
 
+# The kinds of job the Fit tab's first view offers (the PI, 2026-11-14: fit, stop, accept, undo and the result against
+# the data first); the others (MINOS, the sampler, the bands, ...) are one click away.  A row's ``first_view``.
+FIRST_VIEW_KINDS = ("fit",)
+
+
 def job_table():
     """The job table as data (GET /api/jobs/kinds)."""
     out = []
@@ -659,7 +664,8 @@ def job_table():
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": _follows(r.follows),
-                    "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session})
+                    "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session,
+                    "first_view": r.kind in FIRST_VIEW_KINDS})
     return out
 
 

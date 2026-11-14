@@ -370,9 +370,12 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
 - [ ] The page for the median user (`web_ui.md` section 11.11): the original's icon, colours and About; the first
       view in the old program's path and words with the rare fields (a column of the schema) folded; Calculate with
-      what changed; the run's settings from the engine's `<config>` table (2026-11-14). Still typed: a data file and
-      a covariance (no file list route yet), the columns, a reaction, a grid, the fit job's MINOS parameters; a
-      reference's "new…"; lists as rows.
+      what changed; the run's settings from the engine's `<config>` table (2026-11-14). The lists in words, the
+      Reaction Rate tab (and Physics, THM on a THM project) in the first view, the files offered and previewed with
+      the engine's reading, "new …" of a reference, lists of numbers and MINOS's parameters as boxes, the pair form
+      from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
+      reaction, a grid, a composition, the structured fields. The model as a curve on a fine grid waits for a pyazr
+      call (section 11.14).
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
