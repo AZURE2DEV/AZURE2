@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 03:15) — merged: pyazr without physics in Python
+
+**Merged into `feature/upgrade-4-data`**: `feature/upgrade-8-pyazr3-no-python-physics` through rehearsal 65 (a
+true merge of the rehearsal branch; its tree plus the entry below this one).
+
+- The Python port of the engine's transformation (`pyazr/transform.py`, 853 lines) and the two Wigner helpers
+  are deleted; `Session.transform(x)` is the one transformation. The port was wrong on T3 by 0.9 % (it ignored
+  the hybrid potential) and on T2 in the formal basis by 10 %. The one formula pyazr keeps is
+  `widths.weisskopf_width` (no engine counterpart; tested against its closed form).
+- `Pair`, `PairSet`, `LevelScheme`, `SchemeLevel`, `SchemeChannel` and the nuclei are in `pyazr.system`.
+- The mode switch is gone: a session is made for the data sets or, with `Session(file, extrapolations=True)`,
+  for the extrapolations; `pyazr.parameters.carry_model_parameters(x, source, target)` carries a vector from
+  one to the other. The web page's adapter keeps a second session for the extrapolations, made on first use.
+
+**Verified on the merged tree** (build `work/b-trial65`, four threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits identical to the base build; 265 of 265
+quick tests pass. The director's own run over HTTP at one thread (`work/director/walk65/walk.py`, the PI's four
+play projects): the header's chi-squared of T1, T2, T3, 13N equal to the values before the merge to the last
+digit; a gradient MIGRAD job and a covariance band job on each end without an error; the band has one entry per
+data set and per extrapolation (T1 10 + 5, T3 9 + 9, T2 13 + 0, 13N 16 + 0: the two projects without an
+extrapolation record do not make the second session), all finite; chi-squared unchanged after the jobs.
+Not run here: `pyazr_wheel` (the agent ran it on its branch: pass) and the long suite (once for this batch).
+
+**New reference**: tag `tab-t65-1`, base build `work/b-trial65`.
+
+**Open, for a later branch or a decision**:
+
+- In work on a branch that starts here: the session's radius and potential edits (they become `Project` edits
+  and a new session), `bands.best_fit_params` without the private call, pyazr's own refusal of a session of
+  the extrapolations on a project without an extrapolation record (today the engine's "could not initialize;
+  check the output above" with nothing above; 123 test projects, T2 and 13N among them), then the libraries
+  under `pyazr.sources`, `write_outputs`, the bindings without a caller.
+- `Session.wigner_widths` / `dimensionless_widths` read the engine's transformation of a probe vector. That is
+  2 P gamma_W^2 on T1 and 13N (5e-9) and is not where a level has fixed widths or levels mix (T2 20 %, T2 formal
+  a factor 8e3, 17O 1e4). Which of the two the method should return: for the PI and the owner. Left as it is.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-no-python-physics`) — pyazr: no physics in Python
 
 **Measured first** (build `work/b-pysess4`, scripts `work/pysess4/measure4.py`, `measure_extrap.py`).
