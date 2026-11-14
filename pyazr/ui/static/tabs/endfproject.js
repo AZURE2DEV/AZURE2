@@ -184,8 +184,9 @@ export async function renderExport(ctx, el, params, { showJob, routeOf, go }) {
   const job = shownJob(jobs, "endf_write", params.job);
   const head = section("Export this project as an ENDF-6 file", h("p.hint", {}, "The model at the working x as "
     + "an ENDF-6 material (pyazr.endf.write): MF=1, MF=2 (LRF=7, the particle channels in the formal basis), MF=3 of "
-    + "every exit and of capture on a grid refined to the tolerance, a new file of the project folder. What it "
-    + "loses is said before it is written and in the result; then Check the file."));
+    + "every exit, of capture and of elastic scattering on a grid refined to the tolerance, MF=6 (the angular "
+    + "distributions on the same energies), a new file of the project folder. Writing takes a minute or more. "
+    + "What it loses is said before it is written and in the result; then Check the file."));
   el.appendChild(head);
   let preview;
   try {
