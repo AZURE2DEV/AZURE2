@@ -14,19 +14,17 @@
 class AZUREMain {
  public:
   /*!
-   * The AZUREMain function class is created using a Config structure.  New CompoundSystem and WorkingCopy objects are created at initialization
-   * of an AZUREMain object.
+   * The AZUREMain function class is created using a Config structure.  A new WorkingCopy object is created at
+   * initialization of an AZUREMain object; the compound system is the run's (ProgramRun), made by its set-up.
    */
   AZUREMain(const Config &configure) :
     configure_(configure) {
-    compound_ = new CompoundSystem;
     data_ = new WorkingCopy;
   };
   /*!
-   * The CompoundSystem and WorkingCopy objects are destroyed with the AZUREMain instance.
+   * The WorkingCopy object is destroyed with the AZUREMain instance.
    */
   ~AZUREMain() {
-    delete compound_;
     delete data_;
   };
   /*!
@@ -39,17 +37,12 @@ class AZUREMain {
    */
   const Config &configure() const { return configure_; };
   /*!
-   * Returns a pointer to the CompoundSystem object.
-   */
-  const CompoundSystem *compound() const { return compound_; };
-  /*!
    * Returns a pointer to the WorkingCopy object.
    */
   WorkingCopy *data() const { return data_; };
 
  private:
   const Config &configure_;
-  CompoundSystem *compound_;
   WorkingCopy *data_;
 };
 

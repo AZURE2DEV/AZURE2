@@ -5,6 +5,8 @@
       external capture amplitudes ... Recalculating"), reaction_rate (the engine's progress bars) print nothing on
       standard output (each run in a child process, its descriptor 1 captured); the engine's lines reach the logger
       pyazr.engine instead (WARNING lines at level WARNING), and the rate's numbers are those of a run that printed;
+      an Objective's calls likewise (13N's note at the first call; the engine stood in for by an object that
+      writes on descriptor 1, for every call);
   (b) the rate writes nothing beside the project (no output/cross_section_grid.dat, no intEC.extrap) and leaves no
       temporary directory once closed;
   (c) a set-up the engine refuses (T3 with its 2+ levels inactive: the phase-shift data set has no channel) raises
@@ -110,6 +112,51 @@ try:
     check("Session.parameters and fit_with_engine of a project the engine warns about: not on standard output",
           rc == 0 and "Denominator" not in out and "Denominator less than zero" in err, (rc, out[-400:], err[-400:]))
     check("fit_with_engine: the progress callback's prints are shown", "PROGRESS 1" in out, out[-400:])
+
+    # an Objective's calls are held as a session's are.  No project of the tests makes the engine print during one,
+    # so the engine is stood in for by an object that writes a line on descriptor 1 and then asks the real engine
+    code = ("import logging, os, warnings, pyazr\n"
+            "warnings.simplefilter('ignore')\n"
+            "logging.basicConfig(level=logging.INFO, format='LOGGED %(name)s %(levelname)s %(message)s')\n"
+            f"s = pyazr.Session({T1!r})\n"
+            "f = s.objective()\n"
+            "want = (f(f.x0), f.value_and_grad(f.x0)[0], f.residuals(f.x0).sum(), f.log_prob(f.x0))\n"
+            "class Loud:\n"
+            "    def __init__(self, engine): self.engine = engine\n"
+            "    def __getattr__(self, name):\n"
+            "        call = getattr(self.engine, name)\n"
+            "        def said(*a, **k):\n"
+            "            os.write(1, ('WARNING: the engine speaks in ' + name + '\\n').encode())\n"
+            "            return call(*a, **k)\n"
+            "        return said\n"
+            "s._sess = Loud(s._sess)\n"
+            "got = (f(f.x0), f.value_and_grad(f.x0)[0], f.residuals(f.x0).sum(), f.log_prob(f.x0))\n"
+            "f.describe()\n"
+            "print('SAME', got == want, flush=True)\n"
+            "s._sess = s._sess.engine\n"
+            "s.close()\n")
+    rc, out, err = child(code)
+    check("Objective: what the engine writes during a call is not on standard output; the numbers are the same",
+          rc == 0 and out == "SAME True\n", (rc, out[-400:], err[-400:]))
+    spoken = ["calculate_objective_rwa", "calculate_objective_grad_rwa", "objective_rows_rwa", "log_prob_rwa",
+              "objective_term_names"]
+    check("Objective: the lines of each of its engine calls reach the logger pyazr.engine at level WARNING",
+          all(f"LOGGED pyazr.engine WARNING WARNING: the engine speaks in {name}" in err for name in spoken),
+          err[-800:])
+    # and with the engine itself: 13N's sub-point grids make it write a note at the objective's first call
+    shutil.copytree(os.path.join(ROOT, "tests", "13N"), os.path.join(tmp, "13N"),
+                    ignore=shutil.ignore_patterns("output", "checks", "expected"))
+    code = ("import logging, warnings, pyazr\n"
+            "warnings.simplefilter('ignore')\n"
+            "logging.basicConfig(level=logging.INFO, format='LOGGED %(name)s %(levelname)s %(message)s')\n"
+            f"s = pyazr.Session({os.path.join(tmp, '13N', '13N.azr')!r})\n"
+            "f = s.objective()\n"
+            "print('VALUE', f(f.x0) == s.evaluate(f.x0).objective, flush=True)\n"
+            "s.close()\n")
+    rc, out, err = child(code)
+    check("Objective of 13N: the engine's note is not on standard output and reaches the logger at INFO",
+          rc == 0 and out == "VALUE True\n" and "LOGGED pyazr.engine INFO Note: the sub-point grids" in err,
+          (rc, out[-400:], err[-600:]))
 
     code = ("import logging, warnings, pyazr\n"
             "warnings.simplefilter('ignore')\n"

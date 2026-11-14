@@ -29,6 +29,7 @@
 #include <tuple>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "CompoundSystem.h"
 #include "SystemOfCompound.h"
@@ -135,7 +136,7 @@ const char *BasisName(Basis b) { return b == Basis::Brune ? "Brune" : b == Basis
 struct Loaded {
   std::ostringstream sink;
   Config cfg;
-  CompoundSystem compound;
+  std::unique_ptr<const CompoundSystem> compound;  // made by the set-up (test_setup)
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   Loaded() : cfg(sink) {}
@@ -150,8 +151,15 @@ bool Load(Loaded &m, const std::string &azr, Basis basis, bool initialize) {
   if (m.cfg.ReadConfigFile() < 0) return false;
   m.cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(m.cfg);
-  if (m.compound.Fill(m.cfg, m.state, m.inputs) == -1) return false;
-  if (initialize) m.compound.Initialize(m.cfg, m.state, m.inputs);
+  CompoundSetUp setUp = test_setup::WithoutData(m.cfg);
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return false;
+  m.compound = std::move(setUp.compound);
+  if (initialize) {
+    m.state = std::move(setUp.state);
+    m.inputs = std::move(setUp.inputs);
+  } else if (!test_setup::LevelsBeforeTheLastPart(m.cfg, m.state, m.inputs)) {
+    return false;
+  }
   return true;
 }
 
@@ -162,7 +170,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     check(tag + ": load", false, m.sink.str());
     return;
   }
-  CompoundSystem &cn = m.compound;
+  const CompoundSystem &cn = *m.compound;
   const long before = compared;
   const int failuresBefore = failures;
   SystemOfCompound built = BuildSystemOfCompound(cn, m.inputs, m.cfg);
@@ -309,7 +317,7 @@ int main(int argc, char **argv) {
     bool threw = false;
     if (Load(m, argv[1], Basis::Brune, false)) {
       try {
-        BuildSystemOfCompound(m.compound, m.inputs, m.cfg);
+        BuildSystemOfCompound(*m.compound, m.inputs, m.cfg);
       } catch (const std::runtime_error &) {
         threw = true;
       }

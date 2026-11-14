@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
 #include "DataSet.h"
@@ -188,17 +189,16 @@ int RunProject(const std::string &path, bool externalCapture) {
   Config cfg(sink);
   cfg.configfile = file;
   if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
-  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
+  CompoundSetUp made;
+  if (cfg.ReadConfigFile() < 0 || (made = test_setup::WithData(cfg, data)).refusal != CompoundSetUp::Refusal::kNone) {
     check("loads", false, sink.str().substr(0, 400));
     return 1;
   }
-  RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg, state, inputs);
+  const CompoundSystem &compound = *made.compound;
+  LevelState &state = made.state;  // the levels, as the run holds them
+  LevelInputs &inputs = made.inputs;
   compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
@@ -212,19 +212,16 @@ int RunProject(const std::string &path, bool externalCapture) {
     Config cfg2(sink2);
     cfg2.configfile = file;
     if (externalCapture) cfg2.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-    CompoundSystem compound2;
-    LevelState state2;  // the levels, as the run holds them
-    LevelInputs inputs2;
     WorkingCopy data2;
     AZUREParams params2;
-    const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2, state2, inputs2) != -1 && data2.Fill(cfg2, &compound2, inputs2) == 0;
+    CompoundSetUp setUp2;
+    const bool loaded = cfg2.ReadConfigFile() >= 0 &&
+                        (setUp2 = test_setup::WithData(cfg2, data2)).refusal == CompoundSetUp::Refusal::kNone;
     if (loaded) {
-      RequestDataEntrances(compound2, cfg2);
-      compound2.Initialize(cfg2, state2, inputs2);
-      compound2.FillMnParams(params2, state2, inputs2, &cfg2);
+      setUp2.compound->FillMnParams(params2, setUp2.state, setUp2.inputs, &cfg2);
       data2.FillMnParams(params2);
     }
-    check("a second load in the same process", loaded && data2.Initialize(&compound2, cfg2) != -1);
+    check("a second load in the same process", loaded && data2.Initialize(setUp2.compound.get(), cfg2) != -1);
     auto keys = [](WorkingCopy &d) {
       std::vector<int> k;
       for (int i = 1; i <= d.Data().NumSegments(); i++)

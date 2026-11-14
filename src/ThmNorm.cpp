@@ -647,7 +647,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CompoundSystem *c
 
 namespace {
 // The points of the profiled segments of a group, concatenated in order.
-void GatherThmGroup(WorkingCopy *data, const azure2::Results &results, const std::vector<int> &segments, std::vector<double> &m,
+void GatherThmGroup(const WorkingCopy *data, const azure2::Results &results, const std::vector<int> &segments, std::vector<double> &m,
                     std::vector<double> &d, std::vector<double> &e, std::vector<double> &energy) {
   m.clear();
   d.clear();
@@ -657,7 +657,7 @@ void GatherThmGroup(WorkingCopy *data, const azure2::Results &results, const std
     const Segment *seg = data->Data().GetSegment(s);
     if (!seg->IsProfiledNorm()) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) {
-      Unit *pt = seg->GetPoint(*data, p);
+      const Unit *pt = seg->GetPoint(*data, p);
       if (!pt) continue;
       m.push_back(azure2::ModelInDataFrame(*data, *seg, p - 1, pt->GetModelValue(results)));
       d.push_back(seg->LabValue(p - 1));
@@ -711,7 +711,7 @@ double WorkingCopy::ThmBackgroundAt(int i, double energy, const azure2::Results 
   return results.objective.thmProfiles[g].Background(energy);
 }
 
-std::vector<ThmExperimentReport> WorkingCopy::ThmExperimentReports(const azure2::Results &results) {
+std::vector<ThmExperimentReport> WorkingCopy::ThmExperimentReports(const azure2::Results &results) const {
   std::vector<ThmExperimentReport> out;
   for (size_t g = 0; g < set_->thmGroups_.size(); g++) {
     const ThmGroup &group = set_->thmGroups_[g];

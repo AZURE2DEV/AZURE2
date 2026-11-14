@@ -54,11 +54,21 @@ The set-up objects, immutable
    - ``CompoundSystem``, the set-up of the compound nuclei: the pairs, groups, channels
      and levels, the two ``SystemOfCompound`` of the structure, the
      ``PathwayTable``, the model data, the ``gamma_decay`` set and the
-     parameter layout. ``Fill``, ``AddHardSphereGroups``,
-     ``ParseExternalCapture`` and ``Initialize`` write it; after them every
-     owner reads it through a ``const CompoundSystem *`` (or ``const CompoundSystem &``) whose
-     maker, the program's run or the session, outlives the owner. It holds no
-     value of an evaluation and cannot be copied.
+     parameter layout. One function makes it, ``SetUpCompoundSystem``
+     (``include/CompoundSystemSetUp.h``): the structure from the ``<levels>``
+     rows, then the caller's data set-up, which reads the structure through a
+     ``const CompoundSystem &`` and hands back the entrance and capture-A_y
+     requests (``CompoundSetUpRequests``), then the last part (B_c, the input
+     transformation, the pathway table, the external-capture set-up). The
+     set-up calls are private; the function returns the finished object as a
+     ``std::unique_ptr<const CompoundSystem>`` with the owner's levels. Its one
+     owner, the program's run (``ProgramRun::compound``), the sampler's run or
+     the session (``AZUREAPI::compound_``), outlives every reader, which holds
+     a ``const CompoundSystem *`` or ``const CompoundSystem &``. What the last
+     part writes (B_c, the final-state energies, the pathway table, the
+     external-capture blocks, the capture masks) refuses to be read before it
+     (``std::logic_error``). It holds no value of an evaluation and cannot be
+     copied.
 
 The per-evaluation objects
    - ``WorkingCopy`` (``include/WorkingCopy.h``): what an evaluation changes
@@ -76,7 +86,7 @@ The per-evaluation objects
      from the observed basis. Each owner holds its own and hands it to the
      readers (the compound first, then the state, then the inputs): the
      program's run (``ProgramRun::state``, ``inputs``, made by
-     ``CompoundSystem::Fill`` and ``Initialize``), the session (``AZUREAPI::state()``,
+     ``SetUpCompoundSystem``), the session (``AZUREAPI::state()``,
      ``inputs()``: a method of ``AZUREAPI`` that writes the session's levels, data, ``Results`` or its lazily
      read fit settings is not ``const``, so a ``const AZUREAPI &`` only reads), a fit's evaluations (copies of the
      caller's state in its

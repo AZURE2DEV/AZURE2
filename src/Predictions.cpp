@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "CompoundSystem.h"
+#include "CompoundSystemSetUp.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -98,22 +99,24 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     lines.push_back("project: cannot be read");
     return lines;
   }
-  CompoundSystem compound;
-  LevelState state;
-  LevelInputs inputs;
-  if (compound.Fill(configure, state, inputs) == -1 || compound.NumPairs() == 0) {
-    lines.push_back("project: <levels> cannot be set up");
-    return lines;
-  }
-  WorkingCopy data, extrapolations;
-  if (data.Fill(configure, &compound, inputs) != 0)
-    lines.push_back("data: set-up failed");
-  else
-    AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
-  if (extrapolations.MakePoints(configure, &compound, inputs) != 0)
-    lines.push_back("extrapolation: set-up failed");
-  else
-    AppendLines(extrapolations, "extrapolation", RecordNames(configure, "extrapolation"), lines);
+  // The trees need the compound's structure only, never the finished compound (CompoundSystemSetUp.h).
+  bool levels = true;
+  const bool read = InspectCompoundStructure(configure, [&](const CompoundSystem &structure, const LevelState &, const LevelInputs &inputs) {
+    if (structure.NumPairs() == 0) {
+      levels = false;
+      return;
+    }
+    WorkingCopy data, extrapolations;
+    if (data.Fill(configure, &structure, inputs) != 0)
+      lines.push_back("data: set-up failed");
+    else
+      AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
+    if (extrapolations.MakePoints(configure, &structure, inputs) != 0)
+      lines.push_back("extrapolation: set-up failed");
+    else
+      AppendLines(extrapolations, "extrapolation", RecordNames(configure, "extrapolation"), lines);
+  });
+  if (!read || !levels) lines.push_back("project: <levels> cannot be set up");
   return lines;
 }
 

@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
 #include "CompoundSystem.h"
@@ -42,7 +43,7 @@ void Check(bool ok, const std::string &what) {
 struct Loaded {
   std::unique_ptr<std::ostringstream> sink;
   std::unique_ptr<Config> cfg;
-  std::unique_ptr<CompoundSystem> compound;
+  std::unique_ptr<const CompoundSystem> compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
@@ -57,7 +58,6 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.sink.reset(new std::ostringstream);
   l.cfg.reset(new Config(*l.sink));
   l.cfg->configfile = file;
-  l.compound.reset(new CompoundSystem);
   l.data.reset(new WorkingCopy);
   if (l.cfg->ReadConfigFile() < 0) return l;
   if (withData)
@@ -67,35 +67,42 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.cfg->fileCheckMask = l.cfg->screenCheckMask = 0;
   l.cfg->ResolveMatrixRoute();
   InitializeECAmplitudeCache(*l.cfg);
-  if (l.compound->Fill(*l.cfg, l.state, l.inputs) == -1) return l;
-  const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get(), l.inputs)
-                                                                       : l.data->MakePoints(*l.cfg, l.compound.get(), l.inputs);
-  if (filled != 0) return l;
-  CompoundSystem &c = *l.compound;
-  if (l.cfg->paramMask & Config::CALCULATE_WITH_DATA)
-    RequestDataEntrances(c, *l.cfg);
-  else
-    RequestExtrapolationEntrances(c, *l.cfg);
-  if (requests == Requests::FromData) RequestCaptureAyTerms(c, *l.data);
-  if (requests == Requests::AllForward || requests == Requests::AllReverse) {
-    std::vector<std::pair<int, int> > all;
-    for (int a = 1; a <= c.NumPairs(); a++)
-      for (int p = 1; p <= c.NumPairs(); p++)
-        if (c.GetPair(a)->GetPType() != 10 && c.GetPair(p)->GetPType() == 10) all.push_back({a, p});
-    if (requests == Requests::AllReverse) std::reverse(all.begin(), all.end());
-    for (const auto &r : all) c.RequestCaptureAy(r.first, r.second);
-  }
+  CompoundSetUp setUp;
   try {
-    c.Initialize(*l.cfg, l.state, l.inputs);
+    setUp = SetUpCompoundSystem(*l.cfg, [&](const CompoundSystem &c,
+                                            const LevelInputs &inputs) -> std::optional<CompoundSetUpRequests> {
+      const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, &c, inputs)
+                                                                           : l.data->MakePoints(*l.cfg, &c, inputs);
+      if (filled != 0) return std::nullopt;
+      CompoundSetUpRequests r;
+      if (l.cfg->paramMask & Config::CALCULATE_WITH_DATA)
+        RequestDataEntrances(c, *l.cfg, r);
+      else
+        RequestExtrapolationEntrances(c, *l.cfg, r);
+      if (requests == Requests::FromData) RequestCaptureAyTerms(c, *l.data, r);
+      if (requests == Requests::AllForward || requests == Requests::AllReverse) {
+        std::vector<std::pair<int, int> > all;
+        for (int a = 1; a <= c.NumPairs(); a++)
+          for (int p = 1; p <= c.NumPairs(); p++)
+            if (c.GetPair(a)->GetPType() != 10 && c.GetPair(p)->GetPType() == 10) all.push_back({a, p});
+        if (requests == Requests::AllReverse) std::reverse(all.begin(), all.end());
+        for (const auto &q : all) r.AddCaptureAy(q.first, q.second);
+      }
+      return r;
+    });
   } catch (const std::exception &) {
     return l;
   }
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return l;
+  l.compound = std::move(setUp.compound);
+  l.state = std::move(setUp.state);
+  l.inputs = std::move(setUp.inputs);
   l.ok = true;
   return l;
 }
 
 // The capture-A_y part of the table, one line per exit and per term, doubles as hexadecimal floats.
-std::vector<std::string> DumpCaptureAy(CompoundSystem &c) {
+std::vector<std::string> DumpCaptureAy(const CompoundSystem &c) {
   std::vector<std::string> out;
   char buf[256];
   for (int a = 1; a <= c.NumPairs(); a++) {
@@ -117,7 +124,7 @@ std::vector<std::string> DumpCaptureAy(CompoundSystem &c) {
 // The capture-A_y terms of the data sets: (number of such terms, number of them whose exit has its terms built).
 std::pair<int, int> CaptureAyTerms(Loaded &l) {
   int terms = 0, built = 0;
-  CompoundSystem &c = *l.compound;
+  const CompoundSystem &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
     const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower()) continue;
@@ -149,7 +156,7 @@ std::vector<double> CaptureAyValues(Loaded &l) {
   if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, l.state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   azure2::EvaluateModel(*l.data, l.compound.get(), l.state, *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
-  CompoundSystem &c = *l.compound;
+  const CompoundSystem &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
     const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower() || !c.IsPairKey(s.GetExitKey())) continue;
@@ -205,7 +212,7 @@ int main(int argc, char **argv) {
       if (forward.ok && reverse.ok) {
         const std::vector<std::string> f = DumpCaptureAy(*forward.compound), r = DumpCaptureAy(*reverse.compound);
         if (f != r) Check(false, tag + ": the table depends on the order of the requests");
-        CompoundSystem &c = *forward.compound;
+        const CompoundSystem &c = *forward.compound;
         for (int a = 1; a <= c.NumPairs(); a++) {
           if (c.GetPair(a)->GetPType() != 20) continue;
           betaEntrances++;

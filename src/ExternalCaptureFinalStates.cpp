@@ -353,6 +353,7 @@ bool CompoundSystem::MaskedLevelCoupled(const LevelState &state, int j, int la) 
 }
 
 int CompoundSystem::FormalCaptureMaskSlot(int group, int channel) const {
+  RefuseUnfinished("CompoundSystem::FormalCaptureMaskSlot");
   if (!captureMaskSetup_) return -1;
   for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++)
     if (captureMaskSetup_->slots[i].group == group && captureMaskSetup_->slots[i].channel == channel) return (int)i;
@@ -360,5 +361,6 @@ int CompoundSystem::FormalCaptureMaskSlot(int group, int channel) const {
 }
 
 const CompoundSystem::CaptureMaskSlot &CompoundSystem::FormalCaptureMaskOf(int slot) const {
+  RefuseUnfinished("CompoundSystem::FormalCaptureMaskOf");
   return captureMaskSetup_->slots[slot];
 }

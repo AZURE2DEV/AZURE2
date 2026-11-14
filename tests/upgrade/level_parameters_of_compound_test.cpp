@@ -42,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "CompoundSystem.h"
 #include "EngineChannelFunctions.h"
 #include "SystemOfCompound.h"
@@ -82,7 +83,7 @@ enum class Basis { Brune, Park, Formal };
 struct Loaded {
   std::ostringstream sink;
   Config cfg;
-  CompoundSystem compound;
+  std::unique_ptr<const CompoundSystem> compound;  // made by the set-up (test_setup)
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   Loaded() : cfg(sink) {}
@@ -98,8 +99,15 @@ std::unique_ptr<Loaded> Load(const std::string &azr, Basis basis, bool initializ
   if (m->cfg.ReadConfigFile() < 0) throw std::runtime_error("cannot read " + azr);
   m->cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(m->cfg);
-  if (m->compound.Fill(m->cfg, m->state, m->inputs) == -1) throw std::runtime_error("CompoundSystem::Fill failed for " + azr);
-  if (initialize) m->compound.Initialize(m->cfg, m->state, m->inputs);
+  CompoundSetUp setUp = test_setup::WithoutData(m->cfg);
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) throw std::runtime_error("the set-up failed for " + azr);
+  m->compound = std::move(setUp.compound);
+  if (initialize) {
+    m->state = std::move(setUp.state);
+    m->inputs = std::move(setUp.inputs);
+  } else if (!test_setup::LevelsBeforeTheLastPart(m->cfg, m->state, m->inputs)) {
+    throw std::runtime_error("the set-up failed for " + azr);
+  }
   return m;
 }
 
@@ -182,11 +190,11 @@ void CheckProject(const std::string &name, const std::string &azr) {
   std::unique_ptr<Loaded> refF = Load(azr, Basis::Formal, true);
   std::unique_ptr<Loaded> emul = Load(azr, Basis::Brune, true);  // Brune CompoundSystem, made formal group by group (below)
   LevelInputs emulInputs = emul->inputs;               // its input values, made formal group by group
-  const SystemOfCompound built = BuildSystemOfCompound(refB->compound, refB->inputs, refB->cfg);
-  const SystemOfCompound builtF = BuildSystemOfCompound(refF->compound, refF->inputs, refF->cfg);
+  const SystemOfCompound built = BuildSystemOfCompound(*refB->compound, refB->inputs, refB->cfg);
+  const SystemOfCompound builtF = BuildSystemOfCompound(*refF->compound, refF->inputs, refF->cfg);
   const phys::System &sys = built.system;
   const SystemOfCompoundMap &map = built.map;
-  const phys::ChannelFunctions cf = EngineChannelFunctions(filled->compound, map, filled->cfg);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*filled->compound, map, filled->cfg);
 
   Stat bruneG, bruneB, parkG, parkJ, formalE, formalG, formalB, parkFormalE, parkFormalG, outE, outG;
   Stat rtObs, rtPark, rtFormalE, rtFormalG, photonShift;
@@ -197,7 +205,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
   // Formal -> Brune by the engine: CompoundSystem::TransformOut on the formal CompoundSystem, its fit values set to the loaded ones.
   ObservedLevelTable outF;
   {
-    CompoundSystem &cn = refF->compound;
+    const CompoundSystem &cn = *refF->compound;
     std::vector<int> numLevels, numChannels;
     for (int j = 1; j <= cn.NumJGroups(); j++) {
       numLevels.push_back(cn.GetJGroup(j)->NumLevels());
@@ -217,13 +225,13 @@ void CheckProject(const std::string &name, const std::string &azr) {
     const phys::JpiBlock &blk = sys.block(b);
     const std::size_t nc = blk.num_channels(), nl = blk.num_levels();
     const std::vector<phys::ProjectChannel> own = phys::internal_channels(sys, b);
-    const phys::ProjectLevels in = ProjectLevelsOfInputs(filled->compound, filled->inputs, map, b);
+    const phys::ProjectLevels in = ProjectLevelsOfInputs(*filled->compound, filled->inputs, map, b);
     for (std::size_t la = 0; la < nl; la++)
       for (std::size_t k = 0; k < nc; k++)
         if (IsPhoton(sys, blk.channel(k)) && cf(b, k, in.E[la]).static_moment) staticMoments++;
 
     // (a) Brune.
-    const std::vector<phys::ExternalWidth> extB = ExternalWidthsOfInputs(refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
+    const std::vector<phys::ExternalWidth> extB = ExternalWidthsOfInputs(*refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
     phys::LevelParameterOptions opt;
     opt.external = &extB;
         opt.formal = false;
@@ -235,7 +243,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     CompareB(sys, b, pb.B, bruneB);
 
     // (a) Park.
-    const std::vector<phys::ExternalWidth> extP = ExternalWidthsOfInputs(refP->compound, refP->state, refP->inputs, map, b, refP->cfg);
+    const std::vector<phys::ExternalWidth> extP = ExternalWidthsOfInputs(*refP->compound, refP->state, refP->inputs, map, b, refP->cfg);
     phys::Convention convP;
     convP.basis = phys::LevelBasis::Park;
     opt.external = &extP;
@@ -243,14 +251,14 @@ void CheckProject(const std::string &name, const std::string &azr) {
     const std::vector<double> gP = EngineGamma(refP->inputs, map, b);
     for (std::size_t i = 0; i < gP.size(); i++) parkG.add(pp.basis_gamma[i], gP[i], std::fmax(std::fabs(gP[i]), 1e-300));
     {
-      const JGroup *g = refP->compound.GetJGroup(map.groupOfBlock[b]);
+      const JGroup *g = refP->compound->GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++)
         parkJ.add(pp.park_norm[la], refP->state.ParkNorm(map.groupOfBlock[b], map.levelOfBlockLevel[b][la]), 1.0);
     }
 
     // (a) formal.  External capture as the engine's TransformIn computes it: final states in earlier groups are
     // already formal (emul has groups < b replaced by the formal CompoundSystem's values).
-    const std::vector<phys::ExternalWidth> extF = ExternalWidthsOfInputs(emul->compound, emul->state, emulInputs, map, b, emul->cfg);
+    const std::vector<phys::ExternalWidth> extF = ExternalWidthsOfInputs(*emul->compound, emul->state, emulInputs, map, b, emul->cfg);
     phys::Convention convF;
     convF.basis = phys::LevelBasis::Formal;
     opt.external = &extF;
@@ -265,7 +273,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     }
     CompareB(builtF.system, b, pf.B, formalB);
     {  // the same with the Brune final states throughout: how much the engine's order moves the photon amplitudes
-      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsOfInputs(refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsOfInputs(*refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
       for (std::size_t i = 0; i < extF.size(); i++) {
         if (extF[i].present && std::abs(extF[i].value) > 0.0) nonzeroExt++;
         if (extF[i].value != extAll[i].value) movedExt++;
@@ -367,7 +375,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
         if (firstGap.empty()) firstGap = gaps[0];
         continue;
       }
-      const phys::ProjectLevels in = ProjectLevelsOfInputs(filled->compound, filled->inputs, map, b);
+      const phys::ProjectLevels in = ProjectLevelsOfInputs(*filled->compound, filled->inputs, map, b);
       const phys::ConventionTransform T = phys::convention_transform(sys, b, conv, cols);
       // The file's values written in the project's columns; amplitude-input (gammaIsRWA) entries stay amplitudes
       // only where the column maps one to one, which holds for T1-T3 (their amplitude inputs are on single channels).
@@ -379,7 +387,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
               if (std::fabs(T(k, m)) > 0.0) rwa[la * cols.size() + m] = 1;
       const std::vector<double> gp = T.to_project(preEC[b], nl);
       const phys::ProjectLevels pin = phys::observed_from_amplitudes(sys, b, cols, in.E, gp, rwa, phys::LevelBasis::Brune, cf);
-      const std::vector<phys::ExternalWidth> extB = ExternalWidthsOfInputs(refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extB = ExternalWidthsOfInputs(*refB->compound, refB->state, refB->inputs, map, b, refB->cfg);
       phys::LevelParameterOptions opt;
       opt.external = &extB;
             const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
@@ -425,7 +433,7 @@ int main(int argc, char **argv) {
   std::printf("(d) missing channel\n");
   try {
     std::unique_ptr<Loaded> m = Load(argv[3], Basis::Brune, true);
-    const SystemOfCompound built = BuildSystemOfCompound(m->compound, m->inputs, m->cfg);
+    const SystemOfCompound built = BuildSystemOfCompound(*m->compound, m->inputs, m->cfg);
     const phys::System &sys = built.system;
     std::size_t b2 = sys.num_blocks(), b1 = sys.num_blocks();
     for (std::size_t i = 0; i < sys.num_blocks(); i++) {

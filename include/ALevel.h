@@ -69,7 +69,8 @@ class ALevel {
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
   /// \f$\int_a^\infty [W_c(kr)/W_c(ka_c)]^2\f$.
   double GetNFIntegral(int) const;
-  /// The energy (MeV, E_x) with which it enters external capture: its Brune energy at setup (cnuc_split.md section 8).
+  /// The energy (MeV, E_x) with which it enters external capture: its Brune energy at setup (cnuc_split.md section 8),
+  /// set by the compound system's last part; std::logic_error before it set it.
   double GetECEnergy() const;
   /// Factor converting this channel's reduced width amplitude to an ANC.
   double GetECConversionFactor(int) const;
@@ -107,6 +108,7 @@ class ALevel {
   std::vector<bool> zero_input_;
   vector_r gammas_;
   double ec_energy_ = 0.0;
+  bool hasECEnergy_ = false;  ///< set by SetECEnergy; GetECEnergy refuses before
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;
 };

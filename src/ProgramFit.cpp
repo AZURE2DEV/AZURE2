@@ -85,7 +85,7 @@ void ReportParametersAtLimits(const ProgramRun &run, const AZUREParams &params) 
     if (!atLimit) continue;
     if (!nAtLimit) run.configure.outStream << "  Parameter(s) sitting at a limit:" << std::endl;
     std::string text = mp.GetName(i);
-    const std::string label = AZURELabel::Parameter(run.compound, run.inputs, run.data, (int)i);
+    const std::string label = AZURELabel::Parameter(run.compound.get(), run.inputs, run.data, (int)i);
     if (!label.empty()) text += "  =  " + label;
     run.configure.outStream << "    " << text << " = " << value << std::endl;
     nAtLimit++;
@@ -101,7 +101,7 @@ void CaptureMinuitCovariance(ProgramRun &run, const std::vector<double> &covData
   const int nMn = run.params.GetMinuitParams().Params().size();
   std::vector<bool> fixedMask(nMn);
   for (int fi = 0; fi < nMn; fi++) fixedMask[fi] = run.params.GetMinuitParams().Parameter(fi).IsFixed();
-  ParamIndexMap pmap = BuildParamIndexMap(run.compound, run.data, fixedMask);
+  ParamIndexMap pmap = BuildParamIndexMap(run.compound.get(), run.data, fixedMask);
   run.bandCov = BuildBandCovarianceFromMinuit(covData, pmap);
   // Saved later (after the optional reduced-chi^2 scaling) in the band block.
   if (!run.bandCov.empty())

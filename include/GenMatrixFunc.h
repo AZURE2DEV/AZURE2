@@ -129,7 +129,7 @@ class GenMatrixFunc {
   double GetRk(double, double, double, double, int);
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
-  /// The refusal of a capture-A_y point whose terms were not requested at set-up (CompoundSystem::RequestCaptureAy).
+  /// The refusal of a capture-A_y point whose terms were not requested at set-up (CompoundSetUpRequests::AddCaptureAy).
   std::string CaptureAyNotBuiltMessage(const Site *point) const;
 
   /*!

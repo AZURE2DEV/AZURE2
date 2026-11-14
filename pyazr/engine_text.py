@@ -3,7 +3,8 @@
 The engine prints what it does on the process's standard output (file descriptor 1): progress bars of a reaction rate,
 the external-capture integrals it recomputes, the ERROR lines of a project it refuses, a level its transformation
 cannot reach.  A library call is quiet, so the calls that enter the engine -- every call of a :class:`pyazr.Session`
-(``pyazr.locking.engine_call``) and its set-up, a :class:`pyazr.rate.RateSession` and its rate -- run inside
+(``pyazr.locking.engine_call``) and its set-up, every call of a :class:`pyazr.Objective`, a
+:class:`pyazr.rate.RateSession` and its rate -- run inside
 :func:`held`: descriptor 1 points at a temporary file while the engine runs, and what the engine wrote is
 then handed to the logger ``pyazr.engine`` (Python's :mod:`logging`) line by line, the frames of a progress bar left
 out: the ERROR and WARNING lines at level WARNING (shown on standard error unless the caller configures logging

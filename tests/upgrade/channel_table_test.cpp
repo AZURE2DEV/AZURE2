@@ -20,6 +20,7 @@
 #include <omp.h>
 #endif
 
+#include "SetUpForTests.h"
 #include "CompoundSystem.h"
 #include "ChannelTable.h"
 #include "Config.h"
@@ -49,14 +50,12 @@ void CheckProject(const std::string &azr) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = azr;
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
-  LevelInputs inputs;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1) {
+  CompoundSetUp setUp;
+  if (cfg.ReadConfigFile() < 0 || (setUp = test_setup::WithoutData(cfg)).refusal != CompoundSetUp::Refusal::kNone) {
     check(azr + ": load", false);
     return;
   }
-  compound.Initialize(cfg, state, inputs);
+  const CompoundSystem &compound = *setUp.compound;
   std::vector<ChannelTable::Key> keys;
   for (int p = 1; p <= compound.NumPairs(); p++) {
     if (compound.GetPair(p)->GetPType() != 0) continue;
@@ -108,12 +107,9 @@ void CheckProject(const std::string &azr) {
         fromPrevious->Computed() == fromPrevious->Size() - one->Size());
   // The same project with the first key's pair at another channel radius (the structure is fixed after set-up: a
   // radius is changed by filling the compound again with the override, as the API's SetRadius does).
-  CompoundSystem moved;
-  LevelState movedState;  // the levels, as the run holds them
-  LevelInputs movedInputs;
-  moved.Fill(cfg, movedState, movedInputs, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
-  moved.Initialize(cfg, movedState, movedInputs);
-  auto changed = ChannelTable::Build(&moved, cfg, keys, one.get());
+  const CompoundSetUp moved =
+      test_setup::WithoutData(cfg, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
+  auto changed = ChannelTable::Build(moved.compound.get(), cfg, keys, one.get());
   check("a previous table of another channel radius is not reused", changed->Computed() == changed->Size());
 }
 
