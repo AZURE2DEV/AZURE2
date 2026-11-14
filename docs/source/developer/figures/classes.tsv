@@ -40,6 +40,7 @@ CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	s
 azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable
 azure2::PathwayTable	include/PathwayTable.h	reaction pathways and interference terms	setup	class	immutable
 DataSet	include/DataSet.h	the data as set up: segments, effects, meshes	setup	class	immutable
+AbundanceSamples	include/AbundanceSamples.h	the targets' isotopic abundances: samples, priors; the abundance block of the vectors	setup	class	immutable
 Segment	include/Segment.h	one data set: measurement, settings, terms	setup	class	immutable
 TargetEffect	include/TargetEffect.h	a target, beam or detector effect and its kernels	setup	class	immutable
 WorkingCopy	include/WorkingCopy.h	what an evaluation changes; builds the DataSet	setup	class	evaluation

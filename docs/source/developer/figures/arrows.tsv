@@ -54,6 +54,7 @@ WorkingCopy	DataSet	makes	setup		WorkingCopy::Draft() (DataSet &) during the set
 WorkingCopy	DataSet	reads	setup	const	WorkingCopy::set_ (shared_ptr<const DataSet>), WorkingCopy::Data()
 DataSet	Segment	owns	setup		DataSet::segments_ (std::vector<Segment>)
 DataSet	TargetEffect	owns	setup		DataSet::targetEffects_ (std::vector<TargetEffect>)
+DataSet	AbundanceSamples	owns	setup		DataSet::abundances_ (AbundanceSamples, set by WorkingCopy::SetAbundanceSamples)
 WorkingCopy	DataSet	reads	evaluation	const	WorkingCopy::set_ (shared_ptr<const DataSet>), WorkingCopy::Data()
 DataSet	TargetEffect	owns	evaluation		DataSet::targetEffects_ (std::vector<TargetEffect>)
 TargetEffect	azure2::experiment::Kernel	reads	evaluation	const	TargetEffect::kernels_ (EffectKernels: const Kernel *broadening, *resolution), chosen by TargetEffect::SelectKernels
