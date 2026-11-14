@@ -35,6 +35,8 @@ SESSION_NOT_SERVED = {
         "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
         "datasets cache_stats output_dir",
+    "the engine's own fitters: the Fit tab's job for them is a later step (web_ui.md 12, finding 20)":
+        "fit_with_engine",
 }
 
 

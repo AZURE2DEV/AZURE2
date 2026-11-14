@@ -393,8 +393,9 @@ Available Options
      - Fit with the GSL trust-region least-squares minimizer with geodesic
        acceleration (analytic Jacobian); falls back to MIGRAD.
    * - ``--use-nlopt``
-     - Fit with NLopt's BOBYQA instead of Minuit2.  Only in builds configured
-       with ``-DUSE_NLOPT=ON``.
+     - Fit with NLopt's Subplex (SBPLX) instead of Minuit2.  Only in builds
+       configured with ``-DUSE_NLOPT=ON``.  The fitters and their switches:
+       :doc:`../user_guide/fitting`, "The Engine's Fitters".
    * - ``--covariance-band``
      - Write the cross-section uncertainty band from the parameter covariance.
        Without the flag, calculate and fit runs ask for it interactively; with

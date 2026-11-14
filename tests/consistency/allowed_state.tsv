@@ -43,7 +43,6 @@ include/GSLException.h	n	static	table: GSL's error handler is process-wide by GS
 include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): per site, the EC amplitude at the last shifted energy (EC unit amplitudes per mesh energy later)
 src/ALevel.cpp	counter	static	table: the stamp generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
 src/AZURECalc.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
-src/AZURECalc.cpp	progressMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalc.cpp	traceMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/CoulombTable.cpp	f	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	m	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock

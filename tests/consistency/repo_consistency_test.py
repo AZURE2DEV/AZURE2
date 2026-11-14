@@ -13,6 +13,7 @@ source tree only, runs in well under a second.
 Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
 
+import glob
 import os
 import re
 import stat
@@ -1172,6 +1173,42 @@ try:
 except (OSError, IndexError, KeyError) as e:
     problems.append(f"check 44: {e}")
 
+# 46. The engine's fitters are one table (src/Fitters.cpp, Fitters(); docs/upgrade/fit.md): every row's switch is an
+#     option the program parses (a string literal outside src/Fitters.cpp, in src/AZURE2.cpp or support/) and a row of
+#     docs/source/reference/command_line.rst; every row's name is in the fitter table of
+#     docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets (Config::USE_*_MINIMIZER,
+#     Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be selected outside the table.
+_fitter_rows = []
+try:
+    _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
+    if not _fitter_rows:
+        problems.append("src/Fitters.cpp: no row found in Fitters() (check 46)")
+    _parser = read("src/AZURE2.cpp")
+    for _f in glob.glob(os.path.join(ROOT, "support", "**", "*.cpp"), recursive=True):
+        _parser += read(os.path.relpath(_f, ROOT))
+    _cli_page = read("docs/source/reference/command_line.rst")
+    _fit_page = read("docs/source/user_guide/fitting.rst")
+    _fit_table = _fit_page.split("The Engine's Fitters", 1)[1] if "The Engine's Fitters" in _fit_page else ""
+    if not _fit_table:
+        problems.append("docs/source/user_guide/fitting.rst: no section \"The Engine's Fitters\" (check 46)")
+    for _name, _option, _bit in _fitter_rows:
+        if _option and f'"{_option}"' not in _parser:
+            problems.append(f"src/Fitters.cpp: the switch {_option} of the fitter '{_name}' is not parsed by the "
+                            "program (src/AZURE2.cpp, support/) (check 46)")
+        if _option and f"``{_option}``" not in _cli_page:
+            problems.append(f"docs/source/reference/command_line.rst: the switch {_option} of the fitter '{_name}' is "
+                            "not listed (check 46)")
+        if _fit_table and f"``{_name}``" not in _fit_table:
+            problems.append(f"docs/source/user_guide/fitting.rst: the fitter '{_name}' is not in the table of "
+                            "\"The Engine's Fitters\" (check 46)")
+    _row_bits = {_bit for _n, _o, _bit in _fitter_rows}
+    for _bit in sorted(set(re.findall(r"Config::(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)", read("src/AZURE2.cpp")))):
+        if "Config::" + _bit not in _row_bits:
+            problems.append(f"src/AZURE2.cpp: the switch bit Config::{_bit} selects a fitter that is no row of "
+                            "Fitters() in src/Fitters.cpp (check 46)")
+except (OSError, IndexError) as e:
+    problems.append(f"check 46: {e}")
+
 # 48. The wheel carries every file pyazr reads at run time (docs/upgrade/pyazr3.md section 2.9; pyazr/datafiles.py): every
 #     tracked file under pyazr/ that is not Python is a data file the wheel carries (DATA_FILES) or a file it leaves
 #     out (NOT_SHIPPED, with the reason), never both; every DATA_FILES entry exists; the patterns of NOT_SHIPPED are
@@ -1216,4 +1253,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, "
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
-      f"{_wheel_data} data files of the wheel")
+      f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel")

@@ -174,6 +174,41 @@ A command-line flag that is not an option of the calculation:
 ``parseOptions`` and ``printHelp`` (``src/AZURE2.cpp``) and
 ``reference/command_line.rst`` (check 1).
 
+A fitter
+--------
+
+A minimiser the program and a pyazr session can both run:
+
+1. Its function, ``FitResult FitX(AZURECalc &, AZUREParams &, const
+   FitControl &)``, in a file of its own (``src/FitX.cpp``, in
+   ``AZURE2_CORE_SOURCES``): it starts from the values, limits and fixed flags
+   of the ``AZUREParams``, leaves its end point there, writes its lines to
+   ``control.log``, hands its steps to ``control.progress`` (an evaluation
+   fitter puts a ``FitEvaluations`` in place while it runs, which also keeps
+   the best point and puts the stop request in force; an iteration fitter
+   sends a ``FitProgress`` per iteration and checks ``control.stop`` itself)
+   and fills ``FitResult`` (status, calls, covariance where it has one; a
+   stopped fit returns the best point seen with status ``stopped``).
+2. Its row in ``Fitters()`` (``src/Fitters.cpp``): name, the program's switch,
+   the ``Config::paramMask`` bit the switch sets, gradient / residual rows /
+   bounds / covariance / MINOS, progress label, one line of doc. Its place in
+   the table is its precedence in the program.
+3. The switch in the program's parser (``src/AZURE2.cpp``) and its row in
+   ``reference/command_line.rst``; its row in the table "The Engine's
+   Fitters" of ``user_guide/fitting.rst`` (check 46 fails for a row missing
+   from either, and for a minimizer bit of the parser that is no row).
+4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
+   ends where the program ends, with the program's covariance.
+   ``pyazr.kinds()["fitters"]`` and ``fit_with_engine(method=)`` read the
+   table and need no edit.
+
+A quantity of the progress record is a field of ``FitProgress``
+(``include/FitControl.h``), set where the record is made (``FitEvaluations``
+for evaluations, the fitter for its iterations) and copied into the
+dictionary of ``FitWithEngineDict`` (``api/src/pybind_fit.cpp``); the
+program's printer (``ProgramProgress::Print``) is unchanged unless it is to
+print it.
+
 An environment switch
 ---------------------
 
