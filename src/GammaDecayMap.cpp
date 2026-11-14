@@ -545,7 +545,7 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
     bool any = false;
     for (double g : gbar) any = any || g != 0.0;
     if (!any) continue;
-    for (int ch = 1; ch <= group->NumChannels(); ch++) particle[ch - 1] = level->GetFitGamma(ch);
+    for (int ch = 1; ch <= group->NumChannels(); ch++) particle[ch - 1] = compound.State().Gamma(j, la, ch);
     // Gamma_gamma and the branchings: dg_k/dq_i = g_k / (2 Gamma_k) dGamma_k/dq_i (0 where Gamma_k = 0: g ~ b^1/2
     // has no finite derivative at b = 0), times R_k.
     std::vector<double> dGdq;
@@ -567,7 +567,7 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
         std::vector<double> unit = q;
         unit[i] = 1.0;
         const double K = std::sqrt(2.0) * PhotonAmplitudes(compound, *structure_, park_, gslCoulomb_, rmc_, L,
-                                                           level->GetFitE(), unit, particle)[kL1];
+                                                           compound.State().E(j, la), unit, particle)[kL1];
         v = -gbar[kL] * R[kL] * amp[kL] * d / w + gbar[kL1] * R[kL1] * K / (w * std::sqrt(w));
       } else {
         for (std::size_t k = 0; k < m; k++)
@@ -576,7 +576,7 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
       add(map.GammaIndexFlat(j, la, L.photonChannels[i]), v);
     }
     // The particle amplitudes (Brune): g_k^2 = |Gamma_k| n / (2 P_k), n = 1 + sum_c gamma_c^2 S'_c.
-    const double E = level->GetFitE();
+    const double E = compound.State().E(j, la);
     if (!park_) {
       const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(compound, structure_->map, gslCoulomb_, rmc_);
       double n = 1.0;
@@ -615,9 +615,9 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
     for (std::size_t s = 0; s < m; s++) {
       const GammaDecayLevel::External &e = L.external[s];
       if (!e.group) continue;
-      const ALevel *f = compound.GetJGroup(e.group)->GetLevel(e.level);
-      finals[s].first = f->GetFitE();
-      for (int ch = 1; ch <= compound.GetJGroup(e.group)->NumChannels(); ch++) finals[s].second.push_back(f->GetFitGamma(ch));
+      finals[s].first = compound.State().E(e.group, e.level);
+      for (int ch = 1; ch <= compound.GetJGroup(e.group)->NumChannels(); ch++)
+        finals[s].second.push_back(compound.State().Gamma(e.group, e.level, ch));
     }
     auto difference = [&](double upE, double downE, const std::vector<std::pair<double, std::vector<double>>> &upF,
                           const std::vector<std::pair<double, std::vector<double>>> &downF) {

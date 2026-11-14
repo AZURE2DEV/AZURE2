@@ -29,7 +29,9 @@ def esc(text):
     text = text.replace("\\", "\\\\")
     for c in "*`|":
         text = text.replace(c, "\\" + c)
-    return re.sub(r"_(?=\s|$|[,.;:)])", r"\\_", text)
+    # a word ending in "_" is a reference: before a space, the end or any punctuation ("[A-Za-z0-9_-]" was read as
+    # the target "a-za-z0-9": an error of the Sphinx build)
+    return re.sub(r"_(?=\W|$)", r"\\_", text)
 
 
 def lit(text):

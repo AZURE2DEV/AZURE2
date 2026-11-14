@@ -192,13 +192,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   if (replaceGrids) {
     if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
     g = gridNuc_.nuc.get();
-    for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-      for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-        const ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
-        ALevel *to = g->MutableLevel(j, la);
-        to->SetFitE(from->GetFitE());
-        for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
-      }
+    g->CopyFitEnergiesAndAmplitudes(theCNuc->State());
     g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
   }
   const auto t1 = std::chrono::steady_clock::now();

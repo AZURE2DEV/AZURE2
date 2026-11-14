@@ -142,7 +142,7 @@ std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi,
           if (static_cast<azure2::physics::ObservedKind>(observed->Level(j, la).kind[ch - 1]) ==
               azure2::physics::ObservedKind::Width)
             width += std::fabs(observed->Level(j, la).W[ch - 1]);
-      const double eCM = (observed ? observed->Level(j, la).E : level->GetFitE()) - threshold;
+      const double eCM = (observed ? observed->Level(j, la).E : compound->State().E(j, la)) - threshold;
       for (double k : {0.0, -0.5, 0.5, -1.0, 1.0, -2.0, 2.0, -4.0, 4.0}) {
         if (k != 0.0 && !(width > 0.0)) continue;
         const double c = eCM + k * width;

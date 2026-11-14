@@ -2,6 +2,133 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 11:40) — merged: the level state; the page's link; the pages' build test
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 68 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-level-state-2` and `feature/upgrade-6-ui-token-link`. Their entries
+follow.
+
+- The values an evaluation writes per level (fit energies and amplitudes, the shift-function values, the
+  external-capture and final-state quantities, Park's J) live in one `LevelState` held by `CNuc`; `ALevel`
+  keeps the structure and the input values only. Deleted with no caller left: `CNuc::InvalidateShiftFunctions`,
+  `AZUREAPI::TransformRWAParameters`, `AZUREAPI::TransformAllRWAParametersFull`.
+- `allowed_state.tsv`: the version counter's row moved from `src/ALevel.cpp` to `src/LevelState.cpp`; the
+  count stays 49. Accepted: it is the same counter. The size rows of the files the step shrank are the file
+  plus 20 lines.
+- The web page: the printed URL works as a link from another site (cookie `SameSite=Lax`, named per port); a
+  browser without the token gets a page that asks for it; programs keep the JSON refusal.
+- The published pages are built by a quick test (`docs_build`, skipped where Sphinx is missing). Its first run
+  found that `format3.rst` did not build under `-W` (a character class read as a reference): the generator's
+  escape is fixed. Sphinx, its theme and the copy-button extension (`docs/requirements.txt`) are installed in
+  the work environment with the PI's yes.
+
+**Verified on the merged tree** (build `work/b-trial68`): 0 warnings; all projects in the three bases identical
+to `tab-t67-1` (887 / 851 / 887 files); the eight fits identical to `work/b-trial67`; 266 of 266 quick tests.
+The director's own runs (`work/director/spot68/`): `angle_mapping` fits (gradient, LM) and a short T2 sampler
+chain in the physical and the RWA basis, `work/b-trial67` against `work/b-trial68`: every output identical
+(13, 13, 10, 10 files). After the link branch was merged in: the consistency test, `docs_build` (54 pages) and
+the 88 tests of `tests/pyazr/ui` pass. Not run here: the slow tests, `pyazr_wheel`, the long suite.
+
+**New reference**: tag `tab-t68-1`, base build `work/b-trial68`.
+
+**Open, for a later branch or a decision**:
+
+- The design's steps 4 and 5 of `cnuc_split.md` section 12.3 (one parameter layout; pools of `LevelState`
+  instead of copies of the compound; the set-up out and the name `CNuc` gone).
+- Kept as they were: the sub-point-grid copy takes only E and γ (N_f^½ stale in the Brune basis with a fitted
+  final-state amplitude); the RWA chain's snapshot `parameters.out`.
+- `pyazr_ec_relativistic` (label slow) fails on this build and on older ones alike: it parses a number from a
+  line that now prints `Objective(...)`.
+- The page's cookie has no expiry (a session cookie); Firefox and Safari were not run; about 30 `:py:`
+  references of the pages have no target under Sphinx's nitpicky mode.
+
+## 2026-11-14 (director, 10:50, branch `feature/upgrade-6-ui-token-link`) — the page's printed URL works as a link
+
+**Met by the PI**: the printed URL (`http://127.0.0.1:<port>/?token=...`) opened as a link answered
+`{"error": "Unauthorized", "message": "the token is missing or wrong"}`. Cause: the token's cookie was
+`SameSite=Strict`; a browser keeps a strict cookie back on a navigation that starts on another site and on the
+redirect that follows it (`/?token=` answers 303 to `/`), so the redirect arrived without the cookie. Typed into
+the address bar the same URL worked. Reproduced in headless Chrome (the link on `localhost`, the page on
+`127.0.0.1`: the click ended on the refusal) before the change and gone after it.
+
+**Changed** (`pyazr/ui/server.py`, nothing else of pyazr):
+- the cookie is `SameSite=Lax`. Safe while every GET route only reads: a lax cookie goes with a navigation from
+  elsewhere and with nothing else, and a request that changes something carries an `Origin` header, which the
+  guard checks. **Rule for a new route: a GET changes nothing** (web_ui.md 11.1 item 2).
+- the cookie's name carries the port (`azure2_ui_token_<port>`, `cookie_name`): a browser has one cookie jar per
+  host whatever the port, so two servers with their own random tokens logged each other out (found while reading;
+  shown by `static_test.py::test_two_servers_on_one_host_keep_their_own_cookies`).
+- a browser's navigation without the token or with a wrong one gets a small page ("the token is needed", a field
+  for the token, no script, its own policy) instead of raw JSON; programs and `/api` keep the JSON refusal.
+
+**Tests**: `static_test.py` (the cookie's attributes and name, the token page, two servers);
+`smoke_test.py::test_printed_url_followed_from_another_site_opens_the_page` (label `browser`; fails with the
+strict cookie: "the click ended at ... with the title 'AZURE2 — token needed'"). Run: `static`, `api`, `server`,
+`smoke` of `tests/pyazr/ui/` with the engine of the reference build (Python and documents only changed).
+
+**Documents**: web_ui.md (section 8, 11.1 item 2), the user guide's web page (a forward through a gateway must end
+at the server machine's loopback; "the token is needed"), the API page, `tests/pyazr/ui/README.md`.
+
+**The published pages are now built here** (Sphinx 9.1.1 with the two packages of `docs/requirements.txt`,
+installed with the PI's yes). The first build as the workflow runs it (`-W --keep-going`) failed: the format-3
+reference page read `[A-Za-z0-9_-]` as a reference to the target "a-za-z0-9" (two places). The generator's
+escape (`tools/gen_schema_docs.py`, `esc`) now escapes an underscore before any punctuation; the page is
+regenerated (three lines change). New test `docs_build` (`tests/consistency/docs_build_test.py`, in the quick
+suite, about 5 s, skipped without Sphinx): fails on the page as it was, passes now with 54 pages. With `-n`
+(nitpicky) the build lists about thirty `:py:` references without a target (there is no generated Python
+reference to point at): not run by the workflow, left; a decision once pyazr 3.0's reference page exists.
+
+**Open**: the cookie is a session cookie (a restarted browser asks for the token again: the page now says how);
+Firefox and Safari were not run (the rule they follow is the same standard).
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-state-2`) — the fit set out of `ALevel` (`LevelState`)
+
+**Measured first** (start 50e1fa7c), calls of the fit set's accessors outside `ALevel.cpp`: 183 in 22 files.
+
+| accessor | calls / files | accessor | calls / files |
+|---|---|---|---|
+| `GetFitGamma` | 54 / 14 | `GetFitE` | 38 / 15 |
+| `SetFitGamma`, `SetFitE` | 8 / 6 each | `GetParkNorm`, `SetParkNorm` | 14 / 9, 2 / 1 |
+| `GetShiftFunction`, `SetShiftFunction` | 11 / 5, 2 / 1 | `GetShiftDerivative`, `...SecondDerivative` | 9 / 5, 4 / 4 |
+| `GetSqrtNFFactor`, `SetSqrtNFFactor` | 6 / 5, 7 / 3 | `GetECGamma`, `SetECGamma` | 4 / 2, 3 / 3 |
+| the two energies' accessors, derivative setters | 7 | `InvalidateShiftFunctions`, `Stamp` | 3 / 2, 3 / 1 |
+
+By file: `AMatrixFunc.cpp` 41, `CNuc.cpp` 28, `RMatrixFunc.cpp` 20, `THMMatrixFunc.cpp` 19, `ChannelSpace.cpp` 13, the
+rest 8 or fewer.
+
+**Done** (two commits, each built with 0 warnings and run on the per-commit set):
+- `LevelState` (`include/LevelState.h`, `src/LevelState.cpp`) holds per level the fit E and γ, the external-capture
+  amplitudes and N_f^½, S_c(E_λ) with its energy, dS/dE, d²S/dE² with its energy, Park's J and a version; `CNuc`
+  holds one (`State() const`), shaped by `Fill`. Its fills write it (`FillCompoundFromParams` and
+  `CalcShiftFunctions` moved to `src/CNucLevelState.cpp`; `TransformIn`, `FillCompoundFromParamsPhysical`,
+  `ECFinalStatesFromFormal`, `SetFitLevelParameter`, `ObservedOfFitValues`' restore); the only public writer is
+  `CopyFitEnergiesAndAmplitudes` (the sub-point-grid copy). All 183 readers read the state; `ALevel` lost the eleven
+  members, their 26 accessors and its stamp, and keeps the set-up data and input values.
+- `ChannelSpace`'s three memos key on (state address, group, level, version); the version generator moved with its
+  `allowed_state.tsv` row (`src/ALevel.cpp` → `src/LevelState.cpp`, same count). `ThmVertexBoundary` takes the state;
+  `ThmLevelWidth` takes E and γ, so the line-shape width derivative perturbs a vector.
+- By a script (regex, `work/cnuc4` scratch): `RMatrixFunc.cpp` (`(compound()->GetJGroup(j)|theJGroup)->GetLevel(L)->
+  GetFitGamma(C)` → `state.Gamma(j, L, C)`, same for `GetFitE`: 24 lines with the hand edits), `AZUREGrad.cpp` (8
+  lines) and `Objective.cpp` (5 lines) (`level->GetX(c)` → `compound->State().X(j, la, c)`); the rest by hand.
+- Deleted without a caller, writing the fit set: `CNuc::InvalidateShiftFunctions`, `AZUREAPI::TransformRWAParameters`,
+  `AZUREAPI::TransformAllRWAParametersFull`. Left (no fit set): `Rebuild`, `SetRadius`, `SetData`, `SetExtrap`,
+  `GetNormalizationIndices`, `GetEnergyShiftIndices`, `norms_errors`, `GetCurrentNorms`,
+  `HybridPotentialSettings::ConfiguredPairs`.
+- `CNuc.cpp` 1355 → 1135 lines; size rows lowered to the file + 20: `CNuc.cpp` 1155, `AZUREAPI.cpp` 1554,
+  `AZURECalc.cpp` 1437 (`AZURE2.cpp` 1620 lines, row 1639 kept: within the margin).
+
+**Verified how** (build `work/b-cnuc4`, 2 threads): consistency test; all projects × 3 bases against `tab-t66-1`
+(tag `tab-cnuc4-1`): 887 / 851 / 887 identical; the eight fits of `fits_vs_base2.sh` identical to `work/b-trial66`;
+`angle_mapping` (gradient, LM) and T2 sampled in both bases identical; T2 Park gradient, 13N Park LM, T2 formal
+gradient fits identical; `OMP_NUM_THREADS=1 ctest -LE slow -j1` without `gsl_quiet`, `pyazr_park_gradient`,
+`pyazr_parallel_points`, `pyazr_upgrade_thread_independence`, `channel_table_unit`: 264 of 264 passed (3221 s). Injected: the
+version never changing (`LevelState::Touch` empty) made the three Park/formal fits differ (13, 7, 13 files); removed.
+
+**Open.** Steps 4 and 5 of `cnuc_split.md` §12.3 (the `LevelState` pool, `LevelInputs`, `CompoundSystem`). The two
+defects kept as they were: the RWA chain's snapshot `parameters.out` (`StartObservedLevels`) and the sub-point-grid
+copy's stale N_f^½ (both unchanged; the copy still takes only E and γ). `pyazr_ec_relativistic` (label slow) fails
+with this build and with `b-trial65` alike: it parses a float from a line that now prints `Objective(...)`.
+
 ## 2026-11-14 (director, 10:38) — merged: the engine's fit path
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 67 (a true merge of the rehearsal branch; its tree

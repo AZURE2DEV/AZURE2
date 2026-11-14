@@ -131,7 +131,7 @@ class ParkTerm : public ObjectiveTerm {
       for (int la = 1; la <= group->NumLevels(); la++) {
         const ALevel *level = group->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        const double parkNorm = level->GetParkNorm();
+        const double parkNorm = compound.State().ParkNorm(j, la);
         if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
       }
     }
@@ -453,7 +453,7 @@ void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &conf
       for (int la = 1; la <= jg->NumLevels(); la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        const double J = level->GetParkNorm();
+        const double J = compound->State().ParkNorm(j, la);
         if (!(J < 0.0)) {
           appendRow(0.0, nullptr, nullptr);
           continue;
@@ -464,9 +464,9 @@ void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &conf
         for (int ch = 1; ch <= jg->NumChannels(); ch++) {
           const AChannel *channel = jg->GetChannel(ch);
           if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-          const double g = level->GetFitGamma(ch);
-          acc.AddGamma(j, la, ch, -2.0 * g * level->GetShiftDerivative(ch) / s);
-          dE -= g * g * level->GetShiftSecondDerivative(ch);
+          const double g = compound->State().Gamma(j, la, ch);
+          acc.AddGamma(j, la, ch, -2.0 * g * compound->State().ShiftDerivative(j, la, ch) / s);
+          dE -= g * g * compound->State().ShiftSecondDerivative(j, la, ch);
         }
         acc.AddE(j, la, dE / s);
         appendRow(J / s, &acc, nullptr);

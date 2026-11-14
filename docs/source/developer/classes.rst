@@ -64,13 +64,18 @@ and makes the ``Format3Project`` (validated records, the ``<levels>`` rows,
 the specs of ``BuiltProject``), which ``Config`` keeps as
 ``std::shared_ptr<const Format3Project>``. ``CNuc`` is filled from the
 ``<levels>`` rows: pairs (``PPair``) and :math:`J^\pi` groups (``JGroup``),
-each with its channels (``AChannel``) and levels (``ALevel``). The levels
-hold the parameter vector's values, so ``CNuc`` is copied for every
-evaluation that runs at the same time; its pairs, groups and channels do not
-change after the set-up, and the compiler holds to it: outside ``CNuc``'s own
-set-up they are reached through ``const`` pointers only (``GetPair``,
-``GetJGroup``), and the level values that move with the parameters through
-``CNuc::MutableLevel``. The observed values of the levels at a vector (Brune
+each with its channels (``AChannel``) and levels (``ALevel``: the input
+values, the fix flags, the external-capture final-state data). The values at
+the parameter vector (fit energies and amplitudes, shift functions and their
+derivatives, Park's :math:`J`, the external-capture amplitudes and
+:math:`N_f^{1/2}`) are the ``LevelState`` the ``CNuc`` holds: its fills
+(``FillCompoundFromParams``, ``CalcShiftFunctions``, ``TransformIn``,
+``SetFitLevelParameter``) write it, every reader gets it ``const`` through
+``CNuc::State()``. ``CNuc`` is copied for every evaluation that runs at the
+same time; its pairs, groups and channels do not change after the set-up, and
+the compiler holds to it: outside ``CNuc``'s own set-up they are reached
+through ``const`` pointers only (``GetPair``, ``GetJGroup``), and a level's
+input values through ``CNuc::MutableLevel``. The observed values of the levels at a vector (Brune
 energies and amplitudes, observed widths, ANCs and moments, the external parts)
 are not stored on the levels: ``CNuc::TransformOut`` returns them as an
 ``ObservedLevelTable``, which the reports (``WriteParametersOut``), the model

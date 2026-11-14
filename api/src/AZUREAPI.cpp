@@ -273,7 +273,7 @@ bool AZUREAPI::UpdateParameters() {
  * calculating anything.
  *
  * The free-vector entry points (CalculateChi2RWA, UpdateSegmentsRWA,
- * TransformRWAParameters, ...) take the FIXED parameters from all_rwa_, i.e.
+ * TransformAllRWAParameters, ...) take the FIXED parameters from all_rwa_, i.e.
  * from the .azr.  The CLI's external parameter file sets fixed level
  * parameters too (AZUREParams::ReadUserParameters), so a session given only the
  * free part of a param.sav computes a different model whenever the file's
@@ -440,47 +440,6 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 }
 
 // Transform RWA parameters to physical values
-vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
-  // p holds the non-fixed parameters only, so the loop has to run over the
-  // full parameter array -- running it to p.size() leaves every parameter
-  // beyond that index at its .azr value, which silently returns stale widths
-  // for the levels at the end of the file.  A shorter p (e.g. only the
-  // leading R-matrix block, with the norm/shift tail sliced off) is still
-  // accepted: the free parameters it does not cover keep their all_rwa_ value.
-  vector_r params = all_rwa_;
-  int k = 0;
-  for (int i = 0; i < params.size(); ++i) {
-    if (!fixed_[i]) {
-      if (k < p.size()) params[i] = p[k];
-      ++k;
-    }
-  }
-
-  CNuc *localCompound = NULL;
-  WorkingCopy *localData = NULL;
-  localCompound = compound();
-  localData = data();
-
-  localCompound->FillCompoundFromParams(params);
-  localData->FillAbundancesFromVector(params);
-
-  vector_r transformedParams = localCompound->GetTransformParams(localCompound->TransformOut(configure()));
-  data()->Data().Abundances().AppendTo(params, transformedParams);
-
-  // Get only non fixed parameters
-  vector_r transformed;
-  k = 0;
-  for (int i = 0; i < transformedParams.size(); ++i) {
-    if (!fixed_[i]) {
-      transformed.push_back(transformedParams[i]);
-      ++k;
-    }
-  }
-
-  return transformed;
-}
-
-// Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixed) const {
   // p holds every parameter, fixed ones included; a short p updates a prefix.
   vector_r params = all_rwa_;
@@ -508,25 +467,6 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
     }
   }
 
-  return transformed;
-}
-
-// Transform every parameter (fixed ones included) to physical values, and
-// return all of them.  A snapshot of a fit needs the fixed channels too: they
-// are fixed in reduced-width space, so their observed widths move with the
-// free widths of the same level (the 1 + sum gamma^2 dS/dE factor and the
-// external width), and a <levels> block that keeps their old observed values
-// reads back as a different model (12C+alpha, 2026-10-12: +21 chi2 units).
-vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
-  vector_r params = all_rwa_;
-  for (int i = 0; i < p.size() && i < params.size(); ++i) {
-    params[i] = p[i];
-  }
-  CNuc *localCompound = compound();
-  localCompound->FillCompoundFromParams(params);
-  data()->FillAbundancesFromVector(params);
-  vector_r transformed = localCompound->GetTransformParams(localCompound->TransformOut(configure()));
-  data()->Data().Abundances().AppendTo(params, transformed);
   return transformed;
 }
 
@@ -913,7 +853,7 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
     const JGroup *jg = localCompound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++)
-      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(jg->GetLevel(la)->GetParkNorm());
+      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(localCompound->State().ParkNorm(j, la));
   }
   return out;
 }

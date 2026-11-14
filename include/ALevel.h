@@ -2,10 +2,8 @@
 #define ALEVEL_H
 
 #include "Constants.h"
-#include <cstdint>
 #include <vector>
 
-#include <limits>
 
 namespace azure2 {
 namespace io {
@@ -18,13 +16,10 @@ class LevelRow;
 /*!
  * An R-matrix level  represents a specific eigenstate of the compound nucleus.
  *
- * A level carries its energy and one reduced width amplitude per channel of
- * its \f$J^\pi\f$ group, in two parallel sets that are easy to confuse:
- *
- *  - **input / formal** -- GetE, GetGamma: what the nuclear input file said,
- *    in the formal R-matrix parameterization.
- *  - **fitted** -- GetFitE, GetFitGamma: the working values the minimizer
- *    moves. This is the set a calculation actually reads.
+ * A level carries its set-up data (IDs, fix flags, the external-capture final-state data) and its input values,
+ * GetE and GetGamma: what the nuclear input file said, in the engine's basis after CNuc::TransformIn.  The values a
+ * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the
+ * external-capture amplitudes and N_f^1/2) are not the level's: they are the compound's LevelState (CNuc::State).
  *
  * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
  * ObservedLevelTable.
@@ -72,37 +67,14 @@ class ALevel {
   /// Formal internal reduced width amplitude for a channel.
   double GetGamma(int) const;
 
-  // -- fitted parameters -----------------------------------------------------
-  /// Working reduced width amplitude the minimizer moves; what a calculation reads.
-  double GetFitGamma(int) const;
-  /// Working level energy the minimizer moves.
-  double GetFitE() const;
-
   // -- external capture ------------------------------------------------------
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
   /// \f$\int_a^\infty [W_c(kr)/W_c(ka_c)]^2\f$.
   double GetNFIntegral(int) const;
-  /// The \f$N_f^{1/2}\f$ normalization of the bound-state wave function.
-  double GetSqrtNFFactor() const;
-  /// The amplitude with which this level enters external capture as a final state, with which N_f^1/2 is formed:
-  /// its Brune (Park) amplitude in every basis (cnuc_split.md section 8); the fit amplitude except in the formal basis.
-  double GetECGamma(int) const;
   /// The energy (MeV, E_x) with which it enters external capture: its Brune energy at setup (cnuc_split.md section 8).
   double GetECEnergy() const;
   /// Factor converting this channel's reduced width amplitude to an ANC.
   double GetECConversionFactor(int) const;
-
-  /// Shift function for a channel, evaluated at the resonance energy.
-  double GetShiftFunction(int) const;
-  /// Park (2021) Eq. (28): the squared norm of the basis state,
-  /// \f$J_{\lambda\lambda}=1-\sum_c\gamma_{\lambda c}^2 (dS_c/dE)_{E_\lambda}\f$.
-  /// 1 unless the Park formalism is in use.
-  double GetParkNorm() const;
-  /// dS_c/dE and d^2S_c/dE^2 at the level energy, filled by
-  /// CNuc::CalcShiftFunctions in the Park formalism (0 otherwise; the second
-  /// derivative only when it was asked for, see ShiftSecondDerivativesValidAt).
-  double GetShiftDerivative(int) const;
-  double GetShiftSecondDerivative(int) const;
 
   /// Put the width of an input file line at its J-group channel number (1-based), padding any channel
   /// before it with a zero, fixed width (CNuc::Fill): a level may list its channels in another order than its
@@ -113,35 +85,9 @@ class ALevel {
   void SetGamma(int, double);
   void SetZeroInputWidth(int, bool);
   void SetE(double);
-  void SetFitGamma(int, double);
-  void SetFitE(double);
   void AddNFIntegral(double);
-  void SetSqrtNFFactor(double);
-  void SetECGamma(int, double);
   void SetECEnergy(double);
   void AddECConversionFactor(double);
-  void SetShiftFunction(int, double);
-  void SetParkNorm(double);
-  void SetShiftDerivative(int, double);
-  void SetShiftSecondDerivative(int, double);
-  /// Energy at which the shift functions (and their derivatives) were last
-  /// computed, so CNuc::CalcShiftFunctions can skip a level that has not
-  /// moved; NaN means "never".
-  bool ShiftFunctionsValidAt(double) const;
-  /*!
-   * A number that changes whenever the fitted energy, a fitted width, a shift
-   * function or the Park overlap of the level is set, unique over all levels
-   * of the process: equal stamps on one object mean those values are
-   * unchanged (ChannelSpace::Update keys its cache on it).
-   */
-  std::uint64_t Stamp() const { return stamp_; }
-  void SetShiftFunctionsEnergy(double);
-  /// Energy at which the second derivatives d^2S_c/dE^2 were last computed
-  /// (Park; only the gradient needs them), as ShiftFunctionsValidAt.
-  bool ShiftSecondDerivativesValidAt(double) const;
-  void SetShiftSecondDerivativesEnergy(double);
-  /// Forget both energies: the next CNuc::CalcShiftFunctions recomputes.
-  void InvalidateShiftFunctions();
   /// Mark the level as an external-capture final state of a pair, with its
   /// multipolarity mask.
   void SetECParams(int, unsigned char);
@@ -151,8 +97,6 @@ class ALevel {
   void AddID(int id);
 
  private:
-  static std::uint64_t NewStamp();
-  std::uint64_t stamp_ = NewStamp();
   std::vector<int> ids_;
   bool isinrmatrix_;
   bool energyfixed_;
@@ -160,11 +104,6 @@ class ALevel {
   int ecPairNum_;
   unsigned char ecMultMask_;
   double level_e_;
-  double fitlevel_e_;
-  double sqrt_nf_factor_;
-  double park_norm_ = 1.0;
-  double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
-  double shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
   std::vector<bool> channelfixed_;
   /// Per-channel input convention: true = gamma column was a reduced width
   /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
@@ -172,14 +111,9 @@ class ALevel {
   /// See ZeroInputWidth.
   std::vector<bool> zero_input_;
   vector_r gammas_;
-  vector_r fitgammas_;
-  vector_r ec_gammas_;
   double ec_energy_ = 0.0;
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;
-  vector_r shifts_;
-  vector_r shift_derivs_;
-  vector_r shift_derivs2_;
 };
 
 #endif

@@ -166,8 +166,7 @@ std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const
       for (int ch = 0; ch <= group->NumChannels(); ch++) {
         const int f = ch == 0 ? pmap.EIndexFlat(j, la) : pmap.GammaIndexFlat(j, la, ch);
         if (f < 0 || f >= pmap.NumFull() || pmap.FullToPacked(f) < 0) continue;
-        const ALevel *level = group->GetLevel(la);
-        const double v = ch == 0 ? level->GetFitE() : level->GetFitGamma(ch);
+        const double v = ch == 0 ? compound->State().E(j, la) : compound->State().Gamma(j, la, ch);
         const double h = ch == 0 ? kEnergyStep * std::max(1.0, std::fabs(v)) : kAmplitudeStep * std::max(std::fabs(v), kAmplitudeFloor);
         const double up = v + h, down = v - h;
         compound->SetFitLevelParameter(j, la, ch, up);

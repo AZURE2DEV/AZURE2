@@ -5,7 +5,8 @@ worker, its jobs, the working parameter vector, the budget), :func:`create_app` 
 The server builds no engine session (a build holds the GIL); it holds the project text and its history
 (:mod:`pyazr.ui.state`), and asks a worker (:mod:`pyazr.ui.workers`) for every number of the engine.  It binds to a
 loopback address only, and every request needs the token (``Authorization: Bearer <token>``, ``?token=`` or the
-cookie set by the first ``?token=`` request) and a ``Host`` header naming the loopback (DNS rebinding).
+cookie set by the first ``?token=`` request; a browser without it gets a page that asks for it) and a ``Host``
+header naming the loopback (DNS rebinding).
 """
 import hmac
 import inspect
@@ -23,7 +24,12 @@ from .state import State, session_options
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
+# The cookie's name is TOKEN_COOKIE_<port> (cookie_name): a browser keeps one cookie jar per host whatever the port,
+# so two servers on one machine would otherwise overwrite each other's token.
 TOKEN_COOKIE = "azure2_ui_token"
+# The policy of the page that asks for the token (token_page): its own inline style and its form, nothing else.
+TOKEN_PAGE_SECURITY_POLICY = ("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; "
+                              "frame-ancestors 'none'")
 # The bounds of the first rows of a file (GET /api/files/{path}): rows per request, bytes read of one line.
 FILE_HEAD_ROWS = 200
 FILE_HEAD_LINE_BYTES = 4096
@@ -437,7 +443,7 @@ def create_app(project, *, threads=1, token, root=None):
     from contextlib import asynccontextmanager
 
     from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
 
     from .routes import install
 
@@ -469,12 +475,21 @@ def create_app(project, *, threads=1, token, root=None):
                                  "allowed": f"{request.url.scheme}://{host_header}"}, status_code=403)
         given = _token_of(request)
         if given is None or not hmac.compare_digest(given, token):
+            if asks_for_a_page(request):
+                return HTMLResponse(token_page(wrong=given is not None), status_code=401,
+                                    headers={"Content-Security-Policy": TOKEN_PAGE_SECURITY_POLICY,
+                                             "Cache-Control": "no-store"})
             return JSONResponse({"error": "Unauthorized", "message": "the token is missing or wrong",
                                  "fix": "Authorization: Bearer <token>, or ?token=<token> (the URL the server "
                                         "printed)"}, status_code=401)
         response = await call_next(request)
         if request.query_params.get("token"):
-            response.set_cookie(TOKEN_COOKIE, token, httponly=True, samesite="strict")
+            # "lax", not "strict": the printed URL is often followed from another site or application (a link in a
+            # chat or a mail page), and the browser keeps a strict cookie back on that navigation and on the redirect
+            # that follows it, so the page answered 401 to its own link.  A lax cookie goes with a navigation (GET)
+            # from elsewhere and with nothing else from there; every GET route only reads, and a request that
+            # changes something carries an Origin header, checked above.
+            response.set_cookie(cookie_name(host_header), token, httponly=True, samesite="lax")
         response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
         return response
 
@@ -491,11 +506,45 @@ def host_name(header):
     return header.rsplit(":", 1)[0] if header.count(":") == 1 else header
 
 
+def cookie_name(host_header):
+    """The token cookie's name for the port the browser names in its Host header (the port it reached the server on,
+    a tunnel's local port included): ``azure2_ui_token_8000``; without a port, the scheme's default 80."""
+    header = host_header.strip()
+    port = header.rsplit(":", 1)[1] if ":" in header and not header.endswith("]") else "80"
+    return f"{TOKEN_COOKIE}_{port}" if port.isdigit() else f"{TOKEN_COOKIE}_80"
+
+
+def asks_for_a_page(request):
+    """A browser's navigation (a GET that accepts HTML, outside /api): its refusal is a page, not JSON."""
+    return (request.method == "GET" and not request.url.path.startswith("/api/")
+            and "text/html" in request.headers.get("accept", ""))
+
+
+def token_page(*, wrong):
+    """The page a browser gets instead of the JSON refusal when the token is missing or wrong: what happened, where
+    the token is, and a field that takes it (a GET of ``/?token=...``: the same door as the printed URL)."""
+    what = "The token in this address is not this server's." if wrong else "This address was opened without its token."
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark"><title>AZURE2 — token needed</title>
+<style>body {{ font: 16px/1.5 system-ui, sans-serif; max-width: 40em; margin: 3em auto; padding: 0 1em; }}
+input {{ font: inherit; width: 22em; max-width: 100%; }} button {{ font: inherit; }}</style></head>
+<body><h1>AZURE2: the token is needed</h1>
+<p id="token-refusal">{what}</p>
+<p>Open the address the server printed when it started, with its <code>?token=...</code> part (it is also in the
+file <code>.&lt;project&gt;.ui/url</code> beside the project), or paste the token here:</p>
+<form method="get" action="/"><input name="token" type="password" autocomplete="off" autofocus
+aria-label="token"> <button type="submit">Open the page</button></form>
+</body></html>
+"""
+
+
 def _token_of(request):
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    return request.query_params.get("token") or request.cookies.get(TOKEN_COOKIE)
+    return (request.query_params.get("token")
+            or request.cookies.get(cookie_name(request.headers.get("host") or "")))
 
 
 def free_port():

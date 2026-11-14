@@ -60,7 +60,7 @@ enum class CNucSystemContent {
  *    levels with IsInRMatrix(), in group order, with E = ALevel::GetE() and gamma = ALevel::GetGamma(ch): the
  *    parameters the project was loaded with, in the basis AZUREParams::BasisForConfig names (after TransformIn these
  *    are the formal/Brune/Park amplitudes in MeV^1/2, not the widths in eV of the file).  The fitted values
- *    (GetFitE, GetFitGamma), which move during a fit, are not read.
+ *    (CNuc::State), which move during a fit, are not read.
  *
  * Throws std::runtime_error when the CNuc is not in that state (CNucSystemContent::Parameters and the parameters
  * still the file's widths), when a spin is not a multiple of 1/2, or for a pair type or radiation type the System has

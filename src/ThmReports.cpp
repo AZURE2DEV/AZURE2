@@ -241,8 +241,8 @@ bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<d
         lv.level = la;
         lv.J = jg->GetJ();
         lv.pi = jg->GetPi();
-        lv.energy = level->GetFitE() - threshold;
-        lv.width = ThmLevelWidth(compound, jg, level, configure);
+        lv.energy = compound->State().E(j, la) - threshold;
+        lv.width = ThmLevelWidth(compound, j, la, configure);
         for (size_t k = 0; k < energies.size(); k++)
           lv.nc2.push_back(ThmLineshapeFactorSq(ex.zeta[k], lv.energy - energies[k], lv.width));
         ex.levels.push_back(lv);
@@ -440,7 +440,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
       cr.l = c->GetL();
       cr.s = c->GetS();
       // The vertex boundary of the model (THMMatrixFunc::CalculateTHMCrossSection).
-      ThmVertexBoundary boundaryOf(configure, pair, jg, ch);
+      ThmVertexBoundary boundaryOf(configure, pair, jg, compound->State(), j, ch);
       // The pieces on the grid: [E][node] and the quasi-free [E].
       std::vector<std::vector<Pieces>> grid(energies.size());
       std::vector<Pieces> qf(energies.size());
@@ -455,7 +455,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
         if (!level->IsInRMatrix()) continue;
         ThmVertexReport::Level lr;
         lr.level = la;
-        lr.boundary = boundaryOf.OnShell() ? std::nan("") : boundaryOf.Level(level);
+        lr.boundary = boundaryOf.OnShell() ? std::nan("") : boundaryOf.Level(la);
         for (size_t i = 0; i < energies.size(); i++) {
           const complex B = boundaryOf.OnShell() ? boundaryOf.OnShellAt(energies[i]) : complex(lr.boundary, 0.0);
           if (dw) {
