@@ -48,9 +48,20 @@ program whose `chiSquared.out` the API's numbers are compared with.
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
   record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
   and undone with the buttons; in the Physics tab the first function, a Coulomb function with elements outside its
-  domain, its table view and the session's channel functions, each with its status line and Python text) and takes a
+  domain, its table view and the session's channel functions, each with its status line and Python text; the
+  Nucleus tab's new pair and new level forms, a pair added with the form, removed with its button and both undone)
+  and takes a
   screenshot per tab (and of the masked Coulomb function)
   (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
+- `thm_routes_test.py`: the THM tab's routes: every diagnostic of `/api/session/functions` and every raw route
+  `/api/session/thm_*` against the direct `Session` call on T2 and two THM copies of `tests/18O_p_a_thm`; option and
+  experiment edits against the program's `chiSquared.out` and Undo; refusals without THM content (the message's
+  parts); the keys served as `pyazr.kinds()["thm"]`; the rows as pyazr's rows (`Session.describe()["functions"]`), a
+  row added to pyazr's table drawn with no line of the page.
+- `nucleus_routes_test.py`: the Nucleus tab's edits against the same `Project` calls: a pair added and removed on
+  T1 (texts equal, the objective unchanged, Undo byte for byte), a pair in use refused with remove_pair's message and
+  removed with its channels, the THM binding energy on T2 (text and objective of a session on the direct edit), the
+  amplitude flag, `allowed_channels` with and without `l_max`, a new level with the allowed channels.
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails
@@ -209,11 +220,34 @@ Added with the sampler and the bands (each shown failing on 2026-11-14, the file
 - the band is a closed region (the lower edge drawn back); a band of other points is not drawn: each broken in
   turn; each fails `node_test.py` (`js/results.test.mjs`).
 
+Added with the pair edits and what a fit returns (each shown failing on 2026-11-14, the file restored after):
+
+- a photon pair has no light partner: the check dropped from `newPairRequest`; fails `node_test.py`
+  (`js/nucleus.test.mjs`).
+- MINOS validity per side: the sides swapped in `minosValidity`; fails `node_test.py` (`js/fitting.test.mjs`).
+- the outcome of an engine fit: left out of the job's result; fails
+  `engine_jobs_test.py::test_call_limit_is_said_in_the_engine_words`.
+- `l_max` of `allowed_channels`: dropped from the route's arguments; fails
+  `nucleus_routes_test.py::test_allowed_channels_and_a_new_level`.
+- MINOS's sides from the engine: `minos_valid` left empty in the adapter; fails
+  `engine_jobs_test.py::test_engine_minos_follows_an_engine_fit`.
+
+Added with the page on pyazr's tables (each shown failing on 2026-11-14, the file restored after):
+
+- the error body carries pyazr's parts: `parts_of` returning None for every part; fails
+  `thm_routes_test.py::test_no_thm_content_refuses`.
+- the rows are pyazr's: the fit vector left among the arguments; fails
+  `thm_routes_test.py::test_diagnostic_rows_are_pyazrs_rows`.
+- a line's numbers are walked by the row: the elements of `lines.over` taken in reverse; fails
+  `thm_routes_test.py::test_t2_diagnostics_equal_the_session`.
+- the nuclides offered: `choicesOf` reading `optical_potentials` for `<nucleus>`; fails `node_test.py`
+  (`js/thm.test.mjs`).
+
 Added with the THM tab (each shown failing on 2026-11-14, the file restored after):
 
 - the THM answers carry the session's numbers: `norm_sigma` taken from the last sigma instead of the first; fails
   `thm_routes_test.py::test_distortion_lineshape_and_coherent_background_equal_the_session[cbkg]`.
-- the key table has every key of an experiment line the engine reads: the row `theta` renamed; fails
-  `thm_routes_test.py::test_key_table_has_every_key_the_engine_reads`.
+- the keys served are the engine's table: (since the page reads pyazr's tables) a key dropped from the answer of
+  `thm.keys()`; fails `thm_routes_test.py::test_keys_are_the_engines_table`.
 - a killed or interrupted sampler continues from its saved chain: the saved file not looked up; fails
   `sampler_bands_test.py::test_killed_sampler_continues_from_its_saved_chain`.

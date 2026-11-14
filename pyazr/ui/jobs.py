@@ -182,9 +182,9 @@ def _covariance_by_name(names, matrix):
 ENGINE_STATES = {"converged": "converged", "stopped": "stopped"}
 
 
-# The fitter the engine runs in place of a least-squares fitter where a data set has no analytic Jacobian (the row of
-# the engine's fitter table it runs: FitLeastSquares.cpp falls back to MIGRAD).
-FALLBACK_FITTER = "migrad"
+def _fitters():
+    import pyazr
+    return pyazr.kinds()["fitters"]
 
 
 def fit_engine(tracker, x0, settings, names, *, method, minos=None):
@@ -210,23 +210,29 @@ def fit_engine(tracker, x0, settings, names, *, method, minos=None):
     print(r["log"], flush=True)
     tracker.first = float(objective_of(tracker.session)(x0))
     tracker.best, tracker.best_x = r["objective"], np.array([r["x"][n] for n in names], float)
-    ran = FALLBACK_FITTER if r["fell_back_to_migrad"] else r["method"]
+    # the fitter that ran in place of the one asked for where a data set has no analytic Jacobian: the fitter table's
+    # "fallback" of the row asked for
+    fallback = _fitters()[r["method"]]["fallback"]
+    ran = fallback if r["fell_back_to_migrad"] else r["method"]
     words = f"the engine's {ran}: {r['status']}"
-    extra = {"engine_status": r["status"], "valid": r["converged"], "edm": r["edm"], "fit_calls": r["calls"],
-             "fitter": {"asked": r["method"], "ran": ran}, "notices": []}
+    # the fit's notices (a fallback to another fitter, a call limit the fitter ignored) and its outcome in the words
+    # every fitter shares (converged, call_limit, ...), as the engine gives them
+    extra = {"engine_status": r["status"], "outcome": r["outcome"], "valid": r["converged"], "edm": r["edm"],
+             "fit_calls": r["calls"], "fitter": {"asked": r["method"], "ran": ran}, "notices": list(r["notices"])}
     if r["fell_back_to_migrad"]:
-        # the engine's own line in the fitter's log, as a notice of the result
-        said = [line.strip() for line in r["log"].splitlines() if "falling back" in line.lower()]
-        extra["notices"] = said or [f"the engine's {r['method']} ran {FALLBACK_FITTER} in its place"]
-        words += (f" ({FALLBACK_FITTER} in place of {r['method']}: no analytic Jacobian for a data set; no HESSE, "
+        words += (f" ({fallback} in place of {r['method']}: no analytic Jacobian for a data set; no HESSE, "
                   "no MINOS)")
     if r["covariance"] is not None:
         extra.update(_covariance_by_name(r["names"], r["covariance"]), errors=r["errors"],
                      errors_from="HESSE after the engine's MIGRAD" if r["covariance_from_hesse"]
-                     else f"the covariance of the {FALLBACK_FITTER} that ran in place of {r['method']}"
+                     else f"the covariance of the {fallback} that ran in place of {r['method']}"
                      if r["fell_back_to_migrad"] else "the engine's (J^T J + priors)^-1")
     if r["minos"]:
-        extra["minos"] = {n: {"lower": lo, "upper": hi, "valid": None} for n, (lo, hi) in r["minos"].items()}
+        # each side's verdict as the engine gives it ({valid, at_limit, call_limit, new_minimum}); valid: both sides
+        sides = r["minos_valid"]
+        extra["minos"] = {n: {"lower": lo, "upper": hi,
+                              "valid": all(v.get("valid") for v in sides[n].values()) if n in sides else None,
+                              "sides": sides.get(n)} for n, (lo, hi) in r["minos"].items()}
     return ENGINE_STATES.get(r["status"], "ended"), words, extra
 
 
@@ -580,7 +586,8 @@ def engine_rows(fitters):
             settings += (Setting("minos", "boolean", False, "MINOS after the fit and its HESSE: asymmetric "
                                  "intervals of every free parameter (Up = the session's chiVariance)"),)
         facts = (("program switch", f["option"] or "none (the program's default)"), ("covariance", f["covariance"]),
-                 ("MINOS can follow", f["minos"]), ("gradient", f["gradient"]), ("residual rows", f["residual_rows"]))
+                 ("MINOS can follow", f["minos"]), ("gradient", f["gradient"]), ("residual rows", f["residual_rows"]),
+                 ("honours a call limit", f["call_limit"]), ("falls back to", f["fallback"] or "none"))
         fits.append(JobRow("fit", method, f"the engine's {name}: {f['doc']}", settings=settings, facts=facts,
                            run=partial(fit_engine, method=name)))
         if f["minos"]:

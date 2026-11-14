@@ -28,7 +28,10 @@ What the server keeps
 ---------------------
 
 - **The project text is the state.**  Every edit goes through ``pyazr.Project`` and is validated by the engine
-  before it is accepted; a refused edit answers 422 with the engine's diagnostics and changes nothing.  Every
+  before it is accepted; a refused edit answers 422 with the engine's diagnostics and changes nothing.  A refusal's
+  body has ``error`` (the class), ``message`` (the whole text) and the message's parts ``what``, ``allowed``, ``fix``
+  as pyazr's errors carry them (``null`` where the message is the engine's own text: then ``message`` is all there
+  is).  Every
   accepted edit gives a new revision number, and every edit names the revision it was made on (``"rev"`` in the
   body, or an ``If-Match`` header): an edit on an old revision answers 412, so two clients cannot overwrite each
   other.  ``POST /api/project/undo`` and ``/redo`` step through the history of texts.
@@ -57,16 +60,33 @@ What the server keeps
   as lists, their units, a status per element with the words of each status (an element outside the domain is
   ``"nan"``, never a refusal), the arguments as used, ``python`` (the pyazr call that makes the same arrays; run it
   to check) and, for stopping, ``citation``; at most 20000 elements per request.  ``GET /api/session/functions`` and
-  ``POST /api/session/functions/<fn>`` do the same for the session's own functions (``channel_functions`` of a pair
-  of the project, and the THM diagnostics ``thm_experiments``, ``thm_background``, ``thm_lineshape``,
-  ``thm_vertex``, ``thm_distortion`` with an ``experiment`` argument), in the session worker; a THM answer adds
-  ``lines`` (a field over channels or levels: one list per line, its labels), ``facts`` (the call's scalars with
-  units) and ``tables``.  The session's own answer of each THM call, as plain data, is ``POST
+  ``POST /api/session/functions/<fn>`` do the same for the session's own functions, the rows of
+  ``Session.describe()["functions"]`` (``channel_functions`` of a pair of the project, and the THM diagnostics
+  ``thm_experiments``, ``thm_background``, ``thm_lineshape``, ``thm_vertex``, ``thm_distortion`` with an
+  ``experiment`` argument), in the session worker at the working parameters (the fit vector ``params`` is not an
+  argument of the route); an argument with ``"required": false`` may be left out.  An answer adds ``lines`` (a field
+  over channels or levels: one list per line, labelled by the fields its row names), ``facts`` (the call's scalars
+  with units) and, for the THM profiles, ``tables``.  The session's own answer of each THM call, as plain data, is
+  ``POST
   /api/session/thm_<call>`` (``experiment``, ``energies``).
+- **Pairs and levels** (the Nucleus tab's routes): ``GET /api/project/pairs``; ``POST /api/project/pairs``
+  (``Project.add_pair``: ``kind``, ``light`` and ``heavy`` as ``{J, parity, Z, mass, g}``, ``separation_energy``,
+  ``radius``, ...; the answer's ``result`` is the new key), ``PATCH /api/project/pairs/<key>`` (``set_pair``, with
+  ``binding_energy`` the THM B), ``DELETE /api/project/pairs/<key>`` (``remove_pair``; refused while a level names
+  the pair unless ``"remove_channels": true``); ``GET /api/project/allowed_channels?J=&parity=`` (the channels a J^π
+  has with the project's pairs: ``[{pair, l, s}]``; ``l_max`` and the photon limits as ``Project.allowed_channels``
+  takes them); ``POST /api/project/levels`` (``channels`` a list or ``"allowed"``); ``PATCH
+  /api/project/levels/<label>/channels/<pair>/<l>/<s>`` (``width``, ``fixed``, ``width_is_amplitude``).
+- **What a fit returns**: an engine fit job's ``result`` has ``outcome`` (the words every fitter shares:
+  ``converged``, ``call_limit``, ...), ``notices`` (the engine's sentences), and after MINOS per parameter ``lower``,
+  ``upper``, ``valid`` and ``sides`` (``{lower, upper}``, each ``{valid, at_limit, call_limit, new_minimum}``); the
+  rows of ``GET /api/jobs/kinds`` carry the fitter table's columns among their ``facts`` (``honours a call limit``,
+  ``falls back to``).
 - **THM** (the THM tab's routes): ``GET /api/project/thm`` (``null`` without a ``<thm>`` section), ``PATCH
   /api/project/thm`` (``{"options": {key: value or null}}``), ``PUT /api/project/thm/experiments/<name>``
   (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET
-  /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc).
+  /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc): the engine's table of
+  the keys its parser reads, ``pyazr.kinds()["thm"]``.
 - Routes that need a pyazr call that does not exist yet (the engine's own fitters, the reaction rate, the level
   matrix, ...) answer 501 naming that call.
 

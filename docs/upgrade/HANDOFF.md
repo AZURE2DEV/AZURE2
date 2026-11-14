@@ -2,6 +2,54 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — pairs and THM columns; what a fit returns
+
+**Done** (`web_ui.md` section 11.10; findings 10 and 11 closed for the page):
+
+- Nucleus tab: **+ pair** (`add_pair`), a pair's edit form from the route's arguments (B among them), **Remove pair**
+  and, after its refusal, **Remove pair … and its channels**; the amplitude flag per channel; **+ level** with the
+  channels of `GET /api/project/allowed_channels` (new route; `allowed_channels` left `PROJECT_NOT_SERVED`).  The THM
+  tab's channels link to the Nucleus tab.
+- Fit tab: an engine fit's `outcome`, the engine's `notices` and MINOS validity per side (`sides`) in the job's
+  result and on the page (an outcome box, a MINOS warning, the column MINOS validity); the fitter rows' facts add
+  "honours a call limit" and "falls back to"; the fallback fitter's name is the table's (`FALLBACK_FITTER` gone).
+
+**Verified**: `tests/pyazr/ui/nucleus_routes_test.py` (new: texts equal to the direct `Project` calls; T2's B edit's
+objective equal to a session's), `engine_jobs_test.py` (outcome, notices, sides, the T2 call limit of 40), node tests,
+the smoke test with the self-test adding and removing a pair with the buttons on T1 and T2; on T2 over HTTP and
+headless Chrome a call limit of 40 drawn as a warning (`call_limit`) and a free fit as converged
+(`work/uiport/fitlimit.py`).  A key added to `src/ThmKeys.cpp` (in this build only, removed after) was served and
+drawn as a form field of the experiment with no line of the page changed (`work/uiport/demokey.py`).
+
+**Open**: the job's state line says "ended without convergence" in the colour of a finished job; the job's call
+count (327 with `max_calls` 40 on T2) counts HESSE's calls after the fit; the routes `/api/evaluate/grid`,
+`/api/data/{name}/grid`, `/kernel` and `level_matrix` stay `missing` (not looked at).
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-new-pyazr`) — the page reads pyazr's tables
+
+**Done** (`web_ui.md` section 11.9; findings 9, 24, 27, 28 closed):
+
+- `<thm>` keys: `pyazr/ui/thm.py` `keys()` is `pyazr.kinds()["thm"]`; the page's table `KEYS` and its test are gone.
+- The session's functions: `GET /api/session/functions` serves pyazr's rows (`Session.describe()["functions"]`)
+  through `physics.page_row` (the fit vector left out, `required` from the method's signature); a call goes to
+  `Engine.session_function` by the row's name; `physics.answer_parts` walks the answer by the rows' `path` and
+  `lines`.  `SESSION_ROWS`, `THM_ROWS` and the shaping of `ANSWERS` are gone; `PAGE` (in `physics.py`, `thm.py`)
+  keeps the tab, group, bound, status field and words, hidden fields and the two table answers.
+- Errors: the body's `what`, `allowed`, `fix` are `e.what`, `e.allowed`, `e.fix` (carried from the worker); null
+  for the engine's own texts (the page shows `message`).
+- The THM key forms offer `kinds()["nuclides"]` and `["optical_potentials"]` by name.
+
+**Verified**: the JSON of the 60 session-function answers and 36 raw THM answers before and after on T1, T2, two THM
+copies of `tests/18O_p_a_thm`, `examples/f19_pag_thm`, `examples/o18_lacognata2010` (`work/uiport/capture.py`,
+`compare.py`): every array, status, table and fact value identical, the raw routes identical; the labels, the facts'
+order and the arguments as used differ (listed in 11.9).  `tests/pyazr/ui` whole (16 files; the smoke test with
+headless Chrome), `tests/pyazr/thm_keys_test.py`, the consistency test, `docs_build` (55 pages); the HTTP walk on
+T1, T2, T3, 13N (`work/uiport/walk/walk.py`, a copy of the director's walk66: the χ² equal to the expected values, a
+fit and a band job each, a radius edit and Undo restoring the χ² exactly, the function routes).  Five injected
+errors each failed their test (README of `tests/pyazr/ui`).
+
+**Open**: the pairs and the THM columns in the Nucleus tab, what a fit returns in the Fit tab (the next commit).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-7-small-repairs-3`) — ten small repairs
 
 **Done** (each shown on the start commit 6bfae502 with `work/b-trial69`, then fixed and tested):

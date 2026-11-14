@@ -12,6 +12,7 @@ set's rows of the objective (``Evaluation.data[i].rows``) splits data sets joine
 (web_ui.md section 2.2, finding 5).  The file has the program's six significant digits.
 """
 import dataclasses
+import inspect
 import os
 import time
 
@@ -272,7 +273,20 @@ class Engine:
         out = self.s.channel_functions(pair, np.asarray(e_cm, float), l, radius, J)
         return {k: np.asarray(v).tolist() for k, v in out.items()}
 
-    # -- the THM experiments (pyazr/session_thm.py); the routes' rows are pyazr/ui/thm.py's -------------------------
+    def session_function(self, fn, arguments, x=None):
+        """A function of the session's table (``Session.describe()["functions"]``) by name, on ``arguments`` (checked
+        by :func:`pyazr.ui.physics.session_request`), at the fit vector x where its row depends on it (``at_x``):
+        the session's answer as plain data."""
+        from pyazr.session_functions import SESSION_FUNCTIONS
+        row = SESSION_FUNCTIONS[fn]
+        kwargs = dict(arguments)
+        if row["axis"] in kwargs:
+            kwargs[row["axis"]] = np.asarray(kwargs[row["axis"]], float)
+        if row["at_x"]:
+            kwargs["params"] = np.asarray(x, float)
+        return _tree(getattr(self.s, fn)(**kwargs))
+
+    # -- the THM experiments (pyazr/session_thm.py) as raw routes ----------------------------------------------------
 
     def thm_experiments(self, x):
         """Every THM experiment as a chi-squared evaluation at x profiles it (``Session.thm_experiments``): by name,
@@ -305,6 +319,13 @@ class Engine:
         written, _ = self.s.save_fit(path, np.asarray(x, float), param_sav=False, relative_to=self.s.cwd)
         with open(written, "rb") as f:
             return f.read().decode("utf-8", "surrogateescape")
+
+
+def required_arguments(fn):
+    """The arguments of the session's method ``fn`` that have no default (a row's ``default`` None says none)."""
+    from pyazr import Session
+    signature = inspect.signature(getattr(Session, fn))
+    return {n for n, p in signature.parameters.items() if n != "self" and p.default is inspect.Parameter.empty}
 
 
 def _energies(energies, what):
@@ -356,8 +377,9 @@ def fit_with_engine(e, method, minos, x0, max_calls, progress, stop):
     """The engine's fitter ``method`` (a row of ``pyazr.kinds()["fitters"]``) on the session from ``x0``
     (``Session.fit_with_engine``): ``progress`` gets each progress record (a dict), ``stop`` (a threading.Event) ends
     the fit at its best point.  Plain data: the end point by name, the objective there, the engine's status and
-    words, EDM (None where the fitter has none), calls, errors, covariance and MINOS intervals by name where the
-    fitter gives them (None otherwise), the fitter's log."""
+    words, the outcome in the words every fitter shares, its notices, EDM (None where the fitter has none), calls,
+    errors, covariance and MINOS intervals by name where the fitter gives them (None otherwise) with each side's
+    validity, the fitter's log."""
     r = e.s.fit_with_engine(method, minos=bool(minos), x0=np.asarray(x0, float), max_calls=max_calls,
                             progress=progress, stop=stop)
     names = list(r.names)
@@ -369,7 +391,9 @@ def fit_with_engine(e, method, minos, x0, max_calls, progress, stop):
             "errors": None if r.errors is None else dict(zip(names, np.asarray(r.errors, float).tolist())),
             "minos": {n: [float(lo), float(hi)] for n, (lo, hi) in r.minos.items()},
             "covariance_from_hesse": bool(r.covariance_from_hesse),
-            "fell_back_to_migrad": bool(r.fell_back_to_migrad), "log": r.log}
+            "fell_back_to_migrad": bool(r.fell_back_to_migrad), "outcome": r.outcome, "notices": list(r.notices),
+            "minos_valid": {n: {side: dict(flags) for side, flags in sides.items()}
+                            for n, sides in r.minos_valid.items()}, "log": r.log}
 
 
 def band_points(e, x):
