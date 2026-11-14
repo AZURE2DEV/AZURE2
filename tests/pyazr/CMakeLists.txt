@@ -1070,6 +1070,14 @@ add_test(NAME pyazr_fit_recipes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SO
 set_tests_properties(pyazr_fit_recipes PROPERTIES LABELS slow PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# Every script of pyazr/examples runs by its docstring's command on a project of tests/ and prints its pinned number,
+# and nothing is written beside the projects (tests/pyazr/examples_test.py, one row per run): the quick rows here,
+# the rows over about 4 s at one thread in pyazr_examples_slow.
+add_test(NAME pyazr_examples COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/examples_test.py)
+set_tests_properties(pyazr_examples PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+add_test(NAME pyazr_examples_slow COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/examples_test.py --slow)
+set_tests_properties(pyazr_examples_slow PROPERTIES LABELS slow ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # The Coulomb table's build and fetch (pyazr/coulomb_table.py): a small table built, fetched by file:// and from a
 # local HTTP server with its SHA-256, a corrupted copy refused and removed.  Nothing leaves this machine.
 add_test(NAME pyazr_coulomb_table COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_table_test.py)

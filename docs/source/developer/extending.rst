@@ -404,6 +404,24 @@ The codes are found, never installed (``pyazr/endf/checkers.py``):
    part (run when ``AZURE2_ENDF_UTILITIES`` / ``AZURE2_PREPRO`` are set).
 5. The command's choices in ``pyazr/cli.py`` (``endf check --program``, ``endf standardize --program``).
 
+An example script of pyazr
+--------------------------
+
+An example tells one task from start to end on a project of the repository, for an expert (or an agent working for
+one) to copy:
+
+1. The file ``pyazr/examples/<name>.py``: a docstring that says the task, the calls it shows and the command that runs
+   it from the repository's root on a project of ``tests/``; the project as its first argument, required; files
+   written only where ``--out`` (or a printed temporary directory) says; every printed number with its unit; pyazr's
+   own calls for what pyazr computes.
+2. Its row in ``ROWS`` of ``tests/pyazr/examples_test.py``: the arguments, one number or text of its output that is
+   pinned, ``slow=True`` above about 4 s at one thread, ``needs=`` the optional packages, ``skip=`` the reason a run
+   cannot be made here (the network).
+3. Its row in the documentation's list of examples (:doc:`../user_guide/pyazr`, "Examples"): the script and its task
+   in one sentence.
+
+Check 58 fails for a script without both rows, and for a row whose script is not there.
+
 A run-time data file of pyazr
 -----------------------------
 

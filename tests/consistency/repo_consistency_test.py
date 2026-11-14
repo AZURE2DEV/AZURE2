@@ -1436,6 +1436,33 @@ try:
 except OSError as e:
     problems.append(f"check 57: {e}")
 
+# 58. Every example is run and listed (docs/source/user_guide/pyazr.rst, "Examples"): each script of pyazr/examples has
+#     a row in ROWS of tests/pyazr/examples_test.py (the table that runs it) and a row of the documentation's list,
+#     and neither names a script that is not there.  A new example is the file and its two rows.
+_examples_page, _examples_test = "docs/source/user_guide/pyazr.rst", "tests/pyazr/examples_test.py"
+try:
+    import ast
+    _example_files = {f[:-3] for f in os.listdir(os.path.join(ROOT, "pyazr", "examples"))
+                      if f.endswith(".py") and not f.startswith("_")}
+    _example_rows = set()
+    for _node in ast.walk(ast.parse(read(_examples_test))):
+        if isinstance(_node, ast.Call) and getattr(_node.func, "id", "") == "Row" and _node.args \
+                and isinstance(_node.args[0], ast.Constant):
+            _example_rows.add(_node.args[0].value)
+    _page = read(_examples_page)
+    _page = _page[_page.index("Worked scripts ship in"):_page.index("Running in parallel\n")]
+    _example_listed = set(re.findall(r"^ +\* - ``([A-Za-z0-9_]+)\.py``", _page, re.M))
+    for _name in sorted(_example_files - _example_rows):
+        problems.append(f"pyazr/examples/{_name}.py has no row in ROWS of {_examples_test} (check 58)")
+    for _name in sorted(_example_rows - _example_files):
+        problems.append(f"{_examples_test}: the row '{_name}' names no script of pyazr/examples (check 58)")
+    for _name in sorted(_example_files - _example_listed):
+        problems.append(f"pyazr/examples/{_name}.py has no row in the list of {_examples_page} (check 58)")
+    for _name in sorted(_example_listed - _example_files):
+        problems.append(f"{_examples_page}: the list names {_name}.py, which is not in pyazr/examples (check 58)")
+except (OSError, ValueError, SyntaxError) as e:
+    problems.append(f"check 58: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1449,4 +1476,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
-      f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's")
+      f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
+      f"{len(_example_files)} examples run and listed")
