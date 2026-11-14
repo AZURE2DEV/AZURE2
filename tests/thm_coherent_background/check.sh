@@ -147,7 +147,7 @@ mkdir -p "$WORK/syn/data"
 cp "$O18/18O_p_a_thm.azr" "$WORK/syn/"; cp "$O18/data/"* "$WORK/syn/data/"
 F=data/lc723_thm_points.dat
 n="$(tr -d '\r' < "$O18/$F" | grep -cv '^#')"
-paste <(tr -d '\r' < "$O18/$F" | grep -v '^#') <(tr -d '\r' < "$WORK/gen/output/$OUT" | awk 'NF > 3' | head -n "$n" | awk '{ print $4 }') |
+paste <(tr -d '\r' < "$O18/$F" | grep -v '^#') <(tr -d '\r' < "$WORK/gen/output/$OUT" | awk 'NF > 3' | awk -v n="$n" 'NR <= n' | awk '{ print $4 }') |
   awk '{ printf "%s %s %.12e %.12e\n", $1, $2, 250 * $5, 2.5 * $5 }' > "$WORK/syn/$F"
 MEMBERS=lc723_thm_points run fit "$WORK/syn" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2" 2
 [ "$(cat "$WORK/fit/status")" = 0 ] && [ -f "$WORK/fit/output/param.sav" ] || { bad "fit run failed"; tail -5 "$WORK/fit/log"; }
@@ -155,7 +155,7 @@ re0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_re0$/ {
 im0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_im0$/ { print $2 }')"
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(a != "" && d <= t) }'; }
 near "$re0" 0.3 1e-4 && near "$im0" -0.2 1e-4 && ok "c0 = $re0 + ($im0) i recovered (true 0.3 - 0.2 i)" || bad "c0 = $re0, $im0"
-nrm="$(tr -d '\r' < "$WORK/fit/output/thm_experiments.out" | awk '$1 == "norm" { print $2; exit }')"
+nrm="$(tr -d '\r' < "$WORK/fit/output/thm_experiments.out" | awk '!f && $1 == "norm" { print $2; f = 1 }')"
 near "$nrm" 0.004 1e-4 && ok "norm 1/250 recovered: $nrm" || bad "norm $nrm (want 0.004)"
 c1="$(tr -d '\r' < "$WORK/fit/output/chiSquared.out" | awk -F, 'NR == 2 { print $2 }')"
 lt "$c1" 1e-3 && ok "segment 1 chi2 ~ 0 ($c1)" || bad "segment 1 chi2 $c1"

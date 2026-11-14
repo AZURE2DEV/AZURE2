@@ -76,7 +76,7 @@ run() {
 # worst relative difference of the model columns of two runs (energies must agree)
 worst() {
   paste -d' ' <(model "$1") <(model "$2") |
-    awk '{ if ($1 != $3) { e = 1; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
+    awk '{ if (e) next; if ($1 != $3) { e = 1; next } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
          END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
 T_of() { awk -v p="$1" -v mu="$MUSX" 'BEGIN { printf "%.17g", p * p / (2 * mu) }'; }
@@ -139,7 +139,7 @@ done
 awk '{ s[$1] += $3; e[$1] = $2; n = ($1 > n ? $1 : n) } END { for (i = 1; i <= n; i++) printf "%s %.12e\n", e[i], s[i] / 3600 }' \
   "$WORK/simpson.txt" > "$WORK/simpson.avg"
 read -r n w <<< "$(paste -d' ' <(model flat) "$WORK/simpson.avg" |
-  awk '{ if ($1 != $3) { print "0 ENERGY"; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e\n", n, w }')"
+  awk '{ if (e) next; if ($1 != $3) { print "0 ENERGY"; e = 1; next } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e\n", n, w }')"
 awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w < 1e-6) }' \
   && ok "table (16 Gauss-Legendre nodes) vs Simpson (41 runs, h = 0.5 MeV/c): $n points, worst rel $w" \
   || bad "table vs Simpson: $n points, worst rel $w"

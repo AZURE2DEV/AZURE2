@@ -42,7 +42,7 @@ run identity identity.azr
 if python3 -I "$HERE/compare.py" 1e-9 "$HERE/models/identity.azr" "$WORK/identity/output" > "$WORK/identity.txt" 2>&1; then
   ok "one project: every shifted data set = its twin at the shifted energies ($(tail -1 "$WORK/identity.txt"))"
 else
-  bad "one project: shifted data sets against their twins"; grep -v '^ok' "$WORK/identity.txt" | head -12
+  bad "one project: shifted data sets against their twins"; grep -v '^ok' "$WORK/identity.txt" | sed -n '1,12p'
 fi
 
 # ---- 2. the identity on two meshes
@@ -52,7 +52,7 @@ if python3 -I "$HERE/compare.py" 3e-6 "$HERE/models/shifted.azr" "$WORK/shifted/
      "$WORK/twins/output" > "$WORK/apart.txt" 2>&1; then
   ok "two projects: every shifted data set = its twin at the shifted energies ($(tail -1 "$WORK/apart.txt"))"
 else
-  bad "two projects: shifted data sets against their twins"; grep -v '^ok' "$WORK/apart.txt" | head -12
+  bad "two projects: shifted data sets against their twins"; grep -v '^ok' "$WORK/apart.txt" | sed -n '1,12p'
 fi
 
 # ---- 3. the gradient of a fitted shift against a central difference of chi^2
@@ -61,7 +61,7 @@ ln -s "$HERE/models/data" "$WORK/grad/data"
 cp "$HERE/models/fit.azr" "$WORK/grad/"
 (cd "$WORK/grad" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" \
    --use-gradient --no-gui --no-readline fit.azr > grad.log 2>&1)
-line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/grad/grad.log" | head -1)"
+line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/grad/grad.log" | sed -n 1p)"
 relJ="$(echo "$line" | grep -o 'relJ [-0-9.e+]*' | cut -d' ' -f2)"
 if [ -n "$relJ" ] && awk -v r="$relJ" 'BEGIN { exit !(r + 0 < 1e-5) }'; then
   ok "the shift's gradient (Jacobian path) = the central difference of chi^2 (relative $relJ, tolerance 1e-5)"

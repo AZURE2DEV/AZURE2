@@ -154,7 +154,7 @@ fit() {  # fit <name> <model> <flags>: mode 2, no parameter file
   (cd "$dir" && printf '2\nn\n\n\n' | run_limited 900 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
 }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
-chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | head -1; }
+chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | sed -n 1p; }
 run dop450 dop450 1
 if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.azr" "$WORK/dop450" "$WORK/models"; then
   for v in "fit_grad:--use-gradient" "fit_lm:--use-lm"; do

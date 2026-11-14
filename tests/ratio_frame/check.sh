@@ -173,7 +173,7 @@ if [ -s "$WORK/particle_rel.t1" ] && [ -s "$WORK/particle_rel.t3" ]; then
          print a, f }' "$WORK/rfree/run.log" > "$WORK/rows"
   nrows="$(wc -l < "$WORK/rows" | tr -d ' ')"
   if [ "$nrows" -lt 5 ]; then
-    bad "(f) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/rfree/run.log" | head -5
+    bad "(f) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/rfree/run.log" | sed -n '1,5p'
   else
     worst="$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a; d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d }
                END { printf "%.2e", w / m }' "$WORK/rows")"

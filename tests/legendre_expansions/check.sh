@@ -88,10 +88,10 @@ edited "$HERE/models/data.azr" "$WORK/grad.azr" sed -E 's/^(2\.5  -1  11\.05  1 
 setup grad "$WORK/grad.azr"
 (cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" --use-gradient --no-gui \
    --no-readline m.azr > run.log 2>&1)
-line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
+line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
-if echo "$line" | grep -q "gamma 0/4; Jacobian path: gamma 0/4" && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+if grep -q "gamma 0/4; Jacobian path: gamma 0/4" <<< "$line" && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
   ok "analytic gradient = finite differences over the five expansions (4 widths, largest relative $worst)"
 else
   bad "gradient check: ${line:-no [grad-check] line} (largest relative $worst)"
@@ -103,18 +103,18 @@ missing=""
 for f in "a_over_a0: the coefficient of order L is A_L / A_0" "absolute: the coefficient of order L is A_L (b/sr)" \
          "rsl: the coefficient of order L is A_L / ((2L+1) A_0)" "2l2: the coefficient of order L is 2 A_L / (2L+1) (b/sr)" \
          "4pi: the coefficient of order L is 4 pi A_L (b)"; do
-  echo "$desc" | grep -qF "Legendre expansion $f" || missing="$missing [$f]"
+  grep -qF "Legendre expansion $f" <<< "$desc" || missing="$missing [$f]"
 done
 if [ -z "$missing" ]; then ok "--describe names the five expansions"; else bad "--describe lacks$missing"; fi
 cd "$WORK/data" || exit 1
 edited m.azr unit.azr awk '/^dataset leg_rsl$/ { r = 1 } r && /^    unit           1$/ { print "    unit           b/sr"; r = 0; next } { print }' ||
   bad "edit: unit"
 msg="$("$AZURE2_BIN" --validate unit.azr 2>&1)"
-if echo "$msg" | grep -q "E_UNIT_NOT_ALLOWED"; then ok "refused: rsl in b/sr (E_UNIT_NOT_ALLOWED)"; else bad "rsl in b/sr: $msg"; fi
+if grep -q "E_UNIT_NOT_ALLOWED" <<< "$msg"; then ok "refused: rsl in b/sr (E_UNIT_NOT_ALLOWED)"; else bad "rsl in b/sr: $msg"; fi
 edited m.azr norm.azr awk '/^dataset leg_rsl$/ { r = 1 } r && /^    norm           1 fixed$/ { print "    norm           1 fit"; r = 0; next } { print }' ||
   bad "edit: norm"
 msg="$("$AZURE2_BIN" --validate norm.azr 2>&1)"
-if echo "$msg" | grep -q "E_MODE_NOT_ALLOWED"; then ok "refused: a fitted norm on rsl (E_MODE_NOT_ALLOWED)"; else bad "rsl norm fit: $msg"; fi
+if grep -q "E_MODE_NOT_ALLOWED" <<< "$msg"; then ok "refused: a fitted norm on rsl (E_MODE_NOT_ALLOWED)"; else bad "rsl norm fit: $msg"; fi
 
 echo
 if [ "$failures" -ne 0 ]; then

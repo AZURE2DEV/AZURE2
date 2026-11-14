@@ -67,7 +67,7 @@ make_model plain ''
 run plain
 ta="$(total plain)"
 if [ -n "$ta" ] && near "$ta" "$want" 1.5; then ok "(a) thick target without spread: total $ta = $want"; else bad "(a) thick target without spread: total '$ta', expected $want"; tail -3 "$WORK/plain/run.log"; fi
-first="$(seg1 plain | head -1 | awk '{ print $2 }')"
+first="$(seg1 plain | sed -n 1p | awk '{ print $2 }')"
 [ -n "$first" ] || { bad "(a) no segment-1 output"; first=0; }
 
 # ---- (b) a beam spread on the thick line, (c) straggling ------------------------------------------------------------
@@ -77,8 +77,8 @@ check_spread() {  # TAG NAME
   local n npos f
   n="$( { seg1 "$name"; seg2 "$name"; } | wc -l | tr -d ' ')"
   npos="$( { seg1 "$name"; seg2 "$name"; } | awk '$2 > 0' | wc -l | tr -d ' ')"
-  f="$(seg1 "$name" | head -1 | awk '{ print $2 }')"
-  if [ "$n" -ge 30 ] && [ "$npos" -eq "$n" ]; then ok "$tag every yield of segments 1 and 2 is positive ($n points)"; else bad "$tag $((n - npos)) of $n yields are not positive"; seg1 "$name" | head -2; fi
+  f="$(seg1 "$name" | sed -n 1p | awk '{ print $2 }')"
+  if [ "$n" -ge 30 ] && [ "$npos" -eq "$n" ]; then ok "$tag every yield of segments 1 and 2 is positive ($n points)"; else bad "$tag $((n - npos)) of $n yields are not positive"; seg1 "$name" | sed -n '1,2p'; fi
   if [ -n "$f" ] && awk -v a="$f" -v b="$first" 'BEGIN { exit !(b > 0 && a / b > 0.99 && a / b < 1.01) }'; then
     ok "$tag first point of segment 1: $f, within 1 % of $first without the spread"
   else

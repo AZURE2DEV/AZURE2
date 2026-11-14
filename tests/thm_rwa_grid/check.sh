@@ -32,7 +32,7 @@ run_with_points() {   # run_with_points N -> prints total chi2
   local d="$WORK/n$1"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
-  local azr; azr="$(ls "$SRC"/*.azr | head -1)"
+  local azr; azr="$(ls "$SRC"/*.azr | sed -n 1p)"
   # the number of sub-points of the fold: "points" of the quadrature field (the data set's and the extrapolation's)
   awk -v n="$1" '$1 == "quadrature" { sub(/points [0-9]+/, "points " n) } { print }' "$azr" > "$d/run.azr"
   [ "$(grep -c "^ *quadrature  *points $1 " "$d/run.azr")" -ge 1 ] || { echo "  FAIL  no quadrature field set to $1 points" >&2; exit 1; }

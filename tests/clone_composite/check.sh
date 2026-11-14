@@ -54,7 +54,7 @@ run() {
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=1_R=1.out"; }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
-chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | head -1; }
+chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | sed -n 1p; }
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a / b - 1; if (d < 0) d = -d; exit !(d < t) }'; }
 
 # data from the truth, N = 1.1e18 (lab value = model_cm x data_lab / data_cm, as tests/target_density)
@@ -77,8 +77,8 @@ else bad "(a) a SUM segment under a fitted density: N ${n:-missing}, chi2 ${c:-m
 
 # (b)
 run grad "$WORK/fit.azr" 2 "--use-gradient" AZURE_GRAD_CHECK=exit
-line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
-if echo "$line" | grep -q "density 0/1;.*density 0/1"; then ok "(b) d chi2/d N on the working copies = the analytic and Jacobian paths"
+line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
+if grep -q "density 0/1;.*density 0/1" <<< "$line"; then ok "(b) d chi2/d N on the working copies = the analytic and Jacobian paths"
 else bad "(b) gradient check: ${line:-no [grad-check] line}"; grep -m3 "density" "$WORK/grad/run.log"; fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: clone_composite"; else echo "FAIL: $failures check(s)"; exit 1; fi

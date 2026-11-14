@@ -125,11 +125,11 @@ fi
 # ---- 4. --describe
 if [ -f "$WORK/new/m.azr" ]; then
   d="$(cd "$WORK/new" && "$AZURE2_BIN" --describe m.azr)"
-  if echo "$d" | grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" && echo "$d" | grep -q "data file $WORK/new/data/" &&
-     echo "$d" | grep -q ".shift.offset (energy shift, fixed)"; then
+  if grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" <<< "$d" && grep -q "data file $WORK/new/data/" <<< "$d" &&
+     grep -q ".shift.offset (energy shift, fixed)" <<< "$d"; then
     ok "--describe: pair keys with their pairs, the resolved data file, the parameters"
   else
-    bad "--describe: $(echo "$d" | head -8)"
+    bad "--describe: $(echo "$d" | sed -n '1,8p')"
   fi
   if (cd "$WORK/new" && "$AZURE2_BIN" --describe m.azr --json) | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["datasets"] and d["datasets"][0]["terms"][0]["entrance_pair"] > 0 else 1)'; then
     ok "--describe --json: a JSON document with the data sets and their pair keys"
@@ -168,7 +168,7 @@ sys.exit(1 if bad else 0)'; then
   else
     bad "--describe --json: rows read or kept differ from the file and the window"
   fi
-  if echo "$d" | grep -Eq "^  rows: [0-9]+ read, [0-9]+ kept, E_lab "; then
+  if grep -Eq "^  rows: [0-9]+ read, [0-9]+ kept, E_lab " <<< "$d"; then
     ok "--describe: the rows read and kept and their E_lab range"
   else
     bad "--describe: no rows line"
@@ -194,7 +194,7 @@ if [ -f "$WORK/new/m.azr" ]; then
   if diff -rq "$WORK/new/output" "$WORK/two/output" > /dev/null; then
     ok "T2 format 3: 1 and 2 threads give identical outputs"
   else
-    bad "T2 format 3: 1 and 2 threads differ: $(diff -rq "$WORK/new/output" "$WORK/two/output" | head -2)"
+    bad "T2 format 3: 1 and 2 threads differ: $(diff -rq "$WORK/new/output" "$WORK/two/output" | sed -n '1,2p')"
   fi
 fi
 
@@ -219,7 +219,7 @@ if [ -f "$WORK/new/m.azr" ]; then
      grep -q 'W_DATA_FILE_NOT_READ' "$WORK/x3nodata/run.log" && ! grep -q '^ERROR' "$WORK/x3nodata/run.log"; then
     ok "extrapolations without the data files: the $n outputs of the run with data, byte for byte (a warning per file)"
   else
-    bad "extrapolations without the data files: $(diff -rq "$WORK/x3data/output" "$WORK/x3nodata/output" | head -2) $(grep -m1 '^ERROR' "$WORK/x3nodata/run.log")"
+    bad "extrapolations without the data files: $(diff -rq "$WORK/x3data/output" "$WORK/x3nodata/output" | sed -n '1,2p') $(grep -m1 '^ERROR' "$WORK/x3nodata/run.log")"
   fi
   run x3nodata 1
   if grep -q 'E_DATA_FILE' "$WORK/x3nodata/run.log" && [ ! -s "$WORK/x3nodata/output/chiSquared.out" ]; then

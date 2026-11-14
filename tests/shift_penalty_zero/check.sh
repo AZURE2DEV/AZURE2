@@ -65,10 +65,10 @@ fi
 cp -r "$WORK/calc" "$WORK/grad"
 (cd "$WORK/grad" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > jacobian.log 2>&1)
 line="$(grep -m1 'Jacobian path:' "$WORK/grad/jacobian.log")"
-if echo "$line" | grep -q "shift 0/2" && echo "$line" | grep -q "shift_fn 0/1"; then
-  ok "(b) analytic gradient = finite differences for dE (x2), b, a0 ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/grad/jacobian.log" | head -1))"
+if grep -q "shift 0/2" <<< "$line" && grep -q "shift_fn 0/1" <<< "$line"; then
+  ok "(b) analytic gradient = finite differences for dE (x2), b, a0 ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/grad/jacobian.log" | sed -n 1p))"
 else
-  bad "(b) gradient check: '${line:-no Jacobian-path line}' $(grep 'components with relative' "$WORK/grad/jacobian.log" | head -2)"
+  bad "(b) gradient check: '${line:-no Jacobian-path line}' $(grep 'components with relative' "$WORK/grad/jacobian.log" | sed -n '1,2p')"
 fi
 
 mk fixed "$(ds xs_40 xs_40.dat 40 'shift          offset 0.004 MeV fixed prior 0 0.002')"

@@ -156,7 +156,7 @@ fi
 mk gradcheck 1 "$(nr G "1.1 fit prior 1.1 10%")" "$(ds xs_40_s08 40 G)" "$(ds xs_90_s09 90 G "offset 0.001 MeV fit prior 0 0.01")"
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > check.log 2>&1)
 line="$(grep 'components with relative' "$WORK/gradcheck/check.log")"
-if echo "$line" | grep -q "norm 0/1 .*Jacobian path: norm 0/1"; then ok "leader's norm: adjoint and Jacobian gradients = finite difference"
+if grep -q "norm 0/1 .*Jacobian path: norm 0/1" <<< "$line"; then ok "leader's norm: adjoint and Jacobian gradients = finite difference"
 else bad "norm gradient check: $line"; fi
 if grep -q "Jacobian-path vs adjoint gradient over 2 free parameters" "$WORK/gradcheck/check.log"; then ok "two free parameters (the follower's norm is fixed)"
 else bad "free-parameter count: $(grep 'Jacobian-path vs adjoint' "$WORK/gradcheck/check.log")"; fi

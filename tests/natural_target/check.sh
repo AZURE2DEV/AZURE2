@@ -146,10 +146,10 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   (cd "$WORK" && mkdir -p gradcheck/output gradcheck/checks && cp data.dat gradcheck/ && cp "$M/M_data.azr" gradcheck/t.azr &&
    cd gradcheck && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
   if grep -q "abundance" "$WORK/gradcheck/run.log"; then
-    line="$(grep "abundance" "$WORK/gradcheck/run.log" | head -1)"
-    if echo "$line" | grep -Eq "abundance[^0-9]*0/[0-9]+"; then ok "gradient check: abundances agree with finite differences ($line)"; else bad "gradient check: $line"; fi
+    line="$(grep "abundance" "$WORK/gradcheck/run.log" | sed -n 1p)"
+    if grep -Eq "abundance[^0-9]*0/[0-9]+" <<< "$line"; then ok "gradient check: abundances agree with finite differences ($line)"; else bad "gradient check: $line"; fi
   else
-    bad "gradient check printed nothing about the abundances"; grep -i "grad" "$WORK/gradcheck/run.log" | head -5
+    bad "gradient check printed nothing about the abundances"; grep -i "grad" "$WORK/gradcheck/run.log" | sed -n '1,5p'
   fi
   # a normalization record shared by the natural SUM and a plain data set on the same data (norm free): the second data
   # set's rows must reach the shared norm column on both gradient paths
@@ -180,15 +180,15 @@ RECORDS
    awk -v recs="$WORK/ng_data.txt" '/^<data>$/ { print; while ((getline l < recs) > 0) print l; skip = 1; next }
         /^<\/data>$/ { skip = 0 } skip { next } { print }' "$M/M_data.azr" > gradcheck_ng/t.azr &&
    cd gradcheck_ng && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
-  line="$(grep "components with relative" "$WORK/gradcheck_ng/run.log" | head -1)"
-  if echo "$line" | grep -q "norm 0/1 .*Jacobian path:.* norm 0/1"; then ok "normalization group over a natural SUM and a plain segment: norm gradient agrees with finite differences"
+  line="$(grep "components with relative" "$WORK/gradcheck_ng/run.log" | sed -n 1p)"
+  if grep -q "norm 0/1 .*Jacobian path:.* norm 0/1" <<< "$line"; then ok "normalization group over a natural SUM and a plain segment: norm gradient agrees with finite differences"
   else bad "normalization group gradient check: $line"; fi
   # two samples: data_enr.dat = 0.1 sigma_A + 0.9 sigma_B; four free abundances, two sum-to-one priors
   paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ e = 1.0 + (NR - 1) * 0.002; v = 0.1 * $2 + 0.9 * $4; printf "%.6f 0 %.12e %.12e\n", e, v, 0.001 * v }' > "$WORK/data_enr.dat"
   (cd "$WORK" && mkdir -p gradcheck2/output gradcheck2/checks && cp data.dat data_enr.dat gradcheck2/ && cp "$M/M_samples_data.azr" gradcheck2/t.azr &&
    cd gradcheck2 && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
-  line="$(grep "abundance" "$WORK/gradcheck2/run.log" | head -1)"
-  if echo "$line" | grep -Eq "abundance[^0-9]*0/4"; then ok "gradient check with two samples: 4 abundances agree with finite differences"; else bad "gradient check with two samples: $line"; fi
+  line="$(grep "abundance" "$WORK/gradcheck2/run.log" | sed -n 1p)"
+  if grep -Eq "abundance[^0-9]*0/4" <<< "$line"; then ok "gradient check with two samples: 4 abundances agree with finite differences"; else bad "gradient check with two samples: $line"; fi
   run "fit2" "$M/M_samples_data.azr" true "" 2 || true
   sav="$WORK/fit2/output/param.sav"
   if [ -s "$sav" ]; then
@@ -202,7 +202,7 @@ RECORDS
   sav="$WORK/fit/output/param.sav"
   if [ -s "$sav" ]; then
     a13="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$sav")"; a14="$(awk '$1 == "natural.isotope.13C" { print $2 }' "$sav")"
-    chi="$(grep -o "Total-Chi-Squared: [0-9.e+-]*" "$WORK/fit/output/chiSquared.out" 2>/dev/null | head -1)"
+    chi="$(grep -o "Total-Chi-Squared: [0-9.e+-]*" "$WORK/fit/output/chiSquared.out" 2>/dev/null | sed -n 1p)"
     if awk -v a="$a13" -v b="$a14" 'BEGIN { exit !((a - 0.6)^2 < 1e-6 && (b - 0.4)^2 < 1e-6) }'; then ok "fit recovers the abundances 0.6 / 0.4 ($a13 / $a14; $chi)"; else bad "fit gave abundances $a13 / $a14 (want 0.6 / 0.4; $chi)"; tail -5 "$WORK/fit/run.log"; fi
   else
     bad "fit wrote no param.sav"; tail -8 "$WORK/fit/run.log"

@@ -45,7 +45,7 @@ grid() {
   sed "s#$3#data/grid.dat#" "$HERE/../$2/$2.azr" > "$d/run.azr"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   local out
-  out="$(ls "$d"/output/AZUREOut_*.out 2>/dev/null | head -1)"
+  out="$(ls "$d"/output/AZUREOut_*.out 2>/dev/null | sed -n 1p)"
   if [ -z "$out" ]; then
     echo "  FAIL  $1: no AZUREOut file"; tail -5 "$d/log" | sed 's/^/        /'; fail=1; return
   fi

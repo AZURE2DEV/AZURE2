@@ -142,7 +142,7 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   gradcheck "gl_$tag" "$flags" AZURE_LEVEL_SPACE=1
   nrows="$(wc -l < "$WORK/g_$tag.rows" | tr -d ' ')"
   if [ "$nrows" -lt 10 ]; then
-    bad "$tag: gradient check listed $nrows parameters"; grep -i "grad" "$WORK/g_$tag/run.log" | head -5
+    bad "$tag: gradient check listed $nrows parameters"; grep -i "grad" "$WORK/g_$tag/run.log" | sed -n '1,5p'
     continue
   fi
   # relative to the largest component: 1e-5 against finite differences (Park: 1e-4,

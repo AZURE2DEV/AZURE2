@@ -57,7 +57,7 @@ if grep -q "ERROR: test segment #1: an analyzing power needs a spin-1/2 projecti
    [ ! -s "$WORK/deuteron/output/AZUREOut_aa=1_R=2.extrap" ]; then
   ok "(b) an analyzing-power segment with a spin-1 projectile is refused"
 else
-  bad "(b) the deuteron analyzing-power segment was not refused"; grep -i "error\|analyzing" "$WORK/deuteron/run.log" | head -3
+  bad "(b) the deuteron analyzing-power segment was not refused"; grep -i "error\|analyzing" "$WORK/deuteron/run.log" | sed -n '1,3p'
 fi
 
 # ---- (c) the spin-0 case is unchanged ---------------------------------------------------------------------------

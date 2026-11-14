@@ -185,7 +185,7 @@ fit() {  # fit <name> <model> <flags>: mode 2, no parameter file
   (cd "$dir" && printf '2\nn\n\n\n' | run_limited 900 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
 }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav" 2>/dev/null; }
-chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" 2>/dev/null | head -1; }
+chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" 2>/dev/null | sed -n 1p; }
 near() { awk -v a="$1" -v b="$2" -v t="$3" -v re="$num" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a ~ re && d <= t) }'; }
 
 # (h), (i) fits on data made at n = 0.18

@@ -68,7 +68,8 @@ run() {
 ratios() {
   paste -d' ' <(tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }') \
               <(tr -d '\r' < "$WORK/$2/output/$OUT" | awk 'NF > 4 { print $1, $4 }') |
-    awk '{ if ($1 != $3) { print "ENERGY", $1, $3; exit 1 } printf "%.12e %.12e\n", $1, $2 / $4 }'
+    awk '{ if (e) next; if ($1 != $3) { print "ENERGY", $1, $3; e = 1; next } printf "%.12e %.12e\n", $1, $2 / $4 }
+         END { exit e }'
 }
 NOFOLD="$THM_NOFOLD"
 

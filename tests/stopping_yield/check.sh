@@ -62,8 +62,8 @@ refused() {
   local msg
   msg="$(cd "$WORK/$4" && "$AZURE2_BIN" --validate m.azr 2>&1; printf '1\n\n\n7\n' |
          $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline m.azr 2>&1)"
-  if echo "$msg" | grep -q "$2" && echo "$msg" | grep -q "$3"; then ok "$1 is refused ($2)"
-  else bad "$1: no $2 ($(echo "$msg" | grep -m2 -E 'ERROR|error'))"; fi
+  if grep -q "$2" <<< "$msg" && grep -q "$3" <<< "$msg"; then ok "$1 is refused ($2)"
+  else bad "$1: no $2 ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 }
 
 # ---- 1. --validate names the source of the stopping
@@ -143,7 +143,7 @@ mkdir -p "$WORK/empty"
 msg="$(cd "$WORK/calc" && AZURE2_SRIM_DATA_DIR="$WORK/empty" "$AZURE2_BIN" --validate m.azr 2>&1; printf '1\n\n\n7\n' |
        AZURE2_SRIM_DATA_DIR="$WORK/empty" $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline m.azr 2>&1)"
 if [ "$(echo "$msg" | grep -c E_STOPPING_DATA)" -ge 2 ]; then ok "no SRIM data (AZURE2_SRIM_DATA_DIR an empty directory): refused by --validate and the run (E_STOPPING_DATA)"
-else bad "no SRIM data: no E_STOPPING_DATA from both ($(echo "$msg" | grep -m2 -E 'ERROR|error'))"; fi
+else bad "no SRIM data: no E_STOPPING_DATA from both ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 
 echo
 if [ "$failures" -ne 0 ]; then
