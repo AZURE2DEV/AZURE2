@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 11:40) — merged: the level state; the page's link; the pages' build test
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 68 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-level-state-2` and `feature/upgrade-6-ui-token-link`. Their entries
+follow.
+
+- The values an evaluation writes per level (fit energies and amplitudes, the shift-function values, the
+  external-capture and final-state quantities, Park's J) live in one `LevelState` held by `CNuc`; `ALevel`
+  keeps the structure and the input values only. Deleted with no caller left: `CNuc::InvalidateShiftFunctions`,
+  `AZUREAPI::TransformRWAParameters`, `AZUREAPI::TransformAllRWAParametersFull`.
+- `allowed_state.tsv`: the version counter's row moved from `src/ALevel.cpp` to `src/LevelState.cpp`; the
+  count stays 49. Accepted: it is the same counter. The size rows of the files the step shrank are the file
+  plus 20 lines.
+- The web page: the printed URL works as a link from another site (cookie `SameSite=Lax`, named per port); a
+  browser without the token gets a page that asks for it; programs keep the JSON refusal.
+- The published pages are built by a quick test (`docs_build`, skipped where Sphinx is missing). Its first run
+  found that `format3.rst` did not build under `-W` (a character class read as a reference): the generator's
+  escape is fixed. Sphinx, its theme and the copy-button extension (`docs/requirements.txt`) are installed in
+  the work environment with the PI's yes.
+
+**Verified on the merged tree** (build `work/b-trial68`): 0 warnings; all projects in the three bases identical
+to `tab-t67-1` (887 / 851 / 887 files); the eight fits identical to `work/b-trial67`; 266 of 266 quick tests.
+The director's own runs (`work/director/spot68/`): `angle_mapping` fits (gradient, LM) and a short T2 sampler
+chain in the physical and the RWA basis, `work/b-trial67` against `work/b-trial68`: every output identical
+(13, 13, 10, 10 files). After the link branch was merged in: the consistency test, `docs_build` (54 pages) and
+the 88 tests of `tests/pyazr/ui` pass. Not run here: the slow tests, `pyazr_wheel`, the long suite.
+
+**New reference**: tag `tab-t68-1`, base build `work/b-trial68`.
+
+**Open, for a later branch or a decision**:
+
+- The design's steps 4 and 5 of `cnuc_split.md` section 12.3 (one parameter layout; pools of `LevelState`
+  instead of copies of the compound; the set-up out and the name `CNuc` gone).
+- Kept as they were: the sub-point-grid copy takes only E and γ (N_f^½ stale in the Brune basis with a fitted
+  final-state amplitude); the RWA chain's snapshot `parameters.out`.
+- `pyazr_ec_relativistic` (label slow) fails on this build and on older ones alike: it parses a number from a
+  line that now prints `Objective(...)`.
+- The page's cookie has no expiry (a session cookie); Firefox and Safari were not run; about 30 `:py:`
+  references of the pages have no target under Sphinx's nitpicky mode.
+
 ## 2026-11-14 (director, 10:50, branch `feature/upgrade-6-ui-token-link`) — the page's printed URL works as a link
 
 **Met by the PI**: the printed URL (`http://127.0.0.1:<port>/?token=...`) opened as a link answered
