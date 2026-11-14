@@ -827,7 +827,9 @@ axes name the quantity, frame and unit; a plot is never the only place a number 
 - **A token, as Jupyter does**: a random token in the URL the command prints, exchanged for a cookie on the first
   load; every `/api` request needs it. Reason: on a shared machine (this one, a cluster's login node) every local user
   can reach 127.0.0.1 ports; without a token any of them could edit and save a user's project. `--token` sets a
-  fixed one for agents and tests.
+  fixed one for agents and tests. The cookie is `SameSite=Lax` and named for the port (`azure2_ui_token_<port>`);
+  a browser that asks for the page without the token gets a page with a field for it, a program the JSON refusal
+  (as built: 11.1, item 2).
 - The `Host` header must be `127.0.0.1` or `localhost` (DNS rebinding); no CORS headers; JSON bodies only.
 - File access is limited to a root: the project's directory by default, `--root DIR` to open several; paths are
   resolved (symlinks included) and refused outside the root (403; the spike refused `../../escape.azr`).
@@ -1021,6 +1023,17 @@ edit with the evaluation that follows 0.43–0.54 s on T2, its undo 0.49 s. The 
 1. *Static files* are served by `STATIC_ROUTES` and one generic handler in `routes.py`, apart from `ROUTES` (whose
    rows are pyazr calls or server methods, and whose tests count them); the page revalidates every file on each load.
 2. *The token*: `/?token=` answers with a redirect to `/` that sets the cookie, so the token leaves the address bar.
+   The cookie is `SameSite=Lax` (since 2026-11-14; it was `Strict`): the printed URL is usually followed from
+   somewhere else (a link in a chat or a mail page), and a browser keeps a strict cookie back on a navigation that
+   started on another site and on the redirect that follows it, so the server answered 401 to its own link (met by
+   the PI; reproduced in headless Chrome, `smoke_test.py`). A lax cookie goes with a navigation (GET) from elsewhere
+   and with nothing else from there. This is safe while **every GET route only reads** (the rule for a new route:
+   a request that changes something is not a GET; it then carries an `Origin` header, checked by item 12). The
+   cookie's name carries the port the browser named (`azure2_ui_token_28400`): a browser has one cookie jar per
+   host whatever the port, so two servers on one machine overwrote each other's token. A navigation without the
+   token or with a wrong one (a GET that accepts HTML, outside `/api`) gets a small page that says so and takes
+   the token in a field (its form is `GET /?token=`, the printed URL's door; its own policy allows its inline
+   style and that form, no script); every other request keeps the JSON refusal with its three parts.
    *Content-Security-Policy* on every answer: scripts from the server only (no inline script, no eval); inline styles
    are allowed because plotly.js sets style attributes and adds style elements; images also from `data:` and
    `blob:` (plotly's image export).

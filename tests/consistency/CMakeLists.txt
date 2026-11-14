@@ -37,3 +37,9 @@ add_test(NAME tools_classify_quadrature
 add_test(NAME tools_runall
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/runall_test.py)
+
+# The published pages build without warnings, as the documentation workflow builds them; skipped without Sphinx.
+add_test(NAME docs_build
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/docs_build_test.py)
+set_tests_properties(docs_build PROPERTIES SKIP_RETURN_CODE 77)

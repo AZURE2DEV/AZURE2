@@ -108,6 +108,7 @@ ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, 
 ctest --test-dir build -R <name> --output-on-failure  # a single test
 ctest --test-dir build -L slow                        # long pyazr tests: run when you change pyazr fitting/bands
 sphinx-build -W --keep-going -b html docs/source docs/_build/html   # docs, warnings are errors (as CI)
+ctest --test-dir build -R docs_build                  # the same build as a test (skipped without Sphinx)
 ```
 
 `tests/run_tests.sh` without an argument takes the *newest* `build*/src/AZURE2`.
