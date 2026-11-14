@@ -2,6 +2,20 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: the loose ends
+
+**Done** (`endf.md` 13.7): the start grid of every written section seeded with the level energies (E_r and
+E_r -+ Gamma/2) and the exit thresholds, and the quarter points of every interval checked by the refinement's own
+rule (`pyazr/endf/grid.py`); the loss list exact (`from_session`'s losses only for what the project holds;
+`Written.not_written` every section a reaction needs and the file lacks, with the reason; both in MF=1); refusal
+fixes in words (`Candidate.accept`, `write`, `to_project`, `from_session`); IFG=0 converted on reading (p. 73),
+KRM=3 refused with the door it would need; PSYCHE's MT=102 Q explained (its mass formula, not the file).
+**Verified how**: build `work/b-endf4` (no C++ change), `pyazr_endf_write`, `pyazr_endf_model`, `pyazr_endf_check`,
+`pyazr_endf_read`, the consistency test, the pages built; dense check (20001 points per section) on T1, T2, 13N
+within 1.0e-3; injected errors (seeds removed: the narrow level missed; the factor 2 of IFG=0 removed) fail the tests.
+**Open**: a level narrower than about 1e3 times the ER field's last digit cannot be written (MF=2 reproduces MF=3 only
+to 4e-4 near a 0.2 eV level; the 1e-5 check refuses it): a question for the PI.
+
 ## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits

@@ -793,8 +793,7 @@ options `use_coulomb_table`, `use_gsl_coul`. What differs from the design, and w
   (`src/CNucLevelParameters.cpp`, another agent's file) for a `PPair`; that function could call the door's.
 - `to_project` asks door 2 for a Brune tolerance of 1e-11 MeV (the engine's report uses 1e-6 MeV): with 1e-6 the
   write-then-read of T1 moved the model by 7.6e-5.
-- IFG=0 and KRM=3 are refused, not converted (IFG=0 needs the penetrabilities in the file's frame at E_lambda; KRM=3
-  needs the photon pair of the eliminated widths): not built.
+- IFG=0 is converted by `to_project` (section 13.7); KRM=3 is refused (section 13.7: the door it needs).
 - The coupling order of SCH is not in the manual; read as AZURE2's (light particle first). The library's MF=3
   tests angle-integrated cross sections only, which do not depend on it.
 
@@ -835,7 +834,42 @@ CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11 (`opt/`), on T1, T2, 13N as written:
 - FIZCON: MF=3/MT needs MF=6 (one per MF=3 section: MF=6 not written); on 13N before AWI was taken from AME2020,
   "AWI SHOULD BE SET TO 9.98623E-01" (13N gives the proton's mass as 1.00728 u, nuclear; repaired).
 - PSYCHE: AP not in range and, on T2, "SPIN OF ISOTOPE 7015. DISAGREES WITH 0.5" (both its reading of the record
-  after the range as SPI, AP of LRF 1-3, section 13.2: that record holds 0, 0, IFG, KRM, NJS, KRL); for MT=102 "calculated Q 6.67452E+06 disagrees
-  with the given Q 1.94349E+06" (the given Q is AME2020's S_p of 13N; PSYCHE's number not explained), a negative
-  thermal cross section and a resonance integral (neutron quantities, below the table).
+  after the range as SPI, AP of LRF 1-3, section 13.2: that record holds 0, 0, IFG, KRM, NJS, KRL); for MT=102
+  "calculated Q 6.67452E+06 disagrees with the given Q 1.94349E+06": PSYCHE's `QTEST` (psyche.f lines 2700-2820)
+  takes the masses from its function `AMASS` (lines 8874-9046), a semi-empirical mass formula with shell terms and
+  a table for n, p, d, t, 3He and alpha only; that formula, coded in `work/endf4/s/amass.py`, gives 6.6745 MeV for
+  12C + p -> 13N. The file's QM = QI is AME2020's S_p of 13N (1.94349 MeV): the code's number, not the file's (the
+  test of PSYCHE is 5 % and above 0.25 MeV, so any light capture target is reported); a negative thermal cross
+  section and a resonance integral (neutron quantities, below the table).
 
+### 13.7 The writer's loose ends (as built)
+
+- **The start grid** (`pyazr/endf/grid.py`, `start_grid`): 41 even points over the range, every exit threshold and
+  every level energy with E_r -+ Gamma/2 inside it. The lists are pyazr's: the physical values of the session's
+  parameters at x (`Session.transform`: energies and the widths of the channels open at the level) and the pair
+  records (`Session.pairs`), E_x to lab by the engine's `cm_to_lab_energy`. `grid.refine` runs `pyazr.refine_grid`
+  and then checks the quarter points of every interval by the same rule, refining again from the failing ones (up to
+  four rounds; the model is cached, so a point is computed once). Without the check, the seeded grid of 13N reached
+  3.6e-3 on a flank (44 of 20001 points above 2e-3); with it T1 MT=102, T2 MT=800/801 and 13N MT=102 are within
+  1.0e-3 on 20001 points each. Test: a copy of T2 with its 3- level at 13.0734 MeV made 0.2 eV wide, the level
+  2.6 keV from an even point: the grid follows the engine to 1.8e-4 of the peak; with the seeds removed it misses it
+  (0.92, the injected error). A file of that copy is not written: its MF=2 reproduces MF=3 only to 3.7e-4 near the
+  level, since ER holds 1e-3 eV at 1 MeV (the 11-column field) against a width of 0.2 eV; the writer's 1e-5 check
+  refuses it (a question for the PI: a narrow level cannot be written).
+- **The loss list**: `from_session`'s losses name only what the project holds (photon pairs, data sets with their
+  records, THM experiments, beta pairs, excited light particles); `Written.not_written` names every section (MF=3,
+  MF=6 of elastic MT=2, of each exit, of MT=102) a reaction of the project needs that the file lacks, with the
+  reason; both are in the MF=1 text. The test compares them with the file's sections and the project.
+- **Refusal texts**: the fix of `Candidate.accept`, `write`, `to_project` and `from_session` is in words (no Python
+  call), so that the page, the command line and a script read the same.
+- **IFG=0** (p. 73): converted by `to_project`, gamma = sign(GAM) sqrt(|GAM| / 2P) (the manual prints
+  "sign(GAM) x |GAM|/2P": its square root is meant, Gamma = 2 gamma^2 P, eq. D.45 p. 356), P the engine's
+  `penetrability` row at the channel's c.m. energy |ER| m_B/(m_A+m_B) + Q (eq. D.82, p. 364; |ER| for a negative
+  ER, p. 73); a width on a channel closed there is refused. T2 written as IFG=0 gives the levels of the IFG=1 file to
+  6.9e-7. **KRM=3** stays refused: AZURE2's `use_rmc` holds eliminated photon widths, but a start model is in the
+  Brune basis, and the Brune transformation of the eliminated widths needs a door the engine lacks: door 2
+  (`observed_levels_of_block`) with, per level, the formal eliminated width Gamma_gamma (MeV, P = 1) as an
+  argument, returning the observed Gamma_gamma of each level (the eigenvector transformation of the particle
+  channels applied to the photon amplitudes). No library file of `work/endf/evals` exercises either: the only one,
+  ENDF/B-VIII.1 3He + 4He, is IFG=1, KRM=4.
+- **PSYCHE's Q of MT=102**: its mass formula (section 13.6); nothing to repair in the file.
