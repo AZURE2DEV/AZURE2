@@ -29,7 +29,8 @@ from .errors import ParameterError, ParameterKeyError, close_names, listed
 from . import session_checks, session_fit, session_options, session_physics, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
-from .parameters import Pair, PairSet, Parameter, Parameters
+from .parameters import Parameter, Parameters
+from .system import Pair, PairSet
 from .project import require_format3
 from .potentials import _HybridPotentials
 
@@ -392,7 +393,7 @@ class Session(
     @property
     @engine_call
     def level_scheme(self):
-        """A structured, printable :class:`~pyazr.scheme.LevelScheme`.
+        """A structured, printable :class:`~pyazr.system.LevelScheme`.
 
         Groups the model the way it reads physically -- particle pairs, then
         J-groups, then levels and their channels (L, S, radiation type, partial
@@ -400,7 +401,7 @@ class Session(
         human-readable overview.  Read-only; to add/remove levels and write the
         result to a file see :meth:`pyazr.Project.add_level` and the other level edits of :class:`pyazr.Project`.
         """
-        from .scheme import LevelScheme
+        from .system import LevelScheme
         return LevelScheme.from_azr(self)
 
     @property
@@ -566,7 +567,6 @@ class Session(
         """The compound nuclei of the project: ``{(Z, A): PairSet}`` of the
         pairs that form each, in pair-number order (one entry for every project
         written before several nuclei could share a file)."""
-        from .parameters import PairSet
         out = {}
         for pair in self.pairs:
             out.setdefault(pair.nucleus, PairSet()).append(pair)

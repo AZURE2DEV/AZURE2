@@ -36,7 +36,7 @@ sys.path.insert(0, ROOT)
 
 try:
     from pyazr import Project, Session
-    from pyazr.nuclei import merge_projects
+    from pyazr.system import merge_projects
     import pyazr._azure2  # noqa: F401
 except ImportError as e:  # as the other pyazr tests: no package or engine module -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")

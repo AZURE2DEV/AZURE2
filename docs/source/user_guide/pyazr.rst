@@ -634,7 +634,8 @@ one record whose reaction is the sum of the members':
 
 .. code-block:: python
 
-   from pyazr import merge_projects, Session
+   from pyazr import Session
+   from pyazr.system import merge_projects
 
    report = merge_projects(
        ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
@@ -882,8 +883,9 @@ Dimensionless widths
 
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf units are the corresponding sanity
 check for capture. AZURE2's Wigner limit (``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
-Teichmann-Wigner sum-rule unit 3ħ²/(2μa²); a θ² quoted against the other common unit, ħ²/(μa²)
-(``lane_thomas_wigner()``), is 1.5 times larger.
+Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); a θ² quoted against the other common
+unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``) is pyazr's one physics
+formula of its own (the engine has none); every other number of the table is the engine's.
 
 The external region, and the caches
 -----------------------------------
@@ -919,8 +921,7 @@ dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math
 ``W`` and ``rho_dlog`` (:math:`\rho W'/W`, the shift function of a closed channel at :math:`\rho = \kappa a`). It
 is the engine's GSL-free function (physics/coulomb), good to :math:`10^{-12}` against mpmath for
 :math:`l \le 10`, :math:`\eta_b \le 1000`, :math:`10^{-4} \le \rho \le 200`; an invalid argument raises
-``ValueError`` naming the element. ``pyazr.whittaker`` (pair, radius and binding energy in MeV) is the older Python
-copy of the engine's GSL path.
+``ValueError`` naming the element.
 
 .. code-block:: python
 
@@ -1307,6 +1308,25 @@ call.
    * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
      - ``s.objective().residuals(x)``, ``.residuals_and_jacobian(x, skip=...)``: the data rows first, then one
        row per prior and constraint
+   * - ``transform_out(levels)``, ``partial_widths(level)``, ``LevelWidthTransformer``, ``levels_from_azr``,
+       ``levels_from_scheme``, ``TransformedLevel``, ``TransformedChannel`` and the classes Level and Channel of
+       ``pyazr.transform``
+     - ``s.transform(x)``: the engine's transformation, one physical value per row of ``s.parameters`` (a chain:
+       one call per sample; ``pyazr/examples/transform_widths.py``)
+   * - ``pyazr.penetrability``, ``shift``, ``shift_derivative``, ``whittaker`` (Python formulas)
+     - ``pyazr.physics.penetrability``, ``.shift``, ``.shift_derivative``, ``.whittaker_wave``; with a session's
+       radius, Coulomb table and potential ``s.channel_functions(pair, e_cm, l)``
+   * - ``teichmann_wigner(g2)``, ``lane_thomas_wigner(g2)``
+     - ``Parameter.wigner_limit`` and ``pyazr.physics.wigner_limit`` (the 3 hbar^2 / (2 mu a^2) unit; the
+       hbar^2 / (mu a^2) unit is 2/3 of it)
+   * - ``pyazr.Pair``, ``pyazr.PairSet``, ``pyazr.LevelScheme``, ``pyazr.SchemeLevel``, ``pyazr.SchemeChannel``,
+       ``pyazr.Nucleus``, ``pyazr.MergeReport``, ``pyazr.merge_projects``, ``pyazr.nucleus_of``,
+       ``pyazr.nucleus_of_pair``, the modules ``pyazr.scheme`` and ``pyazr.nuclei``
+     - the same names in ``pyazr.system`` (``pyazr.system.Pair``, ``pyazr.system.PairSet``,
+       ``pyazr.system.LevelScheme``, ``pyazr.system.SchemeLevel``, ``pyazr.system.SchemeChannel``,
+       ``pyazr.system.Nucleus``, ``pyazr.system.MergeReport``, ``pyazr.system.merge_projects``,
+       ``pyazr.system.nucleus_of``, ``pyazr.system.nucleus_of_pair``; modules ``pyazr.system.scheme``,
+       ``pyazr.system.nuclei``)
 
 Examples
 --------
@@ -1335,7 +1355,8 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``deactivate_level.py``
      - Switching a resonance off without removing it.
    * - ``transform_widths.py``
-     - Reduced width amplitudes to physical partial widths.
+     - Reduced width amplitudes to physical partial widths with ``Session.transform``, beside the naive
+       2γ²P; a chain's samples mapped onto physical values.
    * - ``dimensionless_widths.py``
      - θ² and Weisskopf units for a whole fit.
    * - ``channel_functions.py``

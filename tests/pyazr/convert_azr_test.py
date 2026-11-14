@@ -107,7 +107,7 @@ for project, azr, hybrid in CASES:
                      "tabulate": lambda: pyazr.tabulate(path, [(1, 1)], 1.0, 2.0),
                      "angular_distribution": lambda: pyazr.angular_distribution(path, [1.0]),
                      "write_averaged_azr": lambda: pyazr.write_averaged_azr(path, os.path.join(d, "avg.azr"), {}),
-                     "merge_projects": lambda: pyazr.merge_projects([path], os.path.join(d, "merged.azr"))}
+                     "merge_projects": lambda: pyazr.system.merge_projects([path], os.path.join(d, "merged.azr"))}
             for name, call in calls.items():
                 try:
                     call()

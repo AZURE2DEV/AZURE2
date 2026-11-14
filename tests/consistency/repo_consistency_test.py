@@ -443,7 +443,7 @@ for rel, literal in sorted(KNOWN):
 
 
 # 10b. One table of element symbols: physics/'s Elements.h (ElementSymbol, ElementZ; the binding's element_symbols(),
-#      which pyazr.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
+#      which pyazr.system.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
 #      consecutive symbols written out -- is a copy that drifts (src/ParameterLabel.cpp's stopped at Kr).
 ELEMENT_RUN = re.compile(r'\bHe\b["\',\s]{1,6}\bLi\b["\',\s]{1,6}\bBe\b')
 for top in ("src", "include", "api", "io", "experiment", "pyazr"):

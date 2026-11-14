@@ -29,9 +29,9 @@ def _element_symbols():
     loaded by path outside its package."""
     import importlib
     import sys
-    if __package__:
-        return list(importlib.import_module(f"{__package__}._azure2").element_symbols())
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if __package__:  # pyazr.system: the engine module is the parent package's
+        return list(importlib.import_module(f"{__package__.rpartition('.')[0]}._azure2").element_symbols())
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if root not in sys.path:
         sys.path.insert(0, root)
     return list(importlib.import_module("pyazr._azure2").element_symbols())
@@ -86,7 +86,7 @@ def nucleus_of(ptype, Z1, Z2, M1, M2) -> Nucleus:
 
 
 def nucleus_of_pair(pair) -> Nucleus:
-    """The compound nucleus of a runtime :class:`pyazr.parameters.Pair` (the
+    """The compound nucleus of a runtime :class:`pyazr.system.Pair` (the
     engine reports it; this recomputes it from the pair's columns)."""
     return nucleus_of(pair.ptype, pair.Z1, pair.Z2, pair.M1, pair.M2)
 
@@ -117,7 +117,7 @@ def merge_projects(projects, out, *, isotopes=None, target="natural", isotope_su
     the set, its reaction the sum of every member's reaction and its target ``target``; the other members' records
     are dropped.  The project is validated as written: an error raises :class:`pyazr.FormatError`.
     """
-    from .project import Project, FormatError, _bytes, _text, _engine_module as engine
+    from ..project import Project, FormatError, _bytes, _text, _engine_module as engine
     out = os.path.abspath(out)
     out_dir = os.path.dirname(out)
     members = []

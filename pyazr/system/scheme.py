@@ -160,7 +160,7 @@ class LevelScheme:
     def _pairs_block(self):
         lines = ["Particle pairs:"]
         # The compound nucleus is only worth a column when the pairs form more
-        # than one (a natural-target project); see pyazr.nuclei.
+        # than one (a natural-target project); see pyazr.system.nuclei.
         nuclei = {(getattr(p, "nucleus_Z", 0), getattr(p, "nucleus_A", 0)) for p in self.pairs}
         several = len(nuclei) > 1
         for p in self.pairs:

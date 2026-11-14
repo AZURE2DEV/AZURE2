@@ -343,7 +343,7 @@ def kinds():
       value in the fit vector), ``owner`` (the record fields that say what it belongs to), own_prior, segment_field,
       vary_from_project, doc;
     - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
-      :class:`pyazr.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
+      :class:`pyazr.system.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
       describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);
     - ``options``: the session options by their keyword of :class:`pyazr.Session`: type, default, ``key`` (the
       ``<config>`` key of an option of the calculation, the same word; "" for one that is not project state, with its

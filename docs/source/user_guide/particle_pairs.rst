@@ -311,7 +311,7 @@ appear on the :doc:`fitting` and :doc:`mcmc` tabs. In the file the table is
 the ``<abundances>`` block and the sum sigma the ``abundanceSumSigma`` key
 (:doc:`../reference/data_formats`), named samples as ``<name>:``-prefixed
 lines; a project without the block has no abundance parameters at all. The pyazr function
-:func:`pyazr.merge_projects` builds such a project from several
+:func:`pyazr.system.merge_projects` builds such a project from several
 single-nucleus ones.
 
 .. note::

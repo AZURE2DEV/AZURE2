@@ -97,11 +97,10 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   `project.require_format3` (the engine's message, io::NotFormat3Message, names
   `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
   (`convert_azr`, `convert_params`).
-- `transform.py` is a Python port of the engine's `TransformOut`, and
-  `widths.py` and `bands.py` re-derive engine quantities. Their formulas are
-  compared with the rows of `pyazr.physics` that replace them
-  (`tests/pyazr/physics_table_test.py`) and go in the rename step. Never add
-  another copy: a missing function is a row of the physics table.
+- No physics formula in Python: physical values are `Session.transform(x)` (the engine's `TransformOut`), the
+  functions the rows of `pyazr.physics` or `Session.channel_functions`.  The one formula of pyazr's own is the
+  Weisskopf estimate (`widths.weisskopf_width`, tested against its closed form by `tests/pyazr/weisskopf_test.py`:
+  the engine has none).  Never add another: a missing function is a row of the physics table.
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 

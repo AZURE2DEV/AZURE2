@@ -28,7 +28,7 @@ sys.path.insert(0, ROOT)
 
 try:
     from pyazr import Project  # noqa: E402
-    from pyazr.parameters import Pair  # noqa: E402
+    from pyazr.system import Pair  # noqa: E402
 except ImportError as e:
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(77)
