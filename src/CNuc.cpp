@@ -405,7 +405,6 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     for (int j = 1; j <= this->NumJGroups(); j++) this->Group(j)->SetNucleusLabelled(true);
   this->BuildSystems(configure);
 
-  if (this->ReadAbundances(configure) == -1) return -1;
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
   gammaDecayInputs_ = gammaDecays_->FileNumbers();
@@ -413,18 +412,6 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   WarnMassSeparationMismatch(*this, configure);
 
   return 0;
-}
-
-/*!
- * The samples of the <abundances> block (AbundanceSamples::Set, for this project's compound nuclei) and the current
- * abundances at the file's values.
- */
-int CNuc::SetAbundances(const Config &configure, const azure2::experiment::AbundanceSpecs &specs) {
-  std::vector<std::pair<int, int> > nucleiZA;
-  for (const CompoundNucleus &n : nuclei_) nucleiZA.push_back({n.Z, n.A});
-  const int read = abundances_.Set(configure.outStream, specs, nucleiZA);
-  abundanceValues_ = abundances_.StartValues();
-  return read;
 }
 
 /*!
@@ -651,7 +638,6 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
       level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
-  abundances_.ReadFrom(p, (std::size_t)i, abundanceValues_);
 }
 
 namespace phys = azure2::physics;
@@ -875,9 +861,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       energyIndex++;
     }
   }
-  // Isotopic abundances, right after the level block (AbundanceSamples.h; WorkingCopy::FillMnParams, which takes its
-  // offsets from the vector size, needs no change); only when the project carries an <abundances> block.
-  abundances_.AddParameters(abundanceValues_, params);
+  // The isotopic abundances follow, written by WorkingCopy::FillMnParams (AbundanceSamples::AddParameters).
 }
 
 /*!
@@ -902,7 +886,6 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
       level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
-  abundances_.ReadFrom(p, (std::size_t)i, abundanceValues_);
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
   if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
 }

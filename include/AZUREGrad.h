@@ -84,7 +84,7 @@ class ParamIndexMap {
   int EnergyShiftIndex(int segment) const;
   /// Full index of the sqrt(E) energy-shift coefficient for a 1-based segment, or -1.
   int EnergyShiftSqrtIndex(int segment) const;
-  /// Full index of the abundance parameter with this 1-based ordinal (CNuc::AbundanceOrdinal), or -1.
+  /// Full index of the abundance parameter with this 1-based ordinal (AbundanceSamples::Ordinal), or -1.
   int AbundanceIndex(int ordinal) const;
   /// Full index of parameter aj of the shift function declared on a 1-based segment, or -1.
   int EnergyShiftFnIndex(int segment, int j) const;
@@ -296,8 +296,8 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
  * has J < 0; a no-op outside the Park formalism.
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
-/// Gradient of the isotopic-abundance priors and sum-to-one penalty (CNuc::AbundancePenalty), into the accumulator.
-void AddAbundancePenaltyGradient(CNuc *compound, const WorkingCopy &data, const Config &configure, GradAccum &accum);
+/// Gradient of the isotopic-abundance priors and sum-to-one penalty (AbundanceSamples::Penalty), into the accumulator.
+void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)

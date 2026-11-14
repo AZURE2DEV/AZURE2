@@ -447,10 +447,9 @@ class WorkingCopy {
 
   using ThmGroup = ::ThmGroup;                  // ThmGroup.h
   using ThmCoherentParam = ::ThmCoherentParam;  // ThmGroup.h
-  /// Reads the coherent-background block of a full parameter vector (if it
-  /// has one) into the parameters and, if given, the compound the HOES model
-  /// reads them from.  Called by FillEnergyShiftsFromParams.
-  void FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc);
+  /// Reads the coherent-background block of a full parameter vector (if it has one) into the present values
+  /// (ThmCoherentValues, which the HOES model reads).  Called by FillEnergyShiftsFromParams.
+  void FillThmCoherentFromParams(const vector_r &p);
   /*!
    * Profiles group g from the model values of its segments' points: stores in `results` (Results::objective) the
    * profile, every segment's norm (the shared n*) and its chi^2 (that of its own points), and returns the group's

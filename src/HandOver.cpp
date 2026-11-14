@@ -197,7 +197,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
-  FillThmCoherentFromParams(p, theCNuc);
+  FillThmCoherentFromParams(p);
   // The isotopic abundances, the block after the levels (none without <abundances>).
   this->FillAbundancesFromVector(p);
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.

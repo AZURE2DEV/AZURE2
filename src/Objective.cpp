@@ -16,7 +16,6 @@
 #include "ModelPass.h"
 #include "PriorCovariance.h"
 #include "ModelData.h"
-#include "AbundanceComparison.h"
 
 namespace {
 
@@ -156,18 +155,12 @@ class AbundanceTerm : public ObjectiveTerm {
   // term, which couples them, is here.
   void AddForSampler(const ObjectiveContext &c, double &chi2) const override {
     const AbundanceSamples &samples = c.data->Data().Abundances();
-    if (samples.Present()) {
-      CompareCopies(c.compound->AbundanceValues(), c.data->AbundanceValues(), "ABUNDANCE", "the sampler's term");
-      chi2 += samples.SumPenalty(c.data->AbundanceValues(), c.config.abundanceSumSigma);
-    }
+    if (samples.Present()) chi2 += samples.SumPenalty(c.data->AbundanceValues(), c.config.abundanceSumSigma);
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     const AbundanceSamples &samples = c.data->Data().Abundances();
     if (!samples.Present()) return;
-    CompareCopies(c.compound->AbundanceValues(), c.data->AbundanceValues(), "ABUNDANCE", "the abundance term");
     const double abundancePenalty = samples.Penalty(c.data->AbundanceValues(), c.config.abundanceSumSigma);
-    if (abundancePenalty != c.compound->AbundancePenalty(c.config.abundanceSumSigma))
-      CompareCopies({0.0}, {1.0}, "ABUNDANCE", "the abundance term's priors");
     chi2 += abundancePenalty;
     c.results.objective.abundance = abundancePenalty;
   }
@@ -384,7 +377,6 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
         case ParamKind::Abundance: {
           had = ds.Abundances().Sample(d.sample).entries[d.nucleus - 1].sigma > 0.0;
           ds.ReplaceAbundancePrior(d.sample, d.nucleus);
-          compound->ReplaceAbundancePrior(d.sample, d.nucleus);  // COMPARISON
           break;
         }
         default:  // levels and THM coherent background: a nuisance prior, skipped by index
@@ -448,7 +440,6 @@ void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &conf
   // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
   const AbundanceSamples &samples = data.Data().Abundances();
   if (samples.Present()) {
-    CompareCopies(compound->AbundanceValues(), data.AbundanceValues(), "ABUNDANCE", "AppendModelRows");
     for (int smp = 1; smp <= samples.NumSamples(); smp++) {
       const double s = samples.SumSigma(smp, config.abundanceSumSigma);
       if (!(s > 0.0)) continue;

@@ -756,7 +756,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     eg = false;
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
-    AddAbundancePenaltyGradient(lc, *ld, configure(), accum);  // abundance priors, sum-to-one
+    AddAbundancePenaltyGradient(*ld, configure(), accum);  // abundance priors, sum-to-one
     accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
@@ -1097,7 +1097,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     }
   // Diagonal priors (x - x0)^2 / sigma^2 (Objective.h): gradient 2 (x - x0) / sigma^2, curvature 2 / sigma^2.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double nominal, double e) {
+  ForEachDiagonalPrior(data(), pmap, [&](int idx, double nominal, double e) {
     if (idx >= (int)p.size()) return;
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
@@ -1127,7 +1127,7 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2: the diagonal priors (Objective.h).  The abundance
   // sum-to-one term and Park's wall are residual rows (AppendModelRows), in the sum above.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double e) {
+  ForEachDiagonalPrior(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
   if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradTiming)) {

@@ -1,4 +1,3 @@
-#include "AbundanceComparison.h"
 #include "THMMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "ChannelFunc.h"
@@ -275,7 +274,6 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double
   // ThmCoherentBackground): c(E) times the bucket's vertex M_l (no width),
   // added to the resonant amplitude of its combinations before squaring.
   const ThmCoherentBackground *coherent = point->GetThmCoherent();
-  CompareCopies(compound->ThmCoherentValues(), coherentValues, "THM", "HoesCrossSection");
 
   double sigma = 0.0;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -538,7 +536,6 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
   std::vector<std::vector<complex>> partial(angle ? std::max(numNodes, 1) : 0);
   const ThmCoherentBackground *coherent = point->GetThmCoherent();
   const std::vector<double> &coherentValues = *ctx.coherentValues;
-  CompareCopies(compound()->ThmCoherentValues(), coherentValues, "THM", "THMPointAdjoint");
   const ThmVertexBoundary::Rule rule = ThmVertexBoundary::RuleOf(configure());
 
   // One block per (J group, pass): what the backward sweep needs again.

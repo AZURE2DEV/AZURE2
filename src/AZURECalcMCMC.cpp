@@ -199,7 +199,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   }
 
   all_physical_ = compound()->GetTransformParams(configure());
-  compound()->Abundances().AppendTo(all_rwa_, all_physical_);
+  data()->Data().Abundances().AppendTo(all_rwa_, all_physical_);
   // Add missing parameters
   for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
     all_physical_.push_back(all_rwa_[i]);
@@ -325,7 +325,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   // step 5: the MCMC shares the fit's configuration), by index, not by name.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   std::map<int, std::pair<double, double>> diagonal;  // full index -> (mean, sigma)
-  ForEachDiagonalPrior(data(), compound(), pmap,
+  ForEachDiagonalPrior(data(), pmap,
                        [&](int idx, double nominal, double sigma) { diagonal[idx] = std::make_pair(nominal, sigma); });
   for (size_t i = 0; i < allKinds.size(); ++i) {
     const ParamKind kind = allKinds[i];

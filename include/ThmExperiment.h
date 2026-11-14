@@ -235,7 +235,7 @@ std::string ThmCoherentParamStem(const std::string &experiment, double J, int pa
  * (WorkingCopy::BuildThmGroups resolves the terms against the compound nucleus).
  * One entry per (J group, entrance channel, exit channel) combination, each
  * with 2 (const) or 4 (linear) real fit parameters at `index` in the
- * compound's coherent-background values (CNuc::ThmCoherentValues).  In the
+ * working copy's coherent-background values (WorkingCopy::ThmCoherentValues).  In the
  * HOES amplitude of the J group j, entrance bucket of channel `entrance`
  * and exit channel `exit`,
  *   x -> x + c(E) M_l(entrance),   c(E) = (v[0] + i v[1]) + (v[2] + i v[3]) E,
@@ -250,7 +250,7 @@ struct ThmCoherentBackground {
     int entrance = 0;  ///< 1-based channel of the J group (entrance pair)
     int exit = 0;      ///< 1-based channel of the J group (exit pair)
     int form = 1;      ///< 1 const, 2 linear
-    int index = 0;     ///< first of its 2*form values in CNuc::ThmCoherentValues
+    int index = 0;     ///< first of its 2*form values in WorkingCopy::ThmCoherentValues
   };
   std::vector<Combo> combos;
   /// The combination of (j, entrance channel, exit channel), or null.

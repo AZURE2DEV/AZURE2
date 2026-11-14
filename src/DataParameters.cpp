@@ -2,7 +2,6 @@
 // coefficients, sample thicknesses, densities, Doppler temperatures) starts in the parameter vector, their names
 // and start values (FillMnParams), the shift, shift-function, normalization and thickness groups, the density
 // parameters of the target effects, and the prior centres given by a project's specs.
-#include "AbundanceComparison.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -450,13 +449,9 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   struct Layout {
     int abundance, norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
   } layout;
-  // COMPARISON: CNuc::FillMnParams has written the abundance block; it must hold this copy's values.
-  layout.abundance = (int)p.Params().size() - Data().Abundances().NumParams();
-  {
-    std::vector<double> block;
-    for (int k = 0; k < Data().Abundances().NumParams(); k++) block.push_back(p.Params()[layout.abundance + k]);
-    CompareCopies(block, abundances_, "ABUNDANCE", "WorkingCopy::FillMnParams");
-  }
+  // The isotopic abundances first, right after the level block CNuc::FillMnParams wrote (AbundanceSamples.h).
+  layout.abundance = (int)p.Params().size();
+  Data().Abundances().AddParameters(abundances_, params);
   layout.norm = (int)p.Params().size();
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {

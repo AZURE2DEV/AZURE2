@@ -4,7 +4,6 @@
 // it as the parameter's owner, a line of doc, and the function that reads it from the engine.  The names are typed
 // here only: pyazr reads them (parameter_record_fields, pair_record_fields; pyazr.kinds()), and a new field or a new
 // kind of parameter is a row here (tests/pyazr/parameter_records_test.py fails for a kind no row describes).
-#include "AbundanceComparison.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -393,8 +392,7 @@ const std::vector<PairField> &PairFields() {
          return py::int_(q.GetNucleusA());
        }},
       {"abundance", "", "that nucleus's abundance in the default sample (1 without <abundances>)",
-       [](const CNuc &nuc, const WorkingCopy &data, const PPair &q, int) -> py::object {
-         CompareCopies(nuc.AbundanceValues(), data.AbundanceValues(), "ABUNDANCE", "the pair record");
+       [](const CNuc &, const WorkingCopy &data, const PPair &q, int) -> py::object {
          return py::float_(data.Abundance(data.Data().Abundances().Default(), q.GetNucleus()));
        }},
       {"binding_energy", "MeV", "the THM binding energy of the pair's composite projectile, 0 for other pairs",

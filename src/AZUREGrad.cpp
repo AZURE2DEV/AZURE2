@@ -1,4 +1,3 @@
-#include "AbundanceComparison.h"
 #include "AZUREGrad.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
@@ -104,14 +103,13 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 }
 
 /*!
- * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
+ * Gradient of the abundance penalty (AbundanceSamples::Penalty): the prior
  * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
  * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
-void AddAbundancePenaltyGradient(CNuc *compound, const WorkingCopy &data, const Config &configure, GradAccum &accum) {
+void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum) {
   const AbundanceSamples &samples = data.Data().Abundances();
   if (!samples.Present()) return;
-  CompareCopies(compound->AbundanceValues(), data.AbundanceValues(), "ABUNDANCE", "the abundance gradient");
   const std::vector<double> &values = data.AbundanceValues();
   for (int k = 1; k <= samples.NumParams(); k++) {
     int sample, nucleus;
@@ -1132,12 +1130,12 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
       const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
       vector_r pp = full;
       pp[f] = x0 + h;
-      ld->FillThmCoherentFromParams(pp, lc);
+      ld->FillThmCoherentFromParams(pp);
       models(mp);
       pp[f] = x0 - h;
-      ld->FillThmCoherentFromParams(pp, lc);
+      ld->FillThmCoherentFromParams(pp);
       models(mm);
-      ld->FillThmCoherentFromParams(full, lc);
+      ld->FillThmCoherentFromParams(full);
       for (size_t t = 0; t < rows.size(); t++)
         for (size_t i = 0; i < m0[t].size(); i++)
           rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);

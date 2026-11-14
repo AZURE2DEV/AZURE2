@@ -1145,7 +1145,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       // Use physical parameters
       compound->TransformOut(configure);
       vector_r physicalParams = compound->GetTransformParams(configure);
-      compound->Abundances().AppendTo(params.GetMinuitParams().Params(), physicalParams);
+      data->Data().Abundances().AppendTo(params.GetMinuitParams().Params(), physicalParams);
 
       // Extend with data parameters if needed
       for (size_t i = physicalParams.size(); i < params.GetMinuitParams().Params().size(); i++) {

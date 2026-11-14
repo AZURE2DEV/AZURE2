@@ -1,7 +1,6 @@
 #ifndef OBJECTIVE_H
 #define OBJECTIVE_H
 
-#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <string>
@@ -210,7 +209,7 @@ inline void ForEachApparatusPrior(WorkingCopy *data, const ParamIndexMap &pmap, 
 // Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
 // abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
 template <class F>
-inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
+inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->Data().NumSegments(); s++) {
     const Segment *seg = data->Data().GetSegment(s);
     int idx;
@@ -231,8 +230,6 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
     int sample, nucleus;
     samples.Of(k, sample, nucleus);
     const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
-    const SampleAbundance &old = compound->GetSample(sample)->entries[nucleus - 1];  // COMPARISON
-    if (old.priorReplaced != e.priorReplaced || old.sigma != e.sigma || old.nominal != e.nominal) std::abort();
     if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
   }
 }
