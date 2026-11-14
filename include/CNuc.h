@@ -14,8 +14,6 @@
 #include "ModelData.h"
 #include "GammaDecayMap.h"
 #include "ObservedLevelTable.h"
-#include <cstdio>
-#include <cstdlib>
 #include "LevelInputs.h"
 #include "LevelState.h"
 #include "LevelParameterLayout.h"
@@ -219,27 +217,6 @@ class CNuc {
   void RequestCaptureAy(int entrancePair, int exitPair);
   /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
   void RequestEntrance(int pair);
-
-  // -- the default owner's doors and the copy: no caller is left; they abort for one commit, then go ---------------
-  [[noreturn]] static void DoorCalled(const char *door) {
-    std::fprintf(stderr, "CNuc::%s called: the compound holds no levels and is not copied\n", door);
-    std::abort();
-  }
-  [[noreturn]] const LevelInputs &Inputs() const { DoorCalled("Inputs"); }
-  [[noreturn]] const LevelState &State() const { DoorCalled("State"); }
-  [[noreturn]] LevelState &MutableState() { DoorCalled("MutableState"); }
-  [[noreturn]] void FillCompoundFromParams(const vector_r &) { DoorCalled("FillCompoundFromParams"); }
-  [[noreturn]] void CalcShiftFunctions(const Config &, ShiftOrders = ShiftOrders::kWithSecondDerivatives) {
-    DoorCalled("CalcShiftFunctions");
-  }
-  [[noreturn]] bool TransformIn(const Config &) { DoorCalled("TransformIn"); }
-  [[noreturn]] void FillCompoundFromParamsPhysical(const vector_r &) { DoorCalled("FillCompoundFromParamsPhysical"); }
-  [[noreturn]] ObservedLevelTable TransformOut(const Config &) { DoorCalled("TransformOut"); }
-  [[noreturn]] std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &, const vector_r &) {
-    DoorCalled("ObservedWidthsAt");
-  }
-  [[noreturn]] void FillMnParams(AZUREParams &, const Config * = nullptr) const { DoorCalled("FillMnParams"); }
-  [[noreturn]] CNuc *Clone() const { DoorCalled("Clone"); }
 
  private:
   /// The set-up's writable views of the structure (Fill, AddHardSphereGroups, ParseExternalCapture, Initialize).
