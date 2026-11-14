@@ -89,7 +89,10 @@ export async function render(ctx, el, args) {
   });
   const pairEdit = h("div.pair-edit");
   const pairsBox = section("Pairs", pairTable.element,
-    button("+ pair", "Add a pair (POST /api/project/pairs: add_pair)", () => ctx.navigate("#/nucleus/pair/+new")),
+    pairs.length ? null : h("p.hint.empty", {}, "No particle pairs yet. A pair is the two particles of a channel "
+      + "(the entrance, an exit, or a photon and the final nucleus); the levels' channels are made from them."),
+    button("+ pair", "Add a pair (POST /api/project/pairs: add_pair)", () => ctx.navigate("#/nucleus/pair/+new"),
+      pairs.length ? "" : "primary"),
     pairEdit);
   const selectedPair = args[0] === "pair" ? pairs.find((p) => String(p.key) === args[1]) : null;
   if (selectedPair) showPair(selectedPair);
@@ -170,8 +173,13 @@ export async function render(ctx, el, args) {
     rows: levelRows,
     onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.label)}`),
   });
-  const levelsBox = h("div", {}, section("Levels", levelTable.element, button("+ level", "Add a level with the "
-    + "channels its J^π allows (add_level)", () => ctx.navigate("#/nucleus/level/+new"))));
+  const levelsBox = h("div", {}, section("Levels", levelTable.element,
+    levels.length ? null : h("p.hint.empty", {}, pairs.length ? "No levels yet. A level is a state of the compound "
+      + "nucleus with its J^π and energy; its channels are the pairs' that J^π allows, offered when you add it."
+      : "No levels yet: add the particle pairs first (Particle Pairs), then the levels, whose channels come from "
+        + "them."),
+    button("+ level", "Add a level with the channels its J^π allows (add_level)",
+      () => ctx.navigate("#/nucleus/level/+new"), levels.length || !pairs.length ? "" : "primary")));
   if (selectedLevel) levelsBox.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg));
   if (newLevel) levelsBox.appendChild(newLevelPanel(ctx, pairLabel, msg));
 
@@ -198,6 +206,15 @@ export async function render(ctx, el, args) {
   }
   // what was chosen comes first: a record (or a new one) above the levels, a pair above both; the pairs, rarely
   // edited, last otherwise
+  if (!ctx.expert) {
+    // the first view: one screen per task (layout.js FIRST_VIEW); the γ decays and potentials one click away
+    if (args[0] === "pair") { el.append(pairsBox); return; }
+    const more = h("details.more", {}, h("summary", {}, `More: γ decays and potentials (${mine.length})`),
+      recordsBox);
+    if (record || args[0] === "+new") more.open = true;
+    el.append(...(record || args[0] === "+new" ? [more, levelsBox] : [levelsBox, more]));
+    return;
+  }
   const recordFirst = Boolean(record) || args[0] === "+new";
   const boxes = recordFirst ? [recordsBox, levelsBox] : [levelsBox, recordsBox];
   el.append(...(args[0] === "pair" ? [pairsBox, ...boxes] : [...boxes, pairsBox]));

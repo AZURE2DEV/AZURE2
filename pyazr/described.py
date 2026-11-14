@@ -323,11 +323,46 @@ def _build_kinds():
             "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
             "options": options, "physics": physics, "stopping": stopping, "fitters": fitters, "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
-            "objects": objects, "thm": engine.thm_keys(),
+            "objects": objects, "thm": engine.thm_keys(), "config": _config_kind(engine),
             "nuclides": {n: {"Z": z, "A": a, "mass": m} for n, z, a, m in engine.thm_nuclides()},
             "optical_potentials": {g["name"]: {"projectiles": g["projectiles"], "reference": g["reference"],
                                                "a_range": list(g["a_range"]), "e_range": list(g["e_range"])}
                                    for g in engine.thm_global_opticals()}}
+
+
+# How a kind of <config> entry of the engine's table (config_table()) is shown as a field of the schema's value types.
+_CONFIG_TYPES = {"bool": "enum", "choice": "enum", "int": "integer", "number": "number", "path": "path",
+                 "line": "text", "version": "text"}
+
+
+def _config_kind(engine):
+    """The <config> entries as one record kind of the schema's shape (``kinds()["config"]``): a field per entry of
+    the engine's table, in file order, with its value type, title, doc, group, rare, and what its absence means."""
+    fields = {}
+    for row in engine.config_table():
+        kind = row["kind"]
+        field = {"type": _CONFIG_TYPES[kind], "title": row["title"] or row["name"], "doc": row["doc"],
+                 "required": bool(row["positional"]), "group": row["group"], "rare": bool(row["rare"]),
+                 "positional": bool(row["positional"]), "option": bool(row.get("option", False))}
+        if kind == "bool":
+            field["values"] = ["0", "1"]
+        elif kind == "choice":
+            field["values"] = row["values"].split()
+        if kind == "int":
+            field["min"] = row["minimum"]
+        elif kind == "number":
+            field["min"] = 0
+        if kind == "version":
+            field["readonly"] = True
+        if row.get("option"):
+            field["default"] = "1" if row["default"] else "0"
+            for k in ("flag", "negation", "effect"):
+                field[k] = row[k]
+        if row.get("absent"):
+            field["absent"] = row["absent"]
+        fields[row["name"]] = field
+    return {"title": "<config>", "doc": "The settings of the run: the eleven positional entries (the formalism, the "
+            "directories, the checks), then the key=value lines the engine reads.", "fields": fields}
 
 
 def kinds():
@@ -371,6 +406,13 @@ def kinds():
       doc, required, title with the unit, unit, values of an enum, default, grammar of a text, applies_when), read
       from the tables the engine's parser reads (``src/ThmKeys.cpp``); :meth:`pyazr.Project.set_thm` and
       ``set_thm_experiment`` take these keys;
+    - ``config``: the entries of ``<config>`` as one record kind (title, doc, ``fields`` by name, in file order): the
+      positional entries (``positional``, ``required``) and the keys, each with the schema's value type (``enum`` with
+      ``values`` for a switch or a choice, ``integer`` or ``number`` with ``min``, ``path``, ``text``), ``title`` (the
+      old setup program's words where it had the setting), doc, ``group``, ``rare`` (set rarely), ``absent`` (what a
+      missing key means), ``default`` and the program's ``flag``/``negation`` of an option, ``readonly`` for
+      ``format``; read from the engine's tables (``io/src/ConfigSection.cpp``); :meth:`pyazr.Project.set_config`
+      takes these names;
     - ``nuclides``: the built-in nuclei a ``<thm>`` experiment names by name (``beam=18O``), by name: ``Z``, ``A`` and
       the nuclear ``mass`` in u (AME2020); any other nucleus is written ``Z,A,mass``;
     - ``optical_potentials``: the global optical potentials ``opticalAA=`` / ``opticalSF=`` take by name: the

@@ -9,6 +9,7 @@
 // linked: #/results?x=e_x&y=s_factor&logy=1&levels=1&show=cap_g0,cap_g1&energy=1.2
 
 import { pathOf } from "../api.js";
+import { baselineOf, changeText, changesOf, snapshotOf } from "../calculate.js";
 import { resultView, variedText } from "../fitting.js";
 import { X_CHOICES, Y_CHOICES, resultsPlots, seriesStyle } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
@@ -115,7 +116,19 @@ export async function render(ctx, el) {
   const recordOf = Object.fromEntries(records.map((r) => [r.name, r]));
   const marks = levels.filter((l) => l.active !== false).map((l) => ({ label: l.label, energy: l.energy }));
 
-  el.appendChild(headPanel(evaluation, bandJob, banded.missing, ctx));
+  // what changed since the last calculation (the header's Calculate); its order is the plots' after a Calculate
+  const now = snapshotOf(evaluation, ctx.project.rev);
+  const before = baselineOf(ctx.calculations || [], now);
+  const changes = before ? changesOf(before, now) : null;
+  if (ctx.calculations?.length) el.appendChild(changePanel(changes, now));
+  if (changes && ctx.route.params.calculated === "1") {
+    const rank = Object.fromEntries(changes.sets.map((c, i) => [c.name, i]));
+    series.sort((a, b) => (rank[a.d.name] ?? 1e9) - (rank[b.d.name] ?? 1e9));
+  }
+  const head = headPanel(evaluation, bandJob, banded.missing, ctx);
+  // the first view: the totals as the program writes them and the band's source one click away
+  el.appendChild(ctx.expert ? head : h("details.more", {}, h("summary", {}, `More: the program's totals, the `
+    + `objective ${evaluation.objective}, the band`), head));
   const offer = await acceptedBandOffer(ctx, jobs, bandJob);
   if (offer) el.appendChild(offer);
   const plots = h("div.results-plots");
@@ -128,6 +141,30 @@ export async function render(ctx, el) {
   redraw();
   el.append(chi2Panel(evaluation, series, recordOf), modelDataPanel(evaluation), outputsPanel(ctx),
     laterPanel());
+}
+
+/** The changes since the last calculation: the totals, then one row per data set (the largest change first), each
+ * linked to its plot; before a second calculation, the χ² of this one. */
+function changePanel(changes, now) {
+  const box = section("Calculate: what changed");
+  if (!changes) {
+    box.appendChild(h("p.hint", {}, `χ² ${now.chi2} (data), objective ${now.objective}, at revision ${now.rev}. `
+      + "The next Calculate shows what changed since this one, per data set and in total."));
+    return box;
+  }
+  box.appendChild(h("p", {}, h("strong", {}, `Δχ² ${changeText(changes.chi2)}`), ` (data: ${now.chi2}), Δ objective `
+    + `${changeText(changes.objective)}, from revision ${changes.from} to ${changes.to}.`));
+  const rows = changes.sets.map((c) => ({ ...c, changeText: changeText(c.change) }));
+  const table = renderTable(document, { rows, rowKey: (r) => r.name, withFilter: false, label: "changes",
+    columns: [{ key: "name", title: "data set" },
+      { key: "before", title: "χ² before", numeric: true, digits: 8 },
+      { key: "now", title: "χ² now", numeric: true, digits: 8 },
+      { key: "changeText", title: "Δχ²", doc: "now − before, the engine's two numbers" },
+      { key: "n", title: "N", numeric: true }],
+    onSelect: (r) => document.getElementById(`plot-${r.name}`)?.scrollIntoView({ block: "start" }) });
+  box.append(table.element, h("p.hint", {}, "Choose a row to go to its plot; after Calculate the plots below are "
+    + "in this order."));
+  return box;
 }
 
 /** Where the text's point came from a job (accepted) and the band drawn is not around it: the band jobs that can start
@@ -215,10 +252,12 @@ function choicePanel(ctx, series, redraw) {
     flag("levels", "levels", "the levels of the project text at their excitation energies (x = E_x)"),
     flag("together", "together", "the series shown in one plot per y unit, instead of one plot per series"),
     flag("band", "band", "the band of the newest band job (the Fit tab's), shaded around the model")));
-  box.appendChild(h("p.hint", {}, "Not offered: the lab energy (the engine's lab energy of each point is not in "
+  if (ctx.expert) {
+    box.appendChild(h("p.hint", {}, "Not offered: the lab energy (the engine's lab energy of each point is not in "
     + "pyazr's arrays) and the cross section of a data set measured as an S factor (the program's conversion is "
     + "not bound): docs/upgrade/web_ui.md section 12. The S factor is offered where the engine unit is a cross "
     + "section and the entrance pair is charged."));
+  }
   return box;
 }
 
@@ -240,6 +279,7 @@ function drawPlots(ctx, el, series, marks) {
   }
   for (const plot of plots) {
     const area = h("div.plot.results-plot");
+    if (!view.together) area.id = `plot-${plot.title.split(":")[0]}`;
     panel.appendChild(area);
     const file = `${plot.title.split(":")[0]}_${view.y}_${view.x}`.replace(/[^A-Za-z0-9_.-]+/g, "_");
     const height = (plot.residual ? 140 : 0) + (view.together ? 420 : 360);

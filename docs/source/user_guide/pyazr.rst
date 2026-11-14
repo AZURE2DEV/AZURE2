@@ -81,7 +81,9 @@ program refuses the flags (``AZURE2Error``, ``E_CONFIG_OPTIONS_CONTRADICT``, wit
 ``use_rmc=True`` needs ``use_brune=False``, ``use_park=True`` with ``use_brune=False`` is refused, and
 ``ec_convection_current=False`` needs ``use_long_wavelength=False``.
 ``pyazr.kinds()["options"]`` lists them all with
-type, default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``: the fit vector then holds
+type, default, ``<config>`` key, flag and meaning; ``pyazr.kinds()["config"]`` lists every entry of ``<config>``
+(the positional ones and every key) as fields of one record kind, with its value type, title, group, meaning, what
+the engine does without it and whether it is set rarely (the web page's run settings are drawn from it). ``use_park=True`` is ``--use-park``: the fit vector then holds
 Park's amplitudes, ``park_norms()`` gives every level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard,
 Brune, Park: the ``#parametrization`` tag of ``param.sav``). With ``transform=False`` (``--no-transform``) nothing is
 converted: the numbers of the file are taken as they stand as formal level energies and reduced-width amplitudes, so a

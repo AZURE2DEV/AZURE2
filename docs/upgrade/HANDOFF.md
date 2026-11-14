@@ -2,6 +2,125 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-first-view`) — the page for the median user
+
+**Measured first** (before any code; the old setup program read in `/data0/skowrons/AZURE2/gui/src/`, the page at the
+start commit 9e209ace).
+
+*Every place the page took typed text*, what has a structure, where the engine's table holds it, and the control:
+
+| place | typed | structure | the table that holds it | control now |
+|---|---|---|---|---|
+| Project › `<config>` (one text box per key) | every key's value | a switch, a choice, a whole number ≥ min, a number ≥ 0, a file, a line | `io::ConfigKeys()` and the positional entries (kind, minimum, doc; bound only as `config_keys()`, not in `kinds()`) | `kinds()["config"]`: a switch or a choice per entry, a number box with its bound, a file choice; title, group, meaning, what its absence means, whether the project sets it; search (part 2) |
+| Project › new key and value | a key name and its value | a key of the same table | as above | behind "advanced (any key)" (part 2) |
+| Project › Replace text | the whole project | the grammar | the schema | stays: the advanced way, under "more" |
+| record forms, `path` (dataset `file`, `covariance`, `thm_weight`) | a path | a file of the project folder | schema `path` | still a text box with the first rows of a data file beside it (not done) |
+| record forms, `columns` | `E_lab[MeV] theta_lab[deg] value error` | a role per column of the file | schema `column_roles`, the quantity's roles | still typed (not done) |
+| record forms, `reaction_expr` | `15N(p,a)12C`, sums, ratios | pair labels with `+` and `/` | the pairs (labels offered as a list) | still typed with the list (not done) |
+| record forms, `grid` (extrapolation energies, angles) | `range 0.1 2 MeV lab step 0.01` | kind, bounds, unit, frame, step | schema `grid_kinds` | still typed (not done) |
+| record forms, `number_list` (detector attenuation) | `1 0.98 0.95` | a list of numbers | schema | still typed (not done) |
+| record forms, `name` (`thm`) | an experiment's name | a name of `<thm>` | `Project.thm()` | still typed (not done) |
+| record forms, `spin`, `spin_parity`, `pair` | `1/2`, `3/2-`, a pair label | a choice among the pairs' | the pairs (offered as a list) | text with the list (unchanged) |
+| record forms, `nucleus`, `composition` | `15N`, `Ta2O5` | a nucleus, a formula | the engine's parse | text (a formula is text) |
+| record forms, `text` (`source`, `exfor`, `doi`) | free text | none | — | text; folded under "more fields" in the first depth (rare) |
+| THM › other key and value | `spectatorEnergy[2]`, a value | a key of `kinds()["thm"]` with an index | `src/ThmKeys.cpp` | unchanged (THM is in the expert depth) |
+| THM › data sets that join | names | a choice of data sets | the records | unchanged |
+| Fit › job form, parameters of MINOS | names separated by blanks | a choice of free parameters | `/api/parameters` | unchanged (not done) |
+| Fit › job form, numbers | a number | a number with a default | `jobs.py` setting rows | unchanged (already number boxes) |
+| Nucleus › pair numbers, new pair, new level | numbers; parity as `+1 or -1` | numbers with units; parity a choice | the routes' arguments; units from the page's `UNITS` | unchanged |
+| Nucleus › level energy, channel widths; Fit › x | a number | a number | — | unchanged (a number is typed) |
+
+*Six tasks in steps* (a step is a click or a value entered; "by heart": what the user must know that the screen does
+not say):
+
+| task | the old program | the page before | the page now |
+|---|---|---|---|
+| add a particle pair | Particle Pairs › + › dialog (type; J, π, Z, M, g of each partner; E_x, S, a; EC multipolarities) › Accept: 3 clicks, about 12 values; masses by heart | Nucleus › + pair › kind, partners' J, parity typed `+1 or -1`, Z, mass, g, then the route's arguments by their pyazr names (`light_excitation`, `separation_energy`) › Add pair: 3 clicks, about 12 values; the argument names by heart | Particle Pairs (a tab of its own) › + pair: the same form, alone on its screen (3 clicks) |
+| add a level, set a width free | Levels and Channels › + › J, π, E_x › Accept (channels made from the pairs) › choose the level › untick "Fix?" › type the width: 5 clicks, 4 values | Nucleus › + level › J, parity, E, l max › Channels › tick › Add level › choose the level › untick fixed › width, Enter: 7 clicks, 5 values; the level list below the pairs and the γ decays | Levels and Channels (its own tab) › the same 7 clicks, on a screen with the levels only |
+| add a data set with its file and a normalisation | Segments › Segments From Data › + › entrance key, exit key, energies, angles, data type, Choose… (file), norm, error, vary › Accept: 4 clicks, about 8 values | Data › + new › kind › a form of 32 fields, `reaction`, `file` and `columns` typed in the project's grammar, the norm widget › Apply: 4 clicks, 6 values; the `columns` grammar by heart | Segments › + new › a form with the rarely set fields folded (`source`, `exfor`, `doi`, the pair keys, THM, reference, …) and each field's meaning written under it: 4 clicks, 6 values; `columns` still typed |
+| add a target effect | Experimental Effects › + › segments, target integration, density, stopping (fetch) › Accept: 4 clicks | Data › targets › + new › target form › Apply › Data › data set › target ▾ › Apply: 6 clicks | Experimental Effects (its own tab) › + new › target › Apply › Segments › data set › target ▾ › Apply: 6 clicks; the target's rare fields folded |
+| run a fit, look at it against the data | Calculate › "Fit Segments From Data" › minimiser › Save and Run › Plot › choose segments › Draw: 7 clicks | Fit › method › Run › Accept › Results: 4 clicks; which data set moved: by memory | Fit › Run › Accept › Calculate: 4 clicks; the plots ordered by how much each χ² moved, with the change |
+| give a data set a covariance | not in the old program | Data › data set › `covariance` typed (the file's format by heart) › Apply: 3 clicks | unchanged here: the covariance builder is another branch's |
+| checking a calculation (from an edited width to the plot of the data set it moves) | Calculate › Save and Run › Plot › Draw: 4 clicks | Results: 1 click, then find the data set among all plots, the change by memory | Calculate: 1 click, from any tab; the data set that moved most first, with Δχ² per set and in total |
+
+*Where a beginner was stuck*: the Project tab opened on the `<config>` text boxes with no word of what a key does or
+which keys exist; a data set's form showed 32 fields with their meaning only on hover; an empty project gave no next
+step; the tab names were the page's own (Nucleus, Data, Results), not the old program's.
+
+*The old program's words* the page now takes where the content maps one to one: "Particle Pairs" and "Levels and
+Channels" (the old tabs; the page's Nucleus tab shown as two screens), "Segments" with "Segments From Data" and
+"Segments Without Data" (the Data tab's `data` and `extrapolations` groups), "Experimental Effects" (the `targets`
+group), "Plot" (the Results tab in the first depth); the run settings' titles from the old Runtime Options dialog
+("Use Brune formalism", "Ignore external width if internal width is zeroed", "Use GSL Coulomb functions", "Use RMC
+capture formalism (neutron capture only)", "Perform parameter transformations" (the old box said the opposite, "Do
+not perform…", the key's sense is kept)), the Directories dialog ("Output directory", "Checks directory"), the Checks
+dialog (its eight names) and the menu's "Formalism: A-Matrix". Kept as they are: "Fit" (the old program split it into
+"Fitting Settings" and "Calculate"; the page's tab holds both), "Project", "Physics", "THM".
+
+**The original's face** (first commit): the page shows the original program's icon in its header and as the browser
+tab's icon (`pyazr/ui/static/azure2_icon.png`, byte-identical to `packaging/icons/azure2_icon.png`: consistency check
+57; the server serves `.png`); the colour tokens of `style.css` are built on the icon's measured blue `#004293`
+(accent), red `#990000` (error) and green `#04800d` (success, darkened to `#04720c`), lighter tints of the same in the
+dark theme; every error, warning and success box and the status line carry ✕, ⚠ or ✓ beside the colour; **About**
+gives the versions, the reference to cite (as `docs/source/index.rst` gives it) and the documentation's address.
+Tests: `static_test.py` (the icon's bytes, its media type and that the page names it; the contrast of every text token
+on every background in both themes, at least 4.5:1, computed from the CSS; the accent the icon's blue; the citation
+equal to the documentation's). Verified: `tests/pyazr/ui/` whole, 100 passed (own build `work/b-pagefv`,
+`OMP_NUM_THREADS=1`); consistency test; the documents built (55 pages).
+
+**The first view** (second commit): the page opens in the old program's path and words (Project, Particle Pairs,
+Levels and Channels, Segments, Experimental Effects, Fit, Plot: `layout.js` `FIRST_VIEW`, each a view of one of the
+page's tabs; every route keeps its meaning and marks the view it belongs to); `expert` in the header (key `e`, kept
+in the browser, `?depth=` for one view) shows the seven tabs as before. In the first view a form folds the fields the
+engine's table marks rare (`FieldDef::rare`, `Rare(...)` in `experiment/src/Schema.cpp`, written `"rare": true`: 35
+fields of 6 kinds; `tests/schema/schema_v3.json` regenerated, the reference page unchanged) under "More fields"
+unless the record sets them, and writes every field's meaning under its title; the Nucleus tab's γ decays and
+potentials, the Project tab's options, history, text and engine, and the Results tab's totals are one click away;
+the Project tab says the next step; empty pairs, levels and Data groups say what belongs there with the button that
+adds the first. **Calculate** (header, every tab, key `c`) evaluates the current text and opens the Plot tab with
+"what changed" since the last Calculate (Δχ² in total, of the objective and per data set, largest first, each row
+to its plot; the plots in that order); the status line gives the change after every edit. Where a tab is
+registered is unchanged (`app.js` `TABS`); the first view's tabs are `layout.js` `FIRST_VIEW`; a record's buttons
+are made where they were (`tabs/records.js` `recordPanel`).
+Tests: `tests/pyazr/ui/js/firstview.test.mjs`; the self-test visits every view in the expert's depth, then the
+first view's tabs, a data set's form and Calculate; after its width edit (`edit=1`) it presses Calculate, and
+`smoke_test.py` checks the comparison is the engine's χ² before and after on the Plot tab. Verified: `tests/pyazr/ui/`
+whole (99 passed, then the one long line repaired and static, node and smoke tests 19 passed), the ctests of the
+schema, `describe`, `<config>` and `project_nuclear_part` (7 passed), the consistency test, the documents built.
+
+**The run's settings** (third commit): the Project tab's `<config>` text boxes became the **Run settings**: every
+entry of the engine's `<config>` table as a row with its control (a switch for a 0/1 key, a choice for a positional
+entry, a number box with its bound, a text box for a path or directory), its title (the old program's words where it
+had the setting), key, meaning, what the engine does without it, and whether the project sets it; groups with the
+old Runtime Options first; a search box; rare rows under "More settings"; each change one config edit (Undo takes it
+back); the free key and value table under "Advanced". Built from `kinds()["config"]` (`pyazr/described.py`, from the
+binding's new `config_table()`: `io::ConfigPositionals()`, a table that replaces the reader's private list and now
+also gives the edit's allowed values, and `io::ConfigKeys()` with the new columns `title`, `group`, `absent`, `rare`
+filled by `Told(...)`). The covariance field of a data set got a meaning in the schema (it named only a page).
+Tests: `tests/pyazr/ui/js/settings.test.mjs`; `api_test.py` `test_run_settings_are_the_engines_config_table` (the
+rows are the engine's entries in order, the options' defaults are `kinds()["options"]`'s; five values sent as the
+controls send them give the text of the direct `Project.set_config` on the same text, and Undo gives the text back).
+Errors injected once and seen failing, then removed: a set rare field folded, the change of a calculation with its
+sign reversed, a positional entry's "set" reversed, a pair route marking the wrong view.
+
+**Verified at the end of the branch** (own build `work/b-pagefv`, 0 warnings; three threads): all projects in three
+bases against `tab-t71-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical (tag `tab-pagefv1`); the
+six tasks over HTTP on copies of T1 and T2 through the routes the page's clicks call (`work/pagefv/six_tasks.py`:
+a pair, a level with its allowed channels, a width set free, a data set with its file and a normalisation, a target
+and the data set's reference to it, a covariance removed and given), each text equal to the direct `pyazr.Project`
+call on the same text, and the objective of `POST /api/evaluate` equal to a direct `Session`'s (T1 has no target and
+no covariance file: those two skipped there); `OMP_NUM_THREADS=1 ctest -j1 -LE slow`: 276 of 276 passed (51 min). Not run: the slow tests,
+`tests/run_tests.sh`, a wheel build.
+
+**Open**: the file fields (a data file, a covariance, the prior covariance) are still typed (a list of the project
+folder's files needs the file-list route, `/api/files`, which is not built); the columns, a reaction, a grid and
+the detector's attenuation are typed in the grammar; a reference's "new…"; the fit job's MINOS parameters are
+typed names; the Fit tab is the same in both depths; the pair form's units and partner fields are the page's
+(`UNITS`, `PARTNER` of `tabs/nucleus.js`), parity typed as +1 or -1. **For the PI's eye** (no person has looked):
+the icon's size beside the name (22 px) and in About (32 px); the blue, red and green side by side, light and dark;
+the density of the run settings (four columns); whether the first view's tab names read as the old program's;
+whether "More fields" shows enough or too little of a data set's form; the Plot tab after Calculate.
+
 ## 2026-11-14 (director, 15:00) — merged: the level inputs out of the compound; the ENDF design note
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 72 (a true merge of the rehearsal branch; its tree

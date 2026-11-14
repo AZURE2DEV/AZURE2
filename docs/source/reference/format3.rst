@@ -170,7 +170,7 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
    * - ``covariance``
      - ``<path>``
      - optional
-     - data_formats.rst, covariance files
+     - the covariance of the points (and of the other data sets the file names), a text file of blocks, diagonals and vectors relative to the project (data_formats.rst, Data Covariance Files)
    * - ``active``
      - ``yes|no``
      - optional (default ``yes``)

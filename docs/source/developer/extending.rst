@@ -167,6 +167,13 @@ A **key** (a field of a record kind):
    (check 18); ``Schema::kVersion`` is raised if an existing project changes
    meaning, with the converter's support (``convert/``).
 
+A field a user sets rarely is wrapped in ``Rare(...)`` in the same row: the
+schema writes ``"rare": true`` and the web page's first view folds it under
+"More fields" while the record does not set it (``pyazr/ui/static/forms.js``,
+``folded``; ``tests/pyazr/ui/js/firstview.test.mjs``). Its ``doc`` is the
+meaning the first view writes under the field's title: a field needs a doc
+that says what it is, not where it is described.
+
 A **record kind**: a function ``<Name>Kind()`` in ``experiment/src/Schema.cpp``,
 its entry in ``Schema::Kinds()`` and its section in ``Schema::Sections()``;
 its build in ``Schema::Build``; a fixture, the schema and the page as for a
@@ -187,7 +194,12 @@ A session option (an option of the calculation)
 A switch a project's result depends on is a ``<config>`` key, a program flag
 and a ``pyazr`` keyword under one name.
 
-1. One ``Option`` row of ``io::ConfigKeys()`` (``io/src/ConfigSection.cpp``);
+1. One ``Option`` row of ``io::ConfigKeys()`` (``io/src/ConfigSection.cpp``),
+   wrapped in ``Told(...)`` with the words a form shows (a title, the old
+   program's where it had the setting; the group; what the engine does
+   without it; whether it is set rarely): ``pyazr.kinds()["config"]`` and the
+   web page's run settings read them, so a new key needs nothing in the page
+   (``tests/pyazr/ui/api_test.py``);
    the program's parser and ``--help`` (``ApplyOptionFlag``,
    ``printOptionFlags``), ``--describe``, ``pyazr.kinds()["options"]`` and the
    web UI read it there (check 1; ``io_config_section``). A flag that implies
@@ -400,7 +412,13 @@ A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports
 ``render(ctx, element, args)`` (and ``shown(ctx)`` when it is about a part of
 a project that may be absent, as the THM tab) and one row of ``TABS`` in
 ``pyazr/ui/static/app.js``; add its view to ``VIEWS`` of
-``tests/pyazr/ui/smoke_test.py``. A function of the session drawn by a tab is
+``tests/pyazr/ui/smoke_test.py``. The page has two depths: the expert's shows ``TABS``
+as they are; the first view shows the rows of ``FIRST_VIEW`` in
+``pyazr/ui/static/layout.js`` (the old program's path and words), each a view
+of one tab (``tab``, the route it opens, a ``part`` of the Nucleus tab or the
+Data tab's ``sections``). A tab draws less in the first view where
+``ctx.expert`` is false (the rest under a ``details.more``); a new tab is in
+the expert's depth only until a row of ``FIRST_VIEW`` names it. A function of the session drawn by a tab is
 a row of the session's functions (``Session.describe()["functions"]``,
 ``pyazr/session_functions.py``) and its entry in ``PAGE`` of
 ``pyazr/ui/physics.py`` or ``pyazr/ui/thm.py`` naming that tab in ``tab`` (a

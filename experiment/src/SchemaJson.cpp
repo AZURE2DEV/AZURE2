@@ -129,6 +129,7 @@ void WriteField(JsonWriter &j, const FieldDef &f) {
       WriteCondition(j.Key("required_when"), f.required);
   }
   if (f.repeatable) j.Key("repeatable").Bool(true);
+  if (f.rare) j.Key("rare").Bool(true);
   if (!f.defaultText.empty()) j.Key("default").String(f.defaultText);
   WriteSpecDetail(j, f.spec);
   j.Key("doc").String(f.doc);

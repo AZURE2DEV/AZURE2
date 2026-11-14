@@ -163,6 +163,11 @@ FieldDef Repeatable(FieldDef f) {
   f.repeatable = true;
   return f;
 }
+/// A field a user sets rarely (FieldDef::rare): a form shows it one click away unless the record sets it.
+FieldDef Rare(FieldDef f) {
+  f.rare = true;
+  return f;
+}
 FieldDef Defaulted(FieldDef f, const std::string &defaultText) {
   f.defaultText = defaultText;
   return f;
@@ -286,10 +291,10 @@ const Forms &StructuredValues() {
 /// against <levels>); not for a sum or a ratio (their terms wait for named pairs).
 std::vector<FieldDef> PairKeyFields() {
   const Condition single = Condition::Of(Condition::SingleReaction);
-  return {OptionalWhen("entrance_pair", "Entrance pair key", IntAtLeast(1), single,
-                       "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"),
-          OptionalWhen("exit_pair", "Exit pair key", IntAtLeast(1), single,
-                       "the <levels> pair key of the exit pair, only where the reaction label names two pairs")};
+  return {Rare(OptionalWhen("entrance_pair", "Entrance pair key", IntAtLeast(1), single,
+                            "the <levels> pair key of the entrance pair, only where the reaction label names two pairs")),
+          Rare(OptionalWhen("exit_pair", "Exit pair key", IntAtLeast(1), single,
+                            "the <levels> pair key of the exit pair, only where the reaction label names two pairs"))};
 }
 
 /// Fields of the apparatus that format 3 had and no longer has, with what to do (RecordKind::deleted).
@@ -314,23 +319,24 @@ std::vector<FieldDef> QuantityFields() {
           ByQ("s", "s", Spec(ValueType::Spin), "channel spin of the phase shift"),
           ByQ("expansion", "Legendre expansion", Words({"a_over_a0", "absolute", "rsl", "2l2", "4pi"}),
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
-          ByQ("multipole", "Multipole", Words({"E1", "E2"}), "the photon multipole the cross section is filtered to (M8)"),
-          ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
-              "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"),
-          ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta"),
+          Rare(ByQ("multipole", "Multipole", Words({"E1", "E2"}),
+                   "the photon multipole the cross section is filtered to (M8)")),
+          Rare(ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
+                   "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C")),
+          Rare(ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta")),
           ByQ("charge_state", "Charge state", IntAtLeast(1), "the beam's charge state q; per-charge units need it (F8)"),
           ByQ("efficiency", "Efficiency x branching", Nuis(""), "detection efficiency times branching of counted photons (F9)"),
-          ByQ("thm", "THM experiment", Spec(ValueType::Name), "the experiment[<name>] of <thm>, or global"),
-          ByQ("reference", "Reference cross section", Structured(f.reference),
-              "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E"),
-          OptionalWhen("thm_weight", "THM weight file", Spec(ValueType::Path), Condition::Present("thm"),
-                       "the weight table of <thm> weight[k]")};
+          Rare(ByQ("thm", "THM experiment", Spec(ValueType::Name), "the experiment[<name>] of <thm>, or global")),
+          Rare(ByQ("reference", "Reference cross section", Structured(f.reference),
+                   "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E")),
+          Rare(OptionalWhen("thm_weight", "THM weight file", Spec(ValueType::Path), Condition::Present("thm"),
+                            "the weight table of <thm> weight[k]"))};
 }
 
 std::vector<FieldDef> TextFields() {
-  return {Opt("source", "Source", Spec(ValueType::Text), "where the numbers come from; never read by the physics"),
-          Opt("exfor", "EXFOR", Spec(ValueType::Text), "the EXFOR entry and subentry"),
-          Opt("doi", "DOI", Spec(ValueType::Text), "the DOI of the publication")};
+  return {Rare(Opt("source", "Source", Spec(ValueType::Text), "where the numbers come from; never read by the physics")),
+          Rare(Opt("exfor", "EXFOR", Spec(ValueType::Text), "the EXFOR entry and subentry")),
+          Rare(Opt("doi", "DOI", Spec(ValueType::Text), "the DOI of the publication"))};
 }
 
 // ---------------------------------------------------------------- record kinds (section 3.2)
@@ -356,7 +362,10 @@ RecordKind DatasetKind() {
                                    Condition::Of(Condition::AngleAxis), "rows outside are not used"),
                       Req("norm", "Normalization", norm, "the normalization nuisance, or the name of a shared normalization record"),
                       Repeatable(Opt("shift", "Energy shift", Structured(f.shift), "a term of the energy shift; terms add")),
-                      Opt("covariance", "Covariance file", Spec(ValueType::Path), "data_formats.rst, covariance files"),
+                      Opt("covariance", "Covariance file", Spec(ValueType::Path),
+                          "the covariance of the points (and of the other data sets the file names), a text file of "
+                          "blocks, diagonals and vectors relative to the project (data_formats.rst, Data Covariance "
+                          "Files)"),
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive data set is not used"), "yes")},
                      ApparatusFields(), QuantityFields(), TextFields()});
   k.deleted = DeletedApparatusFields();
@@ -438,16 +447,17 @@ RecordKind TargetKind() {
                            "stopping cross section"),
               RequiredWhen("straggling", "Straggling", Structured(f.straggling), Condition::Is("kind", {"layer", "infinite"}),
                            "energy straggling in the target"),
-              OptionalWhen("phase", "Phase", Words({"solid", "gas"}), Condition::Is("stopping", {"evaluation"}),
-                           "solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a gaseous "
-                           "compound must say gas)"),
-              OptionalWhen("compound_correction", "Compound correction", PositiveNum(), Condition::Is("stopping", {"evaluation"}),
-                           "SRIM's compound factor C of Bragg's rule (left out: 1)"),
+              Rare(OptionalWhen("phase", "Phase", Words({"solid", "gas"}), Condition::Is("stopping", {"evaluation"}),
+                                "solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a "
+                                "gaseous compound must say gas)")),
+              Rare(OptionalWhen("compound_correction", "Compound correction", PositiveNum(),
+                                Condition::Is("stopping", {"evaluation"}),
+                                "SRIM's compound factor C of Bragg's rule (left out: 1)")),
               Repeatable(Opt("isotope", "Isotope", Structured(f.isotope), "abundance weight of a target nucleus")),
-              OptionalWhen("isotope_sum", "Isotope sum", Structured(f.isotopeSum), Condition::Present("isotope"),
-                           "constraint on the sum of the abundances"),
-              Opt("doppler", "Doppler", Structured(f.doppler), "free-gas Doppler broadening"),
-              Opt("screening", "Electron screening", Nuis("energy"), "the screening potential U_e")};
+              Rare(OptionalWhen("isotope_sum", "Isotope sum", Structured(f.isotopeSum), Condition::Present("isotope"),
+                                "constraint on the sum of the abundances")),
+              Rare(Opt("doppler", "Doppler", Structured(f.doppler), "free-gas Doppler broadening")),
+              Rare(Opt("screening", "Electron screening", Nuis("energy"), "the screening potential U_e"))};
   return k;
 }
 
@@ -519,8 +529,10 @@ RecordKind GammaDecayKind() {
                       Req("total_width", "Total radiative width", Nuis("energy"), "Gamma_gamma, the sum of the radiative widths"),
                       Repeatable(Opt("branching", "Branching", Structured(f.branching), "b_f of one final state")),
                       Opt("remainder", "Remainder", Structured(f.remainder), "the final state that takes 1 - sum of the others"),
-                      Repeatable(Opt("mixing", "Mixing ratio", Structured(f.mixing), "delta_f of a final state with L and L+1 (Krane-Steffen)")),
-                      Repeatable(Opt("sign", "Interference sign", Structured(f.decaySign), "the sign of a final state's L amplitude"))},
+                      Rare(Repeatable(Opt("mixing", "Mixing ratio", Structured(f.mixing),
+                                          "delta_f of a final state with L and L+1 (Krane-Steffen)"))),
+                      Rare(Repeatable(Opt("sign", "Interference sign", Structured(f.decaySign),
+                                          "the sign of a final state's L amplitude")))},
                      TextFields()});
   return k;
 }
@@ -535,18 +547,19 @@ RecordKind PotentialKind() {
           "potential of a uniformly charged sphere and a central nuclear term, integrated inward from the matching radius to "
           "the channel radius (docs/upgrade/spin_orbit_potential.md section 1.1).  A pair without a record has none.";
   k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of <levels> by its label (section 3.5)"),
-              Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs"),
+              Rare(Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs")),
               Req("coulomb_radius", "Coulomb radius", PositiveWithUnit("length"),
                   "R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)"),
               Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),
               Opt("spin_orbit", "Spin-orbit term", Structured(f.spinOrbit),
                   "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"),
-              Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
-                            "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the pair"),
-                        "15 fm"),
-              Defaulted(Opt("step", "Numerov step", PositiveWithUnit("length"),
-                            "the step of the inward integration, adjusted so that the channel radius is a node"),
-                        "0.0275 fm")};
+              Rare(Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
+                                 "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the "
+                                 "pair"),
+                             "15 fm")),
+              Rare(Defaulted(Opt("step", "Numerov step", PositiveWithUnit("length"),
+                                 "the step of the inward integration, adjusted so that the channel radius is a node"),
+                             "0.0275 fm"))};
   return k;
 }
 
