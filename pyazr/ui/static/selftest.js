@@ -113,6 +113,7 @@ export function selftest(ctx, tabs, draw) {
         tables: [...document.querySelectorAll(".physics-out table[data-table], .physics-out .table-wrap")].length,
         facts: document.querySelectorAll("dl.function-facts dd").length,
         tabListed: !document.querySelector('a.tab[data-tab="thm"]')?.hidden,
+        tabsShown: [...document.querySelectorAll("a.tab:not([hidden])")].map((a) => a.textContent),
         depth: document.documentElement.dataset.depth, tab: document.querySelector("a.tab.active")?.textContent || "",
         folded: document.querySelectorAll("details.form-more").length,
         changes: document.querySelectorAll('[aria-label^="changes"]').length,
