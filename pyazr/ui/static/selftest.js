@@ -3,7 +3,8 @@
 // unhandled rejection, console error and failed request, and writes the result as JSON into
 // <pre id="selftest-result" data-done="1">.  tests/pyazr/ui/smoke_test.py reads it from Chrome's dumped document.
 // "#selftest?theme=dark" runs it in the dark theme; "#selftest?edit=1" also edits a width and undoes it, and adds a
-// pair with the Nucleus tab's form, removes it with its button and undoes both.  The views are visited in the
+// pair with the Nucleus tab's form, removes it with its button and undoes both.  Where the project folder holds ENDF-6
+// files, the ENDF tab draws them over the data and presses Check on the first.  The views are visited in the
 // expert's depth (every tab and field), then each tab of the first view (FIRST_VIEW) and Calculate twice.
 
 import { FIRST_VIEW, LAYOUT } from "./layout.js";
@@ -41,6 +42,7 @@ export function selftest(ctx, tabs, draw) {
   const steps = [];
   const edit = {};
   const pair = {};
+  const endf = {};
   let fit = {};
 
   async function run() {
@@ -65,7 +67,15 @@ export function selftest(ctx, tabs, draw) {
     routes.push(...await thmRoutes(ctx, tabs));
     routes.push("#/results", "#/results?plot=table", "#/results?x=e_x&levels=1&logy=1");
     routes.push(...PHYSICS_ROUTES);
+    // the ENDF tab: as it opens, the project folder's first ENDF-6 file over the data, and its check screen
+    const endfFiles = (await ctx.api.get("/api/endf/files")).files.map((f) => f.path);
+    routes.push("#/endf");
+    if (endfFiles.length) {
+      routes.push(`#/endf?files=${endfFiles.map(encodeURIComponent).join(",")}`,
+        `#/endf/check?file=${encodeURIComponent(endfFiles[0])}`);
+    }
     for (const route of routes) await visit(route, join(route));
+    if (endfFiles.length) await endfCheck(endfFiles[0]);
     await firstView();
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
     if (/[?&]edit=1/.test(extra)) await pairAddRemove();
@@ -89,6 +99,29 @@ export function selftest(ctx, tabs, draw) {
       await draw();
       await record("Calculate", performance.now());
     }
+  }
+
+  /** The ENDF tab's Check pressed on a file: the job followed until its result is drawn; records the counts the
+   * page shows (the own check's heading and one heading per code) in `endf`. */
+  async function endfCheck(file) {
+    const until = async (test) => {
+      for (let i = 0; i < 600 && !test(); i += 1) await new Promise((r) => setTimeout(r, 50));
+      return test();
+    };
+    const route = `#/endf/check?file=${encodeURIComponent(file)}`;
+    location.hash = join(route);
+    await new Promise((r) => setTimeout(r, 0));
+    await draw();
+    const before = document.querySelector(".endf-check-summary")?.dataset.job || null;
+    document.querySelector("section.check button.primary").click();
+    endf.checked = await until(() => {
+      const shown = document.querySelector(".endf-check-summary");
+      return shown && shown.dataset.job !== before;
+    });
+    Object.assign(endf, { file, headings: [...document.querySelectorAll(".endf-check-job h3")]
+      .map((x) => x.textContent), meanings: [...document.querySelectorAll(".endf-check-job td")]
+      .filter((td) => td.textContent.includes("p. ")).length });
+    await record(`${route} (checked)`, performance.now());
   }
 
   /** One view: the route set, the page drawn, then its step recorded. */
@@ -209,7 +242,7 @@ export function selftest(ctx, tabs, draw) {
     const out = document.createElement("pre");
     out.id = "selftest-result";
     out.textContent = JSON.stringify({ done: true, ms, plotly: typeof globalThis.Plotly === "object",
-      errors, failed: ctx.api.failures, steps, edit, pair, fit, chi2: ctx.evaluation?.chi2 ?? null,
+      errors, failed: ctx.api.failures, steps, edit, pair, endf, fit, chi2: ctx.evaluation?.chi2 ?? null,
       evaluation_refused: ctx.evalError?.what ?? null }, null, 1);
     out.dataset.done = "1";
     out.style.display = "none";

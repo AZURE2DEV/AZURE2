@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 from html import unescape
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import pytest
 
@@ -45,7 +45,32 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          ("first-effects", "data?section=targets"), ("first-calculated", "results?calculated=1"),
          ("expert-project", "project?depth=expert"), ("expert-dataset", "data/{dataset}?depth=expert"),
          # the two utilities: the rate tab (the expert's depth has its link) and a data set's covariance builder
-         ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"))
+         ("expert-rate", "rate?depth=expert"), ("covariance", "covariance/{dataset}"),
+         # the ENDF tab: the project folder's ENDF-6 files over the data, and the first one's check (the self-test's)
+         ("expert-endf", "endf?depth=expert&files={endf_files}"),
+         ("expert-endf-check", "endf/check?depth=expert&file={endf}"))
+# The ENDF-6 files copied into each project's folder (tests/pyazr/data/endf: a hand-written p + 12C file and an
+# extract of the ENDF/B-VIII.1 3He + 4He evaluation, in a subdirectory), and the stand-in of the checking codes the
+# server finds (tests/pyazr/endf_standin, linked under the codes' names; its report has findings).
+ENDF_DATA = os.path.join(uitest.ROOT, "tests", "pyazr", "data", "endf")
+ENDF_FILES = (("p-C012_hand.endf", "p-C012_hand.endf"), ("h-002_He_004_extract.endf",
+                                                        os.path.join("endf", "h-002_He_004_extract.endf")))
+STANDIN = os.path.join(uitest.ROOT, "tests", "pyazr", "endf_standin", "standin.py")
+
+
+def endf_setup(azr, tmp_path):
+    """The ENDF-6 files in the project's folder, and the environment of a server that finds the stand-in codes."""
+    folder = os.path.dirname(azr)
+    for name, target in ENDF_FILES:
+        os.makedirs(os.path.dirname(os.path.join(folder, target)), exist_ok=True)
+        shutil.copyfile(os.path.join(ENDF_DATA, name), os.path.join(folder, target))
+    bin_dir = tmp_path / "endf-bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("checkr", "fizcon", "psyche", "stanef"):
+        if not (bin_dir / name).exists():
+            os.symlink(STANDIN, bin_dir / name)
+    env = {k: v for k, v in os.environ.items() if k not in ("AZURE2_ENDF_UTILITIES", "AZURE2_PREPRO")}
+    return dict(env, AZURE2_ENDF_UTILITIES=str(bin_dir), ENDF_STANDIN_ROLE="findings")
 
 
 def extra_projects():
@@ -65,13 +90,13 @@ def copy_any(azr, dest):
 class Served:
     """``python -m pyazr.ui`` on a free port; stopped (SIGINT, then SIGKILL) and its workers checked gone."""
 
-    def __init__(self, azr, log):
+    def __init__(self, azr, log, env=None):
         from pyazr.ui.server import free_port
         self.port = free_port()
         self.log = open(log, "w")
         self.proc = subprocess.Popen([sys.executable, "-m", "pyazr.ui", azr, "--port", str(self.port), "--token",
                                       TOKEN], cwd=uitest.ROOT, stdout=subprocess.PIPE, stderr=self.log, text=True,
-                                     env=dict(os.environ, PYTHONPATH=uitest.ROOT))
+                                     env=dict(env or os.environ, PYTHONPATH=uitest.ROOT))
         self.url = self.proc.stdout.readline().strip()
         assert self.url.startswith("http://127.0.0.1:"), f"the server printed {self.url!r}"
         assert uitest.wait_until(self._answers, 60), "the server does not answer"
@@ -132,7 +157,7 @@ def test_selftest_and_screenshots(name, tmp_path):
     label = os.path.splitext(os.path.basename(azr))[0]
     shots = os.environ.get("AZURE2_UI_SCREENSHOTS") or str(tmp_path / "shots")
     os.makedirs(shots, exist_ok=True)
-    server = Served(azr, tmp_path / "server.log")
+    server = Served(azr, tmp_path / "server.log", env=endf_setup(azr, tmp_path))
     try:
         t0 = time.monotonic()
         dom = chrome(tmp_path, f"{server.url}#selftest?edit=1&fit=1", "--window-size=1400,900",
@@ -208,6 +233,13 @@ def test_selftest_and_screenshots(name, tmp_path):
             print(f"{label}: fit {fit['method']} {fit['state']} after {fit['calls_seen']} calls seen; chi2 "
                   f"{fit['chi2_before']} -> fit {fit['chi2_fit']}, as written {fit['chi2_written']} -> undo "
                   f"{fit['chi2_back']}")
+        endf = result["endf"]  # the ENDF tab: Check pressed on the first file, the stand-in codes' findings drawn
+        assert endf["checked"] and endf["file"] == "endf/h-002_He_004_extract.endf", endf
+        assert endf["headings"][0].startswith("pyazr.endf's own format check: 3 errors, 1 warning"), endf
+        assert [x.split(" ")[0] for x in endf["headings"][1:]] == ["CHECKR", "FIZCON", "PSYCHE"], endf
+        assert "the report counts 3 errors, 0 warnings" in endf["headings"][1], endf
+        over = next(s for s in result["steps"] if s["route"].startswith("#/endf?files="))
+        assert over["plot"] == "plotly" if label == "T1" else over["plot"] is None, over
         take_screenshots(server, tmp_path, label, shots, result)
     finally:
         server.stop()
@@ -220,7 +252,10 @@ def take_screenshots(server, tmp_path, label, shots, result):
             "dataset": next((r.split("/", 2)[2] for r in routes if r.startswith("#/data/") and "?" not in r
                              and r != "#/data/+new"), None),
             "record": next((r.split("/", 2)[2] for r in routes if r.startswith("#/nucleus/")
-                            and not r.startswith("#/nucleus/level/")), None)}
+                            and not r.startswith("#/nucleus/level/")), None),
+            "endf_files": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf?files=")), None),
+            "endf": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf/check?file=")
+                          and "(checked)" not in r), None)}
     sets = [("light", 1400, 900)]
     if os.environ.get("AZURE2_UI_SHOTS") == "all":
         sets = [(t, w, h) for t in ("light", "dark") for (w, h) in ((1400, 900), (1000, 700))]

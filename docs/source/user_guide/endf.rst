@@ -179,6 +179,15 @@ Trying the codes on your machine::
    python -m pyazr endf check h-002_He_004.endf
    python -m pyazr endf standardize h-002_He_004.endf
 
+On the page
+-----------
+
+The web interface's **ENDF** tab (:doc:`web_interface`) makes the same calls: the files of the project folder and
+what each holds (``summary()``), every data set with the files' values, the data and the model and the ratios
+(``curves(data, session=s)``), the codes found (``checkers()``), **Check** (``check(path, codes=...)``) and
+**Correct** (``standardize(path, program=...)``, then ``accept(to=...)`` or, after a second question,
+``accept(overwrite=True)``) as jobs.
+
 What reading refuses and what it reports
 ----------------------------------------
 

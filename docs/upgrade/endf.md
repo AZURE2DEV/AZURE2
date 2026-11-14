@@ -719,7 +719,18 @@ The findings on the hand-written files are true of them (made-up coefficients, a
 the own check does not test physics or procedures (FIZCON's and PSYCHE's domain): it found none of them, and no code
 found a format error the own check missed on these files.
 
-### 13.3 What the page needs (routes and screens, a later branch)
+### 13.3 What the page needs (routes and screens): as built
+
+Built as listed below (`web_ui.md` section 11.13: the ENDF tab, `pyazr/ui/evaluations.py`). Differences: the curves
+route takes several files at once and answers every data set of the session with the data times its norm, the
+model and two ratios formed in the server's Python (`ratio_to_data` with its error from the datum's, and
+`ratio_to_model`); the codes' list adds, per program, what it does to numbers (a fourth column of `PROGRAMS`); the
+accept is `POST /api/endf/accept` (job id, `to`, `overwrite`), not a route of the job table; the two jobs build no
+session. Two rows of `MEANINGS` were added for CHECKR's LTP=15 messages ("INVALID ANGULAR REPRESENTATION LTP=15",
+"NW SHOULD BE SET TO ****"), seen with the built CHECKR 8.24 on a LAW=5 LTP=15 file. Not built here: "New project
+from ENDF" and the export (another branch), extrapolations' curves (only data sets).
+
+The list as designed:
 
 - Results tab, "Evaluations", add a file: `pyazr.endf.read(path).summary().to_dict()` on a path in the project's
   root; answer: MAT, target, projectile, library, lab, date, authors, LRP, EMAX, the sections (MF, MT, reaction,

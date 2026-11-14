@@ -21,7 +21,7 @@ from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
-from . import utilities
+from . import evaluations, utilities
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -355,6 +355,44 @@ class Server:
     def rate_grids():
         return utilities.rate_grids()
 
+    # -- ENDF-6 evaluations: the files, a summary, the curves over the data, the codes (pyazr/ui/evaluations.py) ----
+
+    def endf_files(self):
+        """The ENDF-6 files of the project folder (relative paths), the folder, and how a file is recognised."""
+        skip = [self._output_directory()]  # the engine's output; hidden directories (the UI's own) are skipped too
+        return {"directory": self.state.directory, "files": evaluations.endf_files(self.state.directory, skip),
+                "depth": evaluations.SEARCH_DEPTH,
+                "how": "files whose first two lines read as ENDF-6 lines (80 columns with MAT, MF, MT), in the "
+                       f"project's directory and {evaluations.SEARCH_DEPTH} levels below; a path inside the root "
+                       "may also be typed"}
+
+    def endf_summary(self, path):
+        """What an ENDF-6 file inside the root holds (``pyazr.endf.read(path).summary()``), in the server's process."""
+        return evaluations.summary(self.state.inside_root(path), path)
+
+    def endf_curves(self, files):
+        """The files' values at every data set's points of the current text at the working x, with the ratios to the
+        datum times its normalization and to the model (the session worker: ``Material.curves(data, session=s)``)."""
+        names = [files] if isinstance(files, str) else list(files or [])
+        if not names:
+            raise Refused("name at least one ENDF-6 file", allowed="files of GET /api/endf/files, or paths inside "
+                          "the root", fix='POST /api/endf/curves {"files": ["a.endf"]}')
+        resolved = [[n, self.state.inside_root(n)] for n in names]
+        return self.session_request("endf_curves", files=resolved)
+
+    @staticmethod
+    def endf_checkers():
+        return evaluations.checkers()
+
+    def endf_accept(self, job_id, to=None, overwrite=False):
+        """Keep the candidate of a finished rewrite job: at ``to`` (inside the root; none: beside the original), an
+        existing file replaced only with ``overwrite``.  No history entry: an ENDF file is not the project text."""
+        job = self.jobs.get(job_id)
+        answer = evaluations.accept(self.state, job.view(), to, overwrite)
+        with job.lock:
+            job.record.setdefault("kept", []).append(dict(answer, time=time.time()))
+        return answer
+
     # -- jobs -------------------------------------------------------------------------------------------------------
 
     @staticmethod
@@ -378,6 +416,10 @@ class Server:
         x.  Files a job writes (a chain) go to the project's output directory."""
         if rev is not None:
             self.state.check_rev(rev)
+        from .jobs import job_row
+        for name in job_row(kind, method).files:  # a file a job reads: inside the root (403 otherwise)
+            if (settings or {}).get(name):
+                self.state.inside_root(settings[name])
         source = None
         with self.worker.lock:
             with self.state.lock:
