@@ -270,3 +270,10 @@ details.form-more, details.more { margin: 6px 0; }
 details.form-more > summary, details.more > summary { cursor: pointer; color: var(--accent); padding: 3px 0; }
 details.more > section.panel, details.more > div { margin-top: 6px; }
 p.empty { padding: 6px 0; }
+
+/* the run's settings (Project tab): a table per group, the control beside the title and key */
+table.settings-group { border-collapse: collapse; margin: 6px 0 10px; width: 100%; }
+table.settings-group caption { text-align: left; font-weight: 600; padding: 4px 0; }
+table.settings-group th { text-align: left; font-weight: 500; width: 26%; vertical-align: top; padding: 4px 8px 4px 0; }
+table.settings-group td { vertical-align: top; padding: 4px 8px 4px 0; border-top: 1px solid var(--grid); }
+table.settings-group th { border-top: 1px solid var(--grid); }

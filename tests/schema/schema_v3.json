@@ -262,7 +262,7 @@
      "type": "path",
      "grammar": "<path>",
      "required": false,
-     "doc": "data_formats.rst, covariance files"
+     "doc": "the covariance of the points (and of the other data sets the file names), a text file of blocks, diagonals and vectors relative to the project (data_formats.rst, Data Covariance Files)"
     },
     "active": {
      "title": "Active",

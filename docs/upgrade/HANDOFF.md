@@ -88,6 +88,21 @@ first view's tabs, a data set's form and Calculate; after its width edit (`edit=
 whole (99 passed, then the one long line repaired and static, node and smoke tests 19 passed), the ctests of the
 schema, `describe`, `<config>` and `project_nuclear_part` (7 passed), the consistency test, the documents built.
 
+**The run's settings** (third commit): the Project tab's `<config>` text boxes became the **Run settings**: every
+entry of the engine's `<config>` table as a row with its control (a switch for a 0/1 key, a choice for a positional
+entry, a number box with its bound, a text box for a path or directory), its title (the old program's words where it
+had the setting), key, meaning, what the engine does without it, and whether the project sets it; groups with the
+old Runtime Options first; a search box; rare rows under "More settings"; each change one config edit (Undo takes it
+back); the free key and value table under "Advanced". Built from `kinds()["config"]` (`pyazr/described.py`, from the
+binding's new `config_table()`: `io::ConfigPositionals()`, a table that replaces the reader's private list and now
+also gives the edit's allowed values, and `io::ConfigKeys()` with the new columns `title`, `group`, `absent`, `rare`
+filled by `Told(...)`). The covariance field of a data set got a meaning in the schema (it named only a page).
+Tests: `tests/pyazr/ui/js/settings.test.mjs`; `api_test.py` `test_run_settings_are_the_engines_config_table` (the
+rows are the engine's entries in order, the options' defaults are `kinds()["options"]`'s; five values sent as the
+controls send them give the text of the direct `Project.set_config` on the same text, and Undo gives the text back).
+Errors injected once and seen failing, then removed: a set rare field folded, the change of a calculation with its
+sign reversed, a positional entry's "set" reversed, a pair route marking the wrong view.
+
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree

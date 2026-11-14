@@ -362,7 +362,10 @@ RecordKind DatasetKind() {
                                    Condition::Of(Condition::AngleAxis), "rows outside are not used"),
                       Req("norm", "Normalization", norm, "the normalization nuisance, or the name of a shared normalization record"),
                       Repeatable(Opt("shift", "Energy shift", Structured(f.shift), "a term of the energy shift; terms add")),
-                      Opt("covariance", "Covariance file", Spec(ValueType::Path), "data_formats.rst, covariance files"),
+                      Opt("covariance", "Covariance file", Spec(ValueType::Path),
+                          "the covariance of the points (and of the other data sets the file names), a text file of "
+                          "blocks, diagonals and vectors relative to the project (data_formats.rst, Data Covariance "
+                          "Files)"),
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive data set is not used"), "yes")},
                      ApparatusFields(), QuantityFields(), TextFields()});
   k.deleted = DeletedApparatusFields();

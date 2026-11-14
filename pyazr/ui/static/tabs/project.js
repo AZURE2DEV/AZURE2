@@ -7,6 +7,7 @@ import { formatNumber, renderTable } from "../tables.js";
 import { button, diagnosticLine, h, section } from "../ui.js";
 import { FIRST_VIEW } from "../layout.js";
 import { recordRoute } from "./records.js";
+import { settingsSection } from "./settings.js";
 
 /**
  * The next step of a project, from what it has (the first view's guide): {text, hash, label} of the first thing
@@ -29,25 +30,28 @@ export function nextStep(counts, evalError, firstView = FIRST_VIEW) {
 }
 
 export async function render(ctx, el) {
+  if (!ctx.kinds) ctx.kinds = await ctx.api.get("/api/kinds");
   const [config, problems, history, records] = await Promise.all([ctx.api.get("/api/project/config"),
     ctx.api.get("/api/project/validate"), ctx.api.get("/api/project/history"), ctx.api.get("/api/project/records")]);
   const msg = h("div.messages");
   el.appendChild(msg);
   el.appendChild(fileSection(ctx, msg));
+  const send = (entries) => ctx.edit("set <config>", () => ctx.api.patch("/api/project/config", { entries }), msg)
+    .catch(() => {});
+  const settings = settingsSection(ctx, ctx.kinds.config?.fields || {}, config, send, configSection(ctx, config, msg));
   if (!ctx.expert) {
     // the first view: the next step, the problems, the run's settings; the rest one click away
     el.appendChild(await nextSection(ctx, records));
     el.appendChild(problemsSection(ctx, problems, records));
-    el.appendChild(configSection(ctx, config, msg));
+    el.appendChild(settings);
     el.appendChild(h("details.more", {}, h("summary", {}, "More: session options, history, the project's text, "
       + "the engine"), optionsSection(ctx), historySection(ctx, history), textSection(ctx, msg),
     engineSection(ctx)));
     return;
   }
   el.appendChild(problemsSection(ctx, problems, records));
-  const columns = h("div.two-columns");
-  columns.append(configSection(ctx, config, msg), optionsSection(ctx));
-  el.appendChild(columns);
+  el.appendChild(settings);
+  el.appendChild(optionsSection(ctx));
   el.appendChild(historySection(ctx, history));
   el.appendChild(textSection(ctx, msg));
   el.appendChild(engineSection(ctx));
@@ -108,7 +112,8 @@ function configSection(ctx, config, msg) {
   };
   const table = h("table.kv", {}, tbody);
   table.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } });
-  return section("<config>", h("p.hint", {}, "An empty value removes the key; Enter applies."), table,
+  return h("div.config-text", {}, h("p.hint", {}, "Every <config> entry as text: an empty value removes the key, a "
+    + "new key and value go in the last row; Enter applies."), table,
     h("div.form-actions", {}, button("Apply", "set_config with the changed entries (Enter)", apply, "primary")));
 }
 

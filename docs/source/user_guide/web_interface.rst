@@ -104,8 +104,13 @@ reverts it, ``t`` switches between the system's theme, light and dark.  Each vie
 (``#/data/s02_diff090``), so a link or a reload brings you back to it.
 
 **Project.**  The file and its working copy; the problems the engine's validator reports, each with a link to the
-record it names; the ``<config>`` entries, edited as text (an empty value removes a key); the session's options
-(Brune, Park, the Coulomb table and the others) with the values in use and the program's flags, read-only for now;
+record it names; the **Run settings**: every ``<config>`` entry the engine knows, in groups (the old program's
+Runtime Options first: the formalism, Brune, Park, the parameter transformation, external widths, RMC, GSL Coulomb
+functions; then physics, fit, directories, checks, numerics), each with its control (a switch, a choice, a number
+box), its key, what it does, what the engine does when the project does not set it, and whether the project sets
+it; a change is applied at once and Undo takes it back; **×** removes a key; a search box finds a setting by any
+word; the rarely set ones wait under **More settings**, and **Advanced** has the entries as text (any key); the
+session's options (Brune, Park, the Coulomb table and the others) with the values in use and the program's flags;
 the history of edits; the project's text, read-only, with **Replace text** for an edit of the whole; the engine's
 version, build and data files.
 

@@ -887,7 +887,8 @@ What must know of a new thing under this design:
 - **A kind of plot**: one function in `plots.js`, one row of the plot table, one smoke-test step.
 - **A kind of job**: one row of `jobs.py` (its pyazr call, settings, progress fields) and its test.
 - **A session option**: none. The Project tab's options come from `kinds()["options"]`; an option of the calculation
-  is a `<config>` key, edited with the other entries.
+  is a `<config>` key, edited with the other entries: its row of `io::ConfigKeys()` (with its title, group, absence
+  and rarity) gives its control in the run settings.
 
 ## 11. The order of work
 
@@ -1614,6 +1615,14 @@ pyazr. Measured first (the typed places, the six tasks in steps: the HANDOFF ent
   baseline is the newest calculation that is not the current one (same revision and χ²); the status line gives the
   change since the last Calculate after every edit. Clicks from an edited width to the plot of the data set it moves:
   one (Calculate), the set that moved most first; before, one (Results) and the data set found by eye.
+- **Run settings** (Project tab, both depths; `tabs/settings.js`): the rows of `kinds()["config"]`, a record kind
+  made by `pyazr/described.py` from the engine's table (`config_table()` of the binding: `io::ConfigPositionals()`
+  and `io::ConfigKeys()`, which gained the columns `title` (the old program's words where it had the setting),
+  `group`, `absent` (what the engine does without the key) and `rare`; the positional entries their `values`, now
+  also the edit's check). A switch for a 0/1 key, a choice for a positional entry, a number box with its bound, a
+  text box for a path or a directory; each change is one `PATCH /api/project/config` (one history entry); `×`
+  removes a key; a search over key, title, meaning and group; rare rows under "More settings" unless set; the free
+  key and value table under "Advanced". A new key of the table appears with no line of the page.
 - **Next step** (Project tab, first view): the first missing thing in the old program's order (`nextStep`: pairs,
   levels, data (records of a kind with a quantity), the engine's refusal, else Calculate) with its button. Empty
   pairs, levels and Data groups say what belongs there and offer the first one.

@@ -185,7 +185,12 @@ A session option (an option of the calculation)
 A switch a project's result depends on is a ``<config>`` key, a program flag
 and a ``pyazr`` keyword under one name.
 
-1. One ``Option`` row of ``io::ConfigKeys()`` (``io/src/ConfigSection.cpp``);
+1. One ``Option`` row of ``io::ConfigKeys()`` (``io/src/ConfigSection.cpp``),
+   wrapped in ``Told(...)`` with the words a form shows (a title, the old
+   program's where it had the setting; the group; what the engine does
+   without it; whether it is set rarely): ``pyazr.kinds()["config"]`` and the
+   web page's run settings read them, so a new key needs nothing in the page
+   (``tests/pyazr/ui/api_test.py``);
    the program's parser and ``--help`` (``ApplyOptionFlag``,
    ``printOptionFlags``), ``--describe``, ``pyazr.kinds()["options"]`` and the
    web UI read it there (check 1; ``io_config_section``). A flag that implies
