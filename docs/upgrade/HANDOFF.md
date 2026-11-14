@@ -33,17 +33,16 @@ compound system built from it with the requests; B_c and the final-state energie
 
 **What changed, by file**: see the commits.  The class scheme (`classes.tsv`, `arrows.tsv`, figures) follows.
 
-**Verified how**: build `work/b-cnuc9` (6 jobs, 0 warnings at every commit). Per commit: consistency test, the quick set (12
-folders x 3 bases, T1-T3, 13N, two external-capture, THM, sub-point grids) against `tab-t74-1` identical, the unit
-tests near the change (63 for the rename, 8 for the channel functions, 138 pyazr/consistency/api tests for the
-session's constness). Check 59: injected `CNuc *old_;` and a `Clone()` into `CompoundSystem.h`, two failures
-(removed). The doors' numbers (`work/cnuc9/doors/dump.py`: both doors on every particle block of T1, T2, 13N, Brune
-and Park) byte-identical between `b-trial77` and this build. At the end (head of the code 1d845f37): all projects
-in the three bases against `tab-t74-1` (tag `tab-cnuc9-T`) Brune 887, formal 851, Park 887 files, all identical;
-the own runs against `b-trial77` (`work/cnuc9/extra.sh`: the eight fits and the natural-target fits, T2 sampled in
-both bases, `gamma_decay`, MINOS, a fit with band, a rate) 16 of 16 identical; a T2 fit at 1 and at 6 threads, 14
-output files identical; `OMP_NUM_THREADS=1 ctest -LE slow -j2` 289 of 289; `docs_build` 60 pages;
-`tools/check_skills.py`.
+**Verified how**: build `work/b-cnuc9` (6 jobs, 0 warnings at every commit). Per commit: consistency test, the quick set
+(12 folders x 3 bases, T1-T3, 13N, two external-capture, THM, sub-point grids) against `tab-t74-1` identical, the unit
+tests near the change (63 for the rename, 8 for the channel functions, 138 pyazr/consistency/api tests for the session's
+constness). Check 59: injected `CNuc *old_;` and a `Clone()` into `CompoundSystem.h`, two failures (removed). The doors'
+numbers (`work/cnuc9/doors/dump.py`: both doors on every particle block of T1, T2, 13N, Brune and Park) byte-identical
+between `b-trial77` and this build. At the end (head of the code 1d845f37): all projects in the three bases against
+`tab-t74-1` (tag `tab-cnuc9-T`) Brune 887, formal 851, Park 887 files, all identical; the own runs against `b-trial77`
+(`work/cnuc9/extra.sh`: the eight fits and the natural-target fits, T2 sampled in both bases, `gamma_decay`, MINOS, a
+fit with band, a rate) 16 of 16 identical; a T2 fit at 1 and at 6 threads, 14 output files identical; `OMP_NUM_THREADS=1
+ctest -LE slow -j2` 289 of 289; `docs_build` 60 pages; `tools/check_skills.py`.
 
 **Open**: the one build (above); `GetThmExperiments` only reads but is not `const` (the engine's
 `WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)` are not `const`); `Config &configure()
