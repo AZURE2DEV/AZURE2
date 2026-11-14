@@ -2086,8 +2086,9 @@ the nuisance priors, `GetParameterBounds`, `OutsideSamplerSupport`, `GetThmExper
 `inputs()`, `data()`, `results()` return `const` references from a `const` session. The callers holding a
 `const AZUREAPI &` were the binding's own (`pybind_evaluation.cpp`, `pybind_model_data.cpp`, `pybind_records.cpp`,
 `pybind_api.cpp`): they hold `AZUREAPI &` now. `results_` and the three nuisance members are no longer `mutable`
-(four rows of `allowed_state.tsv` gone). `GetThmExperiments` only reads, but through
-`WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)`, which are not `const`.
+(four rows of `allowed_state.tsv` gone). `GetThmExperiments` only reads; it is
+`const` again since `WorkingCopy::ThmExperimentReports` is and `Segment::GetPoint` has a `const` form (the one set-up
+as built).
 
 **The channel functions once.** `ParticleChannelValues(pair, l, 2j, E_c, gsl)` (`EngineChannelFunctions.h`) holds
 the lines of a particle channel (S, dS/dE, P; the ANC factor below threshold); `EngineChannelFunctions` and the

@@ -392,7 +392,7 @@ class AZUREAPI {
   vector_r GetCurrentNorms() const;
   /// The THM experiments (<thm> experiment[...]) as the last chi^2 evaluation
   /// profiled them: shared norm, background and their covariance.
-  std::vector<ThmExperimentReport> GetThmExperiments();
+  std::vector<ThmExperimentReport> GetThmExperiments() const;
   /// The Coulomb line shape of THM experiment `name` (lineshape=on) at the
   /// c.m. energies `energies`, with the level poles of the current compound
   /// (the last evaluation's parameters).  False and `why` if unavailable.

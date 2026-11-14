@@ -327,7 +327,7 @@ int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
  * gradient vector is a permutation-correct match for the sampler's parameter
  * ordering (see PLAN.md, "Parameter-vector order must exactly match").
  */
-ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, WorkingCopy *data,
+ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, const WorkingCopy *data,
                                  const std::vector<bool> &fixed) {
   ParamIndexMap map;
   int i = 0;

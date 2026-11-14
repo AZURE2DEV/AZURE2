@@ -879,6 +879,10 @@ Unit *Segment::GetTermPoint(WorkingCopy &data, int t, int i) const {
   return &data.UnitAt(TermFirstUnit(data, t) + i - 1);
 }
 
+const Unit *Segment::GetTermPoint(const WorkingCopy &data, int t, int i) const {
+  return &data.UnitAt(TermFirstUnit(data, t) + i - 1);
+}
+
 void Segment::KeepLoadFrame(const WorkingCopy &data, int t) {
   Fixed(t).loadFrame = std::make_shared<const azure2::experiment::MeasurementFrame>(data.State(*this).terms[t].frame);
 }

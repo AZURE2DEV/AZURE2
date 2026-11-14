@@ -601,7 +601,7 @@ bool AZUREAPI::WriteOutputFiles() {
   return true;
 }
 
-std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() {
+std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
   if (data_ == nullptr) return std::vector<ThmExperimentReport>();
   return data()->ThmExperimentReports(results());
 }

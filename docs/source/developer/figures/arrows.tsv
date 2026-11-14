@@ -100,7 +100,7 @@ AZURECalc	ParameterLimitsManager	reads	inference	nonconst	AZURECalc::limitsManag
 AZUREParams	ROOT::Minuit2::MnUserParameters	owns	inference		AZUREParams::params_
 AZUREParams	ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<ParameterRecord>)
 ParameterRecord	ParamKindRow	reads	inference	const	ParameterRecord::Row() (const ParamKindRow &, a row of ParamKindTable())
-AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, WorkingCopy *, ...) in AZURECalc::GradientBy
+AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, ...) in AZURECalc::GradientBy
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
 AZURECalcMCMC	CompoundSystem	reads	inference	const	AZURECalcMCMC::compound_ (const CompoundSystem *): the caller's, which outlives it

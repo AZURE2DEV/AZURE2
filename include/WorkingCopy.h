@@ -471,7 +471,7 @@ class WorkingCopy {
   /// (ThmNorm.cpp) and the ranges of the reports (ThmReports.cpp).
   static void ThmGroupEnergyRange(WorkingCopy &data, const ThmGroup &group, double &eLo, double &eHi);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
-  std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results);
+  std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results) const;
   /*!
    * The Coulomb line shape of THM experiment `name` (lineshape=on) at the
    * c.m. energies `energies` (MeV, x + A) and the current fit parameters of
