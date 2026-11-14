@@ -79,7 +79,7 @@ check_spread() {  # TAG NAME
   npos="$( { seg1 "$name"; seg2 "$name"; } | awk '$2 > 0' | wc -l | tr -d ' ')"
   f="$(seg1 "$name" | sed -n 1p | awk '{ print $2 }')"
   if [ "$n" -ge 30 ] && [ "$npos" -eq "$n" ]; then ok "$tag every yield of segments 1 and 2 is positive ($n points)"; else bad "$tag $((n - npos)) of $n yields are not positive"; seg1 "$name" | sed -n '1,2p'; fi
-  if [ -n "$f" ] && awk -v a="$f" -v b="$first" 'BEGIN { exit !(b > 0 && a / b > 0.99 && a / b < 1.01) }'; then
+  if [ -n "$f" ] && awk -v a="$f" -v b="$first" 'BEGIN { exit !(b ~ /^ *[-+]?\.?[0-9]/ && b > 0 && a / b > 0.99 && a / b < 1.01) }'; then
     ok "$tag first point of segment 1: $f, within 1 % of $first without the spread"
   else
     bad "$tag first point of segment 1: '$f' vs $first without the spread"; tail -2 "$WORK/$name/run.log"

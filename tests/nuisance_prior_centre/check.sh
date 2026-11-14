@@ -55,7 +55,7 @@ term() {
     "$WORK/$1/output/chiSquared.out" 2>/dev/null
 }
 # equal to the six digits chiSquared.out writes
-near() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a != "" && d <= 1e-5 * (b < 0 ? -b : b) + 1e-12) }'; }
+near() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(b ~ /^ *[-+]?\.?[0-9]/ && a != "" && d <= 1e-5 * (b < 0 ? -b : b) + 1e-12) }'; }
 expect() {  # NAME LABEL WANT WHAT
   local got; got="$(term "$1" "$2")"
   if near "$got" "$3"; then ok "$4: Total-$2-Chi-Squared $got"; else bad "$4: Total-$2-Chi-Squared '$got', want $3"; fi

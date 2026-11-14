@@ -118,6 +118,13 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
       project_tol="$TOL"
     fi
   fi
+  # awk compares a tolerance that is not a number ("2e-2#why") as text, and every error passes it.
+  if ! [[ "$project_tol" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+    echo "=== $name ==="
+    echo "  FAIL: tolerance '$project_tol' is not a number (TOL or $name/tolerance)"
+    fail=$((fail + 1))
+    continue
+  fi
 
   if [ ! -f "$expected" ]; then
     echo "SKIP $name: no expected/chiSquared.out"

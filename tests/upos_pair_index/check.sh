@@ -49,9 +49,9 @@ maxrel() {
   paste <(block "$1" "$3" | awk '{ print $1, $3, $4 }') <(block "$2" "$3" | awk '{ print $1, $3, $4 }') | awk '
     { if (e) next; if ($1 != $4 || $2 != $5) { print "grid"; e = 1; next }
       d = $3 - $6; if (d < 0) d = -d; m = $6 < 0 ? -$6 : $6; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
-    END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
+    END { if (e) exit; if (n == 0) print "nan"; else printf "%.3e\n", w }'
 }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^[0-9.]+([eE][-+]?[0-9]+)?$/ && r + 0 <= t + 0) }'; }
 f1="$WORK/base/output/AZUREOut_aa=2_R=5.out"; f2="$WORK/extra/output/AZUREOut_aa=2_R=5.out"
 if [ -s "$f1" ] && [ -s "$f2" ]; then
   n="$(block "$f1" 1 | grep -c .)"

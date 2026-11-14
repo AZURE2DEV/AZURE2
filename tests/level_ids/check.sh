@@ -77,7 +77,7 @@ run() {
 total() { grep -o 'Total-Chi-Squared: [^ ]*' "$1/output/chiSquared.out" | awk '{ print $2 }'; }
 # awk only: the Windows runner has no diff
 ndiff() { awk 'NR == FNR { a[FNR] = $0; n = FNR; next } { m = FNR; if (a[FNR] != $0) d++ } END { print d + (n > m ? n - m : m - n) }' "$1" "$2"; }
-relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(m > 0 && d <= t * m) }'; }
+relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(b ~ /^ *[-+]?\.?[0-9]/ && m > 0 && d <= t * m) }'; }
 
 run ref "$REF/13N.azr" || exit 1
 for m in zero narrow first same; do run "$m" "$WORK/$m.azr" || exit 1; done

@@ -463,6 +463,7 @@ int main() {
   {
     const Diagnostic m = StoppingDataMissing("TP", "stopping: no SRIM data");
     const bool okM = m.code == "E_STOPPING_DATA" && m.record == "TP" && m.field == "stopping" &&
+                     m.message.find("--srim-data-dir=DIR") != std::string::npos &&
                      m.message.find("AZURE2_SRIM_DATA_DIR") != std::string::npos;
     check("E_STOPPING_DATA: the target's stopping, and where the files are read from", okM);
     if (okM) tested.insert(m.code);

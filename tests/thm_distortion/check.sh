@@ -117,11 +117,11 @@ run n_plane "experiment[A] $KINN distortion=optical opticalAA=plane"
 run n_coul "experiment[A] $KINN distortion=coulomb"
 if ran n_off && ran n_plane && ran n_coul; then
   w="$(ratios n_plane n_off | awk '{ d = $2 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e", n, w }')"
-  awk -v w="${w#* }" -v n="${w% *}" 'BEGIN { exit !(n > 100 && w < 1e-6) }' \
+  awk -v w="${w#* }" -v n="${w% *}" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 100 && w < 1e-6) }' \
     && ok "no distortion left (plane a + A, eta_sF = 0): R = 1 at ${w% *} points, worst |R - 1| = ${w#* }" \
     || bad "plane waves: R != 1 ($w)"
   r="$(ratios n_coul n_off | awk 'NR == 1 { lo = $2; hi = $2 } { if ($2 < lo) lo = $2; if ($2 > hi) hi = $2 } END { printf "%.4f %.4f", lo, hi }')"
-  awk -v lo="${r% *}" -v hi="${r#* }" 'BEGIN { exit !(lo > 0.88 && hi < 1.12 && hi - lo > 0.01) }' \
+  awk -v lo="${r% *}" -v hi="${r#* }" 'BEGIN { exit !(hi ~ /^ *[-+]?\.?[0-9]/ && lo > 0.88 && hi < 1.12 && hi - lo > 0.01) }' \
     && ok "point Coulomb in d + 18O only (eta_aA = 0.73): R = ${r% *} to ${r#* } over the data" \
     || bad "neutral spectator, Coulomb a + A: R = $r"
 fi
@@ -138,7 +138,7 @@ if ran c_off && ran c_on; then
   rlo="$(sed -n 1p "$WORK/c.rows")"; rhi="$(sed -n 3p "$WORK/c.rows")"
   awk -v a="$lo" -v b="$rlo" -v c="$hi" -v d="$rhi" 'BEGIN { split(a, x, " "); split(b, y, " "); split(c, u, " "); split(d, v, " ")
       e1 = x[2] / y[2] - 1; e2 = u[2] / v[2] - 1; if (e1 < 0) e1 = -e1; if (e2 < 0) e2 = -e2
-      exit !(x[1] - y[1] < 1e-9 && y[1] - x[1] < 1e-9 && e1 < 1e-5 && e2 < 1e-5 && y[2] != 1 && v[2] != 1) }' \
+      exit !(y[1] ~ /^ *[-+]?\.?[0-9]/ && x[1] ~ /^ *[-+]?\.?[0-9]/ && x[1] - y[1] < 1e-9 && y[1] - x[1] < 1e-9 && e1 < 1e-5 && e2 < 1e-5 && y[2] != 1 && v[2] != 1) }' \
     && ok "model ratio == R of thm_experiments.out at E = ${lo% *} (${lo#* }) and ${hi% *} (${hi#* }), lab 30 deg" \
     || bad "model ratio vs distortion_point: '$lo' '$rlo' / '$hi' '$rhi'"
   eref="$(awk 'NR == 10 { print $1 }' "$WORK/c.ratio")"
@@ -176,7 +176,7 @@ compare() {  # compare RUN COLUMN LABEL
       d = log(1 / $2) / log(10) - log($c) / log(10); s += d * d; n++; if (d < 0) d = -d; if (d > m) m = d }
       END { printf "%d %.4f %.4f\n", n, sqrt(s / n), m }' > "$WORK/$1.cmp"
   read -r n rms mx < "$WORK/$1.cmp"
-  awk -v n="$n" -v r="$rms" -v m="$mx" 'BEGIN { exit !(n == 11 && r <= 0.035 && m <= 0.06) }' \
+  awk -v n="$n" -v r="$rms" -v m="$mx" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && m ~ /^ *[-+]?\.?[0-9]/ && n == 11 && r <= 0.035 && m <= 0.06) }' \
     && ok "$3: $n energies 0.8-2.55 MeV, rms $rms dex, max $mx dex" || bad "$3: $(cat "$WORK/$1.cmp")"
 }
 if ran d_off && ran d_19 && ran d_26; then

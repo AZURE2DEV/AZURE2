@@ -78,13 +78,13 @@ run relstale "intEC.dat"
 C="$(chi2 relstale)"
 d="$(rel "$C" "$B")"
 refusals() { grep -c -e "$SIGWARN" -e "$COUNTWARN" "$WORK/$1/run.log"; }
-if [ "$(refusals relstale)" -gt 0 ] && awk -v d="$d" 'BEGIN { exit !(d <= 1e-6) }'; then ok "(b) the relativistic run refuses the non-relativistic intEC.dat (warned: $(grep -o -m1 -e "$SIGWARN" -e "$COUNTWARN" "$WORK/relstale/run.log"); recomputed) and gives the fresh relativistic chi2 ($C, $d)"; else bad "(b) the relativistic run given the non-relativistic intEC.dat gives $C vs fresh $B ($d); refusals printed: $(refusals relstale)"; fi
+if [ "$(refusals relstale)" -gt 0 ] && awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-6) }'; then ok "(b) the relativistic run refuses the non-relativistic intEC.dat (warned: $(grep -o -m1 -e "$SIGWARN" -e "$COUNTWARN" "$WORK/relstale/run.log"); recomputed) and gives the fresh relativistic chi2 ($C, $d)"; else bad "(b) the relativistic run given the non-relativistic intEC.dat gives $C vs fresh $B ($d); refusals printed: $(refusals relstale)"; fi
 
 cp "$WORK/plain/output/intEC.dat" "$WORK/plain/output/intEC.dat.sig" "$WORK/plainreuse/"
 run plainreuse "intEC.dat"
 D="$(chi2 plainreuse)"
 d="$(rel "$D" "$A")"
-if ! grep -q "$SIGWARN" "$WORK/plainreuse/run.log" && awk -v d="$d" 'BEGIN { exit !(d <= 1e-4) }'; then ok "(c) the non-relativistic run reuses its own file without a warning ($D)"; else bad "(c) the non-relativistic run with its own file: $D vs $A ($d); warning present: $(grep -c "$SIGWARN" "$WORK/plainreuse/run.log")"; fi
+if ! grep -q "$SIGWARN" "$WORK/plainreuse/run.log" && awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-4) }'; then ok "(c) the non-relativistic run reuses its own file without a warning ($D)"; else bad "(c) the non-relativistic run with its own file: $D vs $A ($d); warning present: $(grep -c "$SIGWARN" "$WORK/plainreuse/run.log")"; fi
 
 # (d): the stale file with the count of the fresh relativistic one (its first amplitudes), the non-relativistic signature
 make_variant relsamecount 1
@@ -94,7 +94,7 @@ cp "$WORK/plain/output/intEC.dat.sig" "$WORK/relsamecount/"
 run relsamecount "intEC.dat"
 E="$(chi2 relsamecount)"
 d="$(rel "$E" "$B")"
-if grep -q "$SIGWARN" "$WORK/relsamecount/run.log" && ! grep -q "$COUNTWARN" "$WORK/relsamecount/run.log" && awk -v d="$d" 'BEGIN { exit !(d <= 1e-6) }'; then ok "(d) a stale file with the right count ($n amplitudes) is refused by its signature alone and recomputed ($E, $d)"; else bad "(d) the stale file with the right count ($n): $E vs fresh $B ($d); signature warning: $(grep -c "$SIGWARN" "$WORK/relsamecount/run.log"), count warning: $(grep -c "$COUNTWARN" "$WORK/relsamecount/run.log")"; fi
+if grep -q "$SIGWARN" "$WORK/relsamecount/run.log" && ! grep -q "$COUNTWARN" "$WORK/relsamecount/run.log" && awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-6) }'; then ok "(d) a stale file with the right count ($n amplitudes) is refused by its signature alone and recomputed ($E, $d)"; else bad "(d) the stale file with the right count ($n): $E vs fresh $B ($d); signature warning: $(grep -c "$SIGWARN" "$WORK/relsamecount/run.log"), count warning: $(grep -c "$COUNTWARN" "$WORK/relsamecount/run.log")"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

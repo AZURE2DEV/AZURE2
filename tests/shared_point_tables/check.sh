@@ -101,7 +101,7 @@ read -r n d <<< "$(same_outputs "$WORK/fit1" "$WORK/fit4")"
 if [ "$rc1" -eq 0 ] && [ "$rc4" -eq 0 ] && [ "$n" -gt 0 ] && [ "$d" -eq 0 ]; then ok "(c) capped fit: $n output files identical at 1 and 4 threads"; else bad "(c) capped fit: $d of $n output files differ between 1 and 4 threads"; fi
 
 if [ "$hwm_calc" -gt 0 ] && [ "$hwm_fit" -gt 0 ]; then
-  if awk -v f="$hwm_fit" -v c="$hwm_calc" -v k="$FACTOR" 'BEGIN { exit !(f <= k * c) }'; then
+  if awk -v f="$hwm_fit" -v c="$hwm_calc" -v k="$FACTOR" 'BEGIN { exit !(f ~ /^ *[-+]?\.?[0-9]/ && f <= k * c) }'; then
     ok "(d) peak RSS: fit at 4 threads $((hwm_fit / 1024)) MB <= $FACTOR x calculation $((hwm_calc / 1024)) MB"
   else
     bad "(d) peak RSS: fit at 4 threads $((hwm_fit / 1024)) MB > $FACTOR x calculation $((hwm_calc / 1024)) MB"

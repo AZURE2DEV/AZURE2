@@ -63,10 +63,12 @@ def main():
 
     def formula(name, replaced_by, values, reference, where, floor=0.0):
         """Largest relative difference of a Python formula from the row that replaces it (absolute below `floor`),
-        recorded and printed."""
-        d = max(rel(v, r, floor) for v, r in zip(values, reference)) if len(values) else 0.0
+        recorded, printed and checked: the two are the same formula, so they agree to rounding (1e-12)."""
+        same_length = len(values) == len(reference) and len(values) > 0
+        d = max(rel(v, r, floor) for v, r in zip(values, reference)) if same_length else float("inf")
         formula_table.append((name, replaced_by, d, where))
-        print(f"  python-formula  {name} -> {replaced_by}: max rel diff {d:.2e} over {where}")
+        check(f"python-formula  {name} = {replaced_by} to 1e-12 (max rel diff {d:.2e} over {where})", d <= 1e-12,
+              f"{len(values)} values against {len(reference)}")
         return d
 
     # pairs (z1, z2, m1, m2) and their energy windows (MeV) for the channel functions

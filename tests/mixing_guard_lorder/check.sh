@@ -68,7 +68,7 @@ coef() { awk 'BEGIN { pi = atan2(0, -1) } { W[$1 + 0] = $2; A[NR] = $1 + 0 } END
   printf "%.12e %.12e %.3e\n", a0, a2, m / a0 }' "$1"; }
 read a0_03 a2_03 res_03 < <(coef "$WORK/w03")
 read a0_00 a2_00 res_00 < <(coef "$WORK/w00")
-if awk -v a="$res_03" -v b="$res_00" 'BEGIN { exit !(a <= 1e-8 && b <= 1e-8) }'; then ok "(a) both distributions are a0 + a2 P2 at every angle (residuals $res_03, $res_00 of a0)"; else bad "(a) the distributions are not a0 + a2 P2 (residuals $res_03, $res_00 of a0)"; fi
+if awk -v a="$res_03" -v b="$res_00" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && b ~ /^ *[-+]?\.?[0-9]/ && a <= 1e-8 && b <= 1e-8) }'; then ok "(a) both distributions are a0 + a2 P2 at every angle (residuals $res_03, $res_00 of a0)"; else bad "(a) the distributions are not a0 + a2 P2 (residuals $res_03, $res_00 of a0)"; fi
 F="$(awk 'BEGIN { r11 = -0.4; r12 = 0.774596669; d = 0.3; printf "%.6f", (r11 + 2 * d * r12) / ((1 + d * d) * r11) }')"
 ratio="$(awk -v a="$a2_03" -v b="$a0_03" -v c="$a2_00" -v d="$a0_00" 'BEGIN { printf "%.6f", (a / b) / (c / d) }')"
 if awk -v r="$ratio" -v f="$F" 'BEGIN { d = r - f; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then ok "(b) a2/a0 at delta = 0.3 over delta = 0 is $ratio = F = $F (3/2 -> 3/2 M1/E2, k = 2)"; else bad "(b) a2/a0 at delta = 0.3 over delta = 0 is $ratio, expected F = $F (the guard dropped the mixing at k = 2)"; fi

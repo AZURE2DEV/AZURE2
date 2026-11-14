@@ -2,6 +2,69 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-tests-cannot-fail`) — stale names in messages and pages
+
+**Done.** Text only, no logic:
+
+- Engine: the unit-mistake hint of Brune's transformation (`src/CNucTransformMessages.cpp`) named pyazr's removed
+  `calculate()`, `calculate_energies()`, `calculate_rwa()`; it names the fit vector (`s.parameters.x0`,
+  `s.evaluate(x)`). Comments naming the removed `set_nuclear_potential` (`include/Config.h`,
+  `HybridPotentialSettings.h`, `SpinOrbitChecks.h`) name the project's `potential` records and `PPair`.
+- The SRIM refusal (`experiment/src/StoppingChecks.cpp`, `E_STOPPING_DATA`) names `--srim-data-dir=DIR` beside the
+  switch; `experiment/tests/diagnostics_test.cpp` asks for both.
+- Check 39's two messages said "(check 41)".
+- `docs/source/reference/output_files.rst`: the parameter names are the records' (`<data set>.norm`,
+  `<data set>.shift.offset`, `<target>.areal_density`, ...), not `segment_<k>_*`; `docs/source/developer/
+  coulomb_table.rst`: `--threads=N` (the machine's share) instead of `--threads 4`; `docs/upgrade/FOR_THE_OWNER.md`:
+  `s.objective()` and `evaluate(x).chi2` for `fit_objective()` and `segment_chi2()`; `pyazr_on_records.md` and
+  `data_kinds.md` say where `pyazr.masses` moved (the other mentions of `pyazr.nds`/`pyazr.masses` are history).
+- `tools/check_doc_names.py`: every program option and pyazr name the pages' literals show against `AZURE2 --help`,
+  `import pyazr` and the classes; 0 left on the pages (161 options, 328 pyazr names read; two names shown on purpose
+  are listed in the script). Not a consistency check (it needs the build); a line in `tests/CLAUDE.md`.
+
+**Verified.** Greps before and after (in the report); the build with 0 warnings; the consistency test; the injected
+names (an option, a module, a session call) fail the docs check.
+
+**Left.** The binding's private names (`write_output_files`, `data_mode`, `coulomb_functions` in
+`api/src/pybind_api.cpp`) are the engine module's, not pyazr's; the diagnostics table's description of
+`E_STOPPING_DATA` (`experiment/src/Diagnostics.cpp`) still names only the switch, since `tests/schema/schema_v3.json`
+and `format3.rst` copy it.
+
+## 2026-11-14 (agent, branch `feature/upgrade-7-tests-cannot-fail`) — comparisons of the tests that could not fail
+
+**Done.** A comparison whose failure cannot reach the caller, in `tests/*/check.sh`, `tests/lib/`, `tests/run_tests.sh`
+and `tests/pyazr/`, by kind:
+
+- *A mark followed by a number* (an awk program prints `grid`/`x` from its body, then a number from `END`; the caller
+  reads both lines, or `+ 0` reads the mark as 0): `models()` of `thm_park`, `cmp_out` of `extrap_sav_segments`,
+  `maxrel()` of `sum_lab_frame` and `upos_pair_index`, `ratio_dev()` of `ratio_frame` (a moved grid passed),
+  `moddiff()` of `thm_spectator_angles` and `compare()` of `ec_e1m1_phase` (failed only because awk compared the mark
+  as text). Each prints the mark alone; `le()` of `sum_lab_frame` / `upos_pair_index` takes numbers only.
+- *An upper bound on a value that is not tested to be a number* (an empty value, a mark, `nan` or `-nan` passes:
+  `"" < "1e-06"` as text, `"grid" + 0 = 0`): 149 awk programs in 74 scripts get `v ~ /^ *[-+]?\.?[0-9]/ && ...`;
+  the relative-difference helpers `rel()` of `mcmc_physical_norm` and `reldev()` of `shift_subpoint_angle` print `x`
+  for a non-number (they printed 0 for two empty inputs).
+- *A loop or a comparison that compared nothing or not the grid*: `level_at_threshold` (no files gave 0) and
+  `total_optical`'s `maxrel` (energies and row counts not compared) now print a mark.
+- *A tolerance that compares as text*: `tests/run_tests.sh` refuses a `tolerance` (or `TOL`) that is not a number
+  (`2e-2#why` passed every error).
+- *A stale call*: `extrap_sav_segments` (c) used the removed `data_mode=` and failed whenever pyazr was importable
+  (skipped otherwise); now `extrapolations=True`.
+- *Printed, not asserted* (pyazr): `physics_table_test.py`'s `formula()` checks each Python formula against its row
+  to 1e-12 (the largest seen is 1.6e-14).
+
+Check 56 of `tests/consistency/repo_consistency_test.py` (`tests/consistency/comparison_scan.py`) finds the first two
+kinds; the rule is in `tests/CLAUDE.md` and `docs/source/developer/contributing.rst`.
+
+**Verified.** The four known helpers and `ratio_frame` each fail on an injected moved energy (a wrapper of the base
+binary that edits one output file, `work/testsweep/inject/`) and pass without it; the 149 rewritten bounds, run alone
+with the value empty, `grid`, `nan` and `-nan`: the old programs passed 217 of 596 such values (114 places), the new
+none (`work/testsweep/tools/demo_bounds.py`); check 56 fails on an injected script (both kinds) and finds 159 places
+on the start commit, none after; every changed `check.sh` passes against `work/b-trial66`.
+
+**Left.** Arithmetic on `-v` values that is then compared (e.g. `d = a - b` with both empty is 0) outside the two
+helpers above is not scanned; "want" values computed from shell numbers likewise.
+
 ## 2026-11-14 (director, 11:40) — merged: the level state; the page's link; the pages' build test
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 68 (a true merge of the rehearsal branch; its tree

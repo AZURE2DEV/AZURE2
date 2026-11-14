@@ -66,9 +66,9 @@ else
                                 d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
                                 e = $1 - $3; if (e < 0) e = -e; if (e > v) v = e }
                               END { printf "%.2e %.2e", w / m, v / m }' "$WORK/rows")"
-  awk -v w="$fd" 'BEGIN { exit !(w + 0 <= 1e-5) }' && ok "gradient = finite differences for $n parameters ($fd of the largest)" \
+  awk -v w="$fd" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }' && ok "gradient = finite differences for $n parameters ($fd of the largest)" \
     || bad "gradient vs finite differences: $fd of the largest"
-  awk -v w="$jac" 'BEGIN { exit !(w + 0 <= 1e-10) }' && ok "Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
+  awk -v w="$jac" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }' && ok "Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
     || bad "Jacobian-path vs adjoint gradient: $jac of the largest"
 fi
 

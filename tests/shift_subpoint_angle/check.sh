@@ -31,8 +31,8 @@ total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.o
 # segsum MODEL FROM TO -> chi2 summed over segments FROM..TO
 segsum() { awk -F, -v a="$2" -v b="$3" '$1 ~ /^[0-9]+$/ && $1 >= a && $1 <= b { s += $2 } END { printf "%.6g", s }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
 # reldev A B -> |A-B|/|B|
-reldev() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; printf "%.2e", d / m }'; }
-within() { awk -v d="$1" -v t="$2" 'BEGIN { exit !(d <= t) }'; }
+reldev() { awk -v a="$1" -v b="$2" 'BEGIN { if (a !~ /^ *[-+]?\.?[0-9]/ || b !~ /^ *[-+]?\.?[0-9]/) { print "x"; exit } d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; printf "%.2e", d / m }'; }
+within() { awk -v d="$1" -v t="$2" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= t) }'; }
 
 run() {  # MODEL: mode 1 in $WORK/MODEL
   local dir="$WORK/$1"

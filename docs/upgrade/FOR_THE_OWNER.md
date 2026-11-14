@@ -122,7 +122,7 @@ p.add_dataset("Y_curve", reaction="15N(p,a)12C", quantity="yield", unit="counts/
 p["Y_curve"].set(norm=pyazr.Nuisance(1.0, "fit", prior=(1, "3%")))
 p.validate()
 with p.session() as m:              # saves, and returns the calculation object
-    chi2 = sum(m.segment_chi2())
+    chi2 = m.evaluate(m.parameters.x0).chi2
 ```
 
 pyazr spells no field, quantity or unit itself: the calls and their help text are generated from the engine's schema,
@@ -141,7 +141,7 @@ data sets or, with `extrapolations=True`, for the extrapolations; a channel radi
 of the `Project` and a new session.  `import pyazr` needs numpy only.  Every earlier name and what replaces it is the
 table "Earlier names" of the pyazr page of the user guide; the names of the package are listed there too.
 
-A fit or a sampler in Python starts from `f = s.fit_objective()`: the objective the program's fit minimises as one
+A fit or a sampler in Python starts from `f = s.objective()`: the objective the program's fit minimises as one
 callable, with its gradient, its least-squares rows and Jacobian, its bounds and `log_prob` (the rule of the
 program's own sampler), so scipy, iminuit and emcee each take it in a line (`pyazr/examples/fit_*.py`; on T2
 iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives every number of `chiSquared.out` and

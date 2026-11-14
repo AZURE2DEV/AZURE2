@@ -63,7 +63,7 @@ else
   worst="$(join <(segchi plain) <(segchi diag) | awk '{ d = $2 - $3; if (d < 0) d = -d; s = $2 < 0 ? -$2 : $2; if (s < 1) s = 1
                                                        if (d / s > w) w = d / s; n++ } END { printf "%.1e %d", w, n }')"
   eng="$(awk -F, '!/^#/ { d = $5 - $6; if (d < 0) d = -d; printf "%.1e", d / $6 }' "$WORK/diag/output/covariance.out")"
-  if awk -v w="$worst" -v e="$eng" 'BEGIN { split(w, x, " "); exit !(x[2] >= 14 && x[1] + 0 <= 1e-6 && e + 0 <= 1e-10) }'; then
+  if awk -v w="$worst" -v e="$eng" 'BEGIN { split(w, x, " "); exit !(x[1] ~ /^ *[-+]?\.?[0-9]/ && e ~ /^ *[-+]?\.?[0-9]/ && x[2] >= 14 && x[1] + 0 <= 1e-6 && e + 0 <= 1e-10) }'; then
     ok "diag(e^2) covariance: per-segment chi2 equal to no covariance (${worst#* } segments), r^T M^-1 r = sum r^2 to $eng"
   else
     bad "diag(e^2) covariance vs none: segments $worst, r^T M^-1 r vs sum r^2 $eng"
@@ -83,7 +83,7 @@ for m in dense rel; do
   fi
   res="$("$PYTHON" "$HERE/verify.py" "$WORK/$m")"
   if awk -v r="$res" 'BEGIN { split(r, x, " "); d = x[1] - x[2]; if (d < 0) d = -d
-                              exit !(x[1] > 0 && d / x[1] <= 1e-8 && x[3] + 0 <= 1e-5) }'; then
+                              exit !(x[1] ~ /^ *[-+]?\.?[0-9]/ && x[3] ~ /^ *[-+]?\.?[0-9]/ && x[1] > 0 && d / x[1] <= 1e-8 && x[3] + 0 <= 1e-5) }'; then
     ok "$m: engine r^T M^-1 r = numpy v^T C^-1 v (${res% *}), segment partition = chiSquared.out (${res##* })"
   else
     bad "$m: numpy chi2, engine chi2, segment partition: $res"
@@ -114,7 +114,7 @@ for m in dense rel; do
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    printf "%.2e", w / m }' "$WORK/g_$m.rows")"
-  if awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-6) }'; then
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-6) }'; then
     ok "$m: adjoint and Jacobian-path gradients = finite differences, $nrows parameters ($kinds), worst $worst of the largest"
   else
     bad "$m: gradient vs finite differences, worst $worst of the largest (> 1e-6)"
@@ -135,7 +135,7 @@ done
 start="$(objective dense)"
 spread="$(printf '%s\n' "${objs[@]}" | awk -F= -v s="$start" '{ x = $2 + 0; if (NR == 1 || x < lo) lo = x; if (NR == 1 || x > hi) hi = x; if (x >= s) up++ }
                                                                 END { printf "%.1e %d", (hi - lo) / lo, up + 0 }')"
-if awk -v s="$spread" 'BEGIN { split(s, x, " "); exit !(x[1] + 0 <= 1e-4 && x[2] == 0) }'; then
+if awk -v s="$spread" 'BEGIN { split(s, x, " "); exit !(x[1] ~ /^ *[-+]?\.?[0-9]/ && x[1] + 0 <= 1e-4 && x[2] == 0) }'; then
   ok "MIGRAD, LM and GSL fits (levels fixed): ${objs[*]} (start $start), within ${spread% *} of each other"
 else
   bad "fits with the levels fixed: ${objs[*]} (start $start), spread/rises $spread"

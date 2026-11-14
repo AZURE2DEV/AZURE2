@@ -1002,7 +1002,7 @@ def getenv_problems(rel, text):
     code = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', code)
     if re.search(r"\b(?:std::)?(?:getenv|secure_getenv|_dupenv_s|GetEnvironmentVariable[AW]?)\s*\(", code):
         found.append(f"{rel}: reads the environment (getenv); read the switch from the record "
-                     "(azure2/support/Environment.h) or the run's Config::environment (check 41)")
+                     "(azure2/support/Environment.h) or the run's Config::environment (check 39)")
     return found
 
 
@@ -1023,7 +1023,7 @@ if not getenv_problems("probe.cpp", 'int f() { return std::getenv("AZURE_X") != 
 if getenv_problems("probe.cpp", '// getenv("AZURE_X") in a comment\nconst char *t = "getenv(";'):
     problems.append("check 39: a getenv in a comment or a string is reported; update this check")
 if "getenv" not in read(ENV_READER):
-    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 41)")
+    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 39)")
 
 # 40. The table of switches and the manual's list are one list (docs/source/reference/command_line.rst, "Environment
 #     switches"): every row of support/src/Environment.cpp's table is a row there with its kind, and every row there is
@@ -1409,6 +1409,23 @@ if [len(early_pipes(s)) for s in _EARLY] != [1] * len(_EARLY) or any(early_pipes
     problems.append("check 50: the early-reader scan no longer finds the forms it guards (or finds a safe one): "
                     f"{[s for s in _EARLY if len(early_pipes(s)) != 1]} {[s for s in _LATE if early_pipes(s)]}")
 
+# 56. A comparison of a shell test can fail (tests/CLAUDE.md, "Writing one"; tests/consistency/comparison_scan.py):
+#     in tests/*/check.sh and tests/lib/*.sh no awk program prints a mismatch mark from its body and then a number
+#     from END (the caller reads both lines and never sees the mark), and no awk program puts an upper bound on a -v
+#     value it never tests to be a number (an empty value or a mark compares as text, or after `v + 0` as 0, and
+#     passes).  The scan's own forms (FINDS, SAFE) are run first, so a change that blinds it fails here.
+import comparison_scan  # noqa: E402
+
+_missed, _flagged = comparison_scan.self_test()
+if _missed or _flagged:
+    problems.append(f"check 56: the comparison scan misses {_missed} or flags the safe forms {_flagged}; update "
+                    "tests/consistency/comparison_scan.py")
+for _rel, _line, _kind, _detail in comparison_scan.scan_tree(ROOT):
+    problems.append(f"{_rel}:{_line}: {_detail} ({_kind}): a comparison whose failure cannot reach the caller; "
+                    "print the mark alone (END: if (flag) exit) or test the value (v ~ /^ *[-+]?\\.?[0-9]/ && ...) "
+                    "(check 56)")
+_comparison_scripts = len(comparison_scan.scanned_files(ROOT))
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1421,4 +1438,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, "
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
-      f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader")
+      f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
+      f"{_comparison_scripts} test scripts whose comparisons can fail")

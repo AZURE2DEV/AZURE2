@@ -73,7 +73,7 @@ else
 fi
 run story 2 2 --max-calls=150
 fitted="$(total "$WORK/story/output/chiSquared.out")"
-if [ -n "$fitted" ] && awk -v a="$fitted" -v b="$start" 'BEGIN { exit !(a < b) }'; then
+if [ -n "$fitted" ] && awk -v a="$fitted" -v b="$start" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a < b) }'; then
   ok "story: a fit of 150 calls lowers the chi^2 ($start -> $fitted)"
 else
   bad "story: the fit did not lower the chi^2 ($start -> ${fitted:-none}; $(grep -m1 ERROR "$WORK/story/run.log"))"
@@ -113,12 +113,12 @@ print(f"{len(es)} {len(ex)} {worst(es, ss):.2e} {worst(ex, sx):.2e} {agree:.2e}"
 PY
 )"
   read -r ns nx errs errx agree <<< "$res"
-  if awk -v s="$errs" -v ns="$ns" -v nx="$nx" 'BEGIN { exit !(s <= 1e-3 && 5 * ns < nx) }'; then
+  if awk -v s="$errs" -v ns="$ns" -v nx="$nx" 'BEGIN { exit !(s ~ /^ *[-+]?\.?[0-9]/ && ns ~ /^ *[-+]?\.?[0-9]/ && s <= 1e-3 && 5 * ns < nx) }'; then
     ok "below the level: the adaptive grid of S has $ns points and interpolates S to $errs; the grid of sigma $nx points ($errx)"
   else
     bad "adaptive S against sigma below the level: S grid $ns points $errs, sigma grid $nx points $errx"
   fi
-  if awk -v a="$agree" 'BEGIN { exit !(a <= 1e-9) }'; then
+  if awk -v a="$agree" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a <= 1e-9) }'; then
     ok "sfactor extrapolation (keV*b) = the sigma extrapolation, sigma and S columns, to $agree"
   else
     bad "sfactor extrapolation against the S column of the sigma extrapolation: $agree"

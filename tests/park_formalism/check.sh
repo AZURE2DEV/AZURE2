@@ -177,7 +177,7 @@ gw="$(awk '{ sub(/\r$/, "") }
 read -r gworst gn gnj <<EOF_GW
 $gw
 EOF_GW
-if awk -v w="$gworst" -v n="${gn:-0}" -v j="${gnj:-0}" 'BEGIN { exit !(n > 0 && j == n && w + 0 <= 1e-3) }'; then
+if awk -v w="$gworst" -v n="${gn:-0}" -v j="${gnj:-0}" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 0 && j == n && w + 0 <= 1e-3) }'; then
   ok "wall: gradient with the penalty = finite differences on both paths for $gn parameters (worst $gworst of the largest)"
 else
   bad "wall: gradient vs finite differences at the wall: worst '$gworst', $gn parameters, ${gnj:-0} on the Jacobian path"
