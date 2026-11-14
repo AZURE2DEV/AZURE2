@@ -120,7 +120,11 @@ printf '2\nn\nparam.sav\n\n7\n' | "$AZURE2_BINARY" --no-gui --no-readline --use-
 **The same fitters from Python.** `s.fit_with_engine(method)` runs the program's fitter on a session (methods:
 `pyazr.kinds()["fitters"]`, the table of `docs/source/user_guide/fitting.rst`, "The Engine's Fitters"): `migrad`,
 `migrad-gradient`, `lm`, `gsl-lm`, `nlopt` where built; `minos=True` after a MIGRAD row; HESSE always follows a
-MIGRAD row; it writes no file and leaves the session's values alone. `scripts/engine_fit.py` runs several methods
+MIGRAD row; it writes no file and leaves the session's values alone. The result: `x`/`objective` (the lowest
+objective reached; at a call limit the lowest evaluated), `status` (the fitter's word) and `outcome` (shared words:
+converged, call_limit, iteration_limit, stopped, invalid, failed), `notices` (fallback to MIGRAD, a setting ignored:
+`max_calls` on `lm`/`gsl-lm`, whose rows have `call_limit` false), `minos` and `minos_valid` (per side: valid,
+at_limit, call_limit, new_minimum; trust an interval only with `valid`). `scripts/engine_fit.py` runs several methods
 from one start and writes their status, objective, errors and MINOS intervals to JSON.
 
 **Least squares on the Jacobian.** `f = s.objective()`; `r, J = f.residuals_and_jacobian(x)` gives the rows
@@ -138,7 +142,8 @@ in about a second. So: least squares (lsq_fit, `lm`, `gsl-lm`) for speed, stagin
 amplitudes interfere. MIGRAD stops slightly above the minimum least squares finds (9e-6 relative here, 9e-4 on
 T2): compare fitters at that level, not bit for bit.
 
-**Convergence.** Read `output/fitStatus.out` (`status converged|call_limit|invalid`, EDM, calls) or the final
+**Convergence.** Read `output/fitStatus.out` (every fitter: `status converged|call_limit|iteration_limit|invalid|...`,
+`fitter_status`, `minimizer`, EDM, calls, `call_limit` with `ignored` for LM/GSL-LM) or the final
 `MIGRAD converged` / `WARNING: MIGRAD did NOT converge` line. `chiSquared.out` and `param.sav` are written either way.
 A plateau of a few hundred evaluations on a model with hundreds of free parameters is not a minimum
 (`references/running-fits.md`).

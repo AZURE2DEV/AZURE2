@@ -22,7 +22,9 @@ bool RunHesse(AZURECalc &objective, FitResult &result);
 /*!
  * MINOS on result.minimum with Up = `up` (the objective's error definition is set to it): for every parameter of
  * `params` in order, "\tParameter <n>..." on `log`, then its (lower, upper) interval, (0, 0) for a fixed one, into
- * result.minos.  The working copy is put in error-analysis mode (no progress lines); the caller ends it.
+ * result.minos, and the validity of each side (Minuit2's MinosError) into result.minosValidity.  The working copy is
+ * put in error-analysis mode; the caller ends it.  A caller that reports progress observes the evaluations with a
+ * FitEvaluations of stage "minos", which marks their records as MINOS's.
  */
 void RunMinos(AZURECalc &objective, const AZUREParams &params, double up, FitResult &result, std::ostream &log);
 

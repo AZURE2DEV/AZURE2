@@ -20,6 +20,7 @@
 #include "CaptureAyRequests.h"
 #include "CommandLineValues.h"
 #include "Config.h"
+#include "Fitters.h"
 #include "RunDiagnostics.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/io/ConfigSection.h"
@@ -148,14 +149,8 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
-#ifdef USE_NLOPT
-            << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
-#endif
-            << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
             << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
-            << std::setw(25) << std::left << "\t--max-calls=N:" << std::setw(0) << "Stop a MIGRAD or NLopt fit after N function calls (default: no limit; the fit ends at convergence)." << std::endl
-            << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
-            << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
+            << FitterSwitchesHelp()
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
             << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
             << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
@@ -251,16 +246,8 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       continue;
     else if (*it == "--use-api")
       configure.paramMask |= Config::USE_API;
-#ifdef USE_NLOPT
-    else if (*it == "--use-nlopt")
-      configure.paramMask |= Config::USE_NLOPT_MINIMIZER;
-#endif
-    else if (*it == "--use-lm")
-      configure.paramMask |= Config::USE_LM_MINIMIZER;
-    else if (*it == "--use-gsl-lm")
-      configure.paramMask |= Config::USE_GSL_LM_MINIMIZER;
-    else if (*it == "--use-gradient")
-      configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+    else if (ApplyFitterSwitch(configure, *it))  // a fitter's switch: its row of Fitters(); one not built is refused
+      continue;
     else if (*it == "--refreeze-covariance")
       configure.refreezeCovariance = 5;
     else if (it->compare(0, 22, "--refreeze-covariance=") == 0)

@@ -80,8 +80,6 @@ void ReportMigrad(const ROOT::Minuit2::FunctionMinimum &m, long calls, const Fit
   result.edm = m.Edm();
   result.edmGoal = goal;
   result.calls = calls;
-  result.statusMinimizer = "MIGRAD";
-  result.statusValid = m.IsValid();
 }
 
 FitResult FitMigradRows(AZURECalc &objective, AZUREParams &params, const FitControl &control, bool gradient) {
@@ -96,9 +94,9 @@ FitResult FitMigradRows(AZURECalc &objective, AZUREParams &params, const FitCont
   if (result.status != "stopped" && objective.data()->Data().HasRelativeCovariance()) {
     std::ostream &log = *control.log;
     for (int pass = 0;; pass++) {
-      const double frozen = result.minimum->Fval();
+      const double frozen = result.objective;
       objective.data()->RefreezeCovariance();
-      const double refrozen = objective(result.minimum->UserParameters().Params());
+      const double refrozen = objective(result.x);
       log << "Data covariance: relvector model re-frozen at the fitted parameters; objective " << frozen
           << " (model frozen at the start of this pass) -> " << refrozen << "." << std::endl;
       if (std::fabs(refrozen - frozen) < 0.5) break;
@@ -111,16 +109,13 @@ FitResult FitMigradRows(AZURECalc &objective, AZUREParams &params, const FitCont
       }
       log << "Refitting with the re-frozen covariance (pass " << pass + 1 << " of at most " << control.refreezePasses
           << ")..." << std::endl;
-      const ROOT::Minuit2::MnUserParameters restart = result.minimum->UserParameters();
+      ROOT::Minuit2::MnUserParameters restart = result.minimum->UserParameters();
+      for (unsigned int i = 0; i < result.x.size(); i++) restart.SetValue(i, result.x[i]);
       result = MigradPass(objective, restart, gradient, control);
       if (result.status == "stopped") break;
     }
   }
-  if (result.status == "stopped") {
-    for (unsigned int i = 0; i < result.x.size(); i++) params.GetMinuitParams().SetValue(i, result.x[i]);
-  } else {
-    params.GetMinuitParams() = result.minimum->UserParameters();
-  }
+  AdoptMigradEndPoint(params, result);
   return result;
 }
 
@@ -138,6 +133,9 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
   std::atomic<long> calls{0};
   objective.CountCallsInto(&calls);
   std::unique_ptr<ROOT::Minuit2::FunctionMinimum> minimum;
+  bool haveBest = false;  // the lowest objective MIGRAD evaluated, and its point
+  double bestObjective = 0.0;
+  std::vector<double> bestPoint;
   {
     FitEvaluations evaluations(objective, control, result.fitter.c_str());
     // With the analytic gradient MIGRAD is given the objective as an FCNGradientBase (AZURECalc::Gradient);
@@ -167,6 +165,11 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
                    << "MIGRAD stopped on request after " << result.calls << " function calls; the best point seen "
                    << "is kept." << std::endl;
     }
+    haveBest = evaluations.HasBest();
+    if (haveBest) {
+      bestObjective = evaluations.BestObjective();
+      bestPoint = evaluations.BestPoint();
+    }
   }
   objective.CountCallsInto(nullptr);
   if (result.status != "stopped") {
@@ -174,9 +177,27 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
     result.x = minimum->UserParameters().Params();
     result.objective = minimum->Fval();
     TakeCovariance(*minimum, start, result);
+    // At the call limit Minuit2 returns its last accepted state, which can be the start itself (the limit reached
+    // while it seeds the gradient).  The fit's end point is then the lowest objective it evaluated.
+    if (result.status == "call_limit" && haveBest && bestObjective < result.objective &&
+        bestPoint.size() == result.x.size()) {
+      std::ostringstream notice;
+      notice << "MIGRAD stopped at its call limit; the end point is the lowest objective it evaluated, "
+             << std::setprecision(10) << bestObjective << ", not Minuit2's last state (" << result.objective
+             << "), whose covariance is the one reported.";
+      *control.log << notice.str() << std::endl;
+      result.notices.push_back(notice.str());
+      result.x = bestPoint;
+      result.objective = bestObjective;
+    }
   }
   result.minimum = std::shared_ptr<ROOT::Minuit2::FunctionMinimum>(std::move(minimum));
   return result;
+}
+
+void AdoptMigradEndPoint(AZUREParams &params, const FitResult &result) {
+  if (result.status != "stopped" && result.minimum) params.GetMinuitParams() = result.minimum->UserParameters();
+  for (unsigned int i = 0; i < result.x.size(); i++) params.GetMinuitParams().SetValue(i, result.x[i]);
 }
 
 FitResult FitMigrad(AZURECalc &objective, AZUREParams &params, const FitControl &control) {

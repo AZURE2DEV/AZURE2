@@ -36,6 +36,7 @@ SRC="$HERE/../../src/AZURE2.cpp"
 SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
 SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
 SRC_SWITCHES="$HERE/../../support/src/Environment.cpp"  # the options of the switches that move numbers (their table)
+SRC_FITTERS="$HERE/../../src/Fitters.cpp"  # the fitters' switches (the fitter table, with the fitters not built)
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
@@ -52,7 +53,8 @@ fi
 # A flag that takes a value prints as "--flag[=FILE]:".
 printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
-literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" | tr -d '\r' | grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" "$SRC_FITTERS" | tr -d '\r' |
+  grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
 # and the switch options without a value: the "Option" column of the list "Environment switches".
 documented="$( (tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p';
@@ -72,8 +74,27 @@ accepted() {
   local out
   [ "$1" = --help ] && { grep -q "^Syntax: AZURE2" "$WORK/help.txt"; return; }
   out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$1" no_such_project.azr < /dev/null 2>&1 | head -c 100000 | tr -d '\r')"
-  ! grep -qF "Unknown option $1." <<< "$out"
+  ! grep -qF "Unknown option $1." <<< "$out" && ! grep -qF "which this build of AZURE2 does not have" <<< "$out"
 }
+
+# A fitter's switch whose fitter this build leaves out (the absent rows of src/Fitters.cpp) is refused in three
+# parts: what (the fitter is not in this build), the switches allowed, how to build it; exit 2.
+absent="$(sed -n '/AbsentFitters()/,/^}/s/.*{"[a-z-]*", "\(--[a-z-]*\)".*/\1/p' "$SRC_FITTERS")"
+if grep -qF "#ifndef USE_NLOPT" "$SRC_FITTERS" && [ -z "$absent" ]; then
+  bad "could not read the absent fitters' switches from src/Fitters.cpp (check this test)"
+fi
+for f in $absent; do
+  out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$f" no_such_project.azr < /dev/null 2>&1 | head -c 100000 |
+    tr -d '\r')"
+  status=$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$f" no_such_project.azr < /dev/null > /dev/null 2>&1; echo $?)
+  grep -qF -- "$f" "$WORK/help.txt" && continue  # built in: accepted and printed (checked below)
+  if [ "$status" = 2 ] && grep -qF "this build of AZURE2 does not have" <<< "$out" &&
+     grep -qF "The fitter switches of this build: --use-" <<< "$out" && grep -qF "build AZURE2 with" <<< "$out"; then
+    ok "$f: a fitter not built, refused (exit 2) with what, the switches allowed and how to build it"
+  else
+    bad "$f: a fitter not built: exit $status, not the three-part refusal: $out"
+  fi
+done
 
 for f in $(printf '%s\n%s\n' "$printed" "$literals" | sort -u); do
   in_help=no; in_src=no

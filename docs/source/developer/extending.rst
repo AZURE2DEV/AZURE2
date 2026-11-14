@@ -187,16 +187,27 @@ A minimiser the program and a pyazr session can both run:
    fitter puts a ``FitEvaluations`` in place while it runs, which also keeps
    the best point and puts the stop request in force; an iteration fitter
    sends a ``FitProgress`` per iteration and checks ``control.stop`` itself)
-   and fills ``FitResult`` (status, calls, covariance where it has one; a
-   stopped fit returns the best point seen with status ``stopped``).
+   and fills ``FitResult`` (its own status word, which ``FitOutcome`` maps
+   to the shared words, ``converged``, calls, covariance where it has one,
+   ``notices`` for what the caller should know; ``x`` and ``objective`` are
+   the lowest objective it reached: a stopped fit, or one ended by its call
+   limit, returns the best point seen).
 2. Its row in ``Fitters()`` (``src/Fitters.cpp``): name, the program's switch,
    the ``Config::paramMask`` bit the switch sets, gradient / residual rows /
-   bounds / covariance / MINOS, progress label, one line of doc. Its place in
-   the table is its precedence in the program.
-3. The switch in the program's parser (``src/AZURE2.cpp``) and its row in
-   ``reference/command_line.rst``; its row in the table "The Engine's
-   Fitters" of ``user_guide/fitting.rst`` (check 46 fails for a row missing
-   from either, and for a minimizer bit of the parser that is no row).
+   bounds / covariance / MINOS, whether it honours a call limit
+   (``callLimit``: ``RunFitter`` adds the notice for a fitter that does not),
+   the row it falls back to without an analytic Jacobian (``fallback``), the
+   progress label, one line of doc. Its place in the table is its precedence
+   in the program. The program's parser and usage text take the switch and
+   the doc line from the row (``ApplyFitterSwitch``, ``FitterSwitchesHelp``);
+   a fitter behind a build option also gets a row in ``AbsentFitters()`` for
+   the builds without it, so that its switch is refused with how to build it.
+   ``fitStatus.out`` (one writer, ``WriteFitStatus``) needs no edit.
+3. The switch's row in ``reference/command_line.rst`` and the fitter's row
+   in the table "The Engine's Fitters" of ``user_guide/fitting.rst`` (check
+   46 fails for a row missing from either, for a switch named in
+   ``src/AZURE2.cpp`` outside the table, and for a minimizer bit of the
+   parser that is no row).
 4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
    ends where the program ends, with the program's covariance.
    ``pyazr.kinds()["fitters"]`` and ``fit_with_engine(method=)`` read the
