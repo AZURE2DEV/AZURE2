@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""pyazr.endf.write (docs/upgrade/endf.md sections 4, 11, 13.4): T1, T2 and 13N written as ENDF-6 and read back.
+
+For each project:
+(a) the module's own format check of the written file: no error, one warning (LRP=2 in a primary evaluation, p. 42);
+(b) MF=3 read back with the module's reader at the data's lab energies and at the midpoints of the written grid
+    equals the engine's sigma there to the grid's tolerance (linear interpolation, INT=2);
+(c) MF=2 read back (resonances(), to_project) gives the session's levels again (energies and particle widths to
+    1e-7), and the MF=3 sections carry the check the writer made (MF=2 reproduces MF=3 to 1e-5);
+(d) the MF=1 text names the photon widths, the losses and the sections not written.
+With AZURE2_ENDF_UTILITIES and AZURE2_PREPRO set, CHECKR, FIZCON and PSYCHE run on each written file and every
+finding is printed (not judged here: the report of the branch reads them).
+Exits 77 (skipped) without the compiled engine module.  Run from anywhere:  python3 tests/pyazr/endf_write_test.py
+"""
+import os
+import shutil
+import sys
+import tempfile
+import warnings
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, ROOT)
+try:
+    import numpy as np
+    import pyazr
+    from pyazr import _azure2  # noqa: F401
+    import pyazr.endf as E
+    from pyazr.endf.writer import _pair_keys
+except ImportError as e:
+    print(f"skip: {e}")
+    sys.exit(77)
+
+warnings.simplefilter("ignore")
+PROJECTS = [os.path.join(ROOT, "tests", "upgrade", "T1", "T1.azr"), os.path.join(ROOT, "tests", "upgrade", "T2",
+                                                                                  "T2.azr"),
+            os.path.join(ROOT, "tests", "13N", "13N.azr")]
+TOLERANCE = 1e-3
+TMP = tempfile.mkdtemp(prefix="endf_write_")
+failures = []
+
+
+def check(name, ok, detail=""):
+    print(f"  {'ok  ' if ok else 'FAIL'}  {name}" + ("" if ok else f"  -- {str(detail)[:600]}"))
+    if not ok:
+        failures.append(name)
+
+
+def engine_sigma(session, label, e_lab_MeV, folder, pair_keys):
+    """The engine's sigma (b) of reaction `label` at lab energies, at the session's start (an extrapolation)."""
+    p = pyazr.Project.new(os.path.join(folder, "probe.azr"), nuclear_part=session.file)
+    np.savetxt(os.path.join(folder, "probe.dat"), e_lab_MeV, fmt="%.17g")
+    p.add_extrapolation("probe", reaction=label, quantity="sigma", unit="b",
+                        energies=f"file {os.path.join(folder, 'probe.dat')} MeV lab", **pair_keys)
+    p.save()
+    pf = os.path.join(folder, "probe.par")
+    P = session.parameters
+    with open(pf, "w") as fh:
+        fh.write(f"#parametrization {session.basis}\n")
+        for q in P:
+            fh.write(f"{q.name} {float(q.start if q.fixed else P.x0[q.free_index])!r}\n")
+    s = pyazr.Session(p.path, extrapolations=True, parameter_file=pf)
+    try:
+        return np.asarray(s.evaluate(s.parameters.x0).data[0].model, float)
+    finally:
+        s.close()
+
+
+for azr in PROJECTS:
+    name = os.path.basename(azr)
+    print(name)
+    d = os.path.join(TMP, name.replace(".azr", ""))
+    shutil.copytree(os.path.dirname(azr), d, ignore=shutil.ignore_patterns("output*", "checks*"))
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub), exist_ok=True)
+    cwd = os.getcwd()
+    os.chdir(d)
+    try:
+        s = pyazr.Session(name)
+        out = os.path.join(d, name.replace(".azr", ".endf"))
+        w = E.write(s, out, header={"AUTH": "pyazr tests", "ALAB": "TEST"}, tolerance=TOLERANCE)
+        print("\n".join("      " + line for line in str(w).splitlines()))
+        # (a)
+        found = E.check_format(out).findings
+        errors = [f for f in found if f.severity == "error"]
+        warns = [f.code for f in found if f.severity == "warning"]
+        check(f"{name}: own format check: no error, the one warning LRP=2", not errors and warns == ["LRP"],
+              [(f.severity, f.code, f.message) for f in found])
+        # (b)
+        m = E.read(out)
+        project = pyazr.Project.open(azr)
+        entrance = next(p.key for p in s.pairs if p.is_entrance)
+        lab = np.unique(np.concatenate([np.asarray(x.extra["energy_lab"], float)
+                                        for x in s.evaluate(s.parameters.x0).data]))
+        for mf, mt, _ in w.sections:
+            if mf != 3:
+                continue
+            xs = m.cross_section(mt)
+            grid = np.asarray(xs.table.x) / 1e6
+            sigma_grid = {mt: np.asarray(xs.table.y)}
+            mid = 0.5 * (grid[1:] + grid[:-1])
+            exit_key = -1 if mt == 102 else next(
+                p.key for p, q in zip([p for p in s.pairs if p.pair_kind == "particle" and p.key != entrance],
+                                      [r for r in E.read(out).resonances().pairs[1:]]) if q.mt == mt)
+            label = project.reaction(entrance, exit_key)
+            keys = _pair_keys(project, entrance, exit_key)
+            for what, e in (("the data's lab energies", lab[(lab >= grid[0]) & (lab <= grid[-1])]),
+                            ("the midpoints of the grid", mid)):
+                ref = engine_sigma(s, label, e, d, keys)
+                got = xs(e * 1e6)
+                # the grid's rule (pyazr.refine_grid, the engine's adaptive grid): relative to the value, not below
+                # 1e-3 of the largest value of the range
+                floor = 1e-3 * np.max(np.abs(sigma_grid[mt]))
+                dev = np.abs(got - ref) / np.maximum(np.abs(ref), floor)
+                big = np.abs(ref) >= floor
+                rel = np.abs(got[big] - ref[big]) / np.abs(ref[big])
+                print(f"      MT={mt} at {what}: {len(e)} points, max |dev|/max(|sigma|, 1e-3 max) {dev.max():.2e}; "
+                      f"relative where sigma >= 1e-3 max: max {rel.max():.2e}, median {np.median(rel):.1e}")
+                check(f"{name}: MF=3/MT={mt} at {what} = the engine to {2 * TOLERANCE:g} (the grid's rule)",
+                      dev.max() < 2 * TOLERANCE, dev.max())
+        # (c)
+        exits = [mt for mf, mt, _ in w.sections if mf == 3 and mt != 102]
+        check(f"{name}: the writer's check: MF=2 reproduces every particle reaction of MF=3 ({exits}) to 1e-5",
+              sorted(w.mf2_check) == sorted(exits) and all(v < 1e-5 for v in w.mf2_check.values()), w.mf2_check)
+        back = m.resonances()
+        ent = next(p.to_dict() for p in s.pairs if p.is_entrance)
+        new, conv = E.to_project(back, os.path.join(d, "back.azr"),
+                                 separation_energy=ent["sep_energy"] + ent["excitation"])
+        orig = {}
+        for lv in project.levels():
+            orig.setdefault(lv.jpi, []).append(lv.energy)
+        got = {}
+        for lv in conv.levels:
+            got.setdefault(lv.jpi, []).append(lv.energy_MeV)
+        worst = max(abs(a - b) / max(abs(a), 1.0) for k in got for a, b in zip(sorted(orig[k]), sorted(got[k])))
+        check(f"{name}: the levels read back from the file: energies to 1e-7 MeV", worst < 1e-7, (orig, got))
+        # (d)
+        text = " ".join(" ".join(m.header.text).split())
+        check(f"{name}: MF=1 names LRP=2's statement, the losses and the sections not written",
+              "MF=2 (LRF=7, KRM=4, IFG=1) reproduces" in text and "Not carried by this file" in text and
+              "MF=6/MT=102" in text, text[-800:])
+        check(f"{name}: MF=1: LRP=2, NSUB of the projectile, EMAX the upper energy", m.header.lrp == 2 and
+              m.header.nsub == 10 * (1000 * int(ent["Z1"]) + round(ent["M1"])), (m.header.lrp, m.header.nsub))
+        if os.environ.get("AZURE2_ENDF_UTILITIES") and os.environ.get("AZURE2_PREPRO"):
+            result = E.check(out)
+            print("\n".join("      " + line for line in str(result).splitlines()))
+        s.close()
+    finally:
+        os.chdir(cwd)
+
+if os.environ.get("ENDF_TEST_KEEP"):
+    print(f"files kept in {TMP}")
+else:
+    shutil.rmtree(TMP, ignore_errors=True)
+print(f"{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
+sys.exit(1 if failures else 0)

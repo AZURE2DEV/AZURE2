@@ -139,3 +139,5 @@ AZURECalcMCMC	nu::Mcmc	makes	inference		AZURECalcMCMC::RunMCMCSampling: nu::Mcmc
 AZURECalcMCMC	Objective	reads	inference	const	Objective::Engine().SamplerChi2(context) in AZURECalcMCMC (src/AZURECalcMCMC.cpp)
 pyazr.endf	pyazr	links	libraries		pyazr/endf imports pyazr.physics (the Coulomb and lab-energy rows) and pyazr.errors
 pyazr::endf::Material	pyazr::Session	reads	frontends	const	Material.curves(data, session=s) reads s.datasets, s.pairs (pyazr/endf/curves.py request_of)
+pyazr::endf::Material	pyazr::endf::resonances::LRF7	makes	frontends		Material.resonances() (pyazr/endf/resonances.py read_resonances)
+pyazr::endf::resonances::LRF7	pyazr::Session	reads	frontends	const	pyazr.endf.from_session(s, x) reads s.parameters, s.pairs and the door formal_levels_of_block (api/src/pybind_level_doors.cpp)

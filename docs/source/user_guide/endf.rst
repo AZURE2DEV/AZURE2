@@ -8,7 +8,8 @@ applies is cited by the manual's printed page in its source and in its messages.
 ``python -m pyazr`` beside it (:doc:`pyazr_command_line`); ``--json`` gives the same answer as data.
 
 ``pyazr/examples/endf_evaluation.py`` does the four things below on a hand-written p + 12C file and the project T1
-of the tests, or on a file and a project you name.
+of the tests, or on a file and a project you name; ``pyazr/examples/endf_start_model.py`` starts a project from the
+ENDF/B-VIII.1 3He + 4He extract and writes T1 as an evaluation.
 
 Read a file and see what it holds
 ---------------------------------
@@ -178,6 +179,103 @@ Trying the codes on your machine::
    export AZURE2_ENDF_UTILITIES=/path/to/endf-utility-codes/bin AZURE2_PREPRO=/path/to/prepro/bin
    python -m pyazr endf check h-002_He_004.endf
    python -m pyazr endf standardize h-002_He_004.endf
+
+Start a project from an evaluation
+----------------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Python
+     - command line
+   * - ``r = pyazr.endf.read(path).resonances(isotope=0, energy_range=0)``
+     - ``python -m pyazr endf summary FILE`` (what MF=2 holds)
+   * - ``project, report = pyazr.endf.to_project(r, "new.azr", material=m)``
+     - ``python -m pyazr endf to-project FILE NEW.azr [--separation-energy S] [--json]``
+
+``Material.resonances()`` reads MF=2/MT=151 in the R-Matrix Limited format (LRF=7) into a record in the file's own
+units and frame (ER in eV, the laboratory energy of the incident particle; GAM in eV^1/2; masses in neutron masses;
+radii in 1e-12 cm); ``print(r)`` lists the pairs, spin groups, channels and levels. ``to_project`` makes a new
+format-3 project of it (never an existing file) in the Brune basis, every level and width fixed:
+
+- the incident pair is the one with MT=2 (p. 71); its separation energy from the compound nucleus comes from
+  AME2020 (the file holds no mass of the compound nucleus), or ``separation_energy=`` in MeV; every other pair takes
+  the file's Q value, and the residual's excitation from MF=3's QM - QI of its MT (p. 105) when the file has that
+  section. Masses are the file's; the report compares each with AME2020 (the 3He + 4He file of ENDF/B-VIII.1 gives
+  6Li 21.7 keV below AME2020, and the engine warns that separation energies and masses disagree);
+- ER and GAM go to E_x and the c.m. scale with E_lab / E_cm = (m_A + m_B)/m_B of the incident pair (pp. 66,
+  355-356); the file's boundary conditions BND are kept: the engine turns the formal levels with those B_c into
+  Brune energies, widths (eV) and ANCs (fm^-1/2), the observed form a project holds;
+- a spin group without levels is not written (AZURE2 computes the hard-sphere phases itself); a level above EH is
+  marked as background in the report.
+
+On the 3He + 4He extract of the tests the project reproduces the file's own MF=3/MT=600 (4He(3He,p)6Li) to 1.1e-6
+above 7.2 MeV (median 7e-8); the two points just above the p + 6Li threshold do not follow from the file's MF=2.
+
+Refused, each with what, what is allowed and how to fix it: a range that is not LRF=7 or has NRO=1, KRM other than
+4 (Reich-Moore and Breit-Wigner files are not read as a start model), KRL=1 (no equations in the manual), IFG=0
+(widths instead of amplitudes), a photon pair (with KRM=4 its channels enter the level matrix; AZURE2 keeps
+radiative widths out of the total width), a fission pair, KBK > 0 or KPS > 0 (background R-matrix, tabulated
+phases), APE different from APT or two radii in one pair (AZURE2 has one radius per pair), SHF=0 or PNT=-1 on a
+particle channel. The manual does not say in which order the channel spin couples the two spins; the module reads
+SCH as AZURE2's (light particle first). An angle-integrated cross section does not depend on that order.
+
+Write an evaluation
+-------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Python
+     - command line
+   * - ``record, losses = pyazr.endf.from_session(s, x)``
+     - (the MF=2 that would be written, and what it cannot carry)
+   * - ``w = pyazr.endf.write(s, "new.endf", x, header={"MAT": 625, "AUTH": "..."})``
+     - ``python -m pyazr endf write PROJECT NEW.endf [--header h.json] [--low E --high E] [--json]``
+
+``write`` writes the session's model at the fit vector ``x``:
+
+- **MF=1/MT=451** (pp. 38-42): LRP=2, the projectile's AWI (its nuclear mass in neutron masses, p. 24), EMAX, NSUB;
+  the three standard text lines and HSUB from ``header`` (MAT, NLIB, NVER, LREL, NMOD, ALAB, EDATE, AUTH, REF, DDATE,
+  RDATE, LIBRARY, TEXT: the evaluator's fields; MAT defaults to 9999); a text that says what wrote the file, that
+  MF=3 holds the engine's cross sections and that MF=2 reproduces them, the photon widths of the levels, and every
+  loss; the directory.
+- **MF=2/MT=151**: the particle channels in the formal basis (LRF=7, KRM=4, IFG=1), with the engine's boundary
+  values B_c = S_c(E_1) of each spin group written as BND, ER and GAM on the laboratory scale of the incident pair.
+  Photon channels are not in MF=2 (the PI's decision): capture is MF=3/MT=102.
+- **MF=3** of every particle exit (MT 600 + k, 650 + k, ..., 800 + k) and of the total capture (MT=102, internal
+  and external capture), on one grid of laboratory energies made by ``pyazr.refine_grid``, the engine's refinement
+  of an adaptive extrapolation grid: an interval is split while its midpoint differs from linear interpolation by
+  more than ``tolerance`` (default 1e-3) times the value, or times 1e-3 of the largest value where the cross section
+  is smaller than that. INT=2. On T1, T2 and 13N linear interpolation in the written file gives the engine's value at
+  the data's energies and at the grid's midpoints to 1e-3 by that rule.
+- Before the file is written, MF=2 is read back into a project and its particle reactions computed on the grid: they
+  must equal MF=3 to 1e-5 (T2: 8e-8), else the write is refused.
+
+Not written, and listed in MF=1 and in the answer: MF=3/MT=2 and MF=6 (the elastic channel needs MF=6 LAW=5, the
+exits MF=6 LAW=2, capture to each final state MF=6/MT=102), the photon channels and external capture in MF=2, the
+data and the apparatus of the project, the particles' g-factors. Refused: a session in the formal basis, Reich-Moore
+(``use_rmc``), relativistic kinematics, a nuclear potential, several compound nuclei, an exit pair outside ENDF's
+reaction families, a session without an exit. A cross section far below 1e-3 of its largest value in the energy
+range is good to the absolute tolerance only: give a lower range (``energy_range_MeV``) for sub-barrier capture.
+
+What the checking codes say about a written file
+------------------------------------------------
+
+Measured with CHECKR 8.24, FIZCON 8.19 and PSYCHE 8.11 on the files written from T1, T2 and 13N:
+
+- *LRP=2 ONLY ALLOWED IN DERIVED FILES* (CHECKR): expected, the PI's decision (the library's charged-particle LRF=7
+  files have the same).
+- *MATERIAL NUMBER SHOULD BE 625* (CHECKR, warning, for p + 12C): the default MAT 9999; the MAT is the evaluator's (``header``).
+- *PRESENCE OF FILE 3, MT= ... REQUIRES AN EQUIVALENT SECTION IN FILE 6* (FIZCON): MF=6 is not written yet.
+- *AP NOT IN RANGE* and *SPIN OF ISOTOPE ... DISAGREES WITH ...* (PSYCHE): PSYCHE's reading of LRF=7 (above).
+- *THE CALCULATED Q 6.67452E+06 DISSAGREES WITH THE GIVEN Q 1.94349E+06* for MT=102 (PSYCHE, note): the given Q
+  of 12C(p,g)13N is the AME2020 separation energy; how PSYCHE reckons 6.67 MeV for a proton capture is not
+  established here.
+- *THERMAL SIGMA* (negative) and *RESONANCE INTEGRAL* (PSYCHE, notes): PSYCHE's neutron quantities, computed
+  below the first energy of the table (0.12 MeV), where the file has no value.
 
 What reading refuses and what it reports
 ----------------------------------------

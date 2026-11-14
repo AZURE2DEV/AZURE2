@@ -548,7 +548,10 @@ implementation in C++ would break the rule of one. The command line is pyazr's (
 Status (2026-11-14): decisions 1 (photon channels out of MF=2, capture pointwise in MF=3/MF=6), 3 (LRP=2 with full
 pointwise MF=3), 7 (the MAT 228 extract committed as test data) and 10 (MF=32 from a formal-basis HESSE) are
 **decided by the PI**, as recommended. Decisions 2, 4, 5, 6, 8 and 9 are the director's interim choices, as
-recommended (HANDOFF, 2026-11-14 15:00).
+recommended (HANDOFF, 2026-11-14 15:00). As built (sections 13.4, 13.5): 1 (no photon channel in MF=2; capture in
+MF=3/MT=102; MF=6/MT=102 not yet written), 2 (widest form by default), 3 (LRP=2, one named value `writer.LRP`; MF=2
+checked against MF=3 before writing), 4 (KRL=1 refused on reading and writing), 7, 8, 9 (AME2020 for the incident
+pair, the file's Q values for the others) are in the code.
 
 1. **Photon channels.** (a) In MF=2 as channels of photon pairs (KRM=4, P = 1, Gamma_gamma kept at E_lambda): the
    radiative widths then enter the level matrix of every code that reads the file, the energy dependence
@@ -733,7 +736,91 @@ found a format error the own check missed on these files.
 - "Standardize" (a job): `pyazr.endf.standardize(path, program=, mf2=)`; answer: the candidate's path and its
   `diff()` rows; "Keep as new file" is `accept(to=)`, "Replace" `accept(to=path, overwrite=True)` after a second
   question.
-- "New project from ENDF": not built (the start model, the next stage).
+- "New project from ENDF" (a job, one thread): `m = pyazr.endf.read(path)`, `m.resonances(isotope=, energy_range=)`
+  (a refusal's what, allowed, fix shown as it is), then `pyazr.endf.to_project(record, new_path,
+  separation_energy="ame2020" | MeV, material=m)` (or `pyazr endf to-project FILE NEW --json`); answer: the new
+  project's path (open it as the project), the separation energy and its source, each nuclide's mass in the file
+  against AME2020 (keV), the pairs (key, MT, Q, S, excitation), the levels (spin group, ER, formal and Brune E_x,
+  the widths and ANCs written, the iteration's status, background when ER > EH), what was not written, the notes.
+  The page asks: the file, the isotope and range when MF=2 has several, the separation energy (AME2020 by
+  default), the new project's name.
+- "Export ENDF" (a job, one thread): `pyazr.endf.write(session, new_path, x, header={...}, energy_range_MeV=(lo,
+  hi), tolerance=, number_form=)` (or `pyazr endf write PROJECT NEW --json`); answer: the file, its sections (MF,
+  MT, lines), the grid of each MF=3 section (points, range), the check that MF=2 reproduces MF=3 (largest relative
+  difference per MT), the losses, the sections not written. The page asks the MF=1 fields (MAT, NLIB, NVER, LREL,
+  NMOD, ALAB, EDATE, AUTH, REF, DDATE, RDATE, the library's name in HSUB, free text), the energy range (default:
+  the data's), the grid tolerance (1e-3) and the number form (widest); before writing it shows
+  `pyazr.endf.from_session(s, x)[1]` (the losses and the photon widths). The result offers "Check" on the file.
 
 Routes, one per call: `POST /api/endf/summary`, `POST /api/endf/curves`, `GET /api/endf/checkers`; jobs
-`endf_check` and `endf_standardize` (with `accept`).
+`endf_check`, `endf_standardize` (with `accept`), `endf_import` (`to_project`) and `endf_write` (`write`).
+
+### 13.4 Stage 2: the start model
+
+`pyazr/endf/resonances.py`: `ParticlePair`, `Channel`, `Level`, `SpinGroup`, `LRF7` (plain records in the file's
+units and frame, `print()` lists them, `LRF7.rows(number_form)` writes MF=2/MT=151), `read_resonances` behind
+`Material.resonances(isotope=0, energy_range=0)` with every refusal of section 3.2 (three parts). `pyazr/endf/
+model.py`: `to_project(record, path, separation_energy="ame2020" | MeV, material=None)` -> `(Project, Conversion)`,
+`from_session(session, x)` -> `(LRF7, Losses)`. Command `pyazr endf to-project FILE NEW`.
+
+The doors (`api/src/pybind_level_doors.cpp`, registered in `BindPhysics`): `formal_levels_of_block` (door 1:
+a block's levels in the Brune or Park basis, as amplitudes or in the observed form, -> formal E, gamma and the
+engine's B_c, through `physics::level_parameters`) and `observed_levels_of_block` (door 2: formal levels with the
+caller's B_c -> Brune E, amplitudes, widths and ANCs, through `brune_from_formal` and `observed_levels`; its
+iteration tolerance an argument, the engine's 1e-6 MeV by default). Both take plain pair records and build the
+`System` and the engine's `PPair` objects themselves, with the engine's `ChannelFunc` / `WhitFunc` and the session
+options `use_coulomb_table`, `use_gsl_coul`. What differs from the design, and why:
+- Door 1 is a free function of pair records and a block's numbers, not `Session.formal_levels(x)`: the session's
+  object is in files another agent rewrites (`api/src/pybind_api.cpp`, `AZUREAPI*.cpp`). `from_session` gives it
+  the session's fit vector (Brune or Park amplitudes). A session in the formal basis is refused (its B_c belongs to
+  the energies it was opened with).
+- The particle channel functions of the doors repeat the 12 lines of `ChannelFunctionsFromCNuc`
+  (`src/CNucLevelParameters.cpp`, another agent's file) for a `PPair`; that function could call the door's.
+- `to_project` asks door 2 for a Brune tolerance of 1e-11 MeV (the engine's report uses 1e-6 MeV): with 1e-6 the
+  write-then-read of T1 moved the model by 7.6e-5.
+- IFG=0 and KRM=3 are refused, not converted (IFG=0 needs the penetrabilities in the file's frame at E_lambda; KRM=3
+  needs the photon pair of the eliminated widths): not built.
+- The coupling order of SCH is not in the manual; read as AZURE2's (light particle first). The library's MF=3
+  tests angle-integrated cross sections only, which do not depend on it.
+
+Measured (`tests/pyazr/endf_model_test.py`, build `work/b-endf3`): door 1 on a Brune session's start equals the
+formal session's levels bit for bit, door 2 on those with door 1's B_c equals the formal session's transform bit
+for bit (T1, T2, 13N). The ENDF/B-VIII.1 extract: 14 levels (the design's 15 was a miscount), the observed energies of
+section 6.2, MF=3/MT=600 above 7.2 MeV reproduced to 1.13e-6 (median 6.6e-8), 6Li 21.7 keV below AME2020 in the
+report. Write then read (from_session, MF=2 in the widest form, resonances(), to_project, the levels put back into
+the original session): T1 parameters to 5.8e-9, model to 1.7e-6 (one analysing-power point beside the narrow 3/2-
+level; the 11-column fields carry BND to 1e-9 and ER to 1e-3 eV), Delta chi^2 -2.2e-4; T2 parameters to 1.2e-8,
+model 1.7e-7, Delta chi^2 +6.2e-4. Ten refusals, each with its three parts.
+
+### 13.5 Stage 3: the writer
+
+`pyazr/endf/writer.py`: `write(session, path, x=None, header=, energy_range_MeV=, tolerance=1e-3, max_points=4000,
+number_form="widest")` -> `Written` (sections, grids, the MF=2 check, losses, not written); `records.RecordWriter`
+writes the records. Command `pyazr endf write PROJECT NEW`. MF=1/MT=451 (LRP=2; AWI the projectile's nuclear mass
+from AME2020, p. 24; NSUB; the text: what wrote it, the MF=2/MF=3 sentence, the photon widths, the losses; the
+directory), MF=2/MT=151 (door 1), MF=3 of every particle exit and of the total capture.
+
+The grid: `pyazr.refine_grid` (the engine's refinement of an adaptive extrapolation grid; the engine's `energies
+adaptive` record is refused by a pyazr session) on all reactions at once, each sweep one extrapolation session at
+the sweep's lab energies. Its rule: |midpoint - linear interpolation| <= tolerance x max(|sigma|, 1e-3 max sigma).
+Measured (`tests/pyazr/endf_write_test.py`): MF=3 read back with the module's reader at the data's lab energies and
+at the grid's midpoints equals the engine to 9.2e-4 - 1.0e-3 by that rule (T1 MT=102 381 points, T2 MT=800/801 427
+points, 13N MT=102 488 points). Before writing, MF=2 is read back (to_project) and its particle reactions computed
+at the grid: T2 7.9e-8 (T1 and 13N have no particle exit: nothing to compare). The own format check: no error, the
+LRP=2 warning.
+
+Not built: MF=3/MT=2 with MF=6/MT=2 LAW=5, MF=6 LAW=2 of the exits, MF=6/MT=102 (listed in MF=1 and in `Written`).
+The real codes on the written files: section 13.6.
+
+### 13.6 The checking codes on the written files
+
+CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11 (`opt/`), on T1, T2, 13N as written:
+- CHECKR: LRP=2 (error; the PI's decision), MAT should be 625 / 728 (warning; MAT 9999 is the default, the
+  evaluator's field).
+- FIZCON: MF=3/MT needs MF=6 (one per MF=3 section: MF=6 not written); on 13N before AWI was taken from AME2020,
+  "AWI SHOULD BE SET TO 9.98623E-01" (13N gives the proton's mass as 1.00728 u, nuclear; repaired).
+- PSYCHE: AP not in range and, on T2, "SPIN OF ISOTOPE 7015. DISAGREES WITH 0.5" (both its reading of the record
+  after the range as SPI, AP of LRF 1-3, section 13.2: that record holds 0, 0, IFG, KRM, NJS, KRL); for MT=102 "calculated Q 6.67452E+06 disagrees
+  with the given Q 1.94349E+06" (the given Q is AME2020's S_p of 13N; PSYCHE's number not explained), a negative
+  thermal cross section and a resonance integral (neutron quantities, below the table).
+

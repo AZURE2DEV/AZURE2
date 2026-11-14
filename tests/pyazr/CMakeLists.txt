@@ -90,6 +90,20 @@ add_test(NAME pyazr_endf_read
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_read_test.py)
 set_tests_properties(pyazr_endf_read PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# pyazr.endf's start model: the engine's two level doors against its own transformation (T1, T2, 13N), the
+# ENDF/B-VIII.1 extract into a project reproducing its MF=3/MT=600, the refusals, write then read of T1 and T2.
+add_test(NAME pyazr_endf_model
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_model_test.py)
+set_tests_properties(pyazr_endf_model PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# pyazr.endf.write: T1, T2, 13N written and read back (own format check, MF=3 against the engine at the data and at
+# the grid's midpoints, MF=2 back to the levels); the real checking codes print their findings when found.
+add_test(NAME pyazr_endf_write
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py)
+set_tests_properties(pyazr_endf_write PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
 # into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when
 # AZURE2_ENDF_UTILITIES and AZURE2_PREPRO are set in the environment of ctest (skipped otherwise).
