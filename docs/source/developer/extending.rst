@@ -115,16 +115,25 @@ energy and the amplitudes:
    ``BuildParamIndexMap``, the labels of ``src/ParameterLabel.cpp``, the
    ``gamma_decay`` slots, the model data's derivative columns), so none
    counts positions of its own.
-2. The value: a member of ``LevelState`` (``include/LevelState.h``) and its
-   branch in the fills that switch on the slot's kind
-   (``FillCompoundFromParams``, ``SetFitLevelParameter``), its start value in
-   ``CNuc::FillMnParams`` and its observed value in ``GetTransformParams``.
-3. A parameter kind (below) for its record, its pull-back in
+2. The value at the vector: a member of ``LevelState``
+   (``include/LevelState.h``) and its branch in the fills that switch on the
+   slot's kind (``FillCompoundFromParams``, ``SetFitLevelParameter``). What a
+   fill computes from it beside the level (as a ``gamma_decay`` record's
+   ``GammaDecayFill``) is a member of ``LevelState`` too.
+3. The input value: a member of ``LevelInputs`` (``include/LevelInputs.h``),
+   made by ``CNuc::Fill`` from the ``<levels>`` rows, written by
+   ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
+   vector), read by ``CNuc::FillMnParams`` as the start value; its observed
+   value in ``GetTransformParams``. ``ALevel`` holds only what the
+   ``<levels>`` rows say (``FileE``, ``FileGamma``, ``FileZeroWidth``).
+4. A parameter kind (below) for its record, its pull-back in
    ``GradAccum`` (``src/AZUREGrad.cpp``) if the gradient is analytic, and its
    readers in the matrix functions.
-4. Tests: ``tests/upgrade/level_parameter_layout_test.cpp`` (the layout
-   against the names ``FillMnParams`` gives the block) and the objective's
-   gradient against finite differences.
+5. Tests: ``tests/upgrade/level_parameter_layout_test.cpp`` (the layout
+   against the names ``FillMnParams`` gives the block),
+   ``tests/upgrade/level_inputs_test.cpp`` (the input values and what a fill
+   leaves in the state) and the objective's gradient against finite
+   differences.
 
 A term of the objective
 -----------------------

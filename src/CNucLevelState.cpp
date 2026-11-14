@@ -21,7 +21,8 @@
  */
 
 void CNuc::FillCompoundFromParams(const vector_r &params) {
-  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, params);  // GammaDecayMap.h
+  // GammaDecayMap.h: the records' numbers become amplitudes; what the map computed is the state's.
+  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, levelState_, params);
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
     const int j = slots.group, la = slots.level;
     levelState_.SetE(j, la, p[slots.energy]);

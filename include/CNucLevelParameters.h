@@ -9,6 +9,7 @@
 
 class CNuc;
 class Config;
+class LevelInputs;
 
 /*!
  * The engine's side of physics/ level_parameters (docs/upgrade/level_parameters.md): what the physics functions take
@@ -28,27 +29,30 @@ class Config;
  * --use-rmc), or the static-moment factor and E2 scale; beta channels 1 (docs/upgrade/cnuc_split.md section 7).
  * The CNuc must outlive the returned function; it is read, not modified.
  */
-azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map,
+azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
                                                            const Config &configure);
 /// The same, with the two settings it reads from the Config given directly: GSL Coulomb functions, --use-rmc.
-azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, bool gslCoulomb,
-                                                           bool rmc);
+azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
+                                                           bool gslCoulomb, bool rmc);
 
 /*!
- * The <levels> values of block b as the file gives them (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2),
- * amplitudes (gammaIsRWA) and their flags.  The CNuc must be filled (CNuc::Fill) and not initialized: after
- * CNuc::Initialize its levels hold the transformed amplitudes.
+ * The input values of block b (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2), amplitudes (gammaIsRWA)
+ * and their flags, from `inputs` before the transformation (CNuc::Fill's, or a physical vector's): after
+ * CNuc::TransformIn they are the transformed amplitudes.
  */
-azure2::physics::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSystemMap &map, std::size_t b);
+azure2::physics::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const LevelInputs &inputs,
+                                                     const CNucSystemMap &map, std::size_t b);
 
 /*!
  * External-capture amplitudes of block b's photon channels (ExternalReducedWidth with initial = true), in the
  * layout of the block's gamma; not present unless external capture is on, nor (as in the engine) for an amplitude
  * |gamma| < 1e-8 when zero widths are ignored (IGNORE_ZERO_WIDTHS).  The value depends on the amplitudes the
  * CNuc's levels hold at the time of the call (the level's own particle amplitudes and the final state's): CNuc's
- * TransformIn calls it with the Brune (Park) amplitudes of the level after its first loop.
+ * TransformIn calls it with the Brune (Park) amplitudes of the level after its first loop.  The amplitudes are those
+ * of `inputs` (ExternalReducedWidthOfInputs).
  */
-std::vector<azure2::physics::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CNucSystemMap &map,
-                                                                   std::size_t b, const Config &configure);
+std::vector<azure2::physics::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const LevelInputs &inputs,
+                                                                   const CNucSystemMap &map, std::size_t b,
+                                                                   const Config &configure);
 
 #endif
