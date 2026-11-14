@@ -32,7 +32,7 @@ int SetUpRun(ProgramRun &run) {
     return -1;
   }
   if ((run.configure.screenCheckMask | run.configure.fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*run.compound, run.configure);
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*run.compound, run.compound->Inputs(), run.configure);
 
   // An extrapolation run whose project has an adaptive grid refines it once the parameters are known (below).
   run.refinesAdaptiveGrids =
@@ -103,7 +103,7 @@ int SetUpRun(ProgramRun &run) {
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
   // is computed on them (AdaptiveExtrapolation.h).
   if (run.refinesAdaptiveGrids) {
-    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound, run.params.GetMinuitParams().Params());
+    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound, run.compound->MutableState(), run.compound->Inputs(), run.params.GetMinuitParams().Params());
     if (!refined) return -1;
     delete run.data;
     run.data = refined.release();
@@ -156,7 +156,7 @@ int SetUpObjective(ProgramRun &run) {
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed =
           run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*run.compound, *observed, run.configure);
+    WarnLargeRadiativeWidths(*run.compound, run.compound->Inputs(), *observed, run.configure);
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
   // in the first evaluation's report.

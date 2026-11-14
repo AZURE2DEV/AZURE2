@@ -6,6 +6,7 @@
 #include <vector>
 
 class CNuc;
+class LevelState;
 class Config;
 class PPair;
 struct GradAccum;
@@ -65,14 +66,14 @@ struct Value {
 
 /// Evaluate one channel with the compound's current parameters (Brune and Park need
 /// CNuc::CalcShiftFunctions first, as for any calculation).
-Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch);
+Value Evaluate(CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch);
 
 /*!
  * Accumulate Re(conj(aBar) d a0/d parameters) into accum (level energies and widths), exactly.
  * Returns false when the level-matrix adjoint does not support the configuration (RMC formalism,
  * levels left out of the R-matrix); the caller then differentiates numerically.
  */
-bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
+bool Adjoint(CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv);
 
 /// A measured scattering length: a <modelData> datum of quantity scattering_length (ModelData.cpp).
@@ -94,17 +95,17 @@ struct Constraint {
 std::string ResolveConstraint(CNuc *compound, Constraint &c);
 
 /// Model value of a constraint (fm).
-complex ConstraintValue(CNuc *compound, const Config &configure, const Constraint &c);
+complex ConstraintValue(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c);
 
 /// Residuals of one constraint, appended to r: (Re a - value)/sigma and (Im a - imValue)/imSigma for each
 /// nonzero sigma; none when it is inactive.
-void ConstraintResiduals(CNuc *compound, const Config &configure, const Constraint &c, std::vector<double> &r);
+void ConstraintResiduals(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r);
 
 /*!
  * Gradient of one constraint's chi2 (row = -1) or of its row-th residual (0: the first of Re, Im that it has) into
  * accum.  Returns false where Adjoint does.
  */
-bool ConstraintGradient(CNuc *compound, const Config &configure, const Constraint &c, GradAccum &accum,
+bool ConstraintGradient(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
                         const vector_matrix_r *shiftDeriv, int row);
 
 /// Number of residual rows of one constraint (0, 1 or 2).
@@ -112,7 +113,7 @@ int NumResiduals(const Constraint &c);
 
 /// Table of every particle pair's s-wave scattering lengths, as written to scatteringLengths.out (measured ones are
 /// <modelData> data: ModelData::Report).
-std::string Report(CNuc *compound, const Config &configure);
+std::string Report(CNuc *compound, const LevelState &state, const Config &configure);
 
 }  // namespace ScatteringLength
 

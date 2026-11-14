@@ -82,7 +82,7 @@ void OnProject(const std::string &file, bool brune) {
         const int slot = records.SlotOf(r, ch);
         const double expected = slot >= 0 ? widths[slot] : level->FileGamma(ch);
         Check(in.Gamma(j, la, ch) == expected, where + " channel " + std::to_string(ch) + " width");
-        Check(in.ZeroInputWidth(j, la, ch) == level->FileZeroWidth(ch), where + " channel " + std::to_string(ch) +
+        Check(cn.State().ZeroInputWidth(j, la, ch) == level->FileZeroWidth(ch), where + " channel " + std::to_string(ch) +
                                                                             " zero flag");
       }
     }

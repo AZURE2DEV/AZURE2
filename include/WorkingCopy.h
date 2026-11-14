@@ -37,6 +37,7 @@ class ThmDistortion;
 class ThmDwVertex;
 
 class CNuc;
+class LevelState;
 class AZUREParams;
 class PriorCovariance;
 struct BandData;
@@ -408,7 +409,7 @@ class WorkingCopy {
   void RefreezeCovariance();
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
-  void PrepareCovarianceSeeds(CNuc *, const Config &, azure2::Results &results);
+  void PrepareCovarianceSeeds(CNuc *, const LevelState &state, const Config &, azure2::Results &results);
   void FillMnParams(AZUREParams &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
@@ -416,7 +417,7 @@ class WorkingCopy {
   /// evaluation, so it ends with BeginEvaluation(results): `results` is the buffer of the evaluation that follows,
   /// owned by its caller.
   void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, CNuc *theCNuc = nullptr,
-                                  const Config *configure = nullptr);
+                                  const LevelState *levels = nullptr, const Config *configure = nullptr);
   /// The start of an evaluation into the caller's buffer `results`, after the hand-over: the records are laid out
   /// again if a point or sub-point is not where the layout puts it (a new point, a re-placed sub-point grid, a copied
   /// segment), each moving its values in `results` to its new record; `results` is sized for the layout (a new buffer
@@ -435,11 +436,11 @@ class WorkingCopy {
     results.objective.thmProfiles.resize(Data().NumThmGroups());
     results.objective.covarianceSeed.resize(Data().HasCovariance() ? modelSize_ : 0, 0.0);
   }
-  /// Lay the shared meshes out again for the levels theCNuc holds now (its fit values, as observed parameters) and the
+  /// Lay the shared meshes out again for the levels `state` holds (its fit values, as observed parameters) and the
   /// supports of the points of the segments in \p shiftActive at their present shifts (ShiftedFold.h), and place again
   /// the slots of every sharing group whose nodes changed.  Returns the number of points whose slots changed, and
   /// appends their plan tasks to \p replacedTasks.  Called by FillEnergyShiftsFromParams.
-  int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
+  int ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, const Config &configure, const std::vector<TermRef> &shiftActive,
                            std::vector<int> &replacedTasks);
   /// Drop the last segment.
   void DeleteLastSegment();
@@ -474,7 +475,7 @@ class WorkingCopy {
    * exit, the pole and |N_C|^2.  False (and `why`) if there is no such
    * experiment or it has no line shape.
    */
-  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
                          const Config &configure, ThmLineshapeReport &out, std::string &why);
   /*!
    * The entrance vertex of THM experiment `name` at the c.m. energies
@@ -484,7 +485,7 @@ class WorkingCopy {
    * |M_l|^2 and its quasi-free value (p_s = 0), with the boundary the vertex
    * uses for that level.  False (and `why`) if there is no such experiment.
    */
-  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
                       const Config &configure, ThmVertexReport &out, std::string &why);
   /*!
    * The distortion factor of THM experiment `name` (distortion=coulomb or
@@ -505,8 +506,8 @@ class WorkingCopy {
    * AZURE_SERIAL_CHI2 set.  After a pass that returns 0 the caller reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
-  int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
-                                azure2::Results &results);
+  int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const LevelState &state,
+                                const Config &configure, azure2::Results &results);
   /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
   /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
   const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
@@ -586,7 +587,7 @@ class WorkingCopy {
   /// Calls f(point, angular slots, natural slots) for every point and slot in layout order, a slot after its writer.
   template <class F>
   void ForEachResultUnit(F f);
-  void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
+  void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const LevelState *levels, const Config *configure);
   /// The external-capture amplitudes of the leaves (InitializeLeaves): computed and appended to `out`, or read from
   /// `in` where the data segments' amplitudes end (usePrevious); -1 when stopped or a GSL error ends the loop.
   int LeafECAmplitudes(CNuc *, const Config &, bool usePrevious, std::ifstream &in, std::ofstream &out);

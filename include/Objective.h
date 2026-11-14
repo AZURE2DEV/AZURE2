@@ -36,6 +36,10 @@ constexpr double kParkNormScale = 1.0e-3;
 
 struct ObjectiveContext {
   CNuc *compound;
+  /// The levels at the evaluated vector (the model data's finite differences write and restore them) and the
+  /// levels' input values of the evaluation's owner.
+  LevelState &state;
+  const LevelInputs &inputs;
   WorkingCopy *data;
   /// The buffer of the evaluation: the model value of every point of `data` (azure2::EvaluateModel) in, what the terms
   /// store out (Results::objective: profiled norms, THM profiles, segment chi^2, totals; the writer reads them).
@@ -251,7 +255,7 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F
  * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
  * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
  */
-void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+void AppendModelRows(CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac);
 
 class PriorCovariance;

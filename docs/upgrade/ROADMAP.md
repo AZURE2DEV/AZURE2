@@ -218,7 +218,11 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       only and nothing of it is written after set-up.  The `gamma_decay` fills and the formal-basis capture-mask
       projectors are the `LevelState`'s: a fill writes the state and nothing else of `CNuc` (`cnuc_split.md` §12.3,
       step 4 as built, second part).
-- [ ] The readers take the state they read (`const CNuc &` and a `LevelState`); the owners (fitter, sampler, rate,
+- [x] The readers take the state they read: every reader of an evaluation's values takes its `LevelState`, every reader
+      of the input values its `LevelInputs`; `CNuc`'s fills and transformations are `const` and write the state they
+      are given; the zero-width flags and the input energies an evaluation reads are the state's (`cnuc_split.md`
+      §12.3, step 4 as built, third part).
+- [ ] The owners (fitter, sampler, rate,
       sub-point grids, bands, adaptive extrapolation, limits, binding) hold the compound shared and constant with their
       own `LevelState` (and `LevelInputs` where they transform); pools of `LevelState`; `Clone` deleted (`cnuc_split.md`
       §12.3, step 4, what remains).

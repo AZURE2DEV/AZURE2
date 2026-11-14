@@ -213,14 +213,14 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   azure2::Results results;
-  ld->FillEnergyShiftsFromParams(p, results, lc, &m.cfg);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &m.cfg);
   lc->CalcShiftFunctions(m.cfg);
-  vector_matrix_r sd = BuildShiftDerivTable(lc, m.cfg);
+  vector_matrix_r sd = BuildShiftDerivTable(lc, lc->State(), m.cfg);
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
-  accum.Init(lc);
+  accum.Init(lc, lc->State());
   FitBarFn one = [](const Segment *, int, int, double) { return 1.0; };
-  const bool ok = AccumulateEGammaGradient(lc, ld, results, m.cfg, pmap, &sd, one, accum);
+  const bool ok = AccumulateEGammaGradient(lc, lc->State(), ld, results, m.cfg, pmap, &sd, one, accum);
   delete lc;
   delete ld;
   return ok;
@@ -266,7 +266,7 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
   m.compound->CalcShiftFunctions(m.cfg);
   double penalty = 0.0;  // the objective's Park term alone
   for (const auto &term : Objective::Engine().Terms())
-    if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.data, results, p, m.cfg}, penalty);
+    if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.compound->MutableState(), m.compound->Inputs(), m.data, results, p, m.cfg}, penalty);
   check(label + ": starting point beyond the wall (Park penalty " + num(penalty) + ")", penalty > 1.0e3);
   check(label + ": Chi2Value = operator() (" + num(value) + " vs " + num(full) + ")",
         std::fabs(value - full) <= 1e-10 * std::fabs(full), "difference " + num(full - value));

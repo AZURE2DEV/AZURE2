@@ -225,12 +225,12 @@ bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *>
   return true;
 }
 
-double SegmentLocalChi2(const Segment &segment, CNuc *compound, const Config &config, WorkingCopy &data,
+double SegmentLocalChi2(const Segment &segment, CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data,
                         Results &results, double norm) {
   double chi = 0.0;
   const bool refolded = RefoldShiftedSegments(data, {&segment}, config, results);
   for (int pid = 0; pid < segment.NumPoints(); pid++) {
-    EvaluateModelPoint(data, segment, pid, compound, config, results,
+    EvaluateModelPoint(data, segment, pid, compound, state, config, results,
                        refolded ? LeafValues::Ready : LeafValues::Calculate);
     chi += PointResidual(data, segment, pid, results, norm).Chi2();
   }
@@ -238,14 +238,14 @@ double SegmentLocalChi2(const Segment &segment, CNuc *compound, const Config &co
   return chi;
 }
 
-std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const Config &config,
+std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const LevelState &state, const Config &config,
                               Results &results) {
   std::vector<double> norms;
   for (int s : segments) {
     const Segment &segment = *data.Data().GetSegment(s);
     double norm = data.State(segment).norm;
     if (segment.IsProfiledNorm()) {
-      SegmentLocalChi2(segment, compound, config, data, results, norm);  // the models at the present shift
+      SegmentLocalChi2(segment, compound, state, config, data, results, norm);  // the models at the present shift
       segment.ProfileNormChiSquared(data, results, norm);
     }
     norms.push_back(norm);

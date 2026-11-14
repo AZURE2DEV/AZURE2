@@ -67,7 +67,7 @@ double gsl_reactionrate_integrand(double u, void *p) {
       azure2::Results results;  // the point's own result record
       point->UsePrivateRecord(results);
       point->Initialize(nullptr, compound, configure);
-      point->Calculate(nullptr, compound, configure, results);
+      point->Calculate(nullptr, compound, compound->State(), configure, results);
       double sigma = point->GetFitCrossSection(results);
       delete point;
       if (std::isfinite(sigma) && sigma > 0.0) crossSection += sigma;
@@ -105,14 +105,14 @@ RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
   gc.entranceKey = entranceKey;
   try {
     std::unique_ptr<CNuc> g(compound->Clone());  // the copy holds the compound's fit values (CNuc::State)
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
+    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->State(), g->TransformOut(configure)));
     gc.inputWidthsArePhysical = true;
-    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, g.get());
+    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, g.get(), g->Inputs());
   } catch (const std::exception &e) {
     configure.outStream << "\tWarning: could not transform the parameters to observed values for the "
                            "rate grid (" << e.what() << "); using the input level values." << std::endl;
     gc.inputWidthsArePhysical = false;
-    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound);
+    return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, compound->Inputs());
   }
 }
 
@@ -287,7 +287,7 @@ double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure
       azure2::Results results;  // the point's own result record
       point.UsePrivateRecord(results);
       point.Initialize(nullptr, compound, configure);
-      point.Calculate(nullptr, compound, configure, results);
+      point.Calculate(nullptr, compound, compound->State(), configure, results);
       double sigma = point.GetFitCrossSection(results);
       if (!std::isfinite(sigma)) return std::numeric_limits<double>::quiet_NaN();
       total += sigma;

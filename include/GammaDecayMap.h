@@ -109,7 +109,7 @@ class GammaDecaySet {
   /// the fill computed stored in `state` (GammaDecayFill), nothing else written.
   vector_r ToEngine(const CNuc &compound, LevelState &state, const vector_r &p) const;
   /// CNuc::GetTransformParams: the record's value of the last fill at a record slot, else `otherwise`.
-  double ValueOr(const CNuc &compound, int j, int la, int ch, double otherwise) const;
+  double ValueOr(const CNuc &compound, const LevelState &state, int j, int la, int ch, double otherwise) const;
   /// Partial widths (eV, signed, one per photon channel in slot order) of a record from its values q (slot order);
   /// with dGdq, also dGamma_k/dq_i (row-major k * m + i); excess: sum of the explicit branchings minus 1 (> 0: the
   /// remainder is 0 and the others are scaled, section 2.6).
@@ -122,7 +122,7 @@ class GammaDecaySet {
    * amplitudes given their share; added to gradFull at the indices of `map`.  GradAccum::Scatter calls it and leaves
    * the record slots' own cotangents out.
    */
-  void PullBack(const CNuc &compound, const GradAccum &accum, const ParamIndexMap &map, vector_r &gradFull) const;
+  void PullBack(const CNuc &compound, const LevelState &state, const GradAccum &accum, const ParamIndexMap &map, vector_r &gradFull) const;
   /// The full-vector indices of everything the photon amplitudes of record r depend on: the level's energy and
   /// channels (the record's numbers, its particle amplitudes) and the channels of the final states of its external
   /// parts.  The gradient asks for the photon amplitudes' cotangents when one of them is free.
@@ -133,15 +133,15 @@ class GammaDecaySet {
     double r = 0.0;
     std::vector<std::pair<int, double>> d;
   };
-  std::vector<PenaltyRow> PenaltyRows(const CNuc &compound) const;
+  std::vector<PenaltyRow> PenaltyRows(const CNuc &compound, const LevelState &state) const;
   /// Their chi^2, sum r^2.
-  double Penalty(const CNuc &compound) const;
+  double Penalty(const CNuc &compound, const LevelState &state) const;
   /// d chi^2 / d q, as (full index, value) pairs (GradAccum::direct).
-  void AddPenaltyGradient(const CNuc &compound, std::vector<std::pair<int, double>> &grad) const;
+  void AddPenaltyGradient(const CNuc &compound, const LevelState &state, std::vector<std::pair<int, double>> &grad) const;
 
   /// The block of parameters.out: per record Gamma_gamma, every b_f, delta_f and the partial widths; a note for a
   /// branching or remainder at 0 and for a sum of branchings above 1; the observed widths are `table`'s.
-  std::string Report(const CNuc &compound, const ObservedLevelTable &table) const;
+  std::string Report(const CNuc &compound, const LevelState &state, const ObservedLevelTable &table) const;
 
  private:
   struct Point;

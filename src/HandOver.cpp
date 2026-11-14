@@ -188,12 +188,13 @@ void WorkingCopy::FillNormsFromParams(const vector_r &p) {
  */
 
 void WorkingCopy::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, CNuc *theCNuc,
-                                       const Config *configure) {
-  this->FillEnergyShiftsFromParamsImpl(p, theCNuc, configure);
+                                             const LevelState *levels, const Config *configure) {
+  this->FillEnergyShiftsFromParamsImpl(p, theCNuc, levels, configure);
   this->BeginEvaluation(results);
 }
 
-void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, const Config *configure) {
+void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, const LevelState *levels,
+                                                 const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
@@ -281,7 +282,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // The plan tasks whose units move (re-placed grids, shifted points): their slots are looked up again at the end.
   std::vector<int> movedTasks;
   if (theCNuc && configure) {
-    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, movedTasks);
+    this->ReplaceSubPointGrids(theCNuc, *levels, *configure, shiftActiveSegments, movedTasks);
     // Slots placed again: the row sets of their readers at the new energies (RowSet.h).
     if (!movedTasks.empty()) this->BuildRowSets(theCNuc, *configure);
   }

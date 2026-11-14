@@ -26,6 +26,7 @@
 class Segment;
 class WorkingCopy;
 class CNuc;
+class LevelState;
 class PPair;
 class TargetEffect;
 namespace azure2 {

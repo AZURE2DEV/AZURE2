@@ -66,8 +66,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     AZUREParams params;
     localCompound->FillCompoundFromParams(p);
     localData->FillNormsFromParams(p);
-    localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &configure());
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
+    localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &localCompound->State(), &configure());
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
     if (localCompound) ReturnPooledCNuc(localCompound);
@@ -85,7 +85,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
 double AZURECalcMCMC::LogLikelihoodOfFilled(CNuc *localCompound, WorkingData *working, const vector_r &p) const {
   azure2::Results &results = working->results;
-  ObjectiveContext context{localCompound, working->data.get(), results, p, configure()};
+  ObjectiveContext context{localCompound, localCompound->MutableState(), localCompound->Inputs(), working->data.get(), results, p, configure()};
   // A support of the posterior (Park's J > 0, docs/upgrade/objective.md D2): -infinity outside.
   if (Objective::Engine().ExcludesForSampler(context)) {
     ReturnPooledCNuc(localCompound);
@@ -95,7 +95,7 @@ double AZURECalcMCMC::LogLikelihoodOfFilled(CNuc *localCompound, WorkingData *wo
   // The model value of every point, then the fit's objective as the sampler takes it (Objective::SamplerChi2,
   // objective.md section 6): every term at its value, the data with THM norms profiled as the fit does (D1), except
   // the priors this sampler normalises (CalculateLogPrior).  A term added to the objective arrives here unedited.
-  azure2::EvaluateModel(*working->data, localCompound, configure(), results, azure2::LeafValues::Calculate);
+  azure2::EvaluateModel(*working->data, localCompound, localCompound->State(), configure(), results, azure2::LeafValues::Calculate);
   const double chiSquared = Objective::Engine().SamplerChi2(context);
 
   ReturnPooledCNuc(localCompound);
@@ -156,9 +156,9 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &localCompound->State(), &configure());
 
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
   return LogLikelihoodOfFilled(localCompound, working, fitVector);
 }
 
@@ -198,7 +198,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     if (!par.IsFixed()) rwa_.push_back(par.Value());
   }
 
-  all_physical_ = compound()->GetTransformParams(observed);
+  all_physical_ = compound()->GetTransformParams(compound()->State(), observed);
   data()->Data().Abundances().AppendTo(all_rwa_, all_physical_);
   // Add missing parameters
   for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
@@ -395,7 +395,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         // parameter stays uniform rather than getting an invented width.
         usePriors_[i] = false;
         nNoError++;
-        noErrorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
+        noErrorLabels.push_back(AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]));
       }
     } else if (kind == ParamKind::ThmCoherent) {
       // THM coherent background: nothing in the data quotes an error on it,
@@ -408,7 +408,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
       if (usePriors_[i] && priorStds_[i] > 0.0)
         nUserSet++;
       else
-        noPriorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
+        noPriorLabels.push_back(AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]));
     }
   }
 
@@ -432,7 +432,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         const bool has = useRWA ? limits.NuisancePrior(freeAllIndex[i], nominal, sigma)
                                 : limits.NuisancePriorPhysical(freeAllIndex[i], nominal, sigma);
         if (!has) continue;
-        const std::string label = AZURELabel::Parameter(compound(), data(), freeAllIndex[i]);
+        const std::string label = AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]);
         if (usePriors_[i] && priorStds_[i] > 0.0) {
           overridden += (overridden.empty() ? "" : ", ") + label;
         } else if (kind == ParamKind::ThmCoherent) {
@@ -784,7 +784,7 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
             // For RWA parameters, use the same approach as CalculateLogLikelihood
             localCompound->FillCompoundFromParams(fullParams);
             localData->FillNormsFromParams(fullParams);
-            localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound,
+            localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &localCompound->State(),
                                                   &configure());
             if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
               localCompound->CalcShiftFunctions(configure());
@@ -803,7 +803,7 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
               localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
-              localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound,
+              localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &localCompound->State(),
                                                   &configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
               // FillMnParams read the clone's starting norms and shifts; the
@@ -824,18 +824,18 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
             for (const Segment &seg : localData->Data().GetSegments())
               if (!seg.HasComponents())
                 for (Unit &point : seg.GetPoints(*localData))
-                  point.Calculate(localData, localCompound, configure(), localResults);
+                  point.Calculate(localData, localCompound, localCompound->State(), configure(), localResults);
             // The model values (ModelPass.h): the points above are calculated; the loop skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
             for (int s = 1; s <= localData->Data().NumSegments(); s++) {
               const Segment *seg = localData->Data().GetSegment(s);
-              azure2::EvaluateModelSegment(*localData, *seg, localCompound, configure(), localResults,
+              azure2::EvaluateModelSegment(*localData, *seg, localCompound, localCompound->State(), configure(), localResults,
                                            seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }
 
             localData->WriteOutputFiles(configure(), localResults, true);
 
-            WriteParametersOut(*localCompound, run.useRWA ? StartObservedLevels() : localCompound->TransformOut(configure()),
+            WriteParametersOut(*localCompound, localCompound->State(), run.useRWA ? StartObservedLevels() : localCompound->TransformOut(configure()),
                                configure());
 
             // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav

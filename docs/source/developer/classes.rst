@@ -67,18 +67,23 @@ the specs of ``BuiltProject``), which ``Config`` keeps as
 each with its channels (``AChannel``) and levels (``ALevel``: the values of
 the ``<levels>`` rows, the fix flags, the external-capture final-state data;
 nothing of a level is written after the set-up). The levels' input values in
-the engine's basis (energies, widths or amplitudes, the zero-width flags, the
-``gamma_decay`` records' numbers, whether the transformation ran) are the
-``LevelInputs`` the ``CNuc`` holds (``CNuc::Inputs()``): ``Fill`` makes it,
-``TransformIn`` and ``FillCompoundFromParamsPhysical`` rewrite it. The values
-at the parameter vector (fit energies and amplitudes, shift functions and
-their derivatives, Park's :math:`J`, the external-capture amplitudes and
-:math:`N_f^{1/2}`, the ``gamma_decay`` records' fills, the formal-basis
-capture-mask projectors) are the ``LevelState`` the ``CNuc`` holds: its fills
-(``FillCompoundFromParams`` with ``GammaDecaySet::ToEngine``,
-``CalcShiftFunctions``, ``TransformIn``, ``SetFitLevelParameter``) write it
-and nothing else of the ``CNuc``, every reader gets it ``const`` through
-``CNuc::State()``. Where each level's energy and amplitudes sit in the
+the engine's basis (energies, widths or amplitudes, the ``gamma_decay``
+records' numbers, whether the transformation ran) are a ``LevelInputs``.
+The values at the parameter vector (fit energies and amplitudes, shift
+functions and their derivatives, Park's :math:`J`, the external-capture
+amplitudes and :math:`N_f^{1/2}`, the ``gamma_decay`` records' fills, the
+formal-basis capture-mask projectors, and what an evaluation reads of the
+input: the zero-width flags and the input energies) are a ``LevelState``.
+``CNuc``'s fills and transformations are ``const`` and write the state and
+inputs they are given (``FillCompoundFromParams`` with
+``GammaDecaySet::ToEngine``, ``CalcShiftFunctions``, ``TransformIn``,
+``FillCompoundFromParamsPhysical``, ``SetFitLevelParameter``,
+``TransformOut``); every reader of an evaluation's values takes the
+``LevelState`` it reads as an argument (the matrix functions hold the one
+they are solved at), and every reader of the input values the
+``LevelInputs``. The ``CNuc`` holds one of each for its default owner, the
+run or session that set it up (``CNuc::State()``, ``CNuc::Inputs()``), which
+hands them to the readers. Where each level's energy and amplitudes sit in the
 parameter vector is the ``LevelParameterLayout`` (``CNuc::ParameterLayout()``,
 built by ``Fill``, shared by the copies): every walk of the level block reads
 it. ``CNuc`` is copied for every evaluation that runs at the

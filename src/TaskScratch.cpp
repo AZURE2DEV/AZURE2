@@ -15,36 +15,36 @@ namespace azure2 {
 TaskScratch::TaskScratch() = default;
 TaskScratch::~TaskScratch() = default;
 
-AMatrixFunc &TaskScratch::PointSolver(CNuc *compound, const Config &configure) {
+AMatrixFunc &TaskScratch::PointSolver(CNuc *compound, const LevelState &state, const Config &configure) {
   if (!point_) {
-    point_.reset(new AMatrixFunc(compound, configure));
+    point_.reset(new AMatrixFunc(compound, state, configure));
     point_->ShareChannelMemo(&channel_);
   }
-  point_->Reset(compound, configure);
+  point_->Reset(compound, state, configure);
   return *point_;
 }
 
-THMMatrixFunc &TaskScratch::PointThmSolver(CNuc *compound, const Config &configure) {
+THMMatrixFunc &TaskScratch::PointThmSolver(CNuc *compound, const LevelState &state, const Config &configure) {
   if (!pointThm_) {
-    pointThm_.reset(new THMMatrixFunc(compound, configure));
+    pointThm_.reset(new THMMatrixFunc(compound, state, configure));
     pointThm_->ShareChannelMemo(&channel_);
   }
-  pointThm_->Reset(compound, configure);
+  pointThm_->Reset(compound, state, configure);
   return *pointThm_;
 }
 
-AMatrixFunc &TaskScratch::GradientSolver(CNuc *compound, const Config &configure) {
+AMatrixFunc &TaskScratch::GradientSolver(CNuc *compound, const LevelState &state, const Config &configure) {
   if (!gradient_) {
-    gradient_.reset(new AMatrixFunc(compound, configure));
+    gradient_.reset(new AMatrixFunc(compound, state, configure));
     gradient_->ShareChannelMemo(&channel_);
   }
-  gradient_->Reset(compound, configure);
+  gradient_->Reset(compound, state, configure);
   return *gradient_;
 }
 
-THMMatrixFunc &TaskScratch::GradientThmSolver(CNuc *compound, const Config &configure) {
+THMMatrixFunc &TaskScratch::GradientThmSolver(CNuc *compound, const LevelState &state, const Config &configure) {
   if (!gradientThm_) {
-    gradientThm_.reset(new THMMatrixFunc(compound, configure));
+    gradientThm_.reset(new THMMatrixFunc(compound, state, configure));
     gradientThm_->ShareChannelMemo(&channel_);
   }
   return *gradientThm_;

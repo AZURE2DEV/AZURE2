@@ -141,8 +141,8 @@ complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const 
   return value;
 }
 
-complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelInputs &inputs, int j, int la,
-                                     const AChannel *channel, const Config &configure) {
+complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelState &state, const LevelInputs &inputs, int j,
+                                     int la, const AChannel *channel, const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
   const JGroup *group = compound.GetJGroup(j);
@@ -152,7 +152,7 @@ complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelInputs &in
   for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(inputs.Gamma(j, la, ch));
   for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
     values.finalGamma.push_back(inputs.Gamma(finalState.first, finalState.second, ch));
-  values.finalSqrtNF = compound.State().SqrtNF(finalState.first, finalState.second);
+  values.finalSqrtNF = state.SqrtNF(finalState.first, finalState.second);
   return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
 }
 
@@ -247,29 +247,29 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
  * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration is
  * EvaluationIteration's, so that the capture agrees with the Brune basis to rounding (the reports use 1e-6 MeV).
  */
-void CNuc::ECFinalStatesFromFormal() {
+void CNuc::ECFinalStatesFromFormal(LevelState &state) const {
   const ECFinalBlocks &r = *ecFinalBlocks_;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
     const int j = r.structure->map.groupOfBlock[b];
-    JGroup *group = this->Group(j);
+    const JGroup *group = this->GetJGroup(j);
     const std::vector<int> &levels = r.structure->map.levelOfBlockLevel[b];
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
-      E.push_back(levelState_.E(j, la));
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(j, la, (int)k + 1));
+      E.push_back(state.E(j, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(state.Gamma(j, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, b, E, gamma, B, cf, options);
     WarnOnce(brune, r.printedOnce);
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
-      ALevel *level = group->GetLevel(levels[lb]);
+      const ALevel *level = group->GetLevel(levels[lb]);
       if (!level->IsECLevel()) continue;
       const std::vector<double> g(brune.gamma.begin() + lb * nc, brune.gamma.begin() + (lb + 1) * nc);
-      for (std::size_t k = 0; k < nc; k++) levelState_.SetECGamma(j, levels[lb], (int)k + 1, g[k]);
-      levelState_.SetSqrtNF(j, levels[lb], SqrtNFFactor(*this, group, level, 1.0, g));
+      for (std::size_t k = 0; k < nc; k++) state.SetECGamma(j, levels[lb], (int)k + 1, g[k]);
+      state.SetSqrtNF(j, levels[lb], SqrtNFFactor(*this, group, level, 1.0, g));
     }
   }
 }
@@ -319,7 +319,7 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
  * The projector Pi = T^-1 P T of each slot at the current fit parameters (physics/ capture_mask, Eq. 5), T from
  * brune_from_formal (EvaluationIteration) as for the final states; empty when no level of the block is masked.
  */
-void CNuc::FormalCaptureMasksFromParams() {
+void CNuc::FormalCaptureMasksFromParams(LevelState &state) const {
   const CaptureMaskSetup &r = *captureMaskSetup_;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(true);
@@ -330,26 +330,26 @@ void CNuc::FormalCaptureMasksFromParams() {
     std::vector<unsigned char> masked(n, 0);
     bool any = false;
     for (std::size_t lb = 0; lb < n; lb++) {
-      masked[lb] = levelInputs_.ZeroInputWidth(mask.group, mask.levels[lb], mask.channel) ? 1 : 0;
+      masked[lb] = state.ZeroInputWidth(mask.group, mask.levels[lb], mask.channel) ? 1 : 0;
       any = any || masked[lb];
     }
-    levelState_.SetCaptureProjector((int)i, std::vector<double>());
+    state.SetCaptureProjector((int)i, std::vector<double>());
     if (!any) continue;
     // A masked level whose particle amplitudes are all zero is decoupled: no shift-matrix element links it to another
     // level, so T is the identity on its row and column and Pi = P exactly (external_capture.md section 7).
     bool coupled = false;
     for (std::size_t lb = 0; lb < n && !coupled; lb++)
-      if (masked[lb]) coupled = MaskedLevelCoupled(mask.group, mask.levels[lb]);
+      if (masked[lb]) coupled = MaskedLevelCoupled(state, mask.group, mask.levels[lb]);
     if (!coupled) continue;
     std::vector<double> E, gamma, B(nc);
     for (int la : mask.levels) {
-      E.push_back(levelState_.E(mask.group, la));
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelState_.Gamma(mask.group, la, (int)k + 1));
+      E.push_back(state.E(mask.group, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(state.Gamma(mask.group, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure->system, mask.block, E, gamma, B, cf, options);
     WarnOnce(brune, r.printedOnce);
-    levelState_.SetCaptureProjector((int)i, phys::capture_mask(brune.transform, n, masked));
+    state.SetCaptureProjector((int)i, phys::capture_mask(brune.transform, n, masked));
   }
 }
 
@@ -358,14 +358,15 @@ void CNuc::FormalCaptureMasksFromParams() {
  * projector (T depends on the parameters), or when a masked level is decoupled now but one of its particle amplitudes
  * is free: P is exact at the point, but dPi = [P, dT] is not zero there (external_capture.md section 7).
  */
-bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) const {
+bool CNuc::FormalCaptureMasksOutsideAdjoint(const LevelState &state,
+                                             const std::function<bool(int, int, int)> &freeGamma) const {
   if (!captureMaskSetup_) return false;
   for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++) {
     const CaptureMaskSlot &mask = captureMaskSetup_->slots[i];
-    if (!levelState_.CaptureProjector((int)i).empty()) return true;
+    if (!state.CaptureProjector((int)i).empty()) return true;
     const JGroup *group = this->GetJGroup(mask.group);
     for (int la : mask.levels) {
-      if (!levelInputs_.ZeroInputWidth(mask.group, la, mask.channel)) continue;
+      if (!state.ZeroInputWidth(mask.group, la, mask.channel)) continue;
       for (int ch = 1; ch <= group->NumChannels(); ch++)
         if (group->GetChannel(ch)->GetRadType() == 'P' && freeGamma(mask.group, la, ch)) return true;
     }
@@ -374,10 +375,10 @@ bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, i
 }
 
 /// Has level `la` of J-group `j` a particle amplitude other than zero (current fit values)?
-bool CNuc::MaskedLevelCoupled(int j, int la) const {
+bool CNuc::MaskedLevelCoupled(const LevelState &state, int j, int la) const {
   const JGroup *group = this->GetJGroup(j);
   for (int ch = 1; ch <= group->NumChannels(); ch++)
-    if (group->GetChannel(ch)->GetRadType() == 'P' && levelState_.Gamma(j, la, ch) != 0.0) return true;
+    if (group->GetChannel(ch)->GetRadType() == 'P' && state.Gamma(j, la, ch) != 0.0) return true;
   return false;
 }
 

@@ -85,7 +85,7 @@ void ReportParametersAtLimits(const ProgramRun &run, const AZUREParams &params) 
     if (!atLimit) continue;
     if (!nAtLimit) run.configure.outStream << "  Parameter(s) sitting at a limit:" << std::endl;
     std::string text = mp.GetName(i);
-    const std::string label = AZURELabel::Parameter(run.compound, run.data, (int)i);
+    const std::string label = AZURELabel::Parameter(run.compound, run.compound->Inputs(), run.data, (int)i);
     if (!label.empty()) text += "  =  " + label;
     run.configure.outStream << "    " << text << " = " << value << std::endl;
     nAtLimit++;

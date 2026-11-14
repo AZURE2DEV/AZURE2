@@ -48,9 +48,9 @@ AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const R
 /*!
  * \brief The quantized anchors of every level of the compound.
  */
-std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound,
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound, const LevelInputs &inputs,
                                                                                      double frameShift) {
-  std::vector<ResonanceInfo> anchors = LevelResonances(compound);
+  std::vector<ResonanceInfo> anchors = LevelResonances(compound, inputs);
   for (ResonanceInfo &r : anchors) {
     r.energy -= frameShift;
     r = Quantize(r);
@@ -238,10 +238,10 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
  * reaction-rate breakpoints).
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound) {
+AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs) {
   if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
   std::vector<ResonanceInfo> resonances;
-  for (const ResonanceInfo &r : LevelResonances(compound)) {
+  for (const ResonanceInfo &r : LevelResonances(compound, inputs)) {
     double margin = 20.0 * r.particleWidth;
     if (r.energy >= endEnergy - margin && r.energy <= startEnergy + margin) resonances.push_back(r);
   }
@@ -257,7 +257,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
  * the separation energy of the entrance channel.
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
+AdaptiveIntegrationGrid::LevelResonances(CNuc *compound, const LevelInputs &inputs) {
   std::vector<ResonanceInfo> resonances;
 
   if (!compound) return resonances;
@@ -277,8 +277,6 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   double separationEnergy = entrancePair->GetSepE();
   double excitationEnergy = entrancePair->GetExE();
 
-  // The input values (CNuc::Inputs): the file's widths before TransformIn, the fit basis's amplitudes after it.
-  const LevelInputs &inputs = compound->Inputs();
 
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
