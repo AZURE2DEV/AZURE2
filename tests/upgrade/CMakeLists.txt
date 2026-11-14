@@ -240,3 +240,18 @@ target_link_libraries(capture_ay_requests_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_capture_ay_requests
          COMMAND capture_ay_requests_test ${CMAKE_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/capture_ay_requests)
 set_tests_properties(upgrade_capture_ay_requests PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)
+
+# The level block of the parameter vector (include/LevelParameterLayout.h): a layout by hand, and on projects with
+# external capture, a gamma_decay record and several nuclei the layout against the groups' sizes and the names
+# CNuc::FillMnParams gives the block.  Reads the projects in place and writes nothing.
+add_executable(level_parameter_layout_test level_parameter_layout_test.cpp)
+target_link_libraries(level_parameter_layout_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_level_parameter_layout
+         COMMAND level_parameter_layout_test
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
+                 ${CMAKE_SOURCE_DIR}/tests/13N/13N.azr
+                 ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/record.azr
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(upgrade_level_parameter_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)

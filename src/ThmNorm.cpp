@@ -629,9 +629,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
   // The coherent backgrounds are the last block of the parameter vector
   // (FillMnParams sets the offset again when it lays the vector out).
   if (!Draft().thmCoherentParams_.empty()) {
-    int offset = 0;
-    for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-      offset += theCNuc->GetJGroup(j)->NumLevels() * (1 + theCNuc->GetJGroup(j)->NumChannels());
+    int offset = theCNuc->ParameterLayout().Size();
     for (int s = 1; s <= Draft().NumSegments(); s++) {
       if (Draft().GetSegment(s)->IsVaryNorm() && !Draft().GetSegment(s)->IsProfiledNorm()) offset++;
       offset++;  // energy shift

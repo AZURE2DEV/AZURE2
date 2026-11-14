@@ -849,6 +849,11 @@ citation notice; the PI's word on the terms: free to use as long as SRIM is cite
 recommendation below; the others are the note's. The removal of the readline menus (3) is a change for the owner's
 users and stands on the list of things he must see.
 
+**Taken by the PI on 2026-11-14** ("Yes to all", on three questions of section 9's edits): a pair no level names yet
+is kept in `<levels>` by a pair row (inactive, level ID 0); `add_level(..., "allowed")` gives every channel width 0,
+fixed (as built; the question was put as either this or free as in the Qt program, and the answer is read as keeping
+what is built); the `width_is_amplitude` flag stays refused on photon channels.
+
 1. **Names of the top-level objects.** (a) `Session`, `Project`, `Parameters`, `Objective`, `Evaluation` (the
    binding's class is already `_azure2.Session`); (b) `Model` for the session; (c) keep `azure2`, a lower-case class
    named after the program, whose `help()` shows a mixin's docstring today. *Recommendation: (a).* Later: a rename

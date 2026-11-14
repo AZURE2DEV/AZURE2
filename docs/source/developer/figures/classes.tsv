@@ -37,6 +37,7 @@ JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	eval
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
 ALevel	include/ALevel.h	a level: input E and gamma, flags, final-state data	setup	class	evaluation
 LevelState	include/LevelState.h	the levels at the vector: E, gamma, shift functions, J, N_f	setup	class	evaluation
+LevelParameterLayout	include/LevelParameterLayout.h	where each level's energy and amplitudes sit in the vector	setup	class	immutable
 ObservedLevelTable	include/ObservedLevelTable.h	the observed values of the levels at one vector, for the reports	setup	class	run
 CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	setup	class	immutable
 azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable

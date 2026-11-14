@@ -2,7 +2,97 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-14 (director, 13:05) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
+## 2026-11-14 (director, 13:10) — merged: one layout of the level block of the parameter vector
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 70 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-parameter-layout` and one rewrapped comment line of
+`src/ModelData.cpp`. The agent's entry follows.
+
+- `LevelParameterLayout` (`include/LevelParameterLayout.h`) lists the slots of the level block in the format's
+  order; `CNuc::Fill` builds it once. The twelve places that each counted positions of their own read it
+  (the design had counted eight). Read by the director: every reader's loop gives the old order (the slots are
+  listed in the order of the old loops), and the test writes the order out independently.
+- The copies of the compound were measured and not replaced: an owner writes on its copy the levels' input
+  values, the `gamma_decay` inputs and fills and the capture masks, not only a `LevelState`. **Decided by the
+  director**: the next branch carries `LevelInputs`, moves the fills and masks into the evaluation's state and
+  gives the readers the state they read (the part of the design's last step that the owners need); the set-up
+  and the name `CNuc` stay for the last step.
+
+**Verified on the merged tree** (build `work/b-trial70`, five threads): 0 warnings; all projects in the three
+bases against `tab-t69-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `work/b-trial69`; 273 of 273 quick tests (with `docs_build`). The director's own runs
+(`work/director/spot70/`): the natural-target fit of `angle_mapping` in two fitters and a sampler chain of T2 in
+both bases (8 walkers, 100 steps), every output file identical to `work/b-trial69`. Not run here: the slow
+tests, MINOS, the rate and the band (the agent ran them on its branch: identical), the long suite.
+
+**New reference**: tag `tab-t70-1`, base build `work/b-trial70`.
+
+**Decided by the PI (2026-11-14)**: a pair no level names yet is kept in `<levels>` by a pair row (inactive,
+level ID 0); `add_level(..., "allowed")` gives every channel width 0, fixed (as built; the question was put as
+either this or free as Qt, and the answer was "yes to all": read as keeping what is built, and the PI was told
+so); the `width_is_amplitude` flag stays refused on photon channels. Recorded in `pyazr3.md` section 5.
+
+**Open** (beside the earlier lists): the `gamma_decay` records' numbers still sit at energy + channel by
+arithmetic (`GammaDecayMap.cpp`; the layout states it as part of its order); the long suite of the earlier
+batch (rehearsal 69) is still running.
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-parameter-layout`) — one layout of the level block
+
+**Measured first** (start f0b17b19). The places that count positions of the level block of the parameter vector
+for themselves: twelve, not the design's eight (the THM coherent offset, the `gamma_decay` index and the model
+data's columns were not counted). The table with files, lines and what each reads or writes per slot is in
+`cnuc_split.md` §12.3, "Step 4 as built, first part". The copies of the compound at the start:
+
+| copy | where | what it is for |
+|---|---|---|
+| the fitter's pool (`GetPooledCNuc`) | `AZURECalc.cpp` 1340 (used at 409, 591, 680, 1183, 1260) | one per evaluation running at once: the fill, the shift functions, the matrix functions |
+| the fitter's output copy | `AZURECalc.cpp` 502 (`output_compound_`) | the snapshot's evaluation and its files |
+| fresh copies for checks | `AZURECalc.cpp` 460 (trace `fresh`), 600 (`AZURE_POOL_CHECK`) | a reference evaluation beside the pooled one |
+| the sampler's pool | `AZURECalcMCMC.cpp` 1270 (used at 59, 114, 880; `SamplerSupport.cpp` 29) | per walker evaluation; the physical mode writes the level inputs and runs `TransformIn` on it |
+| the sampler's start and snapshot | `AZURECalcMCMC.cpp` 739, 776 | the observed levels of the start vector; the snapshot's evaluation |
+| the limits' conversion | `ParameterLimitsManager.cpp` 402 | observed → reduced limit: `FillCompoundFromParamsPhysical`, `TransformIn`, `FillMnParams` |
+| the rate | `ReactionRate.cpp` 107 (`RateResonances`), 365, 409 (one per thread) | the resonances from observed inputs; the rate integrand per thread |
+| the sub-point grids | `TargetSetup.cpp` 193 (`gridNuc_`, kept for the run) | the observed levels the grids are laid out from (writes the level inputs) |
+| tests | `history_test`, `results_owner_test`, `park_chi2_fallback_test`, `sampler_objective_test` | copies per evaluation, as the pools |
+
+**Done** (one commit): `LevelParameterLayout` (`include/LevelParameterLayout.h`, `src/LevelParameterLayout.cpp`):
+the slots of the level block in the format's order (kind, group, level, channel, level number), per level the
+index of its energy and of each amplitude, and the names `energy_N` / `width_N_M`. `CNuc::Fill` builds it once
+(beside the shape of the `LevelState`); the copies share it. Every one of the twelve places reads it:
+`CNuc::FillMnParams` (iterates the slots), `FillCompoundFromParams`, `FillCompoundFromParamsPhysical`,
+`GetTransformParams`, `ConvertAmplitudeBasis`, `SetFitLevelParameter` (takes a slot now), the level part of
+`BuildParamIndexMap`, `AZURELabel::NumParameters` and `Parameter`, `LevelEnergyIndex` (`GammaDecayMap.cpp`),
+`WorkingCopy::BuildThmGroups` (the coherent offset) and `LevelJacobian` (`ModelData.cpp`). What still assumes the
+order rather than reading it: the `gamma_decay` records' numbers at energy + channel (`GammaDecayMap.cpp`), which
+the layout states as part of its order. Test `upgrade_level_parameter_layout`
+(`tests/upgrade/level_parameter_layout_test.cpp`): a layout by hand, and on T1, T2, T3, 13N and a `gamma_decay`
+project the format's order written out in the test against every slot, index and name, and against the names
+`FillMnParams` gives. Injected: the channels of a level in reverse order in the layout: 131 failures; removed.
+
+**Not done: the copies** (the second part of the design's step 4). Measured why it is larger than the design says:
+an owner writes more than a `LevelState` on its copy after set-up. `FillCompoundFromParamsPhysical` and
+`TransformIn` write the levels' input values (`ALevel` E, γ, zero-input flags) and `gammaDecayInputs_`;
+`FillCompoundFromParams` writes `gammaDecayFills_` (`GammaDecaySet::ToEngine`) and `captureMasks_`; `TransformIn`
+writes `transformedIn_` and `transformError_`. The sampler's physical mode, the limits' conversion, `RateResonances`
+and the sub-point-grid copy do it. So the owners need `LevelInputs` too, and every reader of `CNuc::State()` (about
+80 calls in 17 files), of the `gamma_decay` fills and of the formal capture masks must take the owner's state:
+part of the design's step-5 signatures comes forward. `Clone`, the pools and their `allowed_state.tsv` rows are
+unchanged.
+
+**Verified how** (build `work/b-cnuc5`, 0 warnings, 5 threads at most): the consistency test; `docs_build` (54
+pages); all projects in the three bases against `tab-t68-1` (tag `tab-cnuc5-1`): 887 / 851 / 887 identical; the
+eight fits of `fits_vs_base2.sh` identical to `work/b-trial68`; against `work/b-trial68` also (`work/cnuc5/extra.sh`):
+`angle_mapping` fits (gradient, LM), T2 sampled in the physical and the RWA basis, a MINOS run of T2, a T2 gradient
+fit with `--covariance-band` and a rate run of `reaction_rate/models/p12C.azr`: every output identical (13, 13, 10,
+10, 16, 17, 4 files); T2 gradient and 13N LM fits at 3 threads identical to the same at 1 thread (14, 10 files);
+`OMP_NUM_THREADS=1 ctest -LE slow -j1`: 268 of 268 passed (3467 s). An evaluation (pyazr `Objective`, 100 calls, 1
+thread, best of 3, base and branch alternately, three rounds): T1 0.094–0.096 s both; T2 3.74–3.81 s base, 3.77–3.86
+s branch; the same pair of builds measured on the start commit (identical code) differed by as much (3.69 / 3.75 s).
+
+**Open.** The copies (above). The two defects kept as they were: the sub-point-grid copy's stale N_f^½ and the RWA
+chain's snapshot `parameters.out`.
+
+## 2026-11-14 (director, 11:30) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 69 (a true merge of the rehearsal branch; its tree
 plus this entry): `feature/upgrade-7-tests-cannot-fail` and `feature/upgrade-8-pyazr3-project-edits`. Their
