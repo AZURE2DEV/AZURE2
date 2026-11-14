@@ -544,6 +544,16 @@ fails when its switch or its line in the manual is missing. One thing to know: f
 program silently takes the analytic-gradient MIGRAD; `fit_with_engine` does what it is told, so the program's plain
 run on such a project corresponds to `method="migrad-gradient"`.
 
+## ENDF files for evaluators (2026-11-14)
+
+`pyazr.endf` reads any ENDF-6 file with no outside program: `pyazr endf summary FILE` says what it holds in the
+manual's words (material, projectile, sections and reactions, Q values, energy ranges, the laws of MF=6, the
+R-matrix flags of MF=2, the header text), `pyazr endf curves FILE PROJECT` gives the evaluation at every data set's
+points in its own quantity and unit (MF=3, MF=6 LAW=2 and the charged-particle elastic LAW=5), and
+`pyazr.endf.check_format(path)` checks the file's format, each finding with the manual's page. Every format rule is
+cited by the printed page of ENDF-102 (2023); the physics conversions are the engine's rows. An extract (182 lines) of the ENDF/B-VIII.1 3He + 4He evaluation is test data (your yes of 2026-11-14), with its source and
+citation beside it.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

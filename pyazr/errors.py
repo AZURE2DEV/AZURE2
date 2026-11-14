@@ -16,6 +16,9 @@ older pyazr keeps catching it:
   (:class:`DomainZeroDivision`, also a ``ZeroDivisionError``, where the formula divided by zero before).
 - :class:`SessionClosed` (``RuntimeError``): a call on a closed session.
 - :class:`MissingFile` (``FileNotFoundError``): a project, working directory or parameter file that does not exist.
+- :class:`FormatRefused` (``ValueError``): a valid ENDF-6 file, or a part of it, that pyazr does not read or cannot
+  turn into what was asked (``pyazr.endf``): an option AZURE2 has no place for, a law not built, a quantity the file
+  does not hold.
 
 A message says (1) what was wrong with the value given, (2) what is allowed, (3) which call shows or fixes it, and
 names objects by their label.  Where the message is built from these three parts, they are attributes too:
@@ -34,7 +37,7 @@ import difflib
 
 __all__ = ["Error", "FormatError", "ParameterError", "ParameterKeyError", "ParameterIndexError",
            "ParameterVectorError", "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed",
-           "MissingFile", "EngineWarning"]
+           "MissingFile", "FormatRefused", "EngineWarning"]
 
 
 class Error(Exception):
@@ -139,6 +142,20 @@ class MissingFile(Error, FileNotFoundError):
 
     def __str__(self):
         return self.strerror
+
+
+class FormatRefused(Error, ValueError):
+    """A valid ENDF-6 file, or a part of it, that pyazr does not read or cannot turn into what was asked
+    (``pyazr.endf``); always with its three parts ``what``, ``allowed``, ``fix``.  A malformed file is a
+    :class:`FormatError` instead."""
+
+    def __init__(self, message=None, *, what, allowed, fix):
+        text = message or what
+        if what not in text:
+            text = f"{what}: {text}"
+        text += "" if allowed in text else f"; allowed: {allowed}"
+        text += "" if fix in text else f"; {fix}"
+        super().__init__(text, what=what, allowed=allowed, fix=fix)
 
 
 class EngineWarning(UserWarning):

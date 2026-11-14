@@ -117,3 +117,5 @@ State	pyazr/ui/state.py	the open project and its edit history	frontends	class	ru
 SessionWorker	pyazr/ui/workers.py	the process that holds the session	frontends	class	run
 Engine	pyazr/ui/engine.py	session operations for the routes (in the worker)	frontends	class	run
 JobTable	pyazr/ui/jobs.py	fits and samplers run as jobs	frontends	class	run
+pyazr.endf	pyazr/endf/__init__.py	ENDF-6 files: read, summarise, curves, format check, checking codes	libraries	package	run
+pyazr::endf::Material	pyazr/endf/material.py	one material of an ENDF-6 file: sections, header, curves	frontends	class	run

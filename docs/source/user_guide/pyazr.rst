@@ -142,6 +142,8 @@ class                     also a                                    raised for
 ``DomainZeroDivision``    ``DomainError``, ``ZeroDivisionError``    the same, where the formula divided by zero
 ``SessionClosed``         ``RuntimeError``                          a call on a closed session
 ``MissingFile``           ``FileNotFoundError``                     a project, directory or ``param.sav`` missing
+``FormatRefused``         ``ValueError``                            an ENDF-6 file, or a part of it, that
+                                                                    ``pyazr.endf`` does not read (:doc:`endf`)
 ========================  ========================================  ================================================
 
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
@@ -1256,7 +1258,7 @@ The names of the package
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
 lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
-``system``, ``sources``, ``stopping`` and ``physics``, and the error classes.
+``system``, ``sources``, ``stopping``, ``physics`` and ``endf``, and the error classes.
 
 .. code-block:: text
 
@@ -1270,8 +1272,8 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
-   EngineError AZURE2Error DomainError DomainZeroDivision SessionClosed MissingFile EngineWarning Objective
-   Evaluation EvaluatedData
+   EngineError AZURE2Error DomainError DomainZeroDivision SessionClosed MissingFile FormatRefused EngineWarning
+   Objective Evaluation EvaluatedData endf
 
 Earlier names
 -------------

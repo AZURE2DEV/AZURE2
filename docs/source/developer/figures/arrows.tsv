@@ -137,3 +137,5 @@ FitEvaluations	FitProgress	makes	inference		FitEvaluations::Evaluated: FitProgre
 AZURECalc	EvaluationObserver	reads	inference	const	AZURECalc::observer_ (const EvaluationObserver *)
 AZURECalcMCMC	nu::Mcmc	makes	inference		AZURECalcMCMC::RunMCMCSampling: nu::Mcmc mcmc_sampler(nwalkers, ndim, initial_positions)
 AZURECalcMCMC	Objective	reads	inference	const	Objective::Engine().SamplerChi2(context) in AZURECalcMCMC (src/AZURECalcMCMC.cpp)
+pyazr.endf	pyazr	links	libraries		pyazr/endf imports pyazr.physics (the Coulomb and lab-energy rows) and pyazr.errors
+pyazr::endf::Material	pyazr::Session	reads	frontends	const	Material.curves(data, session=s) reads s.datasets, s.pairs (pyazr/endf/curves.py request_of)

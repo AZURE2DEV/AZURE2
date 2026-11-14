@@ -353,6 +353,23 @@ A command of ``python -m pyazr``
    ``cli.write_reference_page()`` (check 42 fails for a row without a case, a
    case without a row, an unknown argument type or a stale page).
 
+A section (MF/MT) of ``pyazr.endf``
+-----------------------------------
+
+The format work of ENDF-6 is ``pyazr/endf/`` (user guide :doc:`../user_guide/endf`); every rule it codes cites
+the printed page of ENDF-102 (2023) in a comment. A section that can be read and evaluated:
+
+1. Its records: a ``read_*`` function and a record class in ``pyazr/endf/distributions.py`` (or a new file of the
+   package for a new file MF), read with the ``Cursor`` of ``records.py`` and ending with ``_require_done``; a
+   method of ``Material`` (``material.py``) that calls it.
+2. Its words in ``Material.summary()``: a branch of ``_describe_section`` (``summary.py``); a new reaction or file
+   name is a row of the tables of ``names.py``.
+3. Its record counts in the own check: a branch of ``_check_records`` (``format_check.py``).
+4. If it gives a quantity of a data set: a branch of ``curves`` (``curves.py``); physics (a kinematic or Coulomb
+   formula) is a row of ``pyazr.physics``, never a formula in the package.
+5. A hand-written file of the section (``tests/pyazr/endf_testfiles.py`` writes it) and checks against hand values
+   from the manual's equations in ``tests/pyazr/endf_read_test.py``.
+
 A run-time data file of pyazr
 -----------------------------
 

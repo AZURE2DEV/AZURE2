@@ -231,3 +231,35 @@ Calls ``pyazr.fetch_levels``.
   auto).
 - ``--json``: one JSON document on standard output.
 
+``endf summary``
+----------------
+
+What an ENDF-6 file holds: material, projectile, library, sections in words, the header text.
+
+.. code-block:: text
+
+   python -m pyazr endf summary FILE [--mat N] [--json]
+
+Calls ``pyazr.endf.read``.
+
+- ``FILE``: an ENDF-6 file (an existing file).
+- ``--mat``: the material (MAT) of a file that holds several (a whole number).
+- ``--json``: one JSON document on standard output.
+
+``endf curves``
+---------------
+
+The evaluation at each data set's points in its quantity and unit (--json: the values beside the model at the project's start values).
+
+.. code-block:: text
+
+   python -m pyazr endf curves FILE PROJECT [--record TEXT] [--mat N] [--json]
+
+Calls ``pyazr.endf.Material.curves``.
+
+- ``FILE``: an ENDF-6 file (the evaluation) (an existing file).
+- ``PROJECT``: the project whose data sets are compared (an existing format-3 project file (.azr)).
+- ``--record``: only the data set of this name (a text).
+- ``--mat``: the material (MAT) of a file that holds several (a whole number).
+- ``--json``: one JSON document on standard output.
+

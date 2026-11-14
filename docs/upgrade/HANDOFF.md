@@ -2,6 +2,18 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-read-check`) — ENDF: read, summarise, curves, own format check
+
+**Done**: `pyazr/endf/` (records and the three number forms, INT 1-6, `Material` with `summary()`, MF=3 and MF=6
+LAW=2 and LAW=5 with every LTP at given energies and angles, `Material.curves(data, session=s)` in the data set's
+quantity and unit with the engine's rows for lab energies and Coulomb terms, `check_format(path)`);
+`pyazr.FormatRefused`; commands `pyazr endf summary`, `pyazr endf curves`; the ENDF/B-VIII.1 3He + 4He extract as
+test data with its README; user page `user_guide/endf.rst`; `endf.md` section 13.1 ("as built") and the decisions'
+status in section 11; Developer Guide recipe "A section (MF/MT) of pyazr.endf"; two boxes of the class scheme.
+**Verified how**: `tests/pyazr/endf_read_test.py` (82 checks against hand values from the manual's equations; two
+injected errors failed nine checks), `tests/pyazr/cli_test.py`, `tests/pyazr/errors_test.py`, the consistency test,
+`docs_build`. No C++ changed. **Open**: the checking codes (next commit), the start model from LRF=7.
+
 ## 2026-11-14 (director, 15:00) — merged: the level inputs out of the compound; the ENDF design note
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 72 (a true merge of the rehearsal branch; its tree
