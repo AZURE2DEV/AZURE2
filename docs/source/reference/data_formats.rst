@@ -456,10 +456,19 @@ after ``</levels>`` (and after ``</abundances>``)::
   pair (a, b) is :math:`\langle t_a t_{3a}\, t_b t_{3b} | T T_3\rangle`
   times one amplitude per isospin channel (arrangement, l, s). Particle
   isospins default to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose
-  particles match in mass number, spin, parity and isospin form one
+  particles match in mass number, spin, parity, isospin and state form one
   arrangement, and partner channels (same l, s and J) must share a channel radius
   (a ``<channelRadii>`` line may set it per l, s or J, the same for every pair of
-  the arrangement).
+  the arrangement). A particle's state is the rank of its excitation energy
+  among the particles of the project with the same Z, A, spin and parity (the
+  lowest listed is the first): mirror partners are ranked each in its own
+  nucleus, so the n-th listed state of a spin and parity pairs with the n-th,
+  and a nucleus that is its own mirror pairs each state with itself. The
+  start-up report and ``isospin.out`` mark a state after the first, e.g.
+  ``0+#2`` for :math:`^{12}`\ C(7.654) beside the 0+ ground state. (Until
+  November 2026 the excitation energy was not looked at: an excited particle
+  with the ground state's spin and parity fell in the ground-state arrangement
+  and was tied to the partner nucleus's ground-state channel.)
 - The member in the ``reference`` nucleus (otherwise the first in file
   order) holds the free parameters. The others are derived: energies
   :math:`E_m = E_\mathrm{ref} - T_\mathrm{ref} + T_m + \Delta_m` (:math:`T` the
