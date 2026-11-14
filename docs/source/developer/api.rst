@@ -8,7 +8,7 @@ How Python reaches the engine. The user's side is in the user guide
 ------------
 
 ``AZUREAPI`` (``api/include/AZUREAPI.h``, ``api/src/AZUREAPI.cpp``) is the
-engine as a session: it owns a ``CNuc`` and a ``WorkingCopy`` (made in
+engine as a session: it owns a ``CompoundSystem`` and a ``WorkingCopy`` (made in
 ``AZUREAPI::ReplaceModel``), reads the run's ``Config``, and keeps the
 session's ``Results`` buffer. ``AZUREAPI::Initialize`` makes the same set-up
 calls as the program's ``AZUREMain`` (:doc:`architecture`, step 2), so a
@@ -114,7 +114,10 @@ lock (``pyazr/locking.py``: ``engine_call``), as ``Objective`` and
 ``Evaluation`` do, so two threads on one session run one after the other;
 ``tests/pyazr/session_lock_test.py`` fails for a member that reaches the
 engine without it. Fits, bands and model averages are Python on top of it
-(``pyazr/bands.py``, ``pyazr/modelavg.py``).
+(``pyazr/bands.py``, ``pyazr/modelavg.py``), as is the model of a data set on
+a fine grid (``Session.model_curve``, ``pyazr/model_curve.py``: a
+``CurveSession`` owns a session of the extrapolations made from the data
+sets' records, trimmed by ``bands``).
 
 ``python -m pyazr`` (``pyazr/cli.py``) is one table of commands
 (``COMMANDS``), each calling one ``pyazr`` function.

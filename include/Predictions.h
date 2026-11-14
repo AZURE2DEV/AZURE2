@@ -7,7 +7,7 @@
 
 #include "azure2/experiment/Prediction.h"
 
-class CNuc;
+class CompoundSystem;
 class Segment;
 
 /*!
@@ -20,7 +20,7 @@ namespace azure2 {
 
 /// The setup of a segment's tree: its reaction as read, and its terms as the set-up made them (term 0 the segment's own
 /// points, then its leaves in order), with the compound nucleus of each entrance pair.
-experiment::PredictionSetup PredictionSetupOf(const Segment &segment, const CNuc &compound);
+experiment::PredictionSetup PredictionSetupOf(const Segment &segment, const CompoundSystem &compound);
 
 /// One line per data set and extrapolation of a project, "data <label>: <tree>" then "extrapolation <label>: <tree>",
 /// in the order of the file (AZURE2 --print-predictions, pyazr.predictions); the label is the record's name in a

@@ -14,7 +14,7 @@ shipped levels is of order the number of points and the relative comparison
 in `run_tests.sh` is meaningful. Flipping the sign of the background pole's
 beta amplitude alone changes it by orders of magnitude.
 
-What it guards (`tests/pyazr/beta_sign_test.py`): `CNuc::GetTransformParams`
+What it guards (`tests/pyazr/beta_sign_test.py`): `CompoundSystem::GetTransformParams`
 returned the absolute value of a beta amplitude until 2026-10-12, so every
 consumer of the physical vector (the GUI's level write-back, the MCMC's
 physical parameters, pyazr's `save_fit`) wrote a negative amplitude back

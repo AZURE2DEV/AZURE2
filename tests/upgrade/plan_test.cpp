@@ -1,5 +1,5 @@
 // The calculation plan gives every point one writer (include/CalculationPlan.h, docs/upgrade/data_model.md S5), on
-// every project given: the set-up of a calculation (Config, CNuc::Fill, WorkingCopy::Fill, the Initialize steps), which
+// every project given: the set-up of a calculation (Config, CompoundSystem::Fill, WorkingCopy::Fill, the Initialize steps), which
 // builds the plan (WorkingCopy::BuildPlan) and checks it there -- a plan that breaks the assertion throws.
 // For each project that sets up, also: the plan checks again here (CalculationPlan::Check), every task's point is the
 // point of the data set at that position of WorkingCopy::PlanUnits and names that task (Unit::PlanTask), and a copy of
@@ -21,7 +21,7 @@
 #include "AMatrixFunc.h"
 #include "ProjectSetup.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CalculationPlan.h"
 #include "Config.h"
 #include "PPair.h"
@@ -57,7 +57,7 @@ std::string CrossCheck(WorkingCopy &data) {
 // (and external-capture amplitude source: the T-matrix groups) and numTMatrices their count; the tasks by decreasing cost.  Counts the solves of a pass (energy tasks) against the
 // units.
 long energyTasks = 0, energyUnits = 0;
-std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cfg) {
+std::string CheckEnergyTasks(WorkingCopy &data, CompoundSystem &compound, const Config &cfg) {
   azure2::CalculationPlan &plan = const_cast<azure2::CalculationPlan &>(data.Plan());
   std::vector<int> work(plan.NumTasks());
   for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
@@ -133,7 +133,7 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;

@@ -5,7 +5,7 @@
 #include <string>
 
 #include "AZUREAPI.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "CoulFunc.h"

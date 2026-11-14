@@ -7,7 +7,7 @@
 
 #include "azure2/physics/Pathways.h"
 
-struct CNucSystem;
+struct SystemOfCompound;
 
 /*!
  * The reaction pathways of a run as one immutable table (docs/upgrade/cnuc_split.md section 11.4): per entrance pair,
@@ -21,7 +21,7 @@ struct CNucSystem;
  * order as before and the signature of an intEC file is unchanged.
  * The positions (k, m) -- spin group within its exit and pathway within its group, 1-based, internal and external
  * counted separately -- key the T-matrix storage, the external-capture amplitudes and their cache; the table keeps
- * them.  Engine numbers (J-group, channel, level) are 1-based as CNuc numbers them; System indices are 0-based.
+ * them.  Engine numbers (J-group, channel, level) are 1-based as CompoundSystem numbers them; System indices are 0-based.
  */
 namespace azure2 {
 
@@ -73,7 +73,7 @@ struct CaptureAyTerm {
 
 /// An internal pathway: entrance channel ch and exit channel chp of one J-group.
 struct InternalRow {
-  int group, ch, chp;         ///< J-group and its channel numbers (CNuc's, 1-based)
+  int group, ch, chp;         ///< J-group and its channel numbers (CompoundSystem's, 1-based)
   double stat_spin_factor;    ///< (2J + 1) / ((2 I1 + 1)(2 I2 + 1)) of the exit pair as the trees hold it; 0.0 for a
                               ///< beta entrance
   int block, k_in, k_out;     ///< physics::InternalPathway (System indices, 0-based)
@@ -133,13 +133,13 @@ struct EntrancePathways {
   const ExternalRow &External(const SpinGroupRow &g, int m) const { return external[g.first_external + m - 1]; }
 };
 
-/// An external-capture final state for BuildPathwayTable: what reaction_pathways needs, and where it is in CNuc.
+/// An external-capture final state for BuildPathwayTable: what reaction_pathways needs, and where it is in CompoundSystem.
 struct PathwayFinalState {
   physics::FinalState state;
   int group = 0, level = 0;   ///< J-group and level (1-based)
 };
 
-/// What the table depends on besides the System and the final states (all fixed before CNuc::Initialize).
+/// What the table depends on besides the System and the final states (all fixed before CompoundSystem::Initialize).
 struct PathwayTableOptions {
   bool rmatrix_capture = false;   ///< the R-matrix-capture formalism: no photon exit pathways
   int max_l_order = 0;            ///< the largest Legendre order of the interferences and capture-A_y terms
@@ -155,10 +155,10 @@ class PathwayTable {
   int NumPairs() const { return (int)entrances_.size(); }
 
  private:
-  friend std::shared_ptr<const PathwayTable> BuildPathwayTable(const CNucSystem &,
+  friend std::shared_ptr<const PathwayTable> BuildPathwayTable(const SystemOfCompound &,
                                                                const std::vector<PathwayFinalState> &,
                                                                const PathwayTableOptions &);
-  std::vector<EntrancePathways> entrances_;  ///< one per pair, in CNuc order
+  std::vector<EntrancePathways> entrances_;  ///< one per pair, in CompoundSystem order
 };
 
 /*!
@@ -166,9 +166,9 @@ class PathwayTable {
  * System map, then for each exit of a non-beta entrance the interferences of the spin groups for L = 0 ...
  * max_l_order (particle_interference, photon_interference, upos_interference, kept when |Z| > 1e-10), the diagonal
  * pathways, and the requested capture-A_y terms (capture_ay_coefficients, kept when |a| or |b| >= 1e-10).
- * `structure` is CNuc::SystemStructure() (BuildSystemFromCNuc(..., CNucSystemContent::Structure)).
+ * `structure` is CompoundSystem::SystemStructure() (BuildSystemOfCompound(..., SystemOfCompoundContent::Structure)).
  */
-std::shared_ptr<const PathwayTable> BuildPathwayTable(const CNucSystem &structure,
+std::shared_ptr<const PathwayTable> BuildPathwayTable(const SystemOfCompound &structure,
                                                       const std::vector<PathwayFinalState> &finalStates,
                                                       const PathwayTableOptions &options);
 

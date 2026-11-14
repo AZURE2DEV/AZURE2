@@ -373,7 +373,8 @@ def sample_emcee(tracker, x0, settings, names):
     summary.update(chain=chain_path, acceptance=float(np.mean(sampler.acceptance_fraction)), thin=settings["thin"],
                    continues=None if previous is None else tracker.source["id"],
                    continued_from=None if previous is None else chain_of_source)
-    write_checkpoint(summary_path, plain_json(dict(summary, names=list(names))))
+    write_checkpoint(summary_path, plain_json(dict(summary, names=list(names),
+                                                      parametrization=tracker.session.s.basis)))  # priors.BASES
     summary["summary"] = summary_path
     taus = [t for t in summary["tau"].values() if np.isfinite(t) and t > 0]
     tau_words = f"up to {max(taus):.3g} steps" if taus else "not estimated (too few steps)"

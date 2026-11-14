@@ -24,7 +24,7 @@ class AChannel {
   AChannel(const azure2::io::LevelRow &, int);
   /// Build directly from couplings: l, s, pair number, radiation type.
   AChannel(int, double, int, char);
-  /// 1-based index of this channel's particle pair, as CNuc::GetPair takes it.
+  /// 1-based index of this channel's particle pair, as CompoundSystem::GetPair takes it.
   int GetPairNum() const;
   /// Orbital angular momentum of the channel.
   int GetL() const;

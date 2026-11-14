@@ -7,7 +7,7 @@
 
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Objective.h"
 #include "ParameterKind.h"
@@ -26,7 +26,7 @@ vector_r FullOf(const vector_r &free, const vector_r &all, const std::vector<boo
 
 }  // namespace
 
-AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &params) const {
+AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &params) {
   ObjectiveBreakdown out;
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
@@ -44,7 +44,7 @@ AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &para
 }
 
 bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
-                                const std::vector<int> &skipColumns) const {
+                                const std::vector<int> &skipColumns) {
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   vector_r residuals, jacobian;
   int nCols = (int)params.size();
@@ -92,12 +92,12 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
   return true;
 }
 
-bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) const {
+bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) {
   ReadFitSettings();
   return !PosteriorSupport::OfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
 }
 
-double AZUREAPI::LogProbabilityRWA(const vector_r &params) const {
+double AZUREAPI::LogProbabilityRWA(const vector_r &params) {
   // The support first, as the sampler tests its prior before the likelihood: a point outside is not evaluated.
   if (OutsideSamplerSupport(params)) return -std::numeric_limits<double>::infinity();
   const double objective = CalculateObjectiveRWA(params);

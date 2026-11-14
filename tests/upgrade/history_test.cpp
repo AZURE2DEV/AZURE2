@@ -41,7 +41,7 @@
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
 #include "DataSet.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -141,7 +141,7 @@ struct Evaluation {
 };
 
 struct Copy {
-  const CNuc *compound = nullptr;  // shared, constant
+  const CompoundSystem *compound = nullptr;  // shared, constant
   LevelState state;                // the copy's own levels
   LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
@@ -150,12 +150,12 @@ struct Copy {
 
 // One evaluation, as AZURECalc::Chi2On: hand-over, point pass, model values, objective.
 Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
-  const CNuc *lc = c.compound;
+  const CompoundSystem *lc = c.compound;
   WorkingCopy *ld = c.data.get();
   lc->FillCompoundFromParams(p, c.state);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, c.results, lc, &c.state, &c.inputs, &cfg);
-  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, c.state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, c.state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   std::vector<const Segment *> segments;
   for (int i = 1; i <= ld->Data().NumSegments(); i++) segments.push_back(ld->Data().GetSegment(i));
   const bool pre = ld->CalculatePointsInParallel(segments, lc, c.state, cfg, c.results) >= 0;
@@ -188,7 +188,7 @@ int RunProject(const std::string &path, bool externalCapture) {
   Config cfg(sink);
   cfg.configfile = file;
   if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;
@@ -212,7 +212,7 @@ int RunProject(const std::string &path, bool externalCapture) {
     Config cfg2(sink2);
     cfg2.configfile = file;
     if (externalCapture) cfg2.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-    CNuc compound2;
+    CompoundSystem compound2;
     LevelState state2;  // the levels, as the run holds them
     LevelInputs inputs2;
     WorkingCopy data2;

@@ -1,9 +1,9 @@
-#include "CNucLevelParameters.h"
+#include "EngineChannelFunctions.h"
 
 #include <cmath>
 
-#include "CNuc.h"
-#include "CNucExternalCapture.h"
+#include "CompoundSystem.h"
+#include "ExternalCaptureAmplitudes.h"
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "Constants.h"
@@ -12,15 +12,32 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
+phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec, bool gsl) {
+  phys::ChannelValues v;
+  ChannelFunc cf(&pair, gsl);
+  v.S = cf.Shift(l, twoJ, Ec);
+  if (Ec > 0.0) {
+    v.P = cf.Penetrability(l, twoJ, Ec);
+  } else if (Ec < 0.0) {
+    // The ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2) (level_parameters.md section 1).
+    const double radius = pair.GetChRad();
+    WhitFunc whit(&pair);
+    const double W = whit(l, twoJ, radius, std::fabs(Ec));
+    v.P = pair.GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
+  }
+  v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
+  return v;
+}
+
+phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map,
                                                 const Config &configure) {
-  return ChannelFunctionsFromCNuc(compound, map, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
+  return EngineChannelFunctions(compound, map, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
                                   !!(configure.paramMask & Config::USE_RMC_FORMALISM));
 }
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map, bool gsl, bool rmc) {
-  const CNuc *cn = &compound;
-  const CNucSystemMap m = map;
+phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map, bool gsl, bool rmc) {
+  const CompoundSystem *cn = &compound;
+  const SystemOfCompoundMap m = map;
   return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
     const JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
     const AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
@@ -31,21 +48,10 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNuc
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
-      ChannelFunc cf(pair, gsl);
-      v.S = cf.Shift(l, twoJ, Ec);
-      if (Ec > 0.0) {
-        v.P = cf.Penetrability(l, twoJ, Ec);
-      } else if (Ec < 0.0) {
-        // The ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2) (level_parameters.md section 1).
-        const double radius = pair->GetChRad();
-        WhitFunc whit(pair);
-        const double W = whit(l, twoJ, radius, std::fabs(Ec));
-        v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
-      }
-      v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
+      v = ParticleChannelValues(*pair, l, twoJ, Ec, gsl);
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
-        // A static moment (CNuc.cpp TransformIn, "Static moments" in conventions.rst).
+        // A static moment (LevelTransforms.cpp TransformIn, "Static moments" in conventions.rst).
         const double J = group->GetJ();
         v.static_moment = true;
         v.P = 1e-10;
@@ -65,7 +71,7 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNuc
   };
 }
 
-phys::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const LevelInputs &inputs, const CNucSystemMap &map,
+phys::ProjectLevels ProjectLevelsOfInputs(const CompoundSystem &filled, const LevelInputs &inputs, const SystemOfCompoundMap &map,
                                           std::size_t b) {
   const int j = map.groupOfBlock.at(b);
   const JGroup *group = filled.GetJGroup(j);
@@ -84,8 +90,8 @@ phys::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const LevelInputs 
   return out;
 }
 
-std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(const CNuc &compound, const LevelState &state,
-                                                        const LevelInputs &inputs, const CNucSystemMap &map, std::size_t b,
+std::vector<phys::ExternalWidth> ExternalWidthsOfInputs(const CompoundSystem &compound, const LevelState &state,
+                                                        const LevelInputs &inputs, const SystemOfCompoundMap &map, std::size_t b,
                                                         const Config &configure) {
   const int j = map.groupOfBlock.at(b);
   const JGroup *group = compound.GetJGroup(j);

@@ -1,5 +1,5 @@
-#ifndef CNUCEXTERNALCAPTURE_H
-#define CNUCEXTERNALCAPTURE_H
+#ifndef EXTERNALCAPTUREAMPLITUDES_H
+#define EXTERNALCAPTUREAMPLITUDES_H
 
 #include "ObservedLevelTable.h"
 #include <utility>
@@ -9,7 +9,7 @@
 
 class AChannel;
 class ALevel;
-class CNuc;
+class CompoundSystem;
 class Config;
 class LevelInputs;
 class LevelState;
@@ -17,7 +17,7 @@ class JGroup;
 
 /*!
  * The engine's side of physics/ external_capture (docs/upgrade/external_capture.md section 2): it reads a level, its
- * group and the final state from CNuc and calls the physics functions.  Nothing else of the engine computes N_f or
+ * group and the final state from CompoundSystem and calls the physics functions.  Nothing else of the engine computes N_f or
  * gamma^ext.
  */
 
@@ -25,7 +25,7 @@ class JGroup;
 /// final state of the earlier pair `otherPairKey` (experiment::ExternalCaptureFinalStates decides it): a photon pair
 /// has its own final state (else the second pair took the level's capture parameters, and capture into the first ran
 /// without its external part).
-void FinalStateOfAnotherPair(const CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum);
+void FinalStateOfAnotherPair(const CompoundSystem &compound, const Config &configure, int otherPairKey, int level, int pairNum);
 
 /*!
  * N_f^(-1/2) of level `level` of `group` (Eq. 1): n0 = 1 (Brune) or Park's J, gamma the level's amplitude per group
@@ -33,7 +33,7 @@ void FinalStateOfAnotherPair(const CNuc &compound, const Config &configure, int 
  * 1 / sqrt(N_f) as the engine has always formed it (no check of N_f > 0: a Park norm at or below 0 is reported where
  * it is computed).
  */
-double SqrtNFFactor(const CNuc &compound, const JGroup *group, const ALevel *level, double n0,
+double SqrtNFFactor(const CompoundSystem &compound, const JGroup *group, const ALevel *level, double n0,
                     const std::vector<double> &gamma);
 
 /*!
@@ -41,7 +41,7 @@ double SqrtNFFactor(const CNuc &compound, const JGroup *group, const ALevel *lev
  * pair is the channel's, when its multipolarity flag (column 31) covers the channel's E1, M1 or E2; (group, level),
  * 1-based, or (0, 0) when the channel has no external part.
  */
-std::pair<int, int> ExternalCaptureFinalState(const CNuc &compound, const AChannel *channel);
+std::pair<int, int> ExternalCaptureFinalState(const CompoundSystem &compound, const AChannel *channel);
 
 /// The numbers gamma^ext of one photon channel depends on (Eqs. 2 and 4), as values.
 struct ExternalCaptureInputs {
@@ -66,20 +66,20 @@ struct ExternalCaptureSlopes {
  * integrals are ECIntegral's direct ones with the run's per-thread scratch.  With `slopes`, also its derivatives,
  * from the same integrals.  Zero unless E1, E2 or M1 into a final state.
  */
-complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const AChannel *channel,
+complex ExternalReducedWidthAt(const CompoundSystem &compound, const JGroup *group, const AChannel *channel,
                                std::pair<int, int> finalState,
                                const ExternalCaptureInputs &in, const Config &configure,
                                ExternalCaptureSlopes *slopes = nullptr);
 
 /// gamma^ext of the photon channel `channel` of level la of J-group j (ExternalReducedWidthAt) at the input values
 /// `inputs`: the level's and the final state's input energy and amplitudes, with the final state's stored N_f^(-1/2)
-/// (CNuc::TransformIn).
-complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelState &state, const LevelInputs &inputs, int j,
+/// (CompoundSystem::TransformIn).
+complex ExternalReducedWidthOfInputs(const CompoundSystem &compound, const LevelState &state, const LevelInputs &inputs, int j,
                                      int la, const AChannel *channel, const Config &configure);
 
 /// gamma^ext of the photon channel `channel` of level la of J-group j (1-based) at the Brune (Park) values of
-/// `table` (CNuc::TransformOut): the level's and the final state's energy, amplitudes and N_f^(-1/2) of the table.
-complex ExternalReducedWidthOfTable(const CNuc &compound, const ObservedLevelTable &table, int j, int la,
+/// `table` (CompoundSystem::TransformOut): the level's and the final state's energy, amplitudes and N_f^(-1/2) of the table.
+complex ExternalReducedWidthOfTable(const CompoundSystem &compound, const ObservedLevelTable &table, int j, int la,
                                     const AChannel *channel, const Config &configure);
 
 #endif

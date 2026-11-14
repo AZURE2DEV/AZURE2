@@ -73,10 +73,12 @@ export function selftest(ctx, tabs, draw) {
     routes.push("#/endf");
     if (endfFiles.length) {
       routes.push(`#/endf?files=${endfFiles.map(encodeURIComponent).join(",")}`,
-        `#/endf/check?file=${encodeURIComponent(endfFiles[0])}`);
+        `#/endf/check?file=${encodeURIComponent(endfFiles[0])}`, `#/endf/new?file=${encodeURIComponent(endfFiles[0])}`);
     }
+    routes.push("#/endf/export");
     for (const route of routes) await visit(route, join(route));
     if (endfFiles.length) await endfCheck(endfFiles[0]);
+    if (endfFiles.length) await endfConvert(endfFiles[0]);
     await firstView();
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
     if (/[?&]edit=1/.test(extra)) await pairAddRemove();
@@ -150,6 +152,25 @@ export function selftest(ctx, tabs, draw) {
       .map((x) => x.textContent), meanings: [...document.querySelectorAll(".endf-check-job td")]
       .filter((td) => td.textContent.includes("p. ")).length });
     await record(`${route} (checked)`, performance.now());
+  }
+
+  /** The ENDF tab's Convert pressed on a file (a new project from its MF=2): the job followed until its report is
+   * drawn; records its heading and the "Write the new project" button in `endf.converted`, `endf.report`. */
+  async function endfConvert(file) {
+    const route = `#/endf/new?file=${encodeURIComponent(file)}`;
+    location.hash = join(route);
+    await new Promise((r) => setTimeout(r, 0));
+    await draw();
+    const convert = [...document.querySelectorAll("button.primary")].find((b) => b.textContent === "Convert");
+    if (!convert || convert.disabled) { endf.converted = false; return; }
+    convert.click();
+    for (let i = 0; i < 600 && !document.querySelector(".endf-import-job h3"); i += 1) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    endf.report = document.querySelector(".endf-import-job h3")?.textContent || "";
+    endf.converted = Boolean(endf.report) && [...document.querySelectorAll(".endf-keep button")]
+      .some((b) => b.textContent === "Write the new project");
+    await record(`${route} (converted)`, performance.now());
   }
 
   /** One view: the route set, the page drawn, then its step recorded. */

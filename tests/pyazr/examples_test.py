@@ -54,6 +54,7 @@ ROWS = [
         "prior on 1 parameter(s), parametrization 1 (Brune), from 1 part(s)"),
     # calculate and compare
     Row("per_dataset_chi2", [T2], "T2.azr: chi2 = 10905.2 over 330 points"),
+    Row("model_curve", [T2], "s01_int_thin                b     40    238            0.39751          0.467377"),
     Row("decompose_cross_section", [T1, "--level", "1/2+ 2.365"], "1/2+ 2.365       7.841e-01"),
     Row("angular_distribution", [T1, "-n", "3"], "largest |a_k>0| over the range: 0.1889", slow=True),
     Row("channel_radius_scan", [T3, "--pair", "2", "--radii", "3.5", "4.0", "4.5", "--out", "{out}"],
@@ -77,7 +78,7 @@ ROWS = [
         "peak S = 263.5 keV b at 0.4190 MeV"),
     # evaluations
     Row("endf_evaluation", [], "format check by pyazr.endf: 0 errors, 0 warnings"),
-    Row("endf_start_model", ["{out}"], "MF=3/MT=102 (z,g) capture: 130 lines, 381 points", slow=True),
+    Row("endf_start_model", ["{out}"], "MF=6/MT=102 (z,g) capture: 3941 lines", slow=True),
     # physics functions
     Row("channel_functions", [T1], " 0      1.0284      0.18764       2.0968      0.17374"),
     Row("ec_integrals", [T1], "20 external-capture pathways from pair 1", slow=True),

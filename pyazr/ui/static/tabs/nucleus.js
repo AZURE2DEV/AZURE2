@@ -6,7 +6,7 @@
 // showing the χ² the engine computes after it, a refusal shown in the engine's words.
 
 import { pathOf } from "../api.js";
-import { pairColumns } from "../lists.js";
+import { onlyColumns, pairColumns } from "../lists.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, h, section } from "../ui.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel, recordRoute } from "./records.js";
@@ -79,7 +79,8 @@ export async function render(ctx, el, args) {
   if (!ctx.kinds) ctx.kinds = await ctx.api.get("/api/kinds");
   const pairTable = renderTable(document, {
     rowKey: (r) => String(r.key), label: "pairs", withFilter: false, selected: args[0] === "pair" ? args[1] : null,
-    caption: "Particle pairs of <levels>", columns: pairColumns(ctx.kinds.pairs?.fields, pairs),
+    caption: "Particle pairs of <levels>", columns: ctx.expert ? pairColumns(ctx.kinds.pairs?.fields, pairs)
+      : onlyColumns(pairColumns(ctx.kinds.pairs?.fields, pairs), ctx.describe?.first_view?.pairs),
     rows: pairs, onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
   });
   const pairEdit = h("div.pair-edit");

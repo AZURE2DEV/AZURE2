@@ -1,7 +1,7 @@
 #include "THMMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "ChannelFunc.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Unit.h"
 #include "JGroup.h"
@@ -70,7 +70,7 @@ double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const S
  * on-shell L_c(E) = S_c(E) + i P_c(E) recovered from L_o = L_c - B_c.  With
  * coherentJ the vertex without a width of every bucket goes to unitVertex.
  */
-void ThmEntranceVertices(const Config &configure, const CNuc *compound, const LevelState &state, Site *point, const JGroup *jg, int j, int aa,
+void ThmEntranceVertices(const Config &configure, const CompoundSystem *compound, const LevelState &state, Site *point, const JGroup *jg, int j, int aa,
                          int pass, int node, const ThmDwVertex *dw, const ThmDwVertex::At &dwAt, bool coherentJ,
                          BucketVertices &vbys, BucketUnitVertices &unitVertex) {
   const int numLevels = jg->NumLevels();
@@ -187,7 +187,7 @@ void ThmApplyWeights(const Config &configure, const Site *point, double &sigma) 
 
 }  // namespace
 
-THMMatrixFunc::THMMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure) :
+THMMatrixFunc::THMMatrixFunc(const CompoundSystem *compound, const LevelState &state, const Config &configure) :
   AMatrixFunc(compound, state, configure) {
   // The HOES amplitude reads individual elements of the level matrix
   // (GetAMatrixElement over the active levels) and its adjoint the whole of it
@@ -205,7 +205,7 @@ THMMatrixFunc::THMMatrixFunc(const CNuc *compound, const LevelState &state, cons
  */
 void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double> &coherentValues,
                       azure2::Results &results) {
-  const CNuc *const compound = levels.compound();
+  const CompoundSystem *const compound = levels.compound();
   const LevelState &state = levels.state();
   const Config &configure = levels.configure();
   int aa = compound->GetPairNumFromKey(point->GetEntranceKey());
@@ -400,7 +400,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, const std::vector<doub
 // Reverse-mode (adjoint) derivative of the HOES cross section.
 // ===========================================================================
 
-ThmAdjointContext BuildThmAdjointContext(const CNuc *compound, const LevelState &state,
+ThmAdjointContext BuildThmAdjointContext(const CompoundSystem *compound, const LevelState &state,
                                          const std::vector<double> &coherentValues,
                                          const Config &configure, const vector_matrix_r *shiftDeriv, bool lineshape) {
   ThmAdjointContext ctx;

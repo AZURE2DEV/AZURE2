@@ -77,7 +77,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
@@ -281,7 +281,7 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity")
    and in `ModelQuantities()` (`experiment/src/ModelDatum.cpp`), with what `BuildModelData` must find in `<levels>`
    (level, pairs, channel) and its refusals (a code each, recipe "A format-3 diagnostic code").
-3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CNuc::ObservedOfFitValues` returns (never
+3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
    formal parameters); its gradient comes with it (central differences over the level's J^π group).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.
@@ -355,11 +355,13 @@ positions of the amplitudes they replace, one number per amplitude, and a map tu
    `<levels>` tables in a file of its own (`experiment/src/GammaDecay.cpp`), its refusals as codes (recipe "A format-3
    diagnostic code"); `Schema::Build` calls the build for `--validate` and pyazr.
 2. The map in one engine file (`src/GammaDecayMap.cpp`): reading the section (as `ModelData::Read`), the input values
-   at set-up (so that TransformIn converts them as any width), `AddParameter` (called in `CNuc::FillMnParams` for the
-   slots it owns), `ToEngine` (the first line of `CNuc::FillCompoundFromParams`) through the engine's own conversion
-   (`physics/` `amplitudes_from_observed`), `PullBack` (called by `GradAccum::Scatter`: the chain rule onto the numbers
-   and onto the level's other parameters), the priors as rows of an objective term, the report in `parameters.out`.
-   A second map is a second member of `CNuc` beside `gammaDecays_` and one more line in each of those four places.
+   at set-up (so that TransformIn converts them as any width), `AddParameter` (called in
+   `CompoundSystem::FillMnParams` for the slots it owns), `ToEngine` (the first line of
+   `CompoundSystem::FillCompoundFromParams`) through the engine's own conversion (`physics/`
+   `amplitudes_from_observed`), `PullBack` (called by `GradAccum::Scatter`: the chain rule onto the numbers and onto
+   the level's other parameters), the priors as rows of an objective term, the report in `parameters.out`.
+   A second map is a second member of `CompoundSystem` beside `gammaDecays_` and one more line in each of those four
+   places.
 3. A parameter kind (recipe "A new kind of fit parameter"; `IsLevelSlot` covers a number in a level's slot).
 4. Tests: the same project written both ways gives identical calculations (`tests/gamma_decay/check.sh` is the
    pattern), fits in both parametrisations with equal minima and propagated errors (`tests/pyazr/gamma_decay_test.py`),
@@ -371,7 +373,7 @@ not a kind. What a parameter is lives in its record, never in its name [check 23
 parameter name].
 1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
    `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
-2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
+2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CompoundSystem::FillMnParams` or
    `WorkingCopy::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
 3. Follow the layout in `BuildParamIndexMap` (a number of a level: a slot of `LevelParameterLayout`, which every
    walk of the level block reads; Developer Guide, "A level parameter"); the fields that say what it belongs to are
@@ -556,8 +558,8 @@ same); (3) its reader: a switch that prints or checks reads the record where it 
 `azure2::support::ProcessEnvironment().Set(Switch::kX)` / `.On(...)` / `.Text(...)` / `.Number(...)` (a hot path
 keeps the value in a `static const` local); a switch of kind *numbers* is a field of `Config::EnvironmentSettings`
 filled in `SettingsOf` (`src/Config.cpp`) and read from the run's `Config` (deep code without a `Config`: from the
-pair's `PairFunctionSettings`, set in `CNuc::Fill`); (4) a counter it prints is a member of `azure2::RunDiagnostics`
-(`include/RunDiagnostics.h`), reached through `configure.diagnostics`, never a `static`.  The option needs nothing
+pair's `PairFunctionSettings`, set in `CompoundSystem::Fill`); (4) a counter it prints is a member of
+`azure2::RunDiagnostics` (`include/RunDiagnostics.h`), reached through `configure.diagnostics`, never a `static`.  The option needs nothing
 else: the program's parser, `--help` and `--describe` read it from the row, and the record holds the option's value
 as it holds the variable's (`StartProcessEnvironment`, made by `main` first; the command line over the options file
 over the variable).  Never `getenv` (check 39 refuses it outside `support/src/Environment.cpp`); never `setenv` to

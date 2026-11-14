@@ -294,7 +294,7 @@ five more Coulomb-function evaluations per open channel; for a charged channel
 the energy derivative of the Coulomb functions has no closed form, the
 :math:`\eta` derivative being an integral; :math:`S'` is
 ``ChannelFunc::ShiftDerivative``, the :math:`dS/dE` of every other caller,
-with its own branches at and below threshold).  ``CNuc::CalcShiftFunctions``
+with its own branches at and below threshold).  ``CompoundSystem::CalcShiftFunctions``
 takes them after the shift functions, for all levels at once and in parallel;
 the Coulomb functions are computed at every call (``physics/coulomb``, no
 memo keyed by the history of the run), so that they do not depend on the

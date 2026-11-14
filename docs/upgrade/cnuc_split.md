@@ -2023,6 +2023,75 @@ did the rate's constructor; the session also runs an `AZURECalc` (`AZUREAPIFit.c
 - Byte-identical because it renames and moves code that steps 1–4 left without state: no function body changes but for
   the receiver of its accessors. The check is the build itself plus the tree.
 
+*Step 5 as built* (branch `feature/upgrade-5-compound-system`, start 5884aa62). Measured first on the start commit.
+
+The members of `CNuc` (grep counts of the accessors in `src/`, `api/`, `include/`, `tests/`; "the set-up" are the
+calls a caller makes: `Fill`, which calls `AddHardSphereGroups` and `ParseExternalCapture` itself, then
+`RequestEntrance` / `RequestCaptureAy`, then `Initialize`):
+
+| member | what | written by | read by |
+|---|---|---|---|
+| `pairs_` | the `PPair`s | `Fill` (from the rows, radius overrides, hybrid potential); the entrance flags in `Initialize` (`BuildPathways`) | `GetPair` and friends: 226 calls in 56 files |
+| `jgroups_` | J^π groups, channels, levels | `Fill` (groups, channels, Wigner limits, the levels' rows), `AddHardSphereGroups` (groups), `ParseExternalCapture` (final-state data, N_f integrals), `Initialize` (B_c in `CalcBoundaryConditions`, final-state energies in `SetUpECFinalBlocks`) | `GetJGroup`: 251 calls in 42 files; B_c 22 reads in 12 files, the final-state energy 6 |
+| `nuclei_` | (Z, A) of each compound nucleus | `Fill` (`AddPair`) | `NumNuclei`, `GetNucleus`, `NucleusLabel`: the abundance samples, reports, rate |
+| `systemStructure_`, `systemAllGroups_`, `systemError_` | the physics `System` twice, or the error of its build | `Fill` (`BuildSystems`, last step) | transformations, B_c, pathway build, external-capture set-up, tests (19 calls) |
+| `modelData_`, `gammaDecays_`, `parameterLayout_` | model data, `gamma_decay` records, level block of θ | `Fill` | the objective's term, the data set-up (`NumResiduals`); the fills and reports; every walk of the level block (20 calls in 9 files) |
+| `entranceRequests_` | entrance pairs | `RequestEntrance`, between `Fill` and `Initialize` (`RequestDataEntrances`, `RequestExtrapolationEntrances`, the rate's set-up) | `BuildPathways` (`Initialize`) |
+| `captureAyRequests_` | capture-A_y (entrance, exit) | `RequestCaptureAy`, between them (`RequestCaptureAyTerms`, from the data's built segments) | `BuildPathways` |
+| `pathways_` | the pathway table | `Initialize` | `Pathways()`: 30 calls in 14 files |
+| `ecFinalBlocks_`, `captureMaskSetup_` | formal-basis final-state blocks, capture masks | `Initialize` | the fills of a state, `FormalCaptureMaskSlot`/`Of` (4 files), the adjoint's test |
+
+What reads the half-built object (between `Fill` and `Initialize`): in the program's run (`SetUpRun`), the
+sampler's (`runMCMC`) and the session (`AZUREAPI::Initialize`): `WriteCompoundNucleusCheck` (structure, input
+values); the data's set-up, `WorkingCopy::Fill` / `MakePoints` (the nuclei for the abundance samples; pairs, groups,
+levels and model data for the segments and target effects; the input values *before* the transformation: the
+sub-point meshes branch on `LevelInputs::TransformedIn()`); the entrance requests (`IsPairKey`,
+`GetPairNumFromKey`); the rate's `RatePairsProblem`; `RequestCaptureAyTerms` (the data's segments and the pairs).
+`azure2::ProjectPredictions` (`src/Predictions.cpp`) calls `Fill` and the data's set-up and never `Initialize`.
+A probe (accessors of B_c, the final-state energy, the external-capture blocks, the capture masks and the pathway
+table aborting between `Fill` and `Initialize`; all projects in the Brune and formal bases, not committed) showed
+that none of them reads what `Initialize` writes: no abort, every output file identical to `tab-t74-1`.
+
+What the data's set-up hands to the compound's (the design's `SetupRequests`): the entrance pairs (of every term of
+the active data sets or extrapolations, or the rate's), the capture-A_y (entrance, exit) pairs of the analyzing-power
+segments whose exit is a capture pair; besides, `ParseExternalCapture` reads the exit pairs of the specs
+(`ProjectExitPairKeys`) and the session hands its radius overrides to `Fill`.
+
+**The one build was not made.** The design puts the data's set-up before the build; the code needs it in the middle
+(code taken): the data's set-up reads the compound's structure and the untransformed input values, and the run's log
+prints the data's set-up (`Filling Data Structures...`, its warnings, the data check) between `Fill`'s lines and
+`Initialize`'s (`Performing Input Parameter Transformation...`, `Sorting Reaction Pathways...`, their warnings), so
+a build that returns the finished object before the data's set-up changes every `run.log`, and the order of the
+refusals of a project refused by both. The choices are the director's (see the HANDOFF entry). Until then the
+compound is made by the four set-up calls as before and held by its maker as before: `AZUREMain::compound_` and
+`AZUREAPI::compound_` (`CompoundSystem *`, written by the set-up only), `runMCMC`'s local; every other holder takes
+`const CompoundSystem *` or `const CompoundSystem &` of that maker, which outlives it.
+
+**The name.** `CNuc` is `CompoundSystem`. Files (moved with `git mv` first, split in the next commit):
+`CNuc.cpp` → `CompoundSystemBuild.cpp` (set-up, B_c, pathway build with `CNucPathways.cpp`), `CompoundSystem.cpp`
+(queries), `LevelTransforms.cpp` (`TransformIn`, `TransformOut` and their parts, with `CNucObserved.cpp`);
+`CNucExternalCapture` → `ExternalCaptureFinalStates.cpp` (`ParseExternalCapture`, the final-state blocks and masks)
+and `ExternalCaptureAmplitudes.cpp/.h` (N_f, γ^ext); `CNucReport` → `LevelReport`, `CNucChecks` →
+`CompoundSystemChecks`, `CNucSystem` → `SystemOfCompound`, `CNucLevelParameters` → `EngineChannelFunctions`,
+`CNucTransformMessages` → `LevelInputMessages`, `CNucLevelState.cpp` → `LevelStateFill.cpp`,
+`CNucParameterVector.cpp` → `LevelParameterVector.cpp`. Where §12.2 named other files (`LevelInputs.cpp` for
+`TransformIn`, `ObservedLevelTable.cpp` for `TransformToBrune`, `LevelState.cpp` for the fills): those are still
+members of the compound, so they stay in files of their own named by the job. Consistency check 59 refuses `CNuc`,
+`cnuc_pool_` and a `Clone()` of the compound in `src/`, `include/`, `api/`.
+
+**The session's constness.** Every method of `AZUREAPI` that writes the session's levels, data, `Results` or its
+lazily read fit settings (`ReadFitSettings`) lost `const` (27 methods: the evaluations, transformations, gradients,
+the nuisance priors, `GetParameterBounds`, `OutsideSamplerSupport`, `GetThmExperiments`); the accessors `state()`,
+`inputs()`, `data()`, `results()` return `const` references from a `const` session. The callers holding a
+`const AZUREAPI &` were the binding's own (`pybind_evaluation.cpp`, `pybind_model_data.cpp`, `pybind_records.cpp`,
+`pybind_api.cpp`): they hold `AZUREAPI &` now. `results_` and the three nuisance members are no longer `mutable`
+(four rows of `allowed_state.tsv` gone). `GetThmExperiments` only reads, but through
+`WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)`, which are not `const`.
+
+**The channel functions once.** `ParticleChannelValues(pair, l, 2j, E_c, gsl)` (`EngineChannelFunctions.h`) holds
+the lines of a particle channel (S, dS/dE, P; the ANC factor below threshold); `EngineChannelFunctions` and the
+binding's level doors call it.
+
 **Side by side.** Steps 1, 2 and 2b together; then 3; then 4; then 5. Step 3 cannot run beside 1 (both edit every
 external-capture function and `CNuc.cpp`'s fills), nor 4 beside 3 (the same owners' lines). Step 5 is the conflict
 magnet (≈ 110 files): it should start when no other branch edits the engine's signatures (the sampler, the records,

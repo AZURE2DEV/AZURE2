@@ -11,6 +11,7 @@ own output directory (``<config>``'s output directory of the session's file poin
 set's rows of the objective (``Evaluation.data[i].rows``) splits data sets joined by a data covariance otherwise
 (web_ui.md section 2.2, finding 5).  The file has the program's six significant digits.
 """
+import contextlib
 import dataclasses
 import inspect
 import os
@@ -67,6 +68,8 @@ class Engine:
     def __init__(self):
         self.s = None
         self._extrapolation_session = None
+        self._curves = None  # the session of the model curves (pyazr.model_curve.CurveSession) of the open session
+        self._curves_at = (None, None)  # (x as bytes, {name: ModelCurve or refusal}) of the last curves evaluated
 
     # -- the session ----------------------------------------------------------------------------------------------
 
@@ -79,6 +82,7 @@ class Engine:
         if self._extrapolation_session is not None:
             self._extrapolation_session.close()
             self._extrapolation_session = None
+        self._close_curves()
         s = pyazr.Session(file, cwd=cwd)
         os.makedirs(s.output_dir, exist_ok=True)  # the external-capture cache and chiSquared.out are written there
         self.s = s
@@ -202,12 +206,64 @@ class Engine:
 
     def endf_curves(self, files, x):
         """ENDF-6 files' values at every data set's points at x (``Material.curves(data, session=s)`` of
-        :mod:`pyazr.endf`), beside the data set's datum times its normalization and its model; ``files``: [(name,
-        absolute path)], each checked inside the root by the server.  See :func:`pyazr.ui.evaluations.curves_answer`."""
+        :mod:`pyazr.endf`), beside the data set's datum times its normalization and its model, and on the grid of the
+        data set's model curve (:meth:`curve`) where it has one; ``files``: [(name, absolute path)], each checked
+        inside the root by the server.  See :func:`pyazr.ui.evaluations.curves_answer`."""
         from .evaluations import curves_answer
         x = np.asarray(x, float)
         ev = self.s.evaluate(x)
-        return curves_answer(files, self.s, ev.data, self._dataset_arrays(x, ev))
+        curves = self._model_curves(x)
+        return curves_answer(files, self.s, ev.data, self._dataset_arrays(x, ev),
+                             {n: (c if isinstance(c, Exception) else (c, self._curve_arrays(c)))
+                              for n, c in curves.items()})
+
+    def curve(self, name, x):
+        """The model of the data set ``name`` on a fine grid at x (``Session.model_curve``; the arrays of
+        :class:`pyazr.model_curve.ModelCurve`: c.m. and lab energies, excitation energies, c.m. angles, the model in
+        the engine's unit, which grid values are the data set's own points, the branches; the S factor where offered)
+        or its refusal (``pyazr.ParameterError``, three parts).  The curves of every active data set are made in one
+        session of the extrapolations (``pyazr.model_curve.model_curves``: the folds of the curves are then planned
+        on one mesh, as the data session's), kept while its records are the same (they change with an energy shift),
+        and evaluated once per x."""
+        self._index(name)
+        c = self._model_curves(np.asarray(x, float))[name]
+        if isinstance(c, Exception):
+            raise c
+        return self._curve_arrays(c)
+
+    def endf_export(self, x):
+        """What an ENDF-6 file of the session at x would lose, before it is written
+        (:func:`pyazr.ui.evaluations.export_preview`: ``pyazr.endf.from_session``)."""
+        from .evaluations import export_preview
+        return export_preview(self.s, np.asarray(x, float))
+
+    def _model_curves(self, x):
+        """``{name: ModelCurve or refusal}`` of every active data set at x (see :meth:`curve`)."""
+        from pyazr.model_curve import CurveSession, plan_curves
+        key = x.tobytes()
+        if self._curves_at[0] != key:
+            plan = plan_curves(self.s, None, x)
+            if self._curves is None or self._curves.plan.text != plan.text:
+                self._close_curves()
+                self._curves = CurveSession(self.s, plan)
+            self._curves_at = (key, self._curves.evaluate(x))
+        return self._curves_at[1]
+
+    def _curve_arrays(self, c):
+        """A :class:`pyazr.model_curve.ModelCurve` as plain data, with the S factor where it is offered."""
+        info = self.info[self._index(c.name)]
+        out = {"name": c.name, "quantity": c.quantity, "engine_unit": c.unit, "variable": c.variable,
+               "e_cm": _plain(c.energies), "e_lab": _plain(c.energy_lab), "e_x": _plain(c.excitation_energies),
+               "angle_cm": _plain(c.angles), "model": _plain(c.model), "at_data": [bool(v) for v in c.at_data],
+               "branches": [dataclasses.asdict(b) for b in c.branches], "points": c.n}
+        if self._has_s_factor(info):
+            out["s_factor"] = {"model": _plain(c.model * c.sfactor_conversion), "unit": S_FACTOR_UNIT}
+        return out
+
+    def _close_curves(self):
+        if self._curves is not None:
+            self._curves.close()
+        self._curves, self._curves_at = None, (None, None)
 
     def _extrapolations(self):
         """The session of the same project and options made for its extrapolations (``extrapolations=True``), made
@@ -375,6 +431,25 @@ def open_for_job(file, cwd):
     e = Engine()
     e.open(file, cwd)
     return e, e.s.parameters.x0, e._free_names()
+
+
+@contextlib.contextmanager
+def session_named(s, file_name):
+    """A session of the text and options of ``s`` read from a copy named ``file_name`` in a directory of its own
+    (relative paths still resolved in ``s.cwd``), closed and removed at the end: for a call that names the session's
+    file in what it writes (``pyazr.endf.write``'s MF=1 text names the project, not the UI's working file)."""
+    import shutil
+    import tempfile
+    import pyazr
+    work = tempfile.mkdtemp(prefix="pyazr_ui_named_")
+    path = os.path.join(work, file_name)
+    shutil.copyfile(s.file, path)
+    named = pyazr.Session(path, cwd=s.cwd, **s.options)
+    try:
+        yield named
+    finally:
+        named.close()
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def objective_of(e):

@@ -6,7 +6,7 @@
  * thm_* tables are written in ThmReports.cpp.  Members of WorkingCopy, kept out
  * of WorkingCopy.cpp so that the classic data handling stays as it is on dev.
  */
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Constants.h"
 #include "PPair.h"
 #include "ThmFunc.h"
@@ -74,7 +74,7 @@ struct ThmReaction {
  * Trojan horse a = x + s, the kinematics, and the startup lines that say so.
  * False (and the ERROR written) if they do not describe the segments.
  */
-bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
+bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, const CompoundSystem *compound, const ThmExperiment &x,
                           const WorkingCopy::ThmGroup &group, const std::string &where, ThmReaction &r) {
   ThmDistortion::Kinematics &dk = r.dk;
   int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
@@ -86,7 +86,7 @@ bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, const CNuc
                           << std::endl;
       return false;
     }
-  const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
+  const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(pairKey));
   const int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
   const double M[2] = {pair->GetM(1), pair->GetM(2)};
   const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
@@ -192,7 +192,7 @@ bool ThmBuildWindow(WorkingCopy &data, const Config &configure, const ThmExperim
 
 // Coulomb line shape of the spectator (ThmLineshape.h), lineshape=on.  The
 // level energies and widths it uses are the observed ones of Brune.
-bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, const CompoundSystem *compound, const ThmExperiment &x,
                        WorkingCopy::ThmGroup &group, const std::string &where, const ThmReaction &r) {
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << where << "lineshape=on uses the observed level energies and widths "
@@ -234,8 +234,8 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, const CNuc *t
     int key = data.Data().GetSegment(s)->GetExitKey();
     bool seen = false;
     for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
-    if (seen || !theCNuc->IsPairKey(key)) continue;
-    const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
+    if (seen || !compound->IsPairKey(key)) continue;
+    const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(key));
     int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
     ThmLineshape::Exit e;
     e.pairKey = key;
@@ -253,11 +253,11 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, const CNuc *t
 
 // Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the HOES
 // amplitude of every segment of the experiment; R(E) is not applied.
-bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, const CompoundSystem *compound, const ThmExperiment &x,
                       WorkingCopy::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
   int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
-  int pairNum = theCNuc->GetPairNumFromKey(pairKey);
-  const PPair *pair = theCNuc->GetPair(pairNum);
+  int pairNum = compound->GetPairNumFromKey(pairKey);
+  const PPair *pair = compound->GetPair(pairNum);
   // coulombIntegral=1 is refused with it by Config::ReadThmBlock
   // (CheckThmCoulombConsistency).
   const std::string refused =
@@ -267,8 +267,8 @@ bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, const CNuc *th
     return false;
   }
   std::vector<int> ls;
-  for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-    const JGroup *jg = theCNuc->GetJGroup(j);
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    const JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int ch = 1; ch <= jg->NumChannels(); ch++)
       if (jg->GetChannel(ch)->GetPairNum() == pairNum) ls.push_back(jg->GetChannel(ch)->GetL());
@@ -408,7 +408,7 @@ bool ThmBuildDistortion(WorkingCopy &data, const Config &configure, const ThmExp
 
 // Angular window of the exit pair (ThmAngular.h), theta=: the model of every
 // segment is dsigma/dOmega averaged over theta_cm in the window.
-bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, const CompoundSystem *compound, const ThmExperiment &x,
                          WorkingCopy::ThmGroup &group, const std::string &where) {
   if (configure.thm.coherentL) {
     configure.outStream << where << "theta= computes the interference of the entrance partial waves "
@@ -418,9 +418,9 @@ bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, const CNuc 
     return false;
   }
   int maxLp = 0;
-  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-    for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++)
-      maxLp = std::max(maxLp, theCNuc->GetJGroup(j)->GetChannel(ch)->GetL());
+  for (int j = 1; j <= compound->NumJGroups(); j++)
+    for (int ch = 1; ch <= compound->GetJGroup(j)->NumChannels(); ch++)
+      maxLp = std::max(maxLp, compound->GetJGroup(j)->GetChannel(ch)->GetL());
   if (2 * maxLp > ThmAngleWindow::kMaxL) {
     configure.outStream << where << "theta= carries Legendre orders up to " << ThmAngleWindow::kMaxL
                         << "; the model has a channel with l = " << maxLp << "." << std::endl;
@@ -450,7 +450,7 @@ bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, const CNuc 
  * background.  The first refusal ends it (the order of the checks is what a
  * user sees, so it is kept).
  */
-int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
+int WorkingCopy::BuildThmGroups(const Config &configure, const CompoundSystem *compound) {
   Draft().thmGroups_.clear();
   Draft().thmCoherentParams_.clear();
   Draft().thmCoherentParamOffset_ = -1;
@@ -512,17 +512,17 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
 
     ThmReaction reaction;  // its kinematics are those of distortion=coulomb|optical and the DW vertex
     if (x.hasKinematics) {
-      if (!ThmResolveKinematics(*this, configure, theCNuc, x, group, where, reaction)) return -1;
+      if (!ThmResolveKinematics(*this, configure, compound, x, group, where, reaction)) return -1;
       if (x.psKind != ThmExperiment::PS_DELTA && !ThmBuildWindow(*this, configure, x, group, where, reaction))
         return -1;
-      if (x.lineshape && !ThmBuildLineshape(*this, configure, theCNuc, x, group, where, reaction)) return -1;
+      if (x.lineshape && !ThmBuildLineshape(*this, configure, compound, x, group, where, reaction)) return -1;
     }
     if (x.vertexDW) {
-      if (!ThmBuildDwVertex(*this, configure, theCNuc, x, group, where, reaction.dk)) return -1;
+      if (!ThmBuildDwVertex(*this, configure, compound, x, group, where, reaction.dk)) return -1;
     } else if (x.distortion != ThmExperiment::DIST_NONE) {
       if (!ThmBuildDistortion(*this, configure, x, group, where, reaction.dk)) return -1;
     }
-    if (x.hasTheta && !ThmBuildAngleWindow(*this, configure, theCNuc, x, group, where)) return -1;
+    if (x.hasTheta && !ThmBuildAngleWindow(*this, configure, compound, x, group, where)) return -1;
     if (!x.cbackground.empty()) {
       // Coherent background (cbackground=, ThmCoherentBackground): one complex
       // amplitude per (J^pi, entrance (s,l), exit (s',l')) combination, whose
@@ -539,7 +539,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
                             << std::endl;
         return -1;
       }
-      const int aa = theCNuc->GetPairNumFromKey(group.pairKey);
+      const int aa = compound->GetPairNumFromKey(group.pairKey);
       std::shared_ptr<ThmCoherentBackground> cb = std::make_shared<ThmCoherentBackground>();
       cb->experiment = x.name;
       std::ostringstream c;
@@ -549,15 +549,15 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
         const std::string term = "cbackground " + jpi + ":" + std::to_string(t.exitKey) + ": ";
         bool exitUsed = false;
         for (int s : group.segments) exitUsed = exitUsed || Draft().GetSegment(s)->GetExitKey() == t.exitKey;
-        if (!exitUsed || !theCNuc->IsPairKey(t.exitKey)) {
+        if (!exitUsed || !compound->IsPairKey(t.exitKey)) {
           configure.outStream << where << term << "no segment of the experiment has exit pair " << t.exitKey << "."
                               << std::endl;
           return -1;
         }
-        const int exitNum = theCNuc->GetPairNumFromKey(t.exitKey);
+        const int exitNum = compound->GetPairNumFromKey(t.exitKey);
         int j = 0;
-        for (int jj = 1; jj <= theCNuc->NumJGroups(); jj++) {
-          const JGroup *jg = theCNuc->GetJGroup(jj);
+        for (int jj = 1; jj <= compound->NumJGroups(); jj++) {
+          const JGroup *jg = compound->GetJGroup(jj);
           if (jg->IsInRMatrix() && std::fabs(jg->GetJ() - t.J) < 1.0e-6 && jg->GetPi() == t.parity) j = jj;
         }
         if (j == 0) {
@@ -565,7 +565,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
                               << " group with a level in the R matrix." << std::endl;
           return -1;
         }
-        const JGroup *jg = theCNuc->GetJGroup(j);
+        const JGroup *jg = compound->GetJGroup(j);
         int found = 0;
         for (int in = 1; in <= jg->NumChannels(); in++) {
           const AChannel *ci = jg->GetChannel(in);
@@ -632,7 +632,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
   // The coherent backgrounds are the last block of the parameter vector
   // (FillMnParams sets the offset again when it lays the vector out).
   if (!Draft().thmCoherentParams_.empty()) {
-    int offset = theCNuc->ParameterLayout().Size();
+    int offset = compound->ParameterLayout().Size();
     for (int s = 1; s <= Draft().NumSegments(); s++) {
       if (Draft().GetSegment(s)->IsVaryNorm() && !Draft().GetSegment(s)->IsProfiledNorm()) offset++;
       offset++;  // energy shift

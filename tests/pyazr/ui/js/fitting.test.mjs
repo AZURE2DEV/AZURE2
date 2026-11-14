@@ -202,3 +202,25 @@ test("MINOS validity: per side the flags the engine set, one word for iminuit's;
   assert.equal(v.outcome, "call_limit");
   assert.deepEqual(v.minosInvalid, ["a"]);
 });
+
+test("a finished job's followers: in the first view only the kinds the job table marks for it, the others folded", () => {
+  const followers = [{ kind: "minos", method: "engine_migrad", first_view: false },
+    { kind: "sample", method: "emcee", first_view: false }, { kind: "fit", method: "lm", first_view: true },
+    { kind: "rate", method: "engine", first_view: false, tab: "rate" }];
+  const first = f.followersShown(followers, true);
+  assert.deepEqual(first.shown.map((x) => x.kind), ["fit"]);
+  assert.deepEqual(first.folded, ["minos", "sample", "rate"]);
+  const expert = f.followersShown(followers, false);
+  assert.equal(expert.shown.length, 4);
+  assert.deepEqual(expert.folded, []);
+});
+
+test("the jobs of a tab: by the job table's row of the job's kind and method (JobRow.tab)", () => {
+  const table = [{ kind: "fit", method: "engine_migrad" }, { kind: "endf_check", method: "codes", tab: "endf" },
+    { kind: "rate", method: "engine", tab: "rate" }];
+  const jobs = [{ id: "a", kind: "fit", method: "engine_migrad" }, { id: "b", kind: "endf_check", method: "codes" },
+    { id: "c", kind: "rate", method: "engine" }, { id: "d", kind: "sample", method: "emcee" }];
+  assert.deepEqual(f.jobsOfTab(jobs, table, "fit").map((j) => j.id), ["a", "d"]);
+  assert.deepEqual(f.jobsOfTab(jobs, table, "endf").map((j) => j.id), ["b"]);
+  assert.equal(f.tabOfJob(jobs[2], table), "rate");
+});

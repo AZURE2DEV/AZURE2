@@ -173,6 +173,20 @@ def test_no_engine_kind_is_spelled_in_the_ui():
         assert not re.search(r"\b(kind|quantity|record_kind)\s*(==|!=|\bin\b)\s*[\"'(\[{]", source), path
 
 
+def test_first_view_columns_name_columns_of_the_tables():
+    """Every column the first view keeps (pyazr/ui/first_view.py) is a key of pyazr's table of that list or one of
+    the list's own columns (lists.js, tabs/data.js)."""
+    import pyazr
+    from pyazr.ui.first_view import FIRST_VIEW_COLUMNS
+    own = {"name", "norm", "chi2", "users", "problems", "line", "n"}
+    kinds = pyazr.kinds()
+    tables = {"description": set(kinds["description"]["fields"]), "pairs": set(kinds["pairs"]["fields"])}
+    assert set(FIRST_VIEW_COLUMNS) == set(tables), sorted(FIRST_VIEW_COLUMNS)
+    for name, keys in FIRST_VIEW_COLUMNS.items():
+        unknown = sorted(set(keys) - tables[name] - own)
+        assert not unknown, f"first_view {name}: no such column {unknown}"
+
+
 def test_ui_tests_registered():
     with open(os.path.join(ROOT, "tests", "pyazr", "CMakeLists.txt")) as f:
         cmake = f.read()

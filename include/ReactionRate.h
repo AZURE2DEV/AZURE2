@@ -6,11 +6,11 @@
 #include "LevelState.h"
 #include <vector>
 
-class CNuc;
+class CompoundSystem;
 
-extern std::vector<double> gsl_reactionrate_breakpoints(const CNuc *, const LevelState &, const LevelInputs &,
+extern std::vector<double> gsl_reactionrate_breakpoints(const CompoundSystem *, const LevelState &, const LevelInputs &,
                                                         const Config &, int);
-extern double gsl_reactionrate_integration(double, const CNuc *, const LevelState &, const Config &, int, int,
+extern double gsl_reactionrate_integration(double, const CompoundSystem *, const LevelState &, const Config &, int, int,
                                            const std::vector<double> &);
 
 /// A container structure for a reaction rate.
@@ -45,17 +45,17 @@ class RateData {
 class ReactionRate {
  public:
   /*!
-   * The ReactionRate object is created with reference to a CNuc object (shared and constant; the caller outlives
+   * The ReactionRate object is created with reference to a CompoundSystem object (shared and constant; the caller outlives
    * this object), the caller's levels (`state`, copied into the rate's own and filled from `params`; `inputs`, read),
    * a vector of Minuit parameters, a Config structure, and a set of entrance and exit pair keys.  It warns of large
    * radiative widths at `params` and, under Brune, computes its state's shift functions.
    */
-  ReactionRate(const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const vector_r &params,
+  ReactionRate(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const vector_r &params,
                const Config &, int, int);
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   /*!
    * Returns a reference to the Config structure.
    */
@@ -66,7 +66,7 @@ class ReactionRate {
   int entranceKey() const { return entrance_key_; };
   /*!
    * Returns the exit pair key; -1 is the total radiative capture, the sum over every capture
-   * (gamma) pair of the entrance pair's compound nucleus (CNuc::CapturePairKeys).
+   * (gamma) pair of the entrance pair's compound nucleus (CompoundSystem::CapturePairKeys).
    */
   int exitKey() const { return exit_key_; };
   /// Reaction rate on the temperature grid, writing reactionrates.out.
@@ -85,7 +85,7 @@ class ReactionRate {
  private:
   int entrance_key_;
   int exit_key_;
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   const LevelInputs &inputs_;  ///< the caller's
   const Config &configure_;
   LevelState state_;  ///< the rate's own

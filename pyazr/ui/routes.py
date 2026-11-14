@@ -54,7 +54,8 @@ ROUTES = (
     # -- tables of the engine and the server
     Route("GET", "/api/describe", V, "server.Server.describe",
           "The server: pyazr.describe() (versions, build, Coulomb table, data in use), the session options, the "
-          "compute budget, the open project, the job table and this route table.", serves=("pyazr.describe",)),
+          "compute budget, the open project, the job table, this route table, and the columns of the lists the "
+          "page's first view shows (first_view: pyazr/ui/first_view.py).", serves=("pyazr.describe",)),
     Route("GET", "/api/server", V, "server.Server.processes",
           "PIDs and memory (kB) of the server and its worker processes."),
     Route("GET", "/api/schema", V, "server.Server.schema", "The engine's schema of the project format.",
@@ -174,6 +175,12 @@ ROUTES = (
           "One data set's arrays at the working x: c.m. and excitation energies, c.m. angles (after energy shifts), "
           "the datum and its error as read and times the norm in use, the model, the engine's standardized "
           "residuals, the S factor where offered.", args=("name",)),
+    Route("GET", "/api/evaluation/curve/{name}", S, "engine.Engine.curve",
+          "The model of one data set on a fine grid over its range at the working x (Session.model_curve): per grid "
+          "point the c.m., lab and excitation energies, the c.m. angle, the model in the engine's unit, whether it "
+          "is one of the data set's points; the branches (one per fixed angle of an excitation function or fixed "
+          "energy of an angular distribution); the S factor where offered.  Refused with the three parts for a "
+          "data set that is not one function of one variable.", args=("name",)),
     Route("POST", "/api/transform", S, "engine.Engine.transform",
           "Physical values of every parameter at x (entries given over the working x).", kwargs=("x",)),
     Route("POST", "/api/evaluate/grid", M, "pyazr.Session.evaluate.energies",
@@ -289,6 +296,20 @@ ROUTES = (
           "The ENDF checking codes found (pyazr.endf.checkers(): name, path, family, kind, what it does, what it "
           "does to numbers), every program pyazr knows, where they were looked for.",
           serves=("pyazr.endf.checkers", "pyazr.endf.PROGRAMS")),
+    Route("POST", "/api/endf/resonances", V, "server.Server.endf_resonances",
+          "What MF=2 of an ENDF-6 file holds for a new project, nothing written (pyazr.endf.read(path).resonances("
+          "isotope, energy_range)): the record's text, EL, EH, the incident pair, the pairs, the spin groups; or the "
+          "refusal's what, allowed, fix.", args=("path",), kwargs=("isotope:int", "energy_range:int"),
+          serves=("pyazr.endf.Material.resonances",)),
+    Route("POST", "/api/endf/keep_project", V, "server.Server.endf_keep_project",
+          "Put the new project of a finished endf_import job (pyazr.endf.to_project) into the project folder at `to` "
+          "(a new .azr inside the root; none: the job's name); never over an existing file.", args=("job_id",),
+          kwargs=("to",)),
+    Route("GET", "/api/endf/export", V, "server.Server.endf_export",
+          "What an ENDF-6 file of the current text at the working x would lose before it is written (pyazr.endf."
+          "from_session: the losses and the photon widths, or the refusal), the writer's default energy range, a "
+          "file name not in use; the file is written by the job endf_write.",
+          serves=("engine.Engine.endf_export", "pyazr.endf.from_session")),
     Route("POST", "/api/endf/accept", V, "server.Server.endf_accept",
           "Keep the candidate of a finished endf_standardize job: at `to` (inside the root; none: beside the "
           "original), an existing file replaced only with overwrite (Candidate.accept).", args=("job_id",),
@@ -368,6 +389,9 @@ PROJECT_NOT_SERVED = {
     "directory": "a property: the project's directory is in GET /api/project (root)",
     "unsaved": "a property: GET /api/project",
     "add_<kind>": "POST /api/project/records with the kind (Project.add)",
+    "parameter_settings": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level parameter)",
+    "set_parameter_setting": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level "
+                             "parameter)",
 }
 
 

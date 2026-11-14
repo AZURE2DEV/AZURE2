@@ -1,16 +1,16 @@
 // AZUREAPI: the model values of the <modelData> data (AZUREAPI.h ModelDataRWA; ModelData.h).
 #include "AZUREAPI.h"
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelData.h"
 
-std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rwaParams) const {
+std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rwaParams) {
   vector_r full = all_rwa_;
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i]) full[i] = rwaParams[k++];
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   lc->FillCompoundFromParams(full, state());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), state());
   std::vector<ModelDatumValue> out;

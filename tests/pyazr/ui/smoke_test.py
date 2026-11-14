@@ -2,8 +2,8 @@
 real server (``python -m pyazr.ui``) on copies of T1 and T2, the page's self-test (``#selftest``: every tab, a level,
 a data set's form and its plot drawn by plotly.js and as a table, a record kind without layout hints, a new record's
 form, a width typed into its box and taken back with the Undo button; in the Fit tab a recipe fit started with Run, its
-progress seen, Stop, Accept into project and Undo) read from the document Chrome dumps, and one screenshot per tab.  Fails on any script error, console error or
-failed request the self-test recorded.
+progress seen, Stop, Accept into project and Undo) read from the document Chrome dumps, and one screenshot per tab.
+Fails on any script error, console error or failed request the self-test recorded.
 
 Environment:
 - ``CHROME``: the browser (default: google-chrome, chromium or chromium-browser on PATH); without one, prints
@@ -49,6 +49,8 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the ENDF tab: the project folder's ENDF-6 files over the data, and the first one's check (the self-test's)
          ("expert-endf", "endf?depth=expert&files={endf_files}"),
          ("expert-endf-check", "endf/check?depth=expert&file={endf}"),
+         # its new project from the first file (converted by the self-test: the report) and the export's form
+         ("expert-endf-new", "endf/new?depth=expert&file={endf}"), ("first-endf-export", "endf/export"),
          # the first view's Reaction Rate tab, and its Physics tab (shown there on a project with THM content: T2)
          ("first-rate", "rate"), ("first-physics", "physics"), ("first-dataset", "data/{dataset}"),
          # a file of the folder previewed in a data set's file field (as the field's change shows it)
@@ -270,6 +272,7 @@ def test_selftest_and_screenshots(name, tmp_path):
         assert endf["headings"][0].startswith("pyazr.endf's own format check: 3 errors, 1 warning"), endf
         assert [x.split(" ")[0] for x in endf["headings"][1:]] == ["CHECKR", "FIZCON", "PSYCHE"], endf
         assert "the report counts 3 errors, 0 warnings" in endf["headings"][1], endf
+        assert endf["converted"] and "levels in" in endf["report"], endf  # Convert: to_project's report drawn
         over = next(s for s in result["steps"] if s["route"].startswith("#/endf?files="))
         assert over["plot"] == "plotly" if label == "T1" else over["plot"] is None, over
         take_screenshots(server, tmp_path, label, shots, result, azr)

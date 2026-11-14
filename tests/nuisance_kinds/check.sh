@@ -5,7 +5,7 @@
 # The limits manager converts a width's settings (partial widths, eV) to reduced-width amplitudes through the
 # level parameters (ParameterLimitsManager::ConvertPhysicalLimitToReduced).  It used to run that conversion for
 # every nuisance row not on a segment, indexing the vector of level parameters and abundances
-# (CNuc::GetTransformParams) with the index of, e.g., a screening potential or a THM coherent background: an
+# (CompoundSystem::GetTransformParams) with the index of, e.g., a screening potential or a THM coherent background: an
 # out-of-bounds write (an _GLIBCXX_ASSERTIONS build aborts there).  Only a width is converted now (the parameter's
 # record says what it is); any other kind keeps its settings as given.
 #

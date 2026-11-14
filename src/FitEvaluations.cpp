@@ -6,7 +6,7 @@
 
 #include "AZURECalc.h"
 #include "WorkingCopy.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 
 void HandOverEvaluation(const FitControl &control, const FitProgress &record) {
   if (control.progress) control.progress(record);

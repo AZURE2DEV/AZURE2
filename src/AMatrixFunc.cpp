@@ -5,7 +5,7 @@
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "PolarizationFunc.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Unit.h"
 #include "AZUREGrad.h"
@@ -28,10 +28,10 @@
 #endif
 
 /*!
- * The AMatrixFunc object is created with reference to a CNuc object.
+ * The AMatrixFunc object is created with reference to a CompoundSystem object.
  */
 
-AMatrixFunc::AMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure) :
+AMatrixFunc::AMatrixFunc(const CompoundSystem *compound, const LevelState &state, const Config &configure) :
   configure_(&configure),
   compound_(compound),
   state_(&state),
@@ -175,7 +175,7 @@ void AMatrixFunc::ClearMatrices() {
 
 
 /*!
- * This function creates the inverted A-Matrix from the parameters in the CNuc object.
+ * This function creates the inverted A-Matrix from the parameters in the CompoundSystem object.
  */
 
 void AMatrixFunc::FillMatrices(Site *point) {
@@ -1123,7 +1123,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
   // Park: the level matrix is (E_r - E) J[r][c] - sum_d g_r g_c (L_d + B_d - S_r,d),
   // with the overlap J of Park's Eqs. (9) and (28) depending on the widths and,
   // through dS/dE at E_lambda, on the level energies.  Its derivatives come from
-  // the per-level values CNuc::CalcShiftFunctions stores (S, S', S'').
+  // the per-level values CompoundSystem::CalcShiftFunctions stores (S, S', S'').
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
@@ -1259,7 +1259,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d (physics/ExternalCapture.h),
         //   sqrtNF = nFSum^{-1/2},  d sqrtNF / d gamma_d = -A_d gamma_d sqrtNF^3.
         // Park: sqrtNF = (J + sum_d A_d gamma_d^2)^{-1/2} with J = 1 - sum_d gamma_d^2 S'_d
-        // over the particle channels (CNuc::CalcShiftFunctions), so every particle
+        // over the particle channels (CompoundSystem::CalcShiftFunctions), so every particle
         // channel contributes  d sqrtNF / d gamma_d = (S'_d - A_d) gamma_d sqrtNF^3.
         complex pre = gamma_fc * conv * effAmp;  // d T_ec / d sqrtNF
         int numNF = finalLevel->NumNFIntegrals();
@@ -1370,7 +1370,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 /*!
  * Beam energy in the compound system, as FillMatrices takes it.
  */
-double AMatrixFunc::InEnergy(const CNuc *compound, Site *point) {
+double AMatrixFunc::InEnergy(const CompoundSystem *compound, Site *point) {
   if (compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20) {
     int ep = compound->GetPairNumFromKey(point->GetExitKey());
     return point->GetCMEnergy() + compound->GetPair(ep)->GetSepE() + compound->GetPair(ep)->GetExE();
@@ -2682,7 +2682,7 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
   if (n == 0 || n != jg->NumLevels()) return false;
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   const bool brune = !park && (configure().paramMask & Config::USE_BRUNE_FORMALISM);
-  // Brune takes S' from shiftDeriv, Park from the levels (CNuc::CalcShiftFunctions).
+  // Brune takes S' from shiftDeriv, Park from the levels (CompoundSystem::CalcShiftFunctions).
   if (brune && !shiftDeriv) return false;
   // The channels with the shift terms, as LevelMatrixAdjoint takes them.
   std::vector<char> &particle = la_particle_;

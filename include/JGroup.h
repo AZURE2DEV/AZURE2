@@ -44,7 +44,7 @@ class JGroup {
   /// Total angular momentum of the group.
   double GetJ() const;
   /// The compound nucleus the group belongs to: its 1-based index in the
-  /// CNuc's nucleus list (0 until set) and its charge and mass numbers.  A
+  /// CompoundSystem's nucleus list (0 until set) and its charge and mass numbers.  A
   /// group holds channels of one nucleus only, so the level matrix of a
   /// project with several nuclei is block-diagonal by construction.
   int GetNucleus() const { return nucleus_; }
@@ -52,7 +52,7 @@ class JGroup {
   int GetNucleusA() const { return nucleusA_; }
   void SetNucleus(int index, int z, int a) { nucleus_ = index; nucleusZ_ = z; nucleusA_ = a; }
   /// Whether labels of this group's levels should name the nucleus: set by
-  /// CNuc::Fill on every group when the project holds more than one nucleus.
+  /// CompoundSystem::Fill on every group when the project holds more than one nucleus.
   bool NucleusLabelled() const { return nucleusLabelled_; }
   void SetNucleusLabelled(bool on) { nucleusLabelled_ = on; }
   /// Append a level.

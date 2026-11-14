@@ -18,8 +18,8 @@
 #include <sstream>
 #include "ParameterLabel.h"
 #include "Config.h"
-#include "CNuc.h"
-#include "CNucReport.h"
+#include "CompoundSystem.h"
+#include "LevelReport.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
 #include "Unit.h"
@@ -129,7 +129,7 @@ ShiftParamTarget ShiftTargets(WorkingCopy *ld, const ParamDesc &d) {
 
 }  // namespace
 
-ShiftColumnCount FillShiftColumns(const CNuc *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(const CompoundSystem *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
@@ -302,7 +302,7 @@ ShiftColumnCount FillShiftColumns(const CNuc *lc, LevelState &state, const Level
  * the largest or non-finite contributions, and their offending points (with any non-finite
  * target-effect sub-points).  At most 20 dumps per run.
  */
-void AZURECalc::DumpNonFinite(const vector_r &p, double chi, const CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const {
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, const CompoundSystem *lc, WorkingCopy *ld, const azure2::Results &results) const {
   double threshold = azure2::support::ProcessEnvironment().Number(azure2::support::Switch::kDumpNonFinite, 0.0);
   if (!(threshold > 1.0)) threshold = 1.0e10;
   if (std::isfinite(chi) && chi <= threshold) return;
@@ -412,7 +412,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   } else {
     localData = data();
   }
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   // The level state of this evaluation: the pooled one, or the caller's for an evaluation on the data set itself.
   LevelState &ls = pooled ? *pooled : state_;
   // The buffer of this evaluation: the working copy's, or the caller's for an evaluation on the data set itself.
@@ -423,8 +423,8 @@ double AZURECalc::operator()(const vector_r &p) const {
   localCompound->FillCompoundFromParams(p, ls);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p, results, localCompound, &ls, &inputs_, &configure());
-  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  // A chi-squared alone: no Park second derivatives (CompoundSystem::CalcShiftFunctions).
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), ls, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
@@ -503,7 +503,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   std::lock_guard<std::mutex> outputLock(output_mutex_);
   if (!states_.output) states_.output = std::make_unique<LevelState>(state_);
   if (!output_data_) output_data_.reset(data()->Clone());
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   LevelState &ls = *states_.output;
   WorkingCopy *ld = output_data_.get();
   azure2::Results &results = output_results_;
@@ -565,12 +565,12 @@ double AZURECalc::Chi2On(LevelState &ls, WorkingCopy *ld, azure2::Results &resul
 
 double AZURECalc::Chi2OnWith(const Config &config, LevelState &ls, WorkingCopy *ld, azure2::Results &results,
                              const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   lc->FillCompoundFromParams(p, ls);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, results, lc, &ls, &inputs_, &config);
-  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
-  if (config.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(config, ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  // A chi-squared alone: no Park second derivatives (CompoundSystem::CalcShiftFunctions).
+  if (config.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(config, ls, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   const bool pre = PrecalculatePoints(ls, ld, results, config, thmOnly);
 
   for (int i = 1; i <= ld->Data().NumSegments(); i++)
@@ -592,7 +592,7 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // Pooled working copies keep their applied energy shifts and mapping between
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
   // mapping each time.
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   std::unique_ptr<LevelState> pooled = GetPooledState();
   LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
@@ -682,7 +682,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   // --- Analytic energy / reduced-width block via the shared adjoint engine. ---
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   std::unique_ptr<LevelState> pooled = GetPooledState();
   LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
@@ -1187,7 +1187,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                                  vector_r &jac, std::vector<int> &packedToFull) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   std::unique_ptr<LevelState> pooled = GetPooledState();
   LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
@@ -1266,7 +1266,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // and residual r = (model/J - data*n)/(err*n) as ComputeResidualJacobian.
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   std::unique_ptr<LevelState> pooled = GetPooledState();
   LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
@@ -1275,7 +1275,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   lc->FillCompoundFromParams(full, ls);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, results, lc, &ls, &inputs_, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), ls, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
 
   residuals.clear();
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
@@ -1331,7 +1331,7 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
 double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
   if (!limitsManager_) return 0.0;
   // p is the full parameter vector (fixed parameters included), as
-  // CNuc::FillCompoundFromParams reads it; the prior is looked up by the same
+  // CompoundSystem::FillCompoundFromParams reads it; the prior is looked up by the same
   // full index.  (Indexing p by the limits manager's non-fixed index, as this
   // once did, evaluates a prior on whatever parameter sits at that position as
   // soon as a fixed parameter precedes the one carrying it.)

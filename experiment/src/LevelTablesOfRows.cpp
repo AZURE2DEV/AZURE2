@@ -58,7 +58,7 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
   for (const io::LevelRow &r : rows)
     if (!PairByKey(r.ir(), t.pairs)) t.pairs.push_back(PairInfoOfRow(r));
   // External capture: the mask of a pair's first active row that has one, the pairs in the order of their first active
-  // rows (CNuc::Fill numbers its pairs so, and fills its external-capture map from the same rows)
+  // rows (CompoundSystem::Fill numbers its pairs so, and fills its external-capture map from the same rows)
   std::vector<int> activeOrder;
   for (const io::LevelRow &r : rows) {
     if (r.isActive() != 1) continue;
@@ -69,7 +69,7 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
   for (int key : activeOrder)
     if (PairByKey(key, t.pairs)->externalCapture != 0) t.externalCapturePairs.push_back(key);
 
-  // Groups (J, parity, compound nucleus) and their channels, in the order of the active rows, as CNuc::Fill.
+  // Groups (J, parity, compound nucleus) and their channels, in the order of the active rows, as CompoundSystem::Fill.
   std::vector<std::tuple<double, int, std::pair<int, int>>> groups;
   std::vector<std::vector<LevelChannelInfo>> channels;
   std::vector<std::vector<LevelInfo>> levels;

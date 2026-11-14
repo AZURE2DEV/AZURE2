@@ -31,7 +31,7 @@ azure2::experiment::Format3Project	experiment/include/azure2/experiment/ProjectR
 azure2::experiment::BuiltProject	experiment/include/azure2/experiment/Build.h	what Schema::Build makes of the records	setup	class	immutable
 azure2::experiment::DatasetSpec	experiment/include/azure2/experiment/SetupSpecs.h	one data set as built: observable, pairs, nuisances	setup	class	immutable
 Config	include/Config.h	the run: options, paths, the project read, scratch	setup	class	run
-CNuc	include/CNuc.h	compound nuclei as set up: pairs, J groups, levels (read-only after set-up, not copied)	setup	class	immutable
+CompoundSystem	include/CompoundSystem.h	compound nuclei as set up: pairs, J groups, levels (read-only after set-up, not copied)	setup	class	immutable
 PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	immutable
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	immutable
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
@@ -40,7 +40,7 @@ LevelInputs	include/LevelInputs.h	the levels' input values in the engine's basis
 LevelState	include/LevelState.h	the levels at the vector: E, gamma, shift functions, J, N_f, fills, projectors, zero flags	setup	class	evaluation
 LevelParameterLayout	include/LevelParameterLayout.h	where each level's energy and amplitudes sit in the vector	setup	class	immutable
 ObservedLevelTable	include/ObservedLevelTable.h	the observed values of the levels at one vector, for the reports	setup	class	run
-CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	setup	class	immutable
+SystemOfCompound	include/SystemOfCompound.h	the physics System of a compound system and its index map	setup	class	immutable
 azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable
 azure2::PathwayTable	include/PathwayTable.h	reaction pathways and interference terms	setup	class	immutable
 DataSet	include/DataSet.h	the data as set up: segments, effects, meshes	setup	class	immutable
@@ -66,11 +66,11 @@ AMatrixFunc	include/AMatrixFunc.h	level matrix, T-matrix, observables (a GenMatr
 THMMatrixFunc	include/THMMatrixFunc.h	the HOES cross section of THM sites	evaluation	class	evaluation
 RMatrixFunc	include/RMatrixFunc.h	the channel-matrix route (a GenMatrixFunc)	evaluation	class	evaluation
 LevelMatrixSolver	include/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
-CNuc	include/CNuc.h	the compound nuclei as set up, shared constant by every evaluation	evaluation	class	immutable
+CompoundSystem	include/CompoundSystem.h	the compound nuclei as set up, shared constant by every evaluation	evaluation	class	immutable
 LevelState	include/LevelState.h	the levels at the evaluation's vector, the owner's	evaluation	class	evaluation
 AZURECalc	include/AZURECalc.h	the objective: chi^2, gradient, residual rows	inference	class	run
 WorkingData	include/WorkingData.h	a pooled working copy with its buffer	inference	class	evaluation
-CNuc	include/CNuc.h	the compound nuclei as set up, shared constant by the pools	inference	class	immutable
+CompoundSystem	include/CompoundSystem.h	the compound nuclei as set up, shared constant by the pools	inference	class	immutable
 LevelState	include/LevelState.h	the levels at the vector: one per evaluation running at once	inference	class	evaluation
 StatePool	include/StatePool.h	idle level states of the evaluations that run at once, the caller's	inference	class	evaluation
 FitterStates	include/AZURECalc.h	a fit's pooled level states and its output state, the caller's	inference	class	evaluation
@@ -101,7 +101,7 @@ nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probabili
 RunRequest	include/RunRequest.h	the answers of a program run: its command and options	frontends	class	run
 AZUREMain	include/AZUREMain.h	the program's run: its stages in order	frontends	class	run
 Config	include/Config.h	the run: options, paths, the project read	frontends	class	run
-CNuc	include/CNuc.h	compound nuclei as set up by the run or the session	frontends	class	immutable
+CompoundSystem	include/CompoundSystem.h	compound nuclei as set up by the run or the session	frontends	class	immutable
 LevelState	include/LevelState.h	the run's or the session's levels at the vector	frontends	class	evaluation
 LevelInputs	include/LevelInputs.h	the run's or the session's levels' input values	frontends	class	run
 WorkingCopy	include/WorkingCopy.h	the data of one evaluation	frontends	class	evaluation
@@ -126,5 +126,7 @@ JobTable	pyazr/ui/jobs.py	fits and samplers run as jobs	frontends	class	run
 pyazr.endf	pyazr/endf/__init__.py	ENDF-6 files: read, summarise, curves, format check, checking codes, start model, writer	libraries	package	run
 pyazr::endf::Material	pyazr/endf/material.py	one material of an ENDF-6 file: sections, header, curves	frontends	class	run
 pyazr::endf::resonances::LRF7	pyazr/endf/resonances.py	MF=2 R-Matrix Limited parameters in the file's units and frame	frontends	class	immutable
+pyazr::endf::engine_values::Sweeps	pyazr/endf/engine_values.py	the ENDF writer's engine sessions: the values of MF=3 and MF=6 on the writer's grids	frontends	class	run
 RateSession	pyazr/rate.py	a session set up for a reaction rate, as the program's rate command	frontends	class	run
+CurveSession	pyazr/model_curve.py	the session of the extrapolations that draws data sets' model curves	frontends	class	run
 Covariance	pyazr/covariance.py	a data covariance built from named parts, checked	frontends	class	run

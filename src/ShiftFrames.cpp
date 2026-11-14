@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelTable.h"
 #include "Config.h"
 #include "WorkingCopy.h"
@@ -47,10 +47,10 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  * Updates the energies of all points in this segment based on the current energy shift.
  */
 
-void Segment::UpdatePointEnergiesWithShift(WorkingCopy &data, const CNuc *theCNuc, const Config *configure) const {
+void Segment::UpdatePointEnergiesWithShift(WorkingCopy &data, const CompoundSystem *compound, const Config *configure) const {
   // No lock: each thread re-energises the points of its own working copy.
   for (int t = 0; t < NumTerms(); t++)
-    for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
+    for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(data, t, i, compound, configure);
 }
 
 std::vector<double> Segment::ShiftState(const SegmentState &segment) {
@@ -59,14 +59,14 @@ std::vector<double> Segment::ShiftState(const SegmentState &segment) {
   return state;
 }
 
-void Segment::BeginShiftRefill(WorkingCopy &data, int t, const CNuc *theCNuc, const Config &configure) const {
+void Segment::BeginShiftRefill(WorkingCopy &data, int t, const CompoundSystem *compound, const Config &configure) const {
   TermState &u = data.State(*this).terms[t];
   // Tables of another system (a session that changed a radius or the Coulomb route) are dropped.
-  if (!u.shiftTables.empty() && !u.shiftTables.front().table->SameSystem(theCNuc, configure)) u.shiftTables.clear();
+  if (!u.shiftTables.empty() && !u.shiftTables.front().table->SameSystem(compound, configure)) u.shiftTables.clear();
   u.shiftRows.assign(NumPoints(), {});
 }
 
-void Segment::CommitShiftTable(WorkingCopy &data, int t, const CNuc *theCNuc, const Config &configure) const {
+void Segment::CommitShiftTable(WorkingCopy &data, int t, const CompoundSystem *compound, const Config &configure) const {
   SegmentState &segment = data.State(*this);
   TermState &u = segment.terms[t];
   if ((int)u.shiftRows.size() != NumPoints()) return;  // no refill since BeginShiftRefill
@@ -80,7 +80,7 @@ void Segment::CommitShiftTable(WorkingCopy &data, int t, const CNuc *theCNuc, co
       u.shiftTables.erase(it);
       break;
     }
-  u.shiftTables.insert(u.shiftTables.begin(), TermState::ShiftTable{state, ChannelTable::FromRows(theCNuc, configure, std::move(all))});
+  u.shiftTables.insert(u.shiftTables.begin(), TermState::ShiftTable{state, ChannelTable::FromRows(compound, configure, std::move(all))});
   if (u.shiftTables.size() > kShiftTables) u.shiftTables.resize(kShiftTables);
 }
 
@@ -96,7 +96,7 @@ ChannelRowSource Segment::ShiftRowSource(TermState &u, int i) {
  * and recalculates their energy-dependent values.  Writes only that point, so
  * different points may be updated concurrently.
  */
-void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const CNuc *theCNuc, const Config *configure) const {
+void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const CompoundSystem *compound, const Config *configure) const {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
   // Half-off-shell data have points below the entrance threshold, and all of
@@ -115,9 +115,9 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const 
       point->SetLabEnergy(shiftedEnergy);
 
       // Recalculate energy dependent values
-      if (theCNuc && configure) {
-        const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
-        const PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
+      if (compound && configure) {
+        const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->TermEntranceKey(t)));
+        const PPair *exitPair = compound->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
 
         // The same conversion as Segment::Fill (ratios are dimensionless: no cross-section conversion; a leaf's
         // value is always converted)
@@ -143,10 +143,10 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const 
             }
           }
           // the point alone: its row follows its angle; its slots are nodes of the shared mesh, which stay
-          point->OwnSite().CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
+          point->OwnSite().CalcLegendreP(&data, configure->maxLOrder, compound, effect);
         }
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
-        point->OwnSite().RecalcEDependentValues(&data, theCNuc, *configure, &rows);
+        point->OwnSite().RecalcEDependentValues(&data, compound, *configure, &rows);
         // The nodes stay and the kernel moves with the point (ShiftedFold.h): its row set does not depend on the shift
         // (the c.m. angle of a point given at a lab angle is the row set's at each node, a function of the node's
         // energy and the lab angle: RowSet.h).  Its target is taken at the shifted, true energy (the rule of

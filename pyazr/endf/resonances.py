@@ -200,8 +200,9 @@ def _refuse(source, what, allowed, fix):
 def read_resonances(material, isotope=0, energy_range=0):
     """MF=2/MT=151 of ``material``: the LRF=7 subsection of isotope ``isotope`` and energy range ``energy_range``
     (0-based) as an :class:`LRF7`.  Refused (:class:`pyazr.FormatRefused`), each with what, allowed and fix: no
-    MF=2, a range that is not LRF=7 or has NRO=1, KRM other than 4, KRL=1, IFG=0, a photon or fission pair, KBK > 0
-    or KPS > 0, APE != APT or two radii in one pair, SHF=0 or PNT=-1 on a particle channel."""
+    MF=2, a range that is not LRF=7 or has NRO=1, KRM other than 4, KRL=1, IFG other than 0 and 1, a photon or
+    fission pair, KBK > 0 or KPS > 0, APE != APT or two radii in one pair, SHF=0 or PNT=-1 on a particle channel.
+    An IFG=0 record keeps its widths (eV); :func:`pyazr.endf.to_project` converts them (p. 73)."""
     source = f"{os.path.basename(material.path)} MAT={material.mat} MF=2/MT=151"
     section = material.section(2, 151)
     c = section.cursor(material.path)
@@ -240,17 +241,22 @@ def read_resonances(material, isotope=0, energy_range=0):
                       "AZURE2 has one radius per pair; give the radius as a constant in the evaluation")
     sub = c.cont()
     ifg, krm, njs, krl = sub.l1, sub.l2, sub.n1, sub.n2
+    if krm == 3:
+        raise _refuse(source, "KRM=3 (Reich-Moore): the first pair is gamma + compound nucleus, whose widths are "
+                      "eliminated into the level energies (pp. 73-74, Appendix D.1.7)", "KRM=4, the full R-matrix "
+                      "(p. 74)", "AZURE2's Reich-Moore option would take the eliminated widths, but turning them into "
+                      "the Brune basis of a start model is not built; compare the file's cross sections with the "
+                      "data instead")
     if krm != 4:
         raise _refuse(source, f"KRM={krm} ({names.RML_FORMULAS.get(krm, 'unknown')})",
-                      "KRM=4, the full R-matrix (p. 74)", "a Reich-Moore (KRM=3) or Breit-Wigner file is not read "
-                      "into a start model; Material.curves() gives its cross sections")
+                      "KRM=4, the full R-matrix (p. 74)", "a Breit-Wigner file is not read into a start model; "
+                      "compare the file's cross sections with the data instead")
     if krl != 0:
         raise _refuse(source, "KRL=1, relativistic kinematics (p. 71: a flag without equations)", "KRL=0",
                       "the convention of KRL=1 is not decided for AZURE2; read a non-relativistic evaluation")
-    if ifg != 1:
-        raise _refuse(source, "IFG=0: GAM holds widths at the level energy (p. 73), which need the penetrabilities "
-                      "of the file's frame", "IFG=1, reduced-width amplitudes in eV^1/2",
-                      "convert the file to IFG=1 with the code that wrote it")
+    if ifg not in (0, 1):
+        raise _refuse(source, f"IFG={ifg}", "IFG=0 (widths in eV) or IFG=1 (reduced-width amplitudes in eV^1/2), "
+                      "p. 73", "correct IFG in the file")
     plist = c.list()
     pairs = []
     for k in range(plist.l1):

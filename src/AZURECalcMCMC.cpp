@@ -3,8 +3,8 @@
 #include "ModelPass.h"
 #include "ParameterLabel.h"
 #include "Config.h"
-#include "CNuc.h"
-#include "CNucReport.h"
+#include "CompoundSystem.h"
+#include "LevelReport.h"
 #include "WorkingCopy.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
@@ -50,7 +50,7 @@ struct AZURECalcMCMC::Run {
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   // Outside the support (the fit's limits of any parameter): zero probability, nothing evaluated.
   if (!InsideFitLimits(p)) return -std::numeric_limits<double>::infinity();
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   WalkerLevels *walker = nullptr;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
@@ -68,7 +68,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     localCompound->FillCompoundFromParams(p, walker->state);
     localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &walker->state, &walker->inputs, &configure());
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
     if (walker) ReturnPooledLevels(walker);
@@ -85,7 +85,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 }
 
 double AZURECalcMCMC::LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *working, const vector_r &p) const {
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   azure2::Results &results = working->results;
   ObjectiveContext context{localCompound, walker->state, walker->inputs, working->data.get(), results, p, configure()};
   // A support of the posterior (Park's J > 0, docs/upgrade/objective.md D2): -infinity outside.
@@ -106,7 +106,7 @@ double AZURECalcMCMC::LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *w
 }
 
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) const {
-  const CNuc *localCompound = compound();
+  const CompoundSystem *localCompound = compound();
   WalkerLevels *walker = nullptr;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
@@ -161,7 +161,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &walker->state, &walker->inputs, &configure());
 
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   return LogLikelihoodOfFilled(walker, working, fitVector);
 }
 
@@ -317,7 +317,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
     return;
   }
 
-  // Every parameter of the vector, in its length and order, by its kind (its record, written by CNuc::FillMnParams
+  // Every parameter of the vector, in its length and order, by its kind (its record, written by CompoundSystem::FillMnParams
   // and WorkingCopy::FillMnParams).  (Re-walking the levels and segments, as this once did, gave an entry to a free THM
   // norm, which is profiled and not a parameter; matching names duplicated the fit's prior rules.)
   std::vector<ParamKind> allKinds = paramKinds_;
@@ -776,7 +776,7 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
         }
 
         if (!fullParams.empty()) {
-          const CNuc *localCompound = compound();
+          const CompoundSystem *localCompound = compound();
           WalkerLevels snapshotLevels(levels_);  // this snapshot's copy of the sampler's levels
           WalkerLevels *walker = &snapshotLevels;
           WorkingCopy *localData = data()->Clone();
@@ -881,7 +881,7 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
   std::vector<std::string> labels;
   filled = false;
   if (!parametersInitialized_) return labels;
-  const CNuc *lc = compound();
+  const CompoundSystem *lc = compound();
   WalkerLevels *walker = GetPooledLevels();
   try {
     if (useRWA) {
@@ -1270,7 +1270,7 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
 }
 
 /*!
- * Get a CNuc object from the pool, creating new if pool is empty
+ * Get a CompoundSystem object from the pool, creating new if pool is empty
  */
 WalkerLevels *AZURECalcMCMC::GetPooledLevels() const {
   // None idle: a copy of the sampler's levels as they are now (one per walker evaluated at the same time).
@@ -1294,7 +1294,7 @@ WorkingData *AZURECalcMCMC::GetPooledData() const {
 }
 
 /*!
- * Return a CNuc object to the pool for reuse
+ * Return a CompoundSystem object to the pool for reuse
  */
 void AZURECalcMCMC::ReturnPooledLevels(WalkerLevels *walker) const { pool_.Give(std::unique_ptr<WalkerLevels>(walker)); }
 

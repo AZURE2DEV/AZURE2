@@ -48,7 +48,7 @@ AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const R
 /*!
  * \brief The quantized anchors of every level of the compound.
  */
-std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(const CNuc *compound, const LevelInputs &inputs,
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(const CompoundSystem *compound, const LevelInputs &inputs,
                                                                                      double frameShift) {
   std::vector<ResonanceInfo> anchors = LevelResonances(compound, inputs);
   for (ResonanceInfo &r : anchors) {
@@ -238,7 +238,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
  * reaction-rate breakpoints).
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, const CNuc *compound, const LevelInputs &inputs) {
+AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, const CompoundSystem *compound, const LevelInputs &inputs) {
   if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
   std::vector<ResonanceInfo> resonances;
   for (const ResonanceInfo &r : LevelResonances(compound, inputs)) {
@@ -257,7 +257,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
  * the separation energy of the entrance channel.
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::LevelResonances(const CNuc *compound, const LevelInputs &inputs) {
+AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const LevelInputs &inputs) {
   std::vector<ResonanceInfo> resonances;
 
   if (!compound) return resonances;
@@ -318,11 +318,11 @@ AdaptiveIntegrationGrid::LevelResonances(const CNuc *compound, const LevelInputs
       // is in the extrapolated cross section.
       //
       // The input width is the reduced width amplitude gamma (MeV^1/2) after
-      // CNuc::TransformIn, so it is used directly -- NOT divided by 1e6.  That
+      // CompoundSystem::TransformIn, so it is used directly -- NOT divided by 1e6.  That
       // 1e6 belongs to the pre-transformation convention (input widths in eV);
       // applying it here made every width 1e12 too small.  The particle sum is
       // level-shift normalised by (1 + sum gamma^2 dS/dE) so the result is the
-      // *observed* width, matching CNuc::TransformOut / parameters.out.
+      // *observed* width, matching CompoundSystem::TransformOut / parameters.out.
       double totalWidth = 0.0;
       double normSum = 0.0;
       // Before the input transformation has run (which is the case whenever
@@ -360,7 +360,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CNuc *compound, const LevelInputs
             // in double precision (ChannelFunc) -- are left out of this
             // estimate, on both sides of threshold alike, so it does not jump
             // when a level crosses it.  (Their gamma^2 dS/dE would belong in
-            // the normalization, as in CNuc::TransformOut; the estimate only
+            // the normalization, as in CompoundSystem::TransformOut; the estimate only
             // sizes the integration grid, and adding it moves the grid of
             // existing projects -- tests/17O by 1.4e-3 in chi2.)
             ChannelFunc channelFunc(chPair, false);
@@ -430,7 +430,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CNuc *compound, const LevelInputs
       double particleWidth = totalWidth;  // before radiative channels
 
       // Radiative channels (M/E): Gamma = 2 gamma^2 P_rad, with the radiation
-      // penetrability following CNuc::TransformOut (the same special cases for a
+      // penetrability following CompoundSystem::TransformOut (the same special cases for a
       // ground-state transition and the RMC formalism).
       for (int ch = 1; ch <= numChannels; ch++) {
         const AChannel *channel = jgroup->GetChannel(ch);

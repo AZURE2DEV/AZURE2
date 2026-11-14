@@ -26,7 +26,7 @@ whoever asks for a calculation, and a project file that says in words what each 
 | 1. Physics core | `physics/`, a standalone library (no engine headers, no GSL): Coulomb and Whittaker functions, level-parameter conventions and transformations (Brune, formal, Park), external capture, coupling coefficients, reaction pathways. Calculations no longer depend on the thread count | done |
 | 2. One objective | One ordered list of χ² terms used by the fit, the gradient, least squares, the MCMC and the Python API | done |
 | 3. One project model | `io/`: the project file read once, losslessly, by the engine and pyazr alike; one mass table | done |
-| 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced | most of it done, see below |
+| 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced and renamed `CompoundSystem` | most of it done, see below |
 | 5–9 | Energy grid and apparatus kernels, own stopping, finite targets for yields; evaluation without copies; DWBA for THM; pyazr 3.0; web interface | not begun |
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
@@ -163,6 +163,19 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   pathways are files of their own. The pathways of a run are one immutable table built at set-up and shared by all
   threads, read by every observable and by external capture; the six classes of the old pathway trees are deleted;
   the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
+- **`CNuc` is now `CompoundSystem`** (`include/CompoundSystem.h`). What you knew as `CNuc` did five jobs; each has its
+  place now. The compound nuclei as set up (pairs, J^π groups, channels with B_c, the levels' `<levels>` data, the
+  physics `System`, the pathway table, the external-capture set-up, the model data, the `gamma_decay` records, the
+  layout of the level block of the parameter vector) are the `CompoundSystem`: built by `Fill`, `AddHardSphereGroups`,
+  `ParseExternalCapture` and `Initialize` (`src/CompoundSystemBuild.cpp`, `src/ExternalCaptureFinalStates.cpp`),
+  constant afterwards and shared by every thread, walker and evaluation, never copied (no `Clone`). The values at a
+  parameter vector (fit energies and amplitudes, shift functions, Park's J, external-capture parts) are a
+  `LevelState`, and the levels' starting values in the fit's basis a `LevelInputs`: each owner (the run, the session,
+  the fitter's pool, the sampler's walkers, the rate) holds its own. The transformations in and out are
+  `src/LevelTransforms.cpp` (the observed values come back as an `ObservedLevelTable`), the fills
+  `src/LevelStateFill.cpp`, the parameter vector `src/LevelParameterVector.cpp`, the reports `src/LevelReport.cpp`,
+  the checks `src/CompoundSystemChecks.cpp`; the abundances went to the data. The consistency test refuses the old
+  name.
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the
@@ -570,7 +583,10 @@ energy) and of what was not written; what AZURE2 cannot read is refused with wha
 library's 3He + 4He file the engine reproduces the file's own 4He(3He,p)6Li to 1.1e-6. The other way, `pyazr endf
 write PROJECT NEW.endf` writes MF=1, MF=2 (particle channels in the formal basis, your decision: no photon channel)
 and MF=3 of every exit and of capture from the engine (LRP=2, with the check that MF=2 reproduces MF=3 before the
-file is written). MF=6 (angular distributions, the elastic channel) is not written yet and is listed in the file.
+file is written) and MF=6: the angular distribution of each exit (Legendre coefficients), the elastic channel
+(the nuclear and interference part, tabulated, with its integral in MF=3/MT=2) and the primary photon of capture to
+each final state with its yield; on T1, T2 and 13N the file gives the engine's differential cross sections to
+3e-3 (5e-3 for elastic scattering). A file with widths instead of amplitudes (IFG=0) is converted on reading.
 The two conversions are the engine's own (two new functions of the binding); write then read gives T1 and T2 back
 with chi-squared changed by 2e-4 and 6e-4.
 
@@ -894,6 +910,51 @@ says when the answer depends on whether the project has external capture). `--no
 no effect); `--no-readline`, which nearly every old script carries, is refused (your decision): the user drops it.
 The refusal says so: "Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads nothing from
 standard input.  Drop --no-readline and give the command: ...", exit status 2.
+
+## pyazr's library calls: the small findings that need the engine (2026-11-14)
+
+The example scripts showed defects of pyazr's calls; those that Python can repair are repaired (a call prints nothing
+on standard output, writes nothing beside the project, refuses with three parts; the level scheme's words, the
+units of the external-capture integrals, of an extrapolation and of a gamma_decay number; a prior or a limit on a
+level parameter as a `Project` edit).  What needs the engine, function by function:
+
+- **The final state of an external-capture integral.** `AZUREAPI::GetECIntegrals` (`api/src/AZUREAPI.cpp`) writes six
+  numbers per pathway (l_i, l_f, 2s_i, 2s_f, multipolarity, E/M); it knows the final state (`ecLevel`, its pair
+  `finalPair`) and does not pass it.  It should push the final pair's key and the EC level's (group, level), and
+  `Session.ec_integrals` would read them; today two pathways to two final states with the same quantum numbers are
+  told apart by their position only.
+- **The engine's text.** A session's `Config::outStream` is the binding's `NoticeBuffer` in front of `std::cout`
+  (`api/src/pybind_api.cpp`, `notices_{std::cout}`): every line that is not a held notice reaches the process's
+  standard output.  Python now points descriptor 1 at a temporary file during each session call and a rate
+  (`pyazr/engine_text.py`) and logs the lines; the engine-side repair is a `NoticeBuffer` over a buffer of the
+  session's with a `take_output()` beside `take_notices()`, after which the descriptor juggling can go.  The lines
+  met: the rate's progress bar and grid line (`src/ReactionRate.cpp`: `PrintRateProgress` and the
+  "Wrote cross section grid" line), the stale-cache WARNING and the "Segment #" progress of
+  `src/ExternalCaptureSetup.cpp`, the phase-shift ERROR of `WorkingCopy` (`src/WorkingCopy.cpp`), the
+  "**WARNING: Denominator less than zero" of `src/CNucTransformMessages.cpp` (also printed by
+  `Session.parameters` and a fit when a `<parameterSettings>` limit lies beyond what the transformation reaches).
+  The "Coulomb table: ..." lines go to `std::cerr` (`src/CoulombTable.cpp`, `src/RunDiagnostics.cpp`) at every set-up
+  and at the end of the process; a library would keep them for `describe()`.
+- **The rate's files.** `src/ReactionRate.cpp` writes `cross_section_grid.dat` into the output directory of the
+  project and its rate session wrote an empty `intEC.extrap` with its `.sig` over the project's cache.  pyazr's
+  `RateSession` now runs on a copy of the project whose output directory is a temporary one; a `RuntimeOptions`
+  field "no output files" (or an output directory of the session's) would make the copy unnecessary.
+- **Threads of a session.** `pyazr.Session` has no `threads` argument: a session uses the process's OpenMP threads
+  (`OMP_NUM_THREADS` before the import, or `omp_get_max_threads()`); the binding binds no `omp_set_num_threads` and
+  `RuntimeOptions` has no field for it.
+- **Units of two parameter kinds.** A `shift_fn` parameter's unit is the kind's text "as the shift function defines",
+  an `apparatus` parameter's "the row's (apparatusUnit)": the record (`api/src/pybind_records.cpp`) carries no unit
+  of its own row.  (A `radiative` parameter's unit is now taken from the kind's text by its part.)
+- **`<parameterSettings>` has no schema row.** Its columns are the reader's (`ParameterLimitsManager::
+  ReadParameterSettings`); pyazr names them once (`pyazr/parameter_settings.py`, `COLUMNS`).  Its rows name a level
+  by the engine's running number (`Level N Energy (MeV)`), which shifts when a level is added, removed or switched
+  off; a row by the parameter's name (`energy_N`) is read only for parameters other than a level's
+  (`SettingNameFor`), so the numbering cannot be avoided from Python.
+- **The phase-shift check at set-up only.** The engine refuses a phase-shift data set whose (J, l, s) no active level
+  carries when a session is set up (`src/WorkingCopy.cpp`); the validator does not check it, so `Project` repeats
+  the rule after each edit (`Project._phase_shift_problems`).  As a build check of the validator it would be one
+  implementation.  The validator's `E_FIELD_NOT_APPLICABLE` of a phase shift's J, l or s gives a message but no
+  `allowed` and no `fix`.
 
 ## For the maintainers to decide
 

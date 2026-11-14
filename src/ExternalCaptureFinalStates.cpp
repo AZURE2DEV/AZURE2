@@ -1,4 +1,11 @@
-#include "CNucExternalCapture.h"
+// The external-capture set-up of the compound system (CompoundSystem.h): the final states of the photon pairs
+// (ParseExternalCapture), the formal-basis final-state blocks and capture masks, and their values at a fit vector.
+#include "ExternalCaptureAmplitudes.h"
+
+#include <map>
+#include <set>
+#include <stdexcept>
+#include <vector>
 
 #include <cmath>
 #include <iostream>
@@ -7,13 +14,19 @@
 #include "AChannel.h"
 #include "GSLException.h"
 #include "ALevel.h"
-#include "CNuc.h"
-#include "CNucLevelParameters.h"
-#include "CNucSystem.h"
+#include "CompoundSystem.h"
+#include "EngineChannelFunctions.h"
+#include "SystemOfCompound.h"
 #include "Config.h"
 #include "ECIntegral.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "NFIntegral.h"
+#include "ProjectSetup.h"
+#include "WhitFunc.h"
+#include "azure2/experiment/FinalStates.h"
+#include "azure2/experiment/ProjectReader.h"
+#include "azure2/io/LevelRows.h"
 #include "azure2/physics/ExternalCapture.h"
 #include "azure2/physics/LevelParameters.h"
 
@@ -49,144 +62,101 @@ void ThrowIfFailed(const phys::LevelSet &set) {
 }
 }  // namespace
 
-double SqrtNFFactor(const CNuc &compound, const JGroup *group, const ALevel *level, double n0,
-                    const std::vector<double> &gamma) {
-  std::vector<phys::BoundChannel> channels;
-  for (int ch = 1; ch <= group->NumChannels() && ch <= level->NumNFIntegrals(); ch++) {
-    const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
-    channels.push_back({pair->GetChRad(), pair->GetRedMass(), gamma[ch - 1], level->GetNFIntegral(ch)});
-  }
-  return 1.0 / std::sqrt(phys::bound_state_normalization(n0, channels));
-}
+/*!
+ * Marks the final state of each photon pair with external capture (`ecPairs`: pair number -> multipole mask) and
+ * stores its N_f integrals and Whittaker conversion factors; the final states are decided by
+ * experiment::ExternalCaptureFinalStates on the <levels> `rows`, as the validation decides them.
+ */
 
-std::pair<int, int> ExternalCaptureFinalState(const CNuc &compound, const AChannel *channel) {
-  const char type = channel->GetRadType();
-  if (type != 'E' && !(type == 'M' && channel->GetL() == 1)) return {0, 0};
-  for (int j = 1; j <= compound.NumJGroups(); j++)
-    for (int la = 1; la <= compound.GetJGroup(j)->NumLevels(); la++) {
-      const ALevel *f = compound.GetJGroup(j)->GetLevel(la);
-      if (!f->IsECLevel() || channel->GetPairNum() != f->GetECPairNum()) continue;
-      const int L = channel->GetL();
-      const unsigned char mask = f->GetECMultMask();
-      if ((type == 'E' && L == 1 && (mask & isE1)) || (type == 'M' && L == 1 && (mask & isM1)) ||
-          (type == 'E' && L == 2 && (mask & isE2)))
-        return {j, la};
-      return {0, 0};
+int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
+                               const std::vector<azure2::io::LevelRow> &rows) {
+  std::vector<int> ecKeys;
+  for (const auto &ec : ecPairs) ecKeys.push_back(this->Pair(ec.first)->GetPairKey());
+  const azure2::experiment::LevelTables tables = azure2::experiment::LevelTablesOfRows(rows);
+  const std::vector<azure2::experiment::FinalStateOfPair> finals = azure2::experiment::ExternalCaptureFinalStates(tables, ecKeys);
+  std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
+  // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
+  if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
+    for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);
+  for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
+    PPair *exitPair = this->Pair(ec->first);
+    if (exitPair->GetPType() != 10) {
+      configure.outStream << "Final state is not a capture pair." << std::endl;
+      continue;
     }
-  return {0, 0};
+    // The final state must be a level of the project (user guide, "Gamma-Ray Calculations"; it carries the ANC and the
+    // gamma widths): refused for a pair an active data set (or the rate) exits into, else warned about and switched off,
+    // so no level is ever made up.  tests/ec_final_state_listed.
+    double jValue = exitPair->GetJ(2);
+    int parity = exitPair->GetPi(2);
+    JGroup newJGroup(jValue, parity);
+    newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
+    int jGroupNum = this->IsJGroup(newJGroup);
+    const azure2::experiment::FinalStateOfPair &finalState = *azure2::experiment::FinalStateOf(finals, exitPair->GetPairKey());
+    if (finalState.levels.empty()) {
+      const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
+      configure.outStream << (used ? "ERROR" : "WARNING") << ": external capture into pair " << exitPair->GetPairKey()
+                          << " needs its final state, J^pi = " << jValue << (parity > 0 ? "+" : "-") << " at E_x = "
+                          << exitPair->GetHeavyExE() << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
+                          << (jGroupNum ? " within 1 keV in that J^pi group." : " and that J^pi group does not exist.")
+                          << (used ? "" : "  No segment uses this pair: external capture into it is switched off for this run.")
+                          << std::endl;
+      if (used) return -1;
+      continue;
+    }
+    // Two levels of one J^pi within 1 keV of each other (different level IDs): the final state is ambiguous.
+    if (finalState.levels.size() > 1) {
+      configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << finalState.levels.size()
+                          << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
+                          << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
+                          << " or give the pair the energy of the one it decays to." << std::endl;
+      return -1;
+    }
+    const azure2::experiment::LevelInfo &level = tables.levels[finalState.levels[0]];
+    if (level.group != jGroupNum) throw std::logic_error("ParseExternalCapture: the level tables number J^pi groups unlike Fill");
+    const int levelNum = level.level;
+    if (finalState.sharedWithPairKey != 0) {
+      FinalStateOfAnotherPair(*this, configure, finalState.sharedWithPairKey, levelNum, ec->first);
+      return -1;
+    }
+    this->Group(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
+    for (int ch = 1; ch <= this->Group(jGroupNum)->NumChannels(); ch++) {
+      PPair *theFinalPair = this->Pair(this->Group(jGroupNum)->GetChannel(ch)->GetPairNum());
+      double nfIntegralValue = 0.;
+      double ecConvert = 0.;
+      if (theFinalPair->GetPType() == 0) {
+        NFIntegral newNFIntegral(theFinalPair);
+        nfIntegralValue = newNFIntegral(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
+        WhitFunc newWhitFunc(theFinalPair);
+        double whitConv = newWhitFunc(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
+                                      theFinalPair->GetChRad(),
+                                      fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
+        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
+      }
+      this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
+      this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
+    }
+  }
+  return 0;
 }
 
-complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const AChannel *channel,
-                               std::pair<int, int> finalState,
-                               const ExternalCaptureInputs &values, const Config &configure,
-                               ExternalCaptureSlopes *slopes) {
-  if (slopes) {
-    slopes->level.assign(group->NumChannels(), complex(0.0, 0.0));
-    slopes->finalScale.clear();
-  }
-  if (finalState.first == 0) return complex(0.0, 0.0);
-  const char type = channel->GetRadType();
-  const int L = channel->GetL();
-  const JGroup *finalGroup = compound.GetJGroup(finalState.first);
-  const ALevel *finalLevel = finalGroup->GetLevel(finalState.second);
-  std::vector<phys::CaptureChannel> in;
-  std::vector<const AChannel *> inChannels;
-  std::vector<int> inNumber;
-  for (int ch = 1; ch <= group->NumChannels(); ch++) {
-    const AChannel *c = group->GetChannel(ch);
-    if (c->GetRadType() != 'P') continue;
-    in.push_back({c->GetPairNum(), c->GetL(), c->GetS(), values.levelGamma[ch - 1]});
-    inChannels.push_back(c);
-    inNumber.push_back(ch);
-  }
-  std::vector<phys::FinalChannel> out;
-  std::vector<const AChannel *> outChannels;
-  std::vector<int> outNumber;
-  for (int chp = 1; chp <= finalGroup->NumChannels(); chp++) {
-    const AChannel *c = finalGroup->GetChannel(chp);
-    if (c->GetRadType() != 'P') continue;
-    // s_fc = gamma~_fc N_f^(-1/2) K_c (Eq. 2), in the engine's order.
-    out.push_back({c->GetPairNum(), c->GetL(), c->GetS(),
-                   values.finalGamma[chp - 1] * values.finalSqrtNF * finalLevel->GetECConversionFactor(chp)});
-    outChannels.push_back(c);
-    outNumber.push_back(chp);
-  }
-  // The integrals of the pairs that couple, kept for the slopes (Eq. 4 is bilinear in gamma_lambda c and s_fc).
-  std::vector<complex> integrals(in.size() * out.size());
-  std::vector<unsigned char> known(in.size() * out.size(), 0);
-  const phys::RadialIntegral integral = [&](std::size_t c, std::size_t cf) {
-    if (known[c * out.size() + cf]) return integrals[c * out.size() + cf];
-    ECIntegral theECIntegral(compound.GetPair(outChannels[cf]->GetPairNum()), configure);
-    const complex v = theECIntegral(inChannels[c]->GetL(), outChannels[cf]->GetL(), inChannels[c]->GetS(),
-                                    outChannels[cf]->GetS(), group->GetJ(), finalGroup->GetJ(), L, type,
-                                    values.levelEnergy, values.finalEnergy, true);
-    integrals[c * out.size() + cf] = v;
-    known[c * out.size() + cf] = 1;
-    return v;
-  };
-  const phys::Multipole X = type == 'M' ? phys::Multipole::M : phys::Multipole::E;
-  const complex value = phys::external_reduced_width(X, L, finalGroup->GetJ(), in, out, integral);
-  if (!slopes) return value;
-  slopes->finalScale.assign(finalGroup->NumChannels(), complex(0.0, 0.0));
-  for (std::size_t c = 0; c < in.size(); c++) {
-    std::vector<phys::CaptureChannel> unit = in;
-    for (std::size_t k = 0; k < unit.size(); k++) unit[k].gamma = k == c ? 1.0 : 0.0;
-    slopes->level[inNumber[c] - 1] = phys::external_reduced_width(X, L, finalGroup->GetJ(), unit, out, integral);
-  }
-  for (std::size_t cf = 0; cf < out.size(); cf++) {
-    std::vector<phys::FinalChannel> unit = out;
-    for (std::size_t k = 0; k < unit.size(); k++) unit[k].scale = k == cf ? 1.0 : 0.0;
-    slopes->finalScale[outNumber[cf] - 1] = phys::external_reduced_width(X, L, finalGroup->GetJ(), in, unit, integral);
-  }
-  return value;
-}
-
-complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelState &state, const LevelInputs &inputs, int j,
-                                     int la, const AChannel *channel, const Config &configure) {
-  const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
-  if (finalState.first == 0) return complex(0.0, 0.0);
-  const JGroup *group = compound.GetJGroup(j);
-  ExternalCaptureInputs values;
-  values.levelEnergy = inputs.E(j, la);
-  values.finalEnergy = inputs.E(finalState.first, finalState.second);
-  for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(inputs.Gamma(j, la, ch));
-  for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
-    values.finalGamma.push_back(inputs.Gamma(finalState.first, finalState.second, ch));
-  values.finalSqrtNF = state.SqrtNF(finalState.first, finalState.second);
-  return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
-}
-
-complex ExternalReducedWidthOfTable(const CNuc &compound, const ObservedLevelTable &table, int j, int la,
-                                    const AChannel *channel, const Config &configure) {
-  const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
-  if (finalState.first == 0) return complex(0.0, 0.0);
-  const ObservedLevel &level = table.Level(j, la);
-  const ObservedLevel &finalLevel = table.Level(finalState.first, finalState.second);
-  ExternalCaptureInputs values;
-  values.levelEnergy = level.E;
-  values.finalEnergy = finalLevel.E;
-  values.levelGamma = level.gamma;
-  values.finalGamma = finalLevel.gamma;
-  values.finalSqrtNF = finalLevel.sqrtNF;
-  return ExternalReducedWidthAt(compound, compound.GetJGroup(j), channel, finalState, values, configure);
-}
 
 // ------------------------------------------------------------------ formal basis: Brune quantities per evaluation
-// (CNuc members: the final states' Brune amplitudes of step 2 and the --ignore-externals projectors of step 4.)
+// (CompoundSystem members: the final states' Brune amplitudes of step 2 and the --ignore-externals projectors of step 4.)
 
 /*!
  * The R-matrix blocks of the formal basis that hold an external-capture final state with other levels
  * (cnuc_split.md section 8): in them the final state's formal amplitude is a mixture of the block's poles, and its
  * Brune amplitude, the residue of its own pole, is what external capture needs.  Setup state, shared by the clones.
  */
-struct CNuc::ECFinalBlocks {
-  std::shared_ptr<const CNucSystem> structure;
+struct CompoundSystem::ECFinalBlocks {
+  std::shared_ptr<const SystemOfCompound> structure;
   std::vector<std::size_t> blocks;
   bool gslCoulomb = false, rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
-void CNuc::SetUpECFinalBlocks(const Config &configure, const LevelInputs &inputs) {
+void CompoundSystem::SetUpECFinalBlocks(const Config &configure, const LevelInputs &inputs) {
   ecFinalBlocks_.reset();
   // The final state's energy in external capture (the photon energy, the bound-state wave): its Brune energy, the
   // level energy now except in the formal basis (below).
@@ -221,7 +191,7 @@ void CNuc::SetUpECFinalBlocks(const Config &configure, const LevelInputs &inputs
   if (record->blocks.empty()) return;
   ecFinalBlocks_ = record;
   // The Brune energies of their final states, from the formal parameters (EvaluationIteration).
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure->map, record->gslCoulomb, record->rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, record->structure->map, record->gslCoulomb, record->rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : record->blocks) {
     const int j = record->structure->map.groupOfBlock[b];
@@ -247,9 +217,9 @@ void CNuc::SetUpECFinalBlocks(const Config &configure, const LevelInputs &inputs
  * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration is
  * EvaluationIteration's, so that the capture agrees with the Brune basis to rounding (the reports use 1e-6 MeV).
  */
-void CNuc::ECFinalStatesFromFormal(LevelState &state) const {
+void CompoundSystem::ECFinalStatesFromFormal(LevelState &state) const {
   const ECFinalBlocks &r = *ecFinalBlocks_;
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
     const int j = r.structure->map.groupOfBlock[b];
@@ -279,14 +249,14 @@ void CNuc::ECFinalStatesFromFormal(LevelState &state) const {
  * of more than one level (external_capture.md section 3).  Setup state, shared by the clones; the projectors
  * themselves are recomputed with the fit parameters (FormalCaptureMasksFromParams).
  */
-struct CNuc::CaptureMaskSetup {
-  std::shared_ptr<const CNucSystem> structure;
+struct CompoundSystem::CaptureMaskSetup {
+  std::shared_ptr<const SystemOfCompound> structure;
   std::vector<CaptureMaskSlot> slots;
   bool gslCoulomb = false, rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
-void CNuc::SetUpFormalCaptureMasks(const Config &configure, LevelState &state) {
+void CompoundSystem::SetUpFormalCaptureMasks(const Config &configure, LevelState &state) {
   captureMaskSetup_.reset();
   state.ShapeCaptureProjectors(0);
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::IGNORE_ZERO_WIDTHS) ||
@@ -296,7 +266,7 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure, LevelState &state) {
       this->SystemStructureHandle(), {},
       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
       configure.printedOnce});
-  const CNucSystemMap &map = setup->structure->map;
+  const SystemOfCompoundMap &map = setup->structure->map;
   for (int p = 1; p <= this->NumPairs(); p++) {
     const azure2::EntrancePathways &P = this->Pathways().Entrance(p);
     for (const azure2::ExternalRow &ec : P.external) {
@@ -319,9 +289,9 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure, LevelState &state) {
  * The projector Pi = T^-1 P T of each slot at the current fit parameters (physics/ capture_mask, Eq. 5), T from
  * brune_from_formal (EvaluationIteration) as for the final states; empty when no level of the block is masked.
  */
-void CNuc::FormalCaptureMasksFromParams(LevelState &state) const {
+void CompoundSystem::FormalCaptureMasksFromParams(LevelState &state) const {
   const CaptureMaskSetup &r = *captureMaskSetup_;
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure->map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.gslCoulomb, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(true);
   for (std::size_t i = 0; i < r.slots.size(); i++) {
     const CaptureMaskSlot &mask = r.slots[i];
@@ -358,7 +328,7 @@ void CNuc::FormalCaptureMasksFromParams(LevelState &state) const {
  * projector (T depends on the parameters), or when a masked level is decoupled now but one of its particle amplitudes
  * is free: P is exact at the point, but dPi = [P, dT] is not zero there (external_capture.md section 7).
  */
-bool CNuc::FormalCaptureMasksOutsideAdjoint(const LevelState &state,
+bool CompoundSystem::FormalCaptureMasksOutsideAdjoint(const LevelState &state,
                                              const std::function<bool(int, int, int)> &freeGamma) const {
   if (!captureMaskSetup_) return false;
   for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++) {
@@ -375,29 +345,20 @@ bool CNuc::FormalCaptureMasksOutsideAdjoint(const LevelState &state,
 }
 
 /// Has level `la` of J-group `j` a particle amplitude other than zero (current fit values)?
-bool CNuc::MaskedLevelCoupled(const LevelState &state, int j, int la) const {
+bool CompoundSystem::MaskedLevelCoupled(const LevelState &state, int j, int la) const {
   const JGroup *group = this->GetJGroup(j);
   for (int ch = 1; ch <= group->NumChannels(); ch++)
     if (group->GetChannel(ch)->GetRadType() == 'P' && state.Gamma(j, la, ch) != 0.0) return true;
   return false;
 }
 
-int CNuc::FormalCaptureMaskSlot(int group, int channel) const {
+int CompoundSystem::FormalCaptureMaskSlot(int group, int channel) const {
   if (!captureMaskSetup_) return -1;
   for (std::size_t i = 0; i < captureMaskSetup_->slots.size(); i++)
     if (captureMaskSetup_->slots[i].group == group && captureMaskSetup_->slots[i].channel == channel) return (int)i;
   return -1;
 }
 
-const CNuc::CaptureMaskSlot &CNuc::FormalCaptureMaskOf(int slot) const {
+const CompoundSystem::CaptureMaskSlot &CompoundSystem::FormalCaptureMaskOf(int slot) const {
   return captureMaskSetup_->slots[slot];
-}
-
-void FinalStateOfAnotherPair(const CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum) {
-  const PPair *pair = compound.GetPair(pairNum);
-  configure.outStream << "ERROR: external capture into pairs " << otherPairKey
-                      << " and " << pair->GetPairKey() << ": both have the final state J^pi = " << pair->GetJ(2)
-                      << (pair->GetPi(2) > 0 ? "+" : "-") << " at E_x = " << pair->GetHeavyExE() << " MeV (level " << level
-                      << " of that J^pi group).  A photon pair has its own final state: remove the duplicated pair, or"
-                      << " give it the energy of another level." << std::endl;
 }

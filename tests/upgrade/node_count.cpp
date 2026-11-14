@@ -1,7 +1,7 @@
 // The node count of a folded project (docs/upgrade/energy_grid.md section 2.2): how many distinct compound energies
 // the units of the point pass lie on today, and how many nodes one shared mesh per compound nucleus at today's node
 // density would have.  A measuring tool for the shared mesh (branch 7, part 2), not a test: it prints, it asserts
-// nothing.  Each project is set up as a calculation is (Config, CNuc::Fill, WorkingCopy::Fill, the Initialize steps; no
+// nothing.  Each project is set up as a calculation is (Config, CompoundSystem::Fill, WorkingCopy::Fill, the Initialize steps; no
 // evaluation).
 //
 //   node_count [--plan] [--detail] <dir/project.azr> ...   (each project is read in its own directory: data paths are relative)
@@ -43,7 +43,7 @@
 #include "ProjectSetup.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "CalculationPlan.h"
 #include "DataSet.h"
 #include "MeshPlanner.h"
@@ -90,8 +90,8 @@ bool g_detail = false;  // --detail: the supports, anchors and short supports on
 
 /// The planner's columns for one project: supports and anchors as the set-up has them (see the head of the file).
 /// The quantized anchors in E_x per entrance pair key, as the set-up's grids saw the levels: taken after
-/// WorkingCopy::Fill (which places the grids) and before CNuc::Initialize transforms the widths.
-std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(const CNuc &compound, const LevelInputs &inputs, const Config &cfg) {
+/// WorkingCopy::Fill (which places the grids) and before CompoundSystem::Initialize transforms the widths.
+std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(const CompoundSystem &compound, const LevelInputs &inputs, const Config &cfg) {
   std::map<int, std::vector<azure2::MeshAnchor>> out;
   for (int i = 1; i <= compound.NumPairs(); i++) {
     const PPair *pair = compound.GetPair(i);
@@ -105,7 +105,7 @@ std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(const CNuc &compoun
   return out;
 }
 
-void PlanColumns(CNuc &compound, WorkingCopy &data, const std::map<int, std::vector<azure2::MeshAnchor>> &anchorsByPair,
+void PlanColumns(CompoundSystem &compound, WorkingCopy &data, const std::map<int, std::vector<azure2::MeshAnchor>> &anchorsByPair,
                  const std::set<std::pair<int, std::uint64_t>> &today,
                  const std::set<std::pair<int, std::uint64_t>> &unfolded) {
   const azure2::CalculationPlan &plan = data.Plan();
@@ -229,7 +229,7 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;

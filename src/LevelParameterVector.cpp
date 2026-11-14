@@ -1,24 +1,24 @@
-// CNuc: the parameter vector of the level block, read and written along the layout (LevelParameterLayout): the
+// CompoundSystem: the parameter vector of the level block, read and written along the layout (LevelParameterLayout): the
 // vector seeded from the levels' input values, a physical vector taken as input values, the observed vector of a
 // table, and the change of amplitude basis between Brune and Park.
 #include <cmath>
 #include <string>
 #include <vector>
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "AZUREParams.h"
-#include "CNucExternalCapture.h"
-#include "CNucSystem.h"
+#include "ExternalCaptureAmplitudes.h"
+#include "SystemOfCompound.h"
 #include "Config.h"
 #include "Minuit2/MnUserParameters.h"
-#include "CNucLevelParameters.h"
+#include "EngineChannelFunctions.h"
 
 namespace phys = azure2::physics;
 
 /*!
- * Fills the CNuc object from the parameter array.
+ * Fills the CompoundSystem object from the parameter array.
  */
 
-void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed, LevelState &state, LevelInputs &inputs) const {
+void CompoundSystem::FillCompoundFromParamsPhysical(const vector_r &observed, LevelState &state, LevelInputs &inputs) const {
   const vector_r &p = gammaDecays_->Empty() ? observed : gammaDecays_->WithPartialWidths(observed);
   if (!gammaDecays_->Empty()) inputs.SetGammaDecayNumbers(gammaDecays_->NumbersAt(observed));
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
@@ -35,10 +35,10 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed, LevelState &
 }
 
 /*!
- * Fills the Minuit parameter array from initial values in the CNuc object.
+ * Fills the Minuit parameter array from initial values in the CompoundSystem object.
  */
 
-void CNuc::FillMnParams(AZUREParams &params, const LevelState &state, const LevelInputs &inputs,
+void CompoundSystem::FillMnParams(AZUREParams &params, const LevelState &state, const LevelInputs &inputs,
                         const Config *config) const {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   for (const LevelParameterLayout::Slot &slot : this->ParameterLayout().Slots()) {
@@ -86,7 +86,7 @@ void CNuc::FillMnParams(AZUREParams &params, const LevelState &state, const Leve
 }
 
 
-vector_r CNuc::GetTransformParams(const LevelState &state, const ObservedLevelTable &table) const {
+vector_r CompoundSystem::GetTransformParams(const LevelState &state, const ObservedLevelTable &table) const {
   // The observed values TransformOut computed (physics/ observed_levels, cnuc_split.md section 8): Gamma (eV),
   // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
   const LevelParameterLayout &layout = this->ParameterLayout();
@@ -113,14 +113,14 @@ vector_r CNuc::GetTransformParams(const LevelState &state, const ObservedLevelTa
  * The positions are the layout's (ParameterLayout).
  */
 
-bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) const {
+bool CompoundSystem::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) const {
   if (from == to) return true;
   const bool toPark = (to == 2);
   if (!((from == 1 && to == 2) || (from == 2 && to == 1))) return false;
   // physics/ park_from_brune, brune_from_park on each R-matrix block (level_parameters.md Eq. 2.3); the errors
   // scale with the amplitudes, by J^1/2 or J^-1/2.
-  const CNucSystem &structure = this->SystemStructure();
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
+  const SystemOfCompound &structure = this->SystemStructure();
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, structure.map, configure);
   for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
     const int j = structure.map.groupOfBlock[b];
     const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];

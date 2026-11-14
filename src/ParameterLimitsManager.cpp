@@ -1,6 +1,6 @@
 #include "ParameterLimitsManager.h"
 #include "Config.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "azure2/experiment/Build.h"
@@ -111,7 +111,7 @@ inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   return sign * value;
 }
 
-ParameterLimitsManager::ParameterLimitsManager(const Config *config, const CNuc *compound, const LevelState &state,
+ParameterLimitsManager::ParameterLimitsManager(const Config *config, const CompoundSystem *compound, const LevelState &state,
                                                const LevelInputs &inputs, WorkingCopy *data, AZUREParams *params) :
   config_(config),
   compound_(compound),

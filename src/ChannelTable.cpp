@@ -4,7 +4,7 @@
 #include <cmath>
 #include <exception>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "CoulFunc.h"
@@ -42,10 +42,10 @@ ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, dou
 namespace {
 
 // Everything a row depends on besides (l, 2J, E_c), per pair: a previous table is reused only when these agree.
-std::vector<std::vector<double>> PairSignatures(const CNuc *cnuc, const Config &configure) {
+std::vector<std::vector<double>> PairSignatures(const CompoundSystem *compound, const Config &configure) {
   std::vector<std::vector<double>> s;
-  for (int p = 1; p <= cnuc->NumPairs(); p++) {
-    const PPair *pair = cnuc->GetPair(p);
+  for (int p = 1; p <= compound->NumPairs(); p++) {
+    const PPair *pair = compound->GetPair(p);
     CoulFunc coulomb(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     s.push_back({(double)pair->GetPType(), (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2),
                  pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(),
@@ -60,14 +60,14 @@ std::vector<std::vector<double>> PairSignatures(const CNuc *cnuc, const Config &
 
 }  // namespace
 
-std::shared_ptr<const ChannelTable> ChannelTable::Build(const CNuc *cnuc, const Config &configure, std::vector<Key> keys,
+std::shared_ptr<const ChannelTable> ChannelTable::Build(const CompoundSystem *compound, const Config &configure, std::vector<Key> keys,
                                                         const ChannelTable *previous) {
   auto table = std::make_shared<ChannelTable>();
   std::sort(keys.begin(), keys.end());
   keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
   table->keys_ = std::move(keys);
   table->rows_.resize(table->keys_.size());
-  table->pairSignatures_ = PairSignatures(cnuc, configure);
+  table->pairSignatures_ = PairSignatures(compound, configure);
   if (previous && previous->pairSignatures_ != table->pairSignatures_) previous = nullptr;
 
   std::vector<int> todo;
@@ -91,7 +91,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(const CNuc *cnuc, const 
   for (int t = 0; t < n; t++) {
     try {
       const Key &k = table->keys_[todo[t]];
-      table->rows_[todo[t]] = Compute(cnuc->GetPair(k.pair), k.l, k.two_j, k.energy, configure);
+      table->rows_[todo[t]] = Compute(compound->GetPair(k.pair), k.l, k.two_j, k.energy, configure);
     } catch (...) {
 #ifdef _OPENMP
 #pragma omp critical(channel_table_error)
@@ -103,7 +103,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(const CNuc *cnuc, const 
   return table;
 }
 
-std::shared_ptr<const ChannelTable> ChannelTable::FromRows(const CNuc *cnuc, const Config &configure,
+std::shared_ptr<const ChannelTable> ChannelTable::FromRows(const CompoundSystem *compound, const Config &configure,
                                                            std::vector<std::pair<Key, Row>> rows) {
   auto table = std::make_shared<ChannelTable>();
   std::sort(rows.begin(), rows.end(), [](const std::pair<Key, Row> &a, const std::pair<Key, Row> &b) { return a.first < b.first; });
@@ -115,12 +115,12 @@ std::shared_ptr<const ChannelTable> ChannelTable::FromRows(const CNuc *cnuc, con
     table->keys_.push_back(kr.first);
     table->rows_.push_back(kr.second);
   }
-  table->pairSignatures_ = PairSignatures(cnuc, configure);
+  table->pairSignatures_ = PairSignatures(compound, configure);
   return table;
 }
 
-bool ChannelTable::SameSystem(const CNuc *cnuc, const Config &configure) const {
-  return pairSignatures_ == PairSignatures(cnuc, configure);
+bool ChannelTable::SameSystem(const CompoundSystem *compound, const Config &configure) const {
+  return pairSignatures_ == PairSignatures(compound, configure);
 }
 
 const ChannelTable::Row *ChannelTable::Find(const Key &k) const {

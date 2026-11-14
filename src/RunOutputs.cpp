@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelData.h"
 #include "ParameterKind.h"

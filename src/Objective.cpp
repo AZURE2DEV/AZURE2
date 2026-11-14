@@ -6,7 +6,7 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "JGroup.h"
 #include "PPair.h"
 #include "Config.h"
@@ -105,7 +105,7 @@ class NuisanceTerm : public ObjectiveTerm {
 // T6: Park formalism, every level's overlap J = 1 - sum_c gamma_c^2 dS_c/dE kept positive: the sum over the R-matrix
 // levels of (J/kParkNormScale)^2 for J < 0 (zero for every valid parameter set).  A level with J <= 0 has no standard
 // R-matrix counterpart (its Brune reduced widths would be imaginary), and nothing in the level matrix itself keeps a
-// minimizer out of that region, so this is the wall.  The shift functions must be current (CNuc::CalcShiftFunctions).
+// minimizer out of that region, so this is the wall.  The shift functions must be current (CompoundSystem::CalcShiftFunctions).
 class ParkTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -123,7 +123,7 @@ class ParkTerm : public ObjectiveTerm {
   }
 
  private:
-  static double Wall(const CNuc &compound, const LevelState &state) {
+  static double Wall(const CompoundSystem &compound, const LevelState &state) {
     double penalty = 0.0;
     for (int j = 1; j <= compound.NumJGroups(); j++) {
       const JGroup *group = compound.GetJGroup(j);
@@ -348,7 +348,7 @@ double Objective::Chi2(const ObjectiveContext &c) const {
   return chi2;
 }
 
-std::vector<std::string> ReplaceDiagonalPriors(const CNuc *compound, WorkingCopy *data, const PriorCovariance &pc) {
+std::vector<std::string> ReplaceDiagonalPriors(const CompoundSystem *compound, WorkingCopy *data, const PriorCovariance &pc) {
   std::vector<std::string> replaced;
   const ParamIndexMap pmap = BuildParamIndexMap(compound, data, std::vector<bool>());
   // The flags are settings of the data set: one revision of it (WorkingCopy::ReviseDataSet) for all of them.
@@ -427,7 +427,7 @@ std::vector<std::string> ReplaceDiagonalPriors(const CNuc *compound, WorkingCopy
   return replaced;
 }
 
-void AppendModelRows(const CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
     residuals.push_back(r);

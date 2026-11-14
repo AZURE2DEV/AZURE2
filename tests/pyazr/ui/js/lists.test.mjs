@@ -91,12 +91,25 @@ test("a reference offers the existing records and \"new …\", which is never a 
   assert.ok(norm.controls.some((c) => c.options?.some((o) => o.value === `${forms.NEW_RECORD}:normalization`)));
 });
 
-test("a list of numbers is a box per number, two more for new ones; an emptied box removes its number", { skip },
+test("a list of numbers is a box per number and one that grows; an emptied box removes its number", { skip },
   async () => {
     const forms = await mod("forms.js");
     const w = forms.widgetOf(schema.records.detector.fields.attenuation, "1 0.98 0.95", { schema });
-    assert.equal(w.controls.length, 5);
+    assert.equal(w.controls.length, 4);
+    assert.ok(w.controls[3].grows && !w.controls[2].grows, "the last, empty box grows");
     const v = forms.valuesOf(w);
     assert.equal(w.compose(v), "1 0.98 0.95");
     assert.equal(w.compose({ ...v, n1: "", n3: "0.9" }), "1 0.95 0.9");
+    // a box the form adds when the last is typed in is one of the widget's controls: composed with the others
+    w.controls.push({ ...w.controls[3], name: "n4", value: "" });
+    assert.equal(w.compose({ ...v, n3: "0.9", n4: "0.8" }), "1 0.98 0.95 0.9 0.8");
   });
+
+test("the first view keeps the columns the server's table names (a table's key, d. and f. taken off)", async () => {
+  const lists = await mod("lists.js");
+  const columns = [{ key: "name" }, { key: "d.tree" }, { key: "d.rows_kept" }, { key: "norm" }, { key: "chi2" },
+    { key: "f.kind" }, { key: "line" }];
+  assert.deepEqual(lists.onlyColumns(columns, ["name", "tree", "norm", "kind"]).map((c) => c.key),
+    ["name", "d.tree", "norm", "f.kind"]);
+  assert.equal(lists.onlyColumns(columns, undefined), columns, "no table: every column");
+});

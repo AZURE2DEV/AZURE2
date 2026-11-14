@@ -90,6 +90,14 @@ add_test(NAME pyazr_endf_read
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_read_test.py)
 set_tests_properties(pyazr_endf_read PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# The model as a curve over a data set (Session.model_curve): at the data points equal to Session.evaluate on T1, T2
+# and a ratio to Rutherford (unfolded to rounding, folded to the quadrature), between the points equal to the same
+# points read as data, energy shifts, the grid, the refusals with their three parts (about 25 s).
+add_test(NAME pyazr_model_curve
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/model_curve_test.py)
+set_tests_properties(pyazr_model_curve PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # pyazr.endf's start model: the engine's two level doors against its own transformation (T1, T2, 13N), the
 # ENDF/B-VIII.1 extract into a project reproducing its MF=3/MT=600, the refusals, write then read of T1 and T2.
 add_test(NAME pyazr_endf_model
@@ -99,10 +107,16 @@ set_tests_properties(pyazr_endf_model PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
 
 # pyazr.endf.write: T1, T2, 13N written and read back (own format check, MF=3 against the engine at the data and at
 # the grid's midpoints, MF=2 back to the levels); the real checking codes print their findings when found.
+# The quick set writes T1 and follows the narrow level; T2 and 13N (minutes: the elastic tables) are in the slow set.
 add_test(NAME pyazr_endf_write
          COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T1 narrow)
 set_tests_properties(pyazr_endf_write PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+add_test(NAME pyazr_endf_write_slow
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T2 13N)
+set_tests_properties(pyazr_endf_write_slow PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     LABELS slow TIMEOUT 3000)
 
 # pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
 # into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when
@@ -1026,10 +1040,12 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # and new-level edits against the same Project calls (T1, T2).  utilities_test: the covariance builder's routes (the
 # file and the field as one history entry) and the rate job against pyazr.covariance and pyazr.rate (T1).
 # prior_builder_test: the prior builder's routes against pyazr.priors.build, the file and the key as one entry (T1).
+# curves_test: the model curve route and an ENDF file on the curve's grid against pyazr.model_curve (T1, T2).
+# endf_project_test: a new project from an ENDF-6 file and the project written as one, against pyazr.endf (T1).
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
         ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py ui/thm_routes_test.py
         ui/nucleus_routes_test.py ui/utilities_test.py ui/endf_test.py
-        ui/prior_builder_test.py)
+        ui/prior_builder_test.py ui/curves_test.py ui/endf_project_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
@@ -1142,3 +1158,32 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
+
+# The words and units of pyazr's answers (the defects the example scripts met): the level scheme's pairs by key and
+# kind, the units of the external-capture integrals, of an extrapolation's model values and of a gamma_decay
+# parameter.
+add_test(NAME pyazr_library_answers
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/library_answers_test.py)
+set_tests_properties(pyazr_library_answers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr's library calls: nothing on standard output (the engine's lines go to the logger pyazr.engine), the rate's
+# files in a temporary directory of its own, a refused set-up and a wrong fit vector with their three parts.
+add_test(NAME pyazr_library_calls
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/library_calls_test.py)
+set_tests_properties(pyazr_library_calls PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A Project edit that leaves a phase-shift data set or extrapolation without its partial wave is refused with its
+# three parts (the engine's set-up check, made at the edit), in agreement with the engine on T3.
+add_test(NAME pyazr_project_phase_shift
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_phase_shift_test.py)
+set_tests_properties(pyazr_project_phase_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A prior or a limit on a level parameter as a Project edit (<parameterSettings>): the session's objective holds the
+# prior, the parameter's bounds the limits; the rows read back; replaced, removed; refusals with their three parts.
+add_test(NAME pyazr_parameter_settings
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_settings_test.py)
+set_tests_properties(pyazr_parameter_settings PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

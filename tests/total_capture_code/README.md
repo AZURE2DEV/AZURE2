@@ -11,7 +11,7 @@ external-capture lookup for that point crashed (SIGSEGV on `tests/13N`; a model
 without external capture gave meaningless numbers instead). The key without
 the type is now refused; the type with a real exit key has always meant total
 capture (the expansion replaces the key with the capture pairs) and now says
-so with a warning. The segment-level lookups use `CNuc::GetPairFromKey`, which
+so with a warning. The segment-level lookups use `CompoundSystem::GetPairFromKey`, which
 returns null for a key no pair has.
 
 ## Checks (`check.sh path/to/AZURE2`)

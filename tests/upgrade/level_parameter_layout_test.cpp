@@ -1,9 +1,9 @@
 // The level block of the parameter vector (include/LevelParameterLayout.h).
 //  (a) A layout made by hand (groups of 2 levels x 3 channels, none, 1 level x 1 channel): every index, name and
 //      level number against the order of the format (per level its energy, then one amplitude per channel).
-//  (b) Every project given, loaded with CNuc::Fill: the format's order written out in the test (groups, levels, per
+//  (b) Every project given, loaded with CompoundSystem::Fill: the format's order written out in the test (groups, levels, per
 //      level its energy, then its channels in order) against every slot of the layout, its index and name, and the
-//      names CNuc::FillMnParams gives the level block (a gamma_decay record's slot excepted: the record names its own
+//      names CompoundSystem::FillMnParams gives the level block (a gamma_decay record's slot excepted: the record names its own
 //      numbers).
 // Arguments: .azr files.  Reads them in place and writes nothing.
 #include <cstdio>
@@ -15,7 +15,7 @@
 #include <Minuit2/MnUserParameters.h>
 
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "JGroup.h"
@@ -60,7 +60,7 @@ void OnProject(const std::string &file) {
   cfg.fileCheckMask = cfg.screenCheckMask = 0;
   cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(cfg);
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   if (compound.Fill(cfg, state, inputs) == -1) {

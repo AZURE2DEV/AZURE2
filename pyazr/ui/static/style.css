@@ -304,3 +304,8 @@ span.severity.note { color: var(--muted); }
 .file-choice datalist { display: none; }
 .name-choice .name-boxes { max-height: 180px; overflow: auto; columns: 2; font-size: 12px; }
 .name-choice .name-boxes label { display: block; }
+/* the ENDF tab's new project and export: one setting per line, its words beside the box */
+.endf-settings { display: grid; grid-template-columns: minmax(16em, max-content) 1fr; gap: 4px 12px;
+  align-items: center; margin: 6px 0; }
+.endf-settings .setting-words { color: var(--muted); }
+.endf-import-job h3, .endf-write-job h3 { font-size: 13px; margin: 8px 0 4px; }

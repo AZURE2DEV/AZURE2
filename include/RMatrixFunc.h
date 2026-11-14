@@ -14,11 +14,11 @@
 class RMatrixFunc : public GenMatrixFunc {
  public:
   /// Build against a compound nucleus.
-  RMatrixFunc(const CNuc *, const LevelState &state, const Config &);
+  RMatrixFunc(const CompoundSystem *, const LevelState &state, const Config &);
   /*!
    * Returns a pointer to the compound nucleus object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
   const LevelState &state() const override { return state_; }
   const Config &configure() const { return configure_; };
 
@@ -55,7 +55,7 @@ class RMatrixFunc : public GenMatrixFunc {
   void AddRLInvRMatrixElement(int, int, int, complex);
 
  private:
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   const LevelState &state_;
   const Config &configure_;
   vector_matrix_c r_matrices_;

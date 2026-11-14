@@ -40,7 +40,7 @@ Workspace"). Observable code 18 (THM on the removed polarization-times-cross
 section, code 8) is refused at startup like 8 itself.
 
 *Identical particles.* The channels of an identical pair are generated with
-:math:`l + s` even only (``CNuc``); a level line naming a forbidden channel
+:math:`l + s` even only (``CompoundSystem``); a level line naming a forbidden channel
 of a spin-0 pair draws a ``WARNING`` and one of a pair with spin is refused.
 The on-shell cross sections out of an identical entrance pair carry
 :math:`1 + \delta_{12} = 2` (reactions, capture and differential alike; an
@@ -2799,7 +2799,7 @@ fixed-angle observable; ``tests/7Li_p_a``: :math:`\chi^2` 1747.26 at
 angle-integrated (same parameters, profiled norm).
 
 *Identical particles.* A channel of two identical nuclei is admitted only
-with :math:`l + s` even (``CNuc``), so the exit waves of an
+with :math:`l + s` even (``CompoundSystem``), so the exit waves of an
 :math:`\alpha + \alpha` pair all have even :math:`l'` and the distribution
 has even :math:`L` only: it is symmetric about 90°, and a window and its
 mirror give the same model. No factor is applied, as in AZURE2's

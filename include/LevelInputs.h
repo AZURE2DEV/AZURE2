@@ -18,9 +18,9 @@
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in LevelState.
  *
  * Held by the owner that set the compound up (the program's run, the session) and copied by an owner that transforms
- * (the sampler's walkers, a limit's conversion, the rate's resonances, the sub-point grids); made by CNuc::Fill from
- * the <levels> rows (ALevel's file values) and the gamma_decay records, rewritten by CNuc::TransformIn and
- * CNuc::FillCompoundFromParamsPhysical.  FillMnParams and the reports read it.
+ * (the sampler's walkers, a limit's conversion, the rate's resonances, the sub-point grids); made by CompoundSystem::Fill from
+ * the <levels> rows (ALevel's file values) and the gamma_decay records, rewritten by CompoundSystem::TransformIn and
+ * CompoundSystem::FillCompoundFromParamsPhysical.  FillMnParams and the reports read it.
  */
 class LevelInputs {
  public:
@@ -42,7 +42,7 @@ class LevelInputs {
   /// Why the last transformation failed (empty if it did not).
   const std::string &TransformError() const { return transformError_; }
 
-  // -- writing (CNuc::Fill, TransformIn, FillCompoundFromParamsPhysical) --------------------------------------------
+  // -- writing (CompoundSystem::Fill, TransformIn, FillCompoundFromParamsPhysical) --------------------------------------------
   void SetE(int j, int la, double energy) { groups_[j - 1].E[la - 1] = energy; }
   void SetGamma(int j, int la, int ch, double gamma) { groups_[j - 1].gamma[At(j, la, ch)] = gamma; }
   void SetGammaDecayNumbers(std::vector<std::vector<double>> numbers) { gammaDecayNumbers_ = std::move(numbers); }

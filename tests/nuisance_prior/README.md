@@ -4,7 +4,7 @@ A `<parameterSettings>` row with the nuisance flag adds
 `((p - nominal)/error)^2` to chi-squared for the parameter the row names.
 The chi-squared function, its gradient and the least-squares drivers receive
 the **full** parameter vector (fixed parameters included, as
-`CNuc::FillCompoundFromParams` reads it), while `ParameterLimitsManager`
+`CompoundSystem::FillCompoundFromParams` reads it), while `ParameterLimitsManager`
 numbers the parameters by their position among the non-fixed ones.
 `AZURECalc::CalculateNuisanceChiSquared` and `AddNuisanceGradient` used to
 index the full vector with that non-fixed index, so as soon as one fixed
@@ -26,7 +26,7 @@ the fixed zero widths `width_1_6`, `width_1_7`:
 
 Case (c) covers a parameter list whose fixed flags differ from a freshly
 filled one: the limits manager is applied to the parameters as `param.par`
-left them, so a non-fixed index recomputed from `CNuc::FillMnParams` points one
+left them, so a non-fixed index recomputed from `CompoundSystem::FillMnParams` points one
 parameter off.
 
 The chi-squared is read from the `Total Chi-Squared:` line of the run's

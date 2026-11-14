@@ -1438,7 +1438,8 @@ except OSError as e:
 
 # 58. Every example is run and listed (docs/source/user_guide/pyazr_examples.rst): each script of pyazr/examples has
 #     a row in ROWS of tests/pyazr/examples_test.py (the table that runs it) and a row of the documentation's list,
-#     and neither names a script that is not there.  A new example is the file and its two rows.
+#     and neither names a script that is not there; no page of the repository's skills names an example that is not
+#     there.  A new example is the file and its two rows.
 _examples_page, _examples_test = "docs/source/user_guide/pyazr_examples.rst", "tests/pyazr/examples_test.py"
 try:
     import ast
@@ -1459,8 +1460,51 @@ try:
         problems.append(f"pyazr/examples/{_name}.py has no row in the list of {_examples_page} (check 58)")
     for _name in sorted(_example_listed - _example_files):
         problems.append(f"{_examples_page}: the list names {_name}.py, which is not in pyazr/examples (check 58)")
+    # The repository's skills name examples too: in a paragraph, list item or table row of a skill's page that names
+    # pyazr/examples/ (or says "Examples:"), and in the table of azure2-calculate/references/examples.md, every
+    # script named (`pyazr/examples/x.py` or a bare `x.py`) is a file of pyazr/examples.
+    for _md in sorted(glob.glob(os.path.join(ROOT, ".claude", "skills", "**", "*.md"), recursive=True)):
+        _rel = os.path.relpath(_md, ROOT)
+        _whole = _rel.endswith(os.path.join("azure2-calculate", "references", "examples.md"))
+        for _item in re.split(r"\n\s*\n|\n(?=\s*- )|\n(?=\|)", read(_rel)):  # paragraphs, list items, table rows
+            if not (_whole or "pyazr/examples/" in _item or "Examples:" in _item):
+                continue
+            for _token in re.findall(r"`((?:pyazr/examples/)?[A-Za-z0-9_]+\.py)`", _item):
+                _name = _token.rsplit("/", 1)[-1][:-3]
+                if _name not in _example_files:
+                    problems.append(f"{_rel}: names the example {_token}, which is not in pyazr/examples (check 58)")
 except (OSError, ValueError, SyntaxError) as e:
     problems.append(f"check 58: {e}")
+
+# 59. The compound nuclei as set up are a CompoundSystem (include/CompoundSystem.h; docs/upgrade/cnuc_split.md section
+#     12): one constant object shared by every evaluation, never copied.  The old name CNuc (in any identifier or file
+#     name), a Clone() of the compound and the pools of compounds (cnuc_pool_) do not come back in the engine, the
+#     binding or their headers.
+OLD_COMPOUND_NAME = re.compile(r"CNuc|cnuc_pool_")
+COMPOUND_CLONE = re.compile(r"\bClone\s*\(")
+_compound_files = 0
+for rel in tracked_files():
+    if not rel.startswith(("src/", "include/", "api/")):
+        continue
+    if "CNuc" in os.path.basename(rel):
+        problems.append(f"{rel}: a file named after CNuc; the compound system is CompoundSystem (check 59)")
+    if not rel.endswith((".cpp", ".h", ".hpp")):
+        continue
+    try:
+        text = read(rel)
+    except (OSError, UnicodeDecodeError):
+        continue
+    _compound_files += 1
+    for number, line in enumerate(text.splitlines(), 1):
+        if OLD_COMPOUND_NAME.search(line):
+            problems.append(f"{rel}:{number}: names {OLD_COMPOUND_NAME.search(line).group(0)}; the compound system is "
+                            "CompoundSystem, shared constant, with a LevelState per owner (check 59)")
+    if rel == "include/CompoundSystem.h" and COMPOUND_CLONE.search(text):
+        problems.append(f"{rel}: CompoundSystem has a Clone(); it is shared constant, never copied (check 59)")
+if not OLD_COMPOUND_NAME.search("const CNuc *c") or not OLD_COMPOUND_NAME.search("std::vector<int> theCNucList") \
+        or not OLD_COMPOUND_NAME.search("cnuc_pool_.top()") or OLD_COMPOUND_NAME.search("const CompoundSystem &c") \
+        or not COMPOUND_CLONE.search("std::unique_ptr<CompoundSystem> Clone() const;"):
+    problems.append("check 59: the old-name pattern no longer matches the forms it guards; update this check")
 
 if problems:
     for p in problems:
@@ -1476,4 +1520,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
       f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
-      f"{len(_example_files)} examples run and listed")
+      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files")

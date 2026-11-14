@@ -17,13 +17,13 @@ class LevelRow;
  * An R-matrix level  represents a specific eigenstate of the compound nucleus.
  *
  * A level carries its set-up data only: IDs, fix flags, the external-capture final-state data, and the values of its
- * <levels> lines (FileE, FileGamma, FileZeroWidth), which CNuc::Fill reads to group the levels and to make the
+ * <levels> lines (FileE, FileGamma, FileZeroWidth), which CompoundSystem::Fill reads to group the levels and to make the
  * owner's LevelInputs.  Nothing of a level is written after set-up.  The input values in the engine's basis (what
- * CNuc::TransformIn makes of the file's) are a LevelInputs of the owner (the run, the session, ...); the values a
+ * CompoundSystem::TransformIn makes of the file's) are a LevelInputs of the owner (the run, the session, ...); the values a
  * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the
  * external-capture amplitudes and N_f^1/2) are a LevelState of the owner.
  *
- * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
+ * The observed values of the reports are not the level's: CompoundSystem::TransformOut returns them as an
  * ObservedLevelTable.
  *
  * Channel numbers are 1-based and index the channels of the owning JGroup, so
@@ -75,7 +75,7 @@ class ALevel {
   double GetECConversionFactor(int) const;
 
   /// Put the width of an input file line at its J-group channel number (1-based), padding any channel
-  /// before it with a zero, fixed width (CNuc::Fill): a level may list its channels in another order than its
+  /// before it with a zero, fixed width (CompoundSystem::Fill): a level may list its channels in another order than its
   /// group, or leave one out.
   void SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLine);
   /// Pad the width vectors with zero, fixed widths up to n channels.

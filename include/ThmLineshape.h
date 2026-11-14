@@ -12,7 +12,7 @@ class LevelState;
 #include <string>
 #include <vector>
 
-class CNuc;
+class CompoundSystem;
 class JGroup;
 class ALevel;
 class Config;
@@ -105,18 +105,18 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
  * Under Brune (required by lineshape=on) the fit energy is the observed one and
  * Gamma = sum_c 2 gamma_c^2 P_c(E_lambda) / (1 + sum_c gamma_c^2 dS_c/dE)
  * over the open particle channels (the normalization over all particle
- * channels), plus the radiative widths, as CNuc::TransformOut writes them to
+ * channels), plus the radiative widths, as CompoundSystem::TransformOut writes them to
  * parameters.out (internal part; a ground-state moment and closed channels
  * carry no width).  Under Park (--use-park, which implies Brune) the
  * amplitudes are the observed ones, gamma_Park^2 = gamma_Brune^2 / (1 + sum),
  * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Level `la` of J group `j` (1-based) at fit energy `energy`
  * (MeV) and amplitudes `gamma` (one per channel, MeV^1/2).
  */
-double ThmLevelWidth(const CNuc *compound, int j, int la, double energy,
+double ThmLevelWidth(const CompoundSystem *compound, int j, int la, double energy,
                      const std::vector<double> &gamma,
                      const Config &configure);
 /// The same at the fit values of `state` (LevelState.h).
-double ThmLevelWidth(const CNuc *compound, const LevelState &state, int j, int la, const Config &configure);
+double ThmLevelWidth(const CompoundSystem *compound, const LevelState &state, int j, int la, const Config &configure);
 
 
 struct ThmExperiment;

@@ -572,7 +572,7 @@ void Abundances(Context &c) {
       const Value *iso = isotopes[k];
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
-      // where the abundance is written, under the parameter's name (the engine's, CNuc::AbundanceParamName)
+      // where the abundance is written, under the parameter's name (the engine's, AbundanceSamples)
       c.out_.parameterSources[AbundanceParameterName(t->name, nucleus->nucleus.text, 0, 0)] = {t->name, "isotope", (int)k, "abundance", ""};
       std::set<std::pair<int, int>> compounds;
       std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets

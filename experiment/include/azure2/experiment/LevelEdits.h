@@ -18,7 +18,7 @@ namespace experiment {
 /*!
  * The <levels> section of a project as a person reads it -- levels named by J^pi and energy, channels by pair and
  * (l, s) -- and its edits as line replacements of the document (docs/upgrade/pyazr_on_records.md, "Edits of the
- * nuclear part").  The rows are read by io::LevelRow and grouped by LevelTablesOfRows (the engine's CNuc::Fill
+ * nuclear part").  The rows are read by io::LevelRow and grouped by LevelTablesOfRows (the engine's CompoundSystem::Fill
  * numbering); a row is written by io::EditLevelRow, which keeps every byte of the row but the tokens it replaces.
  * Rows an edit does not touch keep their bytes.  Numbers are written as the shortest decimal that reads back as the
  * same double (ShortestNumberText).  Library azure2_experiment_reader (it reads the document).

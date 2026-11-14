@@ -172,8 +172,11 @@ def main():
         edit(base, azr, with_scaling("abc"))
         res, log = run(azr, work)
         check("SUM, scaling 'abc': the project is refused", "error" in res, f"{res}")
+        # the engine's ERROR line: in the refusal's message (pyazr quotes the set-up's lines there; they no longer
+        # reach standard output)
+        said = log + res.get("error", "")
         check("SUM, scaling 'abc': the engine names the data set and the scale",
-              "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" in log, log[-600:])
+              "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" in said, said[-600:])
 
         # 2b (a converter test: the component layouts of an old segment line, read by the converter's SegLine on the
         # old original kept in tests/convert/fixtures; each variant converted with pyazr.convert_azr and run).

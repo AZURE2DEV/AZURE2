@@ -1,7 +1,7 @@
 # ec_final_state_listed — an external-capture final state must be a level of the project
 
 The user guide ("Gamma-Ray Calculations") asks for one level per gamma-ray pair: that level carries the bound
-state's ANC and gamma widths. Before 2026-10-26, `CNuc::ParseExternalCapture` silently created a missing final
+state's ANC and gamma widths. Before 2026-10-26, `CompoundSystem::ParseExternalCapture` silently created a missing final
 state as a hidden level: energy fixed at the pair's E_x, not in the R-matrix, and a FREE reduced-width amplitude
 of 0.1 MeV^1/2 in every particle channel, which appeared in no `.azr` line and not in the GUI. Because the level
 was appended only when external capture was on (CLI: modes with a capture segment; API: always), every later

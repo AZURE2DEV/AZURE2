@@ -21,7 +21,7 @@
 
 class Config;
 class WorkingCopy;
-class CNuc;
+class CompoundSystem;
 class PriorCovariance;
 
 /// A function class to perform MCMC Bayesian calculation of parameters
@@ -49,12 +49,12 @@ struct WalkerLevels {
 class AZURECalcMCMC {
  public:
   /*!
-   * The AZURECalcMCMC object is created with reference to an WorkingCopy and CNuc object (shared and constant; the
+   * The AZURECalcMCMC object is created with reference to an WorkingCopy and CompoundSystem object (shared and constant; the
    * caller outlives this object) and the caller's levels, which it copies into its own.  `pool` holds the walkers'
    * idle levels: the caller's, as the evaluations that take from it are const.
    * The runtime configurations are also passed through a Config structure.
    */
-  AZURECalcMCMC(WorkingCopy *data, const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+  AZURECalcMCMC(WorkingCopy *data, const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs,
                 StatePool<WalkerLevels> &pool, const Config &configure) :
     configure_(configure),
     levels_{state, inputs},
@@ -190,9 +190,9 @@ class AZURECalcMCMC {
    */
   WorkingCopy *data() const { return data_; };
   /*!
-   * Returns a pointer to the CNuc object.
+   * Returns a pointer to the CompoundSystem object.
    */
-  const CNuc *compound() const { return compound_; };
+  const CompoundSystem *compound() const { return compound_; };
 
   /*!
    * See Minuit2 documentation for an explanation of this function.
@@ -273,7 +273,7 @@ class AZURECalcMCMC {
   WalkerLevels levels_;  ///< the sampler's own: the start vector's (UpdateParameterVectors), the seed of the copies
   StatePool<WalkerLevels> &pool_;  ///< the caller's
   WorkingCopy *data_;
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   double theErrorDef;
 
   // Parameter vectors for physical parameter handling (mutable for lazy initialization)

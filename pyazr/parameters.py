@@ -18,6 +18,7 @@ are one table of the engine (``api/src/pybind_records.cpp``; ``pyazr.kinds()["pa
 
 import functools
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -116,6 +117,17 @@ class Parameter(_Record):
     __slots__ = ()
     _which = "parameter"
 
+    def __init__(self, record=(), **fields):
+        super().__init__(record, **fields)
+        # A kind whose numbers differ in unit names each unit with its parts in the kind's text (a gamma_decay
+        # number: "eV (total_width), 1 (branching, mixing)"): the record's own part picks its unit from that text.
+        own = object.__getattribute__(self, "_record")
+        part = own.get("decay_part")
+        if part:
+            unit = _units_by_part(own.get("unit") or "").get(part)
+            if unit is not None:
+                own["unit"] = unit
+
     @property
     def nucleus(self):
         """``(Z, A)`` of an abundance parameter's compound nucleus, else ``None``."""
@@ -129,6 +141,17 @@ class Parameter(_Record):
     def __repr__(self):
         return (f"Parameter(#{self.index}, {self.name}, {self.kind}, {'fixed' if self.fixed else 'free'}, "
                 f"start={self.start:.6g} {self.unit}" + (f", {self.owner_text()}" if self.owner_text() else "") + ")")
+
+
+@functools.lru_cache(maxsize=None)
+def _units_by_part(kind_unit):
+    """``{part: unit}`` of a kind's unit text that names its parts: ``"eV (total_width), 1 (branching, mixing)"`` ->
+    ``{"total_width": "eV", "branching": "1", "mixing": "1"}``; empty for a text of one unit."""
+    out = {}
+    for unit, parts in re.findall(r"\s*([^,()]+?)\s*\(([^)]*)\)", kind_unit):
+        for part in parts.split(","):
+            out[part.strip()] = unit
+    return out
 
 
 def _text(value):

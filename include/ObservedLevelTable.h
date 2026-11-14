@@ -6,7 +6,7 @@
 #include "Constants.h"
 
 /*!
- * The Brune (Park) and observed values of every level at one set of fit values: what CNuc::TransformOut computes for
+ * The Brune (Park) and observed values of every level at one set of fit values: what CompoundSystem::TransformOut computes for
  * the reports (parameters.out, the model data, the warnings, the observed parameter vector).  A value: the
  * transformation returns it and changes no level; its caller holds it as long as it reads it.
  *

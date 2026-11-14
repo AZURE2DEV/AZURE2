@@ -11,7 +11,7 @@ namespace experiment {
 /*!
  * The final state of the external capture of a photon pair (user guide, "Gamma-Ray Calculations"): a level of the
  * project with the J^pi of the pair's heavy particle, in its compound nucleus, within 1 keV of its E_x; it carries the
- * ANC and the gamma widths.  The one rule: the engine's set-up (CNuc::ParseExternalCapture) and the validation
+ * ANC and the gamma widths.  The one rule: the engine's set-up (CompoundSystem::ParseExternalCapture) and the validation
  * (Schema::Build) both take their refusals from ExternalCaptureFinalStates.
  */
 struct FinalStateOfPair {

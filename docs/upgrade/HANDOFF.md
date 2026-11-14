@@ -2,6 +2,197 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-7-pyazr-repairs`) — pyazr's library calls: the defects the examples met
+
+Each item measured on the start commit (`5884aa62`, engine of `work/b-pyfix`, copies of the projects, one thread),
+then repaired with a test that fails before (shown by running it with the old files of the commit before):
+
+- **Level scheme** (`pyazr/system/scheme.py`): T3 listed "2: photon" for its beta pair (key 4) and channels by the
+  engine's numbers; now pairs by key with the engine's `pair_kind` word (the numbers and words of `Project.pairs()`),
+  channel labels with key and kind, and the value named by what the row holds (Gamma eV, C fm^-1/2 for a level below
+  the pair's threshold, gamma MeV^1/2, B the beta-feeding amplitude): `tests/pyazr/library_answers_test.py` (a).
+- **ec_integrals**: each pathway now has `unit` "fm^(L+1)" (from the engine's use: T = C k^(L+1/2) x integral,
+  dimensionless; derived from the code, not measured); the final state needs the engine (below).  Test (b).
+- **Extrapolation units**: `evaluate(x).data[i].unit` was None in a session of the extrapolations; the description
+  of an extrapolation now carries `unit` and `engine_unit` (T1: b, deg, b/sr).  Test (c).
+- **radiative unit**: was "eV (total_width), 1 (branching, mixing)"; a record takes its part's unit from that text
+  (eV, 1, 1).  Test (d).
+- **Quiet** (`pyazr/engine_text.py`, `locking.engine_call`): measured, a session's set-up printed the engine's stale
+  cache WARNING and ERROR lines, `reaction_rate` 1.1-1.3 kB of progress bars, `endf.write` its sessions' WARNINGs,
+  `Session.parameters` and a fit the transformation's "**WARNING: Denominator"; every session call, the set-up and the
+  rate now point descriptor 1 at a temporary file and log the lines to `pyazr.engine` (WARNING/ERROR at WARNING, the
+  rest INFO); Python's `print` stays shown (`sys.stdout` moved to a copy of the real descriptor), also in a fit's
+  progress callback.  `Objective` calls are not held (hot path; none printed in the measurement).  The "Coulomb
+  table: ..." lines are the engine's `std::cerr`, not touched.  `tests/pyazr/library_calls_test.py` (a).
+- **Writes**: the rate wrote `output/cross_section_grid.dat` beside the project (or "could not write") and an empty
+  `intEC.extrap` over the project's cache; `trimmed_model` wrote its `.azr` beside the project and `output/bands/`;
+  `extrapolation_bands` left `output/bands/`; `tabulate` its `azr_tab_*` work directory (and left it when raising);
+  parallel `sensitivities` used `output/sensitivities/`.  Now: `RateSession` runs on a copy whose output directory is
+  a temporary one (removed on close); `trimmed_model` writes into the work directory it returns (temporary unless
+  `workdir=`); `extrapolation_bands` removes its own (new `workdir=` keyword keeps one of the caller's); `tabulate` and
+  the parallel workers use temporary directories.  The rule (pyazr's: save_fit, endf.write) is in the Developer Guide
+  (`contributing.rst`) and `pyazr/CLAUDE.md`.  Rates (T1 1->2, 1->-1), bands and tables bit for bit those of before;
+  2-process sensitivities equal to before.  Test (b), (e).
+- **Refusals**: `evaluate`'s and the Objective's `ParameterVectorError` (the engine's message only) are checked in
+  Python with what/allowed/fix (`session_checks.fit_vector`); a refused set-up (it said "check the output above")
+  quotes the engine's ERROR lines in `what` and its message; save_fit's refusals have parts.  Test (c), (d).
+- **Phase shift**: a Project edit that makes the levels of a phase shift's (J, l, s) inactive was accepted and the
+  session refused; `Project._apply` now repeats the engine's set-up rule (`src/WorkingCopy.cpp`) and refuses the edit
+  (data sets and extrapolations; only new problems): `tests/pyazr/project_phase_shift_test.py`, the engine agreeing on
+  each case.
+- **save_fit(relative_to=)**: not a defect (T1: written relative to the directory, reopened with that cwd, chi2 equal
+  to 1e-15); no `threads` argument of `Session` (needs the engine); the functions without a caller (a token count
+  over the repository's code): `cli.write_reference_page` (named by the docs, run by hand), `cli` `Catcher.isatty`
+  (asked by logging set-ups), `covariance._field_default`, `DescribedDatasets.by_reaction`,
+  `endf.model.particle_pairs_text` (another agent's), `parameters.record_fields`, `project.write_parameter_values`,
+  `LevelScheme.by_jpi`, `WidthTable.by_level` (named in pyazr.rst); none deleted.
+- **A prior or a limit on a level parameter** (`pyazr/parameter_settings.py`, mixed into `Project`):
+  `set_parameter_setting(level, channel=None, prior=, limits=)`, `parameter_settings()`, `kinds()
+  ["parameter_settings"]`; T1: the session's "nuisance priors" = 0.04 for a prior 3.5 +- 0.01 on E = 3.502, the
+  width's bounds the limits converted; refusals (fixed, inactive, unknown channel, sigma, order).  The engine has no
+  schema row for `<parameterSettings>` (the columns named once in `COLUMNS`).  `edit_model.py` shows it.
+  `tests/pyazr/parameter_settings_test.py`.
+- **A project without a nuclear-part file**: measured, `<config>\nformat=3\n</config>` with an empty `<levels>`
+  parses and validates, but the engine reads `<config>`'s eleven positional lines first (the session: "no <config>
+  block found"; `set_config`: "the <config> section is not complete"); it takes the engine's text of an empty
+  project (its positional defaults), which `config_table()` does not give.  Not built.
+- **Skills**: 9 names of removed examples in five pages replaced; check 58 also refuses a skill's page that names an
+  example that is not there (injected once: `fit_zeus.py` back in azure2-uncertainty, one failure; all nine on the
+  start commit).
+
+**Verified** (this branch, `work/b-pyfix`, 0 warnings): `OMP_NUM_THREADS=1 ctest -LE slow -j1` once on `e421d595`:
+289 of 293 passed; the 4 failures (`pyazr_rebuild_resources`, `pyazr_composite_terms`, `pyazr_config_options`: tests
+that read the engine's lines on standard output or compared refusal texts; `pyazr_ui_routes_consistency`: the two new
+Project names) were repaired and the 4 pass with `ec_final_state`, `errors`, `library_calls` (`d5d883ad`, `ae9c4f09`
+and the commit after).  `tests/pyazr/examples_test.py --all`: 31 run, 1 skipped (network), all ok.  `ctest -R skill`:
+12 of 12.  Slow tests run once on the way: `pyazr_concurrent_sessions` (set-up held), `pyazr_fit_with_engine` (every
+session call held): passed.  Consistency test and the pages' build after every commit.  Not run: the projects x 3
+bases comparison (no C++ changed), `scripts/check.sh --quick` as such (its parts were run).
+
+**Open** (the engine; `FOR_THE_OWNER.md`): the final state of an EC integral, the engine's text kept by the session,
+the rate's files, a session's threads, the units of `shift_fn` and `apparatus` parameters, a schema row for
+`<parameterSettings>`, the phase-shift check in the validator, an empty project from the engine.
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: MF=6
+
+**Done** (`endf.md` 13.8, 13.9): `pyazr.endf.write` writes MF=6 from the engine on the one energy grid of MF=3:
+LAW=2 of each particle exit (the engine's `legendre` quantity with the expansion `rsl`, which is LAW=2's a_l; the
+residual LAW=4), LAW=5 LTP=12 of charged-particle elastic scattering with sigma_NI in MF=3/MT=2 (cosines per energy,
+`grid.thin`), MF=6/MT=102 (per final state the primary photon, LAW=2 with the yield sigma_f/sigma, and the recoil).
+New files `pyazr/endf/engine_values.py`, `sections.py`; `write(..., elastic_max_cosine=0.98)`, other signatures
+unchanged. Reader: capture to one final state in `curves`; LAW=5 LTP 12-15 interpolates sigma_NI(E_i) P_NI as its
+text said (the code multiplied two interpolations). The channel-spin coupling order measured on the full 3He + 4He
+library file (no MF=3/MF=6 number depends on it; the file's MF=6/MT=600 coefficients are not normalised).
+**Verified how**: `pyazr_endf_write` (curves of the written files against the engine at the data's points and
+between grid points: elastic 3.4e-3, LAW=2 1.1e-3, photons 3.0e-3 at most), `pyazr_endf_model`, `_read`, `_check`,
+the example, the consistency test, the pages built, CHECKR, FIZCON, PSYCHE on the written files (every finding in
+`endf.md` 13.8, all the codes' limits or readings). **Open** (questions for the PI): MF=6 over 200 energies and
+LAW=5 panels over 201 cosines (CHECKR's limits, not the manual's); LTP=12 where sigma_NI changes sign (an outside
+code multiplying two interpolations errs there); a narrow level cannot be written (13.7).
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-mf6`) — ENDF writer: the loose ends
+
+**Done** (`endf.md` 13.7): the start grid of every written section seeded with the level energies (E_r and
+E_r -+ Gamma/2) and the exit thresholds, and the quarter points of every interval checked by the refinement's own
+rule (`pyazr/endf/grid.py`); the loss list exact (`from_session`'s losses only for what the project holds;
+`Written.not_written` every section a reaction needs and the file lacks, with the reason; both in MF=1); refusal
+fixes in words (`Candidate.accept`, `write`, `to_project`, `from_session`); IFG=0 converted on reading (p. 73),
+KRM=3 refused with the door it would need; PSYCHE's MT=102 Q explained (its mass formula, not the file).
+**Verified how**: build `work/b-endf4` (no C++ change), `pyazr_endf_write`, `pyazr_endf_model`, `pyazr_endf_check`,
+`pyazr_endf_read`, the consistency test, the pages built; dense check (20001 points per section) on T1, T2, 13N
+within 1.0e-3; injected errors (seeds removed: the narrow level missed; the factor 2 of IFG=0 removed) fail the tests.
+**Open**: a level narrower than about 1e3 times the ER field's last digit cannot be written (MF=2 reproduces MF=3 only
+to 4e-4 near a 0.2 eV level; the 1e-5 check refuses it): a question for the PI.
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-curve-export`) — the model as a curve; ENDF in and out
+
+`web_ui.md` section 11.16 has the whole; user guide `web_interface.rst`, `web_ui_api.rst`, `endf.rst`, `pyazr.rst`,
+`pyazr_examples.rst`; Developer Guide `extending.rst`, `api.rst`; the class scheme (`CurveSession`).
+
+- **The model as a curve**: `pyazr/model_curve.py` (`plan_curves`, `CurveSession`, `model_curves`, `ModelCurve`);
+  `Session.model_curve(name, x=None, points=200)` (`pyazr/session.py`, one method after `evaluate`, 12 lines);
+  `bands._trimmed_project` used as it is (`bands.py` unchanged).  Route `GET /api/evaluation/curve/{name}`
+  (`Engine.curve`, one `CurveSession` for every data set, kept while its records are the same); the Plot tab and the
+  ENDF tab draw it (`plots.js curveTraces`; `POST /api/endf/curves` adds `curve` and each file's `on_curve`).
+  Example `pyazr/examples/model_curve.py` (a row of `examples_test.py` and of `pyazr_examples.rst`).
+- **A project from an evaluation and back** (the ENDF tab, `tabs/endfproject.js`): `POST /api/endf/resonances`, the
+  job `endf_import`/`to_project`, `POST /api/endf/keep_project`; `GET /api/endf/export`, the job
+  `endf_write`/`writer` (on a session of the job's text under the project's name: `engine.session_named`,
+  `state.project_file_of`).
+- **The first view's rough edges**: the follow-up buttons by the form's rule; each tab its own jobs ("Every job" in
+  the Fit tab); `pyazr/ui/first_view.py` (the lists' first-view columns, the PI's decision of 2026-11-14, served in
+  `GET /api/describe`); "whole
+  file"; a list of numbers that grows as it is typed (the "two boxes per Apply" item: a list took at most two new
+  numbers per Apply); keys `0`, `[`, `]`; the smoke test's header within 120 columns.
+- **A chain records its parametrization** (the PI, 2026-11-14): the sampler job writes `parametrization` (the
+  session's basis, the values of `priors.BASES`) into `chain_<id>.json` (`jobs.py`, one statement);
+  `priors.chain_basis(path)` reads it (`read_chain` unchanged); the prior builder's part `chain` refuses another
+  parametrization and notes a chain that does not record it.  The page asked nothing; it showed the assumption as a
+  note, now the recorded parametrization (the build's notes).
+- **Lines in shared files**: `app.js` (the import of `tabByKey`, the key rows and the key handler), `layout.js`
+  (`tabByKey`), `fitting.js` (`followersShown`, `tabOfJob`, `jobsOfTab`), `forms.js` (`number_list`), `formview.js`
+  (`grows`), `tabs/fit.js`, `tabs/fitjob.js`, `tabs/data.js`, `tabs/nucleus.js`, `lists.js` (`onlyColumns`),
+  `tabs/results.js`, `tabs/endf.js`, `style.css` (a block at the end), `selftest.js` (Convert pressed),
+  `routes.py` (four rows; the describe row's doc), `server.py` (three `endf_*` methods; `first_view` in describe),
+  `engine.py`, `evaluations.py`, `state.py`, `tests/pyazr/CMakeLists.txt`, `smoke_test.py` (two views).
+- **Verified**: see the branch's report (the new tests, `tests/pyazr/ui/` whole, node tests, the smoke test with its
+  screenshots read, the consistency test, the documents built, `ctest -LE slow`).  No C++ changed: no project
+  comparison.
+- **Open**: `POST /api/project/open` resolves a relative path in the server's working directory, not the project's
+  (the kept project's answer carries `open_path`, absolute); `pyazr.endf.write` names `session.file` in the MF=1
+  text (the page writes through a session under the project's name); a folded data set's curve alone
+  (`Session.model_curve`) is folded on its own mesh (2.4e-3 from the data session's on T2's thin target), all of
+  them together (`model_curves`, the page) on one (4e-9); the curve's grid is linear (a resonance narrower than
+  its spacing is missed: `points=`).
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-compound-system`) — the compound system: the name, the session's constness, the channel functions; the one build stopped
+
+**Done** (six commits): `CNuc` is `CompoundSystem` and its files are named by job; consistency check 59 keeps the old
+name out; every method of `AZUREAPI` that writes the session's state lost `const`; a particle channel's functions
+are one function. **Not done**: the one build (`BuildCompoundSystem`), stopped as the brief says, because the data's
+set-up reads the compound between `Fill` and `Initialize` (below; a decision for the director).
+
+**Measured first** (start 5884aa62; the table of members, the readers of the half-built object and the set-up requests
+are in `cnuc_split.md` §12.3, "Step 5 as built"). In short: the callers make the compound by `Fill` (which calls
+`AddHardSphereGroups` and `ParseExternalCapture`), then the data's set-up, the entrance and capture-A_y requests, then
+`Initialize`. Between `Fill` and `Initialize` the data's set-up (`WorkingCopy::Fill` / `MakePoints`), the check file
+of the compound, the entrance requests, the rate's pair check and `RequestCaptureAyTerms` read the half-built object:
+its structure and the input values before the transformation (the target effects' sub-point meshes branch on
+`LevelInputs::TransformedIn()`). A probe that aborted on any read of B_c, the final-state energies, the
+external-capture blocks, the capture masks or the pathway table between the two calls ran all projects in the Brune
+and formal bases without an abort (tag `tab-cnuc9-probe`, outputs identical to `tab-t74-1`; the probe was not
+committed: `work/cnuc9/probe.patch`).
+
+**Why the one build stopped.** A build that returns the finished object before the data's set-up changes every
+`run.log` (`Filling Data Structures...` and the data's warnings and check move after `Performing Input Parameter
+Transformation...` and `Sorting Reaction Pathways...`), the order of the refusals of a project refused by both, and
+makes the data's set-up read transformed input values unless the file's values are kept apart. Options for the
+director: (a) accept the new order of `run.log` once (a classified difference of `run.log` only) and keep the file's
+input values for the data's set-up: then `BuildCompoundSystem(config, SetupRequests)` with the requests taken from
+the specs (the capture-A_y requests from the specs instead of the built segments: a comparison commit first, as for
+the entrances); (b) two finished objects: the structure (what `Fill` makes, read by the data's set-up) and the
+compound system built from it with the requests; B_c and the final-state energies then leave `AChannel` and `ALevel`
+(22 reads of B_c in 12 files, 6 of the energy), so function bodies change; (c) keep the four calls.
+
+**What changed, by file**: see the commits.  The class scheme (`classes.tsv`, `arrows.tsv`, figures) follows.
+
+**Verified how**: build `work/b-cnuc9` (6 jobs, 0 warnings at every commit). Per commit: consistency test, the quick set
+(12 folders x 3 bases, T1-T3, 13N, two external-capture, THM, sub-point grids) against `tab-t74-1` identical, the unit
+tests near the change (63 for the rename, 8 for the channel functions, 138 pyazr/consistency/api tests for the session's
+constness). Check 59: injected `CNuc *old_;` and a `Clone()` into `CompoundSystem.h`, two failures (removed). The doors'
+numbers (`work/cnuc9/doors/dump.py`: both doors on every particle block of T1, T2, 13N, Brune and Park) byte-identical
+between `b-trial77` and this build. At the end (head of the code 1d845f37): all projects in the three bases against
+`tab-t74-1` (tag `tab-cnuc9-T`) Brune 887, formal 851, Park 887 files, all identical; the own runs against `b-trial77`
+(`work/cnuc9/extra.sh`: the eight fits and the natural-target fits, T2 sampled in both bases, `gamma_decay`, MINOS, a
+fit with band, a rate) 16 of 16 identical; a T2 fit at 1 and at 6 threads, 14 output files identical; `OMP_NUM_THREADS=1
+ctest -LE slow -j2` 289 of 289; `docs_build` 60 pages; `tools/check_skills.py`.
+
+**Open**: the one build (above); `GetThmExperiments` only reads but is not `const` (the engine's
+`WorkingCopy::ThmExperimentReports` and `Segment::GetPoint(WorkingCopy &)` are not `const`); `Config &configure()
+const` still hands out a writable `Config` from a `const` session (not changed: the brief named the levels); stale
+line references `CNuc.cpp:NNNN` in `docs/source/theory/conventions.rst` predate this branch (the file had 982 lines
+at the start) and were left.
+
 ## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits
@@ -198,6 +389,11 @@ output files. Outside: the timing check of `pyazr_evaluation` fails under load.
   `prior_build`, `prior_write`; its files are the page's one listing with `output`, `Server.files(outputs=True)`),
   `pyazr.session.basis_of` (`Session.basis` uses it).  `web_ui.md` section 11.15; `prior_builder.rst` "On the page",
   `web_interface.rst`, `web_ui_api.rst`, `fitting.rst`, the Developer Guide.
+- **A chain records its parametrization** (the PI, 2026-11-14): the sampler job writes `parametrization` (the
+  session's basis, the values of `priors.BASES`) into `chain_<id>.json` (`jobs.py`, one statement);
+  `priors.chain_basis(path)` reads it (`read_chain` unchanged); the prior builder's part `chain` refuses another
+  parametrization and notes a chain that does not record it.  The page asked nothing; it showed the assumption as a
+  note, now the recorded parametrization (the build's notes).
 - **Lines in shared files**: `pyazr/ui/static/app.js` (the import of `tabs/prior.js`; the `TABS` row `prior`),
   `pyazr/ui/static/tabs/fit.js` (the link, one line in the parameters' bar), `pyazr/ui/server.py` (the import of
   `prior`; three methods under "the prior builder"), `pyazr/ui/routes.py` (three rows after the rate's grids),

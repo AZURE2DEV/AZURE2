@@ -10,7 +10,10 @@ is checked as it is made and a refused one raises ``pyazr.FormatError`` with the
   2. a resonance switched off in the file (``set_level(label, active=False)``: its rows stay, the engine reads none
      of them; ``active=True`` brings it back),
   3. a data set removed (``remove``) and one added on an existing data file with another energy window
-     (``add_dataset``).
+     (``add_dataset``),
+  4. a prior on a level's energy and limits on one of its widths (``set_parameter_setting``: rows of
+     ``<parameterSettings>``, read back by ``parameter_settings()``); the edited session's objective holds the
+     prior as its term "nuisance priors", and the parameter's bounds hold the limits.
 
 The edited project is written to ``--out`` (default: a new temporary directory, printed); the original is not
 changed.  Its session reads the data files from the original project's directory (``Session(..., cwd=)``).  The
@@ -74,13 +77,29 @@ def main():
     p.add_dataset(f"{data[0]}_low", **dict(first, energy_window="0.3 1.0 MeV"))
     print(f"added the data set {data[0]}_low: {first['file']} between 0.3 and 1.0 MeV (lab)")
 
-    # -- 4. the edited copy, beside the original's data -------------------------------------------------------------
+    # -- 4. a prior and limits on level parameters --------------------------------------------------------------------
+    level = next(lv for lv in p.levels() if lv.active and not lv.fixed)  # a level whose energy is fitted
+    channel = next(c for c in level.channels if not c.fixed)              # and one of its fitted widths
+    p.set_parameter_setting(level.label, prior=(level.energy - 0.002, 0.01))             # MeV
+    p.set_parameter_setting(level.label, (channel.pair, channel.l, channel.s),
+                            limits=(0.5 * channel.width, 1.25 * channel.width))          # the row's unit (eV here)
+    print()
+    for row in p.parameter_settings():
+        print(f"<parameterSettings> {row.label} -> level {row.level}, channel {row.channel}: prior {row.prior}, "
+              f"limits {row.limits}")
+
+    # -- 5. the edited copy, beside the original's data -------------------------------------------------------------
     path = p.save(os.path.join(out_dir, os.path.basename(args.project)))
     print(f"\nwrote {path}")
     n0, m0, f0, c0 = summary(args.project, here)
     n1, m1, f1, c1 = summary(path, here)
     print(f"original: {n0} data sets, {m0} points, {f0} free parameters, chi2 = {c0:.4f}")
     print(f"edited  : {n1} data sets, {m1} points, {f1} free parameters, chi2 = {c1:.4f}")
+    with Session(path, cwd=here) as s:
+        prior = s.evaluate().terms.get("nuisance priors", 0.0)
+        limited = [(q.name, q.bounds) for q in s.parameters.free if all(abs(b) != float("inf") for b in q.bounds)]
+    print(f"edited  : the prior's term of the objective, nuisance priors = {prior:.4f}; limited: "
+          + ", ".join(f"{n} in [{lo:.4g}, {hi:.4g}] (fit units)" for n, (lo, hi) in limited))
     return 0
 
 

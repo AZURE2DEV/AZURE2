@@ -92,6 +92,13 @@ export function listColumns({ schema, kind, rows, described = {}, descriptionFie
   return columns;
 }
 
+/** The columns the first view keeps of a list: those whose key (a table's key; `d.` and `f.` taken off) is in
+ * `keys` (the server's table, GET /api/describe `first_view`); every column where `keys` is absent. */
+export function onlyColumns(columns, keys) {
+  if (!Array.isArray(keys)) return columns;
+  return columns.filter((c) => keys.includes(c.key.replace(/^[df]\./, "")));
+}
+
 /** The order of a group's lists: the kinds whose records hold a quantity (data sets, extrapolations, model data)
  * first, then the records they name, each in the schema's order. */
 export function listKinds(schema, kinds) {

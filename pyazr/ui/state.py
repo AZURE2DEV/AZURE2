@@ -110,7 +110,8 @@ class State:
         return os.path.join(self.directory, f".{self.stem}.ui")
 
     def session_file(self, job=None):
-        """The file a session of the UI reads: the session worker's, or job ``job``'s."""
+        """The file a session of the UI reads: the session worker's, or job ``job``'s (:func:`project_file_of` gives
+        the project's file name back)."""
         return os.path.join(self.directory, f".{self.stem}.ui-{'session' if job is None else 'job-' + job}.azr")
 
     def ui_path(self, *parts):
@@ -372,3 +373,10 @@ def _new_errors(before, after):
             extra[key(d)] -= 1
             out.append(d)
     return out
+
+
+def project_file_of(session_file):
+    """The project's file name (``T1.azr``) of a file a session of the UI reads (``.T1.ui-session.azr``,
+    ``.T1.ui-job-<id>.azr``: :meth:`State.session_file`); ``None`` for any other name."""
+    m = re.match(r"^\.(.+)\.ui-(session|job-[^/]+)\.azr$", os.path.basename(session_file))
+    return f"{m.group(1)}.azr" if m else None

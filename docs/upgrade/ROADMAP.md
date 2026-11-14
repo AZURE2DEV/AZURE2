@@ -191,7 +191,8 @@ vector, the plan names units by index, a copy of the working copy is a plain cop
 2026-11-11): an immutable `DataSet` held as `shared_ptr<const DataSet>` and a small `WorkingCopy` apart; the unit
 is 480 bytes (was 608); the three class names and their files are deleted and consistency check 31 keeps them out.
 
-**`CNuc`, to finish** (`cnuc_split.md`): `src/CNuc.cpp` was 2,907 lines and is 1,774; printing, checks, messages, the
+**`CNuc`, to finish** (`cnuc_split.md`; the class is `CompoundSystem` now): `src/CNuc.cpp` was 2,907 lines and was
+1,774 here; printing, checks, messages, the
 level grammar, external-capture set-up and the bridge to `physics/` are files of their own; the pathway table is
 immutable, built at set-up and read by everything outside the data classes; the capture analyzing-power terms are
 built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
@@ -229,6 +230,18 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       and the adaptive extrapolation (the run's state) hold the compound as `const CNuc *`; `Clone`, `State()`,
       `Inputs()`, `MutableState()` and the one-argument fills are deleted; `CNuc` holds nothing written after set-up
       and cannot be copied (`cnuc_split.md` §12.3, step 4 as built, fourth part).
+- [x] The name: `CNuc` is `CompoundSystem` (`include/CompoundSystem.h`); its files are named by job
+      (`CompoundSystemBuild.cpp`, `CompoundSystem.cpp`, `LevelTransforms.cpp`, `ExternalCaptureFinalStates.cpp`,
+      `ExternalCaptureAmplitudes.cpp`, `LevelReport.cpp`, `CompoundSystemChecks.cpp`, `SystemOfCompound.cpp`,
+      `EngineChannelFunctions.cpp`, `LevelInputMessages.cpp`, `LevelStateFill.cpp`, `LevelParameterVector.cpp`);
+      consistency check 59 keeps `CNuc`, a `Clone()` of the compound and `cnuc_pool_` out of `src/`, `include/`,
+      `api/`. The session's methods that write its levels, data, `Results` or lazily read settings are not `const`
+      (four `mutable` rows of `allowed_state.tsv` gone). A particle channel's functions are one function
+      (`ParticleChannelValues`), called by the engine and the binding's level doors (`cnuc_split.md` §12.3, step 5 as
+      built).
+- [ ] One build: `BuildCompoundSystem` returning the finished `shared_ptr<const CompoundSystem>`. Not built: the data's
+      set-up reads the compound between `Fill` and `Initialize`, and the run's log prints the data's set-up between
+      the two (`cnuc_split.md` §12.3, step 5 as built; a decision of the director).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -329,7 +342,14 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 - [x] The experts' examples: every script of `pyazr/examples/` runs from the root on a project of `tests/` and is run
       by `tests/pyazr/examples_test.py` (one row each, a pinned number); the page `user_guide/pyazr_examples.rst` lists
-      them by task; check 58 keeps the files, the table and the page one set.
+      them by task; check 58 keeps the files, the table and the page one set, and the skills' pages to the files.
+- [x] The library calls the examples met, repaired: quiet (the engine's lines to the logger `pyazr.engine`), nothing
+      written beside a project (the rate, the bands, `tabulate`), refusals with three parts (a refused set-up, a
+      wrong fit vector, a Project edit that leaves a phase shift without its partial wave), the level scheme's keys
+      and words, units (external-capture integrals, extrapolations, gamma_decay numbers); a prior or a limit on a
+      level parameter as a `Project` edit.  Open (the engine): the final state of an external-capture integral, the
+      engine's text kept by the session instead of descriptor 1, the rate's files, a session's threads, the units of
+      `shift_fn` and `apparatus` parameters, a project started from nothing (`FOR_THE_OWNER.md`).
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
@@ -373,16 +393,18 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       `read_prior` reads the file as the engine reads it.  The page's screen `tabs/prior.js` (`#/prior`, from the
       Fit tab; routes `/api/prior`, `/api/prior/build`, `/api/prior/write`; `web_ui.md` section 11.15).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
-      model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
-      model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
+      model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14); the
+      model on a fine grid over each data set (`Session.model_curve`, route `/api/evaluation/curve/{name}`; the Plot
+      and ENDF tabs; `web_ui.md` section 11.16). Lab energy, Legendre orders wait for pyazr (section 12).
 - [ ] The page for the median user (`web_ui.md` section 11.11): the original's icon, colours and About; the first
       view in the old program's path and words with the rare fields (a column of the schema) folded; Calculate with
       what changed; the run's settings from the engine's `<config>` table (2026-11-14). The lists in words, the
       Reaction Rate tab (and Physics, THM on a THM project) in the first view, the files offered and previewed with
       the engine's reading, "new …" of a reference, lists of numbers and MINOS's parameters as boxes, the pair form
       from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
-      reaction, a grid, a composition, the structured fields. The model as a curve on a fine grid waits for a pyazr
-      call (section 11.14).
+      reaction, a grid, a composition, the structured fields. The first view's rough edges repaired (section 11.16:
+      a fit's follow-up buttons by the form's rule, each tab's own jobs, the lists in the old program's columns by
+      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
@@ -419,9 +441,12 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       module's own format check; `pyazr endf summary|curves`); stage 4 built (the checking codes found and run,
       their reports read, candidates with their difference; `pyazr endf check|standardize`); the page's screens
       built (the ENDF tab: files over the data with ratios, Check and Correct as jobs, `web_ui.md` 11.13); stage 2
-      built (the start model from LRF=7, the engine's two level doors; `pyazr endf to-project`); stage 3 built in
-      part (MF=1, MF=2, MF=3 from the engine, LRP=2; `pyazr endf write`); next: MF=6 of the writer (LAW=2 exits,
-      LAW=5 elastic, MT=102 primaries), then stage 5 (MF=32, LTP=1) and stage 6 (`check_resonances`).
+      built (the start model from LRF=7, IFG=0 converted, the engine's two level doors; `pyazr endf to-project`);
+      stage 3 built (MF=1, MF=2, MF=3 and MF=6 from the engine: LAW=2 exits, LAW=5 elastic with MF=3/MT=2, MT=102
+      primary photons; one seeded grid; LRP=2; `pyazr endf write`); on the page, "New project from a file"
+      (`to_project` as a job, the report before anything is written) and "Export this project" (`write` as a job,
+      the losses before and after; `web_ui.md` 11.16); next: stage 5 (MF=32, LTP=1) and stage 6
+      (`check_resonances`).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

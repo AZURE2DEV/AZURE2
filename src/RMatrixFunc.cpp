@@ -1,5 +1,5 @@
 #include "Unit.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "MatrixInv.h"
 #include "RMatrixFunc.h"
 #include <assert.h>
@@ -43,10 +43,10 @@ void PoleLevelForm(const matrix_c &M, const std::vector<std::vector<double>> &g,
 }  // namespace
 
 /*!
- * The RMatrixFunc object is created with reference to a CNuc object.
+ * The RMatrixFunc object is created with reference to a CompoundSystem object.
  */
 
-RMatrixFunc::RMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure) :
+RMatrixFunc::RMatrixFunc(const CompoundSystem *compound, const LevelState &state, const Config &configure) :
   compound_(compound),
   state_(state),
   configure_(configure) {}
@@ -109,7 +109,7 @@ void RMatrixFunc::ClearMatrices() {
 }
 
 /*!
- * This function creates the \f$ [1-RL] \f$ and \f$ R \f$ Matrices from the CNuc object.
+ * This function creates the \f$ [1-RL] \f$ and \f$ R \f$ Matrices from the CompoundSystem object.
  */
 
 void RMatrixFunc::FillMatrices(Site *point) {

@@ -88,7 +88,7 @@ level scheme, of a THM experiment):
 1. ``include/ParameterKind.h``: the value of ``ParamKind`` and its row of
    ``ParamKindTable()`` (key, unit, owner fields, prior and vary flags, doc);
    a ``ParameterRecord`` factory for new owner fields.
-2. Create it with ``AZUREParams::Add`` in ``CNuc::FillMnParams`` or
+2. Create it with ``AZUREParams::Add`` in ``CompoundSystem::FillMnParams`` or
    ``WorkingCopy::FillMnParams``; every later question asks the record, never
    the name (check 23).
 3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``; a level's
@@ -109,7 +109,7 @@ energy and the amplitudes:
 1. ``include/LevelParameterLayout.h`` / ``src/LevelParameterLayout.cpp``: a
    ``Slot::Kind`` and its slots in the constructor, which fixes where the
    number sits in the level block, and its name in ``Name``. Every walk of
-   the level block reads the layout (``CNuc::FillMnParams``, the fills from a
+   the level block reads the layout (``CompoundSystem::FillMnParams``, the fills from a
    fit vector and from an observed vector, ``GetTransformParams``,
    ``ConvertAmplitudeBasis``, ``SetFitLevelParameter``, the level part of
    ``BuildParamIndexMap``, the labels of ``src/ParameterLabel.cpp``, the
@@ -124,9 +124,9 @@ energy and the amplitudes:
    (the compound first, then the state, then the inputs), as every reader of
    an evaluation's values does.
 3. The input value: a member of ``LevelInputs`` (``include/LevelInputs.h``),
-   made by ``CNuc::Fill`` from the ``<levels>`` rows, written by
+   made by ``CompoundSystem::Fill`` from the ``<levels>`` rows, written by
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
-   vector), read by ``CNuc::FillMnParams`` as the start value; its observed
+   vector), read by ``CompoundSystem::FillMnParams`` as the start value; its observed
    value in ``GetTransformParams``. What an evaluation reads of the input
    (the zero-width flags) is
    written into the ``LevelState`` where the input is read (``Fill``,
@@ -146,8 +146,8 @@ An owner of the levels
 ----------------------
 
 Something that evaluates the model on levels of its own (a second sampler, a
-scan, a new front end) holds the compound as ``const CNuc *`` (or ``const
-CNuc &``) of the run or session that set it up and outlives it, and its own
+scan, a new front end) holds the compound as ``const CompoundSystem *`` (or ``const
+CompoundSystem &``) of the run or session that set it up and outlives it, and its own
 ``LevelState`` (with a ``LevelInputs`` if it transforms from the observed
 basis), copied from its caller's: ``LevelState state(callerState)``. It
 passes the compound, the state and the inputs to the fills and the readers.
@@ -156,6 +156,17 @@ copies are a ``StatePool`` (``include/StatePool.h``) of its caller, lent as
 the ``Results`` are (``FitterStates`` of ``AZURECalc``,
 ``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
 changes: the owner's own file, and its test.
+
+A set-up fact of the compound system
+------------------------------------
+
+Something the compound system learns once from the project and that no evaluation changes (a property of a
+pair, a group or a level, a table derived from them) is a member of ``CompoundSystem``
+(``include/CompoundSystem.h``) with a ``const`` accessor, written by its set-up only:
+``src/CompoundSystemBuild.cpp`` (``Fill`` or ``Initialize``), or ``src/ExternalCaptureFinalStates.cpp`` for the
+external capture. Its readers take ``const CompoundSystem &``. If the check file of the compound nucleus shows
+it, ``WriteCompoundNucleusCheck`` (``src/LevelReport.cpp``) prints it. A value that moves with the parameter
+vector is not a set-up fact: it belongs in ``LevelState`` (above).
 
 A term of the objective
 -----------------------
@@ -408,18 +419,25 @@ A section (MF/MT) of the ENDF writer
 ------------------------------------
 
 ``pyazr.endf.write`` (``pyazr/endf/writer.py``) writes what the engine computes; the module writes records only.
+MF=6 (LAW=2 of the exits, LAW=5 of elastic scattering, the primary photons of MT=102) was added this way.
 
-1. The numbers: an engine quantity on the writer's grid (``_engine_grid``: one extrapolation per reaction in a
-   project of the session's nuclear part, refined by ``pyazr.refine_grid``), or a door of the binding when the
-   engine has no quantity for it (a new file of ``api/src/``, registered in ``BindPhysics``); never a formula in
-   Python.
-2. The records: a branch of ``write`` that fills ``sections[(MF, MT)]`` with a ``RecordWriter``
-   (``records.py``: CONT, LIST, TAB1, TAB2, TEXT), each record laid out as its page of ENDF-102 says (cite it).
-   The directory of MF=1 and the sequence numbers follow from ``sections``.
-3. Its line in ``NOT_WRITTEN`` goes; what the section still cannot carry is a line of ``Losses`` (``model.py``).
-4. Reading it back: the reader's ``read_*`` of the section (the recipe above); a check in
-   ``tests/pyazr/endf_write_test.py`` that the section read back equals the engine at points between the grid's,
-   and the own format check clean on the written file.
+1. The reaction: a role of ``engine_values.Reaction`` made by ``_reactions`` (``writer.py``) from the session's
+   pairs (``"elastic"``, ``"exit"``, ``"capture"``, ``"final_state"``).
+2. The numbers: an engine quantity of an extrapolation in ``engine_values.Sweeps`` (``sigma``, ``legendre`` with
+   the expansion that is the format's own normalisation, ``dsigma_domega`` at angles), on the one energy grid of
+   every section (``Sweeps.energy_grid``: ``grid.refine`` from ``grid.start_grid``, the rule applied to the
+   quantities the file tabulates; a second axis, as the cosines of LAW=5, refined by the same ``grid.refine``). If
+   the engine has no quantity for it, a door of the binding (a new file of ``api/src/``, registered in
+   ``BindPhysics``); never a physics formula in Python. MF=6 needed no door: the ``legendre`` quantity with the
+   expansion ``rsl`` is LAW=2's a_l.
+3. The records: a function of ``sections.py`` that lays the section out as its page of ENDF-102 says (cite it),
+   with a ``RecordWriter`` (``records.py``), and the line of ``write`` that puts it into ``written[(MF, MT)]``.
+   The directory of MF=1 and the sequence numbers follow from the sections.
+4. What it cannot carry: a row of ``NOT_WRITTEN_REASONS`` for a section a reaction needs and the writer leaves out;
+   a line of ``Losses`` (``model.py``) for what the project holds and the file does not.
+5. Reading it back: the reader's ``read_*`` of the section and a branch of ``curves`` (the recipe above; MF=6 needed
+   capture to one final state in ``curves``); checks in ``tests/pyazr/endf_write_test.py`` that the file's values
+   equal the engine at the data's points and between the grid's, and the own format check clean.
 
 A checking code of ``pyazr.endf``
 ---------------------------------
@@ -454,7 +472,9 @@ one) to copy:
 3. Its row on the page of examples (:doc:`../user_guide/pyazr_examples`), under its task: the script, the task in one
    sentence, the command.
 
-Check 58 fails for a script without both rows, and for a row whose script is not there.
+Check 58 fails for a script without both rows, for a row whose script is not there, and for a page of the
+repository's skills (``.claude/skills``) that names an example that is not there: a script folded into another or
+removed leaves the skills too.
 
 A run-time data file of pyazr
 -----------------------------
@@ -530,13 +550,18 @@ for a kind the engine describes, the entries of
 one row there for a new entry of ``describe``); the list of pairs shows
 ``ProjectPair.FIELDS`` marked ``list`` (``pyazr/nuclear_part.py``, a new
 field of a pair is one row with its title and unit; the pair form takes
-``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). A **control** of a form
+``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). Which of those columns the
+first view keeps is one table, ``FIRST_VIEW_COLUMNS`` (``pyazr/ui/first_view.py``,
+served as ``first_view`` of ``GET /api/describe``). A **control** of a form
 is the row of its value type in ``WIDGETS`` (``pyazr/ui/static/forms.js``):
 a ``path`` offers the project folder's files (``GET /api/files``) and is
 previewed under the field (``tabs/records.js`` ``filePreview``, ``GET
 /api/project/records/{name}/preview``), a ``reference`` offers the records and
-"new …", a ``number_list`` a box per number. A **kind of job** the Fit tab's
-first view offers is a kind of ``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``).
+"new …", a ``number_list`` a box per number and one that ``grows`` (the form
+adds the next box as it is typed in). A **kind of job** the Fit tab's
+first view offers, and whose button follows a finished job there, is a kind of
+``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``); a tab lists the jobs of the rows
+whose ``tab`` it is.
 A **view of the first view** is a row of ``FIRST_VIEW`` (``layout.js``); a
 row with ``when`` is shown under the condition of that name (``CONDITIONS``
 in ``app.js``).

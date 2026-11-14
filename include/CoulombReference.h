@@ -5,7 +5,7 @@
 
 #include "azure2/experiment/Prediction.h"
 
-class CNuc;
+class CompoundSystem;
 class Config;
 class WorkingCopy;
 class Unit;
@@ -26,7 +26,7 @@ namespace azure2 {
  * UpdatePointEnergiesWithShift) moves it as it moves the numerator; no level parameter does.  `data` is the data set
  * that holds the point (its target effect).
  */
-double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, const CNuc *compound,
+double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, const CompoundSystem *compound,
                              const Config &configure);
 
 /*!
@@ -46,7 +46,7 @@ double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &
  * masses and charges.  Under a fold it is taken at the point's energy: the model is E exp(2 pi eta(E) + g E) <sigma>,
  * the S factor of the folded cross section at the point.
  */
-double SFactorConversionValue(const Site *point, const CNuc *compound, double shape_perMeV);
+double SFactorConversionValue(const Site *point, const CompoundSystem *compound, double shape_perMeV);
 
 }  // namespace azure2
 

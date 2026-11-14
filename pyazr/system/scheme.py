@@ -5,6 +5,10 @@ Turns the flat parameter / pair metadata (``Session.parameters`` and
 -- particle pairs, then J-groups, then levels, then the channels of each level
 with their (L, S, radiation type, partial width, fixed flag, Wigner limit).
 
+Pairs are named as the project names them: by their key in ``<levels>`` (the number data sets and levels use,
+``Project.pairs()``, the page's list of pairs) and by their kind's word, ``particle``, ``photon`` or ``beta`` (the
+engine's ``Pair.pair_kind``).  The engine's own pair numbers (``Pair.number``, ``SchemeChannel.pair``) are not shown.
+
 This is a *read-only* view of a running instance.  To edit the scheme (add or
 remove levels) and write it back to a file, see :class:`pyazr.Project` (``levels()``, ``add_level``,
 ``remove_level``, ``set_level``, ``set_channel``).
@@ -29,26 +33,37 @@ class SchemeChannel:
     """One channel of a level (a reduced-width / partial-width parameter)."""
 
     param_index: int                # global parameter index of the width
-    pair: int                       # particle-pair number
+    pair: int                       # the engine's pair number (Pair.number)
     L: int
     S: float
-    radiation_type: str             # 'P' (particle) or 'E'/'M'/... (photon)
-    width: float                    # current physical value (partial width, eV)
+    radiation_type: str             # 'P' (particle), 'E'/'M' (photon), the beta decay's type (beta pair)
+    width: float                    # physical value: partial width (eV); a beta channel's feeding amplitude
     fixed: bool
     wigner_limit: Optional[float]
     free_index: Optional[int]
+    pair_key: Optional[int] = None  # the pair's key in <levels> (Project.pairs(), data sets and levels name it)
+    pair_kind: str = "particle"     # the pair's kind: "particle", "photon" or "beta" (Pair.pair_kind)
+    quantity: str = "width"         # what `width` holds, as the <levels> row states it: VALUE_UNITS's keys
+
+    #: What a channel's value is, by ``quantity``: (symbol, unit).  A particle channel of a level below the pair's
+    #: threshold holds its ANC, a row flagged as an amplitude (``width_is_amplitude``) the reduced-width amplitude, a
+    #: beta channel the beta-feeding amplitude (as the row states it); the others a partial width.
+    VALUE_UNITS = {"width": ("Gamma", "eV"), "anc": ("C", "fm^-1/2"), "amplitude": ("gamma", "MeV^1/2"),
+                   "beta": ("B", "")}
 
     @property
     def is_photon(self) -> bool:
-        """Is this a photon channel rather than a particle one?"""
+        """Is this a channel of a pair that is not a particle pair (a photon or a beta-decay pair)?"""
         return self.radiation_type not in (None, "P")
 
     @property
     def label(self) -> str:
-        """Compact channel tag, e.g. ``'p1 L=1 S=1/2'`` or ``'E1 (pair 2)'``."""
+        """Compact channel tag with the pair's key: ``'pair 1 L=1 S=1/2'``, ``'E1 (photon pair 2)'``, ``'G1 (beta pair
+        4)'``."""
+        key = self.pair if self.pair_key is None else self.pair_key
         if self.is_photon:
-            return f"{self.radiation_type}{self.L} (pair {self.pair})"
-        return f"pair{self.pair} L={self.L} S={_fmt_spin(self.S)}"
+            return f"{self.radiation_type}{self.L} ({self.pair_kind} pair {key})"
+        return f"pair {key} L={self.L} S={_fmt_spin(self.S)}"
 
 
 @dataclass
@@ -81,6 +96,18 @@ class SchemeLevel:
                 + sum(0 if c.fixed else 1 for c in self.channels))
 
 
+def _channel_quantity(p, pair_kind, threshold):
+    """What the width record ``p`` holds (a key of :attr:`SchemeChannel.VALUE_UNITS`), as its ``<levels>`` row
+    states it: the engine reads a particle channel of a level below the pair's threshold as an ANC."""
+    if pair_kind == "beta":
+        return "beta"
+    if p.width_is_amplitude:
+        return "amplitude"
+    if pair_kind == "particle" and threshold is not None and p.level_energy is not None and p.level_energy < threshold:
+        return "anc"
+    return "width"
+
+
 class LevelScheme:
     """The full level scheme of an AZURE2 model: pairs + levels + channels.
 
@@ -98,9 +125,11 @@ class LevelScheme:
 
     @classmethod
     def from_azr(cls, azr, name=None):
-        """Build the scheme by reading a .azr file."""
+        """Build the scheme from a session (its parameter and pair records)."""
         params = azr.parameters
         pairs = azr.pairs
+        kinds = {q.number: q.pair_kind for q in pairs}
+        thresholds = {q.number: q.threshold for q in pairs}
 
         # index levels by (jgroup, level) preserving first-seen order
         order = []
@@ -125,7 +154,9 @@ class LevelScheme:
                     param_index=p.index, pair=p.pair, L=p.L, S=p.S,
                     radiation_type=p.radiation_type, width=p.value,
                     fixed=p.fixed, wigner_limit=p.wigner_limit,
-                    free_index=p.free_index))
+                    free_index=p.free_index, pair_key=p.pair_key,
+                    pair_kind=kinds.get(p.pair, "particle"),
+                    quantity=_channel_quantity(p, kinds.get(p.pair, "particle"), thresholds.get(p.pair))))
 
         levels = [by_key[k] for k in order]
         return cls(levels, pairs, name=name or getattr(azr, "file", None))
@@ -158,13 +189,13 @@ class LevelScheme:
     # -- rendering ------------------------------------------------------------
 
     def _pairs_block(self):
-        lines = ["Particle pairs:"]
+        lines = ["Pairs (by their key in <levels>):"]
         # The compound nucleus is only worth a column when the pairs form more
         # than one (a natural-target project); see pyazr.system.nuclei.
         nuclei = {(getattr(p, "nucleus_Z", 0), getattr(p, "nucleus_A", 0)) for p in self.pairs}
         several = len(nuclei) > 1
         for p in self.pairs:
-            kind = "photon  " if p.is_photon else "particle"
+            kind = f"{p.pair_kind:<8}"
             flags = " [entrance]" if p.is_entrance else ""
             nucleus = ""
             # an excited light particle (column 32); the pair opens at Sep + both excitations
@@ -174,7 +205,7 @@ class LevelScheme:
                 from .nuclei import Nucleus
                 nucleus = f"   -> {Nucleus(p.nucleus_Z, p.nucleus_A).label}"
             lines.append(
-                f"  {p.number}: {kind}  "
+                f"  {p.key}: {kind}  "
                 f"J={_fmt_spin(p.J1)}{'+' if p.parity1 > 0 else '-'}"
                 f" & {_fmt_spin(p.J2)}{'+' if p.parity2 > 0 else '-'}"
                 f"   Z={p.Z1}+{p.Z2}"
@@ -210,9 +241,9 @@ class LevelScheme:
                         fix = "fixed" if c.fixed else "FREE "
                         wl = ("" if c.wigner_limit is None
                               else f"  wigner={c.wigner_limit:.3g}")
-                        out.append(
-                            f"      {c.label:<22}  Gamma = {c.width:>12.5g} eV "
-                            f" [{fix}]{wl}")
+                        symbol, unit = SchemeChannel.VALUE_UNITS[c.quantity]
+                        out.append(f"      {c.label:<22}  {symbol:<5} = {c.width:>12.5g} {unit:<7}"
+                                   f" [{fix}]{wl}")
             out.append("")
         return "\n".join(out).rstrip()
 
