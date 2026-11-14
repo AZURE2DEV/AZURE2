@@ -1301,7 +1301,7 @@ call.
    * - the fields ``prior_nominal``, ``input_is_rwa``, ``density_max``, ``doppler_max``, ``sample`` of a parameter
      - ``prior_centre``, ``width_is_amplitude``, ``layout_max``, ``layout_max``, ``sample_name``
    * - ``s.describe()["parameters"]`` with ``x``, ``physical_value``, ``free``
-     - the records (as ``s.parameters``): ``start``, ``value``, ``fixed``
+     - ``s.describe()["parameters"]`` is the records (as ``s.parameters``): ``start``, ``value``, ``fixed``
    * - ``s.sess`` (the binding's session object)
      - none: ``s._engine`` is private (no lock, no promise of stability); every number has a public call
    * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
