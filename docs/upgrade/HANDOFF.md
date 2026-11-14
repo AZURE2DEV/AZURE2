@@ -2,6 +2,57 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 00:50) — merged: the one set-up of the compound system and the data; quiet `Objective` calls
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 79 (rehearsal 78 plus two branches). The agent's
+entry and the director's entry on the `Objective` follow.
+
+- **The one set-up** (`feature/upgrade-5-one-setup`): the director's decision of the last entry, built.
+  `SetUpCompoundSystem` (`include/CompoundSystemSetUp.h`, 59 lines of source) makes the structure, runs the
+  caller's data set-up in the middle on a `const CompoundSystem &`, finishes the compound and returns it as
+  `std::unique_ptr<const CompoundSystem>` with the owner's `LevelState` and `LevelInputs`, or says which step
+  refused. The run, the sampler and the session (both forms) call it; the segments' trees use the named
+  shorter form `InspectCompoundStructure`. The six set-up calls are private; what the last part writes
+  refuses to be read before it.
+- **An `Objective`'s calls are quiet** (`feature/upgrade-7-objective-quiet`, Python only; the PI's answer).
+
+**Conflicts.** The front ends' class figure (regenerated from the merged tables: 31 boxes, 36 arrows);
+HANDOFF by union.
+
+**Read by the director.** The header and the source of the set-up; the three callers' data set-ups
+(`src/RunSetUp.cpp`, `src/AZURE2.cpp`, `api/src/AZUREAPI.cpp` twice); the added lines of `src`, `include`,
+`api`, `physics`: no new `mutable`, `const_cast` or static state; four `friend` lines, two of them new (the
+two set-up functions in `CompoundSystem`), two only changed to `const WorkingCopy *` (`ParamIndexMap`). Only
+`CompoundSystemSetUp.cpp` makes a `CompoundSystem`. The default constructor is still public (a test or a
+new front end can make an empty object, but can call nothing on it that sets it up).
+
+**Verified on the merged tree** (build `work/b-trial79`, head `6dadabd7`): 0 warnings; all projects in the
+three bases against `tab-t74-1` (tag `tab-t79-1`): Brune 887, formal 851, Park 887 files, all identical; the
+eight fits by command identical to `b-trial78`; the quick tests 297 of 297 (296 before; the browser test
+passed this time); the consistency test passes.
+
+**The director's own runs**, `b-trial79` against `b-trial78`, by command, every output file and the screen
+text (`run.log` without the progress lines) compared: MINOS, a fit with band, the rate for one exit pair and
+for all, three `gamma_decay` fits, a T1 extrapolation with band, the natural-target fit in two fitters, the
+T2 sampler in both modes: all identical. The agent's refusal cases run again by me on the merged build
+(`work/director/try79/refusals.sh`, `sessions.sh`): 13 cases through the program and the sampler (refused by
+the structure, by the data, by both, by the last part, by the rate's pairs; T1 with every check file and
+check on screen) and 9 through pyazr sessions: screen text, exit code, output and check files identical.
+
+**Not unified, for the PI** (each changes a screen text or a refusal): the sampler writes neither check
+file and prints no blank line before "Calculation was aborted."; the session's rebuild (after `set_radius`
+or a mode switch) has no rate branch and refuses a project of model data alone that the first set-up
+accepts. The two session forms remain two data set-ups for that reason.
+
+**Seen, not repaired**: `tests/upgrade/node_count --plan` ends with a segmentation fault (in `b-trial78`
+too; without `--plan` it works).
+
+**Started**: a plan for bringing `dev`'s 18 commits into the upgrade (`work/briefs/EI_dev_updates_plan.md`;
+the PI's request; a plan only, `work/devplan/PLAN.md`, nothing merged).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial79`; the quick test set has 297 tests.
+
 ## 2026-11-14 (director, 23:45) — the PI's two answers; an `Objective`'s calls are quiet too
 
 **The PI, 2026-11-14 late** ("Yes" to both questions of the entry below): (1) written MF=6 stays within
