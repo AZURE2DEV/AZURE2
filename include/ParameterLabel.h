@@ -39,16 +39,16 @@ std::string Nuclide(int z, double mass);
 std::string Pair(CNuc *compound, int pairNum);
 
 /*! e.g. "J^pi=3/2+, E=16.9285 MeV (J-group 1, level 1)". */
-/// Level as text, with its \f$J^\pi\f$, energy and position -- the form the warnings use.
-std::string Level(const JGroup *jgroup, const ALevel *level, int jgroupIndex, int levelIndex);
+/// Level as text, with its \f$J^\pi\f$, its energy (MeV; the input energy, CNuc::Inputs) and position -- the form the
+/// warnings use.
+std::string Level(const JGroup *jgroup, double energy, int jgroupIndex, int levelIndex);
 
 /*! e.g. "channel 2: d+t, L=0, S=3/2", or "channel 5: E1 gamma to n+4He". */
 /// Channel as text, with its pair, l and s.
 std::string Channel(CNuc *compound, const JGroup *jgroup, int channelIndex);
 
-/*! Level and channel together, for a width. */
-std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, const ALevel *level,
-                            int jgroupIndex, int levelIndex, int channelIndex);
+/*! Level and channel together, for a width; the level's input energy (CNuc::Inputs). */
+std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex);
 
 /*!
  * Describe the fit parameter at \p minuitIndex (0-based, in the order

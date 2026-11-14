@@ -57,7 +57,7 @@ enum class CNucSystemContent {
  *  - channels: the distinct (pair, kind, l, s) of the J^pi groups that take part in the R-matrix, in order of first
  *    appearance (group by group, channel by channel); a_c = the pair's channel radius;
  *  - blocks: every J^pi group with IsInRMatrix(), in CNuc order; its channels in group order with their B_c; its
- *    levels with IsInRMatrix(), in group order, with E = ALevel::GetE() and gamma = ALevel::GetGamma(ch): the
+ *    levels with IsInRMatrix(), in group order, with E and gamma the compound's input values (CNuc::Inputs): the
  *    parameters the project was loaded with, in the basis AZUREParams::BasisForConfig names (after TransformIn these
  *    are the formal/Brune/Park amplitudes in MeV^1/2, not the widths in eV of the file).  The fitted values
  *    (CNuc::State), which move during a fit, are not read.

@@ -226,8 +226,7 @@ void WarnLargeRadiativeWidths(const CNuc &compound, const ObservedLevelTable &ta
         entry.ratio = ratio;
         entry.radWidth = radiativeWidth;
         entry.particleWidth = particleWidth;
-        // AZURELabel takes non-const pointers (include/ParameterLabel.h); it only reads them.
-        entry.label = AZURELabel::Level(const_cast<JGroup *>(theJGroup), const_cast<ALevel *>(theLevel), j, la);
+        entry.label = AZURELabel::Level(theJGroup, compound.Inputs().E(j, la), j, la);
         flagged.push_back(entry);
       }
     }

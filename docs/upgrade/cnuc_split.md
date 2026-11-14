@@ -1501,7 +1501,9 @@ of one `Clone`, "refill" one `FillCompoundFromParams`, "refill + S_c" a refill a
 every shift function recomputed (`CalcShiftFunctions` without second derivatives). `natural_neon` has the largest
 `<levels>` of the tree (502 rows).
 
-A copy needs only the (b) part, 10–17 % of the bytes; the rest is set-up the copy could share. A calculation makes
+A copy needs only the (b) part, 10–17 % of the bytes; the rest is set-up the copy could share. (Since step 4, second
+part, a copy also writes `LevelInputs` where it transforms: the sampler's physical mode, the limits' conversion, the
+rate's resonances and the sub-point-grid copy.) A calculation makes
 almost no copies: the program at one thread (`printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline`, under `gdb` with a
 counting breakpoint) cloned 1 (T2), 0 (13N) and 1 (`natural_neon`) times, against 0.23 s, 8.0 s and 1.35 s of wall
 time; `FillCompoundFromParams` ran 3 times, `CalcShiftFunctions` once. A fit keeps one copy per thread in a pool
@@ -1861,6 +1863,56 @@ had twelve places, and `SetFitLevelParameter` takes one slot, not a walk):
   sub-point-grid copy do this on their copies. So the owners need `LevelInputs` as well as `LevelState` (as the
   design's end state says), and every reader of `CNuc::State()` (about 80 calls in 17 files), of the fills and of
   the masks must take the owner's state: the design's step 5 signatures, in part, moved into step 4.
+
+*Step 4 as built, second part: the level inputs, and what a fill writes* (branch
+`feature/upgrade-5-cnuc-level-inputs`, start 161ccef1). Measured first: what is written after set-up, by whom, and
+who reads it (calls outside `ALevel.cpp` at the start: `GetE` 29 in 13 files, `GetGamma` 11 in 6, `ZeroInputWidth`
+10 in 4, the setters 8 in 3):
+
+| member | written after set-up by | read by | now |
+|---|---|---|---|
+| `ALevel` input E and γ | `TransformIn`, `FillCompoundFromParamsPhysical` (`CNuc.cpp`); in `Fill`, `GammaDecaySet::Read` through `MutableLevel` | `FillMnParams`, `CalcBoundaryConditions`, `SetUpECFinalBlocks`, the adapters (`ProjectLevelsFromCNuc`, `ExternalReducedWidthOfInputs`), the nuclear report, the transformation's messages, the labels (`ParameterLabel.cpp`, `CNucChecks.cpp`, `AZURECalcMCMC.cpp`), `ThmLevelWidth`, `AdaptiveIntegrationGrid::LevelResonances`, `BuildSystemFromCNuc` (parameters content), the binding's `level_energy`; inside `Fill`: the grouping and its warnings, `ModelData::SameLevel`, `GammaDecaySet::Read` | `LevelInputs::E`, `Gamma`; inside `Fill` `ALevel::FileE`, `FileGamma` |
+| `ALevel` zero-input flags | `TransformIn` | `FillMnParams`, `ObservedWidths`, the formal capture masks, `ExternalWidthsFromCNuc`, `AMatrixFunc.cpp` (5) | `LevelInputs::ZeroInputWidth`; the file's flag `ALevel::FileZeroWidth` |
+| `CNuc::gammaDecayInputs_` | `Fill`, `FillCompoundFromParamsPhysical` | `FillMnParams` | `LevelInputs::GammaDecayNumbers` |
+| `CNuc::transformedIn_`, `transformError_` | `Fill`, `TransformIn` | `Initialize`, `FillMnParams`, `BuildSystemFromCNuc`, `TargetSetup.cpp` (2), a test | `LevelInputs::TransformedIn`, `TransformError` |
+| `CNuc::gammaDecayFills_` | `GammaDecaySet::ToEngine` (in `FillCompoundFromParams`) | `GammaDecaySet::ValueOr`, `PullBack`, `PenaltyRows`, `Report` | `LevelState::GammaDecayFillOf` |
+| `CNuc::captureMasks_` | the projector: `FormalCaptureMasksFromParams` (in `FillCompoundFromParams`); the slots: `Initialize` | `AMatrixFunc.cpp` (channel capture), `FormalCaptureMasksOutsideAdjoint` (`AZUREGrad.cpp`) | the projector `LevelState::CaptureProjector`; the slot (block, group, channel, levels) in the shared set-up, `CNuc::FormalCaptureMaskOf` |
+| `CNuc::levelState_` | the fills (step 3) | `CNuc::State()`: 78 calls in 15 files at the start (`AMatrixFunc` 28, `THMMatrixFunc` 17, `AZUREGrad` 8, `Objective` 5, `GammaDecayMap` 5, `RMatrixFunc` 3, `ThmReports`, `ThmLineshape`, `AZURECalcMCMC` 2 each, `TargetSetup`, `ModelData`, `CNucTransformMessages`, `CNucExternalCapture`, `AdaptiveExtrapolation`, `AZUREAPI` 1 each), and 43 uses of the member in `CNuc*.cpp` | unchanged; 88 calls after (the fills' and masks' readers) |
+| `ALevel` final-state energy, `AChannel` B_c | `Initialize` | external capture, the matrix functions | set-up: unchanged |
+
+The places that copy the compound, with what they write on the copy (start commit): the fitter's pool
+(`AZURECalc.cpp` 1350; the fill, the shift functions), its output copy (502) and the checks' fresh copies (460,
+600); the sampler's pool (`AZURECalcMCMC.cpp` 1280; the fill, the shift functions; in the physical mode
+`FillCompoundFromParamsPhysical` and `TransformIn`), its start table (739: fill, shift functions, `TransformOut`) and
+the snapshot (776: as the pool); `ParameterLimitsManager.cpp` 402 (fill, shift functions, `TransformOut`, then
+`FillCompoundFromParamsPhysical`, `TransformIn`, `FillMnParams`); `ReactionRate.cpp` 107 (`TransformOut`,
+`FillCompoundFromParamsPhysical`), 365 and 409 (one per thread: the rate integrand's fills); `TargetSetup.cpp` 193
+(`CopyFitEnergiesAndAmplitudes`, `TransformOut`, `FillCompoundFromParamsPhysical`); tests (`history_test`,
+`results_owner_test`, `park_chi2_fallback_test`, `sampler_objective_test`, `plan_test`).
+
+- `LevelInputs` (`include/LevelInputs.h`, `src/LevelInputs.cpp`): per level the input energy, per channel the input
+  width or amplitude and the zero-width flag (laid out as `LevelState`), the `gamma_decay` records' input numbers,
+  whether the transformation ran and why it failed. `CNuc` holds one (`CNuc::Inputs()`); `Fill` makes it from the
+  levels' `<levels>` values and writes the records' partial widths into it (`GammaDecaySet::WriteInputWidths`);
+  `TransformIn` and `FillCompoundFromParamsPhysical` write it. The adapters `ProjectLevelsFromCNuc`,
+  `ExternalWidthsFromCNuc` and `ExternalReducedWidthOfInputs` take the `LevelInputs` they read; the labels take the
+  energy they print.
+- `ALevel` holds nothing written after set-up: IDs, fix flags, the input conventions, the external-capture final-state
+  data (the final-state energy written by `Initialize`) and its `<levels>` values (`FileE`, `FileGamma`,
+  `FileZeroWidth`), read by `Fill` and the readers it calls. `SetE`, `SetGamma`, `SetZeroInputWidth` and
+  `CNuc::MutableLevel` are deleted, so the compiler found every reader of the old place (the abort commit of the
+  pattern is not needed for an accessor that no longer exists).
+- The `gamma_decay` fills (`GammaDecayFill`, `include/GammaDecayFill.h`) and the capture-mask projectors are the
+  `LevelState`'s: `GammaDecaySet::ToEngine` takes the compound `const` and the state it writes, so a fill writes the
+  state and nothing else of `CNuc`. The external-capture helpers, the channel functions of the adapter and the
+  `gamma_decay` readers take the compound `const`.
+- What differed from the design: `LevelInputs` holds no external amplitudes, N_f^½ or Park J (step 3 moved N_f^½ whole
+  into the state, and `TransformIn` writes it and J there); only the masks' projectors change with the vector, so the
+  slots stay in the shared set-up; `ALevel` keeps its `<levels>` values, which the set-up reads before any
+  `LevelInputs` exists (grouping, model data, records); the records' widths were written in `Fill`, not after.
+- Not done here: the readers taking the state (88 calls of `CNuc::State()`, 63 uses of `CNuc::Inputs()` or
+  `levelInputs_`), the owners holding their own state and inputs, the pools of `LevelState`, `Clone` deleted, the
+  memory measurement.
 
 **Step 5. The set-up out and the name gone.** (≈ 900 lines touched, mostly signatures in ≈ 110 files; `CNuc.cpp`
 → `CompoundSystemBuild.cpp` and `ExternalCaptureFinalStates.cpp`; the `CNuc*` files renamed: `CNucReport` →

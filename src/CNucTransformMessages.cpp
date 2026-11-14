@@ -19,7 +19,7 @@ namespace {
 // AZURELabel takes non-const pointers (include/ParameterLabel.h); it only reads them.
 std::string LevelLabel(const CNuc &compound, int j, int la) {
   const JGroup *group = const_cast<CNuc &>(compound).GetJGroup(j);
-  return AZURELabel::Level(group, group->GetLevel(la), j, la);
+  return AZURELabel::Level(group, compound.Inputs().E(j, la), j, la);
 }
 std::string ChannelLabel(const CNuc &compound, int j, int ch) {
   CNuc &c = const_cast<CNuc &>(compound);
@@ -36,14 +36,14 @@ void WarnInputColumn(const CNuc &compound, const Config &configure, int j, int l
     case phys::ColumnNote::AmplitudeFlagIgnored:
       configure.outStream << "WARNING: Reduced width amplitude input flag is only "
                           << "supported for particle channels; ignored for J = "
-                          << group->GetJ() << " E = " << level->GetE()
+                          << group->GetJ() << " E = " << compound.Inputs().E(j, la)
                           << " MeV channel " << ch << "." << std::endl;
       break;
     case phys::ColumnNote::ZeroPenetrability: {
       const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
       configure.outStream << "**WARNING: " << LevelLabel(compound, j, la)
                           << ", " << ChannelLabel(compound, j, ch)
-                          << ": the level is " << level->GetE() - pair->GetSepE() - pair->GetExE()
+                          << ": the level is " << compound.Inputs().E(j, la) - pair->GetSepE() - pair->GetExE()
                           << " MeV above the channel threshold, where P = 0 in double precision, "
                           << "so its observed width of " << input
                           << " eV cannot be converted; the reduced width is set to 0. "
@@ -99,7 +99,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
     if (worst > 0) {
       const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + worst - 1];
       const PPair *pair = compound.GetPair(group->GetChannel(worst)->GetPairNum());
-      bool bound = level->GetE() - pair->GetSepE() - pair->GetExE() <= 0.0;
+      bool bound = compound.Inputs().E(j, la) - pair->GetSepE() - pair->GetExE() <= 0.0;
       configure.outStream << "  Largest term: " << ChannelLabel(compound, j, worst)
                           << (bound ? " (bound; ANC input)" : "")
                           << ": input " << in.value[lb * nc + worst - 1]
@@ -130,7 +130,7 @@ void WarnExternalExceedsTotal(const CNuc &compound, const Config &configure, int
   configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
                       << "than the total width" << std::endl
                       << "    "
-                      << AZURELabel::LevelAndChannel(&c, group, group->GetLevel(la), j, la, ch)
+                      << AZURELabel::LevelAndChannel(&c, group, j, la, ch)
                       << std::endl
                       << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
                       << std::endl;

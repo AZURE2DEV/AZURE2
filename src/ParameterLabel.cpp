@@ -73,16 +73,16 @@ std::string Pair(CNuc *compound, int pairNum) {
       Nuclide(pair->GetZ(2), pair->GetM(2));
 }
 
-std::string Level(const JGroup *jgroup, const ALevel *level, int jgroupIndex, int levelIndex) {
+std::string Level(const JGroup *jgroup, double energy, int jgroupIndex, int levelIndex) {
   std::ostringstream out;
-  if (!jgroup || !level) {
+  if (!jgroup) {
     out << "level " << levelIndex << " of J-group " << jgroupIndex;
     return out.str();
   }
 
   out.precision(4);
   out << "J^pi=" << JPi(jgroup->GetJ(), jgroup->GetPi()) << ", E=" << std::fixed
-      << level->GetE() << " MeV (J-group " << jgroupIndex << ", level "
+      << energy << " MeV (J-group " << jgroupIndex << ", level "
       << levelIndex << ")";
   // A project with several compound nuclei says which one; a single-nucleus
   // label is unchanged.
@@ -115,9 +115,8 @@ std::string Channel(CNuc *compound, const JGroup *jgroup, int channelIndex) {
   return out.str();
 }
 
-std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, const ALevel *level,
-                            int jgroupIndex, int levelIndex, int channelIndex) {
-  return Level(jgroup, level, jgroupIndex, levelIndex) + ", " +
+std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, int jgroupIndex, int levelIndex, int channelIndex) {
+  return Level(jgroup, compound->Inputs().E(jgroupIndex, levelIndex), jgroupIndex, levelIndex) + ", " +
       Channel(compound, jgroup, channelIndex);
 }
 
@@ -151,10 +150,9 @@ std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
     if (minuitIndex < layout.Size()) {
       const LevelParameterLayout::Slot &slot = layout.Slots()[minuitIndex];
       const JGroup *jgroup = compound->GetJGroup(slot.group);
-      const ALevel *level = jgroup->GetLevel(slot.level);
       if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy)
-        return "level energy: " + Level(jgroup, level, slot.group, slot.level);
-      return "width: " + LevelAndChannel(compound, jgroup, level, slot.group, slot.level, slot.channel);
+        return "level energy: " + Level(jgroup, compound->Inputs().E(slot.group, slot.level), slot.group, slot.level);
+      return "width: " + LevelAndChannel(compound, jgroup, slot.group, slot.level, slot.channel);
     }
     index = layout.Size();
     // then the isotopic abundances, one per (sample, nucleus) (AbundanceSamples::AddParameters)

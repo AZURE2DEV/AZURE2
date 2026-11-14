@@ -213,8 +213,15 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       the copies) is read by every walk of the block (the fills, the start vector, the observed vector, the basis
       conversion, the index map, the labels, the `gamma_decay` slots, the model data's columns) (`cnuc_split.md`
       §12.3, step 4 as built, first part).
-- [ ] The copies of the compound replaced by a shared constant compound and a `LevelState` (with the level inputs
-      of a transformation) per owner; `Clone` deleted (`cnuc_split.md` §12.3, step 4, second part: measured, not cut).
+- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, zero-width flags, the `gamma_decay`
+      numbers, the transformation's end), held by `CNuc` (`CNuc::Inputs()`); `ALevel` holds its `<levels>` values
+      only and nothing of it is written after set-up.  The `gamma_decay` fills and the formal-basis capture-mask
+      projectors are the `LevelState`'s: a fill writes the state and nothing else of `CNuc` (`cnuc_split.md` §12.3,
+      step 4 as built, second part).
+- [ ] The readers take the state they read (`const CNuc &` and a `LevelState`); the owners (fitter, sampler, rate,
+      sub-point grids, bands, adaptive extrapolation, limits, binding) hold the compound shared and constant with their
+      own `LevelState` (and `LevelInputs` where they transform); pools of `LevelState`; `Clone` deleted (`cnuc_split.md`
+      §12.3, step 4, what remains).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -375,6 +382,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       question a named option of one table (`src/RunRequest.cpp`) that the menu, `--help` and `--describe` read; the
       menu still runs without a command (pyazr3.md decision 3 (a); `tests/cli_commands`).
 - [ ] The tests, examples, skills and pages on the commands; the readline menus removed.
+- [ ] ENDF for the evaluators (`endf.md`: the mapping of a project to ENDF-6 MF=2 LRF=7 and the other sections, a
+      measured spike, the checking codes, `pyazr.endf` and the page's screens; design written 2026-11-14): six
+      stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

@@ -240,11 +240,12 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     same(w + "gamma size", blk.gamma().size(), blk.num_levels() * blk.num_channels());
     for (int lam = 0; lam < (int)blk.num_levels() && lam < (int)rmLevels.size(); lam++) {
       same(w + "block level -> group level", map.levelOfBlockLevel[bl][lam], rmLevels[lam]);
-      const ALevel *lev = g->GetLevel(rmLevels[lam]);
-      same(w + "E", blk.E(lam), lev->GetE());
+      const LevelInputs &in = cn.Inputs();
+      const int j = map.groupOfBlock[bl], la = rmLevels[lam];
+      same(w + "E", blk.E(lam), in.E(j, la));
       for (int k = 0; k < (int)blk.num_channels(); k++) {
-        same(w + "gamma", blk.gamma(lam, k), lev->GetGamma(k + 1));
-        same(w + "gamma row-major", blk.gamma()[lam * blk.num_channels() + k], lev->GetGamma(k + 1));
+        same(w + "gamma", blk.gamma(lam, k), in.Gamma(j, la, k + 1));
+        same(w + "gamma row-major", blk.gamma()[lam * blk.num_channels() + k], in.Gamma(j, la, k + 1));
       }
     }
   }

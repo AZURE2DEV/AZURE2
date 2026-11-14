@@ -38,8 +38,8 @@ int JGroup::IsLevel(ALevel level) const {
   int c = 0;
   double tol = 1e-3;
   while (!b && c < this->NumLevels()) {
-    if (this->GetLevel(c + 1)->GetE() - tol <= level.GetE() &&
-        level.GetE() <= this->GetLevel(c + 1)->GetE() + tol) b = true;
+    if (this->GetLevel(c + 1)->FileE() - tol <= level.FileE() &&
+        level.FileE() <= this->GetLevel(c + 1)->FileE() + tol) b = true;
     c++;
   }
   if (b)

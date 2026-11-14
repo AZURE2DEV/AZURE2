@@ -277,8 +277,8 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   double separationEnergy = entrancePair->GetSepE();
   double excitationEnergy = entrancePair->GetExE();
 
-  auto levelE = [](const ALevel *lv) { return lv->GetE(); };
-  auto levelGamma = [](const ALevel *lv, int ch) { return lv->GetGamma(ch); };
+  // The input values (CNuc::Inputs): the file's widths before TransformIn, the fit basis's amplitudes after it.
+  const LevelInputs &inputs = compound->Inputs();
 
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -295,13 +295,13 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       if (!level || !level->IsInRMatrix()) continue;
 
       // Get level energy (in compound excitation energy)
-      double levelExcitationEnergy = levelE(level);
+      double levelExcitationEnergy = inputs.E(j, l);
       auto levelEnergy = [&](const ALevel *) { return levelExcitationEnergy; };
 
       // Check if level has widths (Γ > 0) to be considered a resonance
       bool hasWidth = false;
       for (int ch = 1; ch <= numChannels; ch++) {
-        if (std::abs(levelGamma(level, ch)) > 1.0e-6) {
+        if (std::abs(inputs.Gamma(j, l, ch)) > 1.0e-6) {
           hasWidth = true;
           break;
         }
@@ -319,7 +319,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       // Gamma_p); leaving it out makes the resonance look far narrower than it
       // is in the extrapolated cross section.
       //
-      // GetGamma() returns the reduced width amplitude gamma (MeV^1/2) after
+      // The input width is the reduced width amplitude gamma (MeV^1/2) after
       // CNuc::TransformIn, so it is used directly -- NOT divided by 1e6.  That
       // 1e6 belongs to the pre-transformation convention (input widths in eV);
       // applying it here made every width 1e12 too small.  The particle sum is
@@ -328,7 +328,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       double totalWidth = 0.0;
       double normSum = 0.0;
       // Before the input transformation has run (which is the case whenever
-      // the data structures -- and so these grids -- are filled), GetGamma()
+      // the data structures -- and so these grids -- are filled), the input width
       // still holds the values as read: the observed partial width in eV for
       // an open particle channel, an ANC for a closed one, Gamma_gamma in eV
       // for a photon channel.  Those are the widths directly; running them
@@ -352,7 +352,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         for (int ch = 1; ch <= numChannels; ch++) {
           const AChannel *channel = jgroup->GetChannel(ch);
           const PPair *chPair = compound->GetPair(channel->GetPairNum());
-          double gamma = std::abs(levelGamma(level, ch));
+          double gamma = std::abs(inputs.Gamma(j, l, ch));
           if (gamma <= 0.0) continue;
           const bool isRWA = level->GammaIsRWA(ch);
           if (channel->GetRadType() == 'P') {
@@ -411,7 +411,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         // above a Coulomb threshold).
         ChannelFunc channelFunc(chPair, false);
         if (channelFunc.IsClosed(localEnergy)) continue;
-        double gamma = std::abs(levelGamma(level, ch));
+        double gamma = std::abs(inputs.Gamma(j, l, ch));
         if (gamma <= 0.0) continue;
         double radius = chPair->GetChRad();
         const int twoJ = chPair->SpinOrbitTwoJ(jgroup->GetJ());
@@ -439,7 +439,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         char radType = channel->GetRadType();
         if (radType != 'M' && radType != 'E') continue;
         const PPair *chPair = compound->GetPair(channel->GetPairNum());
-        double gamma = std::abs(levelGamma(level, ch));
+        double gamma = std::abs(inputs.Gamma(j, l, ch));
         if (gamma <= 0.0) continue;
         double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         double pene;
