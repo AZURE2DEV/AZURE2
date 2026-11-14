@@ -2,6 +2,59 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the Fit tab's loose ends
+
+**Done** (`docs/upgrade/web_ui.md` sections 11.6 and 11.7, the departures updated):
+
+- A sampler killed or interrupted by a restart continues from its chain as last saved (`Tracker.source_product`;
+  the result says `continued_from`); the sampler row follows a fit and a sampler, so the page offers
+  **sample (emcee)…** beside any sampler job.
+- The band's legend names its job and the job whose best point it is drawn around; when the text is an accepted best
+  point and the band drawn is around another, the Results tab offers the band jobs of the accepted job.
+- Each band job's result says which parameters it varied (`varied`, `free`): the Fit and Results tabs show them.
+- An engine LM or GSL-LM that ran MIGRAD in its place: the result has `fitter` (asked, ran) and `notices` (the
+  engine's log line), shown as a notice; the words and the errors' source name the fitter that ran.
+- `max_calls` on the LM rows: left as it was; the fitter table lacks a column saying which fitters honour a call
+  limit, and the engine prints no notice.
+
+**Verified**: `engine_jobs_test.py` (T2: LM asked, MIGRAD ran, the notice), `sampler_bands_test.py` (a killed
+sampler continued from its saved file, the old steps unchanged; the bands' `varied`), the node tests, the routes
+consistency and static tests; `OMP_NUM_THREADS=1 ctest -R pyazr_ui -j1` on `work/b-uithm`: 13 of 13 passed (229 s,
+the smoke test with headless Chrome among them; the full `ctest -LE slow` was run on the first commit only: this
+one changes `pyazr/ui` and its tests alone). A screenshot run on T2 and T3 over HTTP (`work/uithm/shoot_fit.py`).
+
+**Open**: a fitter column "honours a call limit"; an engine fit that ends at its call limit reports its start
+objective as the best objective in the result while the progress's best is lower (seen on T2 with LM falling back
+to MIGRAD, `max_calls` 40: result 10910.13 at the best point, progress best 7087.92).
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the web page's THM tab
+
+**Done** (`docs/upgrade/web_ui.md` section 11.8): the tab **THM**, listed when the project has THM content.
+Model options and experiments as forms of the form generator from a key table (`pyazr/ui/thm.py` `KEYS`, served at
+`GET /api/thm/keys`: the engine has no schema of `<thm>`, finding 27); each edit one project edit through the
+existing THM routes (Undo, refusals in the engine's words); add and remove an experiment, data sets that join it.
+The THM pairs (B) and channels (amplitude flag) read-only from the session (finding 11). The session's five THM calls
+served one-to-one (`POST /api/session/thm_*`, `Engine.thm_*`; they left `SESSION_NOT_SERVED`) and as rows of the
+physics table's shape (`THM_ROWS`, `tab: "thm"`), drawn with the Physics tab's code, now shared
+(`static/functionview.js`): fields with lines per channel and level, facts with units, tables, status per energy
+(an energy beyond the window's reach is a gap), CSV, Copy as Python. The distortion factor has a bound of 1000
+energies per request (17 ms each).
+
+**Verified** (base engine `work/b-trial63` with this worktree on `PYTHONPATH`, one thread): over HTTP on five THM
+projects (T2; `examples/f19_pag_thm`; two copies of `tests/18O_p_a_thm` with a coherent background and with a
+Coulomb distortion and the line shape; `examples/o18_lacognata2010` with the DW vertex) every number of every THM
+route and of what the tab shows equals the direct `Session` call (binary doubles); an option edit's χ² rows equal
+the program's `chiSquared.out` on the edited text; Undo returns the start χ² exactly (`work/uithm/walk_thm.py`).
+UI tests: `thm_routes_test.py` 8 passed (two injected errors shown failing), `routes_consistency`, `static`,
+`node` (58), `physics_tab`, `physics_routes`, the smoke test on T1 and T2 with the THM views (headless Chrome).
+`OMP_NUM_THREADS=1 ctest -LE slow -j1` on `work/b-uithm` (this worktree built, 0 warnings): 265 of 265 passed
+(2734 s, pinned to two CPUs).
+
+**Open**: the THM binding energy and amplitude flag need pyazr edits (finding 11); a schema of `<thm>` and the THM
+calls as rows of the session's description (findings 27, 28); the vertex legend repeats colours beyond eight lines
+(the palette) and draws coinciding lines (levels of one J group under `vertex=constant`, M2 and M2_qf in a delta
+window).
+
 ## 2026-11-14 (branch `feature/upgrade-7-tests-no-quiet-pipe`) — the shell tests: no pipe into a reader that leaves early
 
 **Done.** Under `set -o pipefail` a pipe into `grep -q`, `grep -m`, `head -n`, a `sed` with `q` or an `awk` with

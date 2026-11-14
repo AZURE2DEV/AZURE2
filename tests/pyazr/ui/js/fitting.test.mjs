@@ -162,6 +162,18 @@ test("followers of any method of a kind, offered only with what they take; the s
       result: { status: "finished", chain: "output/chain_s.npy" } };
     assert.deepEqual(names(sample).filter((n) => n.startsWith("bands")), ["bands/draws"]);
     assert.equal(f.follows({ follows: ["fit", null] }, fit), true);
+    // the sampler follows a fit and a sampler (its chain continues), whatever the sampler's state
+    assert.equal(f.follows({ follows: [["fit", null], ["sample", "emcee"]] }, { kind: "sample", method: "emcee" }),
+      true);
+    const killed = { id: "k", kind: "sample", method: "emcee", state: "killed", best: { objective: 1, x: {} } };
+    assert.ok(names(killed).includes("sample/emcee"), "a killed sampler is offered its continuation");
+    assert.ok(!names(killed).includes("bands/draws"), "no band from a chain the job's result lacks");
+    assert.equal(f.variedText({ varied: ["a"], free: ["a", "n"] }),
+      "a (1 of 2 free parameters; held at the start point: n)");
+    assert.equal(f.variedText({}), "");
+    const lm = f.resultView({ ...fit, result: { status: "converged", notices: ["falling back to MIGRAD."],
+      fitter: { asked: "lm", ran: "migrad" } } }, TABLE);
+    assert.deepEqual([lm.notices, lm.fitter.ran], [["falling back to MIGRAD."], "migrad"]);
     assert.equal(f.follows({ follows: ["fit", "engine_lm"] }, fit), false);
     assert.equal(f.STATES.finished.final, true);
     const rows = f.chainRows({ quantiles: { a: { "2.5": 1, "16": 2, "50": 3, "84": 4, "97.5": 5 } },

@@ -32,9 +32,8 @@ SESSION_NOT_SERVED = {
         "configure recalculate_external_capture "
         "refreeze_covariance nuclear_potential nuclear_potentials",
     "the server owns sessions: lifecycle": "close is_alive",
-    "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
-        "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
-        "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
+    "later steps of web_ui.md section 11 (the Nucleus and Physics tabs)":
+        "level_scheme nuclei mass_number basis ec_integrals prior_covariance_residuals prior_covariance_names "
         "datasets cache_stats output_dir",
 }
 
@@ -93,7 +92,7 @@ class Engine:
         """The session: its options and where each came from, free-vector length, data sets (in the engine's order) and parameters."""
         s = self.s
         return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.parameters.x0),
-                "datasets": self._datasets(),
+                "datasets": self._datasets(), "pairs": s.describe()["pairs"],
                 "parameters": self._parameters()}
 
     def _datasets(self):
@@ -273,12 +272,59 @@ class Engine:
         out = self.s.channel_functions(pair, np.asarray(e_cm, float), l, radius, J)
         return {k: np.asarray(v).tolist() for k, v in out.items()}
 
+    # -- the THM experiments (pyazr/session_thm.py); the routes' rows are pyazr/ui/thm.py's -------------------------
+
+    def thm_experiments(self, x):
+        """Every THM experiment as a chi-squared evaluation at x profiles it (``Session.thm_experiments``): by name,
+        its data sets, background, points, chi2, status, norm, background coefficients b, their covariance and sigma,
+        and the coherent background's parameters (cbkg) by name."""
+        return _tree(self.s.thm_experiments(np.asarray(x, float)))
+
+    def thm_background(self, experiment, x):
+        """The shared norm and background of one THM experiment at x (``Session.thm_background``)."""
+        return _tree(self.s.thm_background(experiment, np.asarray(x, float)))
+
+    def thm_lineshape(self, experiment, energies, x):
+        """The Coulomb line shape of a THM experiment at c.m. energies (MeV) of x + A, the level poles of x
+        (``Session.thm_lineshape``); at most :data:`pyazr.ui.physics.MAX_ELEMENTS` energies."""
+        return _tree(self.s.thm_lineshape(experiment, _energies(energies, "thm_lineshape"), np.asarray(x, float)))
+
+    def thm_vertex(self, experiment, energies, x):
+        """The THM entrance vertex of an experiment at c.m. energies (MeV) of x + A, the vertex boundaries of x
+        (``Session.thm_vertex``; energies beyond the window's reach are marked in ``reached`` and warned of)."""
+        return _tree(self.s.thm_vertex(experiment, _energies(energies, "thm_vertex"), np.asarray(x, float)))
+
+    def thm_distortion(self, experiment, energies):
+        """The distortion factor R(E) of a THM experiment at c.m. energies (MeV) of x + A
+        (``Session.thm_distortion``; it does not depend on the R-matrix parameters)."""
+        return _tree(self.s.thm_distortion(experiment, _energies(energies, "thm_distortion")))
+
     def snapshot(self, path, x):
         """The project's text with the values of x written into it (``save_fit``: level values, the free nuisances
         into their records; the result read back and checked), written to ``path``; returns the text."""
         written, _ = self.s.save_fit(path, np.asarray(x, float), param_sav=False)
         with open(written, "rb") as f:
             return f.read().decode("utf-8", "surrogateescape")
+
+
+def _energies(energies, what):
+    from .physics import check_size
+    check_size(np.shape(energies), what, "split the energies over several requests")
+    return np.asarray(energies, float)
+
+
+def _tree(value):
+    """Plain data of a nested answer: dicts, lists, numbers and texts (numpy arrays and scalars as lists and
+    numbers)."""
+    if isinstance(value, dict):
+        return {str(k): _tree(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_tree(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return _tree(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 
 def _dataset_info(d):
@@ -376,7 +422,8 @@ def linear_sigma(e, x, covariance, names):
     """The 1-sigma of the model of every active data set and extrapolation at x from a fit's covariance over the free
     vector ``names`` (``pyazr.bands.uncertainty_bands``: sigma^2 = g^T C g with the engine's sensitivities g, over
     the columns a band spans, ``pyazr.bands.rmatrix_columns``: the nuisances do not enter).  ``(data sets,
-    extrapolations)``: lists of arrays in the order of :func:`band_points`."""
+    extrapolations, the names of the parameters the band varied)``: lists of arrays in the order of
+    :func:`band_points`."""
     from pyazr import bands
     free = e._free_names()
     if list(names) != free:
@@ -395,7 +442,7 @@ def linear_sigma(e, x, covariance, names):
         grids = bands.uncertainty_bands(e._extrapolations(), segments=list(range(n_grids)), params=x[cols],
                                         covariance=block)
         out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
-    return out_data, out_grids
+    return out_data, out_grids, [free[c] for c in cols]
 
 
 def _read_chi_squared(path):

@@ -24,7 +24,8 @@ const several = "several values separated by blanks give one line each";
 
 /**
  * The kinds of argument: per kind, the field of the form (a value type of forms.js's WIDGETS) and how its text becomes
- * the values of a request (a list: one line per value).  `ctx.pairs`: the project's pairs ({key, label}).
+ * the values of a request (a list: one line per value).  `ctx.pairs`: the project's pairs ({key, label});
+ * `ctx.experiments`: the names of the project's THM experiments.
  */
 export const ARGUMENT_KINDS = {
   real: { field: (a) => ({ type: "number_list", doc: `${a.doc} (${a.domain}); ${several}` }),
@@ -42,6 +43,8 @@ export const ARGUMENT_KINDS = {
   pair: { field: (a, ctx) => ({ type: "enum", values: (ctx.pairs || []).map((p) => ({ value: String(p.key),
     label: `${p.key}: ${p.label}` })) }),
   values: (t) => tokenize(t).map(numberOrText) },
+  experiment: { field: (a, ctx) => ({ type: "enum", values: ctx.experiments || [] }),
+    values: (t) => [String(t ?? "").trim()].filter((v) => v !== "") },
 };
 
 /** The arguments a plot may run over: those with a sweep (the row's axis first). */
@@ -60,10 +63,12 @@ export function startTexts(row, axis, ctx = {}) {
   for (const a of row.arguments) {
     if (a.name === axis) continue;
     if (a.kind === "pair") texts[a.name] = String((ctx.pairs || [])[0]?.key ?? "");
+    else if (a.kind === "experiment") texts[a.name] = (ctx.experiments || [])[0] ?? "";
     else if (a.default !== null && a.default !== undefined) {
       texts[a.name] = a.kind === "flag" ? (a.default ? "1" : "0") : numberText(a.default);
     } else texts[a.name] = numberText(a.example);
   }
+  if (!axis) return texts;  // a row answered as a table: no axis
   const w = argOf(row, axis)?.sweep || { lower: "", upper: "", spacing: "linear" };
   texts[axis] = `${numberText(w.lower)} ${numberText(w.upper)}`;
   texts[POINTS] = String(DEFAULT_POINTS);
@@ -81,8 +86,9 @@ export function formSchema(row, axis, ctx = {}) {
         units: a.unit ? [a.unit] : [],
         doc: `${a.doc} (${a.domain}): the plot's horizontal axis, from and to`, required: true };
       if (!isInteger(a)) {
+        const bound = row.max_elements ?? MAX_ELEMENTS;
         fields[POINTS] = { type: "integer", title: "points",
-          doc: `points of the axis; at most ${MAX_ELEMENTS} elements per request (points × lines)` };
+          doc: `points of the axis; at most ${bound} elements per request (points × lines)` };
       }
       fields[SPACING] = { type: "enum", title: "spacing", values: isInteger(a) ? ["integer"] : ["linear", "log"],
         doc: "linear, log (from and to > 0), or every whole number from to to" };
@@ -123,12 +129,13 @@ export function requestOf(row, axis, texts) {
     else lists.push({ name: a.name, values });
   }
   lists.forEach((l, j) => { args[l.name] = l.values.map((v) => nest(v, lists.length - j)); });
+  const lines = combinations(lists);
+  const error = lines.length > MAX_LINES ? `${lines.length} lines: at most ${MAX_LINES} in one plot` : "";
+  if (!axis) return { arguments: args, axis, lines, dims: lists.map((l) => l.name), error };
   const [from, to] = tokenize(texts[axis] ?? "");
   const spacing = texts[SPACING] || "linear";
   args[axis] = { from: numberOrText(from ?? ""), to: numberOrText(to ?? ""), spacing };
   if (spacing !== "integer") args[axis].points = numberOrText(texts[POINTS] ?? "");
-  const lines = combinations(lists);
-  const error = lines.length > MAX_LINES ? `${lines.length} lines: at most ${MAX_LINES} in one plot` : "";
   return { arguments: args, axis, lines, dims: lists.map((l) => l.name), error };
 }
 
@@ -161,10 +168,11 @@ export function statusLine(answer) {
 }
 
 /** The units of the returned fields in the order of the row, each with its fields: [{unit, fields}]. */
-export function unitGroups(row, shown) {
+export function unitGroups(row, shown, answer = null) {
   const out = [];
   for (const r of row.returns) {
     if (shown && !shown.has(r.name)) continue;
+    if (answer && answer.returns?.[r.name] === undefined) continue;  // a field this answer does not have
     let g = out.find((x) => x.unit === r.unit);
     if (!g) out.push(g = { unit: r.unit, fields: [] });
     g.fields.push(r.name);
@@ -172,26 +180,34 @@ export function unitGroups(row, shown) {
   return out;
 }
 
+/** The lines of a returned field: its own (answer.lines[field], a field over channels or levels, its values one
+ * list per line) or the request's (several values of an argument). */
+export function linesOf(answer, request, field) {
+  const own = answer.lines?.[field];
+  if (own) return own.map((label) => ({ label, values: {} }));
+  return request.lines.length ? request.lines : [{ label: "", values: {} }];
+}
+
 /**
  * The plots of an answer: one per unit of the fields shown, one trace per field and line; an element whose status is
- * not 0 is null (a gap), never a number.  `view`: {shown (Set of fields), logx, logy}; `request`: requestOf's.
+ * not 0 is null (a gap), never a number (a field with lines of its own has one status per point of the axis).
+ * `view`: {shown (Set of fields), logx, logy}; `request`: requestOf's.
  */
 export function physicsPlots(row, answer, request, view = {}) {
   const status = flat(answer.status);
   const x = flat(answer.arguments[request.axis] ?? []);
   const n = x.length;
   const axisArg = argOf(row, request.axis) || { name: request.axis, unit: "" };
-  const lines = request.lines.length ? request.lines : [{ label: "", values: {} }];
   const gaps = status.filter((c) => c !== 0).length;
-  const plots = unitGroups(row, view.shown).map((g) => {
+  const plots = unitGroups(row, view.shown, answer).map((g) => {
     const traces = [];
     g.fields.forEach((f) => {
       const y = flat(answer.returns[f]);
-      lines.forEach((line, li) => {
+      linesOf(answer, request, f).forEach((line, li) => {
         const ys = [];
         for (let t = 0; t < n; t += 1) {
           const k = li * n + t;
-          ys.push(status[k] === 0 ? plotted(y[k]) : null);
+          ys.push(status[k % status.length] === 0 ? plotted(y[k]) : null);
         }
         traces.push({ role: "line", name: line.label ? `${f}, ${line.label}` : f, x, y: ys,
           color: seriesStyle(traces.length).color });
@@ -232,9 +248,11 @@ function unravel(k, shape) {
 
 /** The CSV of an answer: one line per element, the arguments at it, every returned field (17 significant digits,
  * "nan" where not computed) and the status; units in the header.  `notes`: lines written first, each after "# ". */
+const quote = (s) => (/[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : String(s));
+const head = (name, unit) => (unit ? `${name} (${unit})` : name);
+
 export function answerCsv(row, answer, notes = []) {
-  const quote = (s) => (/[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : String(s));
-  const head = (name, unit) => (unit ? `${name} (${unit})` : name);
+  if (answer.lines) return linesCsv(row, answer, notes);
   const columns = [...row.arguments.map((a) => head(a.name, a.unit)),
     ...row.returns.map((r) => head(r.name, r.unit)), "status"];
   const shape = answer.shape || [];
@@ -250,8 +268,41 @@ export function answerCsv(row, answer, notes = []) {
   return `${out.join("\n")}\n`;
 }
 
+/** The CSV of an answer whose fields have lines of their own: one line per point of the axis, the arguments of one
+ * value, then every field (a field with lines: a column per line, named by its label) and the status. */
+function linesCsv(row, answer, notes) {
+  const one = row.arguments.filter((a) => a.name !== row.axis);
+  const x = flat(answer.arguments[row.axis] ?? []);
+  const columns = [head(row.axis, row.arguments.find((a) => a.name === row.axis)?.unit),
+    ...one.map((a) => head(a.name, a.unit))];
+  const cells = [];  // per column: (t) -> value
+  for (const r of row.returns) {
+    const v = answer.returns[r.name];
+    if (v === undefined) continue;
+    const labels = answer.lines[r.name];
+    if (labels) {
+      labels.forEach((label, li) => {
+        columns.push(head(`${r.name} [${label}]`, r.unit));
+        cells.push((t) => v[li][t]);
+      });
+    } else { columns.push(head(r.name, r.unit)); cells.push((t) => v[t]); }
+  }
+  columns.push("status");
+  const status = flat(answer.status);
+  const out = [...notes.map((t) => `# ${t}`), columns.map(quote).join(",")];
+  for (let t = 0; t < x.length; t += 1) {
+    const values = [x[t], ...one.map((a) => answer.arguments[a.name]), ...cells.map((c) => c(t)), status[t]];
+    out.push(values.map((v) => quote(csvNumber(v === null ? "" : v))).join(","));
+  }
+  return `${out.join("\n")}\n`;
+}
+
 /** The view of a row from hash parameters: texts (v.<argument>), axis, the fields shown, logx, logy, table. */
 export function applyParams(row, state, params, ctx = {}) {
+  for (const [k, v] of Object.entries(params)) {
+    if (k.startsWith("v.") && argOf(row, k.slice(2))) state.texts[k.slice(2)] = v;
+  }
+  if (!state.axis) return state;  // a row answered as a table
   const axes = axisChoices(row).map((a) => a.name);
   if (params.axis && axes.includes(params.axis) && params.axis !== state.axis) {
     state.axis = params.axis;
@@ -280,7 +331,8 @@ export function applyParams(row, state, params, ctx = {}) {
 export function newState(row, ctx = {}) {
   const axis = axisChoices(row)[0]?.name || row.axis;
   const w = argOf(row, axis)?.sweep;
-  return { axis, texts: startTexts(row, axis, ctx), shown: new Set(row.returns.map((r) => r.name)),
+  const first = row.returns.filter((r) => r.shown !== false);  // a row may leave secondary fields off at first
+  return { axis, texts: startTexts(row, axis, ctx), shown: new Set(first.map((r) => r.name)),
     logx: w?.spacing === "log", logy: false, table: false };
 }
 

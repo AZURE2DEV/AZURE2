@@ -94,6 +94,14 @@ class Tracker:
         os.makedirs(self.products, exist_ok=True)
         return os.path.join(self.products, f"{name}_{self.job_id}{suffix}")
 
+    def source_product(self, name, suffix):
+        """The path of the file ``name`` the source job wrote (its :meth:`product`), or None where it wrote none: a
+        job killed or interrupted (a server restart) has no result, but its files as last saved."""
+        if not self.source:
+            return None
+        path = os.path.join(self.products, f"{name}_{self.source['id']}{suffix}")
+        return path if os.path.isfile(path) else None
+
     def value(self, x):
         return self(x)[0]
 
@@ -174,6 +182,11 @@ def _covariance_by_name(names, matrix):
 ENGINE_STATES = {"converged": "converged", "stopped": "stopped"}
 
 
+# The fitter the engine runs in place of a least-squares fitter where a data set has no analytic Jacobian (the row of
+# the engine's fitter table it runs: FitLeastSquares.cpp falls back to MIGRAD).
+FALLBACK_FITTER = "migrad"
+
+
 def fit_engine(tracker, x0, settings, names, *, method, minos=None):
     """The engine's fitter ``method`` (``Session.fit_with_engine``, the program's fit) from x0: each progress record
     counted into the tracker (the calls of the fit, then of HESSE and MINOS, counted on), the tracker's stop request
@@ -197,14 +210,21 @@ def fit_engine(tracker, x0, settings, names, *, method, minos=None):
     print(r["log"], flush=True)
     tracker.first = float(objective_of(tracker.session)(x0))
     tracker.best, tracker.best_x = r["objective"], np.array([r["x"][n] for n in names], float)
-    words = f"the engine's {r['method']}: {r['status']}"
+    ran = FALLBACK_FITTER if r["fell_back_to_migrad"] else r["method"]
+    words = f"the engine's {ran}: {r['status']}"
+    extra = {"engine_status": r["status"], "valid": r["converged"], "edm": r["edm"], "fit_calls": r["calls"],
+             "fitter": {"asked": r["method"], "ran": ran}, "notices": []}
     if r["fell_back_to_migrad"]:
-        words += " (no analytic Jacobian for a data set: it ran MIGRAD, without HESSE or MINOS)"
-    extra = {"engine_status": r["status"], "valid": r["converged"], "edm": r["edm"], "fit_calls": r["calls"]}
+        # the engine's own line in the fitter's log, as a notice of the result
+        said = [line.strip() for line in r["log"].splitlines() if "falling back" in line.lower()]
+        extra["notices"] = said or [f"the engine's {r['method']} ran {FALLBACK_FITTER} in its place"]
+        words += (f" ({FALLBACK_FITTER} in place of {r['method']}: no analytic Jacobian for a data set; no HESSE, "
+                  "no MINOS)")
     if r["covariance"] is not None:
         extra.update(_covariance_by_name(r["names"], r["covariance"]), errors=r["errors"],
                      errors_from="HESSE after the engine's MIGRAD" if r["covariance_from_hesse"]
-                     else "the engine's (J^T J + priors)^-1")
+                     else f"the covariance of the {FALLBACK_FITTER} that ran in place of {r['method']}"
+                     if r["fell_back_to_migrad"] else "the engine's (J^T J + priors)^-1")
     if r["minos"]:
         extra["minos"] = {n: {"lower": lo, "upper": hi, "valid": None} for n, (lo, hi) in r["minos"].items()}
     return ENGINE_STATES.get(r["status"], "ended"), words, extra
@@ -302,7 +322,9 @@ def sample_emcee(tracker, x0, settings, names):
         return f.log_prob(x)
 
     previous = None
-    chain_of_source = ((tracker.source or {}).get("result") or {}).get("chain")
+    # the source's chain: its result's, or the file a killed or interrupted sampler saved last (every SAVE_EVERY)
+    chain_of_source = ((tracker.source or {}).get("result") or {}).get("chain") or tracker.source_product("chain",
+                                                                                                          ".npy")
     if chain_of_source:
         previous = np.load(chain_of_source)
         if previous.shape[2] != ndim:
@@ -342,7 +364,8 @@ def sample_emcee(tracker, x0, settings, names):
     discard = chain.shape[0] // 2 if settings["discard"] is None else min(settings["discard"], chain.shape[0] - 1)
     summary = chain_summary(chain, names, discard)
     summary.update(chain=chain_path, acceptance=float(np.mean(sampler.acceptance_fraction)), thin=settings["thin"],
-                   continues=None if previous is None else tracker.source["id"])
+                   continues=None if previous is None else tracker.source["id"],
+                   continued_from=None if previous is None else chain_of_source)
     write_checkpoint(summary_path, plain_json(dict(summary, names=list(names))))
     summary["summary"] = summary_path
     taus = [t for t in summary["tau"].values() if np.isfinite(t) and t > 0]
@@ -373,7 +396,7 @@ def bands_covariance(tracker, x0, settings, names):
     from .engine import band_points, linear_sigma
     cov = tracker.source["result"]["covariance"]
     points = band_points(tracker.session, x0)
-    sigma_data, sigma_grids = linear_sigma(tracker.session, x0, cov["matrix"], cov["names"])
+    sigma_data, sigma_grids, varied = linear_sigma(tracker.session, x0, cov["matrix"], cov["names"])
     every = points["datasets"] + points["extrapolations"]
     values = [np.asarray(p["model"]) for p in every]
     sigma = sigma_data + sigma_grids
@@ -382,7 +405,8 @@ def bands_covariance(tracker, x0, settings, names):
            "sigma^2 = g^T C g over the level parameters (pyazr.bands)")
     bands = _band_entries(every, values, [v - s_ for v, s_ in zip(values, sigma)],
                           [v + s_ for v, s_ in zip(values, sigma)], how)
-    return "finished", how, {"bands": bands, "source": tracker.source["id"]}
+    return "finished", how, {"bands": bands, "source": tracker.source["id"], "varied": varied,
+                             "free": list(names)}
 
 
 def bands_draws(tracker, x0, settings, names):
@@ -412,7 +436,7 @@ def bands_draws(tracker, x0, settings, names):
     how = (f"from {len(xs)} draws of the chain of job {tracker.source['id']} after its burn-in of "
            f"{result['discard']} steps: the 16th, 50th and 84th percentiles of the model at each point")
     return "finished", how, {"bands": _band_entries(every, middle, lower, upper, how), "source": tracker.source["id"],
-                             "draws": len(xs)}
+                             "draws": len(xs), "varied": list(names), "free": list(names)}
 
 
 # -- settings: their types and the conversion of a request's value ------------------------------------------------
@@ -476,10 +500,11 @@ class JobRow:
     """One kind of job: ``kind`` and ``method`` name it; ``run`` its function ``(tracker, x0, settings, names) ->
     (state, message, extra)``, or ``missing`` the pyazr call it waits for; ``needs`` the package it imports;
     ``settings`` its :class:`Setting` rows; ``follows`` the (kind, method) of the job whose best point it starts from
-    (the page offers it beside that job's result; method None: any job of that kind); ``takes`` the key of that job's
-    result it needs (a covariance, a chain: the job is refused without one, and offered only beside a result that has
-    it); ``facts`` what the page shows of it beside its doc (name -> value: the program's switch, whether it gives a
-    covariance, whether MINOS can follow)."""
+    (the page offers it beside that job's result; method None: any job of that kind), or a tuple of such pairs;
+    ``takes`` the key of that job's result it needs (a covariance, a chain: the job is refused without one, and offered
+    only beside a result that has it); ``facts`` what the page shows of it beside its doc (name -> value: the program's
+    switch, whether it gives a covariance, whether MINOS can follow).
+    """
     kind: str
     method: str
     doc: str
@@ -518,7 +543,7 @@ JOBS = (
                              "(empty: iminuit's default)"))),
     JobRow("sample", "emcee", "emcee's ensemble sampler on the log-probability (-0.5 objective, zero outside the fit's "
            "limits): walkers around the start point, or a sampler job's chain continued; one process",
-           run=sample_emcee, needs="emcee", follows=("fit", None),
+           run=sample_emcee, needs="emcee", follows=(("fit", None), ("sample", "emcee")),
            settings=(Setting("walkers", "integer", None, "the walkers (empty: twice the free parameters plus two)"),
                      Setting("steps", "integer", 1000, "the stored steps of the chain"),
                      Setting("spread", "number", 1e-3, "the start walkers' spread around the start point, relative to "
@@ -590,9 +615,16 @@ def job_table():
         settings = [{"name": x.name, "type": x.type, "default": x.default, "doc": x.doc,
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
-                    "available": available, "missing": r.missing, "follows": list(r.follows) if r.follows else None,
+                    "available": available, "missing": r.missing, "follows": _follows(r.follows),
                     "takes": r.takes, "facts": dict(r.facts)})
     return out
+
+
+def _follows(follows):
+    """A row's ``follows`` as data: [kind, method], or a list of such pairs (None where it follows no job)."""
+    if not follows:
+        return None
+    return [list(p) for p in follows] if isinstance(follows[0], tuple) else list(follows)
 
 
 def merged_settings(row, given):

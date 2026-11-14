@@ -38,7 +38,8 @@ CHROME = os.environ.get("CHROME") or next((shutil.which(n) for n in ("google-chr
 QUIET_PROFILE = ("--disable-extensions", "--disable-component-update", "--disable-background-networking")
 VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
          "physics", ("physics-masked", "physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3"
-                     "&fields=F,G"), ("physics-stopping", "physics/stopping_power?logy=1"), "thm")
+                     "&fields=F,G"), ("physics-stopping", "physics/stopping_power?logy=1"), "thm",
+         ("thm-vertex", "thm?fn=thm_vertex"))
 
 
 def extra_projects():
@@ -143,7 +144,17 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert "plotly" in drawn and "table" in drawn, result["steps"]
             assert result["plotly"], "plotly.js did not load"
         for step in result["steps"]:
-            assert not step["errorBoxes"], step
+            # a THM diagnostic the experiment does not have (no line shape, no distortion) is the engine's refusal
+            refused = step["route"].startswith("#/thm?fn=") and all("(422)" in b for b in step["errorBoxes"])
+            assert not step["errorBoxes"] or refused, step
+        # the THM tab: listed exactly where the project has THM content; its diagnostics drew their answers
+        thm = [s for s in result["steps"] if s["route"].startswith("#/thm")]
+        listed = thm[0]["tabListed"]
+        assert listed == (label != "T1") or label not in ("T1", "T2"), thm[0]
+        if listed:
+            assert len(thm) > 1 and thm[0]["tables"] >= 1, thm
+            vertex = next(s for s in thm if "fn=thm_vertex" in s["route"])
+            assert vertex["physics"] and vertex["physics"]["computed"] > 0 and vertex["plot"], vertex
         # the Physics tab: every view drew its plot from the route's answer with the status line and the pyazr call;
         # the Coulomb function asked on rho from -2 has elements outside its domain, counted and shown as gaps
         physics = {s["route"]: s["physics"] for s in result["steps"] if s["route"].startswith("#/physics")}

@@ -193,6 +193,12 @@ does not need the user's live state uses pyazr directly.
 
 - `engine.py` is the only file that names the class `Session`. Every public method of `Session` is either called
   there or listed in `SESSION_NOT_SERVED` with a reason.
+- **A diagnostic of the session on a tab** (as the THM tab's): an operation `Engine.<call>` returning plain data
+  (`engine.py`), a session route row (`routes.py`), a row of the physics table's shape with `tab` naming the tab
+  (`THM_ROWS` in `thm.py`; arguments of a kind `ARGUMENT_KINDS` of `static/physicsform.js` knows, returns with
+  units and `lines`, `facts`), and its function in `ANSWERS` that turns the adapter's answer into fields, lines,
+  status, facts and tables; the tab draws it with `static/functionview.js`.  Test it against the direct call in
+  `tests/pyazr/ui/thm_routes_test.py`.  A key of `<thm>` is an entry of `KEYS` (`thm.py`).
 - A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`.
 - **A job kind or a recipe** (a new fitter, MINOS of another library, a sampler): a function `(tracker, x0, settings,
   names) -> (status, message, extra)` in `jobs.py` that calls `tracker.value` / `tracker.grad` (or `tracker(x)` for
