@@ -17,9 +17,9 @@ namespace phys = azure2::physics;
 
 namespace {
 // AZURELabel takes non-const pointers (include/ParameterLabel.h); it only reads them.
-std::string LevelLabel(const CNuc &compound, int j, int la) {
+std::string LevelLabel(const CNuc &compound, const LevelInputs &inputs, int j, int la) {
   const JGroup *group = const_cast<CNuc &>(compound).GetJGroup(j);
-  return AZURELabel::Level(group, compound.Inputs().E(j, la), j, la);
+  return AZURELabel::Level(group, inputs.E(j, la), j, la);
 }
 std::string ChannelLabel(const CNuc &compound, int j, int ch) {
   CNuc &c = const_cast<CNuc &>(compound);
@@ -27,7 +27,7 @@ std::string ChannelLabel(const CNuc &compound, int j, int ch) {
 }
 }  // namespace
 
-void WarnInputColumn(const CNuc &compound, const Config &configure, int j, int la, int ch, phys::ColumnNote note,
+void WarnInputColumn(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch, phys::ColumnNote note,
                      double input) {
   const JGroup *group = compound.GetJGroup(j);
   const ALevel *level = group->GetLevel(la);
@@ -36,14 +36,14 @@ void WarnInputColumn(const CNuc &compound, const Config &configure, int j, int l
     case phys::ColumnNote::AmplitudeFlagIgnored:
       configure.outStream << "WARNING: Reduced width amplitude input flag is only "
                           << "supported for particle channels; ignored for J = "
-                          << group->GetJ() << " E = " << compound.Inputs().E(j, la)
+                          << group->GetJ() << " E = " << inputs.E(j, la)
                           << " MeV channel " << ch << "." << std::endl;
       break;
     case phys::ColumnNote::ZeroPenetrability: {
       const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
-      configure.outStream << "**WARNING: " << LevelLabel(compound, j, la)
+      configure.outStream << "**WARNING: " << LevelLabel(compound, inputs, j, la)
                           << ", " << ChannelLabel(compound, j, ch)
-                          << ": the level is " << compound.Inputs().E(j, la) - pair->GetSepE() - pair->GetExE()
+                          << ": the level is " << inputs.E(j, la) - pair->GetSepE() - pair->GetExE()
                           << " MeV above the channel threshold, where P = 0 in double precision, "
                           << "so its observed width of " << input
                           << " eV cannot be converted; the reduced width is set to 0. "
@@ -52,7 +52,7 @@ void WarnInputColumn(const CNuc &compound, const Config &configure, int j, int l
       break;
     }
     case phys::ColumnNote::AtThreshold:
-      configure.outStream << "**WARNING: " << LevelLabel(compound, j, la)
+      configure.outStream << "**WARNING: " << LevelLabel(compound, inputs, j, la)
                           << ", " << ChannelLabel(compound, j, ch)
                           << ": the level sits exactly at the channel threshold, where an ANC "
                           << "does not define a reduced width; the reduced width is set to 0. "
@@ -62,7 +62,7 @@ void WarnInputColumn(const CNuc &compound, const Config &configure, int j, int l
   }
 }
 
-void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j, int la,
+void WarnObservedOutOfReach(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la,
                             const phys::BasisAmplitudes &amp, const phys::ProjectLevels &in, std::size_t lb,
                             std::size_t nc) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
@@ -75,7 +75,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
     // ordinary point of the parameter space, with nothing in the level matrix to stop it.
     configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
                         << " is not positive" << std::endl
-                        << "    " << LevelLabel(compound, j, la) << std::endl
+                        << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                         << "  The widths of this level exceed what the channel radii allow; no"
                         << std::endl
                         << "  standard R-matrix (real reduced widths) corresponds to it."
@@ -87,7 +87,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
     // amplitude read as a width), so name the channel and the numbers.
     configure.outStream << "**WARNING: Denominator less than zero while transforming"
                         << std::endl
-                        << "    " << LevelLabel(compound, j, la) << std::endl
+                        << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                         << "  No reduced width reproduces these observed widths: "
                         << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << halfDenom << " < 0."
                         << std::endl;
@@ -99,7 +99,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
     if (worst > 0) {
       const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + worst - 1];
       const PPair *pair = compound.GetPair(group->GetChannel(worst)->GetPairNum());
-      bool bound = compound.Inputs().E(j, la) - pair->GetSepE() - pair->GetExE() <= 0.0;
+      bool bound = inputs.E(j, la) - pair->GetSepE() - pair->GetExE() <= 0.0;
       configure.outStream << "  Largest term: " << ChannelLabel(compound, j, worst)
                           << (bound ? " (bound; ANC input)" : "")
                           << ": input " << in.value[lb * nc + worst - 1]
@@ -124,40 +124,40 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
   }
 }
 
-void WarnExternalExceedsTotal(const CNuc &compound, const Config &configure, int j, int la, int ch) {
-  CNuc &c = const_cast<CNuc &>(compound);  // AZURELabel only reads it
-  const JGroup *group = c.GetJGroup(j);
+void WarnExternalExceedsTotal(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, int ch) {
+  const JGroup *group = compound.GetJGroup(j);
   configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
                       << "than the total width" << std::endl
                       << "    "
-                      << AZURELabel::LevelAndChannel(&c, group, j, la, ch)
+                      << AZURELabel::LevelAndChannel(&compound, inputs, group, j, la, ch)
                       << std::endl
                       << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
                       << std::endl;
 }
 
-void WarnParkNormNotPositive(const CNuc &compound, const Config &configure, int j, int la) {
-  configure.outStream << "**WARNING: Park norm J = " << compound.State().ParkNorm(j, la)
+void WarnParkNormNotPositive(const CNuc &compound, const LevelState &state, const LevelInputs &inputs,
+                             const Config &configure, int j, int la) {
+  configure.outStream << "**WARNING: Park norm J = " << state.ParkNorm(j, la)
                       << " is not positive" << std::endl
-                      << "    " << LevelLabel(compound, j, la) << std::endl
+                      << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                       << "  The widths of this level exceed what the channel radii allow; no"
                       << std::endl
                       << "  standard R-matrix (real reduced widths) corresponds to it."
                       << std::endl;
 }
 
-void WarnFormalToBrune(const CNuc &compound, const Config &configure, int j, int la, const phys::LevelSet &out,
+void WarnFormalToBrune(const CNuc &compound, const LevelInputs &inputs, const Config &configure, int j, int la, const phys::LevelSet &out,
                        std::size_t lb, std::size_t nc, const phys::FormalToBruneOptions &options) {
   if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
     configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
-                        << "    " << LevelLabel(compound, j, la) << std::endl
+                        << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                         << "  The input energy and widths are kept for this level; its "
                         << "transformed values are unreliable." << std::endl;
   } else if (out.status[lb] == phys::LevelSet::Status::Bracketed) {
     // The fixed point repels (e' < -1): the root of E - e(E) by bisection (level_parameters.md section 10).
     configure.outStream << "**NOTE: Level transformed by a bracketed root (the iteration does not converge here)"
                         << std::endl
-                        << "    " << LevelLabel(compound, j, la) << std::endl
+                        << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                         << "  Energy residual " << out.residual_MeV[lb] << " MeV (" << out.iterations[lb]
                         << " iterations and evaluations of E - e(E))." << std::endl;
   } else if (out.status[lb] == phys::LevelSet::Status::NotConverged) {
@@ -173,7 +173,7 @@ void WarnFormalToBrune(const CNuc &compound, const Config &configure, int j, int
       }
     configure.outStream << "**WARNING: Could not transform level after "
                         << options.max_iterations << " iterations" << std::endl
-                        << "    " << LevelLabel(compound, j, la) << std::endl
+                        << "    " << LevelLabel(compound, inputs, j, la) << std::endl
                         << "  Energy residual " << out.residual_MeV[lb]
                         << " MeV, tolerance " << options.energy_tolerance_MeV << " MeV." << std::endl;
     if (worstChannel > 0)

@@ -14,7 +14,7 @@ std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rw
   lc->FillCompoundFromParams(full);
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
   std::vector<ModelDatumValue> out;
-  for (const ModelData::Value &v : ModelData::SectionValues(lc, configure(), lc->GetModelData())) {
+  for (const ModelData::Value &v : ModelData::SectionValues(lc, lc->MutableState(), lc->Inputs(), configure(), lc->GetModelData())) {
     const azure2::experiment::ModelDatum &d = *v.datum;
     ModelDatumValue r;
     r.name = d.name;

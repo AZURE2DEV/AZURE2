@@ -163,7 +163,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
   CNuc &cn = m.compound;
   const long before = compared;
   const int failuresBefore = failures;
-  CNucSystem built = BuildSystemFromCNuc(cn, m.cfg);
+  CNucSystem built = BuildSystemFromCNuc(cn, cn.Inputs(), m.cfg);
   const phys::System &sys = built.system;
   const CNucSystemMap &map = built.map;
 
@@ -307,7 +307,7 @@ int main(int argc, char **argv) {
     bool threw = false;
     if (Load(m, argv[1], Basis::Brune, false)) {
       try {
-        BuildSystemFromCNuc(m.compound, m.cfg);
+        BuildSystemFromCNuc(m.compound, m.compound.Inputs(), m.cfg);
       } catch (const std::runtime_error &) {
         threw = true;
       }

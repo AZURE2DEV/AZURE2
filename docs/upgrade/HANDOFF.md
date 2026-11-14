@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-readers-owners`) — the readers take the level state
+
+**A mergeable half** of the end of `CNuc`'s copies: the readers take the state; the owners do not hold their own yet
+(the compound's copies, `Clone` and the pools stay).
+
+**Measured first** (start 395350e1): `CNuc::State()` 88 calls outside `CNuc*.cpp` in 15 files, `CNuc::Inputs()` 32 uses
+in `CNuc.cpp` and 30 outside in 13 files (per file in `cnuc_split.md` §12.3, "Step 4 as built, third part").
+
+**Done** (first commit; the second is the documents):
+- Every reader of an evaluation's values takes the `LevelState` it reads (compound, state, inputs): `AMatrixFunc`,
+  `RMatrixFunc`, `THMMatrixFunc` hold the state they are solved at (`GenMatrixFunc::state()`), and through them the
+  task scratch, the energy and point passes, `ModelPass`, the gradient passes (`GradEnergyTasks`, `AZUREGrad`,
+  `ThmCotangents`), `Objective` (`ObjectiveContext::state`, `inputs`), `ModelData`, `ScatteringLength`, the
+  `gamma_decay` readers, `ThmLineshape`/`ThmReports`, the energy-shift hand-over and `ReplaceSubPointGrids`,
+  `AdaptiveExtrapolation`, `WriteParametersOut`. The readers of the input values take the `LevelInputs`: labels
+  (`ParameterLabel`, now `const CNuc *`), messages, checks, `AdaptiveIntegrationGrid`/`MeshAnchorsOf`,
+  `BuildSystemFromCNuc`.
+- `CNuc`'s fills and transformations are `const` and write the state (and inputs) they are given;
+  `CalcShiftFunctions` takes `ShiftOrders` instead of a positional boolean. What an evaluation read of the inputs is
+  the state's: the zero-width flags moved to `LevelState::ZeroInputWidth`, the input energy is mirrored as
+  `LevelState::InputEnergy` (the THM line shape's ground-state test), both written where the input is read. The
+  parameter-vector walks are in `src/CNucParameterVector.cpp`; `CNuc.cpp` is 996 lines (its size row dropped).
+- The default owner's doors stay (`State`, `Inputs`, `MutableState`, one-argument fills): only owners call them now
+  (`AZURECalc`, `AZURECalcMCMC`, `AZUREAPI*`, `CovarianceBand`, `ReactionRate`, `TargetSetup`,
+  `ParameterLimitsManager`, `AZUREMain`, `FitLeastSquares`, `pybind_records`, the run's files, tests).
+- Call lines changed in other agents' files: `src/RunOutputs.cpp` (two reports), `src/RunSetUp.cpp` (three calls),
+  `src/ProgramFit.cpp` (one label), `src/AZURE2.cpp` (one `GetTransformParams`).
+
+**Verified how** (build `work/b-cnuc7`, 0 warnings, at most 5 threads): all projects in the three bases against
+`tab-t72-1` (tag `tab-cnuc7-1`): 887 / 851 / 887 identical; the quick set (12 folders x 3 bases) identical at each
+step; consistency test; `docs_build` (55 pages). Against `work/b-trial72`, one thread each, every output file compared, the program started with its commands
+(`work/cnuc7/extra.sh`): the eight fits, the natural-target fit of `angle_mapping` (gradient, LM), T2 sampled in the
+physical and the RWA basis (8 walkers, 100 steps), a fit of `gamma_decay/models/record.azr`, MINOS of T2, a T2 fit
+with `--covariance-band`, a rate of `p12C.azr`: all 16 identical. An evaluation (pyazr `Objective`, 100 calls, one
+thread, best of 3, three alternating rounds against `b-trial72`): T1 0.0942–0.0961 s base, 0.0942–0.0954 s branch; T2
+3.82–3.89 s base, 3.81–3.88 s branch. Peak resident size of a T2 fit (`AZURE2 fit --use-gradient --threads=N`,
+`/usr/bin/time -v`), base / branch: 1 thread 174.4 / 174.4 MB, 3 threads 196.7 / 197.1 MB, 5 threads 226.4 / 233.0
+MB (one run each; this branch changes no copy, so these are the numbers before the owners' slice). `OMP_NUM_THREADS=1 ctest -LE slow -j3`: 277 of 277 passed (a first run was killed from outside at test 99).
+
+**Not done** (the owners' slice): the owners holding the compound shared and constant with their own `LevelState`
+(and `LevelInputs` where they transform), the pools of `LevelState`, `Clone` aborting and deleted with the
+`allowed_state.tsv` rows of the pools, the doors deleted, the memory after it. The doors can go only when the run
+(`ProgramRun`, `src/Run*`, the commands agent's files) and the session (`AZUREAPI`) hold the run's state and inputs.
+Open: the two defects on the copies (the sub-point-grid copy's N_f^1/2, the RWA chain's snapshot `parameters.out`)
+are unchanged.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands-2`) — the commands, second part: the menu removed
 
 **Done**:

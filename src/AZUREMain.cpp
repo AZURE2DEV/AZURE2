@@ -28,7 +28,7 @@ void RunReactionRate(ProgramRun &run) {
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed =
           compound->ObservedWidthsAt(configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*compound, *observed, configure);
+    WarnLargeRadiativeWidths(*compound, compound->Inputs(), *observed, configure);
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM)
     compound->CalcShiftFunctions(configure);
   if (configure.rateParams.useFile)
@@ -68,7 +68,7 @@ int AZUREMain::operator()() {
                           << std::endl;
     return -1;
   }
-  WriteParametersOut(*compound(), observed, configure());
+  WriteParametersOut(*compound(), compound()->State(), observed, configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

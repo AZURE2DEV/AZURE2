@@ -81,7 +81,7 @@ std::vector<Channel> Channels(CNuc *compound, int pairKey) {
 
 namespace {
 /// Fill and invert the level matrices at the pair's threshold.
-void ThresholdMatrices(CNuc *compound, const Config &configure, Unit &point, AMatrixFunc &f) {
+void ThresholdMatrices(CNuc *compound, const LevelState &state, const Config &configure, Unit &point, AMatrixFunc &f) {
   point.OwnSite().CalcEDependentValues(nullptr, compound, configure, nullptr);
   f.ClearMatrices();
   f.FillMatrices(&point);
@@ -89,14 +89,14 @@ void ThresholdMatrices(CNuc *compound, const Config &configure, Unit &point, AMa
 }
 }  // namespace
 
-Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch) {
+Value Evaluate(CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch) {
   Value v;
   v.ch = ch;
   v.M = complex(0.0, 0.0);
   if (ch.hasLevels) {
     Unit point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
-    AMatrixFunc f(compound, configure);
-    ThresholdMatrices(compound, configure, point, f);
+    AMatrixFunc f(compound, state, configure);
+    ThresholdMatrices(compound, state, configure, point, f);
     v.M = f.GetUBilinear(ch.jGroup, ch.channel, ch.channel);
   }
   const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum));
@@ -104,12 +104,12 @@ Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch) {
   return v;
 }
 
-bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
+bool Adjoint(CNuc *compound, const LevelState &state, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv) {
   if (!ch.hasLevels) return true;  // a0 does not depend on any parameter
   Unit point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
-  AMatrixFunc f(compound, configure);
-  ThresholdMatrices(compound, configure, point, f);
+  AMatrixFunc f(compound, state, configure);
+  ThresholdMatrices(compound, state, configure, point, f);
   const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum));
   return f.BilinearAdjoint(&point, ch.jGroup, ch.channel, c.c1 * aBar, accum, shiftDeriv);
 }
@@ -141,9 +141,9 @@ std::string ResolveConstraint(CNuc *compound, Constraint &c) {
   return "";
 }
 
-complex ConstraintValue(CNuc *compound, const Config &configure, const Constraint &c) {
+complex ConstraintValue(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c) {
   complex a(0.0, 0.0);
-  for (size_t t = 0; t < c.terms.size(); t++) a += c.weights[t] * Evaluate(compound, configure, c.terms[t]).a0;
+  for (size_t t = 0; t < c.terms.size(); t++) a += c.weights[t] * Evaluate(compound, state, configure, c.terms[t]).a0;
   return a;
 }
 
@@ -152,21 +152,21 @@ int NumResiduals(const Constraint &c) {
   return (c.sigma > 0.0 ? 1 : 0) + (c.imSigma > 0.0 ? 1 : 0);
 }
 
-void ConstraintResiduals(CNuc *compound, const Config &configure, const Constraint &c, std::vector<double> &r) {
+void ConstraintResiduals(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, std::vector<double> &r) {
   if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return;
-  complex a = ConstraintValue(compound, configure, c);
+  complex a = ConstraintValue(compound, state, configure, c);
   if (c.sigma > 0.0) r.push_back((std::real(a) - c.value) / c.sigma);
   if (c.imSigma > 0.0) r.push_back((std::imag(a) - c.imValue) / c.imSigma);
 }
 
-bool ConstraintGradient(CNuc *compound, const Config &configure, const Constraint &c, GradAccum &accum,
+bool ConstraintGradient(CNuc *compound, const LevelState &state, const Config &configure, const Constraint &c, GradAccum &accum,
                         const vector_matrix_r *shiftDeriv, int row) {
   if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return true;
   // d(chi2) = Re(conj(aBar) da):  aBar = 2 r_re/sigma + i 2 r_im/imSigma.  One residual row:
   // aBar = 1/sigma (Re row) or i/imSigma (Im row), since Re(conj(i/s) da) = Im(da)/s.
   complex aBar(0.0, 0.0);
   if (row < 0) {
-    complex a = ConstraintValue(compound, configure, c);
+    complex a = ConstraintValue(compound, state, configure, c);
     if (c.sigma > 0.0) aBar += 2.0 * (std::real(a) - c.value) / (c.sigma * c.sigma);
     if (c.imSigma > 0.0) aBar += complex(0.0, 2.0 * (std::imag(a) - c.imValue) / (c.imSigma * c.imSigma));
   } else if (row == 0 && c.sigma > 0.0) {
@@ -177,11 +177,11 @@ bool ConstraintGradient(CNuc *compound, const Config &configure, const Constrain
     return true;
   }
   for (size_t t = 0; t < c.terms.size(); t++)
-    if (!Adjoint(compound, configure, c.terms[t], c.weights[t] * aBar, accum, shiftDeriv)) return false;
+    if (!Adjoint(compound, state, configure, c.terms[t], c.weights[t] * aBar, accum, shiftDeriv)) return false;
   return true;
 }
 
-std::string Report(CNuc *compound, const Config &configure) {
+std::string Report(CNuc *compound, const LevelState &state, const Config &configure) {
   std::ostringstream out;
   out << "s-wave scattering lengths at each particle pair's threshold" << std::endl
       << "(a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0; Paneru et al., "
@@ -193,7 +193,7 @@ std::string Report(CNuc *compound, const Config &configure) {
     const PPair *pair = compound->GetPair(aa);
     if (pair->GetPType() != 0) continue;
     for (const Channel &ch : Channels(compound, pair->GetPairKey())) {
-      Value v = Evaluate(compound, configure, ch);
+      Value v = Evaluate(compound, state, configure, ch);
       out << std::setw(6) << ch.pairKey << "  " << std::left << std::setw(14) << AZURELabel::Pair(compound, aa)
           << std::setw(6) << AZURELabel::JPi(ch.s, ch.parity) << std::right << std::fixed << std::setprecision(4)
           << std::setw(10) << CoulombX(pair) << std::scientific << std::setprecision(6) << std::setw(16)

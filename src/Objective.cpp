@@ -113,17 +113,17 @@ class ParkTerm : public ObjectiveTerm {
   // The sampler: a support, J < 0 has no R-matrix meaning (decision D2); inside it the wall is 0.
   void AddForSampler(const ObjectiveContext &, double &) const override {}
   bool ExcludesForSampler(const ObjectiveContext &c) const override {
-    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && Wall(*c.compound) > 0.0;
+    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && Wall(*c.compound, c.state) > 0.0;
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
-    const double parkPenalty = Wall(*c.compound);
+    const double parkPenalty = Wall(*c.compound, c.state);
     chi2 += parkPenalty;
     c.results.objective.park = parkPenalty;
   }
 
  private:
-  static double Wall(const CNuc &compound) {
+  static double Wall(const CNuc &compound, const LevelState &state) {
     double penalty = 0.0;
     for (int j = 1; j <= compound.NumJGroups(); j++) {
       const JGroup *group = compound.GetJGroup(j);
@@ -131,7 +131,7 @@ class ParkTerm : public ObjectiveTerm {
       for (int la = 1; la <= group->NumLevels(); la++) {
         const ALevel *level = group->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        const double parkNorm = compound.State().ParkNorm(j, la);
+        const double parkNorm = state.ParkNorm(j, la);
         if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
       }
     }
@@ -214,7 +214,7 @@ class ModelDataTerm : public ObjectiveTerm {
   void Add(const ObjectiveContext &c, double &chi2) const override {
     const ModelDataSet &set = c.compound->GetModelData();
     if (set.NumResiduals() == 0) return;
-    const double v = ModelData::Chi2(c.compound, c.config, set);
+    const double v = ModelData::Chi2(c.compound, c.state, c.inputs, c.config, set);
     chi2 += v;
     if (set.hasSection) {
       c.results.objective.modelData = v;
@@ -231,7 +231,7 @@ class GammaDecayTerm : public ObjectiveTerm {
   std::string Name() const override { return "gamma decay priors"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (c.compound->GetGammaDecays().Empty()) return;
-    chi2 += c.compound->GetGammaDecays().Penalty(*c.compound);
+    chi2 += c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
   }
 };
 
@@ -304,25 +304,25 @@ double Objective::ModelChi2(const ObjectiveContext &c) const {
 }
 
 double Objective::ModelDataChi2(const ObjectiveContext &c) const {
-  return ModelData::Chi2(c.compound, c.config, c.compound->GetModelData());
+  return ModelData::Chi2(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData());
 }
 
 void Objective::ModelDataResiduals(const ObjectiveContext &c, vector_r &residuals) const {
-  ModelData::Residuals(c.compound, c.config, c.compound->GetModelData(), residuals);
+  ModelData::Residuals(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), residuals);
 }
 
 bool Objective::ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap,
                                   const vector_matrix_r *shiftDeriv, GradAccum &accum) const {
   // T11 (gamma_decay priors, the remainder's wall) depends on the parameters alone: its gradient goes straight to their
   // indices (GradAccum::direct).
-  c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, accum.direct);
-  return ModelData::Gradient(c.compound, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
+  c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, c.state, accum.direct);
+  return ModelData::Gradient(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
 }
 
 bool Objective::AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap,
                                     const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals,
                                     vector_r &jac) const {
-  return ModelData::AppendRows(c.compound, c.config, c.compound->GetModelData(), pmap, shiftDeriv, nCols, residuals,
+  return ModelData::AppendRows(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), pmap, shiftDeriv, nCols, residuals,
                                jac);
 }
 
@@ -427,7 +427,7 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
   return replaced;
 }
 
-void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+void AppendModelRows(CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
     residuals.push_back(r);
@@ -453,20 +453,20 @@ void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &conf
       for (int la = 1; la <= jg->NumLevels(); la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        const double J = compound->State().ParkNorm(j, la);
+        const double J = state.ParkNorm(j, la);
         if (!(J < 0.0)) {
           appendRow(0.0, nullptr, nullptr);
           continue;
         }
         GradAccum acc;
-        acc.Init(compound);
+        acc.Init(compound, state);
         double dE = 0.0;
         for (int ch = 1; ch <= jg->NumChannels(); ch++) {
           const AChannel *channel = jg->GetChannel(ch);
           if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-          const double g = compound->State().Gamma(j, la, ch);
-          acc.AddGamma(j, la, ch, -2.0 * g * compound->State().ShiftDerivative(j, la, ch) / s);
-          dE -= g * g * compound->State().ShiftSecondDerivative(j, la, ch);
+          const double g = state.Gamma(j, la, ch);
+          acc.AddGamma(j, la, ch, -2.0 * g * state.ShiftDerivative(j, la, ch) / s);
+          dE -= g * g * state.ShiftSecondDerivative(j, la, ch);
         }
         acc.AddE(j, la, dE / s);
         appendRow(J / s, &acc, nullptr);
@@ -474,7 +474,7 @@ void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &conf
     }
   }
   // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
-  for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound))
+  for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound, state))
     appendRow(row.r, nullptr, &row.d);
   // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
   const AbundanceSamples &samples = data.Data().Abundances();

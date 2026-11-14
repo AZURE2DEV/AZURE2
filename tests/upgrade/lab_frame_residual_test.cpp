@@ -140,9 +140,9 @@ int main(int argc, char **argv) {
   auto evaluate = [&](const vector_r &p) {
     compound.FillCompoundFromParams(p);
     data.FillNormsFromParams(p);
-    data.FillEnergyShiftsFromParams(p, results, &compound, &cfg);
-    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, false);
-    azure2::EvaluateModel(data, &compound, cfg, results, azure2::LeafValues::Calculate);
+    data.FillEnergyShiftsFromParams(p, results, &compound, &compound.State(), &cfg);
+    if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) compound.CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    azure2::EvaluateModel(data, &compound, compound.State(), cfg, results, azure2::LeafValues::Calculate);
   };
   evaluate(p0);
   const std::vector<double> j0 = Jacobians(data);

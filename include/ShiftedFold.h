@@ -8,6 +8,7 @@
 #include "Unit.h"
 
 class CNuc;
+class LevelState;
 class Config;
 class Segment;
 class TargetEffect;
@@ -208,13 +209,13 @@ bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *>
 /// The chi^2 of `segment` alone at the shift its points hold now, its data compared at the norm `norm`, with its shift
 /// prior: the model of every point (refolded on the fixed nodes where FoldOnlyShift holds, else calculated), the
 /// residuals, the penalty.  The local central difference of a shift column (AZURECalc::Gradient).
-double SegmentLocalChi2(const Segment &segment, CNuc *compound, const Config &config, WorkingCopy &data,
+double SegmentLocalChi2(const Segment &segment, CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data,
                         Results &results, double norm);
 /// The norm each of `segments` (1-based) is compared at in a local shift difference: the segment's own, or for a
 /// profiled norm (THM, Segment::IsProfiledNorm) its profile n* at the models of the present shift, held fixed while the
 /// shift moves -- at the profile d chi^2/d n* = 0, so the partial derivative at fixed n* is the total one (the envelope
 /// theorem).  Calculates the profiled segments' models at the present parameters.
-std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const Config &config,
+std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const LevelState &state, const Config &config,
                               Results &results);
 
 }  // namespace azure2

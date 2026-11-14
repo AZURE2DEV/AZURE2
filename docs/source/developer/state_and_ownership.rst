@@ -173,5 +173,6 @@ which must give the same bits as the pooled copy
    ``AZURECalcMCMC`` and ``AZUREAPI`` go to their owners (the fitter's
    adapter, the run), and ``CNuc`` becomes an immutable ``CompoundSystem``
    shared by every evaluation with a per-evaluation ``LevelState`` (today
-   the one each copy of ``CNuc`` holds, ``CNuc::State``); the
+   the one each copy of ``CNuc`` holds, ``CNuc::State``, which it hands to
+   the readers as an argument); the
    allow-list then keeps only its ``table:`` rows.

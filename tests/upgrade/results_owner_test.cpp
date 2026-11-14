@@ -72,9 +72,9 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
 std::vector<double> Evaluate(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, lc, &cfg);
-  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
-  azure2::EvaluateModel(*ld, lc, cfg, results, azure2::LeafValues::Calculate);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &cfg);
+  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  azure2::EvaluateModel(*ld, lc, lc->State(), cfg, results, azure2::LeafValues::Calculate);
   return results.model;
 }
 

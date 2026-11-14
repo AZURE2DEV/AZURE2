@@ -14,11 +14,12 @@
 class RMatrixFunc : public GenMatrixFunc {
  public:
   /// Build against a compound nucleus.
-  RMatrixFunc(CNuc *, const Config &);
+  RMatrixFunc(CNuc *, const LevelState &state, const Config &);
   /*!
    * Returns a pointer to the compound nucleus object.
    */
   CNuc *compound() const { return compound_; };
+  const LevelState &state() const override { return state_; }
   const Config &configure() const { return configure_; };
 
   /// Drop every stored matrix before the next point.
@@ -55,6 +56,7 @@ class RMatrixFunc : public GenMatrixFunc {
 
  private:
   CNuc *compound_;
+  const LevelState &state_;
   const Config &configure_;
   vector_matrix_c r_matrices_;
   vector_matrix_c rl_matrices_;

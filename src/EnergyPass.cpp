@@ -44,7 +44,7 @@ bool StartsTMatrix(Site *const *units, int before, int k, const int *tGroups) {
 
 }  // namespace
 
-void SolveAtOneEnergy(CNuc *cnuc, const std::vector<double> &thmCoherentValues, const Config &configure,
+void SolveAtOneEnergy(CNuc *cnuc, const LevelState &state, const std::vector<double> &thmCoherentValues, const Config &configure,
                       Results &results, Site *const *units, int n, const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
@@ -63,10 +63,10 @@ void SolveAtOneEnergy(CNuc *cnuc, const std::vector<double> &thmCoherentValues, 
   GenMatrixFunc *func = nullptr;
   if (first >= 0) {
     if (configure.paramMask & Config::USE_AMATRIX) {
-      amatrix = &scratch.PointSolver(cnuc, configure);
+      amatrix = &scratch.PointSolver(cnuc, state, configure);
       func = amatrix;
     } else {
-      rmatrix.reset(new RMatrixFunc(cnuc, configure));
+      rmatrix.reset(new RMatrixFunc(cnuc, state, configure));
       func = rmatrix.get();
     }
     if (progress) *progress = first;
@@ -81,7 +81,7 @@ void SolveAtOneEnergy(CNuc *cnuc, const std::vector<double> &thmCoherentValues, 
     if (amatrix && func == amatrix && amatrix->LevelSpaceThroughout()) {
       levels = amatrix;
     } else {
-      THMMatrixFunc &thm = scratch.PointThmSolver(cnuc, configure);
+      THMMatrixFunc &thm = scratch.PointThmSolver(cnuc, state, configure);
       if (progress) *progress = firstHoes;
       thm.ClearMatrices();
       thm.FillMatrices(units[firstHoes]);
@@ -120,12 +120,12 @@ std::string Describe(const Site &u, const EnergyTask &task) {
 
 }  // namespace
 
-long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, const Results &results,
+long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const LevelState &state, const Config &configure, const Results &results,
                       const EnergyTaskList &tasks) {
   Results scratch = results;  // the check writes here, never into the evaluation's values
   std::unique_ptr<AMatrixFunc> ownA;
-  if (configure.paramMask & Config::USE_AMATRIX) ownA.reset(new AMatrixFunc(cnuc, configure));
-  std::unique_ptr<THMMatrixFunc> ownT(new THMMatrixFunc(cnuc, configure));
+  if (configure.paramMask & Config::USE_AMATRIX) ownA.reset(new AMatrixFunc(cnuc, state, configure));
+  std::unique_ptr<THMMatrixFunc> ownT(new THMMatrixFunc(cnuc, state, configure));
   long units = 0, shared = 0, differ = 0;
   long hoesTasks = 0, mixedTasks = 0, oneFill = 0;  // tasks with THM sites, with other readers too, solved by one fill
   std::vector<std::string> reports;
@@ -139,7 +139,7 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
     // The task as the pass solves it (SolveAtOneEnergy), the records kept; then each unit's own solve.
     sites.resize((std::size_t)n);
     for (int k = 0; k < n; k++) sites[(std::size_t)k] = &data.SiteAt(taskUnits[k]);
-    SolveAtOneEnergy(cnuc, data.ThmCoherentValues(), configure, scratch, sites.data(), n,
+    SolveAtOneEnergy(cnuc, state, data.ThmCoherentValues(), configure, scratch, sites.data(), n,
                      tasks.tGroups.data() + task.begin, nullptr);
     int hoes = 0, direct = -1;
     for (int k = 0; k < n; k++)
@@ -173,7 +173,7 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       if (u->Observable() == SiteObservable::kHoes)
         o = ownT.get();
       else if (!o)
-        ownR.reset(new RMatrixFunc(cnuc, configure)), o = ownR.get();
+        ownR.reset(new RMatrixFunc(cnuc, state, configure)), o = ownR.get();
       o->ClearMatrices();
       o->FillMatrices(u);
       o->InvertMatrices();
@@ -227,8 +227,9 @@ const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const
  * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
  */
 
-int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
-                                     azure2::Results &results) {
+int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+                                           const LevelState &state, const Config &configure,
+                                           azure2::Results &results) {
 #ifdef _OPENMP
   if (omp_in_parallel()) return -1;
 #else
@@ -277,7 +278,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     while (start < n) {
       int progress = 0;
       try {
-        azure2::SolveAtOneEnergy(theCNuc, thmCoherentValues_, configure, results, units.data() + start, n - start,
+        azure2::SolveAtOneEnergy(theCNuc, state, thmCoherentValues_, configure, results, units.data() + start, n - start,
                                  tasks.tGroups.data() + task.begin + start, &progress);
         return;
       } catch (const std::exception &e) {
@@ -341,7 +342,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
           return k < numTasks ? "energy task " + std::to_string(k) : "the fold of plan task " + std::to_string(folds[k - numTasks]);
         });
     if (numTasks == 0) collectFailures();
-    const long differ = azure2::CheckEnergyTasks(*this, theCNuc, configure, results, tasks);
+    const long differ = azure2::CheckEnergyTasks(*this, theCNuc, state, configure, results, tasks);
     if (differ) throw std::logic_error("AZURE_PLAN_CHECK: " + std::to_string(differ) +
                                        " units differ from their own solve (listed above)");
   } else {

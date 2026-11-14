@@ -143,9 +143,9 @@ std::vector<double> CaptureAyValues(Loaded &l) {
   const vector_r p = params.GetMinuitParams().Params();
   l.compound->FillCompoundFromParams(p);
   l.data->FillNormsFromParams(p);
-  l.data->FillEnergyShiftsFromParams(p, results, l.compound.get(), l.cfg.get());
-  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, false);
-  azure2::EvaluateModel(*l.data, l.compound.get(), *l.cfg, results, azure2::LeafValues::Calculate);
+  l.data->FillEnergyShiftsFromParams(p, results, l.compound.get(), &l.compound->State(), l.cfg.get());
+  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  azure2::EvaluateModel(*l.data, l.compound.get(), l.compound->State(), *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
   CNuc &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {

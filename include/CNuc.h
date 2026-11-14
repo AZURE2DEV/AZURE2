@@ -95,9 +95,9 @@ class CNuc {
   /// Where each level's energy and amplitudes sit in the parameter vector (LevelParameterLayout.h); built by Fill,
   /// shared by the copies.  Every walk of the level block reads it.
   const LevelParameterLayout &ParameterLayout() const { return *parameterLayout_; }
-  /// Take the fit energies and amplitudes of `from` (a state of a compound of the same structure), nothing derived
-  /// from them (WorkingCopy::ReplaceSubPointGrids' copy).
-  void CopyFitEnergiesAndAmplitudes(const LevelState &from);
+  /// Take the fit energies and amplitudes of `from` into `to` (states of this structure), nothing derived from them
+  /// (WorkingCopy::ReplaceSubPointGrids' state).
+  void CopyFitEnergiesAndAmplitudes(const LevelState &from, LevelState &to) const;
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
@@ -122,11 +122,14 @@ class CNuc {
   void CalcBoundaryConditions(const Config &);
   /// Build the pathway table (Pathways()); CNucPathways.cpp.
   void BuildPathways(const Config &);
-  /// Recompute the shift functions at the current level energies. Needed every
+  /// Which energy derivatives of the shift functions CalcShiftFunctions takes in Park's basis: a chi-squared alone
+  /// needs no second derivatives, the gradient does.
+  enum class ShiftOrders { kWithSecondDerivatives, kFirstDerivativesOnly };
+  /// Recompute the shift functions of `state` at its level energies. Needed every
   /// iteration under the Brune parameterization, where they move with the fit.
-  /// In the Park formalism also dS/dE and J, and, unless `secondDerivatives`
-  /// is false (a chi-squared alone needs none), d^2S/dE^2 for the gradient.
-  void CalcShiftFunctions(const Config &, bool secondDerivatives = true);
+  /// In the Park formalism also dS/dE and J, and d^2S/dE^2 as `orders` asks.
+  void CalcShiftFunctions(const Config &, LevelState &state,
+                          ShiftOrders orders = ShiftOrders::kWithSecondDerivatives) const;
   /// Rescale the level amplitudes of a Minuit parameter set between Brune's
   /// and Park's normalizations (gamma_Park = gamma_Brune sqrt J), in place.
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is
@@ -135,9 +138,10 @@ class CNuc {
   /// External reduced width amplitude for one channel.
 
   // -- parameter transformations --------------------------------------------
-  /// Observed widths and energies to formal R-matrix parameters, in Inputs(). Returns false if a level could not be
-  /// transformed; Inputs().TransformError() says why.
-  bool TransformIn(const Config &);
+  /// Observed widths and energies of `inputs` to the fit's basis (Brune, Park or formal), in `inputs`, with the
+  /// levels' N_f^1/2 and Park's J in `state`.  Returns false if a level could not be transformed;
+  /// inputs.TransformError() says why.
+  bool TransformIn(const Config &, LevelState &state, LevelInputs &inputs) const;
   /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
   /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
   bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
@@ -151,41 +155,45 @@ class CNuc {
     std::vector<int> levels;
   };
   /// The formal-basis mask slot of (group, photon channel), or -1: the mask is then diagonal, a level whose input
-  /// width in the channel is zero (LevelInputs::ZeroInputWidth) is left out (Brune, Park, a block of one level).
+  /// width in the channel is zero (LevelState::ZeroInputWidth) is left out (Brune, Park, a block of one level).
   int FormalCaptureMaskSlot(int group, int channel) const;
   const CaptureMaskSlot &FormalCaptureMaskOf(int slot) const;
   /// Formal basis, --ignore-externals, channel capture through a block of several levels: the masks are recomputed
   /// with the fit parameters.  True when the adjoint does not differentiate that dependence: a slot has a projector,
   /// or a masked level has a free particle amplitude (freeGamma(group, level, channel), 1-based).
-  bool FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) const;
-  /// The Brune (Park) and observed values of the levels at the current fit values, for the reports; prints the
-  /// warnings of levels that do not convert.  Changes no level but for Park's shift functions (TransformToBrune).
-  ObservedLevelTable TransformOut(const Config &);
+  bool FormalCaptureMasksOutsideAdjoint(const LevelState &state,
+                                        const std::function<bool(int, int, int)> &freeGamma) const;
+  /// The Brune (Park) and observed values of the levels at the fit values of `state`, for the reports; prints the
+  /// warnings of levels that do not convert.  Changes nothing of `state` but Park's shift functions (TransformToBrune).
+  ObservedLevelTable TransformOut(const Config &, LevelState &state, const LevelInputs &inputs) const;
   /// The observed parameters of `table` as a flat vector, as a <levels> line holds them (a gamma_decay record's
   /// numbers at its slots); the level block only.
-  vector_r GetTransformParams(const ObservedLevelTable &table) const;
+  vector_r GetTransformParams(const LevelState &state, const ObservedLevelTable &table) const;
   /// The observed values of a parameter vector, as TransformOut computes them but without its messages (for
-  /// WarnLargeRadiativeWidths, CNucChecks.h); the fit state is left at the vector.  Empty if the transformation
-  /// fails.
-  std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &, const vector_r &);
-  /// The observed values of the current fit values (TransformOut without its messages), as the model data read them
-  /// (ModelData.cpp) inside an evaluation: nothing a calculation reads is changed.  Empty if the transformation
+  /// WarnLargeRadiativeWidths, CNucChecks.h); `state` is left at the vector.  Empty if the transformation fails.
+  std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &, const vector_r &, LevelState &state,
+                                                     const LevelInputs &inputs) const;
+  /// The observed values of the fit values of `state` (TransformOut without its messages), as the model data read
+  /// them (ModelData.cpp) inside an evaluation: nothing a calculation reads is changed.  Empty if the transformation
   /// fails.  CNucObserved.cpp.
-  std::optional<ObservedLevelTable> ObservedOfFitValues(const Config &);
+  std::optional<ObservedLevelTable> ObservedOfFitValues(const Config &, LevelState &state,
+                                                        const LevelInputs &inputs) const;
   /// Set the fit value of one slot of the level block (ParameterLayout), as FillCompoundFromParams sets it with
   /// everything derived from it: a level's energy or its amplitude in one channel.  For the numerical derivatives of
   /// the model data; setting the value back restores the state bit for bit.  CNucObserved.cpp.
-  void SetFitLevelParameter(const LevelParameterLayout::Slot &slot, double value);
+  void SetFitLevelParameter(LevelState &state, const LevelParameterLayout::Slot &slot, double value) const;
 
   // -- fitting --------------------------------------------------------------
-  /// Seed the parameter vector from the current level parameters, each with its record (what it is).
-  void FillMnParams(AZUREParams &, const Config *config = nullptr);
-  /// Write a Minuit parameter vector back into the levels.
-  void FillCompoundFromParams(const vector_r &);
+  /// Seed the parameter vector from the levels' input values `inputs`, each with its record (what it is); a width
+  /// whose input was zero (state.ZeroInputWidth) is fixed.
+  void FillMnParams(AZUREParams &, const LevelState &state, const LevelInputs &inputs,
+                    const Config *config = nullptr) const;
+  /// Write a parameter vector into `state`, with everything derived from it but the shift functions.
+  void FillCompoundFromParams(const vector_r &, LevelState &state) const;
   /// The vector of observed parameters (GetTransformParams' form: a gamma_decay record's numbers at its slots) as the
-  /// levels' input values; a record's numbers become its input numbers and its partial widths the level's input
-  /// widths (GammaDecaySet::WithPartialWidths; gamma_parametrisation.md section 2.8).
-  void FillCompoundFromParamsPhysical(const vector_r &);
+  /// levels' input values in `inputs`, with N_f^1/2 in `state`; a record's numbers become its input numbers and its
+  /// partial widths the level's input widths (GammaDecaySet::WithPartialWidths; gamma_parametrisation.md section 2.8).
+  void FillCompoundFromParamsPhysical(const vector_r &, LevelState &state, LevelInputs &inputs) const;
 
   /// The physics/ System of the structure (CNucSystem.h, CNucSystemContent::Structure: R-matrix blocks, B_c = 0, no
   /// level values) and the same with every J-group and level (CNucSystemContent::AllGroups).  Built once, when Fill
@@ -205,6 +213,22 @@ class CNuc {
   /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
   void RequestEntrance(int pair);
 
+  // -- the compound's own levels (State, Inputs), written by these doors of the default owner --------------------
+  LevelState &MutableState() { return levelState_; }
+  void FillCompoundFromParams(const vector_r &p) { FillCompoundFromParams(p, levelState_); }
+  void CalcShiftFunctions(const Config &configure, ShiftOrders orders = ShiftOrders::kWithSecondDerivatives) {
+    CalcShiftFunctions(configure, levelState_, orders);
+  }
+  bool TransformIn(const Config &configure) { return TransformIn(configure, levelState_, levelInputs_); }
+  void FillCompoundFromParamsPhysical(const vector_r &p) { FillCompoundFromParamsPhysical(p, levelState_, levelInputs_); }
+  ObservedLevelTable TransformOut(const Config &configure) { return TransformOut(configure, levelState_, levelInputs_); }
+  std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &configure, const vector_r &p) {
+    return ObservedWidthsAt(configure, p, levelState_, levelInputs_);
+  }
+  void FillMnParams(AZUREParams &params, const Config *config = nullptr) const {
+    FillMnParams(params, levelState_, levelInputs_, config);
+  }
+
   /// Deep copy. AZURECalc gives each thread its own, since a calculation
   /// writes the fitted parameters into the object it runs on.
   CNuc *Clone() const;
@@ -221,15 +245,15 @@ class CNuc {
   /// Formal basis with external capture: the blocks whose final states need their Brune amplitude (Initialize).
   void SetUpECFinalBlocks(const Config &);
   /// Their final states' external-capture amplitudes and N_f^1/2 from the current fit values (FillCompoundFromParams).
-  void ECFinalStatesFromFormal();
+  void ECFinalStatesFromFormal(LevelState &state) const;
   std::shared_ptr<const ECFinalBlocks> ecFinalBlocks_;
   struct CaptureMaskSetup;
   /// Formal basis with --ignore-externals: the (block, photon channel) pairs of channel capture (Initialize, after
   /// the pathways are sorted).
   void SetUpFormalCaptureMasks(const Config &);
   /// Their projectors from the current fit values (FillCompoundFromParams).
-  void FormalCaptureMasksFromParams();
-  bool MaskedLevelCoupled(int j, int la) const;
+  void FormalCaptureMasksFromParams(LevelState &state) const;
+  bool MaskedLevelCoupled(const LevelState &state, int j, int la) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
   /// Whether TransformToBrune prints the warnings of levels that do not convert.
   enum class Messages { kPrint, kQuiet };
@@ -237,10 +261,11 @@ class CNuc {
   ObservedLevelTable EmptyObservedTable() const;
   /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters, with N_f^-1/2, in `table` (formal
   /// basis: physics/ brune_from_formal).
-  void TransformToBrune(const Config &, Messages, ObservedLevelTable &table);
+  void TransformToBrune(const Config &, Messages, LevelState &state, const LevelInputs &inputs,
+                        ObservedLevelTable &table) const;
   /// TransformOut, second part: the observed quantities from the Brune (Park) values of `table` (physics/
   /// observed_levels).
-  void ObservedWidths(const Config &, ObservedLevelTable &table);
+  void ObservedWidths(const Config &, const LevelState &state, ObservedLevelTable &table) const;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
   /// The pathway table (Initialize) and the capture-A_y requests it is built with.

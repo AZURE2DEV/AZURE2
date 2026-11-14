@@ -11,6 +11,8 @@
 #include "azure2/io/LevelRows.h"
 
 class CNuc;
+class LevelInputs;
+class LevelState;
 class Config;
 class ParamIndexMap;
 struct GradAccum;
@@ -59,10 +61,10 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
                                          const std::vector<azure2::io::LevelRow> &rows);
 
 /// The residual rows at the compound's current fit values, appended to r in row order.
-void Residuals(CNuc *compound, const Config &configure, const ModelDataSet &set, vector_r &r);
+void Residuals(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r);
 
 /// The chi-squared of the rows, sum r_k^2 in row order (0 without rows).
-double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set);
+double Chi2(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 /*!
  * d chi2 / d(E, gamma) of the level parameters into accum: the scattering lengths exactly, through the level-matrix
@@ -71,7 +73,7 @@ double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set);
  * those with a packed column in pmap.  False where the adjoint does not support the configuration (the caller then
  * differentiates numerically).
  */
-bool Gradient(CNuc *compound, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool Gradient(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
               const vector_matrix_r *shiftDeriv, GradAccum &accum);
 
 /*!
@@ -79,7 +81,7 @@ bool Gradient(CNuc *compound, const Config &configure, const ModelDataSet &set, 
  * Brune and Park: the shift functions are brought up to date first (CNuc::CalcShiftFunctions).  False, with the rows
  * appended so far, where Gradient would return false.
  */
-bool AppendRows(CNuc *compound, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool AppendRows(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
                 const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals, vector_r &jac);
 
 /// One <modelData> datum at the current fit values: model value (Re and Im for a scattering length) and residuals.
@@ -92,11 +94,11 @@ struct Value {
   double chi2 = 0.0;       ///< the datum's share of the term
 };
 /// Every datum of the <modelData> section, in file order.
-std::vector<Value> SectionValues(CNuc *compound, const Config &configure, const ModelDataSet &set);
+std::vector<Value> SectionValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 /// The table of modelData.out and of the run log: one line per datum (name, quantity, model value, datum, error in
 /// the unit written, residual, chi2), and the total.  Empty without a <modelData> section.
-std::string Report(CNuc *compound, const Config &configure, const ModelDataSet &set);
+std::string Report(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set);
 
 }  // namespace ModelData
 

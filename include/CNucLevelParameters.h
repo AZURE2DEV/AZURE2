@@ -10,6 +10,7 @@
 class CNuc;
 class Config;
 class LevelInputs;
+class LevelState;
 
 /*!
  * The engine's side of physics/ level_parameters (docs/upgrade/level_parameters.md): what the physics functions take
@@ -49,10 +50,11 @@ azure2::physics::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const L
  * |gamma| < 1e-8 when zero widths are ignored (IGNORE_ZERO_WIDTHS).  The value depends on the amplitudes the
  * CNuc's levels hold at the time of the call (the level's own particle amplitudes and the final state's): CNuc's
  * TransformIn calls it with the Brune (Park) amplitudes of the level after its first loop.  The amplitudes are those
- * of `inputs` (ExternalReducedWidthOfInputs).
+ * of `inputs`, the final states' N_f^1/2 those of `state` (ExternalReducedWidthOfInputs).
  */
-std::vector<azure2::physics::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const LevelInputs &inputs,
-                                                                   const CNucSystemMap &map, std::size_t b,
+std::vector<azure2::physics::ExternalWidth> ExternalWidthsFromCNuc(const CNuc &compound, const LevelState &state,
+                                                                   const LevelInputs &inputs, const CNucSystemMap &map,
+                                                                   std::size_t b,
                                                                    const Config &configure);
 
 #endif

@@ -43,7 +43,7 @@
  * derivative on each level, from the same function at the same energy: it is
  * read from there instead of being differentiated again.
  */
-vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
+vector_matrix_r BuildShiftDerivTable(CNuc *compound, const LevelState &state, const Config &configure) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_matrix_r tab(compound->NumJGroups());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -59,12 +59,12 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         const PPair *pair = compound->GetPair(channel->GetPairNum());
         // The Brune boundary/shift block applies only to particle 'P' channels.
         if (pair->GetPType() != 0 || channel->GetRadType() != 'P') continue;
-        if (park && compound->State().ShiftsValidAt(j, la, compound->State().E(j, la))) {
-          tab[j - 1][la - 1][ch - 1] = compound->State().ShiftDerivative(j, la, ch);
+        if (park && state.ShiftsValidAt(j, la, state.E(j, la))) {
+          tab[j - 1][la - 1][ch - 1] = state.ShiftDerivative(j, la, ch);
           continue;
         }
         int l = channel->GetL();
-        double levelEnergy = compound->State().E(j, la);
+        double levelEnergy = state.E(j, la);
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
         double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
                         .ShiftDerivative(l, pair->SpinOrbitTwoJ(jg->GetJ()), resonanceEnergy);
@@ -79,7 +79,7 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
  * d/dx of sum_lambda (J_lambda/s)^2 over J < 0, with J = 1 - sum_d g_d^2 S'_d:
  *   d/d g_d  = 2 J/s^2 (-2 g_d S'_d),    d/d E = 2 J/s^2 (-sum_d g_d^2 S''_d).
  */
-void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
+void AddParkPenaltyGradient(CNuc *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
   const double s2 = kParkNormScale * kParkNormScale;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -87,15 +87,15 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || compound->State().ParkNorm(j, la) >= 0.0) continue;
-      const double factor = 2.0 * compound->State().ParkNorm(j, la) / s2;
+      if (!level->IsInRMatrix() || state.ParkNorm(j, la) >= 0.0) continue;
+      const double factor = 2.0 * state.ParkNorm(j, la) / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
         const AChannel *channel = jg->GetChannel(ch);
         if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-        double g = compound->State().Gamma(j, la, ch);
-        accum.AddGamma(j, la, ch, factor * (-2.0 * g * compound->State().ShiftDerivative(j, la, ch)));
-        dE -= g * g * compound->State().ShiftSecondDerivative(j, la, ch);
+        double g = state.Gamma(j, la, ch);
+        accum.AddGamma(j, la, ch, factor * (-2.0 * g * state.ShiftDerivative(j, la, ch)));
+        dE -= g * g * state.ShiftSecondDerivative(j, la, ch);
       }
       accum.AddE(j, la, factor * dE);
     }
@@ -127,8 +127,9 @@ void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configur
 /*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
-void GradAccum::Init(CNuc *compound) {
+void GradAccum::Init(CNuc *compound, const LevelState &state) {
   source = compound;
+  sourceState = &state;
   const int nJ = compound->NumJGroups();
   e.assign(nJ, {});
   gamma.assign(nJ, {});
@@ -238,7 +239,7 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
       }
     }
   }
-  if (decays) decays->PullBack(*source, *this, map, gradFull);
+  if (decays) decays->PullBack(*source, *sourceState, *this, map, gradFull);
   for (const auto &d : direct)
     if (d.first >= 0 && d.first < (int)gradFull.size()) gradFull[d.first] += d.second;
   for (int k = 0; k < (int)abundance.size(); k++) {
@@ -672,14 +673,14 @@ void AddParamCotangents(const azure2::ModelCotangents &c, const Segment *segment
 
 }  // namespace
 
-bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, const Config &config,
+bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, const LevelState &state, const Config &config,
                              azure2::Results &results, double fitBar, int row, GradAccum &params,
                              std::vector<UnitCotangent> &out) {
   if (fitBar == 0.0) return true;
   // The cotangents of the point's expression tree: its leaves (points, or sub-points of a transform's terms) and its
   // parameters.
   ModelCotangents c;
-  if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
+  if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, state, config, results, fitBar, c)) return false;
   AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
   auto emit = [&](const Unit *reader, const Site *u, int slot, double value, int component) {
     if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask(), reader, slot});
@@ -709,10 +710,10 @@ namespace {
 // into coherentBar[k].  A folded point is linear in its sub-point cross
 // sections; the weights come from the combiner as in GradTargetEffectAdjoint.
 // A folded analyzing power (a ratio of two folds): not covered (false).
-bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, CNuc *compound, const Config &config,
+bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, CNuc *compound, const LevelState &state, const Config &config,
                            const ThmAdjointContext &ctx, THMMatrixFunc &f,
                            GradAccum &accum, std::vector<double> &coherentBar) {
-  f.Reset(compound, config);
+  f.Reset(compound, state, config);
   auto adjoint = [&](Site *pt, double weight) -> bool {
     f.ClearMatrices();
     f.FillMatrices(pt);
@@ -755,9 +756,9 @@ void ReportBail(WorkingCopy &data, const char *what, const Segment *segment, int
 // state that shares its block (CNuc::ECFinalStatesFromFormal, an iteration on the block's formal parameters) and the
 // --ignore-externals projector of a channel capture (CNuc::FormalCaptureMasksOutsideAdjoint, external_capture.md
 // section 7).  Every adjoint entry point asks this and falls back to finite differences.
-bool FormalPartsOutsideAdjoint(CNuc *compound, const ParamIndexMap &pmap) {
+bool FormalPartsOutsideAdjoint(CNuc *compound, const LevelState &state, const ParamIndexMap &pmap) {
   if (compound->HasFormalECFinalBlocks()) return true;
-  return compound->FormalCaptureMasksOutsideAdjoint([&pmap](int j, int la, int ch) {
+  return compound->FormalCaptureMasksOutsideAdjoint(state, [&pmap](int j, int la, int ch) {
     const int full = pmap.GammaIndexFlat(j, la, ch);
     return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0;
   });
@@ -770,7 +771,7 @@ bool FormalPartsOutsideAdjoint(CNuc *compound, const ParamIndexMap &pmap) {
 bool ThmFiniteDifferencesRequested(const Config &config) { return config.environment.thmByDifferences; }
 
 
-bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -780,9 +781,9 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
   // contribution to the gradient is added in AZURECalc::Gradient by the HOES
   // adjoint or finite differences of a chi^2 restricted to THM segments, so
   // mixed THM+direct datasets keep the analytic speed-up on the direct part.
-  if (FormalPartsOutsideAdjoint(compound, pmap)) return false;
+  if (FormalPartsOutsideAdjoint(compound, state, pmap)) return false;
   int bailSeg = 0;
-  if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
+  if (!azure2::EnergyTaskGradient(compound, state, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
     if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
       if (config.FirstTime("AZURE_GRAD_DEBUG energy-task gradient declined")) {
         bool inactiveLevel = false;
@@ -806,7 +807,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
     return false;
   }
   if (accum.formalUsed) {
-    AMatrixFunc amf(compound, config);
+    AMatrixFunc amf(compound, state, config);
     amf.ResolveFormalCotangents(accum, shiftDeriv);
   }
   return true;
@@ -846,7 +847,7 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
 
 }  // namespace
 
-bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -886,7 +887,7 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   }
   residuals.assign(totalRows, 0.0);
   jacobian.assign((size_t)totalRows * nCols, 0.0);
-  if (FormalPartsOutsideAdjoint(compound, pmap) && nSeg > 0) {
+  if (FormalPartsOutsideAdjoint(compound, state, pmap) && nSeg > 0) {
     residuals.clear();
     jacobian.clear();
     return false;
@@ -905,7 +906,7 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   std::vector<azure2::GradPoint> points;
   std::vector<double> models, rows;
   int bailSeg = 0, numTasks = 0;
-  const bool ok = azure2::EnergyTaskRows(compound, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points,
+  const bool ok = azure2::EnergyTaskRows(compound, state, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points,
                                          models, rows, bailSeg, numTasks);
   if (!ok) {
     ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
@@ -943,7 +944,7 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   return ok;
 }
 
-bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeModelGradients(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<Unit *, vector_r> &gradByPoint,
@@ -962,7 +963,7 @@ bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &r
       if (pt) gradByPoint[pt] = vector_r(nCols, 0.0);
     }
   }
-  if (FormalPartsOutsideAdjoint(compound, pmap) && nSeg > 0) {
+  if (FormalPartsOutsideAdjoint(compound, state, pmap) && nSeg > 0) {
     gradByPoint.clear();
     return false;
   }
@@ -972,7 +973,7 @@ bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &r
   std::vector<azure2::GradPoint> points;
   std::vector<double> models, rows;
   int bailSeg = 0, numTasks = 0;
-  if (!azure2::EnergyTaskRows(compound, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points, models, rows,
+  if (!azure2::EnergyTaskRows(compound, state, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points, models, rows,
                               bailSeg, numTasks)) {
     ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();
@@ -985,7 +986,7 @@ bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &r
 
 // THM (HOES) rows: see the declaration in AZUREGrad.h.  Shared by the API
 // (residual Jacobian, chi2 gradient, model gradients) and the CLI band.
-std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *lc, LevelState &state, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap) {
   std::vector<THMRows> rows;
   const bool brune = (config.paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1032,18 +1033,18 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     for (long k = 0; k < n; k++) {
       const Segment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
       out[order[k].first][slot[k]] =
-          azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
+          azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, state, config, results, azure2::LeafValues::Calculate);
     }
   };
   auto fillCompound = [&](const vector_r &p) {
-    lc->FillCompoundFromParams(p);
-    if (brune) lc->CalcShiftFunctions(config);
+    lc->FillCompoundFromParams(p, state);
+    if (brune) lc->CalcShiftFunctions(config, state);
   };
 
   // Norms and shifts are the caller's; the THM model depends on the R-matrix
   // parameters (and the shift already applied to the point energies).
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, lc, &config);
+  ld->FillEnergyShiftsFromParams(full, results, lc, &state, &config);
   fillCompound(full);
   std::vector<vector_r> m0, mp, mm;
   models(m0);
@@ -1064,13 +1065,13 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     vector_matrix_r shiftDeriv;
     const vector_matrix_r *sdp = nullptr;
     if (brune) {
-      shiftDeriv = BuildShiftDerivTable(lc, config);
+      shiftDeriv = BuildShiftDerivTable(lc, state, config);
       sdp = &shiftDeriv;
     }
     bool lineshape = false;
     for (size_t t = 0; t < rows.size(); t++)
       if (ld->Data().GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
-    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, ld->ThmCoherentValues(), config, sdp, lineshape);
+    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, state, ld->ThmCoherentValues(), config, sdp, lineshape);
     const int nCoherent = ld->Data().NumThmCoherentParams();
     std::vector<size_t> slot(order.size());
     {
@@ -1082,10 +1083,10 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
 #pragma omp parallel
     {
       GradAccum accum;
-      accum.Init(lc);
+      accum.Init(lc, state);
       vector_r fullRow(pmap.NumFull(), 0.0);
       std::vector<double> coherentBar(nCoherent, 0.0);
-      THMMatrixFunc thm(lc, config);  // this thread's solver for the region (re-pointed per point)
+      THMMatrixFunc thm(lc, state, config);  // this thread's solver for the region (re-pointed per point)
 #pragma omp for schedule(dynamic)
       for (long k = 0; k < n; k++) {
         if (bail) continue;
@@ -1093,7 +1094,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
         Unit *pt = seg->GetPoint(*ld, order[k].second + 1);
         accum.Zero();
         std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
-        if (!ThmPointModelGradient(*ld, pt, results, lc, config, ctx, thm, accum, coherentBar)) {
+        if (!ThmPointModelGradient(*ld, pt, results, lc, state, config, ctx, thm, accum, coherentBar)) {
 #pragma omp critical
           bail = true;
           continue;
