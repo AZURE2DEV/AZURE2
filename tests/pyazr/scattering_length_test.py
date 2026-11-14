@@ -87,7 +87,7 @@ try:
         for d in ("output", "checks"):
             os.makedirs(os.path.join(work, d), exist_ok=True)
         # be7p.azr has no data segments: an extrapolation-mode session
-        session = Session(os.path.join(work, "be7p.azr"), data_mode=False)
+        session = Session(os.path.join(work, "be7p.azr"), extrapolations=True)
 
     if session is not None:
         values = {(v.pair, v.jpi): v for v in session.scattering_lengths()}

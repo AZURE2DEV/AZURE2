@@ -8,8 +8,8 @@ sub-threshold ANC channel that prints "Denominator less than zero while
 transforming ... input 0.118102 fm^(-1/2)" (the 17O cross-check), which the
 CLI never prints because it never transforms an amplitude vector.  Now, on
 examples/o17_guardo2017_fit (1- level 7.6 keV below the n + 17O threshold,
-ANC channel; an extrapolation record added here), in data and extrapolation
-mode:
+ANC channel; an extrapolation record added here), in a data session and in one made for the
+extrapolations:
 
   1. control: the physical path fed parameters.x0 still prints the warning
      (so the check below can see it);
@@ -57,9 +57,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import numpy as np
 from pyazr import Session
-s = Session(sys.argv[2])
-if sys.argv[4] == "extrap":
-    s.extrap_mode()
+s = Session(sys.argv[2], extrapolations=sys.argv[4] == "extrap")
 if sys.argv[3] == "control":
     s._engine.update_segments(np.asarray(s.parameters.x0, float))
 else:

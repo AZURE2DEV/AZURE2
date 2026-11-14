@@ -67,7 +67,7 @@ def table():
     check(masses.AME_VERSION == "AME2020", "AME_VERSION names the evaluation")
     # pyazr's element symbols are the engine's one table (physics/Elements.h, _azure2.element_symbols()); the
     # AME file names every element it lists the same way.
-    from pyazr.nuclei import SYMBOLS
+    from pyazr.system.nuclei import SYMBOLS
     odd = sorted({(e.Z, e.symbol) for e in t.values() if e.Z > 0 and SYMBOLS[e.Z] != e.symbol})
     check(len(SYMBOLS) == 119 and SYMBOLS[0] == "n" and not odd,
           f"SYMBOLS (n..Og, {len(SYMBOLS)}) agree with the AME symbols{'; differ: ' + str(odd[:5]) if odd else ''}")

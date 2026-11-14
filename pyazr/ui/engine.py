@@ -18,6 +18,7 @@ import time
 import numpy as np
 
 from pyazr import errors, session_checks
+from pyazr import parameters as pyazr_parameters
 from pyazr.locking import session_lock
 
 # The methods of pyazr.Session the UI does not call, by reason (the route-table consistency test,
@@ -66,6 +67,7 @@ class Engine:
 
     def __init__(self):
         self.s = None
+        self._extrapolation_session = None
 
     # -- the session ----------------------------------------------------------------------------------------------
 
@@ -75,6 +77,9 @@ class Engine:
         if self.s is not None:
             self.s.close()
             self.s = None
+        if self._extrapolation_session is not None:
+            self._extrapolation_session.close()
+            self._extrapolation_session = None
         s = pyazr.Session(file, cwd=cwd)
         os.makedirs(s.output_dir, exist_ok=True)  # the external-capture cache and chiSquared.out are written there
         self.s = s
@@ -196,29 +201,36 @@ class Engine:
             out.append(d)
         return out
 
+    def _extrapolations(self):
+        """The session of the same project and options made for its extrapolations (``extrapolations=True``), made
+        on first use and kept with the data session (its external-capture integrals are computed once)."""
+        import pyazr
+        if self._extrapolation_session is None:
+            s = self.s
+            self._extrapolation_session = pyazr.Session(s.file, cwd=s.cwd, **dict(s.options, extrapolations=True))
+        return self._extrapolation_session
+
+    def _extrapolation_vector(self, x):
+        """The data session's free vector ``x`` as the extrapolation session's: its level parameters and abundances
+        (the block both lead with), the extrapolations' nuisances at their start."""
+        return pyazr_parameters.carry_model_parameters(x, self.s.parameters, self._extrapolations().parameters)
+
     def _extrapolation_arrays(self, x):
         """Every active extrapolation's arrays at x (the model on its grid: c.m. energy, excitation energy, c.m. angle,
-        the value in the engine's unit, and the S factor where offered).  The session switches to its extrapolation
-        grids and back (``extrap_mode``, ``data_mode``; the first switch computes the grids' external-capture
-        integrals, later ones reuse them)."""
-        s = self.s
-        infos = [self._extrapolation_info(e) for e in s.extrapolations if e.active]
+        the value in the engine's unit, and the S factor where offered), from the extrapolation session."""
+        infos = [self._extrapolation_info(e) for e in self.s.extrapolations if e.active]
         if not infos:
             return []
-        s.extrap_mode()
-        try:
-            grids = s.evaluate(x).data
-            out = []
-            for info, d_ev in zip(infos, grids):
-                model = d_ev.model
-                d = dict(info, e_cm=_plain(d_ev.energies), e_x=_plain(d_ev.excitation_energies),
-                         angle_cm=_plain(d_ev.angles), model=_plain(model))
-                if self._has_s_factor(info):
-                    d["s_factor"] = {"model": _plain(model * d_ev.extra["sfactor_conversion"]), "unit": S_FACTOR_UNIT}
-                out.append(d)
-            return out
-        finally:
-            s.data_mode()
+        grids = self._extrapolations().evaluate(self._extrapolation_vector(x)).data
+        out = []
+        for info, d_ev in zip(infos, grids):
+            model = d_ev.model
+            d = dict(info, e_cm=_plain(d_ev.energies), e_x=_plain(d_ev.excitation_energies),
+                     angle_cm=_plain(d_ev.angles), model=_plain(model))
+            if self._has_s_factor(info):
+                d["s_factor"] = {"model": _plain(model * d_ev.extra["sfactor_conversion"]), "unit": S_FACTOR_UNIT}
+            out.append(d)
+        return out
 
     def _extrapolation_info(self, e):
         """What the engine's description says of an extrapolation; its values are in its quantity's engine unit."""
@@ -324,11 +336,8 @@ def band_points(e, x):
     out = {"datasets": [_band_entry(e, info, d) for info, d in zip(e.info, ev.data)], "extrapolations": []}
     infos = [e._extrapolation_info(x_) for x_ in e.s.extrapolations if x_.active]
     if infos:
-        e.s.extrap_mode()
-        try:
-            out["extrapolations"] = [_band_entry(e, info, d) for info, d in zip(infos, e.s.evaluate(x).data)]
-        finally:
-            e.s.data_mode()
+        grids = e._extrapolations().evaluate(e._extrapolation_vector(x)).data
+        out["extrapolations"] = [_band_entry(e, info, d) for info, d in zip(infos, grids)]
     return out
 
 
@@ -353,17 +362,14 @@ def models_at(e, xs, progress):
         progress(k + 1, ev.objective, x)
     grids = []
     if any(x_.active for x_ in e.s.extrapolations):
-        e.s.extrap_mode()
-        try:
-            for k, x in enumerate(xs):
-                ev = e.s.evaluate(x)
-                if not grids:
-                    grids = [np.empty((len(xs), len(d.model))) for d in ev.data]
-                for i, d in enumerate(ev.data):
-                    grids[i][k] = d.model
-                progress(len(xs) + k + 1, None, x)
-        finally:
-            e.s.data_mode()
+        ext = e._extrapolations()
+        for k, x in enumerate(xs):
+            ev = ext.evaluate(e._extrapolation_vector(x))
+            if not grids:
+                grids = [np.empty((len(xs), len(d.model))) for d in ev.data]
+            for i, d in enumerate(ev.data):
+                grids[i][k] = d.model
+            progress(len(xs) + k + 1, None, x)
     return data, grids
 
 
@@ -386,13 +392,10 @@ def linear_sigma(e, x, covariance, names):
     out_data = [data[key].sigma for key in sorted(data, key=lambda k: data[k].segment)]
     out_grids = []
     if any(x_.active for x_ in e.s.extrapolations):
-        e.s.extrap_mode()
-        try:
-            n_grids = sum(1 for x_ in e.s.extrapolations if x_.active)
-            grids = bands.uncertainty_bands(e.s, segments=list(range(n_grids)), params=x[cols], covariance=block)
-            out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
-        finally:
-            e.s.data_mode()
+        n_grids = sum(1 for x_ in e.s.extrapolations if x_.active)
+        grids = bands.uncertainty_bands(e._extrapolations(), segments=list(range(n_grids)), params=x[cols],
+                                        covariance=block)
+        out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
     return out_data, out_grids
 
 

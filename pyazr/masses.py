@@ -136,11 +136,11 @@ def _load():
 
 def _symbols():
     try:
-        from .nuclei import SYMBOLS
+        from .system.nuclei import SYMBOLS
     except ImportError:                 # loaded standalone by path, no parent package
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "pyazr_nuclei_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nuclei.py"))
+            "pyazr_nuclei_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "system", "nuclei.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         SYMBOLS = mod.SYMBOLS
@@ -150,7 +150,7 @@ def _symbols():
 def parse_nuclide(spec) -> Tuple[int, int]:
     """``(Z, A)`` of ``spec``: a shorthand (``"p"``, ``"a"``), an isotope name
     (``"12C"``, ``"C12"``, ``"c-12"``, ``"4He"``), a ``(Z, A)`` pair or a
-    :class:`pyazr.nuclei.Nucleus`."""
+    :class:`pyazr.system.Nucleus`."""
     if isinstance(spec, (tuple, list)) and len(spec) == 2:
         return int(spec[0]), int(spec[1])
     s = str(spec).strip()

@@ -89,7 +89,7 @@ the primary reaction does not reproduce it.
 - A natural target is a `target` record with one `isotope` field per target nucleus (`isotope 20Ne 0.9048 fixed`,
   `fit prior ...` to fit it) and `isotope_sum`; a data set on it names the sum of its reactions, each term weighted
   by its nucleus's abundance. The nucleus of a pair is inferred from its masses and charges.
-- Build it with `pyazr.merge_projects(projects, out, isotopes={...}, shared=[{0: "vaughn", 1: "vaughn"}])` rather than
+- Build it with `pyazr.system.merge_projects(projects, out, isotopes={...}, shared=[{0: "vaughn", 1: "vaughn"}])` rather than
   by hand: the engine merges the `<levels>` rows (pair keys and level IDs moved past the earlier members'), keeps
   every record (renaming collisions) and adds the target; member 0's `<config>`, `<thm>`, `<parameterSettings>` and
   `<mcmc>` are kept. `pyazr.rst`, "Several compound nuclei".

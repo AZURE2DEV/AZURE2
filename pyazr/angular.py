@@ -37,8 +37,9 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
     order : int
         Highest Legendre order to compute.
     params : array_like, optional
-        The free vector (``Session.parameters.x0`` of the model's
-        session) to evaluate at. Defaults to the model's own values.
+        The free vector to evaluate at: one of a session made on the project with ``extrapolations=True`` (its
+        ``parameters.x0``; a data session's vector carries over with
+        :func:`pyazr.parameters.carry_model_parameters`).  Defaults to the model's own values.
     lab : bool
         Whether ``energies`` are laboratory (default) or centre-of-mass.
     **azure2_kwargs
@@ -87,8 +88,7 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
         # run where the original file lives.
         azure2_kwargs.setdefault("cwd", os.path.dirname(os.path.abspath(azr_file)) or ".")
 
-        with Session(tmp_azr, **azure2_kwargs) as m:
-            m.extrap_mode()
+        with Session(tmp_azr, extrapolations=True, **azure2_kwargs) as m:
             grids = m.evaluate(m.parameters.x0 if params is None else params).data
 
         out_e = np.full(energies.size, np.nan)

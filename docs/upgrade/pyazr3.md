@@ -1062,3 +1062,26 @@ Not shown by a build: a term added to `src/Objective.cpp` reaching `Evaluation.t
 `ObjectiveTermNames`, the engine's list, read at each evaluation; the evaluation test reads every term by its
 engine name).  Not done (left for later): the dense model line of a data set (finding 21), the σ and S columns
 as the writer forms them (`SigmaAndS`), read-only views.
+
+## 8. No physics in Python (step 5 of section 4, its fourth part): as built
+
+- `pyazr/transform.py` is deleted: `Session.transform(x)` is the engine's transformation, the functions are rows of
+  `pyazr.physics` (or `Session.channel_functions` with the session's radius, table and potential).  The port differed
+  from the engine where a pair has a nuclear potential (T3, 0.9 %) and in the formal basis (T2, 10 %): measured in
+  `HANDOFF.md`.  `widths.teichmann_wigner` and `lane_thomas_wigner` are deleted; `widths.weisskopf_width` is the one
+  formula of pyazr's own (no engine counterpart), tested against its closed form.
+- Differs from 2.3: `wigner_widths` and `dimensionless_widths` stay methods of the session (they read the engine's
+  transformation of a probe vector, no Python formula); the probe and `2 P gamma_W^2` from `channel_functions` disagree
+  where a level has fixed widths or levels mix (T2 20 %, formal T2, 17O), so neither replaced the other: a decision.
+- `pyazr.system`: `Pair`, `PairSet` (`pairs.py`), `LevelScheme`, `SchemeLevel`, `SchemeChannel` (`scheme.py`),
+  `Nucleus`, `nucleus_of`, `nucleus_of_pair`, `merge_projects`, `MergeReport` (`nuclei.py`); no top-level aliases.
+  Differs from 2.2: no `Levels` / `Level` objects (the level rows are `parameters.of_kind("energy")`).
+- The mode switch: a session is made for the data sets or, with `extrapolations=True` (the engine's
+  `RuntimeOptions.data_mode`, the keyword of its option row), for the extrapolations; `extrap_mode`, `data_mode` and
+  the vector mapping of a switched session are gone.  `parameters.carry_model_parameters(x, source, target)` carries
+  the level parameters and abundances of a data session's vector to the extrapolation session.  Differs from 2.2: no
+  `s.extrapolations` evaluation beside `s.data` (the engine evaluates one segment set per session);
+  `s.extrapolations` stays the description of the records.  The web page's adapter keeps a second session for the
+  extrapolations.
+- Not done in this part: `set_channel_radius`, `set_nuclear_potential`, `clear_nuclear_potential` still edit a live
+  session; `bands.best_fit_params` still makes a live session take a parameter file (`_take_parameter_file`).

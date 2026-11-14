@@ -104,7 +104,7 @@ try:
     os.makedirs(os.path.join(tmp, "output"))
     refused = False
     try:
-        with pyazr.Session(path, cwd=tmp, data_mode=False) as m:
+        with pyazr.Session(path, cwd=tmp, extrapolations=True) as m:
             m.evaluate()
     except Exception as e:  # the session's set-up failure
         refused = True

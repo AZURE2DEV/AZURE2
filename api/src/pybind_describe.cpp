@@ -24,19 +24,20 @@ struct NotProjectOptionRow {
   const char *name;
   const char *keyword;
   const char *flag;
-  const char *type;  ///< "bool" (default true) or "str" (default "")
+  const char *type;  ///< "bool" or "str" (default "")
+  bool bool_default;  ///< the default of a "bool" row
   const char *doc;
   const char *reason;
 };
 const std::vector<NotProjectOptionRow> &NotProjectOptionRows() {
   static const std::vector<NotProjectOptionRow> rows = {
-      {"data_mode", "data_mode", "", "bool",
-       "evaluate the data sets (True) or the extrapolations (False); the program's menu choice 1 or 3",
-       "what a run evaluates, chosen per run (the menu, pyazr's set_data / set_extrap)"},
-      {"coulomb_table", "coulomb_table", "--coulomb-table=FILE", "str",
+      {"data_mode", "extrapolations", "", "bool", false,
+       "evaluate the extrapolations (True) or the data sets (False); the program's menu choice 3 or 1",
+       "what a run evaluates, chosen per run (the menu; a pyazr session is made for one or the other)"},
+      {"coulomb_table", "coulomb_table", "--coulomb-table=FILE", "str", false,
        "the Coulomb table file (\"\": $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin)",
        "a file of this machine; whether the table is used is the key use_coulomb_table"},
-      {"base_directory", "cwd", "", "str",
+      {"base_directory", "cwd", "", "str", false,
        "the directory the project's relative paths are resolved in (\"\": the project file's directory)",
        "a directory of this machine"},
   };
@@ -164,7 +165,7 @@ void BindDescription(py::module_ &m) {
           d["negation"] = "";
           d["type"] = row.type;
           if (std::string(row.type) == "bool")
-            d["default"] = true;
+            d["default"] = row.bool_default;
           else
             d["default"] = "";
           d["effect"] = "";

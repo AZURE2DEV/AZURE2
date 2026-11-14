@@ -50,7 +50,7 @@ def extrapolate(azr, fields, params=None, options=None, name="skill_grid", keep=
     p.set_config(output_dir=f"{out.name}/")
     copy = p.save(azr.with_name(f"{azr.stem}_extrap.azr"))
     try:
-        with pyazr.Session(str(copy), data_mode=False, **(options or {})) as s:
+        with pyazr.Session(str(copy), extrapolations=True, **(options or {})) as s:
             x = s.parameters.read(params) if params else s.parameters.x0
             d = next(d for d in s.evaluate(x).data if d.name == name)
             conv = d.extra.get("sfactor_conversion")

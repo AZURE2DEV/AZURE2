@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""AZURE2's Wigner limit is the Teichmann-Wigner sum-rule unit 3 hbar^2 / (2 mu a^2), and the pyazr helpers say so.
+"""AZURE2's Wigner limit is the Teichmann-Wigner sum-rule unit 3 hbar^2 / (2 mu a^2).
 
 `Parameter.wigner_limit` comes from `AChannel::SetWignerLimit`, 1.5 hbar^2 / (mu a^2) in MeV with mu the pair's
-reduced mass and a its channel radius.  Up to dev c1f72bb `pyazr/widths.py` documented it as hbar^2 / (mu a^2) and
-`teichmann_wigner()` multiplied it by 1.5 "for the 3 hbar^2 / (2 mu a^2) convention", giving 2.25 hbar^2 / (mu a^2)
-and a theta^2 too small by 1.5 (audit 2026-10-25, item 19).  `teichmann_wigner()` now returns the limit unchanged
-and `lane_thomas_wigner()` gives the hbar^2 / (mu a^2) unit.
+reduced mass and a its channel radius; `pyazr.physics.wigner_limit` is the same number (a hbar^2 / (mu a^2) unit is
+2/3 of it, and a theta^2 quoted against that unit is 1.5 times larger).
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -31,7 +29,7 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import Session, teichmann_wigner, lane_thomas_wigner
+    from pyazr import Session, physics
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -39,6 +37,7 @@ except ImportError as e:
 work = os.path.join(ROOT, "tests", "13N")
 m = Session(os.path.join(work, "13N.azr"), cwd=work)
 widths = [p for p in m.parameters.of_kind("width") if p.wigner_limit]
+pairs_of = {p.number: p for p in m.pairs}
 check("the 13N widths carry a Wigner limit", len(widths) >= 3, f"{len(widths)} widths with a limit")
 n = 0
 for p in widths:
@@ -54,9 +53,9 @@ for p in widths:
     elif abs(p.wigner_limit / expect - 1.0) >= 1e-9:
         check(f"{p.name}: wigner_limit = 3 hbar^2 / (2 mu a^2)", False, f"{p.wigner_limit} vs {expect}")
 w = widths[0].wigner_limit
-check("teichmann_wigner() returns AZURE2's limit unchanged", teichmann_wigner(w) == w, f"{teichmann_wigner(w)} vs {w}")
-check("lane_thomas_wigner() is 2/3 of it", abs(lane_thomas_wigner(w) / (w / 1.5) - 1.0) < 1e-12)
-check("both pass None through", teichmann_wigner(None) is None and lane_thomas_wigner(None) is None)
+check("pyazr.physics.wigner_limit gives the session's limit", abs(
+    float(physics.wigner_limit(pairs_of[widths[0].pair].M1, pairs_of[widths[0].pair].M2,
+                               pairs_of[widths[0].pair].channel_radius)) / w - 1.0) < 1e-12)
 
 if failures:
     print(f"\n{len(failures)} check(s) FAILED")

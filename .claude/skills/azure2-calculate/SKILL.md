@@ -92,7 +92,7 @@ with pyazr.Session("project.azr") as s:          # cwd defaults to the project's
   another (`s.basis`: 0 standard, 1 Brune, 2 Park). Physical values (Γ in eV, ANCs): `s.transform(x)`, one per row
   of `s.parameters`.
 - **Data or extrapolations**: a session evaluates either its data sets (default) or its extrapolation records
-  (`Session(file, data_mode=False)`); open one session of each kind rather than switching. In extrapolation mode only
+  (`Session(file, extrapolations=True)`); open one session of each kind rather than switching. In extrapolation mode only
   active records are evaluated and every χ² field is `None`; find a record by `d.name`, not by position.
 - **Threads**: every evaluation uses `OMP_NUM_THREADS` threads; two sessions may evaluate on two threads at once; for
   more cores give each worker process its own session (`pyazr.rst`, "Running in parallel").
@@ -127,7 +127,7 @@ p = pyazr.Project.open("model.azr")
 p.add("extrapolation", "sfac", reaction="12C(p,g)13N", quantity="sigma", unit="b",
       energies="range 0.001 0.6 MeV cm points 200 log")
 p.save("model_grid.azr")                  # beside the original: relative paths hold
-with pyazr.Session("model_grid.azr", data_mode=False) as s:
+with pyazr.Session("model_grid.azr", extrapolations=True) as s:
     d = next(d for d in s.evaluate(s.parameters.read("output/param.sav")).data if d.name == "sfac")
 ```
 

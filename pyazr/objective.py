@@ -21,8 +21,9 @@ from . import session_checks
 def require_data_mode(session, what):
     """Refuse a session in extrapolation mode: it has no data and no objective."""
     if session.mode != "data":
-        raise EngineError(f"{what} needs the session's data (it is in extrapolation mode, which has no data and no "
-                          "objective); call data_mode() first.")
+        raise EngineError(f"{what} needs the session's data (it was made with extrapolations=True, which has no data "
+                          "and no objective); make a session for the data: Session(file), or "
+                          "Session(file, **dict(s.options, extrapolations=False)).")
 
 
 class Objective:
