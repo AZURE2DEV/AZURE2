@@ -31,11 +31,11 @@
  * The AMatrixFunc object is created with reference to a CNuc object.
  */
 
-AMatrixFunc::AMatrixFunc(CNuc *compound, const Config &configure) :
+AMatrixFunc::AMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure) :
   configure_(&configure),
   compound_(compound),
-  cached_max_levels_(0),
-  cached_max_channels_(0) {}
+  state_(&state),
+  cached_max_levels_(0), cached_max_channels_(0) {}
 
 /*!
  * Returns the A-Matrix of a J-Group, materializing it from the stored
@@ -196,7 +196,7 @@ void AMatrixFunc::FillMatrices(Site *point) {
         formal_jgroup_[j - 1] = jGroup;
       }
       ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
-      ChannelSpace::Update(jGroup, compound()->State(), j, active_levels_[j - 1], configure(), f);
+      ChannelSpace::Update(jGroup, state(), j, active_levels_[j - 1], configure(), f);
       if (f.usable) {
         if (this->SolveChannelSpace(j, point, inEnergy)) {
           route_[j - 1] = kRouteChannel;
@@ -249,7 +249,7 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
   }
 
   // Pre-cache gamma values for all levels and channels using pre-allocated buffers
-  const LevelState &state = compound()->State();
+  const LevelState &state = this->state();
   for (int la = 1; la <= numLevels; la++) {
     if (jGroup->GetLevel(la)->IsInRMatrix()) {
       levelEnergies_[la] = state.E(j, la);
@@ -386,7 +386,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
-      double gamma = compound()->State().Gamma(jGroupNum, la, chNum);
+      double gamma = state().Gamma(jGroupNum, la, chNum);
       if (fabs(gamma) < 1.0e-12) continue;
       gammas[row - 1] = gamma;
     }
@@ -466,7 +466,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
     // The --ignore-externals mask (external_capture.md section 3): in the formal basis the projector T^-1 P T of
     // the Brune levels whose input width in the photon channel is zero; otherwise those levels are left out.
     const int maskSlot = maskChannel ? compound()->FormalCaptureMaskSlot(jGroupNum, maskChannel) : -1;
-    const std::vector<double> *projector = maskSlot >= 0 ? &compound()->State().CaptureProjector(maskSlot) : nullptr;
+    const std::vector<double> *projector = maskSlot >= 0 ? &state().CaptureProjector(maskSlot) : nullptr;
     if (projector && !projector->empty()) {
       const std::vector<int> &levels = compound()->FormalCaptureMaskOf(maskSlot).levels;
       const std::size_t nl = levels.size();
@@ -475,8 +475,8 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
         if (row == 0) continue;
         double en = 0.0, ex = 0.0;
         for (std::size_t j = 0; j < nl; j++) {
-          en += (*projector)[i * nl + j] * compound()->State().Gamma(jGroupNum, levels[j], chNum);
-          ex += (*projector)[i * nl + j] * compound()->State().Gamma(jGroupNum, levels[j], chpNum);
+          en += (*projector)[i * nl + j] * state().Gamma(jGroupNum, levels[j], chNum);
+          ex += (*projector)[i * nl + j] * state().Gamma(jGroupNum, levels[j], chpNum);
         }
         chan_cap_entrance_[row - 1] = en;
         chan_cap_exit_[row - 1] = ex;
@@ -485,9 +485,9 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
       for (int la = 1; la < (int)map.size(); la++) {
         const int row = map[la];
         if (row == 0) continue;
-        if (maskChannel && compound()->Inputs().ZeroInputWidth(jGroupNum, la, maskChannel)) continue;
-        chan_cap_entrance_[row - 1] = compound()->State().Gamma(jGroupNum, la, chNum);
-        chan_cap_exit_[row - 1] = compound()->State().Gamma(jGroupNum, la, chpNum);
+        if (maskChannel && state().ZeroInputWidth(jGroupNum, la, maskChannel)) continue;
+        chan_cap_entrance_[row - 1] = state().Gamma(jGroupNum, la, chNum);
+        chan_cap_exit_[row - 1] = state().Gamma(jGroupNum, la, chpNum);
       }
     value = channel ? this->ChannelBilinear(jGroupNum, chan_cap_entrance_.data(), chan_cap_exit_.data())
                     : solvers_[jGroupNum - 1].Bilinear(chan_cap_entrance_, chan_cap_exit_);
@@ -565,7 +565,7 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        const LevelState &state = compound()->State();
+        const LevelState &state = this->state();
         double ecNormParam =
             state.ECGamma(theECMGroup.final_group, theECMGroup.final_level, theECMGroup.final_channel) *
             state.SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
@@ -1189,13 +1189,13 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         int fc = ecg->final_channel;
         const ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
         const JGroup *jgf = compound()->GetJGroup(jf);
-        double sqrtNF = compound()->State().SqrtNF(jf, lf);
+        double sqrtNF = state().SqrtNF(jf, lf);
         double conv = finalLevel->GetECConversionFactor(fc);
         complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
                               : point->GetECAmplitude(k, m);
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
-        double gamma_fc = compound()->State().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
+        double gamma_fc = state().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
         complex base = gamma_fc * sqrtNF * conv * ecAmp;
 
         // "effective amplitude" carrying the umatrix_cc factor for the
@@ -1217,14 +1217,14 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                compound()->Inputs().ZeroInputWidth(jcc, la, internalChannel)) continue;
+                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  compound()->Inputs().ZeroInputWidth(jcc, lap, internalChannel)) continue;
+                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
               umatrix_cc += I2 * sqrtPcc *
-                  compound()->State().Gamma(jcc, la, ccChN) *
-                  compound()->State().Gamma(jcc, lap, ccChpN) *
+                  state().Gamma(jcc, la, ccChN) *
+                  state().Gamma(jcc, lap, ccChpN) *
                   this->GetAMatrixElement(jcc, la, lap);
             }
           }
@@ -1236,13 +1236,13 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                compound()->Inputs().ZeroInputWidth(jcc, la, internalChannel)) continue;
-            double gEn = compound()->State().Gamma(jcc, la, ccChN);
+                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
+            double gEn = state().Gamma(jcc, la, ccChN);
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  compound()->Inputs().ZeroInputWidth(jcc, lap, internalChannel)) continue;
-              double gEx = compound()->State().Gamma(jcc, lap, ccChpN);
+                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
+              double gEx = state().Gamma(jcc, lap, ccChpN);
               complex Aval = this->GetAMatrixElement(jcc, la, lap);
               complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]
               aBar[jcc - 1][la - 1][lap - 1] += conj(w) * uBarcc;
@@ -1272,9 +1272,9 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
                                          finalLevel->GetNFIntegral(d)
                                    : 0.0;
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
-            Ad -= compound()->State().ShiftDerivative(jf, lf, d);
+            Ad -= state().ShiftDerivative(jf, lf, d);
           if (Ad == 0.0) continue;
-          double gd = compound()->State().ECGamma(jf, lf, d);
+          double gd = state().ECGamma(jf, lf, d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
           accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
         }
@@ -1313,10 +1313,10 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
       for (int la = 1; la <= numLevels; la++) {
         if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-        double gammaEn = compound()->State().Gamma(jNum, la, chNum);
+        double gammaEn = state().Gamma(jNum, la, chNum);
         for (int lap = 1; lap <= numLevels; lap++) {
           if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-          double gammaEx = compound()->State().Gamma(jNum, lap, chpNum);
+          double gammaEx = state().Gamma(jNum, lap, chpNum);
           complex Aval = this->GetAMatrixElement(jNum, la, lap);
           complex w = pen2 * gammaEn * gammaEx;  // weight of A[la][lap]
 
@@ -1420,7 +1420,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
       return jg->GetChannel(d)->GetRadType() == 'P' &&
              compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
     };
-    const LevelState &state = compound()->State();
+    const LevelState &state = this->state();
     for (int r = 1; r <= n; r++) {
       const int lr = lev(r);
       double Er = state.E(jNum, lr);
@@ -1521,10 +1521,10 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
     la.SG.resize((size_t)n * nch);
     for (int r = 0; r < n; r++) {
       const int level = lev(r + 1);
-      la.E[r] = compound()->State().E(jNum, level);
+      la.E[r] = state().E(jNum, level);
       for (int ch = 0; ch < nch; ch++) {
-        la.G[(size_t)r * nch + ch] = compound()->State().Gamma(jNum, level, ch + 1);
-        la.S[(size_t)r * nch + ch] = compound()->State().Shift(jNum, level, ch + 1);
+        la.G[(size_t)r * nch + ch] = state().Gamma(jNum, level, ch + 1);
+        la.S[(size_t)r * nch + ch] = state().Shift(jNum, level, ch + 1);
         la.SG[(size_t)r * nch + ch] = la.S[(size_t)r * nch + ch] * la.G[(size_t)r * nch + ch];
       }
     }
@@ -1534,7 +1534,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
         if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
     levelArraysPtr = &la;
   } else {
-    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), jNum);
+    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), jNum);
   }
   const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
   const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
@@ -1710,7 +1710,7 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
-      solve[row - 1] = compound()->State().Gamma(jGroupNum, la, chNum);
+      solve[row - 1] = state().Gamma(jGroupNum, la, chNum);
     }
     if (n > 0) {
       if (route_[jGroupNum - 1] == kRouteChannel) {
@@ -1889,7 +1889,7 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
     }
     accum.formalUsed = true;
     const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
-    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), jNum).G;
+    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), jNum).G;
     vector_c ga(nch), gb(nch);
     for (const BilinearTerm &t : terms) {
       const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
@@ -2468,7 +2468,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     formal_[j - 1] = ChannelSpace::Cached(ChannelMemo(), jg);
     formal_jgroup_[j - 1] = jg;
     ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
-    ChannelSpace::Update(jg, compound()->State(), j, active_levels_[j - 1], configure(), f);
+    ChannelSpace::Update(jg, state(), j, active_levels_[j - 1], configure(), f);
     const int n = f.n, nch = f.nch, m = (int)f.act.size();
     const std::vector<double> &ebar = accum.fe[j - 1];
     const std::vector<std::vector<double>> &gbar = accum.fgamma[j - 1];
@@ -2693,9 +2693,9 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
                        : (brune && ch->GetRadType() == 'P');
   }
   const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
-      ChannelMemo(), jg, compound()->State(), j, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
+      ChannelMemo(), jg, state(), j, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
       (brune && shiftDeriv) ? &(*shiftDeriv)[j - 1] : nullptr);
-  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, compound()->State(), j);
+  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), j);
   const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
   const double E = this->InEnergy(energyPoint);
   // The channels the terms involve, their solves u_c = A g_c and g_d . u_c.

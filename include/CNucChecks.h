@@ -2,6 +2,7 @@
 #define CNUC_CHECKS_H
 
 class CNuc;
+class LevelInputs;
 class ObservedLevelTable;
 class Config;
 
@@ -23,6 +24,6 @@ int WarnMassSeparationMismatch(const CNuc &compound, const Config &configure);
 constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 /// Warns of every R-matrix level whose radiative width exceeds 10 % of its particle width, from the observed widths
 /// of `table` (CNuc::ObservedWidthsAt).
-void WarnLargeRadiativeWidths(const CNuc &compound, const ObservedLevelTable &table, const Config &configure);
+void WarnLargeRadiativeWidths(const CNuc &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
 
 #endif

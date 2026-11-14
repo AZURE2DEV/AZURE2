@@ -26,7 +26,7 @@ bool ThmThroughEnergyTasks(const WorkingCopy &data, const Config &config) {
   return true;
 }
 
-std::unique_ptr<ThmAdjointContext> ThmGradientContext(CNuc *compound, const WorkingCopy &data, const Config &config,
+std::unique_ptr<ThmAdjointContext> ThmGradientContext(CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config,
                                                       const vector_matrix_r *shiftDeriv) {
   bool any = false, lineshape = false;
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
@@ -37,7 +37,7 @@ std::unique_ptr<ThmAdjointContext> ThmGradientContext(CNuc *compound, const Work
   }
   if (!any || !ThmThroughEnergyTasks(data, config)) return nullptr;
   return std::unique_ptr<ThmAdjointContext>(
-      new ThmAdjointContext(BuildThmAdjointContext(compound, data.ThmCoherentValues(), config, shiftDeriv, lineshape)));
+      new ThmAdjointContext(BuildThmAdjointContext(compound, state, data.ThmCoherentValues(), config, shiftDeriv, lineshape)));
 }
 
 void ThmModelCotangents(WorkingCopy &data, Results &results, const std::vector<GradPoint> &points,

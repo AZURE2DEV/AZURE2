@@ -60,11 +60,12 @@ phys::LevelBasis BasisOf(const Config &configure) {
 
 }  // namespace
 
-CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CNucSystemContent content) {
+CNucSystem BuildSystemFromCNuc(const CNuc &compound, const LevelInputs &inputs, const Config &configure,
+                               CNucSystemContent content) {
   const bool withParameters = (content == CNucSystemContent::Parameters);
   const bool allGroups = (content == CNucSystemContent::AllGroups);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
-  if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.Inputs().TransformedIn())
+  if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !inputs.TransformedIn())
     throw std::runtime_error("BuildSystemFromCNuc: the compound nucleus has not been initialized "
                              "(CNuc::Initialize): its level parameters are still the input widths");
 
@@ -134,8 +135,8 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CN
       if (!level->IsInRMatrix() && !allGroups) continue;
       groupLevels.push_back(la);
       if (!withParameters) continue;
-      energies.push_back(compound.Inputs().E(j, la));
-      for (int ch = 1; ch <= group->NumChannels(); ch++) gammas.push_back(compound.Inputs().Gamma(j, la, ch));
+      energies.push_back(inputs.E(j, la));
+      for (int ch = 1; ch <= group->NumChannels(); ch++) gammas.push_back(inputs.Gamma(j, la, ch));
     }
 
     blocks.push_back(phys::JpiBlock(TwiceSpin(group->GetJ(), what + " J"), group->GetPi(), group->GetNucleus() - 1,
@@ -154,8 +155,8 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CN
 // The two Systems of a CNuc, built once at the end of CNuc::Fill (CNuc.h).
 void CNuc::BuildSystems(const Config &configure) {
   try {
-    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure));
-    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, configure, CNucSystemContent::AllGroups));
+    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, levelInputs_, configure, CNucSystemContent::Structure));
+    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, levelInputs_, configure, CNucSystemContent::AllGroups));
   } catch (...) {
     // Kept for the readers, which stop on it where they did when each built its own System.
     systemStructure_.reset();

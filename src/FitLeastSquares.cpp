@@ -103,7 +103,7 @@ void FinalizeLeastSquaresCovariance(const AZURECalc &self, const vector_r &full,
   auto describe = [&](int a) {
     const int minuitIndex = p2f[a];
     std::string text = mp.GetName(minuitIndex);
-    const std::string label = AZURELabel::Parameter(self.compound(), self.data(), minuitIndex);
+    const std::string label = AZURELabel::Parameter(self.compound(), self.compound()->Inputs(), self.data(), minuitIndex);
     if (!label.empty()) text += "  =  " + label;
     return text;
   };

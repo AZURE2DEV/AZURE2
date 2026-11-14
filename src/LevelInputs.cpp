@@ -8,6 +8,5 @@ LevelInputs::LevelInputs(const std::vector<int> &numLevels, const std::vector<in
     g.numChannels = (int)nc;
     g.E.assign(n, 0.0);
     g.gamma.assign(n * nc, 0.0);
-    g.zero.assign(n * nc, 0);
   }
 }

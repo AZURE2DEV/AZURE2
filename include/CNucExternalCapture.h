@@ -12,6 +12,7 @@ class ALevel;
 class CNuc;
 class Config;
 class LevelInputs;
+class LevelState;
 class JGroup;
 
 /*!
@@ -73,8 +74,8 @@ complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const 
 /// gamma^ext of the photon channel `channel` of level la of J-group j (ExternalReducedWidthAt) at the input values
 /// `inputs`: the level's and the final state's input energy and amplitudes, with the final state's stored N_f^(-1/2)
 /// (CNuc::TransformIn).
-complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelInputs &inputs, int j, int la,
-                                     const AChannel *channel, const Config &configure);
+complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelState &state, const LevelInputs &inputs, int j,
+                                     int la, const AChannel *channel, const Config &configure);
 
 /// gamma^ext of the photon channel `channel` of level la of J-group j (1-based) at the Brune (Park) values of
 /// `table` (CNuc::TransformOut): the level's and the final state's energy, amplitudes and N_f^(-1/2) of the table.

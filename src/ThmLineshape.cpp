@@ -63,14 +63,14 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma) {
   return std::exp(2.0 * zeta * angle);
 }
 
-double ThmLevelWidth(CNuc *compound, int j, int la, const Config &configure) {
+double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, const Config &configure) {
   const JGroup *jgroup = compound->GetJGroup(j);
   std::vector<double> gamma(jgroup->NumChannels());
-  for (int ch = 1; ch <= jgroup->NumChannels(); ch++) gamma[ch - 1] = compound->State().Gamma(j, la, ch);
-  return ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+  for (int ch = 1; ch <= jgroup->NumChannels(); ch++) gamma[ch - 1] = state.Gamma(j, la, ch);
+  return ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
 }
 
-double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::vector<double> &gammas,
+double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, double energy, const std::vector<double> &gammas,
                      const Config &configure) {
   const JGroup *jgroup = compound->GetJGroup(j);
   const ALevel *level = jgroup->GetLevel(la);
@@ -100,7 +100,7 @@ double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::ve
       // A ground-state transition parametrizes a moment, not a width.  Told
       // by the level's energy as read, as CNuc::TransformOut does, so that a
       // fit moving the level does not change what its gamma means.
-      if (std::fabs(compound->Inputs().E(j, la) - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
+      if (std::fabs(state.InputEnergy(j, la) - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
           jgroup->GetPi() == pair->GetPi(2))
         continue;
       double pene = rmc ? 1.0 : std::pow(std::fabs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);

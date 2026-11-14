@@ -190,7 +190,7 @@ int WarnMassSeparationMismatch(const CNuc &compound, const Config &configure) {
  * width and are skipped; levels with no open particle channel are not checked.  One warning lists every flagged
  * level, worst first.
  */
-void WarnLargeRadiativeWidths(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
+void WarnLargeRadiativeWidths(const CNuc &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure) {
   namespace phys = azure2::physics;
   const double warningRatio = 0.1;
   struct FlaggedLevel {
@@ -226,7 +226,7 @@ void WarnLargeRadiativeWidths(const CNuc &compound, const ObservedLevelTable &ta
         entry.ratio = ratio;
         entry.radWidth = radiativeWidth;
         entry.particleWidth = particleWidth;
-        entry.label = AZURELabel::Level(theJGroup, compound.Inputs().E(j, la), j, la);
+        entry.label = AZURELabel::Level(theJGroup, inputs.E(j, la), j, la);
         flagged.push_back(entry);
       }
     }

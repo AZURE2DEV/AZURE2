@@ -273,10 +273,10 @@ vector_r GammaDecaySet::WithPartialWidths(const vector_r &observed) const {
   return p;
 }
 
-double GammaDecaySet::ValueOr(const CNuc &compound, int j, int la, int ch, double otherwise) const {
+double GammaDecaySet::ValueOr(const CNuc &compound, const LevelState &state, int j, int la, int ch, double otherwise) const {
   const int r = RecordOf(j, la), slot = SlotOf(r, ch);
-  if (slot < 0 || !compound.State().HasGammaDecayFill(r)) return otherwise;
-  return compound.State().GammaDecayFillOf(r).q.at(slot);
+  if (slot < 0 || !state.HasGammaDecayFill(r)) return otherwise;
+  return state.GammaDecayFillOf(r).q.at(slot);
 }
 
 std::vector<double> GammaDecaySet::PartialWidths(const GammaDecayLevel &L, const std::vector<double> &q,
@@ -522,7 +522,7 @@ vector_r GammaDecaySet::ToEngine(const CNuc &compound, LevelState &state, const 
   return p;
 }
 
-void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const ParamIndexMap &map,
+void GammaDecaySet::PullBack(const CNuc &compound, const LevelState &state, const GradAccum &accum, const ParamIndexMap &map,
                              vector_r &gradFull) const {
   const int nFull = (int)gradFull.size();
   auto add = [&](int index, double v) {
@@ -533,8 +533,8 @@ void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const
     const int j = L.spec.group, la = L.spec.level;
     const JGroup *group = compound.GetJGroup(j);
     const ALevel *level = group->GetLevel(la);
-    if (!compound.State().HasGammaDecayFill((int)r)) continue;
-    const GammaDecayFill &fill = compound.State().GammaDecayFillOf((int)r);
+    if (!state.HasGammaDecayFill((int)r)) continue;
+    const GammaDecayFill &fill = state.GammaDecayFillOf((int)r);
     const std::vector<double> &q = fill.q;
     const std::vector<double> &amp = fill.total;  // g_k, the amplitude of the record's observed width
     const std::size_t m = L.photonChannels.size();
@@ -552,7 +552,7 @@ void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const
     bool any = false;
     for (double g : gbar) any = any || g != 0.0;
     if (!any) continue;
-    for (int ch = 1; ch <= group->NumChannels(); ch++) particle[ch - 1] = compound.State().Gamma(j, la, ch);
+    for (int ch = 1; ch <= group->NumChannels(); ch++) particle[ch - 1] = state.Gamma(j, la, ch);
     // Gamma_gamma and the branchings: dg_k/dq_i = g_k / (2 Gamma_k) dGamma_k/dq_i (0 where Gamma_k = 0: g ~ b^1/2
     // has no finite derivative at b = 0), times R_k.
     std::vector<double> dGdq;
@@ -574,7 +574,7 @@ void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const
         std::vector<double> unit = q;
         unit[i] = 1.0;
         const double K = std::sqrt(2.0) * PhotonAmplitudes(compound, *structure_, park_, gslCoulomb_, rmc_, L,
-                                                           compound.State().E(j, la), unit, particle)[kL1];
+                                                           state.E(j, la), unit, particle)[kL1];
         v = -gbar[kL] * R[kL] * amp[kL] * d / w + gbar[kL1] * R[kL1] * K / (w * std::sqrt(w));
       } else {
         for (std::size_t k = 0; k < m; k++)
@@ -583,7 +583,7 @@ void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const
       add(map.GammaIndexFlat(j, la, L.photonChannels[i]), v);
     }
     // The particle amplitudes (Brune): g_k^2 = |Gamma_k| n / (2 P_k), n = 1 + sum_c gamma_c^2 S'_c.
-    const double E = compound.State().E(j, la);
+    const double E = state.E(j, la);
     if (!park_) {
       const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(compound, structure_->map, gslCoulomb_, rmc_);
       double n = 1.0;
@@ -622,9 +622,9 @@ void GammaDecaySet::PullBack(const CNuc &compound, const GradAccum &accum, const
     for (std::size_t s = 0; s < m; s++) {
       const GammaDecayLevel::External &e = L.external[s];
       if (!e.group) continue;
-      finals[s].first = compound.State().E(e.group, e.level);
+      finals[s].first = state.E(e.group, e.level);
       for (int ch = 1; ch <= compound.GetJGroup(e.group)->NumChannels(); ch++)
-        finals[s].second.push_back(compound.State().Gamma(e.group, e.level, ch));
+        finals[s].second.push_back(state.Gamma(e.group, e.level, ch));
     }
     auto difference = [&](double upE, double downE, const std::vector<std::pair<double, std::vector<double>>> &upF,
                           const std::vector<std::pair<double, std::vector<double>>> &downF) {
@@ -669,13 +669,13 @@ std::vector<int> GammaDecaySet::InputIndices(const ParamIndexMap &map, int r) co
   return indices;
 }
 
-std::vector<GammaDecaySet::PenaltyRow> GammaDecaySet::PenaltyRows(const CNuc &compound) const {
+std::vector<GammaDecaySet::PenaltyRow> GammaDecaySet::PenaltyRows(const CNuc &compound, const LevelState &state) const {
   std::vector<PenaltyRow> rows;
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const ex::GammaDecaySpec &s = L.spec;
-    if (!compound.State().HasGammaDecayFill((int)r)) continue;
-    const std::vector<double> &q = compound.State().GammaDecayFillOf((int)r).q;
+    if (!state.HasGammaDecayFill((int)r)) continue;
+    const std::vector<double> &q = state.GammaDecayFillOf((int)r).q;
     auto index = [&](std::size_t i) { return L.energyIndex + L.photonChannels[i]; };
     double sum = 0.0;
     std::vector<std::pair<int, double>> sumTerms;
@@ -710,18 +710,18 @@ std::vector<GammaDecaySet::PenaltyRow> GammaDecaySet::PenaltyRows(const CNuc &co
   return rows;
 }
 
-double GammaDecaySet::Penalty(const CNuc &compound) const {
+double GammaDecaySet::Penalty(const CNuc &compound, const LevelState &state) const {
   double chi2 = 0.0;
-  for (const PenaltyRow &row : PenaltyRows(compound)) chi2 += row.r * row.r;
+  for (const PenaltyRow &row : PenaltyRows(compound, state)) chi2 += row.r * row.r;
   return chi2;
 }
 
-void GammaDecaySet::AddPenaltyGradient(const CNuc &compound, std::vector<std::pair<int, double>> &grad) const {
-  for (const PenaltyRow &row : PenaltyRows(compound))
+void GammaDecaySet::AddPenaltyGradient(const CNuc &compound, const LevelState &state, std::vector<std::pair<int, double>> &grad) const {
+  for (const PenaltyRow &row : PenaltyRows(compound, state))
     for (const auto &d : row.d) grad.push_back({d.first, 2.0 * row.r * d.second});
 }
 
-std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable &table) const {
+std::string GammaDecaySet::Report(const CNuc &compound, const LevelState &state, const ObservedLevelTable &table) const {
   std::ostringstream out;
   if (levels_.empty()) return "";
   out << "RADIATIVE DECAYS (<gammaDecays>: Gamma_gamma, branchings, mixing ratios of Krane and Steffen; Gamma_gamma is "
@@ -730,8 +730,8 @@ std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const ex::GammaDecaySpec &s = L.spec;
-    if (!compound.State().HasGammaDecayFill((int)r)) continue;
-    const std::vector<double> &q = compound.State().GammaDecayFillOf((int)r).q;
+    if (!state.HasGammaDecayFill((int)r)) continue;
+    const std::vector<double> &q = state.GammaDecayFillOf((int)r).q;
     double excess = 0.0;
     const std::vector<double> widths = PartialWidths(L, q, nullptr, &excess);
     out << s.name << ": level " << s.levelId << ", E_x = " << Fmt(s.levelEnergy) << " MeV" << std::endl;
@@ -753,7 +753,7 @@ std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable
           if (L.photonChannels[k] == final.channels[c]) out << " " << Fmt(widths[k]) << " eV (L = " << final.L[c] << ")";
       out << std::endl;
       // A channel on the external-capture floor: the engine's observed width (TransformOut) is not the record's.
-      const GammaDecayFill &fill = compound.State().GammaDecayFillOf((int)r);
+      const GammaDecayFill &fill = state.GammaDecayFillOf((int)r);
       for (std::size_t k = 0; k < L.photonChannels.size(); k++)
         for (const int ch : final.channels)
           if (L.photonChannels[k] == ch && k < fill.floor.size() && fill.floor[k])

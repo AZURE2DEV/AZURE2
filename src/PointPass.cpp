@@ -41,18 +41,19 @@ bool Site::InjectedFailure() const {
          (testFailExit == 0 || this->GetExitKey() == testFailExit);
 }
 
-void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
+void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const LevelState &state, const Config &configure,
+                     azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
   Site *unit = this;
   if (!this->IsTargetEffect() || !azure2::HasSubPointFold(*data, *this)) {
-    azure2::SolveAtOneEnergy(theCNuc, data->ThmCoherentValues(), configure, results, &unit, 1);
+    azure2::SolveAtOneEnergy(theCNuc, state, data->ThmCoherentValues(), configure, results, &unit, 1);
     return;
   }
   // One energy per sub-point; then the fold.
   this->PrepareSubPoints(data, theCNuc, configure);
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     unit = this->GetSubPoint(*data, i);
-    azure2::SolveAtOneEnergy(theCNuc, data->ThmCoherentValues(), configure, results, &unit, 1);
+    azure2::SolveAtOneEnergy(theCNuc, state, data->ThmCoherentValues(), configure, results, &unit, 1);
   }
   data->ContractRowSetOf(*this, results);
   this->FoldSubPoints(*data, configure, results);

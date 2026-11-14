@@ -180,8 +180,8 @@ void CheckProject(const std::string &name, const std::string &azr) {
   std::unique_ptr<Loaded> refF = Load(azr, Basis::Formal, true);
   std::unique_ptr<Loaded> emul = Load(azr, Basis::Brune, true);  // Brune CNuc, made formal group by group (below)
   LevelInputs emulInputs = emul->compound.Inputs();               // its input values, made formal group by group
-  const CNucSystem built = BuildSystemFromCNuc(refB->compound, refB->cfg);
-  const CNucSystem builtF = BuildSystemFromCNuc(refF->compound, refF->cfg);
+  const CNucSystem built = BuildSystemFromCNuc(refB->compound, refB->compound.Inputs(), refB->cfg);
+  const CNucSystem builtF = BuildSystemFromCNuc(refF->compound, refF->compound.Inputs(), refF->cfg);
   const phys::System &sys = built.system;
   const CNucSystemMap &map = built.map;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(filled->compound, map, filled->cfg);
@@ -207,7 +207,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
         loaded.SetE(j, la, cn.Inputs().E(j, la));
         for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) loaded.SetGamma(j, la, ch, cn.Inputs().Gamma(j, la, ch));
       }
-    cn.CopyFitEnergiesAndAmplitudes(loaded);
+    cn.CopyFitEnergiesAndAmplitudes(loaded, cn.MutableState());
     outF = cn.TransformOut(refF->cfg);
   }
 
@@ -221,7 +221,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
         if (IsPhoton(sys, blk.channel(k)) && cf(b, k, in.E[la]).static_moment) staticMoments++;
 
     // (a) Brune.
-    const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
+    const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.State(), refB->compound.Inputs(), map, b, refB->cfg);
     phys::LevelParameterOptions opt;
     opt.external = &extB;
         opt.formal = false;
@@ -233,7 +233,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     CompareB(sys, b, pb.B, bruneB);
 
     // (a) Park.
-    const std::vector<phys::ExternalWidth> extP = ExternalWidthsFromCNuc(refP->compound, refP->compound.Inputs(), map, b, refP->cfg);
+    const std::vector<phys::ExternalWidth> extP = ExternalWidthsFromCNuc(refP->compound, refP->compound.State(), refP->compound.Inputs(), map, b, refP->cfg);
     phys::Convention convP;
     convP.basis = phys::LevelBasis::Park;
     opt.external = &extP;
@@ -248,7 +248,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
 
     // (a) formal.  External capture as the engine's TransformIn computes it: final states in earlier groups are
     // already formal (emul has groups < b replaced by the formal CNuc's values).
-    const std::vector<phys::ExternalWidth> extF = ExternalWidthsFromCNuc(emul->compound, emulInputs, map, b, emul->cfg);
+    const std::vector<phys::ExternalWidth> extF = ExternalWidthsFromCNuc(emul->compound, emul->compound.State(), emulInputs, map, b, emul->cfg);
     phys::Convention convF;
     convF.basis = phys::LevelBasis::Formal;
     opt.external = &extF;
@@ -263,7 +263,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     }
     CompareB(builtF.system, b, pf.B, formalB);
     {  // the same with the Brune final states throughout: how much the engine's order moves the photon amplitudes
-      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsFromCNuc(refB->compound, refB->compound.State(), refB->compound.Inputs(), map, b, refB->cfg);
       for (std::size_t i = 0; i < extF.size(); i++) {
         if (extF[i].present && std::abs(extF[i].value) > 0.0) nonzeroExt++;
         if (extF[i].value != extAll[i].value) movedExt++;
@@ -377,7 +377,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
               if (std::fabs(T(k, m)) > 0.0) rwa[la * cols.size() + m] = 1;
       const std::vector<double> gp = T.to_project(preEC[b], nl);
       const phys::ProjectLevels pin = phys::observed_from_amplitudes(sys, b, cols, in.E, gp, rwa, phys::LevelBasis::Brune, cf);
-      const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.State(), refB->compound.Inputs(), map, b, refB->cfg);
       phys::LevelParameterOptions opt;
       opt.external = &extB;
             const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
   std::printf("(d) missing channel\n");
   try {
     std::unique_ptr<Loaded> m = Load(argv[3], Basis::Brune, true);
-    const CNucSystem built = BuildSystemFromCNuc(m->compound, m->cfg);
+    const CNucSystem built = BuildSystemFromCNuc(m->compound, m->compound.Inputs(), m->cfg);
     const phys::System &sys = built.system;
     std::size_t b2 = sys.num_blocks(), b1 = sys.num_blocks();
     for (std::size_t i = 0; i < sys.num_blocks(); i++) {

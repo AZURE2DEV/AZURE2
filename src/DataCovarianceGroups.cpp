@@ -250,7 +250,7 @@ void WorkingCopy::RefreezeCovariance() {
   for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) gp->Refreeze();
 }
 
-void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure2::Results &results) {
+void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const LevelState &state, const Config &configure, azure2::Results &results) {
   if (set_->covGroups_.empty()) return;
   std::vector<std::pair<const Segment *, int>> work;
   for (int s = 1; s <= Data().NumSegments(); s++) {
@@ -263,9 +263,9 @@ void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure,
   std::vector<const Segment *> segments;
   for (const auto &w : work)
     if (segments.empty() || segments.back() != w.first) segments.push_back(w.first);
-  const bool pre = this->CalculatePointsInParallel(segments, theCNuc, configure, results) == 0;
+  const bool pre = this->CalculatePointsInParallel(segments, theCNuc, state, configure, results) == 0;
   for (int k = 0; k < (int)work.size(); k++)
-    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, configure, results,
+    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, state, configure, results,
                                pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   this->CovarianceChi2Correction(results);
 }

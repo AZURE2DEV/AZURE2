@@ -123,7 +123,7 @@ class SweepModel {
 
 // E_lambda + k Gamma_lambda (k = 0, +-1/2, +-1, +-2, +-4) of the levels of the entrance pair's compound nucleus, as lab
 // energies in [lo, hi]: the observed energies and widths of `observed`, or without it the fit energies alone.
-std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi, const ObservedLevelTable *observed) {
+std::vector<double> Seeds(CNuc *compound, const LevelState &state, int entranceKey, double lo, double hi, const ObservedLevelTable *observed) {
   std::vector<double> seeds;
   if (!compound->IsPairKey(entranceKey)) return seeds;
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
@@ -142,7 +142,7 @@ std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi,
           if (static_cast<azure2::physics::ObservedKind>(observed->Level(j, la).kind[ch - 1]) ==
               azure2::physics::ObservedKind::Width)
             width += std::fabs(observed->Level(j, la).W[ch - 1]);
-      const double eCM = (observed ? observed->Level(j, la).E : compound->State().E(j, la)) - threshold;
+      const double eCM = (observed ? observed->Level(j, la).E : state.E(j, la)) - threshold;
       for (double k : {0.0, -0.5, 0.5, -1.0, 1.0, -2.0, 2.0, -4.0, 4.0}) {
         if (k != 0.0 && !(width > 0.0)) continue;
         const double c = eCM + k * width;
@@ -172,7 +172,7 @@ bool SessionRefusesAdaptiveGrids(const Config &configure) {
   return true;
 }
 
-std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params) {
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params) {
   ExtrapolationSpecs specs = Quiet(configure.project->built.extrapolations);
   ScratchDirectory scratch;
   if (!scratch.Ok()) {
@@ -188,13 +188,13 @@ std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, 
   sweepConfig.paramMask |= Config::USE_API;
   sweepConfig.fileCheckMask = 0;
   sweepConfig.screenCheckMask = 0;
-  const std::optional<ObservedLevelTable> observed = compound->ObservedWidthsAt(configure, params);
+  const std::optional<ObservedLevelTable> observed = compound->ObservedWidthsAt(configure, params, state, inputs);
   for (std::size_t i = 0; i < specs.extrapolations.items.size(); i++) {
     ExtrapolationSpec &x = specs.extrapolations.items[i].spec;
     if (!x.active || !x.adaptive.on) continue;
     std::vector<double> start = x.energies;
     const std::size_t seeded = start.size();
-    for (double e : Seeds(compound, x.reaction.entranceKey, x.minE, x.maxE, observed ? &*observed : nullptr)) start.push_back(e);
+    for (double e : Seeds(compound, state, x.reaction.entranceKey, x.minE, x.maxE, observed ? &*observed : nullptr)) start.push_back(e);
     azure2::experiment::AdaptiveGridResult grid;
     try {
       grid = azure2::experiment::RefineGrid(start, x.adaptive.tolerance, x.adaptive.maxPoints,

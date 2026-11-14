@@ -46,7 +46,7 @@ void WriteCheck(const Config &configure, unsigned int bit, const char *file, con
 
 }  // namespace
 
-void WriteCompoundNucleusCheck(const CNuc &compound, const Config &configure) {
+void WriteCompoundNucleusCheck(const CNuc &compound, const LevelInputs &inputs, const Config &configure) {
   WriteCheck(configure, Config::CHECK_COMPOUND_NUCLEUS, "compoundnucleus.chk", "compound nucleus", [&](std::ostream &out) {
     out << std::endl
         << "************************************" << std::endl
@@ -104,12 +104,12 @@ void WriteCompoundNucleusCheck(const CNuc &compound, const Config &configure) {
               << std::setw(5) << group->GetJ()
               << std::setw(4) << group->GetPi()
               << std::setw(9) << ii
-              << std::setw(14) << compound.Inputs().E(i, ii)
+              << std::setw(14) << inputs.E(i, ii)
               << std::setw(11) << iii
               << std::setw(3) << group->GetChannel(iii)->GetL()
               << std::setw(5) << group->GetChannel(iii)->GetS()
               << std::setw(8) << group->GetChannel(iii)->GetPairNum()
-              << std::setw(11) << compound.Inputs().Gamma(i, ii, iii)
+              << std::setw(11) << inputs.Gamma(i, ii, iii)
               << std::setw(11) << group->GetChannel(iii)->GetRadType() << std::endl;
         }
       }
@@ -280,7 +280,8 @@ void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configur
              });
 }
 
-void WriteParametersOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
+void WriteParametersOut(const CNuc &compound, const LevelState &state, const ObservedLevelTable &table,
+                        const Config &configure) {
   namespace phys = azure2::physics;
   char filename[256];
   snprintf(filename, sizeof(filename), "%sparameters.out", configure.outputdir.c_str());
@@ -357,7 +358,7 @@ void WriteParametersOut(const CNuc &compound, const ObservedLevelTable &table, c
         out << std::endl;
       }
     }
-    out << compound.GetGammaDecays().Report(compound, table);
+    out << compound.GetGammaDecays().Report(compound, state, table);
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
   if (configure.relativistic) WriteRelativisticOut(compound, table, configure);

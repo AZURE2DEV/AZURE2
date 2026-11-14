@@ -99,7 +99,7 @@ class Unit : public Site {
   /// by `data`, the data set that holds the point (its target effects give the fold).  One solve at the point's energy,
   /// or one per sub-point (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data
   /// set (no target effect: a reaction-rate point).
-  void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
+  void Calculate(WorkingCopy *data, CNuc *, const LevelState &state, const Config &configure, azure2::Results &results);
   /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
   void PrepareSubPoints(WorkingCopy *data, CNuc *, const Config &configure);
   /// The task of the data set's calculation plan that calculates this point (CalculationPlan.h; -1: none, as for a

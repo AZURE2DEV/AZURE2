@@ -70,7 +70,7 @@ double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const S
  * on-shell L_c(E) = S_c(E) + i P_c(E) recovered from L_o = L_c - B_c.  With
  * coherentJ the vertex without a width of every bucket goes to unitVertex.
  */
-void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, const JGroup *jg, int j, int aa,
+void ThmEntranceVertices(const Config &configure, CNuc *compound, const LevelState &state, Site *point, const JGroup *jg, int j, int aa,
                          int pass, int node, const ThmDwVertex *dw, const ThmDwVertex::At &dwAt, bool coherentJ,
                          BucketVertices &vbys, BucketUnitVertices &unitVertex) {
   const int numLevels = jg->NumLevels();
@@ -83,7 +83,7 @@ void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, c
       pwVertex = &vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
       if (pwVertex->empty()) pwVertex->assign(numLevels + 1, complex(0.0, 0.0));
     }
-    const ThmVertexBoundary boundaryOf(configure, compound->GetPair(aa), jg, compound->State(), j, ch);
+    const ThmVertexBoundary boundaryOf(configure, compound->GetPair(aa), jg, state, j, ch);
     const complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
     if (dw) {
       // Two components per (s, l): buckets 2 l + k.
@@ -104,7 +104,7 @@ void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, c
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         complex boundary = boundaryOf.At(la, onShellL);
-        double g = compound->State().Gamma(j, la, ch);
+        double g = state.Gamma(j, la, ch);
         vertex0[la] += g * (ak[0] * (boundary - 1.0) - dk[0]);
         vertex1[la] += g * (ak[1] * (boundary - 1.0) - dk[1]);
       }
@@ -119,7 +119,7 @@ void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, c
       const ALevel *level = jg->GetLevel(la);
       if (!level->IsInRMatrix()) continue;
       complex boundary = boundaryOf.At(la, onShellL);
-      (*pwVertex)[la] += compound->State().Gamma(j, la, ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
+      (*pwVertex)[la] += state.Gamma(j, la, ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
                                                             : point->GetThmFormFactor(j, ch, boundary, node));
     }
   }
@@ -139,7 +139,7 @@ complex ThmExitAmplitude(AMatrixFunc &func, const JGroup *jg, int j, int ch, con
   complex amp(0.0, 0.0);
   for (int la = 1; la <= numLevels; la++) {
     if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-    double gEx = func.compound()->State().Gamma(j, la, ch);
+    double gEx = func.state().Gamma(j, la, ch);
     if (std::fabs(gEx) < kNegligibleExitWidth) continue;
     if (nc) {
       complex gExC = gEx * (*nc)[la];
@@ -187,8 +187,8 @@ void ThmApplyWeights(const Config &configure, const Site *point, double &sigma) 
 
 }  // namespace
 
-THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
-  AMatrixFunc(compound, configure) {
+THMMatrixFunc::THMMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure) :
+  AMatrixFunc(compound, state, configure) {
   // The HOES amplitude reads individual elements of the level matrix
   // (GetAMatrixElement over the active levels) and its adjoint the whole of it
   // (GetAMatrix, LevelMatrixABarAdjoint): the level-space route, filled and
@@ -206,6 +206,7 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
 void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double> &coherentValues,
                       azure2::Results &results) {
   CNuc *const compound = levels.compound();
+  const LevelState &state = levels.state();
   const Config &configure = levels.configure();
   int aa = compound->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
@@ -304,7 +305,7 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        nc[la] = ThmLineshapeFactor(zeta, compound->State().E(j, la) - inEnergy, ThmLevelWidth(compound, j, la, configure));
+        nc[la] = ThmLineshapeFactor(zeta, state.E(j, la) - inEnergy, ThmLevelWidth(compound, state, j, la, configure));
       }
     }
 
@@ -323,7 +324,7 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double
       const int node = numNodes > 0 ? pass : -1;
       BucketVertices vbys;
       BucketUnitVertices unitVertex;
-      ThmEntranceVertices(configure, compound, point, jg, j, aa, pass, node, dw, dwAt, coherentJ, vbys,
+      ThmEntranceVertices(configure, compound, state, point, jg, j, aa, pass, node, dw, dwAt, coherentJ, vbys,
                           unitVertex);
 
       // Exit channels (incoherent), each with sqrt(2 P) folded in as 2 P outside.
@@ -399,7 +400,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, const std::vector<doub
 // Reverse-mode (adjoint) derivative of the HOES cross section.
 // ===========================================================================
 
-ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<double> &coherentValues,
+ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const LevelState &state,
+                                         const std::vector<double> &coherentValues,
                                          const Config &configure, const vector_matrix_r *shiftDeriv, bool lineshape) {
   ThmAdjointContext ctx;
   ctx.shiftDeriv = shiftDeriv;
@@ -420,8 +422,8 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<doubl
       for (int la = 1; la <= jg->NumLevels(); la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        if (!lowest || compound->State().E(j, la) < eMin) {
-          eMin = compound->State().E(j, la);
+        if (!lowest || state.E(j, la) < eMin) {
+          eMin = state.E(j, la);
           lowest = la;
         }
       }
@@ -445,19 +447,19 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<doubl
         std::vector<double> &d = ctx.widthDeriv[j - 1][la - 1];
         d.assign(numChannels + 1, 0.0);
         std::vector<double> gamma(numChannels);
-        for (int ch = 1; ch <= numChannels; ch++) gamma[ch - 1] = compound->State().Gamma(j, la, ch);
+        for (int ch = 1; ch <= numChannels; ch++) gamma[ch - 1] = state.Gamma(j, la, ch);
         {
-          const double x0 = compound->State().E(j, la), h = 1.0e-6 * (std::fabs(x0) + 1.0);
-          double wp = ThmLevelWidth(compound, j, la, x0 + h, gamma, configure);
-          double wm = ThmLevelWidth(compound, j, la, x0 - h, gamma, configure);
+          const double x0 = state.E(j, la), h = 1.0e-6 * (std::fabs(x0) + 1.0);
+          double wp = ThmLevelWidth(compound, state, j, la, x0 + h, gamma, configure);
+          double wm = ThmLevelWidth(compound, state, j, la, x0 - h, gamma, configure);
           d[0] = (wp - wm) / (2.0 * h);
         }
         for (int ch = 1; ch <= numChannels; ch++) {
           const double x0 = gamma[ch - 1], h = 1.0e-6 * (std::fabs(x0) + 1.0);
           gamma[ch - 1] = x0 + h;
-          double wp = ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+          double wp = ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
           gamma[ch - 1] = x0 - h;
-          double wm = ThmLevelWidth(compound, j, la, compound->State().E(j, la), gamma, configure);
+          double wm = ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
           gamma[ch - 1] = x0;
           d[ch] = (wp - wm) / (2.0 * h);
         }
@@ -585,8 +587,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        nc[la] = ThmLineshapeFactor(zeta, compound()->State().E(j, la) - inEnergy,
-                                    ThmLevelWidth(compound(), j, la, configure()));
+        nc[la] = ThmLineshapeFactor(zeta, state().E(j, la) - inEnergy,
+                                    ThmLevelWidth(compound(), state(), j, la, configure()));
       }
     }
     bool coherentJ = false;
@@ -604,7 +606,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       b.act = act;
       b.levelOf = levelOf;
       b.nc = nc;
-      ThmEntranceVertices(configure(), compound(), point, jg, j, aa, pass, node, dw, dwAt, coherentJ, b.vbys, b.unit);
+      ThmEntranceVertices(configure(), compound(), state(), point, jg, j, aa, pass, node, dw, dwAt, coherentJ, b.vbys, b.unit);
 
       for (int ch = 1; ch <= numChannels; ch++) {
         const AChannel *c = jg->GetChannel(ch);
@@ -721,7 +723,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
     }
     for (int la = 1; la <= numLevels; la++) {
       if (!b.act[la]) continue;
-      double gEx = compound()->State().Gamma(j, la, r.ch);
+      double gEx = state().Gamma(j, la, r.ch);
       complex ncl = b.nc.empty() ? complex(1.0, 0.0) : b.nc[la];
       accum.AddGamma(j, la, r.ch, std::real(std::conj(ampBar) * ncl * av[la]));
       if (std::fabs(gEx) < kNegligibleExitWidth) continue;  // out of the forward sum
@@ -769,7 +771,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
       const AChannel *c = jg->GetChannel(ch);
       if (c->GetPairNum() != aa) continue;
-      const ThmVertexBoundary boundaryOf(configure(), compound()->GetPair(aa), jg, compound()->State(), j, ch);
+      const ThmVertexBoundary boundaryOf(configure(), compound()->GetPair(aa), jg, state(), j, ch);
       const int lowest = boundaryOf.LowestLevel();
       const complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
       if (dw) {
@@ -789,7 +791,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
             const ALevel *level = jg->GetLevel(la);
             if (!level->IsInRMatrix()) continue;
             const complex boundary = boundaryOf.At(la, onShellL);
-            const double g = compound()->State().Gamma(j, la, ch);
+            const double g = state().Gamma(j, la, ch);
             accum.AddGamma(j, la, ch, std::real(std::conj(vb[la]) * (ak[k] * (boundary - 1.0) - dk[k])));
             if (!boundaryOf.OnShell()) routeB(ch, la, lowest, std::real(std::conj(vb[la]) * (g * ak[k])));
           }
@@ -817,7 +819,7 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
         accum.AddGamma(j, la, ch, std::real(std::conj(vb[la]) * m));
         if (!boundaryOf.OnShell())
           routeB(ch, la, lowest,
-                 std::real(std::conj(vb[la]) * (compound()->State().Gamma(j, la, ch) * (formFactor(boundary + 1.0) - m))));
+                 std::real(std::conj(vb[la]) * (state().Gamma(j, la, ch) * (formFactor(boundary + 1.0) - m))));
       }
     }
 
@@ -827,8 +829,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
       for (int la = 1; la <= numLevels; la++) {
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix() || b.ncBar[la] == complex(0.0, 0.0)) continue;
-        const double x = compound()->State().E(j, la) - inEnergy;
-        const double G = ThmLevelWidth(compound(), j, la, configure());
+        const double x = state().E(j, la) - inEnergy;
+        const double G = ThmLevelWidth(compound(), state(), j, la, configure());
         complex dlnx, dlnG(0.0, 0.0);
         if (G > 0.0) {
           const double r2 = x * x + 0.25 * G * G;
