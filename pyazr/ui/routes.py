@@ -244,6 +244,24 @@ ROUTES = (
           kwargs=("rows:int",)),
     Route("GET", "/api/events", L, "a later step; the page polls the revision and long-polls a job "
           "(GET /api/jobs/{job_id}?wait=)", "Server-sent events: revisions, job progress, build state."),
+    # -- utilities: the covariance builder (pyazr.covariance) and the rate's grids (pyazr.rate)
+    Route("GET", "/api/covariance/{name}", V, "server.Server.covariance_open",
+          "What the covariance builder opens with for a data set: its covariance field, the parts of the file it "
+          "names (from the file's #pyazr.covariance line; hand_written when it has none), the data sets naming the "
+          "file, a file name to propose, the kinds of part with their fields.", args=("name",),
+          serves=("pyazr.covariance.read_parts",)),
+    Route("POST", "/api/covariance/build", V, "server.Server.covariance_build",
+          "A data covariance from parts on the current text: per row the total error sqrt(C_ii) beside the file's, "
+          "the correlation on the fitted rows, the checks, the engine's refusal and its parts, notes.",
+          args=("datasets", "parts"), serves=("pyazr.covariance.build",)),
+    Route("POST", "/api/covariance/write", V, "server.Server.covariance_write",
+          "Write the covariance file at path (relative to the project's directory) and set the data sets' "
+          "covariance field: one history entry, which undo takes back with the file.",
+          args=("datasets", "parts", "path"), kwargs=("rev",), serves=("pyazr.covariance.build",
+                                                                      "pyazr.Project.set")),
+    Route("GET", "/api/rate/grids", V, "server.Server.rate_grids",
+          "The named temperature grids of the rate (pyazr.rate.TEMPERATURE_GRIDS, GK) and the rate's units; the rate "
+          "is the job rate/engine.", serves=("pyazr.rate.TEMPERATURE_GRIDS",)),
     # -- jobs
     Route("GET", "/api/jobs/kinds", V, "server.Server.job_kinds",
           "The job table: kind, method, settings, the package or pyazr call each needs."),

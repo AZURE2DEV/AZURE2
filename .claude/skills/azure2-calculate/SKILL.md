@@ -173,8 +173,9 @@ off = s.evaluate(P.put(x, w, 0.0)).data[i].model        # the model without the 
   (plot it when a rate looks odd). Exit pair `-1` is the total radiative capture (every capture pair of the
   entrance's compound nucleus). Narrow resonances need no hand-added terms (a 22 eV level to 1e-4,
   `tests/reaction_rate`).
-- **In Python** (a rate per posterior sample): `pyazr/examples/reaction_rate.py`; its grid must resolve the Gamow
-  window at the lowest temperature and every resonance.
+- **In Python**: `pyazr.rate` runs the engine's rate in-process (`reaction_rate(file, entrance, exit, grid=...)`,
+  `RateSession` for many vectors, `rate_band` from a covariance or from draws, `gamow_window`); the program's
+  digits (`tests/pyazr/reaction_rate_test.py`); `pyazr/examples/reaction_rate.py` runs it.
 
 ## Adaptive cross-section tables
 

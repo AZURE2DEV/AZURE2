@@ -344,6 +344,11 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       chain to `output/chain_<id>.npy`, quantiles, split R-hat and τ on the page, a chain continued) and the bands
       (linear from a fit's covariance, percentiles of a chain's draws; drawn in the Results tab) as jobs
       (2026-11-14, section 11.7).
+- [x] Two utilities on pyazr modules (2026-11-14, `web_ui.md` section 11.11): the covariance builder
+      (`pyazr.covariance`: a data set's covariance file from named parts, checked as the engine reads it; the Data
+      tab's "Covariance…", the file and the field as one history entry) and the reaction rate (`pyazr.rate`: the
+      engine's rate in-process at any parameters, its band from a covariance or draws, the Gamow window; the Rate
+      tab as a job). The prior-covariance builder and the rate libraries' formats are open.
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).

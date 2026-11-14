@@ -54,10 +54,13 @@ _ENCODING = ("utf-8", "surrogateescape")
 
 
 class Entry:
-    """One history entry: the revision, the time, what was done, and the text after it."""
+    """One history entry: the revision, the time, what was done, the text after it, and the files of the project's
+    directory the entry wrote beside the text (``files``: path -> (bytes before or None when absent, bytes after)),
+    which undo puts back as they were and redo writes again."""
 
-    def __init__(self, rev, what, text):
+    def __init__(self, rev, what, text, files=None):
         self.rev, self.what, self.text, self.time = rev, what, text, time.time()
+        self.files = files or {}
 
 
 class State:
@@ -165,6 +168,34 @@ class State:
                 self._push(what)
             return result
 
+    def edit_with_files(self, rev, what, change, files):
+        """An edit that writes files beside the text (a covariance file the edit names): ``files`` {path inside the
+        root: text} are written first (the engine validates the edit with them), then ``change(project)`` is made;
+        a refusal puts the files back as they were and leaves the text.  One history entry: undo restores the files
+        as they were before (removing those that did not exist) with the text, redo writes them again."""
+        with self.lock:
+            self.check_rev(rev)
+            written = {}
+            for path, text in files.items():
+                full = self.inside_root(path)
+                before = None
+                if os.path.isfile(full):
+                    with open(full, "rb") as f:
+                        before = f.read()
+                written[full] = (before, text.encode(*_ENCODING))
+            before_text = self.project.text
+            _put_files({p: after for p, (_, after) in written.items()})
+            try:
+                result = change(self.project)
+            except BaseException:
+                _put_files({p: b for p, (b, _) in written.items()})
+                raise
+            if self.project.text == before_text:
+                _put_files({p: b for p, (b, _) in written.items()})
+                return result
+            self._push(what, written)
+            return result
+
     def replace_text(self, rev, text, what="replace text"):
         """A whole-text edit: refused when the engine finds an error the current text does not have, or when a path
         named in the text resolves outside the root (checked before the engine reads any file)."""
@@ -183,10 +214,10 @@ class State:
             self.project = candidate
             self._push(what)
 
-    def _push(self, what):
+    def _push(self, what, files=None):
         del self.history[self.pos + 1:]
         self.rev += 1
-        self.history.append(Entry(self.rev, what, self.project.text))
+        self.history.append(Entry(self.rev, what, self.project.text, files))
         self.pos = len(self.history) - 1
         self._write_working_file()
 
@@ -207,6 +238,11 @@ class State:
             pos = self.pos + step
             if not 0 <= pos < len(self.history):
                 raise Conflict(f"nothing to {'undo' if step < 0 else 'redo'}", rev=self.rev)
+            # the files of the entry undone go back to how they were before it; those of the entry redone are written
+            if step < 0:
+                _put_files({p: before for p, (before, _) in self.history[self.pos].files.items()})
+            else:
+                _put_files({p: after for p, (_, after) in self.history[pos].files.items()})
             self.pos = pos
             self.project = Project(self.history[pos].text.encode(*_ENCODING), self.path)
             self.rev += 1
@@ -289,6 +325,19 @@ class State:
                 raise Conflict("the snapshot changed a line of <config> the UI redirects; not merged")
             out.extend(theirs[j1:j2])
         return "".join(out)
+
+
+def _put_files(contents):
+    """Write each file of ``contents`` {path: bytes}, or remove it where the bytes are None."""
+    for path, data in contents.items():
+        if data is None:
+            if os.path.exists(path):
+                os.remove(path)
+            continue
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
 
 
 def _flatten(values):

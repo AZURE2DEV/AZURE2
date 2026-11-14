@@ -116,3 +116,5 @@ State	pyazr/ui/state.py	the open project and its edit history	frontends	class	ru
 SessionWorker	pyazr/ui/workers.py	the process that holds the session	frontends	class	run
 Engine	pyazr/ui/engine.py	session operations for the routes (in the worker)	frontends	class	run
 JobTable	pyazr/ui/jobs.py	fits and samplers run as jobs	frontends	class	run
+RateSession	pyazr/rate.py	a session set up for a reaction rate, as the program's rate command	frontends	class	run
+Covariance	pyazr/covariance.py	a data covariance built from named parts, checked	frontends	class	run

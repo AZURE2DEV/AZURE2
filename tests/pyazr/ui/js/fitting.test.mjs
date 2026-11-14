@@ -62,8 +62,8 @@ test("the job form from the server's job table: waiting rows disabled with their
   }
   const fit = choices.find((k) => k.kind === "fit");
   assert.equal(f.defaultMethod(fit, "no_such").method, TABLE.find((r) => r.kind === "fit" && r.available).method);
-  const waiting = TABLE.find((r) => !r.available);
-  assert.equal(f.defaultMethod(fit, waiting.method)?.method === waiting.method, false);
+  const waiting = TABLE.find((r) => !r.available);  // none where every package is installed and no call waits
+  if (waiting) assert.equal(f.defaultMethod(fit, waiting.method)?.method === waiting.method, false);
   const types = new Set(TABLE.flatMap((r) => r.settings.map((s) => s.type)));
   for (const t of types) assert.ok(fitjob.SETTING_WIDGETS[t], `no widget for the setting type ${t}`);
   const m = fit.methods.find((x) => x.settings.length);

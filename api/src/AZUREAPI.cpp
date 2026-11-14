@@ -150,8 +150,11 @@ int AZUREAPI::Initialize() {
     if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
       data()->PrintData(configure());
   } else {
-    if (!compound()->IsPairKey(configure().rateParams.entrancePair) || !compound()->IsPairKey(configure().rateParams.exitPair)) {
-      // configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
+    // The program's check of the rate's pairs (RunSetUp.cpp): exit -1 is the total radiative capture.
+    const std::string rateProblem =
+        compound()->RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
+    if (!rateProblem.empty()) {
+      configure().outStream << rateProblem << std::endl;
       return -1;
     } else {
       compound()->RequestEntrance(compound()->GetPairNumFromKey(configure().rateParams.entrancePair));

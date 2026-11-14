@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
+
+Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page
+(`web_ui.md` section 11.11; user guide `covariance_builder.rst`, `reaction_rate.rst`).
+
+- **What the engine does with a covariance file** (read in `include/DataCovariance.h`, `src/Segment.cpp`,
+  `experiment/src/CovarianceFile.cpp`, `experiment/src/Measurement.cpp`): chi2 = v^T C^-1 v on the fitted rows; the
+  diagonal/block/matrix terms must be positive definite alone; relvector scales with the model frozen at the first
+  evaluation; the error column of a fitted row is replaced by sqrt(C_ii) (data standing in for the model), with a
+  warning above 1 %; the norm n scales data and covariance together, so a fitted norm prior and a scale part of the
+  same size count one uncertainty twice.  The numbers are compared in the engine's unit of the quantity (after the
+  column units), not the file's column unit as `data_formats.rst` said (corrected there).
+- **Calls**: `pyazr.covariance.build(project, datasets, parts)` -> `Covariance` (`write`, `text`, `summary`),
+  `rows_of`, `read_parts`, `PART_KINDS`; `pyazr.rate.reaction_rate`, `RateSession`, `rate_band`, `gamow_window`,
+  `write_rate_table`, `read_rate_table`, `table_at`, `TEMPERATURE_GRIDS`.  Binding: `_azure2.data_rows`,
+  `Session(..., rate_entrance=, rate_exit=)`, `Session.reaction_rate`; `ReactionRate::Rates()` (header only).
+- **Page**: `tabs/covariance.js` (#/covariance/<name>, no header link), `tabs/rate.js` (#/rate); lines in files
+  another agent edits: `app.js` (two imports, two TABS rows), `tabs/data.js` (the "Covariance…" button, two
+  lines), `tabs/fitjob.js` (the `text` setting widget).  Server: `utilities.py`, four routes, `State.edit_with_files`.
+- **Verified**: `tests/pyazr/covariance_builder_test.py`, `reaction_rate_test.py`, `ui/utilities_test.py` (new), the
+  UI tests, `ctest -LE slow`, the projects against `tab-t71-1` (numbers in the report).
+- **Open**: the prior-covariance builder (not started); the rate libraries' formats (the PI wants them: next
+  commit); the page's keys `1 … 7` do not reach the eighth tab (Rate); a data session's x0 and a rate session's
+  own reading of the same `.azr` differ at 1e-10 in capture amplitudes (rate 1e-9).
+
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree
