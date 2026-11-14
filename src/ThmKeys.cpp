@@ -387,11 +387,11 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     return "expected experiment[<name>] key=value ...";
   std::string name = line.substr(head.size(), close - head.size());
   if (!ValidName(name))
-    return "experiment[" + name + "]: a name is letters, digits and _ - . + only";
+    return "experiment[" + name + "]: a name is letters, digits and _ - . + only; rename the experiment";
   std::string where = "experiment[" + name + "]: ";
   std::string rest = line.substr(close + 1);
   if (!rest.empty() && rest[0] != ' ' && rest[0] != '\t')
-    return where + "expected a space after ']'";
+    return where + "expected a space after ']'; write experiment[<name>] key=value ...";
 
   ThmExperiment *x = nullptr;
   for (ThmExperiment &e : experiments)
@@ -405,10 +405,10 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
   while (tokens >> token) {
     size_t eq = token.find('=');
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
-      return where + "'" + token + "' is not key=value";
+      return where + "'" + token + "' is not key=value; write each key as key=value";
     std::string key = token.substr(0, eq), value = token.substr(eq + 1);
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
-      return where + "key '" + key + "' is given twice";
+      return where + "key '" + key + "' is given twice; give it once";
     std::string why;
     const ThmExperimentKey *row = nullptr;
     for (const ThmExperimentKey &k : ThmExperimentKeys())
@@ -420,7 +420,8 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
       for (const ThmExperimentKey &k : ThmExperimentKeys()) keys += (keys.empty() ? "" : ", ") + k.row.key;
       why = "unknown key '" + key + "' (keys: " + keys + ")";
     }
-    if (!why.empty()) return where + why;
+    // How to go on, the same for every key: the table's rows say what each key takes.
+    if (!why.empty()) return where + why + "; the keys and their values: pyazr.kinds()[\"thm\"]";
     work.keys.push_back(key);
     work.values.push_back(value);
   }

@@ -703,12 +703,13 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
     d.reaction.thm = true;
     if (c.opt_.relativistic) {
       c.Error(codes::kThmRelativistic, r, "thm", "THM data sets are not supported with relativistic=1 (the THM vertex, line shape and "
-                                                 "kinematics are non-relativistic)");
+                                                 "kinematics are non-relativistic); remove relativistic=1 from "
+                                                 "<config>, or the thm field of the data set");
       ok = false;
     }
     if (!d.covarianceFile.empty()) {
       c.Error(codes::kThmCovariance, r, "covariance", "a THM data set's chi^2 is its experiment's (profiled norm), not a sum a "
-                                                      "covariance could amend");
+                                                      "covariance could amend; remove the covariance field");
       ok = false;
     }
     if (thm->word != "global") {
@@ -782,7 +783,9 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   if (r.Has("thm")) {
     x.reaction.thm = true;
     if (c.opt_.relativistic) {
-      c.Error(codes::kThmRelativistic, r, "thm", "THM extrapolations are not supported with relativistic=1");
+      c.Error(codes::kThmRelativistic, r, "thm", "THM extrapolations are not supported with relativistic=1 (the THM vertex is "
+                                                 "non-relativistic); remove relativistic=1 from <config>, or the "
+                                                 "thm field of the extrapolation");
       ok = false;
     }
     if (const Value *w = r.Get("thm_weight")) c.out_.thm.extrapolationWeights.push_back({x.key, w->word});

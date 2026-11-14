@@ -81,7 +81,8 @@ bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, CNuc *theC
   for (int s : group.segments)
     if (data.Data().GetSegment(s)->GetEntranceKey() != pairKey) {
       configure.outStream << where << "beam/target/spectator describe one reaction, but its segments "
-                             "have different entrance pairs."
+                             "have different entrance pairs; give its data sets one entrance pair, or split them "
+                             "into experiments of their own."
                           << std::endl;
       return false;
     }
@@ -195,7 +196,8 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc
                        WorkingCopy::ThmGroup &group, const std::string &where, const ThmReaction &r) {
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << where << "lineshape=on uses the observed level energies and widths "
-                           "as the resonance poles; it needs the Brune parameterization."
+                           "as the resonance poles; it needs the Brune parameterization: run with it (the "
+                           "<config> option use_brune), or set lineshape=off."
                         << std::endl;
     return false;
   }
@@ -333,7 +335,8 @@ bool ThmBuildDistortion(WorkingCopy &data, const Config &configure, const ThmExp
     if (!table.Covers(eLo) || !table.Covers(eHi)) {
       configure.outStream << where << "distortion: the points span E_cm = " << eLo << " to " << eHi
                           << " MeV, beyond the table '" << table.name << "' [" << table.e.front() << ", "
-                          << table.e.back() << "] MeV." << std::endl;
+                          << table.e.back() << "] MeV; give a table that covers the points, or drop the points "
+                             "outside it." << std::endl;
       return false;
     }
     d->description = "table " + table.name;

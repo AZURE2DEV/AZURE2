@@ -47,6 +47,11 @@ set_tests_properties(thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 # against RIPL-3 and FRONT21 are physics_transfer_global_optical): d + 40Ca
 # elastic scattering against DOP853 and the measured ratio to Rutherford, and
 # their use in the distortion factor.
+# The refusals of the THM set-up name the way on (what is wrong, what is allowed, how to go on).
+add_executable(thm_refusals_test thm_refusals_test.cpp)
+target_link_libraries(thm_refusals_test PRIVATE AZURE2Core)
+add_test(NAME thm_refusals COMMAND thm_refusals_test)
+
 add_executable(thm_optical_test thm_optical_test.cpp)
 target_link_libraries(thm_optical_test PRIVATE AZURE2Core)
 

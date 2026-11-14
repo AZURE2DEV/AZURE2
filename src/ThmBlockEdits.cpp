@@ -78,11 +78,13 @@ bool ThmOptionEdits(const std::vector<std::string> &lines, const std::string &ke
   edits.clear();
   ThmOptionLine parsed;
   if (key.compare(0, 6, "weight") == 0) {
-    why = key + ": in format 3 a THM weight is the thm_weight field of its data set or extrapolation";
+    why = key + ": in format 3 a THM weight is the thm_weight field of its data set or extrapolation; set that "
+                "field of the record";
     return false;
   }
   if (change == ThmChange::Set && !ParseThmOptionLine(key, value, parsed)) {
-    why = "<thm> line not understood: '" + key + "=" + value + "' (the options: " + ThmOptionUsage() + ")";
+    why = "<thm> line not understood: '" + key + "=" + value + "' (the options: " + ThmOptionUsage() +
+          "); give one of them (pyazr.kinds()[\"thm\"] lists them)";
     return false;
   }
   std::vector<int> own;
@@ -95,7 +97,7 @@ bool ThmOptionEdits(const std::vector<std::string> &lines, const std::string &ke
   }
   if (change == ThmChange::Remove) {
     if (own.empty()) {
-      why = "<thm> has no line " + key + "=";
+      why = "<thm> has no line " + key + "=: only a line it has can be removed; Project.thm() lists them";
       return false;
     }
     for (auto it = own.rbegin(); it != own.rend(); ++it) edits.push_back({ThmLineEdit::Kind::Remove, *it, ""});
@@ -123,7 +125,8 @@ bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string
                         const std::string &value, ThmChange change, std::vector<ThmLineEdit> &edits, std::string &why) {
   edits.clear();
   if (key == "segments") {
-    why = "segments= is not written in format 3: a data set names its experiment (thm " + name + ")";
+    why = "segments= is not written in format 3: a data set names its experiment (thm " + name +
+          "); set the field thm of the data sets instead";
     return false;
   }
   if (change == ThmChange::Set) {
@@ -144,7 +147,8 @@ bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string
   }
   if (change == ThmChange::Remove && key.empty()) {
     if (own.empty()) {
-      why = "<thm> has no experiment[" + name + "]";
+      why = "<thm> has no experiment[" + name + "]: only an experiment it has can be removed; Project.thm() lists "
+            "them";
       return false;
     }
     for (auto it = own.rbegin(); it != own.rend(); ++it) edits.push_back({ThmLineEdit::Kind::Remove, *it, ""});
@@ -161,7 +165,8 @@ bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string
       }
   if (change == ThmChange::Remove) {
     if (at < 0) {
-      why = "experiment[" + name + "] has no key " + key;
+      why = "experiment[" + name + "] has no key " + key + ": only a key it has can be removed; Project.thm() "
+            "lists them";
       return false;
     }
     std::string line = lines[at];

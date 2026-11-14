@@ -134,7 +134,8 @@ void BuildPotentials(Context &c) {
       c.Error(spinOrbit ? codes::kSoThm : codes::kThmHybridPotential, *m.record, "thm",
               "the entrance pair " + std::to_string(m.entranceKey) + " (" + (info ? PairLabel(*info) : std::string("?")) +
                   ") has a hybrid potential" + (spinOrbit ? " with a spin-orbit term" : "") + " (potential " +
-                  p->second->name + "); the THM vertex uses point-Coulomb waves and is not built with a potential");
+                  p->second->name + "); the THM vertex uses point-Coulomb waves and is not built with a potential: "
+                  "remove the potential record of the pair, or the THM data set");
     }
 }
 
