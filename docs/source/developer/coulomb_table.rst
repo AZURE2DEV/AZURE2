@@ -11,7 +11,7 @@ Why
 ---
 
 A calculation spends most of its time on the channel functions. A ``perf``
-profile of one cold evaluation of the natural-neon example (mode 1, four
+profile of one cold evaluation of the natural-neon example (``calculate``, four
 threads, 10.5 min) gave about 40 % to the Coulomb functions of open channels
 (Michel's routine, mostly for the charged α+¹⁷O channels), about 29 % to the
 shift function of closed channels (a numerical derivative of GSL's Whittaker
@@ -226,7 +226,7 @@ Validation, 2026-10-19 (the 100-per-decade table):
 - With the table off, the natural-neon example is byte-identical to the build
   before this change; ctest 27/27, ``tests/run_tests.sh`` 29/29 with the
   table off and on.
-- The natural-neon example, mode 1, four threads: 473 s without the table,
+- The natural-neon example, ``calculate``, four threads: 473 s without the table,
   88 s with it (20.5 million lookups, 7,695 outside the table), the same χ²
   and outputs to every printed digit.
 - Several suites move with the table on by more than 1e-6: 13N 9.3e-4,
@@ -315,7 +315,7 @@ Cost: laying 29,322 grids out again takes 0.2–0.5 s per evaluation on four
 threads when the levels have not moved; rebuilding them costs about as much
 as a cold evaluation of those sub-points with the table (3,664 grids,
 604,562 sub-points: 23 s, once, when a session starts from a file whose levels
-are far from the point evaluated). The natural-neon example, mode 1: 85 s
+are far from the point evaluated). The natural-neon example, ``calculate``: 85 s
 re-placed, 82 s placed once, the same χ² to every printed digit. A fit moves
 the levels a little at every step and rebuilds only the grids near the
 resonances that moved.

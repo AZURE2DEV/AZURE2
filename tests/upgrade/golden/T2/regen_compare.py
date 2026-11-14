@@ -2,10 +2,10 @@
 """Golden outputs of T2: regenerate them with an AZURE2 binary and compare with the committed set.
 
 Three runs of tests/upgrade/T2, each from a clean copy of the project:
-  calc_start  menu 1 on T2.azr       (the fit project at its start values: every observable and
+  calc_start  calculate T2.azr       (the fit project at its start values: every observable and
                                        apparatus effect of T2 evaluated once, chi2 per segment)
-  calc_truth  menu 1 on T2_true.azr  (the truth)
-  fit         menu 2 on T2.azr with --use-lm (falls back to MIGRAD with the numerical gradient: the
+  calc_truth  calculate T2_true.azr  (the truth)
+  fit         fit T2.azr with --use-lm (falls back to MIGRAD with the numerical gradient: the
                                        THM segments have no analytic Jacobian; see check_recovery.py)
 All runs use --no-coulomb-table (exact Coulomb functions), so the result does not depend on whether a
 Coulomb table exists on the machine, and OMP_NUM_THREADS from --threads (results must not depend on it).
@@ -43,9 +43,9 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "
 import format3_gate  # noqa: E402  (the accepted differences between an old file's outputs and its conversion's)
 PROJECT = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.f3.txt", "data"]
 RUNS = {
-    "calc_start": ("T2.azr", "1\n\n\n7\n", 1e-5, []),
-    "calc_truth": ("T2_true.azr", "1\n\n\n7\n", 1e-5, []),
-    "fit": ("T2.azr", "2\nn\n\n\n7\n", 1e-3, ["--use-lm"]),
+    "calc_start": ("T2.azr", ["calculate"], 1e-5, []),
+    "calc_truth": ("T2_true.azr", ["calculate"], 1e-5, []),
+    "fit": ("T2.azr", ["fit"], 1e-3, ["--use-lm"]),
 }
 KEEP = re.compile(r"^(chiSquared\.out|AZUREOut_.*\.out|thm_experiments\.out|parameters\.out|param\.sav|"
                   r"normalizations\.out|shifts\.out)$")
@@ -96,7 +96,7 @@ def compare(a, b, rtol, name=None):
 
 
 def run(binary, threads, name, work):
-    azr, menu, _, extra = RUNS[name]
+    azr, command, _, extra = RUNS[name]
     d = os.path.join(work, name)
     os.makedirs(d)
     for f in PROJECT:
@@ -105,7 +105,7 @@ def run(binary, threads, name, work):
     for sub in ("output", "checks"):
         os.makedirs(os.path.join(d, sub))
     env = dict(os.environ, OMP_NUM_THREADS=str(threads), LC_ALL="C")
-    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, azr], input=menu, cwd=d,
+    r = subprocess.run([binary, *command, "--no-gui", "--no-coulomb-table", *extra, azr], stdin=subprocess.DEVNULL, cwd=d,
                        env=env, capture_output=True, text=True, timeout=3600)
     if not os.path.isfile(os.path.join(d, "output", "chiSquared.out")):
         sys.exit(f"{name}: no chiSquared.out\n{(r.stdout + r.stderr)[-3000:]}")

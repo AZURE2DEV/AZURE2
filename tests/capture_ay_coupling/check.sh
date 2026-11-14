@@ -31,16 +31,16 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run DIR MODEL MODE [FLAGS] -> $WORK/DIR
 run() {
-  local dir="$WORK/$1" model="$2" mode="$3" flags="${4:-}"
+  local dir="$WORK/$1" model="$2" command="$3" flags="${4:-}"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
   [ -d "$HERE/models/data" ] && cp -r "$HERE/models/data" "$dir/"
   # shellcheck disable=SC2086
-  (cd "$dir" && printf "$mode\n\n\n7\n" | run_limited 300 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 
 # ---- (a) the two-level model --------------------------------------------------------------------------------------
-run twolevel twolevel 3 "--use-brune"
+run twolevel twolevel extrapolate "--use-brune"
 if [ -s "$WORK/twolevel/output/AZUREOut_aa=1_R=2.extrap" ] && [ -s "$WORK/twolevel/output/parameters.out" ]; then
   if [ -n "$PYTHON" ] && "$PYTHON" -c "import numpy, sympy" > /dev/null 2>&1; then
     "$PYTHON" "$HERE/verify.py" "$WORK/twolevel" || failures=$((failures + $?))
@@ -52,7 +52,7 @@ else
 fi
 
 # ---- (b) a spin-1 projectile is refused -------------------------------------------------------------------------
-run deuteron deuteron 3 "--use-brune"
+run deuteron deuteron extrapolate "--use-brune"
 if grep -q "ERROR: test segment #1: an analyzing power needs a spin-1/2 projectile" "$WORK/deuteron/run.log" &&
    [ ! -s "$WORK/deuteron/output/AZUREOut_aa=1_R=2.extrap" ]; then
   ok "(b) an analyzing-power segment with a spin-1 projectile is refused"
@@ -64,7 +64,7 @@ fi
 if [ -f "$HERE/../13N_capture_ay/expected/chiSquared.out" ]; then
   mkdir -p "$WORK/13N/output" "$WORK/13N/checks"
   cp "$HERE/../13N_capture_ay/13N_capture_ay.azr" "$WORK/13N/t.azr" && cp -r "$HERE/../13N_capture_ay/data" "$WORK/13N/"
-  (cd "$WORK/13N" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/13N" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   exp="$(awk -F, 'NR > 1 && $1 + 0 == 2 { gsub(/ /, "", $2); print $2 }' "$HERE/../13N_capture_ay/expected/chiSquared.out")"
   got="$(awk -F, 'NR > 1 && $1 + 0 == 2 { gsub(/ /, "", $2); print $2 }' "$WORK/13N/output/chiSquared.out" 2>/dev/null)"
   if [ -n "$got" ] && awk -v a="$got" -v b="$exp" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-3 * (b < 0 ? -b : b) + 1e-9) }'; then

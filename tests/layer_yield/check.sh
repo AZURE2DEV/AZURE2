@@ -41,12 +41,11 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS: menu 1 (calculation) or 2 (fit) of $WORK/NAME/m.azr
+# run NAME COMMAND THREADS: calculate or fit of $WORK/NAME/m.azr
 run() {
-  local name="$1" menu="$2" threads="$3" input='1\n\n\n7\n'
-  [ "$menu" = 2 ] && input='2\nn\n\n\n'
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf "$input" |
-     OMP_NUM_THREADS="$threads" $(guard_command 600) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     OMP_NUM_THREADS="$threads" $(guard_command 600) "$AZURE2_BIN" "$command" --no-gui m.azr > run.log 2>&1)
 }
 # refused NAME CODE TEXT FILE: --describe of FILE prints CODE and TEXT
 refused() {
@@ -54,8 +53,7 @@ refused() {
   # the validator's and Build's refusals by --describe (data files relative to the working directory); the set-up's by
   # a calculation (menu 1) of a copy of FILE beside the data (a run reads them relative to the project file)
   cp "$WORK/$4" "$WORK/calc/$4"
-  msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; printf '1\n\n\n7\n' |
-         $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline "$4" 2>&1)"
+  msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; $(guard_command 120) "$AZURE2_BIN" calculate --no-gui "$4" 2>&1)"
   if grep -q "$2" <<< "$msg" && grep -q "$3" <<< "$msg"; then ok "$1 is refused ($2)"
   else bad "$1: no $2 ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 }
@@ -68,8 +66,8 @@ if [ "$n" = 9 ]; then ok "--describe: the layer kernel on each of the 9 yields o
 else bad "--describe names the layer kernel on $n data sets (9 expected): $(head -3 "$WORK/calc/describe.err")"; fi
 
 # ---- 2. 1 and 2 threads
-run calc 1 1 && cp -r "$WORK/calc/output" "$WORK/calc_1"
-run calc 1 2
+run calc calculate 1 && cp -r "$WORK/calc/output" "$WORK/calc_1"
+run calc calculate 2
 if [ -s "$WORK/calc_1/chiSquared.out" ] && diff -r "$WORK/calc_1" "$WORK/calc/output" > /dev/null; then
   ok "calculation at 1 and 2 threads: every output identical"
 else
@@ -91,7 +89,7 @@ sed 's/^/        /' "$WORK/limits.txt"
 #      measured 1.2e-4, thick_inf), and at least one moves;
 #      the thick layer comes closer to the independent integral (models/thick_reference.json).
 setup fine "$HERE/models/layer_yield.azr"
-(export AZURE_REFINE_QUADRATURE=2; run fine 1 2)
+(export AZURE_REFINE_QUADRATURE=2; run fine calculate 2)
 res="$(python3 -I - "$WORK/calc/output" "$WORK/fine/output" "$HERE/models/thick_reference.json" <<'PY'
 import json, sys
 def blocks(path):
@@ -136,8 +134,8 @@ if [ "${res%% *}" = 1 ]; then ok "refined quadrature: ${res#* }"; else bad "refi
 
 # ---- 4. the fit
 setup fit "$HERE/models/fit.azr"
-run fit 2 1 && cp -r "$WORK/fit/output" "$WORK/fit_1"
-run fit 2 2
+run fit fit 1 && cp -r "$WORK/fit/output" "$WORK/fit_1"
+run fit fit 2
 # fitStatus.out's call count is Minuit's unsynchronised counter (docs/upgrade/fit_threads.md section 3): left out
 if [ -s "$WORK/fit_1/param.sav" ] && diff -r -x fitStatus.out "$WORK/fit_1" "$WORK/fit/output" > /dev/null &&
    diff <(grep -v '^calls' "$WORK/fit_1/fitStatus.out") <(grep -v '^calls' "$WORK/fit/output/fitStatus.out") > /dev/null; then

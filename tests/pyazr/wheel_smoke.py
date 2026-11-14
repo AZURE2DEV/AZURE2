@@ -84,7 +84,7 @@ def main(repo, scratch):
         for sub in ("output", "checks"):
             shutil.rmtree(os.path.join(folder, sub), ignore_errors=True)
             os.makedirs(os.path.join(folder, sub))
-        p = subprocess.run([program, "--no-gui", "--no-readline", "--no-coulomb-table", "T1.azr"], input="1\n\n\n7\n",
+        p = subprocess.run([program, "calculate", "--no-gui", "--no-coulomb-table", "T1.azr"], stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, cwd=folder, timeout=600)
         total = None
         try:

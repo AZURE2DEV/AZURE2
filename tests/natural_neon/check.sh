@@ -59,7 +59,7 @@ ln -s "$HERE/data" "$dir/data"
 awk '/^<extrapolations>$/ { x = 1 } /^<\/extrapolations>$/ { x = 0 } x && /^    (beam|quadrature) / { next } { print }' \
   "$HERE/natural_neon.azr" > "$dir/t.azr"
 grep -q '^    beam ' <<< "$(awk '/^<extrapolations>$/,/^<\/extrapolations>$/' "$dir/t.azr")" && bad "an extrapolation keeps its beam field"
-(cd "$dir" && printf '3\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$dir" && run_limited 900 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
 
 f20="$dir/output/AZUREOut_aa=2_R=2.extrap"; f22="$dir/output/AZUREOut_aa=4_R=4.extrap"; f21="$dir/output/AZUREOut_aa=6_R=6.extrap"
 if [ ! -s "$f20" ] || [ ! -s "$f22" ] || [ ! -s "$f21" ]; then
@@ -107,7 +107,7 @@ for t in 1 4; do
   mkdir -p "$d/output" "$d/checks"
   ln -s "$HERE/data" "$d/data"
   cp "$HERE/natural_neon.azr" "$d/"
-  (cd "$d" && printf '1\n\n\n7\n' | OMP_NUM_THREADS=$t run_limited 900 "$AZURE2_BIN" --no-gui --no-readline natural_neon.azr > run.log 2>&1)
+  (cd "$d" && OMP_NUM_THREADS=$t run_limited 900 "$AZURE2_BIN" calculate --no-gui natural_neon.azr > run.log 2>&1)
 done
 if [ -s "$WORK/threads1/output/chiSquared.out" ] && [ -s "$WORK/threads4/output/chiSquared.out" ]; then
   # Compared without diff/cmp (neither is in every MSYS2 image: the Windows runner has neither, 2026-11-05):

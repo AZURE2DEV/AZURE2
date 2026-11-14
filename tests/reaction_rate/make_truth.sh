@@ -22,7 +22,7 @@ for m in p12C:1.00728 n12C:1.008665 moved_azr:1.00728; do
   name="${m%%:*}"; m1="${m##*:}"
   d="$WORK/$name"; mkdir -p "$d/output" "$d/checks"
   cp "$HERE/models/${name}_truth.azr" "$d/t.azr"
-  (cd "$d" && printf '3\n\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" && "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
   python3 "$HERE/truth.py" "$m1" 12.0 "$HERE/temperatures.dat" "$d"/output/AZUREOut_aa=1_R=2.extrap \
     > "$HERE/expected/rates_${name}.dat"
   echo "$name: $(wc -l < "$d"/output/AZUREOut_aa=1_R=2.extrap) extrapolation points"
@@ -32,7 +32,7 @@ done
 # takes its per-temperature quadrature; the truth is its dense extrapolation (closed_model.py --truth), at temperatures_closed.dat
 d="$WORK/p12C_closed"; mkdir -p "$d/output" "$d/checks"
 python3 "$HERE/closed_model.py" "$HERE/models/p12C.azr" --truth > "$d/t.azr"
-(cd "$d" && printf '3\n\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$d" && "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
 python3 "$HERE/truth.py" 1.00728 12.0 "$HERE/temperatures_closed.dat" "$d"/output/AZUREOut_aa=1_R=3.extrap \
   > "$HERE/expected/rates_p12C_closed.dat"
 echo "p12C_closed: $(cat "$d"/output/AZUREOut_aa=1_R=3.extrap | wc -l) extrapolation points"

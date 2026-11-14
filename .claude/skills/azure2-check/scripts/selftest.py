@@ -5,7 +5,7 @@ Runs each script on a copy of the synthetic project T1 (tests/upgrade/T1: p + 12
 a phase shift and capture, generated from known parameters) in a temporary directory, and checks numbers that mean
 something:
 
-- chi2_report.py reproduces the Total-Chi-Squared of the program's own calculation (menu 1) to 1e-6, and each data
+- chi2_report.py reproduces the Total-Chi-Squared of the program's own calculation (`calculate`) to 1e-6, and each data
   set's chi2 is the sum of its squared pulls (T1 has no data covariance);
 - widths_check.py gives gamma^2_W = 3 hbar^2/(2 mu a_c^2) as computed here from the pair's masses and radius
   (CODATA 2018); the Brune norm J of the 1/2+ and 3/2- levels equals 1 - Gamma S'(E)/(2 P(E)) from the engine's
@@ -64,7 +64,7 @@ def test_chi2_report(work):
     if not azure2:
         check("chi2_report: AZURE2_BIN set", False, "the comparison with the program needs it")
         return
-    calc = subprocess.run([azure2, "--no-gui", "--no-readline", "T1.azr"], input="1\n\n\n7\n", cwd=work,
+    calc = subprocess.run([azure2, "calculate", "--no-gui", "T1.azr"], stdin=subprocess.DEVNULL, cwd=work,
                           capture_output=True, text=True)
     check("program calculates T1", calc.returncode == 0, f"exit {calc.returncode}")
     r = run("chi2_report.py", "T1.azr", "--chisquared-out", "output/chiSquared.out", "--json", "rep.json", cwd=work)

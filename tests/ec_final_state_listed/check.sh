@@ -36,7 +36,7 @@ run() {  # MODEL -> $WORK/MODEL, mode 1
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$1.azr" "$dir/t.azr"; cp -r "$HERE/data" "$dir/"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 }
 refused() {  # MODEL LABEL
   if grep -q "$ERR" "$WORK/$1/run.log" && [ ! -s "$WORK/$1/output/chiSquared.out" ]; then ok "$2"

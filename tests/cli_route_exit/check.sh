@@ -45,7 +45,7 @@ run() {
   else
     awk -v r="$route" 'p { sub(/^[a-z]+/, r); p = 0 } /^<config>$/ { p = 1 } { print }' "$HERE/../$proj/$proj.azr" > "$dir/$proj.azr"
   fi
-  (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$@" "$proj.azr" > run.log 2>&1)
+  (cd "$dir" && "$AZURE2_BIN" calculate --no-gui "$@" "$proj.azr" > run.log 2>&1)
   rc=$?
 }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
@@ -109,7 +109,7 @@ for e in 5.95 6.05 6.15; do echo "$e  90  1.0  0.01"; done > "$dir/data/sum.dat"
 sed 's/^\(    reaction       13C(a,n)16O\[6.0494\] + \)\(13C(a,n)16O\[6.12989\]\)$/\1abc*\2/' \
   "$HERE/../sum_lab_frame/models/sum_data.azr" > "$dir/sum_data.azr"
 grep -q -- "+ abc\*13C" "$dir/sum_data.azr" || bad "badscale: the model edit did not apply"
-(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline sum_data.azr > run.log 2>&1); rc=$?
+(cd "$dir" && "$AZURE2_BIN" calculate --no-gui sum_data.azr > run.log 2>&1); rc=$?
 # A format-3 project is refused when it is read (Config::ReadFormat3Project): its diagnostics, then the line that says
 # it is refused as its last line, exit 1 (as a refused set-up).
 REFUSED="ERROR: sum_data.azr (format 3) is refused; AZURE2 --validate sum_data.azr lists the same diagnostics."
@@ -123,7 +123,7 @@ grep -q "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term
 # line (before the closing "Thanks for using AZURE2."), exit 1.
 dir="$WORK/nodata"; mkdir -p "$dir/output" "$dir/checks"
 cp "$HERE/../13N/13N.azr" "$dir/"
-(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline 13N.azr > run.log 2>&1); rc=$?
+(cd "$dir" && "$AZURE2_BIN" calculate --no-gui 13N.azr > run.log 2>&1); rc=$?
 REFUSED="ERROR: 13N.azr (format 3) is refused; AZURE2 --validate 13N.azr lists the same diagnostics."
 last="$(grep -v '^ *$' "$dir/run.log" | grep -v '^Thanks for using AZURE2' | tail -n 1)"
 grep -q "E_DATA_FILE: dataset baumann_1658, field file: cannot read data/baumann_1658.dat" "$dir/run.log" \
@@ -139,7 +139,7 @@ cp -R "$HERE/../13N/data" "$dir/data"
 edited "$HERE/../13N/13N.azr" "$dir/13N.azr" \
   awk '$1 == "dataset" { ds = $2 } { print } ds == "artemov" && $1 == "file" { print "    covariance     no_such_cov.txt" }' \
   || bad "nocov: the covariance field was not added"
-(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline 13N.azr > run.log 2>&1); rc=$?
+(cd "$dir" && "$AZURE2_BIN" calculate --no-gui 13N.azr > run.log 2>&1); rc=$?
 last="$(grep -v '^ *$' "$dir/run.log" | grep -v '^Thanks for using AZURE2' | tail -n 1)"
 case "$last" in "ERROR: Covariance file: "*no_such_cov.txt*) last_ok=1 ;; *) last_ok=0 ;; esac
 [ "$rc" = 1 ] && [ "$last_ok" = 1 ] && ! grep -q "Could not fill data object" "$dir/run.log" \
@@ -148,7 +148,7 @@ case "$last" in "ERROR: Covariance file: "*no_such_cov.txt*) last_ok=1 ;; *) las
 
 # A project file that does not exist keeps its own message (and exit status 255).
 dir="$WORK/nofile"; mkdir -p "$dir"
-(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline absent.azr > run.log 2>&1); rc=$?
+(cd "$dir" && "$AZURE2_BIN" calculate --no-gui absent.azr > run.log 2>&1); rc=$?
 grep -q "Could not open absent.azr.  Check that file exists." "$dir/run.log" && [ "$rc" = 255 ] \
   && ! grep -q "is refused" "$dir/run.log" \
   && ok "a missing project file: 'Could not open', exit 255" \
@@ -177,7 +177,7 @@ refused() {
   expect="$(printf '%s\n' "$@")"
   for cmd in run --validate --describe --print-predictions; do
     if [ "$cmd" = run ]; then
-      out="$(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$name" 2>&1)"; rc=$?
+      out="$(cd "$dir" && "$AZURE2_BIN" calculate --no-gui "$name" 2>&1)"; rc=$?
     else
       out="$(cd "$dir" && "$AZURE2_BIN" "$cmd" "$name" 2>&1)"; rc=$?
     fi

@@ -38,7 +38,7 @@ run() {  # MODEL: mode 1 in $WORK/MODEL
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$1.azr" "$dir/t.azr"; cp -r "$HERE/data" "$dir/"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   [ -s "$dir/output/chiSquared.out" ] || { bad "$1: no chiSquared.out"; tail -5 "$dir/run.log"; }
 }
 same() {  # MODEL REF LABEL TOL

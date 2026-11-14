@@ -50,9 +50,9 @@ run() {  # MODEL [REFINE]: the run lands in $WORK/MODEL, or $WORK/MODEL.xREFINE 
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr" && cp -r "$HERE/models/data" "$dir/"
   if [ -n "$refine" ]; then
-    (cd "$dir" && printf '1\n\n\n7\n' | AZURE_REFINE_QUADRATURE="$refine" run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+    (cd "$dir" && AZURE_REFINE_QUADRATURE="$refine" run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   else
-    (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+    (cd "$dir" && run_limited 600 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
   fi
   ls "$dir"/output/AZUREOut_aa=1_* > /dev/null 2>&1 || { bad "$1: no output"; tail -5 "$dir/run.log"; return 1; }
 }

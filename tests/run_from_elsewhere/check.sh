@@ -44,7 +44,7 @@ make_project() {
 }
 # calc START-DIR PROJECT-ARGUMENT [INTEGRALS-FILE]: mode 1, the integrals file at the third prompt
 calc() {
-  (cd "$1" && printf '1\n\n%s\n7\n' "${3:-}" | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline "$2" > run.log 2>&1)
+  (cd "$1" && run_limited 900 "$AZURE2_BIN" calculate ${3:+--capture-amplitudes="$3"} --no-gui "$2" > run.log 2>&1)
 }
 same_files() {  # same_files DIR-A DIR-B: the output and checks files of two projects equal byte for byte
   diff -r "$1/output" "$2/output" > /dev/null && diff -r "$1/checks" "$2/checks" > /dev/null

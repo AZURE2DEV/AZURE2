@@ -59,10 +59,10 @@ for v in experiment distortion dw lineshape ps; do
   esac
   echo "($v) $block"
   setup "$v.start" "$block"
-  (cd "$WORK/$v.start" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$WORK/$v.start" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   c0="$(total "$WORK/$v.start")"
   setup "$v" "$block"
-  (cd "$WORK/$v" && printf '2\nn\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$WORK/$v" && $RUN "$AZURE2_BIN" fit --no-gui run.azr > log 2>&1)
   if [ ! -f "$WORK/$v/output/param.sav" ] || [ -z "$c0" ]; then
     bad "$v: the fit did not finish (start chi2 '$c0')"; tail -5 "$WORK/$v/log" | sed 's/^/        /'
     continue
@@ -75,7 +75,7 @@ for v in experiment distortion dw lineshape ps; do
   # A calculation from the fit's parameters gives the fit's chi2.
   setup "$v.check" "$block"
   cp "$WORK/$v/output/param.sav" "$WORK/$v.check/fit.par"
-  (cd "$WORK/$v.check" && printf '1\nfit.par\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$WORK/$v.check" && $RUN "$AZURE2_BIN" calculate --parameter-file=fit.par --no-gui run.azr > log 2>&1)
   c2="$(total "$WORK/$v.check")"
   awk -v a="$c1" -v b="$c2" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(b != "" && d < 1e-6) }' \
     && ok "$v: a calculation from param.sav gives it ($c2)" || bad "$v: fit chi2 $c1, calculation from param.sav $c2"
@@ -109,7 +109,7 @@ for v in experiment ps shift shiftfree; do
   else
     thm_set "$d/run.azr" "$block" lc723_thm_points lc723_band_mid
   fi
-  (cd "$d" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $RUN "$AZURE2_BIN" --use-gradient --no-gui --no-readline \
+  (cd "$d" && AZURE_GRAD_CHECK=exit $RUN "$AZURE2_BIN" fit --use-gradient --no-gui \
      run.azr > log 2>&1)
   for c in "idx 0 energy" "shift J-1"; do
     [ "$c" = "shift J-1" ] && [ -z "$shiftline" ] && continue

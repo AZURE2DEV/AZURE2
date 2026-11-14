@@ -28,10 +28,10 @@ np = pytest.importorskip("numpy")
 REL = 1e-9  # AZUREOut_* columns have eleven significant digits (precision 10, scientific)
 
 
-def run_menu(azr, menu):
-    """The program on ``azr`` with menu choice ``menu`` (1: with data, 3: extrapolations); its output directory."""
-    proc = subprocess.run([os.environ["AZURE2_BIN"], "--no-readline", os.path.basename(azr)],
-                          input=f"{menu}\n\n\n\n7\n", text=True, cwd=os.path.dirname(azr), capture_output=True,
+def run_program(azr, command):
+    """The program on ``azr`` by ``command`` (calculate: with data, extrapolate: extrapolations); its output directory."""
+    proc = subprocess.run([os.environ["AZURE2_BIN"], command, os.path.basename(azr)],
+                          stdin=subprocess.DEVNULL, text=True, cwd=os.path.dirname(azr), capture_output=True,
                           timeout=600)
     out = os.path.join(os.path.dirname(azr), "output")
     assert any(n.startswith("AZUREOut_") for n in os.listdir(out)), proc.stdout[-2000:]
@@ -87,7 +87,7 @@ def program_chi_squared(directory):
 
 @pytest.mark.parametrize("name", ["T1", "T2"])
 def test_payload_is_the_programs_output(name, tmp_path):
-    program = run_menu(copy_project(name, tmp_path / "cli"), 1)
+    program = run_program(copy_project(name, tmp_path / "cli"), "calculate")
     rows, totals = program_chi_squared(program)
     with make_client(copy_project(name, tmp_path / "api")) as client:
         r = client.get("/api/evaluation")
@@ -113,8 +113,8 @@ def test_payload_is_the_programs_output(name, tmp_path):
         assert abs(sum(d["residual_chi2"] for d in group) - sum(d["chi2"] for d in group)) <= 1e-5 * 513.9
         assert not all(abs(d["residual_chi2"] - d["chi2"]) <= 1e-4 * d["chi2"] for d in group)  # two splits
     assert "residual" in e and "n*datum" in e["residual"]["definition"]
-    if name == "T1":  # the extrapolations: the program's menu 3
-        extrap = blocks(run_menu(copy_project(name, tmp_path / "cli3"), 3), ".extrap")
+    if name == "T1":  # the extrapolations: the program's extrapolate
+        extrap = blocks(run_program(copy_project(name, tmp_path / "cli3"), "extrapolate"), ".extrap")
         assert len(e["extrapolations"]) == 5
         for x in e["extrapolations"]:
             assert match(x, extrap, with_data=False), f"{x['name']}: no block of the program's .extrap files agrees"
@@ -141,7 +141,7 @@ def test_model_data_and_neutral_entrance(tmp_path):
 
 def test_outputs_written_into_the_projects_output_directory(tmp_path):
     azr = copy_project("T2", tmp_path / "api")
-    program = run_menu(copy_project("T2", tmp_path / "cli"), 1)
+    program = run_program(copy_project("T2", tmp_path / "cli"), "calculate")
     with make_client(azr) as client:
         assert client.get("/api/outputs").json()["files"] == []
         r = client.post("/api/outputs", json={})

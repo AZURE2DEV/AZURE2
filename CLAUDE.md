@@ -312,7 +312,7 @@ method; `docs/upgrade/project_format3.md` §3.12). It is a `<config>` key, a fla
 3. Its keyword in `pyazr.Session.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
 4. Its case, both values, in `tests/config_options/check.sh` (key = flag) and `tests/pyazr/config_options_test.py`
    (key = keyword); its line in the table of `docs/source/reference/command_line.rst`.
-An option that is not project state (a file or directory of this machine, the menu's mode) is a field of
+An option that is not project state (a file or directory of this machine, the run's command) is a field of
 `RuntimeOptions` with its row and reason in `NotProjectOptionRows()` (`api/src/pybind_describe.cpp`).
 
 **A new regression check** (`tests/<name>/check.sh`; `tests/CLAUDE.md` for the house pattern). A variant of a
@@ -575,7 +575,7 @@ tools/runall.sh <absolute path of the reference engine> tab-ref   # once per ref
 tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run (REPLACE_TAG=1 to reuse one)
 tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv   # "## <basis>: N files, N identical" when nothing moved
 ```
-Menu 1, three bases (Brune, `--no-brune`, `--use-park`); the outputs land in `$WORK/cmp/<basis>/<tag>/.res-<folder>/
+`AZURE2 calculate`, three bases (Brune, `--no-brune`, `--use-park`); the outputs land in `$WORK/cmp/<basis>/<tag>/.res-<folder>/
 <file>.azr/` (`output/`, `checks/`, `run.log`), the table in `$WORK/cls-<tag>.tsv`, one line per file that differs.
 *Identical* (`tools/classify.py`): the same lines of tokens after commas become blanks and `=` a token of its own,
 numbers compared by value (`1.0` equals `1`), progress lines of `run.log` dropped. The converted-tree gate of format 3

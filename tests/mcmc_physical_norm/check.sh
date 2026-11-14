@@ -25,7 +25,7 @@ cp "$HERE/13N_fast.azr" "$WORK/t.azr"
 cp -r "$HERE/../13N/data" "$WORK/data"
 cd "$WORK"
 # mode 6: param file (blank), EC file (blank), walkers, steps, spread %, energy spread (default), threads, RWA?, overwrite?
-printf '6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > mcmc.log 2>&1
+"$AZURE2_BIN" mcmc --walkers=4 --steps=100 --parameter-spread=0.5 --sampler-threads=1 --basis=physical --overwrite-samples --no-gui t.azr > mcmc.log 2>&1
 grep -q "Parameter mode: Physical" mcmc.log || { bad "the run was not in physical-parameter mode"; tail -5 mcmc.log; exit 1; }
 [ -s output/samples.mcmc ] && [ -s output/param.mcmc ] || { bad "no samples.mcmc / param.mcmc written"; tail -5 mcmc.log; exit 1; }
 nfree="$(awk '/Number of free parameters:/ { print $NF }' mcmc.log)"
@@ -49,7 +49,7 @@ awk -v n="$norm0" '$1 ~ /\.norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2
 chi2_at() {  # chi2_at <parfile> -> data chi2 of a mode-1 calculation from that parameter file
   local d="calc_$(basename "$1" .par)"
   mkdir -p "$d/output" "$d/checks" && cp t.azr "$d/" && cp -r data "$d/"
-  ( cd "$d" && printf '1\n../%s\n\n' "$1" | "$AZURE2_BIN" --no-gui --no-readline t.azr > calc.log 2>&1 )
+  ( cd "$d" && "$AZURE2_BIN" calculate --parameter-file="../$1" --no-gui t.azr > calc.log 2>&1 )
   grep -q "Reading User Parameter File" "$d/calc.log" || { echo "nan"; return; }
   awk '/Total-Chi-Squared:/ { for (i = 1; i <= NF; i++) if ($i == "Total-Chi-Squared:") print $(i + 1) }' "$d/output/chiSquared.out" | tail -1
 }

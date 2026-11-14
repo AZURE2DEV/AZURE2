@@ -39,26 +39,25 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS [env ...] [-- flags]: menu 1, 2 (fit, no MINOS) or 3
+# run NAME COMMAND THREADS [env ...] [-- flags]: calculate, fit or extrapolate
 run() {
-  local name="$1" menu="$2" threads="$3" answers; shift 3
-  answers="$([ "$menu" = 2 ] && printf '2\nn\n\n\n' || printf '%s\n\n\n7\n' "$menu")"
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf '%s\n' "$answers" |
-     env OMP_NUM_THREADS="$threads" "$@" $(guard_command 300) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"; shift 3
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     env OMP_NUM_THREADS="$threads" "$@" $(guard_command 300) "$AZURE2_BIN" "$command" --no-gui m.azr > run.log 2>&1)
 }
 # block N FILE: columns 1-4 of the N-th block (0-based) of an AZUREOut file
 block() { awk -v b="$1" 'NF == 0 { if (seen) n++; seen = 0; next } { seen = 1; if (n == b) print $1, $2, $3, $4 }' "$2"; }
 
 # ---- 1. the extrapolation against truth.py
 setup ex "$HERE/models/extrap.azr"
-run ex 3 "$OMP_NUM_THREADS"
+run ex extrapolate "$OMP_NUM_THREADS"
 out="$WORK/ex/output/AZUREOut_aa=1_R=2.extrap"
 if [ ! -s "$out" ]; then bad "no extrapolation written ($(grep -m1 ERROR "$WORK/ex/run.log"))"
 elif res="$("$PY" "$HERE/truth.py" check "$out")"; then ok "extrapolation: $res"
 else bad "extrapolation against truth.py: $res"; fi
 
 # ---- 2. the fit of ratio data against the fit of sigma data
-for q in sigma ratio; do setup "fit_$q" "$HERE/models/fit_$q.azr"; run "fit_$q" 2 "$OMP_NUM_THREADS"; done
+for q in sigma ratio; do setup "fit_$q" "$HERE/models/fit_$q.azr"; run "fit_$q" fit "$OMP_NUM_THREADS"; done
 cs="$WORK/fit_sigma/output/chiSquared.out" cx="$WORK/fit_ratio/output/chiSquared.out"
 ps="$WORK/fit_sigma/output/parameters.out" px="$WORK/fit_ratio/output/parameters.out"
 if [ ! -s "$cs" ] || [ ! -s "$cx" ] || [ ! -s "$ps" ] || [ ! -s "$px" ]; then
@@ -81,7 +80,7 @@ fi
 
 # ---- 3. folded: the ratio to 1 b equals sigma through the same beam spread
 setup fold "$HERE/models/folded.azr"
-run fold 1 1 && cp -r "$WORK/fold/output" "$WORK/fold_1"
+run fold calculate 1 && cp -r "$WORK/fold/output" "$WORK/fold_1"
 f="$WORK/fold_1/AZUREOut_aa=1_R=2.out"
 if [ -s "$f" ] && [ "$(block 0 "$f" | wc -l)" = 16 ] && diff <(block 0 "$f") <(block 1 "$f") > /dev/null; then
   ok "folded through a 10 keV beam spread: the ratio to 1 b equals sigma character for character (16 points)"
@@ -93,8 +92,8 @@ fi
 edited "$HERE/models/fit_ratio.azr" "$WORK/grad.azr" sed -e 's|^    norm           1 fixed$|&\n    energy_window  0.3 1.6 MeV\n    beam           B\n    quadrature     points 30|' \
   -e 's|^<targets>$|&\nbeam B\n    spread         0.01 MeV lab|' || bad "edit: beam"
 setup grad "$WORK/grad.azr"
-(cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" --use-gradient --no-gui \
-   --no-readline m.azr > run.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" fit --use-gradient --no-gui \
+   m.azr > run.log 2>&1)
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
@@ -111,7 +110,7 @@ if grep -q "divided by the reference cross section of data/ref_cm.dat (37 rows" 
 else
   bad "--describe: $(echo "$desc" | sed -n '1,4p')"
 fi
-run fold 1 2
+run fold calculate 2
 if diff -r "$WORK/fold_1" "$WORK/fold/output" > /dev/null; then ok "folded.azr at 1 and 2 threads: every output identical"
 else bad "folded.azr: outputs differ between 1 and 2 threads"; fi
 

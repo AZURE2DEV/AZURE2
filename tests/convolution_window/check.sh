@@ -31,7 +31,7 @@ OUT=output/AZUREOut_aa=1_R=3.extrap
 
 run() {  # MODEL: mode 3 in $WORK/MODEL
   local dir="$WORK/$1"; mkdir -p "$dir/output" "$dir/checks"; cp "$HERE/models/$1.azr" "$dir/t.azr"
-  (cd "$dir" && printf '3\nn\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui t.azr > run.log 2>&1)
   [ -s "$dir/$OUT" ] || { bad "$1: no output"; tail -5 "$dir/run.log"; }
 }
 

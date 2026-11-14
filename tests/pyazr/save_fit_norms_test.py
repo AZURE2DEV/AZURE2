@@ -96,8 +96,8 @@ if not binary:
 def cli_chi2(work, azr):
     shutil.rmtree(os.path.join(work, "output"), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
-    subprocess.run([binary, "--no-gui", "--no-readline", azr], cwd=work,
-                   input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
+    subprocess.run([binary, "calculate", "--no-gui", azr], cwd=work,
+                   stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=600)
     text = open(os.path.join(work, "output", "chiSquared.out")).read()
     tot = [l.split() for l in text.splitlines() if l.startswith("Total-Chi-Squared:")][0]
     return float(tot[1]), float(tot[3])

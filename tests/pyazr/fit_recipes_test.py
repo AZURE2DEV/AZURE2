@@ -61,8 +61,8 @@ def copy_dir(src, dst, project, edits=()):
 
 
 def program_minimum(azr):
-    proc = subprocess.run([os.environ["AZURE2_BIN"], "--no-readline", "--max-calls=200", os.path.basename(azr)],
-                          input="2\n\n\n\n7\n", text=True, cwd=os.path.dirname(azr), capture_output=True, timeout=1800)
+    proc = subprocess.run([os.environ["AZURE2_BIN"], "fit", "--max-calls=200", os.path.basename(azr)],
+                          stdin=subprocess.DEVNULL, text=True, cwd=os.path.dirname(azr), capture_output=True, timeout=1800)
     found = re.findall(r"^Total Chi-Squared: (\S+)", proc.stdout, re.M)
     return float(found[-1]) if found else None
 

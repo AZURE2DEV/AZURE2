@@ -38,17 +38,16 @@ setup() {
   ln -s "$HERE/models/data" "$WORK/$1/data"
   cp "$2" "$WORK/$1/m.azr"
 }
-# run NAME MENU THREADS: menu 2 (fit) or 3 (extrapolation) of $WORK/NAME/m.azr
+# run NAME COMMAND THREADS: fit or extrapolate of $WORK/NAME/m.azr
 run() {
-  local name="$1" menu="$2" threads="$3" answers
-  answers="$([ "$menu" = 2 ] && printf '2\nn\n\n\n' || printf '3\n\n\n7\n')"
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf '%s\n' "$answers" |
-     env OMP_NUM_THREADS="$threads" $(guard_command 300) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     env OMP_NUM_THREADS="$threads" $(guard_command 300) "$AZURE2_BIN" "$command" --no-gui m.azr > run.log 2>&1)
 }
 
 # ---- 1. the extrapolation against truth.py
 setup ex "$HERE/models/pa_extrap.azr"
-run ex 3 "$OMP_NUM_THREADS"
+run ex extrapolate "$OMP_NUM_THREADS"
 out="$WORK/ex/output/AZUREOut_aa=1_R=2.extrap"
 if [ ! -s "$out" ]; then
   bad "no extrapolation written ($(grep -m1 ERROR "$WORK/ex/run.log"))"
@@ -59,7 +58,7 @@ else
 fi
 
 # ---- 2. the fit of S* data against the fit of the same rows as sigma
-for q in sigma sstar; do setup "fit_$q" "$HERE/models/fit_$q.azr"; run "fit_$q" 2 "$OMP_NUM_THREADS"; done
+for q in sigma sstar; do setup "fit_$q" "$HERE/models/fit_$q.azr"; run "fit_$q" fit "$OMP_NUM_THREADS"; done
 cs="$WORK/fit_sigma/output/chiSquared.out" cx="$WORK/fit_sstar/output/chiSquared.out"
 ps="$WORK/fit_sigma/output/parameters.out" px="$WORK/fit_sstar/output/parameters.out"
 if [ ! -s "$cs" ] || [ ! -s "$cx" ] || [ ! -s "$ps" ] || [ ! -s "$px" ]; then
@@ -92,8 +91,8 @@ else
 fi
 
 # ---- 4. 1 and 2 threads
-run fit_sstar 2 1 && cp -r "$WORK/fit_sstar/output" "$WORK/sstar_1"
-run fit_sstar 2 2
+run fit_sstar fit 1 && cp -r "$WORK/fit_sstar/output" "$WORK/sstar_1"
+run fit_sstar fit 2
 # fitStatus.out's "calls" line is left out: MIGRAD's call count was seen to differ between two 2-thread runs of
 # the same fit (1142 against 1146) with every other byte equal, also for fit_sigma.azr and with the engine before
 # modified_sfactor existed (a defect outside S*).

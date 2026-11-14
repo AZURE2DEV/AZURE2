@@ -90,9 +90,7 @@ mk() {
     { print }' "$MODEL/shift_fn.azr" > "$dir/t.azr"
 }
 run() {  # NAME MODE EXTRA_FLAGS
-  local input
-  if [ "$2" = 1 ]; then input='1\n\n\n7\n'; else input='2\n\n\n\n7\n'; fi
-  (cd "$WORK/$1" && printf "$input" | "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$WORK/$1" && "$AZURE2_BIN" "$2" $3 --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$WORK/$1/output/chiSquared.out" ]; then
     bad "$1: no chiSquared.out"; tail -15 "$WORK/$1/run.log"; return 1
   fi
@@ -119,7 +117,7 @@ mk member 0 "$(scale F 'a0*x' 'a0 0.003 fixed'
                 ds xs_90 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          F'
                 ds xs_90_2 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          H'
                 ds xs_90_3 xs_90.dat 90 'shift          offset 0.001 MeV fixed' 'shift          H')"
-if run member 1 ""; then
+if run member calculate ""; then
   d23="$(blockdiff "$WORK/member" 2 3)"; d24="$(blockdiff "$WORK/member" 2 4)"
   if awk -v d="$d23" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "member = the function given directly with its own constant ($d23)"; else bad "member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "member does not take the leader's constant ($d24 from it)"; else bad "member uses the leader's constant ($d24)"; fi
@@ -132,7 +130,7 @@ GROUP="$(scale F 'a0*(x-1)' 'a0 0 fit prior 0 1'
          ds xs_90_lin_mislabelled_p3 xs_90_lin_mislabelled_p3.dat 90 'shift          offset 0 MeV fit prior 0 1' 'shift          F')"
 fit() {  # NAME FLAGS [strict|info]
   mk "$1" 1 "$GROUP"
-  run "$1" 2 "$2" || return
+  run "$1" fit "$2" || return
   local dir="$WORK/$1" a1 a2 a0 t
   a1="$(par "$dir" xs_40_lin_mislabelled.shift.offset)"; a2="$(par "$dir" xs_90_lin_mislabelled_p3.shift.offset)"
   a0="$(par "$dir" F.a0)"; t="$(total "$dir")"
@@ -152,10 +150,10 @@ fit fit_lm "--use-lm"
 mk gradcheck 1 "$(scale F 'a0*(x-1)+a1*(x-1)^2' 'a0 0.001 fit prior 0 1' 'a1 0.0002 fit prior 0 1'
                   ds xs_40_lin_mislabelled xs_40_lin_mislabelled.dat 40 'shift          offset 0.001 MeV fit prior 0 1' 'shift          F'
                   ds xs_90_lin_mislabelled_p3 xs_90_lin_mislabelled_p3.dat 90 'shift          offset -0.002 MeV fit prior 0 1' 'shift          F')"
-(cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > jacobian.log 2>&1)
+(cd "$WORK/gradcheck" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > jacobian.log 2>&1)
 if grep -q "Jacobian path: shift 0/2 shift_fn 0/2" "$WORK/gradcheck/jacobian.log"; then ok "Jacobian path: a1, a2, a0, a1' agree with finite differences ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/gradcheck/jacobian.log"))"
 else bad "Jacobian-path gradient check: $(grep -E 'Jacobian path|components with relative' "$WORK/gradcheck/jacobian.log" | sed -n '1,3p')"; fi
-(cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > adjoint.log 2>&1)
+(cd "$WORK/gradcheck" && AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > adjoint.log 2>&1)
 nchk="$(grep -c 'shift-grad-check' "$WORK/gradcheck/adjoint.log")"
 worst="$(grep -o 'reldiff=[-0-9.e+]*' "$WORK/gradcheck/adjoint.log" | cut -d= -f2 | sort -g | tail -1)"
 if [ "$nchk" -ge 4 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 < 1e-6) }'; then ok "adjoint path: shift columns = full differences ($nchk checks, worst $worst)"
@@ -179,7 +177,7 @@ mk composite 0 "$(scale F 'a0*x' 'a0 0.003 fixed'
                    COMP=1 ds xs_90 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          F'
                    COMP=1 ds xs_90_2 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          H'
                    ds xs_90_3 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          H')"
-if run composite 1 ""; then
+if run composite calculate ""; then
   d23="$(blockdiff "$WORK/composite" 2 3)"; d24="$(blockdiff "$WORK/composite" 2 4)"
   if awk -v d="$d23" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "composite member = the composite with the function given directly ($d23)"; else bad "composite member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "the component is included ($d24 from the plain segment)"; else bad "composite equals the plain segment ($d24)"; fi

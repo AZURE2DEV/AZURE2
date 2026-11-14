@@ -3,7 +3,7 @@
 # (an unparseable data line once spun ESegment::Fill forever at 100% CPU).
 #
 #   RUN="$(guard_command 600)"
-#   printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr
+#   $RUN "$AZURE2_BIN" calculate --no-gui run.azr
 #
 # GNU timeout where there is one, gtimeout (Homebrew coreutils) on macOS,
 # else run_guard below: plain bash, so the limit holds on every platform.

@@ -152,7 +152,7 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
     # A hang must FAIL, not stall the suite (tests/lib/guard.sh: GNU timeout,
     # gtimeout, or a shell watchdog where neither exists, as on macOS).
     RUN="$(guard_command "${TEST_TIMEOUT:-1800}")"
-    printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$(basename "$azr")" 2>&1 \
+    $RUN "$AZURE2_BIN" calculate --no-gui "$(basename "$azr")" 2>&1 \
       | head -c 2000000 > run.log
   )
 

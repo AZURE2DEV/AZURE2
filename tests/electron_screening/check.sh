@@ -36,24 +36,22 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME AZR MODE FLAGS [env...] -> $WORK/NAME (mode 1 calculate, 2 fit)
 run() {
-  local name="$1" azr="$2" mode="$3" flags="$4"; shift 4
+  local name="$1" azr="$2" command="$3" flags="$4"; shift 4
   local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$SRC/data" "$dir/data"
   [ -d "$WORK/fitdata" ] && ln -s "$WORK/fitdata" "$dir/fitdata"
   cp "$azr" "$dir/t.azr"
-  local input='1\n\n\n7\n'
-  [ "$mode" = 2 ] && input='2\nn\n\n\n'
   (cd "$dir" && for kv in "$@"; do export "$kv"; done
-   printf "$input" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
+   run_limited 900 "$AZURE2_BIN" "$command" $flags --no-gui t.azr > run.log 2>&1)
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=1_R=2.out"; }
 # The value of parameter NAME in a run's param.sav (name value ... per line).
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
 
 # ---- 1. the factor, point by point -------------------------------------------------------
-run bare "$HERE/bare.azr" 1 "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
-run scr "$HERE/scr.azr" 1 "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
+run bare "$HERE/bare.azr" calculate "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
+run scr "$HERE/scr.azr" calculate "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
 if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
   # Rows in data order: segment 6 (32 points), 7 (18), then 8.  exp(pi eta Ue/E), eta of p + 12C with
   # AZURE2's constants (Constants.h) and the pair's masses (1.00728, 12).
@@ -74,7 +72,7 @@ else
 fi
 
 # ---- 2. inside a target effect -------------------------------------------------------------
-run conv "$HERE/conv.azr" 1 "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
+run conv "$HERE/conv.azr" calculate "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
 if [ -s "$(out conv)" ]; then
   d="$(paste "$(out scr)" "$(out conv)" | awk 'NF >= 8 { m = NF / 2; x = $(m + 4) / $4 - 1; if (x < 0) x = -x; if (x > w) w = x } END { printf "%.3e", w }')"
   if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d < 1e-5) }'; then ok "screening inside a 1e-6 MeV beam spread = plain screening (max rel diff $d)"
@@ -84,7 +82,7 @@ else
 fi
 
 # ---- 3. gradient ------------------------------------------------------------------------
-run grad "$HERE/grad.azr" 2 "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS" AZURE_GRAD_CHECK=exit
+run grad "$HERE/grad.azr" fit "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS" AZURE_GRAD_CHECK=exit
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 if grep -q "screening 0/1;.*screening 0/1" <<< "$line"; then ok "d chi2/d U_e: analytic = finite differences, adjoint and Jacobian paths"
 else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/run.log"; fi
@@ -117,13 +115,13 @@ if [ -s "$(out scr)" ]; then
   mkfit 300 50 > "$WORK/fit_prior.azr"
   for v in "fit:--use-gradient" "fit_lm:--use-lm"; do
     name="${v%%:*}"; flags="${v#*:}"
-    run "$name" "$WORK/fit.azr" 2 "$flags" OMP_NUM_THREADS="$OMP_NUM_THREADS"
+    run "$name" "$WORK/fit.azr" fit "$flags" OMP_NUM_THREADS="$OMP_NUM_THREADS"
     ue="$(par "$name" tgt_targetInt3.screening)"
     if [ -n "$ue" ] && awk -v u="$ue" 'BEGIN { d = u / 1000 - 1; if (d < 0) d = -d; exit !(d < 1e-3) }'; then
       ok "$name ($flags): U_e $ue eV from 300 (truth 1000)"
     else bad "$name ($flags): U_e ${ue:-missing}, expected 1000"; tail -5 "$WORK/$name/run.log"; fi
   done
-  run fit_prior "$WORK/fit_prior.azr" 2 "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS"
+  run fit_prior "$WORK/fit_prior.azr" fit "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS"
   ue="$(par fit_prior tgt_targetInt3.screening)"
   sc="$(sed -n 's/.*Total-Screening-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit_prior/output/chiSquared.out" | sed -n 1p)"
   if [ -n "$ue" ] && [ -n "$sc" ] && awk -v u="$ue" -v s="$sc" 'BEGIN { p = ((u - 300) / 50)^2; d = s - p; if (d < 0) d = -d

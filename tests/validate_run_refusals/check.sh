@@ -44,7 +44,7 @@ setup() {  # NAME MODEL: $WORK/NAME/t.azr and its data
 validate() {  # NAME: --validate output in validate.log, its exit code in validate.exit
   (cd "$WORK/$1" && run_limited 120 "$AZURE2_BIN" --validate t.azr > validate.log 2>&1; echo $? > validate.exit)
 }
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); }
 codes() { grep -c "$2" "$WORK/$1/validate.log"; }
 refused() { grep -q "$2" "$WORK/$1/run.log" && [ ! -s "$WORK/$1/output/chiSquared.out" ]; }
 expect() {  # LABEL NAME CODE COUNT EXIT RUN-PATTERN REFUSED(1/0)

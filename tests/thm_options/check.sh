@@ -72,7 +72,7 @@ run() {
                        print "    norm           0.000597139 fit"; print "    thm_weight     two.dat" }
          { print }' "$d/run.azr" > "$d/run.azr.tmp" && mv "$d/run.azr.tmp" "$d/run.azr"
   fi
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   echo $? > "$d/status"
   [ -f "$d/output/chiSquared.out" ] || return 0
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{print $2}'
@@ -85,7 +85,7 @@ runb() {
   cp -r "$HERE/../$2/data" "$d/"
   awk -v o="$3" -v n="$4" 'NF == 33 && $32 == o { $32 = n } { print }' \
     "$HERE/../$2/$2.azr" > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr > log 2>&1)
   [ -f "$d/output/chiSquared.out" ] || return 0
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{print $2}'
 }
@@ -249,7 +249,7 @@ runx() {
   cp -r "$SRC/data" "$d/"
   awk "$XTHM_EDIT" "$SRC/7Li_p_a.azr" > "$d/run.azr"
   [ -z "${WEIGHT:-}" ] || thm_weight "$d/run.azr" "${WEIGHT%%=*}" "${WEIGHT#*=}"
-  (cd "$d" && printf '3\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  (cd "$d" && $RUN "$AZURE2_BIN" extrapolate --no-gui run.azr > log 2>&1)
 }
 wfile xw ramp4.dat "0 1\n5 4\n"
 runx xn

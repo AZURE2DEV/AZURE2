@@ -219,7 +219,7 @@ def write_fit(source, engine):
                 f.write("%.17g 0 1 1\n" % e)
         with open(os.path.join(work, "truth.azr"), "w") as f:
             f.write(fit_project(source, "    shift          offset %.17g MeV fixed" % FIT_TRUE_SHIFT, "scan.dat"))
-        subprocess.run([engine, "--no-gui", "--no-readline", "truth.azr"], input="1\n\n\n7\n", cwd=work, check=True,
+        subprocess.run([engine, "calculate", "--no-gui", "truth.azr"], stdin=subprocess.DEVNULL, cwd=work, check=True,
                        capture_output=True, text=True, env=dict(os.environ, OMP_NUM_THREADS="1"))
         out = [l.split() for l in open(os.path.join(work, "output", "AZUREOut_aa=1_R=2.out"))
                if len(l.split()) >= 5 and not l.startswith("#")]

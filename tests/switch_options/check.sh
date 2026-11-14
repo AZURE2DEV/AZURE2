@@ -39,13 +39,13 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-CALC='1\n\n\n7\n'
-FIT='2\n\n\n\n7\n'
-EXTRAP='3\n\n7\n'
+CALC=calculate
+FIT=fit
+EXTRAP=extrapolate
 # run NAME FOLDER AZR MENU [VAR=VALUE ...] -- [FLAGS ...]: the project FOLDER/AZR (a folder under tests/) in a fresh
-# copy, the menu answers MENU, the variables and flags given; output in $WORK/NAME/output, the log in $WORK/NAME/log.
+# copy, the command COMMAND, the variables and flags given; output in $WORK/NAME/output, the log in $WORK/NAME/log.
 run() {
-  local name="$1" folder="$2" azr="$3" menu="$4"; shift 4
+  local name="$1" folder="$2" azr="$3" command="$4"; shift 4
   local vars=()
   while [ $# -gt 0 ] && [ "$1" != -- ]; do vars+=("$1"); shift; done
   [ $# -gt 0 ] && shift
@@ -53,7 +53,7 @@ run() {
   rm -rf "$dir"; mkdir -p "$dir"
   cp -R "$TESTS/$folder/." "$dir/"
   rm -rf "$dir/output" "$dir/checks"; mkdir -p "$dir/output" "$dir/checks"
-  (cd "$dir" && printf "$menu" | env "${vars[@]}" "$AZURE2_BIN" --no-gui --no-readline "$@" "$azr" > log 2>&1)
+  (cd "$dir" && env "${vars[@]}" "$AZURE2_BIN" $command --no-gui "$@" "$azr" > log 2>&1)
   echo $? > "$dir/status"
 }
 same() { diff -r "$WORK/$1/output" "$WORK/$2/output" > /dev/null 2>&1; }
@@ -61,11 +61,11 @@ filled() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -n "$(ls "$WORK/$1/output")" 
 
 # switch VARIABLE VALUE OPTION FOLDER AZR MENU [FLAGS ...]: cases 1 and 2 for one switch.
 switch() {
-  local var="$1" value="$2" option="$3" folder="$4" azr="$5" menu="$6"; shift 6
+  local var="$1" value="$2" option="$3" folder="$4" azr="$5" command="$6"; shift 6
   local tag; tag="$(echo "$var" | tr 'A-Z' 'a-z')"
-  run "$tag.base" "$folder" "$azr" "$menu" -- "$@"
-  run "$tag.var" "$folder" "$azr" "$menu" "$var=$value" -- "$@"
-  run "$tag.opt" "$folder" "$azr" "$menu" -- "$option" "$@"
+  run "$tag.base" "$folder" "$azr" "$command" -- "$@"
+  run "$tag.var" "$folder" "$azr" "$command" "$var=$value" -- "$@"
+  run "$tag.opt" "$folder" "$azr" "$command" -- "$option" "$@"
   if ! filled "$tag.var" || ! filled "$tag.opt" || ! filled "$tag.base"; then
     bad "$var: a run failed (status $(cat "$WORK/$tag.base/status") / $(cat "$WORK/$tag.var/status") / $(cat "$WORK/$tag.opt/status"))"
     return

@@ -61,7 +61,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   pyazr's `energy_39` was the 14.72 MeV level while the `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr showed
   the `.azr` seed, `param.sav` the fit). Identify a `param.sav` name by (a) `parameters.out`, which lists
   `J = ... E_level = ...` blocks in the same order, or (b) a one-line CLI probe: change that entry in a scratch copy,
-  run mode 1, and see which `E_level` or width line changed.
+  run `calculate`, and see which `E_level` or width line changed.
 - `s.parameters` is the engine's records, one row per parameter (`print(s.parameters.table())`: name, kind, unit,
   start, free, bounds, what it belongs to). A `**WARNING: Denominator less than zero while transforming` printed
   while it is built concerns the transformation of the start values, not the table: cross-check with a plain

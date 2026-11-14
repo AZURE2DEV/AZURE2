@@ -46,8 +46,7 @@ for basis in brune no-brune; do
        /^<\/extrapolations>/ { skip = 0 } !skip' recs="$HERE/extrapolations.txt" "$HERE/beam_profile_kernel.azr" > "$D/t.azr"
   flag=""
   [ "$basis" = no-brune ] && flag=--no-brune
-  (cd "$D" && printf '3\nn\n\n\n7\n' |
-    run_limited 600 "$AZURE2_BIN" --no-gui --no-readline --$ext $flag t.azr > run.log 2>&1)
+  (cd "$D" && run_limited 600 "$AZURE2_BIN" extrapolate --no-gui --$ext $flag t.azr > run.log 2>&1)
 done
 
 for r in 8 4; do

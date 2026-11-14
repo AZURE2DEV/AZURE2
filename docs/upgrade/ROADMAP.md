@@ -386,7 +386,8 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The program takes commands: `AZURE2 calculate|fit|extrapolate|minos|rate|mcmc [options] FILE`, every menu
       question a named option of one table (`src/RunRequest.cpp`) that the menu, `--help` and `--describe` read; the
       menu still runs without a command (pyazr3.md decision 3 (a); `tests/cli_commands`).
-- [ ] The tests, examples, skills and pages on the commands; the readline menus removed.
+- [x] The tests, examples, skills and pages on the commands; the menu and readline removed (a run without a command
+      is refused with the list of commands; `tools/menu_to_command.py` turns old menu answers into the command).
 - [ ] ENDF for the evaluators (`endf.md`: the mapping of a project to ENDF-6 MF=2 LRF=7 and the other sections, a
       measured spike, the checking codes, `pyazr.endf` and the page's screens; design written 2026-11-14): six
       stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).

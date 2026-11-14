@@ -711,7 +711,7 @@ what is computed or how:
 
 Left out as not a property of a project: the fit's and the job's choices (`--use-gradient`, `--use-lm`,
 `--use-gsl-lm`, `--use-nlopt`, `--max-calls`, `--refreeze-covariance`), output choices (`--covariance-band`,
-`--scale-covariance`), the program's own (`--help`, `--no-gui`, `--no-readline`, `--use-api`), the commands
+`--scale-covariance`), the program's own (`--help`, `--no-gui`, `--use-api`), the commands
 (`--convert`, `--validate`, `--describe`, `--schema`, `--build-coulomb-table`, ...), thread counts, and the
 environment switches (their own table, `azure2/support/Environment.h`; whether a number-changing switch should also
 become an option is a question the PI has open).

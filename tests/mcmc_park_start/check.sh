@@ -48,13 +48,14 @@ stage() {
     awk -v w="$2" 'w != "" && !done && index($0, " 300000.0 ") { sub(/ 300000\.0 /, " " w " "); done = 1 } { print }' \
     > "$WORK/$1/run.azr"
 }
-# mcmc NAME RWA(yes|no): the sampler under --use-park; NAME/status, NAME/log.
+# mcmc NAME BASIS (rwa|physical): the sampler under --use-park; NAME/status, NAME/log.
 mcmc() {
   local d="$WORK/$1"
-  (cd "$d" && printf '6\n\n24\n100\n\n0.5\n1\n%s\nyes\n' "$2" |
-     $RUN "$AZURE2_BIN" --no-gui --no-readline --use-park run.azr 2>&1 |
+  (cd "$d" &&
+     $RUN "$AZURE2_BIN" mcmc --walkers=24 --steps=100 --energy-spread=0.5 --sampler-threads=1 --basis="$2" \
+       --overwrite-samples --no-gui --use-park run.azr 2>&1 |
      head -c 20000000 | tr '\r' '\n' > log
-   echo "${PIPESTATUS[1]}" > status)
+   echo "${PIPESTATUS[0]}" > status)
 }
 WARN="WARNING: the MCMC starting point is outside Park's parameter space"
 LEVEL="J^pi=0+, E=0.0000 MeV (J-group 1, level 1): J = -"
@@ -87,10 +88,10 @@ ran() {  # NAME WARNED(1|0)
   fi
 }
 
-stage wall 51000000;   mcmc wall no
-stage wall_rwa 51000000; mcmc wall_rwa yes
-stage edge 33500000;   mcmc edge no
-stage inside "";       mcmc inside no
+stage wall 51000000;   mcmc wall physical
+stage wall_rwa 51000000; mcmc wall_rwa rwa
+stage edge 33500000;   mcmc edge physical
+stage inside "";       mcmc inside physical
 
 echo "== J = -0.54 at the start, physical parameters"
 refused wall

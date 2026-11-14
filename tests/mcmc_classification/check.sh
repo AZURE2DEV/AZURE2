@@ -50,14 +50,14 @@ fail=0
 
 # The CLI's MCMC questions: parameter file (blank), walkers, steps, spread %
 # (default), level-energy spread keV, threads, RWA, overwrite.
-INPUT='6\n\n24\n100\n\n0.5\n1\nno\nyes\n'
+COMMAND='mcmc --walkers=24 --steps=100 --energy-spread=0.5 --sampler-threads=1 --basis=physical --overwrite-samples'
 
 # mcmc NAME: run the sampler on $WORK/NAME/run.azr; status in NAME/status.
 mcmc() {
   local d="$WORK/$1"
-  (cd "$d" && printf '%b' "$INPUT" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+  (cd "$d" && $RUN "$AZURE2_BIN" $COMMAND --no-gui run.azr 2>&1 \
      | head -c 5000000 | tr '\r' '\n' > log
-   echo "${PIPESTATUS[1]}" > status)
+   echo "${PIPESTATUS[0]}" > status)
 }
 stage() {  # NAME SOURCE_DIR AZR
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"

@@ -243,7 +243,7 @@ def describe_package():
     """The package and its engine, as plain data (``pyazr.describe()``).
 
     Keys: ``pyazr`` (version), ``engine`` (version and ``git``, the ``git describe`` of the source at CMake configure
-    time; the compiled module's path), ``build`` (mcmc, nlopt, readline, openmp), ``threads`` (the threads an
+    time; the compiled module's path), ``build`` (mcmc, nlopt, openmp), ``threads`` (the threads an
     evaluation uses now, ``omp_get_max_threads()``, and ``OMP_NUM_THREADS``), ``coulomb_table`` (the default
     session's: :func:`coulomb_table`), ``stopping`` (the stopping library: implementation and citation), ``masses``
     (the mass table: version, file, sha256), ``python`` (version).
@@ -256,7 +256,7 @@ def describe_package():
     return {
         "pyazr": __version__,
         "engine": {"version": build.pop("version"), "git": build.pop("git"), "module": _engine().__file__},
-        "build": {k: build[k] for k in ("mcmc", "nlopt", "readline", "openmp")},
+        "build": {k: build[k] for k in ("mcmc", "nlopt", "openmp")},
         "threads": {"max_threads": int(build["max_threads"]),
                     "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS")},
         "coulomb_table": coulomb_table(),

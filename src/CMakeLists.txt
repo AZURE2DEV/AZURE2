@@ -56,44 +56,10 @@ add_library(AZURE2Core STATIC ${AZURE2_CORE_SOURCES})
 target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-if(NOT NO_READLINE)
-    if(CROSS_COMPILE_WINDOWS)
-        # For Windows cross-compilation, link directly to the MinGW readline library files
-        find_library(READLINE_LIBRARY 
-            NAMES libreadline.dll.a
-            PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib"
-            NO_DEFAULT_PATH)
-        
-        find_library(HISTORY_LIBRARY 
-            NAMES libhistory.dll.a
-            PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib"
-            NO_DEFAULT_PATH)
-        
-        if(READLINE_LIBRARY)
-            set (EXTRA_LIBS ${EXTRA_LIBS} ${READLINE_LIBRARY})
-            message(STATUS "Found readline library: ${READLINE_LIBRARY}")
-        endif()
-        
-        if(HISTORY_LIBRARY)
-            set (EXTRA_LIBS ${EXTRA_LIBS} ${HISTORY_LIBRARY})
-            message(STATUS "Found history library: ${HISTORY_LIBRARY}")
-        endif()
-    else()
-        # For native compilation, use standard readline
-        set (EXTRA_LIBS ${EXTRA_LIBS} readline)
-        
-        find_library(NCURSES_LIBRARY NAMES ncurses)
-        if (NCURSES_LIBRARY)
-            set (EXTRA_LIBS ${EXTRA_LIBS} ${NCURSES_LIBRARY})
-            mark_as_advanced (NCURSES_LIBRARY)
-        endif (NCURSES_LIBRARY)
-    endif()
-endif (NOT NO_READLINE)
-
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
-# two use convert/, linked below); RunRequest.cpp: the commands and the questions of a run, the command line's reader;
-# RunMenu.cpp: the menu's reader; RunPreparation.cpp: a run request into the Config
-set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunRequest.cpp RunMenu.cpp RunPreparation.cpp)
+# two use convert/, linked below); RunRequest.cpp: the commands and the options of a run, the command line's reader;
+# RunPreparation.cpp: a run request into the Config
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunRequest.cpp RunPreparation.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
@@ -174,12 +140,6 @@ if(CROSS_COMPILE_WINDOWS)
     copy_dll_if_exists(AZURE2 "libgsl-0.dll" "${MINGW_DLL_PATH}/libgsl-0.dll")
     copy_dll_if_exists(AZURE2 "libgslcblas-0.dll" "${MINGW_DLL_PATH}/libgslcblas-0.dll")
     
-    # Readline DLLs (these are dynamically linked via .dll.a)
-    copy_dll_if_exists(AZURE2 "libreadline8.dll" "${MINGW_DLL_PATH}/libreadline8.dll")
-    copy_dll_if_exists(AZURE2 "libhistory8.dll" "${MINGW_DLL_PATH}/libhistory8.dll")
-    
-    # Readline's own dependency
-    copy_dll_if_exists(AZURE2 "libtermcap-0.dll" "${MINGW_DLL_PATH}/libtermcap-0.dll")
     
     add_custom_command(TARGET AZURE2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "=== WINDOWS BUILD SUMMARY ==="

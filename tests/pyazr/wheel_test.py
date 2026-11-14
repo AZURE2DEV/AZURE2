@@ -116,7 +116,7 @@ def run_program(binary, folder):
     for sub in ("output", "checks"):
         shutil.rmtree(os.path.join(folder, sub), ignore_errors=True)
         os.makedirs(os.path.join(folder, sub))
-    p = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", "T1.azr"], input="1\n\n\n7\n",
+    p = subprocess.run([binary, "calculate", "--no-gui", "--no-coulomb-table", "T1.azr"], stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, cwd=folder, env=dict(os.environ, OMP_NUM_THREADS="1"),
                        timeout=600)
     return p.returncode, os.path.join(folder, "output")

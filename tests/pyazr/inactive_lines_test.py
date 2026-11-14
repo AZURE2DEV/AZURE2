@@ -232,8 +232,8 @@ with tempfile.TemporaryDirectory() as tmp:
         print("  skip  no AZURE2 binary to cross-check against")
     else:
         os.makedirs(os.path.join(work, "output_seg"), exist_ok=True)
-        subprocess.run([binary, "--no-gui", "--no-readline", "seg.azr"],
-                       cwd=work, input="1\nmoved.sav\n\n7\n", text=True,
+        subprocess.run([binary, "calculate", "--parameter-file=moved.sav", "--no-gui", "seg.azr"],
+                       cwd=work, stdin=subprocess.DEVNULL, text=True,
                        capture_output=True, timeout=900)
         line = ""
         out = os.path.join(work, "output_seg", "chiSquared.out")

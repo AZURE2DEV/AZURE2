@@ -63,9 +63,9 @@ stage() {
 run() {
   local dir="$WORK/$1" proj="$2" mode="$3" pfile="$4" flag="${5:-}"
   if [ "$mode" = fit ]; then
-    (cd "$dir" && printf '2\nn\n%s\n\n7\n' "$pfile" | $RUN "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
+    (cd "$dir" && $RUN "$AZURE2_BIN" fit ${pfile:+--parameter-file="$pfile"} --no-gui $flag "$proj.azr" > run.log 2>&1)
   else
-    (cd "$dir" && printf '1\n%s\n\n7\n' "$pfile" | $RUN "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
+    (cd "$dir" && $RUN "$AZURE2_BIN" calculate ${pfile:+--parameter-file="$pfile"} --no-gui $flag "$proj.azr" > run.log 2>&1)
   fi
   awk '/^Total-Chi-Squared:/ { print $2 }' "$dir/output/chiSquared.out" 2>/dev/null
 }
@@ -164,8 +164,8 @@ else bad "wall: no positive Total-Park-Chi-Squared in chiSquared.out ('$penw')";
 # differences of the objective, and the Jacobian-path gradient beside the adjoint one).  1e-3 of the largest
 # component: the finite differences in E_lambda move by ~7e-5 of it between steps here (dS/dE and d2S/dE2 are
 # numerical derivatives, and this level's J is far from 1), while leaving out the wall's gradient is 2e-2.
-(cd "$WORK/wall" && printf '2\nn\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7 \
-  "$AZURE2_BIN" --no-gui --no-readline --use-park --use-gradient identical_pp_res.azr > grad.log 2>&1)
+(cd "$WORK/wall" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7 \
+  "$AZURE2_BIN" fit --no-gui --use-park --use-gradient identical_pp_res.azr > grad.log 2>&1)
 gw="$(awk '{ sub(/\r$/, "") }
            /^\[grad-check\] idx / { a = f = ""; j = "-"
              for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }

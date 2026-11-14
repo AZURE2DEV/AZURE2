@@ -2,7 +2,7 @@ Code Architecture
 =================
 
 AZURE2 is one C++ calculation engine with two front ends: the program
-``AZURE2`` (command line and menu) and the Python package ``pyazr``, with
+``AZURE2`` (its commands) and the Python package ``pyazr``, with
 the web UI built on ``pyazr``. Both read the same format-3 ``.azr`` project
 through the same code and must give the same numbers. This page is the map:
 the libraries and what each may depend on, then a run step by step.
@@ -117,8 +117,8 @@ How the package is built. A developer's build is the CMake build of the
 repository: it writes ``_azure2`` into ``pyazr/`` (or ``PYAZR_OUTPUT_DIR``)
 and every test imports pyazr from the checkout. A user's ``pip install .`` (or
 ``pip wheel .``) goes through ``pyproject.toml``: scikit-build-core runs the
-same CMake files with the option set of a wheel (``BUILD_TESTING`` and
-``USE_READLINE`` off, the vendored sampler on; targets ``_azure2`` and ``AZURE2``),
+same CMake files with the option set of a wheel (``BUILD_TESTING`` off, the
+vendored sampler on; targets ``_azure2`` and ``AZURE2``),
 installs the module into the package and the program into the wheel's scripts
 (the install rules of component ``python``, keyed on ``SKBUILD``), and copies
 the package directory as it is, less ``wheel.exclude``. The package finds its
@@ -151,7 +151,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    *Program*: ``main`` (``src/AZURE2.cpp``) first runs the project commands
    (``RunProjectCommand``), parses the flags into ``Config``
    (``parseOptions``), calls ``Config::ReadConfigFile`` and
-   ``Config::ResolveMatrixRoute``, and shows the menu. *pyazr*:
+   ``Config::ResolveMatrixRoute``, and ``PrepareRun`` turns the command
+   and its options (``ReadRunCommand``) into the run. *pyazr*:
    ``pyazr.Session(...)`` builds ``_azure2.Session``
    (``api/src/pybind_api.cpp``), which makes a ``Config``, applies the
    keywords of the call (``RuntimeOptions``, ``apply_options``) and calls the

@@ -37,8 +37,8 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 mkdir -p "$WORK/output" "$WORK/checks"
 cp -r "$HERE/data" "$WORK/"
 cp "$HERE/13N.azr" "$WORK/t.azr"
-(cd "$WORK" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > run.log 2>&1)
 status=$?
 if [ "$status" -ne 0 ]; then
   bad "the fit did not start (exit status $status)"; tail -5 "$WORK/run.log"

@@ -108,7 +108,6 @@ bundled in-tree.
 
 **Libraries**
 - [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
-- [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
 - Python 3.10+ with [NumPy](https://numpy.org/) 1.24+ ([SciPy](https://scipy.org/) with the extras `web` and
@@ -122,23 +121,22 @@ bundled in-tree.
 **Ubuntu / Debian**
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential cmake pkg-config libgsl-dev libreadline-dev \
+sudo apt-get install build-essential cmake pkg-config libgsl-dev \
     python3 python3-numpy
 ```
 
 **macOS (Homebrew)**
 ```bash
-brew install cmake pkg-config gsl readline libomp
+brew install cmake pkg-config gsl libomp
 ```
 
-Two Homebrew-specific notes, neither of which applies to a conda/miniforge
-toolchain (which ships its own compiler and OpenMP in a single prefix):
+A Homebrew-specific note, which does not apply to a conda/miniforge toolchain
+(which ships its own compiler and OpenMP in a single prefix):
 
 - **`libomp` is required.** Apple's clang understands no `-fopenmp` and ships
   no OpenMP runtime, so without it CMake stops at `find_package(OpenMP)`.
-- **`readline` is keg-only**, meaning Homebrew deliberately leaves it off the
-  default search path. CMake asks `brew` for its location automatically, so a
-  plain `cmake -S . -B build` works.
+  CMake asks `brew` for its location automatically, so a plain
+  `cmake -S . -B build` works.
 
 ---
 
@@ -192,7 +190,6 @@ Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
 |-------------------------|:-------:|-------------|
 | `USE_API`               | ON      | Build the `AZUREAPI` library and the pybind11 `_azure2` module (required for `pyazr`). |
 | `USE_MCMC`              | ON      | Enable MCMC Bayesian sampling via the bundled `numcmc`. |
-| `USE_READLINE`          | ON      | Use Readline for console input. |
 | `USE_STAT`              | ON      | Use `stat()` for directory checks (turn OFF on Windows). |
 | `USE_NLOPT`             | OFF     | Use NLopt as an alternative minimizer (expects an `nlopt/` tree). |
 | `BUILD_LIBRARY`         | OFF     | Build AZURE2 as a library. |
@@ -216,10 +213,12 @@ channels, levels, and data segments.
 
 A command (`calculate`, `fit`, `extrapolate`, `minos`, `rate`, `mcmc`) runs one
 calculation with the answers its options give and reads nothing from standard
-input; a missing or wrong option is refused with exit status 2 and the fix.
-Without a command, `AZURE2 path/to/config.azr` prints the menu and asks.
-`AZURE2 --help` lists the commands and their options; `pyazr` runs the same
-engine from Python.
+input; a missing or wrong option is refused with exit status 2 and the fix, and
+so is a run without a command. `AZURE2 --help` lists the commands and their
+options; `pyazr` runs the same engine from Python. A script written for the old
+text menu (`printf '1\n\n\n7\n' | AZURE2 ...`): `python3 tools/menu_to_command.py
+'<its answers>'` prints the command that replaces the pipe
+(`docs/source/reference/command_line.rst`, "Scripts written for the menu").
 
 Useful flags (`AZURE2 --help` for the full list):
 
@@ -238,9 +237,7 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
 | `--no-transform`      | Skip the initial parameter transformations. |
 
-A run that fails exits non-zero; a refused command line exits with 2; piped
-answers to the menu that end at a prompt needing an answer stop the run with
-exit status 1.
+A run that fails exits non-zero; a refused command line exits with 2.
 
 ---
 
@@ -450,7 +447,7 @@ The skills:
 | Skill | Covers |
 |---|---|
 | `azure2-setup` | A new project: particle pairs and masses, levels and channels, segments, ENSDF levels and EXFOR data, conventions, first checks. |
-| `azure2-calculate` | Observables at any energy and angle, extrapolation, S(0), reaction rates, decomposition; the CLI menu and pyazr sessions. |
+| `azure2-calculate` | Observables at any energy and angle, extrapolation, S(0), reaction rates, decomposition; the CLI commands and pyazr sessions. |
 | `azure2-fit` | Free and fixed parameters, staged fits, nuisances and priors, convergence, editing levels and background poles, parameter files, dropping data sets. |
 | `azure2-check` | Whether a result can be trusted: pulls, residual structure, limits, radius and background-pole sensitivity, frames and units. |
 | `azure2-uncertainty` | Data covariance, parameter covariance, profile likelihood, sampling, bands, systematic axes. |

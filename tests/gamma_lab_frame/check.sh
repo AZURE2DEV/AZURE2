@@ -39,7 +39,7 @@ run() {   # run MODEL: calculate with data (mode 1) in $WORK/run_MODEL
   cp "$HERE/models/data/"*.dat "$dir/data/" 2> /dev/null
   [ -f "$WORK/lab.dat" ] && cp "$WORK/lab.dat" "$dir/data/"
   [ "$1" = lab ] && echo 1 > "$dir/kinflag.dat"   # lab-frame output files (EData::WriteOutputFiles)
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 }
 
 echo "gamma_lab_frame: $AZURE2_BIN"

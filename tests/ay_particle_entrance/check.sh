@@ -44,7 +44,7 @@ if [ "$rc" = 2 ] && grep -q "ay_beta.*E_REACTION_NOT_ALLOWED.*an analyzing power
 else
   bad "--validate: exit $rc, $(printf '%s\n' "$out" | grep -E 'error|valid' | sed -n '1,3p' | tr '\n' ' ')"
 fi
-(cd "$WORK" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); rc=$?
+(cd "$WORK" && $RUN "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1); rc=$?
 if [ "$rc" = 1 ] && grep -q "an analyzing power needs a particle entrance" "$WORK/run.log" && [ ! -f "$WORK/output/chiSquared.out" ]; then
   ok "the run refuses it (exit 1, no chiSquared.out)"
 else

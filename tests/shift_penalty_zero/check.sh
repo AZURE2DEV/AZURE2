@@ -54,7 +54,7 @@ echo "shift_penalty_zero: $AZURE2_BIN"
 mk calc "$(printf 'energy_scale xs_90_scale\n    function       "a0*(x-1)" MeV\n    param          a0 0.002 fit prior 0 0.004\n\n'
            ds xs_40 xs_40.dat 40 'shift          offset 0.004 MeV fit prior 0 0.002' 'shift          sqrt 0.003 MeV^1/2 fit prior 0 0.001'
            ds xs_90 xs_90.dat 90 'shift          offset 0.001 MeV fit prior 0 0.002' 'shift          xs_90_scale')"
-(cd "$WORK/calc" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/calc" && "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 s="$(field "$WORK/calc" Total-Shift-Chi-Squared:)"
 if [ -n "$s" ] && awk -v s="$s" 'BEGIN { d = s - 13.5; if (d < 0) d = -d; exit !(d < 1e-6) }'; then
   ok "(a) penalties from zero: Total-Shift-Chi-Squared = $s (4 + 9 + 0.25 + 0.25)"
@@ -63,7 +63,7 @@ else
 fi
 
 cp -r "$WORK/calc" "$WORK/grad"
-(cd "$WORK/grad" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > jacobian.log 2>&1)
+(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" fit --use-gradient --no-gui t.azr > jacobian.log 2>&1)
 line="$(grep -m1 'Jacobian path:' "$WORK/grad/jacobian.log")"
 if grep -q "shift 0/2" <<< "$line" && grep -q "shift_fn 0/1" <<< "$line"; then
   ok "(b) analytic gradient = finite differences for dE (x2), b, a0 ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/grad/jacobian.log" | sed -n 1p))"
@@ -72,7 +72,7 @@ else
 fi
 
 mk fixed "$(ds xs_40 xs_40.dat 40 'shift          offset 0.004 MeV fixed prior 0 0.002')"
-(cd "$WORK/fixed" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/fixed" && "$AZURE2_BIN" calculate --no-gui t.azr > run.log 2>&1)
 s="$(field "$WORK/fixed" Total-Shift-Chi-Squared:)"   # not written when no shift term is free
 if [ -z "$(field "$WORK/fixed" Total-Chi-Squared:)" ]; then bad "(c) fixed shift: no chiSquared.out"
 elif [ -z "$s" ] || awk -v s="$s" 'BEGIN { exit !(s + 0 == 0) }'; then ok "(c) a fixed shift adds no penalty (${s:-none reported})"

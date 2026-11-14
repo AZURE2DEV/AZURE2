@@ -62,7 +62,7 @@ Prerequisites, done in the reaction's fit directory, not in the campaign:
    `.azr`, they differ per reaction (see the reaction directory's notes), and rmfit needs them as `--flags` JSON.
 2. Reproduce the last finished fit before building on it: load its `param.sav` by name in pyazr, confirm that the
    objective matches `chiSquared.out` (χ² + normalization penalty), bake it into a clean file (`rmfit.engine.bake`),
-   and check the baked file with the CLI in mode 1 with a blank external parameter file. A bake checked with the
+   and check the baked file with `AZURE2 calculate` without a parameter file. A bake checked with the
    `.sav` as external file proves nothing (the `.sav` overrides `<levels>`). Never take parameters from a running or
    crashed fit, only from the last completed one. Purge inactive level lines.
 3. Merge new data sets onto the baked file (`Project.add_dataset`), capped at the energy range the level scheme
@@ -118,7 +118,7 @@ one). Every step ends by rewriting `STATUS.md` and appending to the readme; read
 | 5 | `structure dataset-off --file <substr>` for the worst χ²/N sets | deactivate and refit; reports the extra recovery of the other sets beyond the set's own χ² | a table for the evaluator |
 | 6 | `round --rounds 2` after any structure change | signs change with the structure | as in 2 |
 | 6b | `crossover --donor <cid> [--donor-dir <campaign>]` | apply another good fit's sign pattern per channel, J^π group or all, and polish every proposal | every donor pattern polished; union verified |
-| 7 | `export`, then review | bake the incumbent to `<reaction>.azr` + `.sav`, verified in a fresh process | CLI mode 1 with the `.sav` as external file reproduces the totals |
+| 7 | `export`, then review | bake the incumbent to `<reaction>.azr` + `.sav`, verified in a fresh process | `AZURE2 calculate` with the `.sav` as external file reproduces the totals |
 
 Other commands: `relocate --level 9/2+#1 --ex 8.4654 [--window 5]` kicks an existing level's energy to `--ex` (MeV),
 re-polishes with that energy confined to ±window (keV), and adopts if it beats the control by τ -- for a narrow level
@@ -143,7 +143,7 @@ Rules of the loop:
   `crossover --donor <old incumbent>`, then polish. For a donor basin perturb 2-4 flips inside one J^π group; flips
   scattered across groups produce a dead basin (8 flips: 1 % above, nothing found; 12 flips: 22 % above and
   unrecoverable). If the sign distance to the target falls by one flip or less in a round, stop the arm.
-- **Data changes are measured frozen first** (CLI mode 1 with the `.sav`). A frozen gain justifies the refit; anything
+- **Data changes are measured frozen first** (`AZURE2 calculate` with the `.sav`). A frozen gain justifies the refit; anything
   beyond it is attributable to the refit. Data-definition fixes (a total re-summed over every open channel, a 4π yield
   redefined as a sum, one outlier removed) have outweighed a week of structure moves.
 - **Never edit a data file that a running job reads**: new name, new directory.
@@ -286,7 +286,7 @@ rmfit hands these to the evaluator:
   narrow or broad verdict;
 - error-bar corrections (record each in the readme with the formula, statistics before/after and file checksums).
 
-Review: `printf '1\n<reaction>.sav\n\n7\n' | $AZURE2_BINARY <flags> --no-readline <reaction>.azr` fills
+Review: `$AZURE2_BINARY calculate --parameter-file=<reaction>.sav <flags> <reaction>.azr` fills
 `output/` with the fit (the `.sav` carries the fitted norms); then make the figures from it (`azure2-plot`).
 
 ## 6. Diagnostics and benchmarks
@@ -348,7 +348,7 @@ Review: `printf '1\n<reaction>.sav\n\n7\n' | $AZURE2_BINARY <flags> --no-readlin
   rmfit builds before 2026-10-30 (expires: 2027-02-01) no longer match by name. Sign-round groups, `free_mask(jpi=)`, level
   add and levelscan still work per J^π only.
 - **`export` fails `bake`'s 1e-4 verify** occasionally after a tighten polish with amplitudes near the cap (rel 1.2e-4,
-  reproducible). Call `bake(..., verify_rtol=5e-4)` directly and confirm with a CLI mode-1 run using the `.sav`.
+  reproducible). Call `bake(..., verify_rtol=5e-4)` directly and confirm with a CLI `calculate` run using the `.sav`.
 - **Park mode** (`"use_park": true`) has its own rules: `references/policy-and-objective.md`.
 - **Process, quota and job-script traps** (`pkill` with `+`, quotas, interpreters, tokens, `__main__` guards):
   `references/cluster-jobs.md`.
