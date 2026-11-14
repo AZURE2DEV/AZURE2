@@ -10,7 +10,7 @@ tests/18O_p_a_thm with a made-up charged spectator, 18O(3He,a15N)d at 115 MeV:
   1. Project: an experiment with lineshape=on round trip; lineshape without
      kinematics and a bad value are refused like AZURE2 refuses them.
   2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
-     files written by write_output_files (thm_experiments.out included).
+     files written by write_outputs (thm_experiments.out included).
   3. thm_lineshape: E_sF, eta_0, zeta and the eta_sb estimate against the
      formulas evaluated here (1e-12), the level widths against parameters.out,
      NC2 against exp[2 zeta arctan(2 (E_l - E)/G_l)].
@@ -195,7 +195,7 @@ with tempfile.TemporaryDirectory() as tmp:
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
-        s.write_output_files(x)
+        s.write_outputs(x)
 
         print("3. thm_lineshape against the formulas")
         grid = np.linspace(0.45, 0.95, 11)
@@ -236,7 +236,7 @@ with tempfile.TemporaryDirectory() as tmp:
     from_py = output_files(py_dir)
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-        check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
+        check(f"write_outputs: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
     check("thm_experiments.out has the zeta row", "zeta[2]" in from_cli["thm_experiments.out"])
 
     print("4. one level: evaluate().data[i].model(on)/evaluate().data[i].model(off) = |N_C|^2")

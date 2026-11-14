@@ -239,10 +239,10 @@ class Engine:
 
     def outputs(self, x):
         """Write the program's output files at x into the session's output directory (pyazr's
-        ``write_output_files``: the chi-squared evaluation first, then the files, as the program writes them at the
+        ``write_outputs``: the chi-squared evaluation first, then the files, as the program writes them at the
         end of a run); the directory and the names of the files this call wrote."""
         start = time.time_ns()
-        directory = self.s.write_output_files(np.asarray(x, float))
+        directory = self.s.write_outputs(np.asarray(x, float))
         names = sorted(n for n in os.listdir(directory) if os.path.isfile(os.path.join(directory, n))
                        and os.stat(os.path.join(directory, n)).st_mtime_ns >= start)
         return {"directory": directory, "files": names}

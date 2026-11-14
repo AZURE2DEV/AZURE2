@@ -288,7 +288,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    normalizations, shifts), ``WriteParametersOut``
    (``src/CNucReport.cpp``), ``CNuc::TransformOut`` (the observed and Brune
    parameters) and ``ReactionRate``. A session writes the same files on
-   request (``Session.write_output_files``).
+   request (``Session.write_outputs``).
 
 .. note:: **Planned.**
    ``CNuc`` will be split into an immutable ``CompoundSystem`` built once at

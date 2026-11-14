@@ -270,6 +270,18 @@ if all_match:
     duplicates = sorted({n for n in exported if exported.count(n) > 1})
     if duplicates:
         problems.append(f"pyazr.__all__: listed twice: {', '.join(duplicates)}")
+    # ... and the user guide lists exactly these names (its section "The names of the package").
+    guide = read("docs/source/user_guide/pyazr.rst")
+    block = re.search(r"\nThe names of the package\n-+\n.*?\.\. code-block:: text\n\n((?:   [^\n]*\n)+)", guide, re.S)
+    if not block:
+        problems.append("docs/source/user_guide/pyazr.rst: no section 'The names of the package' with a text block")
+    else:
+        listed_names = block.group(1).split()
+        for name, where in ((n, "the user guide") for n in sorted(set(exported) - set(listed_names))):
+            problems.append(f"pyazr.__all__: '{name}' is exported but not listed in {where} (The names of the package)")
+        for name in sorted(set(listed_names) - set(exported)):
+            problems.append(f"docs/source/user_guide/pyazr.rst: '{name}' is listed (The names of the package) but "
+                            "not in pyazr.__all__")
 
 
 # 7. The repository carries its licence.

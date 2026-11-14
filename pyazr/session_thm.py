@@ -19,7 +19,7 @@ class SessionTHM:
         chi-squared evaluation at ``params`` profiles them.
 
         Returns ``{name: report}``; see :meth:`thm_background` for a report.
-        Empty without experiments (or in extrapolation mode).  Runs a
+        Empty without experiments (or in a session of the extrapolations).  Runs a
         chi-squared evaluation.
         """
         x = np.asarray(self.parameters.x0 if params is None else params, float)
@@ -96,7 +96,7 @@ class SessionTHM:
         ``energies``: c.m. energies E of x + A (MeV).  The level poles
         (observed energy and total width, Brune) are those of ``params``
         (default: the current parameters; a chi-squared evaluation is run to
-        load them in data mode).  Returns a dict:
+        load them in a session of the data).  Returns a dict:
 
         ``E``, ``E_sF``, ``eta_0``   arrays on the grid
         ``E_aA``, ``B``, ``Zs``, ``ZF``, ``spectator``

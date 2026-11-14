@@ -17,7 +17,7 @@ PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #: (path, what it is and who reads it) of every non-Python file the wheel carries.
 DATA_FILES = (
-    ("data/mass_1.mas20", "the AME2020 mass table; pyazr.masses"),
+    ("data/mass_1.mas20", "the AME2020 mass table; pyazr.sources.masses"),
     ("data/README.md", "where the mass table comes from and its terms (provenance, read by people)"),
     ("ui/static/", "the web page: HTML, scripts, style and the vendored plotly with its licence; pyazr.ui.routes"),
 )

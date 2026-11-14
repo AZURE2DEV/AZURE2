@@ -26,7 +26,7 @@ import numpy as np
 def layer(formula, projectile, e0, areal_density=None, loss_kev=None, active=None, phase=None):
     """The numbers of the layer, as a dict (see the module's docstring)."""
     from pyazr import stopping
-    from pyazr.masses import parse_nuclide
+    from pyazr.sources.masses import parse_nuclide
     m = stopping.Material(formula, phase=phase)
     if areal_density is None:
         areal_density = float(stopping.areal_density_between(m, projectile, e0, e0 - loss_kev * 1e-3))

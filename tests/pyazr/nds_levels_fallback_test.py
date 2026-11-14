@@ -26,8 +26,9 @@ import warnings
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-# load pyazr/nds.py by path: it needs numpy only, not the compiled engine
-spec = importlib.util.spec_from_file_location("pyazr_nds_standalone", os.path.join(ROOT, "pyazr", "nds.py"))
+# load pyazr/sources/nds.py by path: it needs numpy only, not the compiled engine
+spec = importlib.util.spec_from_file_location("pyazr_nds_standalone",
+                                              os.path.join(ROOT, "pyazr", "sources", "nds.py"))
 N = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(N)
 

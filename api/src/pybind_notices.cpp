@@ -10,7 +10,7 @@ const std::vector<HeldNotice> &HeldNotices() {
       {"Could not write to EC Amplitude File.", "ec_amplitudes",
        "The external-capture amplitudes of this session were computed and are used (its results are right), but they "
        "are not saved, so the next session computes them again.  Create the output directory before the session "
-       "(write_output_files creates it, too late for this file), or name another one in the second line of "
+       "(write_outputs creates it, too late for this file), or name another one in the second line of "
        "<config>."},
       {"Could not append to EC Amplitude File.", "ec_amplitudes",
        "The external-capture amplitudes of the component segments were computed and are used (the results are "
@@ -18,10 +18,10 @@ const std::vector<HeldNotice> &HeldNotices() {
        "session, or name another one in the second line of <config>."},
       {"Could not write normalization file.", "normalizations",
        "The other output files may have been written; this one is missing.  Check that the output directory can be "
-       "written, then call write_output_files() again."},
+       "written, then call write_outputs() again."},
       {"Could not write energy shifts file.", "shifts",
        "The other output files may have been written; this one is missing.  Check that the output directory can be "
-       "written, then call write_output_files() again."},
+       "written, then call write_outputs() again."},
   };
   return table;
 }

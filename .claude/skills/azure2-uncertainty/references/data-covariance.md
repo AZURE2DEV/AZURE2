@@ -72,7 +72,7 @@ block variance (the engine factors diagonal + blocks and adds the rank-k terms).
 
 One covariance file per experiment (different experiments uncorrelated), covering all of its data files.
 
-1. **Read the error budget.** The EXFOR entry (`pyazr.nds.fetch_exfor(..., source="local")`, or the raw `.x4`):
+1. **Read the error budget.** The EXFOR entry (`pyazr.sources.nds.fetch_exfor(..., source="local")`, or the raw `.x4`):
    `ERR-ANALYS` (meaning of each error column), `ERR-T` (total), `ERR-S` (statistical), `ERR-SYS`, `ERR-1..n`
    (partial systematics), `MONIT` (normalized to another measurement?), the free text, then the paper. Write down per
    set: point-to-point part, correlated parts, scale part, energy-scale part.

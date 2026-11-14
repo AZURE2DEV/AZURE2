@@ -96,7 +96,7 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
       beta-decay amplitude until 2026-10-12, and a snapshot with the
       sign lost passed. See :meth:`_snapshot_mismatch` for why photon
       channels are judged on physical values only.  With
-      ``norms="fitted"`` (data mode) the reopened file's data chi-squared
+      ``norms="fitted"`` (a session of the data) the reopened file's data chi-squared
       and its objective (:meth:`evaluate`: ``chi2``, ``objective``) must also equal the fit's
       (rel. 1e-6; 1e-4 in the standard parametrization, whose transform is
       inverted iteratively on reading).

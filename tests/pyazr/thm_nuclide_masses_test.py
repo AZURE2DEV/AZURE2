@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One mass table (docs/upgrade/project.md section 5, step 5): the engine's built-in THM nuclei (ThmExperiment.cpp
 kNuclides, which pyazr reads through _azure2.thm_nuclides) carry the nuclear masses of the AME2020 file that
-pyazr.masses reads (pyazr/data/mass_1.mas20):
+pyazr.sources.masses reads (pyazr/data/mass_1.mas20):
 
     M_nuc = M_atomic - Z m_e + B_e(Z),   B_e = 14.4381 Z^2.39 + 1.55468e-6 Z^5.35 eV  (Lunney et al., RMP 75 (2003)
                                                                                      1021, eq. A4)
@@ -18,7 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 try:
-    from pyazr import masses, _azure2
+    from pyazr import _azure2
+    from pyazr.sources import masses
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)

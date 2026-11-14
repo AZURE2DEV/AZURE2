@@ -30,7 +30,8 @@ import warnings
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 os.environ["AZURE2_EXFOR_MASTER"] = os.path.join(HERE, "data", "exfor_master")
-spec = importlib.util.spec_from_file_location("pyazr_nds_standalone", os.path.join(ROOT, "pyazr", "nds.py"))
+spec = importlib.util.spec_from_file_location("pyazr_nds_standalone",
+                                              os.path.join(ROOT, "pyazr", "sources", "nds.py"))
 N = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(N)
 import numpy as np  # noqa: E402

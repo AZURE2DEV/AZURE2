@@ -190,7 +190,7 @@ ROUTES = (
           "the arguments as used, the Python text).", args=("fn",), spread="arguments",
           serves=("engine.Engine.channel_functions",)),
     Route("POST", "/api/outputs", V, "server.Server.outputs",
-          "Write the program's output files at the working x (pyazr's write_output_files) and copy them into the "
+          "Write the program's output files at the working x (pyazr's write_outputs) and copy them into the "
           "project's output directory (<config> output_dir): the files written.", kwargs=("rev",),
           serves=("engine.Engine.outputs",)),
     Route("GET", "/api/outputs", V, "server.Server.outputs_list",

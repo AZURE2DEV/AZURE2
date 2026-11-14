@@ -249,7 +249,8 @@ def describe_package():
     (the mass table: version, file, sha256), ``python`` (version).
     """
     from . import __version__
-    from . import masses, stopping
+    from . import stopping
+    from .sources import masses
     build = dict(_engine().build_info())
     masses_path = masses._TABLE_PATH
     return {

@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-libraries`) — pyazr: the libraries, `write_outputs`, the bindings
+
+**Measured first.** `python -X importtime -c "import pyazr"` and `sys.modules` after the import (build `b-pysess5`):
+neither `mpmath` nor `scipy` is imported; no module of `pyazr/` imports `mpmath`; `scipy` is imported by the web
+page's fit job `scipy_lbfgsb` (`pyazr/ui/jobs.py`) and the recipes `fit_scipy.py`, `fit_zeus.py`.  The bindings of
+`_azure2` with no use in `pyazr/`, `tests/`, `tools/`, `scripts/`, `.claude/`, `docs/source/`
+(`work/pysess5/unused_bindings.sh`: a grep of `.NAME`, `"NAME"`, `NAME(` for every `.def("NAME"`): `rebuild`,
+`initialize`, `set_data`, `set_extrap`, `set_radius`, `set_potential`, `clear_potential`, `potential_records`,
+`configured_potential_pairs`, `transform_rwa`, `transform_all_rwa_full`, `update_norms`, `update_parameters`,
+`normalization_indices`, `energy_shift_indices`, `params_all`, `norms_errors`, `current_norms` (of `Session`) and
+`common_ending` (of `Document`); the script lists none after the removal.
+
+**Done.**
+- `pyazr.sources`: `nds.py`, `masses.py`, `exfor_coulomb.py`, `exfor_sfactor.py` moved there with their names
+  (`git mv`; the table path of `masses` and two relative imports follow); `pyazr.sources.nds`, `pyazr.sources.masses`
+  everywhere (`work/pysess5/port_sources.py`: 30 files of `pyazr/`, `tests/`, `.claude/`, `docs/source/`, README,
+  CLAUDE.md; four multi-name imports split by hand); the functions of `nds` keep their top-level names; `__all__`
+  has `sources` instead of `masses`.
+- `Session.write_output_files(params)` is `write_outputs(x)` (tests, skills, pages, the web page's adapter and two
+  strings of the page and the routes, the engine notices' text in `api/src/pybind_notices.cpp`); the binding keeps
+  its name.
+- The 19 bindings above removed (`api/src/pybind_api.cpp`, `pybind_project.cpp`), with `PotentialsChanged` and
+  `SessionPotentialSetting` / `SessionPotentialRecords` (`pybind_potentials.cpp` keeps the view).
+  `coulomb_functions` stays: `channel_functions` calls it.
+- `pyproject.toml`: numpy the one dependency; scipy in the extras `web` and `examples` (and `all`); mpmath gone.
+- The old words of the docstrings ("data mode", "extrapolation mode", `<segmentsData>`, `<segmentsTest>`) say what is.
+- The user guide lists the names of the package; check 5 of the consistency test compares that list with
+  `pyazr.__all__` (made to fail once by deleting one name from the list).
+- Pages: `pyazr.rst` (migration rows, the names, the libraries' paths), `installation.rst`, `developer/api.rst`,
+  README, `pyazr/CLAUDE.md`, `FOR_THE_OWNER.md`, `ROADMAP.md`, `pyazr3.md` as built.
+
+**Engine functions left without a caller** (not deleted): `AZUREAPI::Rebuild`, `SetRadius`, `SetData`,
+`SetExtrap`, `GetNormalizationIndices`, `GetEnergyShiftIndices`, `norms_errors`, `TransformRWAParameters`,
+`TransformAllRWAParametersFull`, `GetCurrentNorms`; `CNuc::InvalidateShiftFunctions(const Config &)`;
+`HybridPotentialSettings::ConfiguredPairs`; `Config::noteLog` repeats nothing any more (one build per session).
+
+**Verified how** (build `work/b-pysess5`, 2 threads): build 0 warnings; the consistency test; T1, T2, T3, 13N x 3
+bases identical to `b-trial63` (12 of 12); `ctest -LE slow` without `pyazr_session_isolation`, `pyazr_park_gradient`,
+`pyazr_parallel_points`, `gsl_quiet` (more threads than the budget): 263 of 263, `pyazr_physics_table` skipped there
+on an import of `nds` the port had missed, fixed and then passed alone; all projects x 3 bases against `tab-t63-1`:
+887 / 851 / 887 identical; `pyazr_wheel` passed.
+
+**Open.** `tabulate` / `angular_distribution` on given energies and `modelavg` / `priors` into `pyazr.bands` (section
+2.3 of `pyazr3.md`) are not done; `nds.py` (1450 lines) is not split into `exfor` and `ensdf`.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-libraries`) — pyazr: the session's radius and potential edits go
 
 **Measured first** (build `work/b-pysess5`, scripts `work/pysess5/measure_radius.py`, `probe_table.py`, `ui_http.py`).

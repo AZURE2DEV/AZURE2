@@ -432,7 +432,7 @@ it, and HESSE after a MIGRAD row.  The method is the one named: the program's pl
 (the number the program prints as ``Total Chi-Squared``), ``status``, ``converged``, ``edm``, ``calls``,
 ``covariance`` (or None), ``errors``, ``minos`` (name to ``(lower, upper)`` with ``minos=True``), ``names``, ``log``
 (the fitter's lines).  It writes no file and leaves the session's parameter values as they were; ``save_fit(path,
-x=r.x)`` and ``write_output_files`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
+x=r.x)`` and ``write_outputs`` write, as after any other fit.  The engine runs without the GIL.  ``progress`` is
 called with a record per evaluation (MIGRAD, NLopt) or iteration (LM, GSL-LM): ``calls``, ``objective``, ``best``,
 ``x`` and the rest (the docstring lists them); ``stop`` is a ``pyazr.session_fit.StopRequest`` or a
 ``threading.Event``: set from another thread, the fit ends at the best point it has seen, status ``"stopped"``.
@@ -585,7 +585,7 @@ parameter to another value than ``s`` holds. Do not read these files by row posi
 grows (the :math:`\sqrt{E}` coefficients, the tag line), and a positional read of a file from another layout is
 silently off by one or more rows.
 
-``write_output_files(params=None)`` writes the CLI's output files (``AZUREOut_*``, ``chiSquared.out``, ...) for a
+``write_outputs(x=None)`` writes the CLI's output files (``AZUREOut_*``, ``chiSquared.out``, ...) for a
 fit vector, into ``output_dir``: the output directory of the project's ``<config>``, relative to ``cwd``, as the
 engine resolves it (not necessarily ``output/``).
 
@@ -596,13 +596,14 @@ only rescale or move the data and carry no band.
 Masses and separation energies
 ------------------------------
 
-``pyazr.masses`` reads the AME2020 atomic mass table that ships with pyazr (``pyazr/data/mass_1.mas20``). Particles
-are named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``, ``"n"``, ``"d"``, ``"t"``, ``"a"``,
-``"helion"``):
+``pyazr.sources.masses`` reads the AME2020 atomic mass table that ships with pyazr (``pyazr/data/mass_1.mas20``).
+Particles are named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``, ``"n"``, ``"d"``, ``"t"``,
+``"a"``, ``"helion"``):
 
 .. code-block:: python
 
-   from pyazr import masses, Project
+   from pyazr import Project
+   from pyazr.sources import masses
 
    masses.atomic_mass("p")               # 1.007825031898 u, atomic
    masses.separation_energy("p", "12C")  # 1.943490064 MeV, from the mass excesses
@@ -699,12 +700,12 @@ same-J\ :sup:`π` levels interfere, and that is a useful check on any decomposit
 Fetching data from EXFOR and NDS
 --------------------------------
 
-``pyazr.nds`` wraps the IAEA web services for experimental nuclear data and converts the results straight into AZURE2
-form (network required).  EXFOR holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
+``pyazr.sources.nds`` wraps the IAEA web services for experimental nuclear data and converts the results straight into
+AZURE2 form (network required).  EXFOR holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
 
 .. code-block:: python
 
-   from pyazr import nds
+   from pyazr.sources import nds
 
    # search EXFOR: target, reaction (proj,exit) and quantity filters
    hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
@@ -764,17 +765,18 @@ is refused.  A dimensionless differential whose reaction code was dropped (``x4g
 
 The module needs nothing beyond NumPy and the standard library, and doubles as a command-line tool::
 
-   python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
-   python -m pyazr.nds download O2599004 -o data/skowronski.dat
-   python -m pyazr.nds reference O2599004
+   python -m pyazr.sources.nds search --target C-13 --reaction p,g --quantity SIG
+   python -m pyazr.sources.nds download O2599004 -o data/skowronski.dat
+   python -m pyazr.sources.nds reference O2599004
 
 The IAEA services are sometimes unreachable, or answer every request with a Cloudflare challenge page. ``fetch_exfor``
 and ``reference`` then read the entry from a local copy of the EXFOR library, with a warning. The copy is a clone of
 `IAEA-NDS/exfor_master <https://github.com/IAEA-NDS/exfor_master>`_ (about 1.5 GB; ``git clone --depth 1``, refreshed
 with ``git pull``) at ``$AZURE2_EXFOR_MASTER`` or ``~/.azure2/exfor_master``. ``nds.exfor_master_path()`` says which
-copy is used. ``source="web"`` or ``source="local"`` uses only one of the two, and ``python -m pyazr.nds download <ID>
---source local`` does the same from the command line. The local copy gives the original units only (``plus=0``). A
-subentry holding several datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the Web-API.
+copy is used. ``source="web"`` or ``source="local"`` uses only one of the two, and ``python -m pyazr.sources.nds
+download <ID> --source local`` does the same from the command line. The local copy gives the original units only
+(``plus=0``). A subentry holding several datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the
+Web-API.
 
 The Qt setup utility of the released versions has its own EXFOR reader (``gui/src/ExforData.cpp`` on ``dev``), an
 independent implementation of the same Web-API.
@@ -1218,6 +1220,28 @@ fit or a sampler moves at every call, and evaluates the external part of each ra
 functions within the call but leaves none in the memo afterwards, so a sampler that transforms at every step (physical
 priors, a fixed total gamma width) keeps a constant footprint.
 
+The names of the package
+------------------------
+
+``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
+lists): the classes and functions above, the libraries' functions of :mod:`pyazr.sources.nds`, the modules
+``system``, ``sources``, ``stopping`` and ``physics``, and the error classes.
+
+.. code-block:: text
+
+   Session convert_azr convert_params ScatteringLength whittaker_wave tabulate TabulatedCrossSection
+   angular_distribution Parameter Parameters system NuclearPotential sources stopping physics fitted_norms ExforData
+   ExforDataset GroundState Gamma Reference search_exfor fetch_exfor fetch_levels fetch_gammas fetch_ground_state
+   reference resolve_doi aps_doi sfactor_to_cross_section cm_to_lab ChannelWidth WidthTable weisskopf_width Band
+   load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
+   uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
+   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat schema validate
+   describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
+   records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
+   DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
+   EngineError AZURE2Error DomainError DomainZeroDivision SessionClosed MissingFile EngineWarning Objective
+   Evaluation EvaluatedData
+
 Earlier names
 -------------
 
@@ -1347,6 +1371,13 @@ call.
      - the pair's ``potential`` record edited in the project (``p.set(name, central=..., coulomb_radius=...,
        spin_orbit=...)``, ``p.remove(name)``, ``p.add("potential", name, pair=..., ...)``) and a new session;
        ``save_fit`` writes ``<potentials>`` as the project has it
+   * - the modules ``pyazr.nds``, ``pyazr.masses``, ``pyazr.exfor_coulomb``, ``pyazr.exfor_sfactor``;
+       ``python -m pyazr.nds``
+     - ``pyazr.sources.nds``, ``pyazr.sources.masses``, ``pyazr.sources.exfor_coulomb``,
+       ``pyazr.sources.exfor_sfactor``; ``python -m pyazr.sources.nds`` (the functions ``pyazr.fetch_exfor``,
+       ``pyazr.fetch_levels``, ... keep their top-level names)
+   * - ``s.write_output_files(params)``
+     - ``s.write_outputs(x)``
 
 Examples
 --------

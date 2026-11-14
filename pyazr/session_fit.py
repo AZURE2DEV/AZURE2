@@ -112,7 +112,7 @@ class SessionFit:
             it has seen with status ``"stopped"`` (the evaluations running then finish; every later call returns at
             once) and no covariance.
 
-        Returns an :class:`EngineFitResult`.  Writes no file (``save_fit`` and ``write_output_files`` do) and does
+        Returns an :class:`EngineFitResult`.  Writes no file (``save_fit`` and ``write_outputs`` do) and does
         not change the session's parameter values; the session's evaluation buffer holds the end point's model
         values.  The fit applies ``<parameterSettings>`` (limits, nuisance priors) as the program does.  After a
         MIGRAD row HESSE refines the covariance (the program runs it with ``--covariance-band``).  A MIGRAD row on a

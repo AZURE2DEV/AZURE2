@@ -12,7 +12,7 @@ included), which is the convention of AZURE2 projects; the separation energy is
 computed from the mass excesses, ``S = D1 + D2 - Dc``, where the electrons
 cancel because ``Z1 + Z2 = Zc``.
 
-    >>> from pyazr import masses
+    >>> from pyazr.sources import masses
     >>> masses.atomic_mass("12C")
     12.0
     >>> round(masses.separation_energy("p", "12C"), 6)    # S_p(13N), MeV
@@ -39,7 +39,7 @@ AME_VERSION = "AME2020"
 #: The atomic mass unit in MeV used by the AME2020 tables (931494.10242 keV).
 U_MEV = 931.49410242
 
-_TABLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "mass_1.mas20")
+_TABLE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "mass_1.mas20")
 
 # Shorthands -> (Z, A).  No "h": it reads as hydrogen as easily as the helion
 # (write "3He" or "helion").  The photon and the electron have no entry: they are
@@ -136,11 +136,12 @@ def _load():
 
 def _symbols():
     try:
-        from .system.nuclei import SYMBOLS
+        from ..system.nuclei import SYMBOLS
     except ImportError:                 # loaded standalone by path, no parent package
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "pyazr_nuclei_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "system", "nuclei.py"))
+            "pyazr_nuclei_standalone",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "system", "nuclei.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         SYMBOLS = mod.SYMBOLS

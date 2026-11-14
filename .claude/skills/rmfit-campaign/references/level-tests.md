@@ -10,8 +10,8 @@ read their output. Where to look for missing structure, and the width-floor reci
 `candidates.json` (written before `structure add`):
 `{"candidates": [{"energy": E_x (MeV), "jpi": "5/2+" or null to scan, "energy_fixed": true, "channels": [{"pair": n,
 "L": l, "S": s, "gamma": Γ_c (eV, with sign)}, ...], "source": "...", "note": "..."}]}`. Sources: ENSDF/TUNL
-(`pyazr.nds.fetch_levels`), the reaction's literature tables, and residual runs (`diagnose.residual_runs`) in the worst
-segments. The channel width key is `gamma` (`gamma_eV`/`gamma_ev` are accepted too).
+(`pyazr.sources.nds.fetch_levels`), the reaction's literature tables, and residual runs (`diagnose.residual_runs`) in
+the worst segments. The channel width key is `gamma` (`gamma_eV`/`gamma_ev` are accepted too).
 
 `jpi: null` with a pinned energy lets the angular data assign J^π: the window scan runs every J^π with a local polish
 and sends the best to the full model. Record a disagreement with the compilation's J^π as an evaluation decision.

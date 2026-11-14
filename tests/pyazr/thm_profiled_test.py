@@ -16,7 +16,7 @@ Checked here on tests/7Li_p_a (one THM segment, free norm):
      lands on the recorded pin; parameters / parameter_records / parameters.x0
      agree in count and the THM norm is not among them; residuals and
      evaluate().data[i].chi2 add up to chi2; data[i].norm reports n*;
-     write_output_files reproduces the CLI's chiSquared.out and AZUREOut_*.
+     write_outputs reproduces the CLI's chiSquared.out and AZUREOut_*.
   2. On a copy with all but one level fixed (so the THM finite differences
      are cheap): objective().residuals_and_jacobian against central differences of the
      residuals (rel 1e-4), objective().value_and_grad against 2 J^T r and against
@@ -160,10 +160,10 @@ with tempfile.TemporaryDirectory() as tmp:
         check("n* = S_mm/S_md", rel(float(norms[0]), nstar) < 1e-10,
               f"{norms[0]} vs {nstar}")
 
-        m.write_output_files(x)
+        m.write_outputs(x)
     from_py = output_files(py_dir)
     owned = {"chiSquared.out"} | {n for n in from_cli if n.startswith("AZUREOut_")}
-    check("write_output_files wrote the CLI's data files", owned <= set(from_py),
+    check("write_outputs wrote the CLI's data files", owned <= set(from_py),
           f"missing {sorted(owned - set(from_py))}")
     for name in sorted(owned & set(from_py)):
         check(f"{name} is byte-identical to the CLI's", from_py[name] == from_cli[name])

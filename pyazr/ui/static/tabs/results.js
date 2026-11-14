@@ -306,7 +306,7 @@ function outputsPanel(ctx) {
   show().catch((e) => ctx.showError(e, list));
   return section("Output files", h("p", {}, button("Write the program's output files", "AZUREOut_*, "
     + "chiSquared.out, parameters.out, ... at the working x into the project's output directory", write),
-  h("span.hint", {}, " as the program writes them at the end of a run (pyazr's write_output_files)")), list, head);
+  h("span.hint", {}, " as the program writes them at the end of a run (pyazr's write_outputs)")), list, head);
 }
 
 /** What waits for a later step, said once. */

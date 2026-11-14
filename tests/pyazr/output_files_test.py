@@ -86,8 +86,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the binary wrote something", bool(from_cli), "no output files")
 
     with Session(os.path.join(py_dir, "hybrid_potential.azr"), cwd=py_dir) as m:
-        outdir = m.write_output_files()
-    check("write_output_files returned the output directory",
+        outdir = m.write_outputs()
+    check("write_outputs returned the output directory",
           os.path.isdir(outdir), outdir)
     from_py = {os.path.basename(f): open(f).read()
                for f in sorted(glob.glob(os.path.join(outdir, "*")))

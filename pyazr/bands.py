@@ -149,8 +149,8 @@ def live_parameters(model):
     at the time -- but the parameter vector is **not** the same in the two
     modes.  Extrapolation segments carry no normalizations, and AZURE2 drops
     the fixed R-matrix parameters its grids cannot reach, so a model with 483
-    parameters (197 free) in data mode can report 234 (72 free) in
-    extrapolation mode.  The free R-matrix block survives, in order, and it is
+    parameters (197 free) in a session of the data can report 234 (72 free) in
+    a session of the extrapolations.  The free R-matrix block survives, in order, and it is
     that block the covariance describes.  This reads the engine's *current*
     parameter records (``Session.parameters``), rebuilt on every
     ``initialize()``, so it is right for the mode the session is in now.
@@ -393,10 +393,10 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
         (ignored by ``'analytic'``, which is one call).  The engine is one
         non-reentrant object per process, so each worker builds its own
         session: a fixed cost of one model initialization -- and, in
-        extrapolation mode, one grid rebuild -- before it evaluates anything.
+        a session of the extrapolations, one grid rebuild -- before it evaluates anything.
         The columns have to be worth more than that.  As a rule of thumb it
         needs ``len(cols)`` in the hundreds: on the 14-parameter ``tests/13N``
-        model it is a net loss at any ``nprocs``, in data mode (0.8 s serial)
+        model it is a net loss at any ``nprocs``, in a session of the data (0.8 s serial)
         and on an 1845-point extrapolation grid (53 s serial) alike.  Measure
         on your own model rather than assuming.
 
@@ -532,7 +532,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
     if p0.size != len(kinds):
         raise ValueError(
             f"params has {p0.size} entries but the running instance expects "
-            f"{len(kinds)} free parameters.  In extrapolation mode the vector "
+            f"{len(kinds)} free parameters.  In a session of the extrapolations the vector "
             f"is the R-matrix block alone -- see pyazr.bands.live_parameters.")
 
     catalog = (model.extrapolations if getattr(model, "mode", "data") == "extrap"

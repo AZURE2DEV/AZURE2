@@ -103,7 +103,7 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   functions the rows of `pyazr.physics` or `Session.channel_functions`.  The one formula of pyazr's own is the
   Weisskopf estimate (`widths.weisskopf_width`, tested against its closed form by `tests/pyazr/weisskopf_test.py`:
   the engine has none).  Never add another: a missing function is a row of the physics table.
-- `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
+- `sources/nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
 ## The wheel (`pyproject.toml`)
@@ -140,9 +140,9 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 - Errors: raise a specific exception with a message that names the file, line
   or parameter. Never return `None` or `nan` to signal failure, and never
   `print` a warning where `warnings.warn` belongs.
-- Python ≥ 3.8 (`pyproject.toml`). Core dependencies are numpy, scipy and
-  mpmath only. Anything else is an optional extra and is imported inside the
-  function that needs it.
+- Python ≥ 3.10 (`pyproject.toml`). The core dependency is numpy only (`import pyazr` imports neither scipy nor
+  mpmath). Anything else is an optional extra (scipy: `web`, `examples`) and is imported inside the function that
+  needs it.
 - Engine semantics (χ², penalties, normalizations, shifts, parameter order) are
   defined by the C++ code. pyazr must reproduce them exactly. Tests compare
   against the engine's `chiSquared.out` and parameter files, not against

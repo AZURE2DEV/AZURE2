@@ -97,7 +97,7 @@ add_test(NAME pyazr_ec_final_state
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_final_state_test.py)
 set_tests_properties(pyazr_ec_final_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# write_output_files must produce the same files the binary does.
+# write_outputs must produce the same files the binary does.
 add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_files_test.py)
@@ -224,7 +224,7 @@ add_test(NAME pyazr_save_fit_norms
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_norms_test.py)
 set_tests_properties(pyazr_save_fit_norms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# write_output_files returns the project's own output directory.
+# write_outputs returns the project's own output directory.
 add_test(NAME pyazr_output_dir
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_dir_test.py)
@@ -602,7 +602,7 @@ set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 # Project keeps a file's own layout (the lossless document): unedited round trips of every
 # project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
 # One mass table (docs/upgrade/project.md section 5, step 5): the engine's THM nuclei carry the nuclear masses of
-# pyazr/data/mass_1.mas20, the file pyazr.masses reads.
+# pyazr/data/mass_1.mas20, the file pyazr.sources.masses reads.
 add_test(NAME pyazr_thm_nuclide_masses
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_nuclide_masses_test.py)
@@ -625,7 +625,7 @@ add_test(NAME pyazr_coulomb_memo_transform
                  ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_memo_transform_test.py)
 set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# pyazr.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
+# pyazr.sources.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
 # engine's (m1 + m2 - M) c^2, and masses.fill_masses (Project.set_pair) rewrites only a pair's masses and S (2026-10-29).
 add_test(NAME pyazr_masses
          COMMAND ${Python3_EXECUTABLE}

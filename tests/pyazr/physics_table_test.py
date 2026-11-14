@@ -53,7 +53,8 @@ def main():
         import numpy as np
         import mpmath as mp
         import pyazr
-        from pyazr import physics as ph, nds
+        from pyazr import physics as ph
+        from pyazr.sources import nds
     except Exception as err:  # the skip of the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

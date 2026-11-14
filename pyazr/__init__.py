@@ -16,7 +16,8 @@ The engine runs in this interpreter (the compiled module ``pyazr._azure2``); a p
 - :class:`Parameters` / :class:`Parameter` -- the parameter table: what each entry of the fit vector is (name, kind,
   unit, start, bounds, owner), from the engine's records (``Session.parameters``): ``of_kind``, ``of_level``,
   ``put``, ``take``, ``read``, ``write``.
-- :mod:`pyazr.stopping`, :func:`whittaker_wave`, :mod:`pyazr.masses` -- physics functions and data.
+- :mod:`pyazr.stopping`, :func:`whittaker_wave` -- physics functions; :mod:`pyazr.sources` -- the libraries
+  (``nds``: EXFOR and ENSDF; ``masses``: AME2020; ``exfor_coulomb``, ``exfor_sfactor``: EXFOR rules).
 
 Ask the package about itself (plain data, ``json.dumps`` takes it): :func:`describe` (version, build, Coulomb
 table, data in use, threads), :func:`kinds` (record kinds, data kinds, parameter kinds, session options, bound
@@ -60,12 +61,12 @@ from .evaluate import Evaluation, EvaluatedData
 from .parameters import Parameter, Parameters, NuclearPotential
 from . import system
 from .convert import convert_azr, convert_params
-from . import masses
+from . import sources
 from . import stopping
 from . import physics
 from .physics import whittaker_wave
 from .outputs import fitted_norms
-from .nds import (ExforData, ExforDataset, GroundState, Gamma,
+from .sources.nds import (ExforData, ExforDataset, GroundState, Gamma,
                   Reference, search_exfor, fetch_exfor, fetch_levels,
                   fetch_gammas, fetch_ground_state, reference, resolve_doi,
                   aps_doi, sfactor_to_cross_section, cm_to_lab)
@@ -93,7 +94,7 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "angular_distribution",
            "Parameter", "Parameters", "system",
            "NuclearPotential",
-           "masses", "stopping", "physics",
+           "sources", "stopping", "physics",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",

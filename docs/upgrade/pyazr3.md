@@ -1096,3 +1096,12 @@ as the writer forms them (`SigmaAndS`), read-only views.
   docstrings and the user guide say where it is not the single-channel `2 P gamma_W^2` (a decision for the PI).
 - `Session(file, extrapolations=True)` on a project without an active extrapolation record is refused by pyazr
   (`AZURE2Error`: what, what is needed, the two fixes) before the engine is asked.
+- The libraries are `pyazr.sources`: `nds`, `masses`, `exfor_coulomb`, `exfor_sfactor` moved with their names
+  (`python -m pyazr.sources.nds`); differs from 2.2: no split of `nds` into `exfor` and `ensdf` (`nds.py` stays one
+  file of 1450 lines, above the 800 of step 5); the functions of `nds` keep their top-level names.
+  `write_output_files(params)` is `write_outputs(x)` (no `directory=`: the output directory is the project's).
+- The bindings without a caller are gone (18 of `_azure2.Session` and `Document.common_ending`); `coulomb_functions`
+  stays (it is what `channel_functions` calls).  `import pyazr` imports neither scipy nor mpmath: the one dependency
+  is numpy, scipy is in the extras `web` and `examples`.  `pyazr.__all__` and the user guide's list "The names of the
+  package" are compared by the consistency test.  Not done: `tabulate` / `angular_distribution` on given energies,
+  `modelavg` / `priors` into `pyazr.bands`.
