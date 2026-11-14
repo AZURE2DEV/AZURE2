@@ -63,8 +63,8 @@ SOURCE = os.path.join(ROOT, "tests", "hybrid_potential")
 
 def run(work):
     """Produce output/ with the binary, and return what it wrote."""
-    subprocess.run([binary, "--no-gui", "--no-readline", "hybrid_potential.azr"],
-                   cwd=work, input="1\n\n\n7\n", text=True,
+    subprocess.run([binary, "calculate", "--no-gui", "hybrid_potential.azr"],
+                   cwd=work, stdin=subprocess.DEVNULL, text=True,
                    capture_output=True, timeout=900)
     out = os.path.join(work, "output")
     return {os.path.basename(f): open(f).read()

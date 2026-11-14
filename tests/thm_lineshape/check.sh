@@ -61,7 +61,7 @@ run() {
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
   (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui ${4:-} run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+   echo "${PIPESTATUS[0]}" > status)
 }
 
 # awk programs editing the .azr

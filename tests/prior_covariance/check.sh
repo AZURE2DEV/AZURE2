@@ -94,9 +94,9 @@ seg() {
   [ -n "${4:-}" ] && printf '\n    shift          %s' "$4"
   printf '\n'
 }
-# run NAME INPUT FLAGS: the CLI in $WORK/NAME, log in run.log; the exit status is kept in $WORK/NAME/status
+# run NAME COMMAND FLAGS: the CLI in $WORK/NAME, log in run.log; the exit status is kept in $WORK/NAME/status
 run() {
-  (cd "$WORK/$1" && printf "$2" | run_limited 600 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1
+  (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" $2 $3 --no-gui t.azr > run.log 2>&1
    echo $? > status)
 }
 need() {  # NAME: chiSquared.out must exist
@@ -121,10 +121,10 @@ mk a_norm fixall "" "$SEG1" "$SEG2"
 mk a_prior fixall prior.txt "$SEG1_0" "$SEG2_0"
 printf '# the normError priors of the two segments: 10 %% and 5 %% of 1\ns1.norm s2.norm\n1 1\n0.01 0\n0 0.0025\n' \
   > "$WORK/a_prior/prior.txt"
-run a_norm '1\n\n\n7\n' ""
+run a_norm calculate ""
 if need a_norm; then
   setpar "$WORK/a_norm/output/param.par" "$WORK/moved.par" s1.norm=1.07 s2.norm=0.96
-  for d in a_norm a_prior; do cp "$WORK/moved.par" "$WORK/$d/moved.par"; run $d '1\nmoved.par\n\n7\n' ""; done
+  for d in a_norm a_prior; do cp "$WORK/moved.par" "$WORK/$d/moved.par"; run $d 'calculate --parameter-file=moved.par' ""; done
   if need a_norm && need a_prior; then
     want=1.13   # ((1.07 - 1)/0.1)^2 + ((0.96 - 1)/0.05)^2 = 0.49 + 0.64
     c1="$(chi a_norm Total-Chi-Squared)"; c2="$(chi a_prior Total-Chi-Squared)"
@@ -141,7 +141,7 @@ if need a_norm; then
   # the same through a fit (both norms free, levels fixed): one minimum
   mk a_norm_fit fixall "" "$SEG1" "$SEG2"; mk a_prior_fit fixall prior.txt "$SEG1_0" "$SEG2_0"
   cp "$WORK/a_prior/prior.txt" "$WORK/a_prior_fit/"
-  run a_norm_fit '2\n\n\n\n7\n' "--use-lm"; run a_prior_fit '2\n\n\n\n7\n' "--use-lm"
+  run a_norm_fit fit "--use-lm"; run a_prior_fit fit "--use-lm"
   if need a_norm_fit && need a_prior_fit; then
     f1="$(par a_norm_fit s1.norm) $(par a_norm_fit s2.norm)"; f2="$(par a_prior_fit s1.norm) $(par a_prior_fit s2.norm)"
     t1="$(chi a_norm_fit Total-Chi-Squared)"; t2="$(chi a_prior_fit Total-Chi-Squared)"
@@ -156,10 +156,10 @@ fi
 # ---- (b) a correlated 2x2 prior: the quadratic form -----------------------------------------------------------------
 mk b free prior.txt "$SEG1_0" "$SEG2_0"
 printf 's1.norm width_1_1\n1.02 0.6\n0.0004 0.00012\n0.00012 0.0009\n' > "$WORK/b/prior.txt"
-run b '1\n\n\n7\n' ""
+run b calculate ""
 if need b; then
   setpar "$WORK/b/output/param.par" "$WORK/b/moved.par" s1.norm=1.07 width_1_1=0.63
-  run b '1\nmoved.par\n\n7\n' ""
+  run b 'calculate --parameter-file=moved.par' ""
   if need b; then
     p="$(chi b Total-Prior-Covariance-Chi-Squared)"
     want="$(awk 'BEGIN { a = 0.0004; c = 0.00012; e = 0.0009; x = 1.07 - 1.02; y = 0.63 - 0.6; det = a * e - c * c
@@ -181,7 +181,7 @@ s1.norm width_2_1 s1.shift.offset
 2e-5 1e-3 -2e-6
 1e-7 -2e-6 1e-5
 EOF
-run c_none '1\n\n\n7\n' ""
+run c_none calculate ""
 if [ -s "$WORK/c_none/output/param.par" ]; then
   setpar "$WORK/c_none/output/param.par" "$WORK/c_start.par" s1.norm=1 width_2_1=0.75 s1.shift.offset=0.002
   for d in c_prior c_none; do
@@ -242,7 +242,7 @@ for m in "--use-gradient" "--use-lm"; do
   tag="${m#--use-}"
   mk "d1_$tag" fixall prior.txt "$SEGA" "$SEGB"
   printf 's2.norm\n0.9\n0.0004\n' > "$WORK/d1_$tag/prior.txt"
-  run "d1_$tag" '2\n\n\n\n7\n' "$m"
+  run "d1_$tag" fit "$m"
   if need "d1_$tag"; then
     b="$(par "d1_$tag" s2.norm)"; a="$(par "d1_$tag" s1.norm)"
     if absclose "$b" 0.9 1e-4 && absclose "$a" 1.25 1e-3; then ok "(d) $m: the unconstrained norm at the prior mean ($b; 0.9), the other at the data's ($a)"
@@ -250,7 +250,7 @@ for m in "--use-gradient" "--use-lm"; do
   fi
   mk "d2_$tag" fixall prior.txt "$SEGA" "$SEGB"
   printf 's1.norm s2.norm\n1.2 0.9\n0.01 0.00475\n0.00475 0.0025\n' > "$WORK/d2_$tag/prior.txt"
-  run "d2_$tag" '2\n\n\n\n7\n' "$m"
+  run "d2_$tag" fit "$m"
   if need "d2_$tag"; then
     b="$(par "d2_$tag" s2.norm)"; a="$(par "d2_$tag" s1.norm)"
     want="$(awk -v a="$a" 'BEGIN { printf "%.10g", 0.9 + 0.00475 / 0.01 * (a - 1.2) }')"
@@ -265,7 +265,7 @@ refuse() {  # NAME WHAT PRIOR-TEXT...: refused with an ERROR, nothing written
   local name="$1" what="$2"; shift 2
   mk "$name" fixall prior.txt "$SEG1_0" "$SEG2_0"
   printf '%s\n' "$@" > "$WORK/$name/prior.txt"
-  run "$name" '1\n\n\n7\n' ""
+  run "$name" calculate ""
   local out; out="$(ls "$WORK/$name/output")"
   if grep -q '^\*\*ERROR: priorCovariance' "$WORK/$name/run.log" && [ -z "$out" ] && [ "$(cat "$WORK/$name/status")" != 0 ]; then
     ok "(e) $what: refused ($(grep -m1 '^\*\*ERROR: priorCovariance' "$WORK/$name/run.log" | cut -c1-110)...), no output"
@@ -279,21 +279,21 @@ refuse e_rows "too many rows" 's1.norm s2.norm' '1 1' '0.01 0' '0 0.01' '0 0'
 refuse e_rowlen "row length" 's1.norm s2.norm' '1 1' '0.01 0 0' '0 0.01'
 refuse e_tag "#parametrization 2 in a Brune run" '#parametrization 2' 's1.norm s2.norm' '1 1' '0.01 0' '0 0.01'
 mk e_missing fixall nothere.txt "$SEG1_0" "$SEG2_0"
-run e_missing '1\n\n\n7\n' ""
+run e_missing calculate ""
 if grep -q '^\*\*ERROR: priorCovariance: cannot open' "$WORK/e_missing/run.log" && [ -z "$(ls "$WORK/e_missing/output")" ]; then
   ok "(e) missing file: refused, no output"; else bad "(e) missing file not refused cleanly"; fi
 mk e_tagok fixall prior.txt "$SEG1_0" "$SEG2_0"
 printf '#parametrization 1.000000e+00 0.000000e+00\ns1.norm s2.norm\n1 1\n0.01 0\n0 0.01\n' > "$WORK/e_tagok/prior.txt"
-run e_tagok '1\n\n\n7\n' ""
+run e_tagok calculate ""
 if need e_tagok && isnum "$(chi e_tagok Total-Prior-Covariance-Chi-Squared)"; then ok "(e) the run's own tag (param.sav form) is accepted"
 else bad "(e) the run's own tag was not accepted"; fi
 # a listed parameter fixed in the run (energy_2: every level fixed) -> marginalized
 mk e_fixed fixall prior.txt "$SEG1_0" "$SEG2_0"
 printf 's1.norm energy_2\n1.02 0.81\n0.0004 0.00015\n0.00015 0.0001\n' > "$WORK/e_fixed/prior.txt"
-run e_fixed '1\n\n\n7\n' ""
+run e_fixed calculate ""
 if need e_fixed; then
   setpar "$WORK/e_fixed/output/param.par" "$WORK/e_fixed/moved.par" s1.norm=1.07
-  run e_fixed '1\nmoved.par\n\n7\n' ""
+  run e_fixed 'calculate --parameter-file=moved.par' ""
   p="$(chi e_fixed Total-Prior-Covariance-Chi-Squared)"
   want="$(awk 'BEGIN { printf "%.17g", (1.07 - 1.02)^2 / 0.0004 }')"
   if relclose "$p" "$want" 1e-10 && grep -q "Note: prior covariance prior.txt: energy_2 is fixed in this run and marginalized" "$WORK/e_fixed/run.log"; then
@@ -305,7 +305,7 @@ fi
 SEGF1="$(seg xs_40_s08.dat 40 "1.25 fixed")"
 SEGF2="$(seg xs_90_s09.dat 90 "1.25 fixed")"
 mk f_a fixE "" "$SEGF1" "$SEGF2"
-run f_a '2\n\n\n7\n' "--use-lm --covariance-band"
+run f_a fit "--use-lm --covariance-band"
 if need f_a && [ -s "$WORK/f_a/output/covariance.dat" ]; then
   "$PY" -I - "$ROOT/pyazr/priors.py" "$WORK/f_a/output" "$WORK/f_prior.txt" > "$WORK/f_helper.log" 2>&1 <<'PYEOF'
 import importlib.util, sys
@@ -327,7 +327,7 @@ PYEOF
     tag="${m#--use-}"
     mk "f_b_$tag" fixE prior.txt "$SEGF1" "$SEGF2"
     cp "$WORK/f_prior.txt" "$WORK/f_b_$tag/prior.txt"
-    run "f_b_$tag" '2\n\n\n\n7\n' "$m"
+    run "f_b_$tag" fit "$m"
     need "f_b_$tag" || continue
     # worst |w_B - w_A| relative to w_A, and in units of the prior sigma
     read -r wrel wsig <<< "$("$PY" -I - "$WORK/f_a/output/param.sav" "$WORK/f_b_$tag/output/param.sav" "$WORK/f_prior.txt" <<'PYEOF'
@@ -358,7 +358,7 @@ fi
 SEGB_10="$(seg xs_90_big.dat 90 "1 fit prior 1 10%")"
 mk g_mcmc fixall prior.txt "$SEGA" "$SEGB_10"
 printf 's2.norm\n0.9\n0.0004\n' > "$WORK/g_mcmc/prior.txt"
-run g_mcmc '6\n\n\n16\n400\n1\n\n2\nyes\nyes\n' ""
+run g_mcmc 'mcmc --walkers=16 --steps=400 --parameter-spread=1 --sampler-threads=2 --basis=rwa --overwrite-samples' ""
 if [ -s "$WORK/g_mcmc/output/samples.mcmc" ]; then
   read -r lpd mean sd <<< "$("$PY" -I - "$WORK/g_mcmc/output/samples.mcmc" <<'PYEOF'
 import sys
@@ -378,7 +378,7 @@ PYEOF
 else bad "(g) no samples.mcmc"; tail -5 "$WORK/g_mcmc/run.log"; fi
 mk g_phys free prior.txt "$SEGA" "$SEGB_10"
 printf 'width_1_1\n0.6\n0.0004\n' > "$WORK/g_phys/prior.txt"
-run g_phys '6\n\n\n8\n100\n1\n\n1\nno\nyes\n' ""
+run g_phys 'mcmc --walkers=8 --steps=100 --parameter-spread=1 --sampler-threads=1 --basis=physical --overwrite-samples' ""
 if grep -q '^\*\*ERROR: priorCovariance: width_1_1 is a level parameter' "$WORK/g_phys/run.log" && [ ! -s "$WORK/g_phys/output/samples.mcmc" ]; then
   ok "(g) a level-parameter prior is refused in a physical-parameter chain"
 else bad "(g) physical-parameter chain with a width prior not refused"; fi

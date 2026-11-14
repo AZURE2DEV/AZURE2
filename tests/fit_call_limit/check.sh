@@ -42,8 +42,7 @@ fit() {
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$HERE/../identical_pp_res/data" "$dir/data"
   cp "$HERE/../identical_pp_res/identical_pp_res.azr" "$dir/"
-  (cd "$dir" && printf "${MENU:-2\nn\n\n\n7\n}" |
-     "$AZURE2_BIN" --no-gui --no-readline "$@" identical_pp_res.azr > run.log 2>&1)
+  (cd "$dir" && "$AZURE2_BIN" ${COMMAND:-fit} --no-gui "$@" identical_pp_res.azr > run.log 2>&1)
 }
 field() { awk -v k="$2" '$1 == k { $1 = ""; sub(/^ /, ""); print; exit }' "$WORK/$1/output/fitStatus.out" 2>/dev/null; }
 
@@ -104,7 +103,7 @@ else
 fi
 
 # ---- 6. MINOS's progress lines are MINOS's ---------------------------------------------------------------------
-MENU='4\n1\nn\n\n\n7\n' fit minos
+COMMAND='minos --delta-chi2=1' fit minos
 after="$(tr '\r' '\n' < "$WORK/minos/run.log" | sed -n '/Performing parameter error analysis/,$p')"
 if [ -n "$after" ] && grep -q "MINOS evaluation:" <<< "$after" && ! grep -q "Iteration:" <<< "$after"; then
   ok "MINOS: its progress lines say MINOS, no 'Iteration:' line during it"

@@ -78,15 +78,15 @@ stage() {
   if [ -n "${4:-}" ]; then tr -d '\r' < "$azr" | awk "$4" > "$d/run.azr"; else tr -d '\r' < "$azr" > "$d/run.azr"; fi
   [ -z "${3:-}" ] || thm_set "$d/run.azr" "$3" $(thm_datasets "$d/run.azr")
 }
-# run NAME MENU [FLAGS]: AZURE2 on $WORK/NAME/run.azr with the menu input
-# MENU (printf format); status in NAME/status, output in NAME/log.
+# run NAME COMMAND [FLAGS]: AZURE2 COMMAND (a command and its options) on $WORK/NAME/run.azr;
+# status in NAME/status, output in NAME/log.
 run() {
   local d="$WORK/$1"
-  (cd "$d" && printf "$2" | $RUN "$AZURE2_BIN" --no-gui --no-readline ${3:-} run.azr 2>&1 | head -c 2000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+  (cd "$d" && $RUN "$AZURE2_BIN" $2 --no-gui ${3:-} run.azr 2>&1 | head -c 2000000 > log;
+   echo "${PIPESTATUS[0]}" > status)
 }
-calc() { run "$1" '1\n\n\n7\n' "${2:-}"; }
-calc_file() { run "$1" "1\n$2\n\n7\n" "${3:-}"; }
+calc() { run "$1" calculate "${2:-}"; }
+calc_file() { run "$1" "calculate --parameter-file=$2" "${3:-}"; }
 total() { tr -d '\r' < "$WORK/$1/output/chiSquared.out" 2>/dev/null | awk '/^Total-Chi-Squared:/ { print $2 }'; }
 okrun() { [ "$(cat "$WORK/$1/status" 2>/dev/null)" = 0 ] && [ -f "$WORK/$1/output/chiSquared.out" ] || {
   bad "run $1 failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; return 1; }; }
@@ -220,7 +220,7 @@ FREE='/^<targets>/ { print; skip = 1; next } /^<\/targets>/ { skip = 0 } skip { 
       /^<levels>/ { L = 1 } /^<\/levels>/ { L = 0 }
       L && NF > 30 { if ($3 == "8.602600") { $3 = "8.612600"; $4 = 0 } $11 = 0 } { print }'
 stage fit.b "$T18" "" "$FREE"; stage fit.p "$T18" "" "$FREE"
-run fit.b '2\nn\n\n\n7\n'; run fit.p '2\nn\n\n\n7\n' --use-park
+run fit.b fit; run fit.p fit --use-park
 if okrun fit.b && okrun fit.p; then
   cb="$(tr -d '\r' < "$WORK/fit.b/log" | awk '/^Total Chi-Squared:/ { v = $3 } END { print v }')"
   cp="$(tr -d '\r' < "$WORK/fit.p/log" | awk '/^Total Chi-Squared:/ { v = $3 } END { print v }')"
@@ -254,8 +254,8 @@ if okrun wall && okrun wall.b; then
   grep -q "Denominator less than zero" "$WORK/wall.b/log" && ok "wall: Brune warns about the same input" || bad "wall: no Brune warning"
 fi
 # MCMC (when built): 12 walkers, 100 steps, RWA, 1 % spread, 0.5 keV.
-MCMC='6\n\n12\n100\n1\n0.5\n1\nyes\nyes\n'
-if grep -q "Perform MCMC" "$WORK/wall/log"; then
+MCMC='mcmc --walkers=12 --steps=100 --parameter-spread=1 --energy-spread=0.5 --sampler-threads=1 --basis=rwa --overwrite-samples'
+if "$AZURE2_BIN" --help | grep -q '^	mcmc:'; then
   stage_wall wall.mcmc
   run wall.mcmc "$MCMC" --use-park
   if grep -q "WARNING: the MCMC starting point is outside Park's parameter space" "$WORK/wall.mcmc/log" &&

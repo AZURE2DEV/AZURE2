@@ -145,8 +145,8 @@ with tempfile.TemporaryDirectory() as tmp:
                        ("dw", "distortion=coulomb vertexModel=dw spectatorAngles=0-180")):
         block = f"experiment[A] {KIN} {extra}"
         cli_dir, py_dir = project(f"cli_{tag}", block), project(f"py_{tag}", block)
-        proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
-                              input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
+        proc = subprocess.run([binary, "calculate", "--no-gui", "run.azr"], cwd=cli_dir,
+                              stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=600)
         hit = re.findall(r"Total Chi-Squared:\s*([0-9.eE+-]+)", proc.stdout.replace("\r", "\n"))
         from_cli = output_files(cli_dir)
         if not hit or "thm_experiments.out" not in from_cli:

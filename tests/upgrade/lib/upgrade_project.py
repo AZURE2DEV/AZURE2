@@ -313,13 +313,13 @@ def find_binary(arg=None):
     return found[-1]
 
 
-def run(binary, workdir, azr, answers, flags=(), threads=2, timeout=1800):
-    """Run the CLI in workdir with the piped menu answers; returns the log text."""
+def run(binary, workdir, azr, command, flags=(), threads=2, timeout=1800):
+    """Run the CLI in workdir by `command` (a list: the command and its options); returns the log text."""
     os.makedirs(os.path.join(workdir, "output"), exist_ok=True)
     os.makedirs(os.path.join(workdir, "checks"), exist_ok=True)
     env = dict(os.environ, OMP_NUM_THREADS=str(threads), LC_ALL="C")
-    p = subprocess.run([binary, "--no-gui", "--no-readline", *flags, os.path.basename(azr)], cwd=workdir,
-                       input=answers, capture_output=True, text=True, env=env, timeout=timeout)
+    p = subprocess.run([binary, *command, "--no-gui", *flags, os.path.basename(azr)], cwd=workdir,
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env, timeout=timeout)
     log = p.stdout + p.stderr
     with open(os.path.join(workdir, "run.log"), "w") as f:
         f.write(log)
@@ -328,13 +328,14 @@ def run(binary, workdir, azr, answers, flags=(), threads=2, timeout=1800):
     return log
 
 
-CALC = "1\n\n\n7\n"            # calculate segments from data
-FIT = "2\nn\n\n\n7\n"          # fit segments from data (Minuit), no band
-EXTRAP = "3\nn\n\n\n7\n"       # calculate segments without data, no band
+CALC = ["calculate"]           # calculate segments from data
+FIT = ["fit"]                  # fit segments from data (Minuit), no band
+EXTRAP = ["extrapolate"]       # calculate segments without data, no band
 
 
-def rate_answers(entrance, exit_key):
-    return f"5\n\n{entrance}\n{exit_key}\nyes\ntemperatures.dat\n7\n"
+def rate_command(entrance, exit_key):
+    """The rate of the pairs entrance -> exit_key at the temperatures of temperatures.dat."""
+    return ["rate", f"--rate-entrance={entrance}", f"--rate-exit={exit_key}", "--temperature-file=temperatures.dat"]
 
 
 def read_blocks(path):

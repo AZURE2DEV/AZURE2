@@ -105,7 +105,7 @@ def run_program(azr):
     """The command-line program on ``azr`` (menu 1: calculate with data, then quit) at the environment's threads;
     returns the text of its chiSquared.out."""
     binary = os.environ.get("AZURE2_BIN")
-    proc = subprocess.run([binary, "--no-readline", os.path.basename(azr)], input="1\n\n\n7\n", text=True,
+    proc = subprocess.run([binary, "calculate", os.path.basename(azr)], stdin=subprocess.DEVNULL, text=True,
                           cwd=os.path.dirname(azr), capture_output=True, timeout=600)
     path = os.path.join(os.path.dirname(azr), "output", "chiSquared.out")
     assert os.path.exists(path), f"the program wrote no chiSquared.out (exit {proc.returncode}): {proc.stdout[-2000:]}"

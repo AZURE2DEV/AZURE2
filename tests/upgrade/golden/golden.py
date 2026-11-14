@@ -55,15 +55,15 @@ MODES = {
 
 def run_project(binary, name, dest):
     src = os.path.join(HERE, "..", name)
-    for mode, (answers, patterns) in MODES.items():
+    for mode, (command, patterns) in MODES.items():
         work = tempfile.mkdtemp(prefix=f"{name}_{mode}_")
         try:
             shutil.copy(os.path.join(src, f"{name}.azr"), work)
             shutil.copytree(os.path.join(src, "data"), os.path.join(work, "data"))
             shutil.copy(os.path.join(src, "temperatures.dat"), work)
-            if answers is None:
-                answers = up.rate_answers(*PROJECTS[name])
-            up.run(binary, work, f"{name}.azr", answers, flags=FLAGS, threads=2)
+            if command is None:
+                command = up.rate_command(*PROJECTS[name])
+            up.run(binary, work, f"{name}.azr", command, flags=FLAGS, threads=2)
             out = os.path.join(dest, name, mode)
             os.makedirs(out, exist_ok=True)
             for pat in patterns:

@@ -103,10 +103,8 @@ mk() {
     skip { next }
     { print }' "$HERE/shift_fn.azr" > "$dir/t.azr"
 }
-run() {  # NAME MODE EXTRA_FLAGS [SAV]
-  local input
-  if [ "$2" = 1 ]; then input='1\n\n\n7\n'; else input="2\n\n${4:-}\n\n7\n"; fi
-  (cd "$WORK/$1" && printf "$input" | "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+run() {  # NAME COMMAND EXTRA_FLAGS [PARAMETER_FILE]
+  (cd "$WORK/$1" && "$AZURE2_BIN" "$2" ${4:+--parameter-file="$4"} $3 --no-gui t.azr > run.log 2>&1)
   if [ ! -s "$WORK/$1/output/chiSquared.out" ]; then
     bad "$1: no chiSquared.out"; tail -15 "$WORK/$1/run.log"; return 1
   fi
@@ -150,7 +148,7 @@ for t in plain target; do
                     TARGET=$tg ds xs_40_2 xs_40.dat 40 'shift          offset 0.004 MeV fixed' 'shift          s2'
                     TARGET=$tg ds xs_40_3 xs_40.dat 40 'shift          offset 0.0079115 MeV fixed' 'shift          s3')"
   # 0.0079115 = 0.004 + 0.003*sqrt(1.7) to 7 digits; data set 3 is checked to 1e-6 only.
-  if run "sqrt_$t" 1 ""; then
+  if run "sqrt_$t" calculate ""; then
     d12="$(blockdiff "$WORK/sqrt_$t" 1 2)"; d13="$(blockdiff "$WORK/sqrt_$t" 1 3)"
     if awk -v d="$d12" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "$t: a0*sqrt(x) = the sqrt term, model values to $d12"; else bad "$t: a0*sqrt(x) vs the sqrt term differ by $d12"; fi
     if awk -v d="$d13" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-6) }'; then ok "$t: centred form agrees ($d13)"; else bad "$t: centred form differs by $d13"; fi
@@ -166,7 +164,7 @@ else bad "target integration made no difference"; fi
 mk x15 0 "$(scale s1 'a0*x^1.5' '' 'a0 0.003 fixed'
             ds xs_40 xs_40.dat 40 'shift          offset 0.002 MeV fixed' 'shift          s1'
             ds xs_40_x15_preshifted xs_40_x15_preshifted.dat 40)"
-if run x15 1 ""; then
+if run x15 calculate ""; then
   d="$(blockdiff "$WORK/x15" 1 2)"
   if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-8) }'; then ok "a0*x^1.5 = pre-shifted data ($d)"; else bad "a0*x^1.5 vs pre-shifted data: $d"; fi
 fi
@@ -177,7 +175,7 @@ mk follower 0 "$(scale G 'a0*x' '0.001 MeV fixed' 'a0 0.003 fixed'
                  ds xs_40 xs_40.dat 40 'shift          G'
                  ds xs_90 xs_90.dat 90 'shift          G'
                  ds xs_90_2 xs_90.dat 90 'shift          H')"
-if run follower 1 ""; then
+if run follower calculate ""; then
   d="$(blockdiff "$WORK/follower" 2 3)"
   if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "second data set = the same function given in its own record ($d)"; else bad "second data set vs own record: $d"; fi
   if grep -q "shift function on segment #1 (group 'G', segments #1 2)" "$WORK/follower/run.log"; then ok "function and group noted in the log"; else bad "no shift-function note in the log"; fi
@@ -194,7 +192,7 @@ GROUP="$(scale G 'a0*(x-1)' '0 MeV fit prior 0 1' 'a0 0 fit prior 0 1'
          ds xs_90_lin_mislabelled xs_90_lin_mislabelled.dat 90 'shift          G')"
 fit_linear() {  # NAME FLAGS [CHI2: strict (chi2 < 1e-3 required, default) | info]
   mk "$1" 1 "$GROUP"
-  run "$1" 2 "$2" || return
+  run "$1" fit "$2" || return
   local dir="$WORK/$1" a a0 t f
   a="$(par "$dir" G.offset)"; a0="$(par "$dir" G.a0)"; t="$(total "$dir")"
   if absclose "$a" -0.004 1e-5 && absclose "$a0" 0.006 1e-5; then ok "$1: a = $a, a0 = $a0 (truth -0.004, 0.006)"; else bad "$1: a = $a, a0 = $a0, expected -0.004, 0.006"; fi
@@ -248,12 +246,12 @@ convert_refuses short_block "declares 2 parameters but gives" \
 
 # ---- 7. a .sav value does not free a fixed function parameter -------------------
 mk sav_fixed 1 "$(scale G 'a0*(x-1)' '0 MeV fit prior 0 1' 'a0 0 fixed'; ds xs_40_lin_mislabelled xs_40_lin_mislabelled.dat 40 'shift          G')"
-if run sav_fixed 2 ""; then
+if run sav_fixed fit ""; then
   # POSIX BRE only: BSD sed (macOS) reads "\+" as a literal "+", which left the .sav unedited.
   sed 's/^\( *G[.]a0  *\)[-0-9.e+]*/\10.002/' "$WORK/sav_fixed/output/param.sav" > "$WORK/sav_fixed/start.sav"
   if ! absclose "$(par_file "$WORK/sav_fixed/start.sav" G.a0)" 0.002 1e-12; then
     bad "test setup: start.sav does not carry a0 = 0.002"
-  elif run sav_fixed 2 "" start.sav; then
+  elif run sav_fixed fit "" start.sav; then
     v="$(par "$WORK/sav_fixed" G.a0)"
     if absclose "$v" 0.002 1e-12; then ok "fixed a0 stays at the .sav value ($v)"; else bad "fixed a0 moved to $v (.sav 0.002)"; fi
   fi

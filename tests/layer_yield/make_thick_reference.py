@@ -50,7 +50,7 @@ def project_with(azr_text, data_block):
 def run_menu1(binary, workdir, azr_name):
     os.makedirs(os.path.join(workdir, "output"), exist_ok=True)
     os.makedirs(os.path.join(workdir, "checks"), exist_ok=True)
-    p = subprocess.run([binary, "--no-gui", "--no-readline", azr_name], input="1\n\n\n7\n", cwd=workdir,
+    p = subprocess.run([binary, "calculate", "--no-gui", azr_name], stdin=subprocess.DEVNULL, cwd=workdir,
                        capture_output=True, text=True, timeout=3600)
     if p.returncode != 0:
         sys.exit(f"the calculation in {workdir} failed:\n{p.stdout[-2000:]}{p.stderr[-2000:]}")

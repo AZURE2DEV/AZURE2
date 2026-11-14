@@ -59,9 +59,9 @@ project() {
 }
 # run NAME MODE [FLAGS...]: menu MODE (1 calculate, 2 fit; 3 extrapolate) on $WORK/NAME/p.azr; exit status in NAME/exit
 run() {
-  local name="$1" mode="$2"
+  local name="$1" command="$2"
   shift 2
-  (cd "$WORK/$name" && printf '%s\n\n\n' "$mode" | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline "$@" p.azr > run.log 2>&1
+  (cd "$WORK/$name" && run_limited 900 "$AZURE2_BIN" "$command" --no-gui "$@" p.azr > run.log 2>&1
    echo $? > exit)
 }
 chi2() { sed -n 's/^Total-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/$1/output/chiSquared.out"; }
@@ -78,8 +78,8 @@ for b in "" --use-park; do
   project "partial$b" "$M/partial.azr"
   project "record$b" "$M/record.azr"
   must_differ "$WORK/partial$b/p.azr" "$WORK/record$b/p.azr" || bad "the record project is the partial-width one"
-  run "partial$b" 1 $b
-  run "record$b" 1 $b
+  run "partial$b" calculate $b
+  run "record$b" calculate $b
   n=0; d=0
   for f in "$WORK/partial$b"/output/*; do
     base="$(basename "$f")"
@@ -98,7 +98,7 @@ grep -q '^RADIATIVE DECAYS' "$WORK/record/output/parameters.out" && grep -q 'g+1
   || bad "parameters.out: no record block, or the remainder is not 0.168819"
 
 project formal "$M/record.azr"
-run formal 1 --no-brune
+run formal calculate --no-brune
 if grep -q 'ERROR: <gammaDecays> record .level5. (level 5): the formal basis' "$WORK/formal/run.log" && [ ! -s "$WORK/formal/output/chiSquared.out" ]; then
   ok "--no-brune: refused with the message, nothing calculated"
 else bad "--no-brune: not refused"; fi
@@ -110,7 +110,7 @@ grep -q 'mixing       g+15O\[5.183\] 0.5 fixed' "$WORK/sign_record.azr" && ok "m
 for v in partial record; do
   mkdir -p "$WORK/sign_$v/output" "$WORK/sign_$v/checks"
   [ "$v" = partial ] && cp "$M/sign_partial.azr" "$WORK/sign_$v/p.azr" || cp "$WORK/sign_record.azr" "$WORK/sign_$v/p.azr"
-  run "sign_$v" 3
+  run "sign_$v" extrapolate
 done
 ext="AZUREOut_aa=1_R=2.extrap"
 if [ -s "$WORK/sign_partial/output/$ext" ] && cmp -s "$WORK/sign_partial/output/$ext" "$WORK/sign_record/output/$ext"; then
@@ -132,9 +132,9 @@ edited "$M/record.azr" "$WORK/record_d.azr" sed -e 's/^\(    total_width  \)[^ ]
 project fit_partial "$WORK/partial_d.azr"
 project fit_record "$WORK/record_d.azr"
 project fit_record_lm "$WORK/record_d.azr"
-run fit_partial 2
-run fit_record 2
-run fit_record_lm 2 --use-lm
+run fit_partial fit
+run fit_record fit
+run fit_record_lm fit --use-lm
 c0="$(chi2 fit_partial)"
 check "MIGRAD: the record's chi^2 minimum equals the partial widths'" "$(chi2 fit_record)" "$c0" 1e-5
 check "Levenberg-Marquardt: the same minimum" "$(chi2 fit_record_lm)" "$c0" 1e-5
@@ -145,7 +145,7 @@ check "MIGRAD and LM: the same b(6.7931)" "$(sav fit_record_lm 'level5.branching
 c="$(awk -v b="$b6" -v s="$s6" 'BEGIN { printf "%.10g", b + 2 * s }')"
 edited "$M/record.azr" "$WORK/record_prior.azr" sed "s/^\(    branching    g+15O\[6.7931\] [^ ]* fit\)$/\1 prior $c $s6/" || bad "prior variant"
 project fit_prior "$WORK/record_prior.azr"
-run fit_prior 2
+run fit_prior fit
 bp="$(sav fit_prior 'level5.branching.g+15O[6.7931]')"
 pull="$(awk -v b="$bp" -v c="$c" -v w="$s6" 'BEGIN { printf "%.6f", (b - c) / w }')"
 check "a prior (b + 2 sigma, sigma) on b(6.7931): the pull" "$pull" -1 0.02
@@ -159,7 +159,7 @@ edited "$WORK/record_free0.azr" "$WORK/record_free.azr" sed -e 's/^\(    branchi
   -e 's/^\(    remainder    g+15O\[5.183\]\)$/\1 prior 0.15 0.01/' || bad "prior variant of the gradient check"
 for b in "" --use-park; do
   project "grad$b" "$WORK/record_free.azr"
-  run "grad$b" 1 $b  # param.par: the index of the record's first number
+  run "grad$b" calculate $b  # param.par: the index of the record's first number
   i="$(awk '$1 == "level5.total_width" { print NR - 2; exit }' "$WORK/grad$b/output/param.par")"
   (cd "$WORK/grad$b" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_IDX="$((i - 2))-$((i + 7))" \
      run_limited 900 "$AZURE2_BIN" fit --no-gui --use-gradient $b p.azr > grad.log 2>&1)
@@ -184,7 +184,7 @@ echo "-- (f) the record's fit at 1 and at 3 threads: every output file identical
 # numerical gradient, which this fit takes, and came out 65 or 66 at 3 threads from run to run.
 for t in 1 3; do
   project "thr$t" "$WORK/record_d.azr"
-  OMP_NUM_THREADS=$t run "thr$t" 2 --use-gradient
+  OMP_NUM_THREADS=$t run "thr$t" fit --use-gradient
 done
 n=0; d=0
 for f in "$WORK/thr1"/output/*; do
@@ -211,7 +211,7 @@ for start in 0 0.3; do
 done
 for m in --use-gradient --use-lm; do
   project "sadfit$m" "$WORK/sad0.azr"
-  run "sadfit$m" 2 $m
+  run "sadfit$m" fit $m
   check "$m from delta = 0: the fitted delta is the twin's +0.5" "$(sav "sadfit$m" 'level1.mixing.g+15O[5.183]')" 0.5 1e-4
 done
 
@@ -221,7 +221,7 @@ edited "$M/record.azr" "$WORK/record_zero.azr" sed -e 's/^\(    branching    g+1
   -e 's/^\(    remainder    g+15O\[5.183\]\)$/\1 prior -0.2 0.05/' -e 's/^dataset g6859$/&\n    active         no/' \
   -e 's/^dataset g5183$/&\n    active         no/' || bad "boundary variant"
 project zero "$WORK/record_zero.azr"
-run zero 2
+run zero fit
 if [ "$(cat "$WORK/zero/exit")" = 0 ] && ! grep -qiw 'nan' "$WORK/zero/output/parameters.out" "$WORK/zero/output/chiSquared.out" "$WORK/zero/output/param.sav"; then
   ok "a fit pulled below the bounds ends without NaN"
 else bad "the fit pulled below the bounds failed or wrote NaN"; fi
@@ -275,8 +275,8 @@ edited "$M/partial.azr" "$WORK/partial_ec.azr" ec || bad "external-capture twin"
 for b in "" --use-park; do
   project "pec$b" "$WORK/partial_ec.azr"
   project "rec$b" "$WORK/record_ec.azr"
-  run "pec$b" 1 $b
-  run "rec$b" 1 $b
+  run "pec$b" calculate $b
+  run "rec$b" calculate $b
   same_outputs "pec$b" "rec$b" "${b:---use-brune}, external capture"
 done
 # capture is on and large: g_ext of level 5 into the ground state and 6.1763 MeV
@@ -293,8 +293,8 @@ edited "$WORK/partial_ec.azr" "$WORK/partial_ec_m.azr" moved || bad "moved twin"
 edited "$WORK/record_ec.azr" "$WORK/record_ec_m.azr" moved || bad "moved record"
 project pec_m "$WORK/partial_ec_m.azr"
 project rec_m "$WORK/record_ec_m.azr"
-run pec_m 1
-run rec_m 1
+run pec_m calculate
+run rec_m calculate
 same_outputs pec_m rec_m "moved proton width, level energy and ground-state ANC"
 check "after the move the record's width to g+15O is still TransformOut's" "$(block_w rec_m g+15O)" "$(level_w rec_m 2 7.5569)" 2e-6
 
@@ -338,9 +338,9 @@ edited "$WORK/record_ec.azr" "$WORK/rec_d.azr" sed -e 's/^\(    total_width  \)[
 project fit_pec "$WORK/pec_d.azr"
 project fit_rec "$WORK/rec_d.azr"
 project fit_rec_lm "$WORK/rec_d.azr"
-run fit_pec 2 --use-gradient
-run fit_rec 2 --use-gradient
-run fit_rec_lm 2 --use-lm
+run fit_pec fit --use-gradient
+run fit_rec fit --use-gradient
+run fit_rec_lm fit --use-lm
 c0="$(chi2 fit_pec)"
 check "MIGRAD with the gradient: the record's chi^2 minimum equals the twin's" "$(chi2 fit_rec)" "$c0" 1e-5
 check "Levenberg-Marquardt: the same minimum" "$(chi2 fit_rec_lm)" "$c0" 1e-5
@@ -356,7 +356,7 @@ done
 echo "   the record's fit at 1 and 3 threads"
 for t in 1 3; do
   project "ecthr$t" "$WORK/rec_d.azr"
-  OMP_NUM_THREADS=$t run "ecthr$t" 2 --use-gradient
+  OMP_NUM_THREADS=$t run "ecthr$t" fit --use-gradient
 done
 n=0; d=0
 for f in "$WORK/ecthr1"/output/*; do
@@ -372,8 +372,8 @@ edited "$WORK/partial_ec.azr" "$WORK/pec_floor.azr" awk '{ n = split($0, a, " ")
 "$PY" "$M/make_record.py" "$WORK/pec_floor.azr" "$WORK/rec_floor.azr" 5 5.183 fit
 project pec_floor "$WORK/pec_floor.azr"
 project rec_floor "$WORK/rec_floor.azr"
-run pec_floor 1
-run rec_floor 1
+run pec_floor calculate
+run rec_floor calculate
 same_outputs pec_floor rec_floor "below the floor"
 grep -q 'Imaginary portion of the external width is greater' "$WORK/pec_floor/run.log" \
   && grep -q 'below 2P (Im gamma^ext)^2 / n' "$WORK/rec_floor/run.log" \
@@ -422,7 +422,7 @@ for v in partial record; do
   edited "$M/$v.azr" "$WORK/lim_$v.azr" free_gp || bad "free proton width ($v)"
   printf '<parameterSettings>\nLevel 5 Channel 1 Width (eV) 974.937 900 950 0 0 0 level 0\n</parameterSettings>\n' >> "$WORK/lim_$v.azr"
   project "lim_$v" "$WORK/lim_$v.azr"
-  run "lim_$v" 2
+  run "lim_$v" fit
 done
 if [ "$(gp_of lim_partial)" = "950.000000eV" ] && [ "$(gp_of lim_record)" = "950.000000eV" ] && [ "$(chi2 lim_partial)" = "$(chi2 lim_record)" ]; then
   ok "a limit on level 5's proton width: both end at $(gp_of lim_record), chi^2 $(chi2 lim_record)"
@@ -430,7 +430,7 @@ else bad "a limit on level 5's proton width: twin $(gp_of lim_partial), record $
 edited "$WORK/lim_record.azr" "$WORK/limq.azr" sed 's/^Level 5 Channel 1 Width (eV) 974.937 900 950 0 0 0 level 0$/level5.total_width 0.0385027 0.03 0.035 0 0 0 radiative 0/' \
   || bad "limit on Gamma_gamma"
 project limq "$WORK/limq.azr"
-run limq 2
+run limq fit
 check "a limit (0.03, 0.035) eV on Gamma_gamma: the fit ends at it" "$(sav limq level5.total_width)" 0.035 1e-6
 
 # pyazr (tests/pyazr/gamma_decay_test.py part 5) and the MCMC set the vector in observed form: the record's numbers of

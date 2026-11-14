@@ -51,8 +51,8 @@ project() {
   done
   sed -e "$4" "$2/$3" > "$dir/t.azr"
 }
-# azure2 DIR PROJECT INPUT [FLAGS]: the program in DIR
-azure2() { (cd "$1" && printf "$3" | run_limited 900 "$AZURE2_BIN" $4 --no-gui --no-readline "$2" > "${2%.azr}.$5log" 2>&1); }
+# azure2 DIR PROJECT COMMAND [FLAGS]: the program in DIR
+azure2() { (cd "$1" && run_limited 900 "$AZURE2_BIN" $3 $4 --no-gui "$2" > "${2%.azr}.$5log" 2>&1); }
 par() { awk -v n="$2" '$1 == n { print $2; exit }' "$1"; }
 total() { sed -n 's/.*Total-Chi-Squared: \([^ ]*\).*/\1/p' "$1" | tr -d '\r' | head -1; }
 # the objective of chiSquared.out: the data's chi^2 and every prior term (the Total-...-Chi-Squared fields), 6 digits
@@ -63,7 +63,7 @@ objective() { tr -d '\r' < "$1" | awk '$1 == "Total-Chi-Squared:" { for (i = 1; 
 # written on the line containing FIELD_TEXT followed by its value and UNIT_TEXT
 continued() {
   local dir="$WORK/$1" name="$2" field="$3" unit="$4" v v2
-  azure2 "$dir" t.azr '2\nn\n\n\n' --use-gradient fit.
+  azure2 "$dir" t.azr fit --use-gradient fit.
   cp "$dir/output/param.sav" "$dir/fit.sav" 2> /dev/null; cp "$dir/output/chiSquared.out" "$dir/fit_chi.out" 2> /dev/null
   v="$(par "$dir/fit.sav" "$name")"
   if [ -z "$v" ]; then bad "($1) the fit wrote no $name"; tail -5 "$dir/t.fit.log"; return; fi
@@ -74,8 +74,8 @@ continued() {
     "$dir/t.azr" > "$dir/written.azr"
   if ! grep -qF "$field $v $unit" "$dir/written.azr"; then bad "($1) $name = $v not written"; return; fi
   # (2) both projects at the fit's parameters
-  azure2 "$dir" t.azr '1\nfit.sav\n\n7\n' "" at.; cp "$dir/output/chiSquared.out" "$dir/t_chi.out"
-  azure2 "$dir" written.azr '1\nfit.sav\n\n7\n' "" at.; cp "$dir/output/chiSquared.out" "$dir/w_chi.out"
+  azure2 "$dir" t.azr 'calculate --parameter-file=fit.sav' "" at.; cp "$dir/output/chiSquared.out" "$dir/t_chi.out"
+  azure2 "$dir" written.azr 'calculate --parameter-file=fit.sav' "" at.; cp "$dir/output/chiSquared.out" "$dir/w_chi.out"
   if [ -s "$dir/t_chi.out" ] && [ "$(tr -d '\r' < "$dir/t_chi.out")" = "$(tr -d '\r' < "$dir/w_chi.out")" ]; then
     ok "($1) the written project ($name = $v) computes the fit's chi^2, total and per data set: $(total "$dir/w_chi.out")"
   else
@@ -83,7 +83,7 @@ continued() {
     diff <(tr -d '\r' < "$dir/t_chi.out") <(tr -d '\r' < "$dir/w_chi.out") | head -6
   fi
   # (3) a second fit from the written project
-  azure2 "$dir" written.azr '2\nn\n\n\n' --use-gradient fit.
+  azure2 "$dir" written.azr fit --use-gradient fit.
   v2="$(par "$dir/output/param.sav" "$name")"
   local e o1 o2
   e="$(awk -v n="$name" '$1 == n { print $3; exit }' "$dir/fit.sav")"
@@ -101,7 +101,7 @@ SRC13N="$TESTS/13N"
 project density "$TESTS/target_density" fit_prior.azr ''
 ln -s "$SRC13N/data" "$WORK/density/data"
 mkdir -p "$WORK/true/output" "$WORK/true/checks"; ln -s "$SRC13N/data" "$WORK/true/data"
-cp "$TESTS/target_density/true.azr" "$WORK/true/t.azr"; azure2 "$WORK/true" t.azr '1\n\n\n7\n'
+cp "$TESTS/target_density/true.azr" "$WORK/true/t.azr"; azure2 "$WORK/true" t.azr calculate
 truth="$WORK/true/output/AZUREOut_aa=1_R=1.out"
 if [ -s "$truth" ]; then  # the data at N = 1.1e18 as tests/target_density/check.sh makes them
   mkdir -p "$WORK/density/fitdata"; awk 'NF >= 7' "$truth" > "$WORK/true_rows"; i=0
@@ -116,14 +116,14 @@ else bad "(density) true.azr gave no output"; fi
 
 if "$PY" -I "$TESTS/doppler_fgm/make_models.py" "$TESTS/reaction_rate/models/n12C.azr" "$WORK/dop_models" > /dev/null 2>&1; then
   mkdir -p "$WORK/dop450/output" "$WORK/dop450/checks"; ln -s "$WORK/dop_models/data" "$WORK/dop450/data"
-  cp "$WORK/dop_models/dop450.azr" "$WORK/dop450/t.azr"; azure2 "$WORK/dop450" t.azr '1\n\n\n7\n'
+  cp "$WORK/dop_models/dop450.azr" "$WORK/dop450/t.azr"; azure2 "$WORK/dop450" t.azr calculate
   if "$PY" -I "$TESTS/doppler_fgm/make_models.py" fitdata "$TESTS/reaction_rate/models/n12C.azr" "$WORK/dop450" \
        "$WORK/dop_models" > /dev/null 2>&1; then
     project doppler "$WORK/dop_models" fit_prior.azr ''
     continued doppler D.doppler "free_gas" "K fit prior"
     # (4) a start outside the centre's range
     project outside "$WORK/dop_models" fit_prior.azr 's/free_gas 300 K fit prior 300 20/free_gas 400 K fit prior 300 20/'
-    azure2 "$WORK/outside" t.azr '1\n\n\n7\n'
+    azure2 "$WORK/outside" t.azr calculate
     want="Note: D.doppler starts at 400 K, outside [75, 363] K, the range laid out from its prior's centre 300 K;"
     if grep -qF "$want" "$WORK/outside/t.log"; then ok "(4) a start outside [75, 363] K: laid out from the start, said once"
     else bad "(4) no line '$want'"; fi

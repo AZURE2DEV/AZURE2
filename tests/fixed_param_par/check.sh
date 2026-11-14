@@ -73,11 +73,11 @@ EOF
 
 # fit NAME STDIN [flags] -- a fit (menu 2) from a copy of proj
 fit() {
-  local d="$WORK/$1" in="$2"
+  local d="$WORK/$1" command="$2"
   shift 2
   cp -r "$WORK/proj" "$d"
   mkdir -p "$d/output" "$d/checks"
-  (cd "$d" && printf "$in" | $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" run.azr 2>&1 | head -c 1000000 > log)
+  (cd "$d" && $RUN "$AZURE2_BIN" $command --no-gui "$@" run.azr 2>&1 | head -c 1000000 > log)
   [ -f "$d/output/param.sav" ] || { echo "  FAIL  $1: no param.sav"; tail -3 "$d/log" | sed 's/^/        /'; fail=1; return 1; }
 }
 value() { awk -v n="$2" '$1 == n { print $2 }' "$1"; }
@@ -86,7 +86,7 @@ chis=()
 for m in migrad lm gsl-lm; do
   flag=""; [ "$m" = migrad ] || flag="--use-$m"
   # Menu 2 asks about the band first (n), then the parameter file.
-  fit "$m" "2\nn\nfix.par\n\n7\n" $flag || continue
+  fit "$m" "fit --parameter-file=fix.par" $flag || continue
   sav="$WORK/$m/output/param.sav"
   w11="$(value "$sav" width_1_1)"; e1="$(value "$sav" energy_1)"; w12="$(value "$sav" width_1_2)"
   chi="$(grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$WORK/$m/log" | awk '{ print $3 }')"
@@ -113,7 +113,7 @@ else
 fi
 
 # The band covariance of an LM fit spans the free R-matrix parameters only.
-if fit lmband "2\nfix.par\n\n7\n" --use-lm --covariance-band; then
+if fit lmband "fit --parameter-file=fix.par" --use-lm --covariance-band; then
   cov="$WORK/lmband/output/covariance.dat"
   # dev's "#columns" header (2026-11-05) names the columns; numpy.loadtxt and LoadBandCovariance skip it.
   if [ -f "$cov" ] && awk '/^#columns/ { named = ($2 == "energy_1" && $3 == "width_1_2" && NF == 3); next }

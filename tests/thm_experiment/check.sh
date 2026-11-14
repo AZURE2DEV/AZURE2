@@ -60,7 +60,7 @@ run() {
   if [ -n "${3:-}" ]; then awk "$3" "$SRC/18O_p_a_thm.azr" > "$d/run.azr"; else cp "$SRC/18O_p_a_thm.azr" "$d/run.azr"; fi
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
   (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+   echo "${PIPESTATUS[0]}" > status)
 }
 # Byte-identical files, without cmp (not in every MSYS2 image); \r stripped.
 # field FILE KEY -> the value after "KEY" in thm_experiments.out (first match)

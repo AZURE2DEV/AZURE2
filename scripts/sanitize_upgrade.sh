@@ -132,19 +132,19 @@ results=()   # "STATUS name"
 record() { results+=("$1 $2"); printf '  %-5s %s\n' "$1" "$2"; }
 
 # ------------------------------------------------------------------ 1. T1, T2, T3
-CALC='1\n\n\n7\n'; FIT='2\nn\n\n\n7\n'; EXTRAP='3\nn\n\n\n7\n'
+CALC=calculate; FIT=fit; EXTRAP=extrapolate
 # run_project STEP PROJECT AZR MENU FLAGS...: one CLI run on a copy of tests/upgrade/PROJECT
 run_project() {
-  local step="$1" proj="$2" azr="$3" menu="$4"; shift 4
+  local step="$1" proj="$2" azr="$3" command="$4"; shift 4
   local d="$WORK/$step" src="$REPO_ROOT/tests/upgrade/$proj"
   mkdir -p "$d/output" "$d/checks"
   cp -R "$src"/*.azr "$src/data" "$d/"
   for f in temperatures.dat cov_diff.txt prior_cov.txt; do [ -f "$src/$f" ] && cp "$src/$f" "$d/"; done
   san_env "$step"
-  (cd "$d" && printf "$menu" | "$BIN" --no-gui --no-readline --no-coulomb-table "$@" "$azr" > run.log 2>&1)
+  (cd "$d" && "$BIN" $command --no-gui --no-coulomb-table "$@" "$azr" > run.log 2>&1)
   local rc=$?
   cp "$d/run.log" "$REP/$step/run.log"
-  if [ "$rc" -eq 0 ] && [ -s "$d/output/chiSquared.out" -o "$menu" != "$CALC" ]; then
+  if [ "$rc" -eq 0 ] && [ -s "$d/output/chiSquared.out" -o "$command" != "$CALC" ]; then
     record ok "$step"
   else
     record FAIL "$step (exit $rc)"
@@ -154,11 +154,11 @@ if want upgrade; then
   echo "== T1, T2, T3"
   run_project T1-calc T1 T1.azr "$CALC"
   run_project T1-extrap T1 T1.azr "$EXTRAP"
-  run_project T1-rate T1 T1.azr '5\n\n1\n2\nyes\ntemperatures.dat\n7\n'
+  run_project T1-rate T1 T1.azr 'rate --rate-entrance=1 --rate-exit=2 --temperature-file=temperatures.dat'
   run_project T1-fit T1 T1_start.azr "$FIT" --use-gradient
   run_project T3-calc T3 T3.azr "$CALC"
   run_project T3-extrap T3 T3.azr "$EXTRAP"
-  run_project T3-rate T3 T3.azr '5\n\n2\n1\nyes\ntemperatures.dat\n7\n'
+  run_project T3-rate T3 T3.azr 'rate --rate-entrance=2 --rate-exit=1 --temperature-file=temperatures.dat'
   run_project T3-fit T3 T3_start.azr "$FIT" --use-gradient
   run_project T2-calc T2 T2.azr "$CALC"
   run_project "T2-fit$FITCALLS" T2 T2.azr "$FIT" --use-lm --max-calls="$FITCALLS"
@@ -184,12 +184,12 @@ fi
 # ------------------------------------------------------------------ 3. regression projects without check.sh
 REGRESS="beam_profile_kernel beam_spread_ay thick_target_resonance"
 if want regress; then
-  echo "== regression projects (menu 1)"
+  echo "== regression projects (calculate)"
   for t in $REGRESS; do
     d="$WORK/regress-$t"
     cp -R "$REPO_ROOT/tests/$t" "$d"; rm -rf "$d/output" "$d/checks"; mkdir -p "$d/output" "$d/checks"
     san_env "regress-$t"
-    (cd "$d" && printf "$CALC" | "$BIN" --no-gui --no-readline "$t.azr" > run.log 2>&1)
+    (cd "$d" && "$BIN" $CALC --no-gui "$t.azr" > run.log 2>&1)
     rc=$?
     cp "$d/run.log" "$REP/regress-$t/run.log"
     if [ "$rc" -eq 0 ] && [ -s "$d/output/chiSquared.out" ]; then record ok "regress-$t"

@@ -78,7 +78,7 @@ def copy_project(name, dst):
 
 
 def run_program(azr):
-    proc = subprocess.run([os.environ["AZURE2_BIN"], "--no-readline", os.path.basename(azr)], input="1\n\n\n\n7\n",
+    proc = subprocess.run([os.environ["AZURE2_BIN"], "calculate", os.path.basename(azr)], stdin=subprocess.DEVNULL,
                           text=True, cwd=os.path.dirname(azr), capture_output=True, timeout=900)
     return os.path.join(os.path.dirname(azr), "output"), proc
 

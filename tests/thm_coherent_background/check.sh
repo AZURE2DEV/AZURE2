@@ -64,8 +64,8 @@ run() {
   cp -r "$2/data" "$d/"
   cp "$2/$3" "$d/run.azr"
   [ -z "$4" ] || thm_set "$d/run.azr" "$4" ${MEMBERS-$(thm_datasets "$d/run.azr")}
-  (cd "$d" && printf '%s\n\n\n7\n' "${5:-1}" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+  (cd "$d" && $RUN "$AZURE2_BIN" "${5:-calculate}" --no-gui run.azr 2>&1 | head -c 1000000 > log;
+   echo "${PIPESTATUS[0]}" > status)
 }
 total() { tr -d '\r' < "$1/log" | awk '/Total Chi-Squared:/ { c = $3 } END { print c }'; }
 # worst |a/b - 1| of column 4 (the model) of two output files, data lines only
@@ -149,7 +149,7 @@ F=data/lc723_thm_points.dat
 n="$(tr -d '\r' < "$O18/$F" | grep -cv '^#')"
 paste <(tr -d '\r' < "$O18/$F" | grep -v '^#') <(tr -d '\r' < "$WORK/gen/output/$OUT" | awk 'NF > 3' | awk -v n="$n" 'NR <= n' | awk '{ print $4 }') |
   awk '{ printf "%s %s %.12e %.12e\n", $1, $2, 250 * $5, 2.5 * $5 }' > "$WORK/syn/$F"
-MEMBERS=lc723_thm_points run fit "$WORK/syn" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2" 2
+MEMBERS=lc723_thm_points run fit "$WORK/syn" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2" fit
 [ "$(cat "$WORK/fit/status")" = 0 ] && [ -f "$WORK/fit/output/param.sav" ] || { bad "fit run failed"; tail -5 "$WORK/fit/log"; }
 re0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_re0$/ { print $2 }')"
 im0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_im0$/ { print $2 }')"

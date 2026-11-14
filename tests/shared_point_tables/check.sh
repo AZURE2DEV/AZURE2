@@ -49,9 +49,9 @@ make_project() {  # DIR
 }
 # run DIR THREADS MENU [args]: runs AZURE2, prints its peak RSS in kB (0 where /proc is missing)
 run() {
-  local dir="$1" th="$2" menu="$3"; shift 3
-  printf "$menu" | (cd "$dir" && OMP_NUM_THREADS="$th" AZURE_GRID_TIMING=1 exec ${TIMEOUT_CMD:+"$TIMEOUT_CMD" 1800} \
-                      "$AZURE2_BIN" --no-gui --no-readline "$@" t.azr > run.log 2>&1) &
+  local dir="$1" th="$2" command="$3"; shift 3
+  (cd "$dir" && OMP_NUM_THREADS="$th" AZURE_GRID_TIMING=1 exec ${TIMEOUT_CMD:+"$TIMEOUT_CMD" 1800} \
+                      "$AZURE2_BIN" $command --no-gui "$@" t.azr > run.log 2>&1) &
   local sub=$! pid="" hwm=0 h
   while kill -0 "$sub" 2> /dev/null; do
     # the AZURE2 process: the subshell itself, or the child of timeout
@@ -67,8 +67,8 @@ run() {
 chi2() { grep -h 'Total Chi-Squared' "$1/run.log" | tail -1 | awk '{ print $NF }'; }
 
 for d in calc1 calc4 fit1 fit4; do make_project "$WORK/$d"; done
-read -r rc1 hwm_calc <<< "$(run "$WORK/calc1" 1 '1\n\n\n7\n')"
-read -r rc4 _ <<< "$(run "$WORK/calc4" 4 '1\n\n\n7\n')"
+read -r rc1 hwm_calc <<< "$(run "$WORK/calc1" 1 calculate)"
+read -r rc4 _ <<< "$(run "$WORK/calc4" 4 calculate)"
 if [ "$rc1" -ne 0 ] || [ "$rc4" -ne 0 ]; then
   bad "(a) calculation failed (exit $rc1 / $rc4)"; tail -5 "$WORK/calc4/run.log"
 else
@@ -85,7 +85,7 @@ same_outputs() {  # DIR1 DIR2 -> "n d"
   echo "$n $d"
 }
 replaced() { grep -o '[0-9]* re-placed' "$1/run.log" | awk '{ s += $1 } END { print s + 0 }'; }
-FIT='2\nn\n\n\n7\n'
+FIT=fit
 read -r rc1 _ <<< "$(run "$WORK/fit1" 1 "$FIT" --use-gradient --max-calls=5)"
 read -r rc4 hwm_fit <<< "$(run "$WORK/fit4" 4 "$FIT" --use-gradient --max-calls=5)"
 for t in 1 4; do

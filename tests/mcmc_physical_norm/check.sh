@@ -49,7 +49,7 @@ awk -v n="$norm0" '$1 ~ /\.norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2
 chi2_at() {  # chi2_at <parfile> -> data chi2 of a mode-1 calculation from that parameter file
   local d="calc_$(basename "$1" .par)"
   mkdir -p "$d/output" "$d/checks" && cp t.azr "$d/" && cp -r data "$d/"
-  ( cd "$d" && printf '1\n../%s\n\n' "$1" | "$AZURE2_BIN" --no-gui --no-readline t.azr > calc.log 2>&1 )
+  ( cd "$d" && "$AZURE2_BIN" calculate --parameter-file="../$1" --no-gui t.azr > calc.log 2>&1 )
   grep -q "Reading User Parameter File" "$d/calc.log" || { echo "nan"; return; }
   awk '/Total-Chi-Squared:/ { for (i = 1; i <= NF; i++) if ($i == "Total-Chi-Squared:") print $(i + 1) }' "$d/output/chiSquared.out" | tail -1
 }

@@ -76,14 +76,14 @@ SKIP = {"intEC.dat", "intEC.dat.sig", "intEC.extrap", "intEC.extrap.sig", "param
 
 def run_all(project, threads, top):
     """Outputs of menus 1, 3, 5 in top/<mode>/output, and of the fit in top/fit/output."""
-    for mode, answers, azr_name in (("calc", up.CALC, project), ("extrap", up.EXTRAP, project),
-                                    ("rate", up.rate_answers(*RATE[project]), project),
+    for mode, command, azr_name in (("calc", up.CALC, project), ("extrap", up.EXTRAP, project),
+                                    ("rate", up.rate_command(*RATE[project]), project),
                                     ("fit", up.FIT, project + "_start")):
         work = os.path.join(top, mode)
         os.makedirs(work)
         up.project_copy(project, work)
         flags = ["--use-gradient"] if mode == "fit" else []
-        up.run(binary, work, azr_name + ".azr", answers, flags=flags, threads=threads)
+        up.run(binary, work, azr_name + ".azr", command, flags=flags, threads=threads)
 
 
 top = tempfile.mkdtemp(prefix="upgrade_threads.")

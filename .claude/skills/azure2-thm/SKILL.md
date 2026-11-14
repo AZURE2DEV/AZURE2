@@ -189,8 +189,7 @@ Then:
      (odd J, unnatural parity) need the workaround in `references/model-choices.md`.
 
 Checkpoint:
-- The project runs on the CLI (`build/src/AZURE2 calculate --no-gui
-  --no-readline x.azr`).
+- The project runs on the CLI (`build/src/AZURE2 calculate x.azr`).
 - `<thm>` is accepted: AZURE2 exits with `ERROR: <thm> ...` otherwise.
 - B, σ and the norm priors are as recorded in Stage 1.
 - THM Workspace > Diagnostics shows |M_l|² and the HOES/on-shell shapes as expected.

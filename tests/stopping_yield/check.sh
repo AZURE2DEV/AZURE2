@@ -52,10 +52,9 @@ if diff <(grep -v '^#' "$HERE/models/data/tin_p.tab") <(table 0.5) > /dev/null; 
   ok "models/data/tin_p.tab is azure2-stopping's table of the library's values"
 else bad "models/data/tin_p.tab differs from azure2-stopping's output (the library changed: rewrite it, README.md)"; fi
 run() {
-  local name="$1" menu="$2" threads="$3" input='1\n\n\n7\n'
-  [ "$menu" = 2 ] && input='2\nn\n\n\n'
-  (cd "$WORK/$name" && rm -rf output/* checks/* && printf "$input" |
-     OMP_NUM_THREADS="$threads" $(guard_command 600) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  local name="$1" command="$2" threads="$3"
+  (cd "$WORK/$name" && rm -rf output/* checks/* &&
+     OMP_NUM_THREADS="$threads" $(guard_command 600) "$AZURE2_BIN" "$command" --no-gui m.azr > run.log 2>&1)
 }
 # refused WHAT CODE TEXT NAME: --validate, or a calculation (the set-up's refusals), of $WORK/NAME/m.azr prints CODE
 refused() {
@@ -75,8 +74,8 @@ if [ "$n" = 3 ] && [ "$c" = 2 ] && grep -q 'valid\.' "$WORK/calc/validate.txt"; 
 else bad "--validate: $n stopping sources (3 expected), $c SRIM citations (2): $(tail -1 "$WORK/calc/validate.txt")"; fi
 
 # ---- 2. 1 and 2 threads
-run calc 1 1 && cp -r "$WORK/calc/output" "$WORK/calc_1"
-run calc 1 2
+run calc calculate 1 && cp -r "$WORK/calc/output" "$WORK/calc_1"
+run calc calculate 2
 if [ -s "$WORK/calc_1/chiSquared.out" ] && diff -r "$WORK/calc_1" "$WORK/calc/output" > /dev/null; then
   ok "calculation at 1 and 2 threads: every output identical"
 else
@@ -95,7 +94,7 @@ sed 's/^/        /' "$WORK/limits.txt"
 # ---- 4. the fit
 setup fit 0.5 "$HERE/models/fit.azr"
 # at 1 thread: a fit at several threads is not reproducible to the last digit (Minuit's parallel gradient sums)
-run fit 2 1
+run fit fit 1
 res="$(python3 -I - "$HERE/models/truth.json" "$WORK/fit/output" "$WORK/fit/run.log" <<'PY'
 import json, sys
 truth = json.load(open(sys.argv[1]))["fit"]

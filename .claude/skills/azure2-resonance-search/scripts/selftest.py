@@ -83,7 +83,7 @@ def main():
         p.remove_level(label)
         p.save(os.path.join(t3, "reduced.azr"))
         run(FIT, "reduced.azr", "--save-fit", "reduced_fit.azr", cwd=t3)
-        subprocess.run([os.environ["AZURE2_BIN"], "--no-readline", "best.azr"], input="1\n\n\n7\n", text=True,
+        subprocess.run([os.environ["AZURE2_BIN"], "calculate", "best.azr"], stdin=subprocess.DEVNULL, text=True,
                        cwd=t3, capture_output=True)
         par = os.path.join("output", "parameters.out")
 

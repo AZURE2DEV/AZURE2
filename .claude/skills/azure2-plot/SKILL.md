@@ -76,19 +76,14 @@ Code for each figure type is in `references/recipes.md`:
 Figures made from `output/` show the last run, not the `.azr`. After any edit, recalculate before drawing, every time.
 
 1. Finish every `.azr` edit.
-2. Run a mode-1 calculate with the project's flags and the right parameter file.
+2. Run `calculate` with the project's flags and the right parameter file.
 3. Confirm fresh output: `grep Total-Chi output/chiSquared.out` and the `AZUREOut_*.out` timestamps.
 4. Draw the figures (Recipes) and check each curve against the fit column (Rules).
 
 ```bash
 cd <fit directory>
-# 2. calculate: menu 1, external parameter file, blank EC file, exit
-$AZURE2_BINARY <project flags> --no-readline <name>.azr <<EOF
-1
-output/param.sav
-
-7
-EOF
+# 2. calculate from the fit's parameter file
+$AZURE2_BINARY calculate --parameter-file=output/param.sav <project flags> <name>.azr
 # 3. confirm
 grep Total-Chi output/chiSquared.out
 ls -la output/AZUREOut_*.out | head            # timestamps from just now
@@ -109,7 +104,7 @@ ls -la output/AZUREOut_*.out | head            # timestamps from just now
 
 ### Budget the time
 
-A mode-1 calculate on a large multichannel model with target integrations is slow. On one model (107 segments,
+A `calculate` run on a large multichannel model with target integrations is slow. On one model (107 segments,
 ~4,800 points, folded data sets with up to 1,000 sub-points): ~33 min in a fresh directory with empty
 `output/`, ~5 min in a live directory. Tell the person the calculate is running, and send it to the batch system
 rather than a login node: such runs use several GB and effectively one core regardless of `OMP_NUM_THREADS`.

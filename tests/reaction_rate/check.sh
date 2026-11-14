@@ -61,8 +61,9 @@ rate() {
   else cp "$HERE/models/$model.azr" "$d/t.azr"; fi
   cp "$HERE/${TEMPERATURES:-temperatures.dat}" "$d/temperatures.dat"
   [ -n "$par" ] && cp "$HERE/expected/$par" "$d/"
-  (cd "$d" && printf '5\n%s\n%s\n%s\nyes\ntemperatures.dat\n' "$par" "$entrance_key" "$exit_key" |
-     run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$d" &&
+     run_limited 600 "$AZURE2_BIN" rate ${par:+--parameter-file="$par"} --rate-entrance="$entrance_key" \
+       --rate-exit="$exit_key" --temperature-file=temperatures.dat --no-gui t.azr > run.log 2>&1)
   local status=$?
   if [ "$status" -ne 0 ] || [ ! -s "$d/output/reactionrates.out" ]; then
     bad "$model: the rate run failed (exit status $status)"; tail -5 "$d/run.log"; return 1

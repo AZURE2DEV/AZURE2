@@ -71,7 +71,7 @@ run() {
   [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   [ -z "${TABLE:-}" ] || printf '%b' "$TABLE" > "$d/ps.dat"
   (cd "$d" && $RUN "$AZURE2_BIN" calculate --no-gui run.azr 2>&1 | head -c 1000000 > log;
-   echo "${PIPESTATUS[1]}" > status)
+   echo "${PIPESTATUS[0]}" > status)
 }
 # worst relative difference of the model columns of two runs (energies must agree)
 worst() {

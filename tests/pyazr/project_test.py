@@ -67,7 +67,7 @@ def run_cli(directory, azr):
     for d in ("output", "checks"):
         shutil.rmtree(os.path.join(directory, d), ignore_errors=True)
         os.makedirs(os.path.join(directory, d))
-    subprocess.run([BIN, "--no-gui", "--no-readline", azr], input="1\n\n\n7\n", text=True, cwd=directory,
+    subprocess.run([BIN, "calculate", "--no-gui", azr], stdin=subprocess.DEVNULL, text=True, cwd=directory,
                    capture_output=True, env=dict(os.environ, OMP_NUM_THREADS="1"), timeout=900)
     out = os.path.join(directory, "output")
     return out, sorted(os.listdir(out))

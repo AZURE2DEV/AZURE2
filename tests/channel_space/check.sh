@@ -216,8 +216,8 @@ mkext 1.944000 > "$WORK/ext_pole.azr"
 export EXTRA_DATA="$WORK/angdist.dat"
 for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole park:"--use-park":ext; do
   tag="${v%%:*}"; rest="${v#*:}"; flags="${rest%%:*}"; model="$WORK/${rest#*:}.azr"
-  MODEL="$model" run "sc_$tag" 1 "$flags"
-  MODEL="$model" run "sl_$tag" 1 "$flags" AZURE_LEVEL_SPACE=1
+  MODEL="$model" run "sc_$tag" calculate "$flags"
+  MODEL="$model" run "sl_$tag" calculate "$flags" AZURE_LEVEL_SPACE=1
   a="$WORK/sc_$tag/output/scatteringLengths.out"; b="$WORK/sl_$tag/output/scatteringLengths.out"
   if [ -s "$a" ] && [ -s "$b" ] && [ "$(tr -d '\r' < "$a")" = "$(tr -d '\r' < "$b")" ]; then
     ok "$tag: scatteringLengths.out identical on both routes ($(awk '$1 == 1 && $3 == "1/2+" { print "1/2+ a0 " $5 " fm" }' "$a" | tr -d '\r'))"

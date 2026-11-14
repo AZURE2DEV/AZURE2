@@ -4,7 +4,7 @@
 Runs, in a temporary directory:
   1. a calculation of T2_true.azr (the truth), to read the true level parameters in the units of
      param.sav (Brune basis: E in MeV, reduced-width amplitudes in MeV^1/2);
-  2. the fit of T2.azr (menu 2) with --use-lm, started off the truth.  T2's THM segments have no
+  2. the fit of T2.azr (AZURE2 fit) with --use-lm, started off the truth.  T2's THM segments have no
      analytic residual Jacobian in today's engine, so --use-lm falls back to MIGRAD with Minuit's
      numerical gradient (about 1100 calls: 585 s at 8 threads with exact Coulomb functions, 72 s with a
      Coulomb table, the same parameters to the digits of param.sav).  Without a flag the CLI switches on the analytic-gradient
@@ -78,12 +78,12 @@ def chi2_total(path):
     raise RuntimeError("no Total-Chi-Squared in " + path)
 
 
-def run(binary, workdir, azr, menu, threads, extra=()):
+def run(binary, workdir, azr, command, threads, extra=()):
     for d in ("output", "checks"):
         os.makedirs(os.path.join(workdir, d), exist_ok=True)
     env = dict(os.environ, OMP_NUM_THREADS=str(threads), LC_ALL="C")
     t0 = time.time()
-    r = subprocess.run([binary, "--no-gui", "--no-readline", *extra, azr], input=menu, cwd=workdir, env=env,
+    r = subprocess.run([binary, command, "--no-gui", *extra, azr], stdin=subprocess.DEVNULL, cwd=workdir, env=env,
                        capture_output=True, text=True, timeout=3600)
     open(os.path.join(workdir, azr + ".log"), "w").write(r.stdout + r.stderr)
     return time.time() - t0
@@ -122,8 +122,8 @@ def main():
             for f in FILES:
                 src = os.path.join(work, f)
                 (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(d, f))
-        run(binary, truthdir, "T2_true.azr", "1\n\n\n7\n", args.threads)
-        t_fit = run(binary, fitdir, "T2.azr", "2\nn\n\n\n7\n", args.threads, ["--use-lm"] + args.engine_arg)
+        run(binary, truthdir, "T2_true.azr", "calculate", args.threads)
+        t_fit = run(binary, fitdir, "T2.azr", "fit", args.threads, ["--use-lm"] + args.engine_arg)
         truth_lv = read_params(os.path.join(truthdir, "output", "param.par"))
         nuis = json.load(open(os.path.join(HERE, "truth.json")))["nuisance"]
         sav = os.path.join(fitdir, "output", "param.sav")

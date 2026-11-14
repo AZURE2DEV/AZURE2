@@ -117,8 +117,8 @@ with tempfile.TemporaryDirectory() as tmp:
     if binary is None:
         print("  skip  no AZURE2 binary to cross-check against")
     else:
-        subprocess.run([binary, "--no-gui", "--no-readline", "free_norm.azr"],
-                       cwd=work, input="1\nmoved.sav\n\n7\n", text=True,
+        subprocess.run([binary, "calculate", "--parameter-file=moved.sav", "--no-gui", "free_norm.azr"],
+                       cwd=work, stdin=subprocess.DEVNULL, text=True,
                        capture_output=True, timeout=900)
         line = ""
         out = os.path.join(work, "output", "chiSquared.out")
@@ -169,8 +169,8 @@ with tempfile.TemporaryDirectory() as tmp:
     if binary is None:
         print("  skip  no AZURE2 binary to cross-check against")
     else:
-        r = subprocess.run([binary, "--no-gui", "--no-readline", "sg.azr"], cwd=work,
-                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=900)
+        r = subprocess.run([binary, "calculate", "--no-gui", "sg.azr"], cwd=work,
+                           stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=900)
         total = None
         for l in r.stdout.splitlines():
             if l.startswith("Total Chi-Squared:"):

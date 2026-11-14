@@ -29,13 +29,13 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # run NAME MODEL MODE [FLAGS...] -> $WORK/NAME (output/, run.log); env vars pass through
 run() {
-  local name="$1" model="$2" mode="$3"
+  local name="$1" model="$2" command="$3"
   shift 3
   local dir="$WORK/$name"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$HERE/data" "$dir/data"
   cp "$HERE/$model" "$dir/m.azr"
-  (cd "$dir" && printf '%s\n\n\n' "$mode" | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline "$@" m.azr > run.log 2>&1)
+  (cd "$dir" && run_limited 300 "$AZURE2_BIN" "$command" --no-gui "$@" m.azr > run.log 2>&1)
 }
 # a0 NAME PAIR JPI [im]: Re (or Im) a0 of one row of scatteringLengths.out
 a0() {
@@ -50,9 +50,9 @@ check() {  # check LABEL VALUE REFERENCE TOL
 
 # 1. Threshold evaluation against independent values (README.md): mpmath Coulomb functions with the
 #    Brune level matrix at E = 0 (proto_*.py of the archive), and the neutral closed form a (1 - g^2/E).
-run he3he4 he3he4.azr 3
-run be7p be7p.azr 3
-run n16o n16o.azr 3
+run he3he4 he3he4.azr extrapolate
+run be7p be7p.azr extrapolate
+run n16o n16o.azr extrapolate
 check "3He+4He 1/2+ (Paneru 2024: 33.10 fm)" "$(a0 he3he4 1 1/2+)" 33.099574 1e-5
 check "7Be+p 1-, a01" "$(a0 be7p 1 1-)" 17.06776438 1e-5
 check "7Be+p 2-, a02" "$(a0 be7p 1 2-)" -5.018395912 1e-5
@@ -73,14 +73,14 @@ else
 fi
 
 # 3. Independent of the parametrization: the same observed levels in the standard formalism.
-run be7p_std be7p.azr 3 --no-brune
+run be7p_std be7p.azr extrapolate --no-brune
 for j in 1- 2-; do check "7Be+p $j, standard parametrization = Brune" "$(a0 be7p_std 1 $j)" "$(a0 be7p 1 $j)" 1e-8; done
 check "7Be*+p 1- (Im), standard = Brune" "$(a0 be7p_std 2 1- im)" "$(a0 be7p 2 1- im)" 1e-8
 
 # 4. The scattering-length chi2 (scattering_length data of <modelData>, the old <scatteringLengths> lines): every
 #    kind of datum (a01, a02, the coherent combination, a complex length with both parts; the old file's inactive
 #    line is not converted).  Coherent = 3/8 a01 + 5/8 a02 for p (1/2) + 7Be (3/2).
-run fit7 be7p_fit.azr 1
+run fit7 be7p_fit.azr calculate
 MD="$WORK/fit7/output/modelData.out"
 coh="$(awk '$1 == "scattering_length_3" { print $(NF - 5); exit }' "$MD")"
 check "coherent combination = 3/8 a01 + 5/8 a02" "$coh" "$(awk -v a="$(a0 fit7 1 1-)" -v b="$(a0 fit7 1 2-)" 'BEGIN { printf "%.8f", 3 / 8 * a + 5 / 8 * b }')" 1e-5
@@ -98,7 +98,7 @@ check "chi2 total, reference" "$total" 48.3471 1e-4
 for form in "" --no-brune --use-park; do
   limit=1e-6
   [ "$form" = --use-park ] && limit=1e-3
-  AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=40 run "grad${form}" be7p_fit.azr 2 --use-gradient $form
+  AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=40 run "grad${form}" be7p_fit.azr fit --use-gradient $form
   log="$WORK/grad${form}/run.log"
   worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0 } END { print m + 0 }' "$log")"
   n="$(grep -c '\[grad-check\] idx' "$log")"
@@ -107,7 +107,7 @@ for form in "" --no-brune --use-park; do
 done
 
 # 6. A fit with the constraints (least squares: the constraints are residual rows).
-run lm be7p_fit.azr 2 --use-lm
+run lm be7p_fit.azr fit --use-lm
 fitted="$(awk '/^Total model-data chi2/ { print $NF }' "$WORK/lm/output/modelData.out")"
 data="$(sed -n 's/^Total-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/lm/output/chiSquared.out")"
 if awk -v a="$fitted" -v b="$data" 'BEGIN { exit !(b ~ /^ *[-+]?\.?[0-9]/ && a != "" && b != "" && a + b < 6) }'; then ok "--use-lm fit: data chi2 $data + scattering-length chi2 $fitted (start 227.0 + 48.3)"

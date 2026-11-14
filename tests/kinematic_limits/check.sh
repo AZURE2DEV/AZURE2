@@ -39,7 +39,7 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 prep() { mkdir -p "$WORK/$1/output" "$WORK/$1/checks"; cp -r "$2/data" "$WORK/$1/"; }
-run() { (cd "$WORK/$1" && printf '%s\n\n\n7\n' "$2" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && run_limited 600 "$AZURE2_BIN" "$2" --no-gui m.azr > run.log 2>&1); }
 errors() { grep -c "beyond the kinematic maximum" "$WORK/$1/run.log"; }
 below() { grep -c "below the threshold of the exit pair" "$WORK/$1/run.log"; }
 has_nan() { grep -il "nan" "$WORK/$1/output"/AZUREOut_* "$WORK/$1/output/chiSquared.out" 2> /dev/null | sed -n 1p; }
@@ -58,7 +58,7 @@ ext() {
 
 prep a "$LI"
 ext a "range 1.89 1.90 MeV lab step 0.01" 60
-run a 3
+run a extrapolate
 if [ "$(errors a)" -ge 1 ] && [ ! -e "$WORK/a/output/AZUREOut_aa=5_R=2.extrap" ]; then
   ok "(a) 7Li(p,n) test segment at 60 deg lab (theta_max 21-45 deg): refused, no extrapolation file"
 else bad "(a) test segment past theta_max: errors $(errors a), extrap file $(ls "$WORK/a/output" 2> /dev/null | tr '\n' ' '), nan in $(has_nan a)"; fi
@@ -76,7 +76,7 @@ export REC="dataset pn60
     angle_window   60 60 deg
     norm           1 fixed"
 awk '{ print } /^<data>$/ { print ENVIRON["REC"] }' "$LI/7Li_p_ay.azr" > "$WORK/b/m.azr"
-run b 1
+run b calculate
 if [ "$(errors b)" -ge 1 ] && [ ! -s "$WORK/b/output/chiSquared.out" ]; then
   ok "(b) the same as a data segment: refused, no chiSquared.out"
 else bad "(b) data segment past theta_max: errors $(errors b); chiSquared.out: $(grep '^Total' "$WORK/b/output/chiSquared.out" 2> /dev/null)"; fi
@@ -90,7 +90,7 @@ awk 'BEGIN{inl=0} /<levels>/{inl=1} /<\/levels>/{inl=0}
        if ($1 == "reaction") { sub(/12C\(p,p\)12C/, "1H(12C,12C)1H"); sub(/12C\(p,g\)13N/, "1H(12C,g)13N"); $0 = "    " $0 }
        if ($1 == "quantity" && $2 == "analyzing_power") { print; $0 = "    active         no" }
        print }' "$N13/13N.azr" > "$WORK/c/m.azr"
-run c 1
+run c calculate
 if [ "$(errors c)" -ge 1 ] && [ ! -s "$WORK/c/output/chiSquared.out" ]; then
   ok "(c) elastic 12C + p (m1 > m2, theta_max 4.8 deg) at 84.3 deg lab: refused, no chiSquared.out"
 else bad "(c) elastic m1 > m2 past theta_max: errors $(errors c); chiSquared.out: $(grep '^Total' "$WORK/c/output/chiSquared.out" 2> /dev/null)"; fi
@@ -98,7 +98,7 @@ else bad "(c) elastic m1 > m2 past theta_max: errors $(errors c); chiSquared.out
 # (d) control inside theta_max
 prep d "$LI"
 ext d "range 1.89 1.91 MeV lab step 0.01" 10
-run d 3
+run d extrapolate
 f="$WORK/d/output/AZUREOut_aa=5_R=2.extrap"
 if [ -s "$f" ] && [ "$(errors d)" -eq 0 ] && ! grep -qi nan "$f"; then
   ok "(d) control: the same segment at 10 deg runs ($(grep -c . "$f") energies, finite)"
@@ -107,7 +107,7 @@ else bad "(d) control at 10 deg: errors $(errors d), file $(ls -la "$f" 2> /dev/
 # (e) below the exit threshold
 prep e "$LI"
 ext e "list 1.88 MeV lab" 10
-run e 3
+run e extrapolate
 if [ "$(below e)" -ge 1 ] && [ ! -e "$WORK/e/output/AZUREOut_aa=5_R=2.extrap" ]; then
   ok "(e) a lab-differential point below the (p,n) threshold (E_p = 1.88 MeV): refused, no extrapolation file"
 else bad "(e) below threshold: messages $(below e), nan in $(has_nan e)"; fi
@@ -137,7 +137,7 @@ export REC="dataset at_limit
     norm           1 fixed
 "
 awk '{ print } /^<data>$/ { print ENVIRON["REC"] }' "$WORK/f/base.azr" > "$WORK/f/m.azr"
-run f 1
+run f calculate
 if grep -q "error E_LAB_JACOBIAN_AT_LIMIT: .*lies at the kinematic maximum lab angle" "$WORK/f/run.log" && [ "$(errors f)" -eq 0 ] &&
    [ ! -s "$WORK/f/output/chiSquared.out" ]; then
   ok "(f) a point at theta_max = $(cat "$WORK/f/angle") deg (12C + p): refused, E_LAB_JACOBIAN_AT_LIMIT, no chiSquared.out"

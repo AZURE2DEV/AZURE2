@@ -174,8 +174,8 @@ with tempfile.TemporaryDirectory() as tmp:
     block = ("experiment[E] background=linear "
              "cbackground=1/2+:2:linear=0.3,-0.2,0.05,0.1")
     cli_dir, py_dir = project("cli", block), project("py", block)
-    proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
-                          input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
+    proc = subprocess.run([binary, "calculate", "--no-gui", "run.azr"], cwd=cli_dir,
+                          stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=600)
     hit = re.findall(r"Total Chi-Squared:\s*([0-9.eE+-]+)", proc.stdout.replace("\r", "\n"))
     if not hit:
         print("FAIL: the CLI run produced no chi-squared")

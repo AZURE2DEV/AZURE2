@@ -18,7 +18,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 - Use this skill to set up, run, restart or extend a fit, to edit the level scheme or the data-set selection of a
   fitted model, and to carry parameter files across such edits.
 - A new project, new particle pairs, the first level scheme, EXFOR data: `azure2-setup`.
-- Observables, extrapolation, S(0), rates, decomposition, CLI menus, fit vector and physical values: `azure2-calculate`.
+- Observables, extrapolation, S(0), rates, decomposition, CLI commands, fit vector and physical values: `azure2-calculate`.
 - Whether a fit can be trusted (pulls, residual structure, χ²/ν, Wigner limits, radius and background-pole
   sensitivity, saturated poles): `azure2-check`.
 - Parameter uncertainties, bands, MINOS, MCMC, data covariance: `azure2-uncertainty`.
@@ -37,7 +37,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
    parameter file by row (`references/parameters-and-sav.md`).
 3. **Audit the priors.** A norm prior's centre should be the data's own scale (1.0, or the published factor), not a
    previous fit's value; a stale shift value becomes the start of a freed shift.
-4. **Check the start.** A mode-1 calculation from the exact files and flags the fit will use must reproduce the
+4. **Check the start.** A `calculate` run from the exact files and flags the fit will use must reproduce the
    expected χ² (and the first χ² the fit prints must equal it). A start far above the baseline is a problem even when
    it seems explained (`azure2-check`). In pyazr: `print(s.evaluate(s.objective().x0).table())`.
 5. **For a new reaction**, build starting parameters level by level before any global fit
@@ -107,9 +107,9 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 
 ## 5. Running the fit
 
-**CLI (reference implementation).** Mode 2 fits; mode 4 fits and extrapolates. The flags (`--use-brune`,
+**CLI (reference implementation).** `AZURE2 fit` fits; `minos` fits and adds the MINOS intervals. The flags (`--use-brune`,
 `--use-park`, `--ignore-externals`, `--use-gradient`, ...) are CLI-only: copy them from the reference run's job
-script. The menu answers and the order of the uncertainty-band and parameter-file prompts are in `azure2-calculate`;
+script. The commands and their options are in `azure2-calculate`;
 confirm `Reading User Parameter File...` in the log (`Creating New param.par File...` means the parameter file was
 ignored).
 
@@ -149,7 +149,7 @@ A plateau of a few hundred evaluations on a model with hundreds of free paramete
 (`references/running-fits.md`).
 
 **Long fits.** Reserve memory per slot (each of max(4, threads) + 1 model copies holds every sub-point), restart from
-`param.fit` after a kill, and verify the snapshot with mode 1 before trusting a restart (`references/running-fits.md`).
+`param.fit` after a kill, and verify the snapshot with `calculate` before trusting a restart (`references/running-fits.md`).
 
 **Threads.** Results do not depend on the thread count. With several worker processes, keep processes × threads
 within the slots requested.
@@ -188,7 +188,7 @@ within the slots requested.
   (`norms="fitted"`) the fitted norms and shifts go into their data-set records, the priors keeping their centres
   (`references/editing-levels.md`). Write it in the project's directory: its data paths stay relative, and a copy
   elsewhere is refused with `E_DATA_FILE`.
-- Check a snapshot with mode 1 and its `.sav` (must reproduce `chiSquared.out` including `Total-Norm-Chi-Squared` to
+- Check a snapshot with `calculate` and its `.sav` (must reproduce `chiSquared.out` including `Total-Norm-Chi-Squared` to
   about 10⁻⁴), and a bake of `<levels>` with a blank parameter file. Near a destructive-interference minimum, check the
   per-segment χ² of the reopened file, not only the verify.
 - Say which home (`.azr` nominal or `.sav` fitted) every norm and shift you hand over came from, and record in the

@@ -29,7 +29,7 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 MESSAGE="the mesh of a compound nucleus would have more than 1e+06 nodes"
 
-# case NAME DENSITY SHIFT MENU: the model in $WORK/NAME, run with the menu answers MENU (at most 30 s); sets $rc, $secs
+# case NAME DENSITY SHIFT COMMAND: the model in $WORK/NAME, run by COMMAND (at most 30 s); sets $rc, $secs
 case_run() {
   local d="$WORK/$1"
   mkdir -p "$d/output" "$d/checks"
@@ -45,12 +45,12 @@ for line in text.split("\n"):
 open(sys.argv[2], "w").write("\n".join(out))
 PY
   local t0=$SECONDS
-  (cd "$d" && printf "$4" | $(guard_command 30) "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+  (cd "$d" && $(guard_command 30) "$AZURE2_BIN" $4 --no-gui m.azr > run.log 2>&1)
   rc=$?
   secs=$((SECONDS - t0))
 }
 
-case_run prior 1e+14 "offset 0.02 MeV fit prior 0 0.003" '1\n\n\n7\n'
+case_run prior 1e+14 "offset 0.02 MeV fit prior 0 0.003" calculate
 if [ "$rc" = 1 ] && grep -q "^ERROR: $MESSAGE" "$WORK/prior/run.log" &&
    grep -q "data set 'thin', the point at E_lab 0.600000 MeV: its kernel is .* wide, its planned support .* at a step of" "$WORK/prior/run.log" &&
    grep -q "Give the energy shift a narrower prior, or fix it" "$WORK/prior/run.log" && [ "$secs" -le 10 ]; then
@@ -58,7 +58,7 @@ if [ "$rc" = 1 ] && grep -q "^ERROR: $MESSAGE" "$WORK/prior/run.log" &&
 else
   bad "a 3 keV prior: exit $rc after ${secs} s: $(grep -E 'ERROR|what' "$WORK/prior/run.log" | sed -n '1,2p' | cut -c1-200)"
 fi
-case_run flat 1e+16 "offset 0.02 MeV fit" '2\nn\n\n\n7\n'
+case_run flat 1e+16 "offset 0.02 MeV fit" fit
 if grep -q "$MESSAGE" "$WORK/flat/run.log" && ! grep -q "bad_alloc" "$WORK/flat/run.log" && [ "$secs" -le 20 ]; then
   ok "a free shift on a flat chi^2: the fit ends with the message in ${secs} s (exit $rc)"
 else

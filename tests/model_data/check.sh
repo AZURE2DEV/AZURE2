@@ -41,9 +41,9 @@ project() {
 }
 # run NAME MODE [FLAGS...]: the engine on $WORK/NAME/m.azr (output/, run.log); env vars pass through
 run() {
-  local name="$1" mode="$2"
+  local name="$1" command="$2"
   shift 2
-  (cd "$WORK/$name" && printf '%s\n\n\n' "$mode" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline "$@" m.azr > run.log 2>&1)
+  (cd "$WORK/$name" && run_limited 600 "$AZURE2_BIN" "$command" --no-gui "$@" m.azr > run.log 2>&1)
 }
 # model NAME DATUM [column]: the model value (or another column) of a datum in modelData.out
 model() {
@@ -114,9 +114,9 @@ datum a_p15N
 </modelData>
 MD
 project t2
-run t2 1
-project formal; cp "$WORK/t2/m.azr" "$WORK/formal/m.azr"; run formal 1 --no-brune
-project park; cp "$WORK/t2/m.azr" "$WORK/park/m.azr"; run park 1 --use-park
+run t2 calculate
+project formal; cp "$WORK/t2/m.azr" "$WORK/formal/m.azr"; run formal calculate --no-brune
+project park; cp "$WORK/t2/m.azr" "$WORK/park/m.azr"; run park calculate --use-park
 
 # Each quantity in the three bases: the hand value (Brune), and the same value in the formal and Park bases, to the
 # tolerance of the formal -> Brune iteration (1e-6 MeV in the energies, level_parameters.md section 4).
@@ -172,7 +172,7 @@ MD
          s/^1 -1 12.420800 1 1 3 4 2 1 1 1 50 /1 -1 12.420800 1 1 3 4 2 1 1 1 0 /
          s/^1 -1 12.420800 /1 -1 12.000000 /' "$T2/T2_true.azr" > "$WORK/anc$b/m.azr"
     cat "$WORK/anc.md" >> "$WORK/anc$b/m.azr"
-    run "anc$b" 1 $b
+    run "anc$b" calculate $b
   done
   check "ANC of level 1 (fm^-1/2), Brune, as written" "$(model anc C_L1)" 2.0 1e-9
   check "ANC, formal basis = Brune" "$(model anc--no-brune C_L1)" "$(model anc C_L1)" 2e-6
@@ -203,7 +203,7 @@ project only
 awk '/^<(data|thm|targets)>/ { print; skip = 1; next } /^<\/(data|thm|targets)>/ { skip = 0 } !skip' \
   "$T2/T2_true.azr" | grep -v priorCovariance > "$WORK/only/m.azr"
 cat "$WORK/t2.md" >> "$WORK/only/m.azr"
-run only 1
+run only calculate
 check "model data alone: omega gamma as with segments" "$(model only wg_L5)" "$(model t2 wg_L5)" 1e-12
 check "model data alone: Total-Model-Data-Chi-Squared" "$(total only Total-Model-Data-Chi-Squared)" "$(total t2 Total-Model-Data-Chi-Squared)" 1e-12
 
@@ -228,8 +228,8 @@ gradline() { awk -v i="$2" '/\[grad-check\] idx/ && $3 == i { for (k = 1; k <= N
 for b in "" --no-brune --use-park; do
   fitproj "gradw$b" 2.6918028
   fitproj "grad0$b" ""
-  AZURE_GRAD_CHECK=exit run "gradw$b" 2 --use-gradient $b
-  AZURE_GRAD_CHECK=exit run "grad0$b" 2 --use-gradient $b
+  AZURE_GRAD_CHECK=exit run "gradw$b" fit --use-gradient $b
+  AZURE_GRAD_CHECK=exit run "grad0$b" fit --use-gradient $b
   n="$(grep -c '\[grad-check\] idx' "$WORK/gradw$b/run.log")"
   [ "$n" -ge 2 ] || bad "gradient ${b:---use-brune}: $n parameters checked"
   for i in $(awk '/\[grad-check\] idx/ { print $3 }' "$WORK/gradw$b/run.log"); do
@@ -241,8 +241,8 @@ for b in "" --no-brune --use-park; do
 done
 fitproj free ""
 fitproj pulled 2.6918028  # + 3 sigma
-run free 2
-run pulled 2
+run free fit
+run pulled fit
 GA() {  # the fitted alpha0 width of level 5 (eV), from parameters.out
   awk '/^J = 3.0-/ { lv = ($6 + 0 > 13.2) } lv && $1 == "R" && $3 == 2 {
          f = ($13 == "keV") ? 1e3 : (($13 == "MeV") ? 1e6 : (($13 == "meV") ? 1e-3 : 1)); print $12 * f; exit }' \
@@ -256,7 +256,7 @@ t="$(total pulled Total-Model-Data-Chi-Squared)"
 if [ -n "$t" ]; then ok "the pulled fit reports Total-Model-Data-Chi-Squared $t"; else bad "no Total-Model-Data-Chi-Squared in the pulled fit"; fi
 # The same fit by Levenberg-Marquardt (the term's rows and their Jacobian).
 fitproj lm 2.6918028
-run lm 2 --use-lm
+run lm fit --use-lm
 a_lm="$(GA lm)"
 if awk -v a="$a_free" -v b="$a_lm" 'BEGIN { exit !(a != "" && b != "" && b > a) }'; then ok "--use-lm: Gamma_a0 pulled up as well: $a_free -> $a_lm eV"
 else bad "--use-lm: Gamma_a0 ${a_free:-missing} -> ${a_lm:-missing}"; fi
