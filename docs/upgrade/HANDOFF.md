@@ -2,6 +2,139 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 15:00) — merged: the level inputs out of the compound; the ENDF design note
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 72 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-level-inputs` and `feature/upgrade-8-endf-design`. The agents'
+entries follow. No conflict but this file.
+
+- **The compound, second half of step 4**: what a transformation into the fit's basis reads and writes about
+  the levels is one value, `LevelInputs` (`include/LevelInputs.h`), held by `CNuc::Inputs()`; `ALevel` holds
+  set-up data and the file's values only, its setters and `CNuc::MutableLevel` are gone; the `gamma_decay`
+  fills and the capture projectors are in `LevelState`, so a fill writes a `LevelState` and nothing else of
+  the compound. **Not done**: the readers do not take the state as an argument yet (they ask the compound),
+  and the owners still copy the compound (`Clone` and the pools stay); the memory of a fit per thread is not
+  measured. Both are the next branch's.
+- **ENDF, design only** (`docs/upgrade/endf.md`; no code): the mapping of a project to the R-Matrix Limited
+  format and back, what is lost and what is refused, the checking codes read in their manuals and sources,
+  the calls, the page's screens, six stages. Its spike is outside the repository (`work/endf/`).
+
+**Verified on the merged tree** (build `work/b-trial72`, eight threads): 0 warnings; all projects in the three
+bases against `tab-t71-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `b-trial71`; the quick tests 277 of 277 (one more: `upgrade_level_inputs`); the consistency test
+passes with the design note merged.
+
+**The director's own runs**, `b-trial72` against `b-trial71`, one thread, every output file compared
+(`work/director/spot72/own.sh`, `work/director/spot70/extra.sh`): MINOS and a fit with band and scaled
+covariance (`identical_pp_res`), the rate of the closed p + 12C model on a grid for one exit pair and for all,
+three `gamma_decay` fits (`record.azr` with the gradient and the LM fitter, `partial.azr`), a T1 extrapolation
+with band, the natural-target fits in two fitters, and the sampler's chains of T2 in both bases (8 walkers,
+100 steps): all identical. The ENDF note's central number was read in the spike's own table
+(`work/endf/run/inden_work/compare.txt`): the engine against the library file's MF=3 agrees to the file's
+seven digits from 7.2 MeV up; the first point above threshold differs as the note says, and the engine's
+value there is what the Coulomb barrier of p + 6Li at 0.7 keV gives (exp(-2 pi eta) of order 1e-45).
+
+**New reference**: result tag `tab-t72-1`, base build `work/b-trial72`.
+
+**The PI, 2026-11-14 afternoon** (answers to the director's three questions; his words):
+- on "checking the evaluations": "Checking the evaluation, I mean also checking that ENDF file is correctly
+  formatted using the ENDF tools". Taken as: the design's stage 4 (the checking codes started from the page
+  and from pyazr, their reports read, a corrected file offered as a difference) is wanted, beside the
+  calculation against the data and the comparison with a library's curves. No checking code is installed on
+  this machine and none may be installed without his yes: the stage is built against a stand-in and finds
+  the real codes when they are there.
+- on REACLIB / STARLIB for the rate utility: "Yes, these reaction rate formats would be great!" Passed to
+  the utilities agent as an added part.
+- on `--no-readline` once the menus are gone: "It could be refused". Passed to the commands agent: an
+  unknown option like any other, with the three parts.
+
+**The director's interim choices on the ENDF note's ten decisions** (so that the stages can start; each is
+the note's recommendation and each can be turned by the PI before the writer is built): the module's own
+parser (8); separation energies from AME2020 with the file's Q values and the differences reported (9); no
+program command, `pyazr endf ...` (5); GNDS not now (6); relativistic projects refused on export (4); the
+widest number form by default (2). **Waiting for the PI** because they are his or shape what an evaluator
+hands in: photon channels out of MF=2 with capture pointwise (1; it follows his rule on radiative widths, but
+it is the file's physics content); LRP=2 with full MF=3 (3); committing an 11 kB extract of an ENDF/B-VIII.1
+file as test data (7; fetched data in the repository); covariances from a formal-basis HESSE (10). Stages 1
+(curves), 2 (reader, without the library extract: hand-made files and write-then-read only) and 4 (checkers
+against a stand-in) need none of the waiting ones.
+
+**Open**: the readers and owners of the compound (brief written, launched after this merge); the set-up out
+of `CNuc` and its rename; the page's first view, the covariance builder and the rate tab, the commands'
+second part (three agents at work).
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-design`) — ENDF for the evaluators: design and spike
+
+**Done**: `docs/upgrade/endf.md` (no code in the tree): the format from ENDF-102 (2023, cited by printed page); the
+mapping of a project to MF=2/MT=151 LRF=7 (KRM=4; `use_rmc` to KRM=3) and back, quantity by quantity, with the
+engine function of each conversion; what MF=1, 3, 6, 12, 32, 33 take from the engine; which charged-particle
+evaluations of ENDF/B-VIII.1 carry LRF=7 (one file read: 3He + 4He, LRF=7 KRM=4, LRP=2; the others not checked);
+the checking codes (CHECKR, FIZCON, PSYCHE, INTER, STANEF; PREPRO) from their manuals and sources; `pyazr.endf`, two
+engine doors, the page's screens and routes; ten decisions for the PI; six stages with sizes. One ROADMAP row.
+
+**Verified how** (scripts and outputs in `work/endf/`, base build `work/b-trial71`, one thread): T1 and T2 written as
+LRF=7 and read back into the engine: Delta chi^2 -0.031 / -0.69 with 7-digit numbers, +0.17 / +4.4 with the E form,
+-1.2e-5 / +4.4e-4 with the widest form; T1 with S_p from the file's masses +710. The ENDF/B-VIII.1 3He + 4He MF=2,
+its boundary changed to the engine's, reproduces its own MF=3/MT=600 to 1.1e-6 above 7.2 MeV; read with c.m. widths,
+off by up to 143 %. Not run: any checking code (none installed; nothing installed or built), RECENT, MF=3/6/32
+writing, KRL=1.
+
+**Open**: the PI's decisions of `endf.md` section 11 (photon channels out of MF=2, number form, LRP, KRL=1, no
+program command, GNDS later, a library extract as test data, own parser, AME separation energies, MF=32 from a
+formal-basis HESSE); then stage 1.
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-inputs`) — the level inputs out; a fill writes the state
+
+**A mergeable half** of the copies' step: the level inputs (`LevelInputs`) and what a fill writes beside the levels
+(in `LevelState`) are in; the readers taking the state, the owners holding their own state and `Clone`'s deletion
+are not.
+
+**Measured first** (start 161ccef1); the table with writers and readers per member, the copies and what each writes
+on its copy, and the readers of `CNuc::State()` per file is in `cnuc_split.md` §12.3, "Step 4 as built, second
+part". In short: after set-up `TransformIn` and `FillCompoundFromParamsPhysical` wrote the levels' input E, γ and
+zero-width flags (`ALevel`), the `gamma_decay` input numbers and the transformation's end (`CNuc`); a fill wrote the
+`gamma_decay` fills and the formal-basis capture-mask projectors (`CNuc`) beside the `LevelState`. `CNuc::State()`
+had 78 calls in 15 files (43 more uses of the member inside `CNuc*.cpp`); the input accessors 50 calls (`GetE` 29
+in 13 files, `GetGamma` 11 in 6, `ZeroInputWidth` 10 in 4).
+Where the code and the design disagree (code taken): `LevelInputs` holds no external amplitudes, N_f^½ or Park J
+(the state holds them since step 3); only the masks' projectors change with the vector; `ALevel` keeps its
+`<levels>` values for the set-up; the `gamma_decay` widths were written inside `Fill`.
+
+**Done** (two commits):
+- `LevelInputs` (`include/LevelInputs.h`, `src/LevelInputs.cpp`): input E, widths, zero-width flags, the records'
+  numbers, whether the transformation ran and its error. `CNuc` holds one (`CNuc::Inputs()`); `Fill` makes it,
+  `GammaDecaySet::WriteInputWidths` puts the records' partial widths in it, `TransformIn` and
+  `FillCompoundFromParamsPhysical` write it; `FillMnParams`, the reports, the labels, the boundary conditions, the
+  external-capture set-up and the evaluation's zero-width masks read it. `ALevel` now holds only set-up data and its
+  `<levels>` values (`FileE`, `FileGamma`, `FileZeroWidth`, read inside `Fill`); its three setters and
+  `CNuc::MutableLevel` are deleted (the compiler found every reader).
+- `LevelState` holds the `gamma_decay` fills (`GammaDecayFill`, `include/GammaDecayFill.h`) and the capture-mask
+  projectors (`CaptureProjector(slot)`; the slots stay in the shared set-up, `CNuc::FormalCaptureMaskSlot`,
+  `FormalCaptureMaskOf`). `GammaDecaySet::ToEngine` takes the compound `const` and the state it writes: a fill writes
+  the state and nothing else of `CNuc`. The external-capture helpers and the `gamma_decay` readers take the compound
+  `const`.
+- Test `upgrade_level_inputs` (`tests/upgrade/level_inputs_test.cpp`): the inputs after `Fill` against the rows and
+  the records, after `Initialize` (no level written; a formal energy moved), a physical vector at the layout's slots,
+  a copy of the state keeping its records' fills. Injected: the records' widths left out of the inputs (5 failures);
+  the fill's numbers replaced by the file's (1 failure); both removed.
+
+**Verified how** (build `work/b-cnuc6`, 0 warnings, at most 5 threads): all projects in the three bases against
+`tab-t70-1` (tag `tab-cnuc6-1`): 887 / 851 / 887 identical; the quick set (12 folders x 3 bases) identical after each
+commit; the consistency test and 13 tests near the change; `docs_build` (55 pages). Against `work/b-trial70`, one thread
+each, every output file compared (`work/cnuc6/fits.sh`, `extra.sh`): the eight fits identical; the natural-target fit
+of `angle_mapping` (gradient, LM), T2 sampled in the physical and the RWA basis (8 walkers, 100 steps), a fit of
+`gamma_decay/models/record.azr` (gradient), a MINOS run of T2, a T2 fit with `--covariance-band` and a rate run of
+`p12C.azr`: identical (13, 13, 10, 10, 11, 16, 17, 4 files). An evaluation (pyazr `Objective`, 100 calls, 1 thread,
+best of 3, the start commit built the same way, `work/b-cnuc6base`, four rounds in alternating order): T1
+0.087–0.092 s base, 0.090–0.091 s branch; T2 3.55–3.63 s base, 3.56–3.65 s branch.
+`OMP_NUM_THREADS=1 ctest -LE slow -j1`: 274 of 274 passed (2743 s).
+
+**Not done**: the readers taking the state (88 calls of `CNuc::State()` and 63 uses of `CNuc::Inputs()` /
+`levelInputs_` now), the owners with their own state and inputs, the pools of `LevelState`, `Clone` deleted and the
+rows of `allowed_state.tsv` it needed, the memory of a T2 fit at 1, 3, 12 threads (asked before and after the
+owners' slice). Open: the two defects named in the earlier entry (the sub-point-grid copy's stale N_f^½, the RWA
+chain's snapshot `parameters.out`) are unchanged.
+
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 71 (a true merge of the rehearsal branch; its tree

@@ -4,17 +4,22 @@
 #include <cstdint>
 #include <vector>
 
+#include "GammaDecayFill.h"
+
 /*!
  * The levels at one parameter vector and what follows from it: the values an evaluation writes and every
  * calculation reads.  Per level the fit energy and reduced-width amplitudes, the external-capture amplitudes and
  * N_f^1/2 with which it enters external capture as a final state, the shift functions at its energy (with the energy
  * they were computed at), and in Park's basis J = 1 - sum_c gamma_c^2 dS_c/dE with the first and second derivatives.
+ * Beside the levels: what the fill left for each gamma_decay record (GammaDecayFill) and, in the formal basis with
+ * --ignore-externals, the projector of each capture mask (CNuc::FormalCaptureMaskSlot).
  *
  * Indexed like the compound's levels: J-group j and level la, both 1-based, and the group's channels ch, 1-based.  The
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in physics/ JpiBlock.
  *
- * Owned by the compound nucleus (CNuc::State); CNuc's fills (FillCompoundFromParams, CalcShiftFunctions, TransformIn,
- * SetFitLevelParameter) write it, readers get it const.  A copy of the compound copies it.
+ * Owned by the compound nucleus (CNuc::State); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
+ * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write it, readers get it const.  A copy of the compound copies
+ * it.  Its shape (levels, channels, capture masks) is set by the compound's set-up.
  */
 class LevelState {
  public:
@@ -59,6 +64,15 @@ class LevelState {
    */
   std::uint64_t Version(int j, int la) const { return groups_[j - 1].version[la - 1]; }
 
+  // -- beside the levels -------------------------------------------------------------------------------------------
+  /// Has a fill stored what it computed for gamma_decay record r (GammaDecaySet::ToEngine)?
+  bool HasGammaDecayFill(int r) const { return r >= 0 && r < (int)gammaDecayFills_.size(); }
+  /// What the last fill left for record r: its values (slot order) and the parts of its photon amplitudes.
+  const GammaDecayFill &GammaDecayFillOf(int r) const { return gammaDecayFills_[r]; }
+  /// The projector Pi = T^-1 P T of capture-mask slot `slot` (CNuc::FormalCaptureMaskOf), row-major over the slot's
+  /// levels; empty: Pi = P (no masked level, or every masked level decoupled).
+  const std::vector<double> &CaptureProjector(int slot) const { return captureProjectors_[slot]; }
+
   // -- writing (CNuc's fills) -------------------------------------------------------------------------------------
   void SetE(int j, int la, double energy);
   void SetGamma(int j, int la, int ch, double gamma);
@@ -70,6 +84,10 @@ class LevelState {
   void SetParkNorm(int j, int la, double value);
   void SetShiftsEnergy(int j, int la, double energy) { groups_[j - 1].shiftEnergy[la - 1] = energy; }
   void SetSecondDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d2Energy[la - 1] = energy; }
+  void SetGammaDecayFill(int r, GammaDecayFill fill);
+  /// `slots` capture-mask slots, every projector empty (CNuc's set-up).
+  void ShapeCaptureProjectors(std::size_t slots) { captureProjectors_.assign(slots, std::vector<double>()); }
+  void SetCaptureProjector(int slot, std::vector<double> projector) { captureProjectors_[slot] = std::move(projector); }
 
  private:
   struct Group {
@@ -83,6 +101,8 @@ class LevelState {
   }
   void Touch(int j, int la);
   std::vector<Group> groups_;
+  std::vector<GammaDecayFill> gammaDecayFills_;          ///< per gamma_decay record, once a fill has stored it
+  std::vector<std::vector<double>> captureProjectors_;  ///< per capture-mask slot
 };
 
 #endif

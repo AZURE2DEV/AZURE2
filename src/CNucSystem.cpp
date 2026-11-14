@@ -64,7 +64,7 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CN
   const bool withParameters = (content == CNucSystemContent::Parameters);
   const bool allGroups = (content == CNucSystemContent::AllGroups);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
-  if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.IsTransformedIn())
+  if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.Inputs().TransformedIn())
     throw std::runtime_error("BuildSystemFromCNuc: the compound nucleus has not been initialized "
                              "(CNuc::Initialize): its level parameters are still the input widths");
 
@@ -134,8 +134,8 @@ CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CN
       if (!level->IsInRMatrix() && !allGroups) continue;
       groupLevels.push_back(la);
       if (!withParameters) continue;
-      energies.push_back(level->GetE());
-      for (int ch = 1; ch <= group->NumChannels(); ch++) gammas.push_back(level->GetGamma(ch));
+      energies.push_back(compound.Inputs().E(j, la));
+      for (int ch = 1; ch <= group->NumChannels(); ch++) gammas.push_back(compound.Inputs().Gamma(j, la, ch));
     }
 
     blocks.push_back(phys::JpiBlock(TwiceSpin(group->GetJ(), what + " J"), group->GetPi(), group->GetNucleus() - 1,

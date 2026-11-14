@@ -553,7 +553,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
       gridConfig.maxPoints = numPoints;
       // The term's own entrance pair: its resonances, on its energy axis, are what the mesh must resolve.
       gridConfig.entranceKey = term.GetEntranceKey();
-      gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+      gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->Inputs().TransformedIn();
       gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
       gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
       gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
@@ -622,7 +622,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   for (size_t m = 0; m < Draft().meshes_.size(); m++) {
     DataSet::NucleusMesh &mesh = Draft().meshes_[m];
     mesh.anchors = MeshAnchorsOf(compound, mesh,
-                                 (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn());
+                                 (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->Inputs().TransformedIn());
     meshAnchors_[m] = mesh.anchors;
     meshSupports_[m] = mesh.supports;
     meshCentres_[m].assign(mesh.supports.size(), 0.0);

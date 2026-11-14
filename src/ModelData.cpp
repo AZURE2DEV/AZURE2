@@ -58,7 +58,7 @@ std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTa
     const JGroup *group = compound.GetJGroup(d.group);
     if (d.level < 1 || d.level > group->NumLevels()) break;
     if ((int)std::lround(2.0 * group->GetJ()) == l.twoJ && group->GetPi() == l.parity &&
-        group->GetLevel(d.level)->GetE() == l.energy && group->GetLevel(d.level)->IDs() == l.ids)
+        group->GetLevel(d.level)->FileE() == l.energy && group->GetLevel(d.level)->IDs() == l.ids)
       return "";
     break;
   }

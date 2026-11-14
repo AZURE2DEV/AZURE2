@@ -12,13 +12,14 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure) {
+phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map,
+                                                const Config &configure) {
   return ChannelFunctionsFromCNuc(compound, map, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
                                   !!(configure.paramMask & Config::USE_RMC_FORMALISM));
 }
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, bool gsl, bool rmc) {
-  CNuc *cn = &compound;
+phys::ChannelFunctions ChannelFunctionsFromCNuc(const CNuc &compound, const CNucSystemMap &map, bool gsl, bool rmc) {
+  const CNuc *cn = &compound;
   const CNucSystemMap m = map;
   return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
     const JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
@@ -64,26 +65,30 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystem
   };
 }
 
-phys::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSystemMap &map, std::size_t b) {
-  const JGroup *group = filled.GetJGroup(map.groupOfBlock.at(b));
+phys::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const LevelInputs &inputs, const CNucSystemMap &map,
+                                          std::size_t b) {
+  const int j = map.groupOfBlock.at(b);
+  const JGroup *group = filled.GetJGroup(j);
   const std::vector<int> &levels = map.levelOfBlockLevel.at(b);
   const std::vector<int> &channels = map.channelOfBlockChannel.at(b);
   phys::ProjectLevels out;
   out.form = phys::ProjectLevels::Form::Observed;
   for (int la : levels) {
     const ALevel *level = group->GetLevel(la);
-    out.E.push_back(level->GetE());
+    out.E.push_back(inputs.E(j, la));
     for (int ch : channels) {
-      out.value.push_back(level->GetGamma(ch));
+      out.value.push_back(inputs.Gamma(j, la, ch));
       out.is_amplitude.push_back(level->GammaIsRWA(ch) ? 1 : 0);
     }
   }
   return out;
 }
 
-std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CNucSystemMap &map, std::size_t b,
+std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const LevelInputs &inputs,
+                                                        const CNucSystemMap &map, std::size_t b,
                                                         const Config &configure) {
-  const JGroup *group = compound.GetJGroup(map.groupOfBlock.at(b));
+  const int j = map.groupOfBlock.at(b);
+  const JGroup *group = compound.GetJGroup(j);
   const std::vector<int> &levels = map.levelOfBlockLevel.at(b);
   const std::vector<int> &channels = map.channelOfBlockChannel.at(b);
   std::vector<phys::ExternalWidth> out(levels.size() * channels.size());
@@ -94,11 +99,12 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CN
       if (channel->GetRadType() != 'E' && channel->GetRadType() != 'M') continue;
       // --ignore-externals: a channel whose input width is zero has no external part (external_capture.md
       // section 3); gamma^ext is not evaluated.
-      if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) && group->GetLevel(levels[la])->ZeroInputWidth(channels[k]))
+      if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) &&
+          inputs.ZeroInputWidth(j, levels[la], channels[k]))
         continue;
       out[la * channels.size() + k].present = true;
       out[la * channels.size() + k].value =
-          ExternalReducedWidthOfInputs(compound, group, group->GetLevel(levels[la]), channel, configure);
+          ExternalReducedWidthOfInputs(compound, inputs, j, levels[la], channel, configure);
     }
   return out;
 }

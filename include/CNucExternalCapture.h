@@ -11,6 +11,7 @@ class AChannel;
 class ALevel;
 class CNuc;
 class Config;
+class LevelInputs;
 class JGroup;
 
 /*!
@@ -31,14 +32,15 @@ void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherP
  * 1 / sqrt(N_f) as the engine has always formed it (no check of N_f > 0: a Park norm at or below 0 is reported where
  * it is computed).
  */
-double SqrtNFFactor(CNuc &compound, const JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma);
+double SqrtNFFactor(const CNuc &compound, const JGroup *group, const ALevel *level, double n0,
+                    const std::vector<double> &gamma);
 
 /*!
  * The final state of external capture through the photon channel `channel`: the first external-capture level whose
  * pair is the channel's, when its multipolarity flag (column 31) covers the channel's E1, M1 or E2; (group, level),
  * 1-based, or (0, 0) when the channel has no external part.
  */
-std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, const AChannel *channel);
+std::pair<int, int> ExternalCaptureFinalState(const CNuc &compound, const AChannel *channel);
 
 /// The numbers gamma^ext of one photon channel depends on (Eqs. 2 and 4), as values.
 struct ExternalCaptureInputs {
@@ -63,19 +65,20 @@ struct ExternalCaptureSlopes {
  * integrals are ECIntegral's direct ones with the run's per-thread scratch.  With `slopes`, also its derivatives,
  * from the same integrals.  Zero unless E1, E2 or M1 into a final state.
  */
-complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChannel *channel, std::pair<int, int> finalState,
+complex ExternalReducedWidthAt(const CNuc &compound, const JGroup *group, const AChannel *channel,
+                               std::pair<int, int> finalState,
                                const ExternalCaptureInputs &in, const Config &configure,
                                ExternalCaptureSlopes *slopes = nullptr);
 
-/// gamma^ext of the photon channel `channel` of level `level` in `group` (ExternalReducedWidthAt) at the input
-/// values: the level's and the final state's input energy and amplitudes, with the final state's stored N_f^(-1/2)
+/// gamma^ext of the photon channel `channel` of level la of J-group j (ExternalReducedWidthAt) at the input values
+/// `inputs`: the level's and the final state's input energy and amplitudes, with the final state's stored N_f^(-1/2)
 /// (CNuc::TransformIn).
-complex ExternalReducedWidthOfInputs(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel,
-                                     const Config &configure);
+complex ExternalReducedWidthOfInputs(const CNuc &compound, const LevelInputs &inputs, int j, int la,
+                                     const AChannel *channel, const Config &configure);
 
 /// gamma^ext of the photon channel `channel` of level la of J-group j (1-based) at the Brune (Park) values of
 /// `table` (CNuc::TransformOut): the level's and the final state's energy, amplitudes and N_f^(-1/2) of the table.
-complex ExternalReducedWidthOfTable(CNuc &compound, const ObservedLevelTable &table, int j, int la,
+complex ExternalReducedWidthOfTable(const CNuc &compound, const ObservedLevelTable &table, int j, int la,
                                     const AChannel *channel, const Config &configure);
 
 #endif

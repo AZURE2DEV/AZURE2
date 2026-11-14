@@ -100,7 +100,7 @@ double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::ve
       // A ground-state transition parametrizes a moment, not a width.  Told
       // by the level's energy as read, as CNuc::TransformOut does, so that a
       // fit moving the level does not change what its gamma means.
-      if (std::fabs(level->GetE() - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
+      if (std::fabs(compound->Inputs().E(j, la) - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
           jgroup->GetPi() == pair->GetPi(2))
         continue;
       double pene = rmc ? 1.0 : std::pow(std::fabs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);

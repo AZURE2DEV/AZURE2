@@ -12,6 +12,11 @@ std::uint64_t NewVersion() {
 
 }  // namespace
 
+void LevelState::SetGammaDecayFill(int r, GammaDecayFill fill) {
+  if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
+  gammaDecayFills_[r] = std::move(fill);
+}
+
 LevelState::LevelState(const std::vector<int> &numLevels, const std::vector<int> &numChannels) {
   const double never = std::numeric_limits<double>::quiet_NaN();
   groups_.resize(numLevels.size());

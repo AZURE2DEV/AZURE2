@@ -97,7 +97,7 @@ std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(CNuc &compound, con
     const PPair *pair = compound.GetPair(i);
     AdaptiveIntegrationGrid::GridConfig gc;
     gc.entranceKey = pair->GetPairKey();
-    gc.inputWidthsArePhysical = (cfg.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.IsTransformedIn();
+    gc.inputWidthsArePhysical = (cfg.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.Inputs().TransformedIn();
     std::vector<azure2::MeshAnchor> &anchors = out[pair->GetPairKey()];
     for (const auto &r : AdaptiveIntegrationGrid(gc).Anchors(&compound, -(pair->GetSepE() + pair->GetExE())))
       anchors.push_back({r.energy, r.totalWidth, r.particleWidth, r.id});
