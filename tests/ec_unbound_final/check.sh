@@ -51,10 +51,11 @@ CAP3="output/AZUREOut_aa=1_R=3.extrap"
 model() {
   local name="$1" ex="$2" w="$3" zero="$4"; shift 4
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
-  awk -v ex="$ex" -v w="$w" -v zero="$zero" -v segs="$(printf '%s\n' "$@")" '
+  # the segment lines go through the environment: BSD awk (macOS) refuses a newline in a -v value
+  EC_UNBOUND_SEGS="$(printf '%s\n' "$@")" awk -v ex="$ex" -v w="$w" -v zero="$zero" '
     /^<levels>/ { lev = 1; print; next }
     /^<\/levels>/ { lev = 0; print; next }
-    /^<segmentsTest>/ { print; printf "%s\n", segs; skip = 1; next }
+    /^<segmentsTest>/ { print; printf "%s\n", ENVIRON["EC_UNBOUND_SEGS"]; skip = 1; next }
     skip && /^<\/segmentsTest>/ { skip = 0; print; next }
     skip { next }
     lev && NF >= 31 && $1 == "0.5" && $2 == "1" && $3 == "2.3682" {
