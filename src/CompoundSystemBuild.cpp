@@ -1,3 +1,5 @@
+// The build of the compound system (CompoundSystem.h): the structure from the <levels> rows, the hard-sphere groups,
+// the boundary conditions, the input transformation, the pathway table and the external-capture set-up.
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -23,7 +25,6 @@
 #include "EngineChannelFunctions.h"
 #include "SystemOfCompound.h"
 #include "CompoundSystemChecks.h"
-#include "CompoundSystemPathways.h"
 #include "LevelReport.h"
 #include "LevelInputMessages.h"
 #include "CoulFunc.h"
@@ -50,62 +51,6 @@ int Twice(double j) { return (int)std::lround(2.0 * j); }
 }  // namespace
 
 /*!
- * Returns true if a specified pair key exists in the PPair vector, otherwise returns false.
- */
-
-bool CompoundSystem::IsPairKey(int key) const {
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumPairs()) {
-    if (key == this->GetPair(c + 1)->GetPairKey()) b = true;
-    c++;
-  }
-  return b;
-}
-
-std::vector<int> CompoundSystem::CapturePairKeys(int entranceKey) const {
-  std::vector<int> keys;
-  const PPair *entrance = GetPairFromKey(entranceKey);
-  if (!entrance) return keys;
-  for (int i = 1; i <= NumPairs(); i++)
-    if (GetPair(i)->GetPType() == 10 && GetPair(i)->GetNucleus() == entrance->GetNucleus())
-      keys.push_back(GetPair(i)->GetPairKey());
-  return keys;
-}
-
-std::string CompoundSystem::RatePairsProblem(int entranceKey, int exitKey) const {
-  const PPair *entrance = GetPairFromKey(entranceKey);
-  if (!entrance) return "Reaction rate entrance pair " + std::to_string(entranceKey) + " does not exist in compound nucleus.";
-  if (entrance->GetPType() != 0)
-    return "Reaction rate entrance pair " + std::to_string(entranceKey) + " is not a particle pair.";
-  if (exitKey == -1) {
-    if (CapturePairKeys(entranceKey).empty())
-      return "Total capture rate (exit key -1): the compound nucleus of entrance pair " + std::to_string(entranceKey) +
-             " has no capture (gamma) pair.";
-    return "";
-  }
-  if (!GetPairFromKey(exitKey)) return "Reaction rate exit pair " + std::to_string(exitKey) + " does not exist in compound nucleus.";
-  if (exitKey == entranceKey) return "Cannot calculate rate for elastic scattering.";
-  return "";
-}
-
-/*!
- * Returns the number of particle pairs in the PPair vector.
- */
-
-int CompoundSystem::NumPairs() const {
-  return pairs_.size();
-}
-
-/*!
- * Returns the number of \f$ J^\pi \f$ groups in the JGroup vector.
- */
-
-int CompoundSystem::NumJGroups() const {
-  return jgroups_.size();
-}
-
-/*!
  * Tests if a particle pair exists in the PPair vector. If pair exists, the position in
  * the vector is returned.  Otherwise, the function returns 0.
  */
@@ -123,46 +68,6 @@ int CompoundSystem::IsPair(PPair pair) {
     return 0;
 }
 
-/*!
- * Tests if a \f$ J^\pi \f$ group exists in the JGroup vector.  If the group exists, the position in the vector
- * is returned.  Otherwise, the function returns 0.
- */
-
-int CompoundSystem::IsJGroup(JGroup jGroup) const {
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumJGroups()) {
-    // A group belongs to one compound nucleus: the same J^pi of another
-    // nucleus in the file is a different group, with its own level matrix.
-    if (jGroup.GetJ() == this->GetJGroup(c + 1)->GetJ() &&
-        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi() &&
-        jGroup.GetNucleus() == this->GetJGroup(c + 1)->GetNucleus()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
-}
-
-/*!
- * The compound nuclei of the project, one per distinct (Z, A) the pairs form.
- */
-
-int CompoundSystem::NumNuclei() const {
-  return nuclei_.size();
-}
-
-const CompoundNucleus *CompoundSystem::GetNucleus(int nucleusNum) const {
-  return &nuclei_[nucleusNum - 1];
-}
-
-std::string CompoundSystem::NucleusLabel(int nucleusNum) const {
-  std::ostringstream out;
-  out << "Z=" << nuclei_[nucleusNum - 1].Z << " A=" << nuclei_[nucleusNum - 1].A;
-  return out.str();
-}
-
 int CompoundSystem::FindOrAddNucleus(int z, int a) {
   for (unsigned int i = 0; i < nuclei_.size(); i++)
     if (nuclei_[i].Z == z && nuclei_[i].A == a) return i + 1;
@@ -171,26 +76,6 @@ int CompoundSystem::FindOrAddNucleus(int z, int a) {
   nucleus.A = a;
   nuclei_.push_back(nucleus);
   return nuclei_.size();
-}
-
-/*!
- * Returns the position of a particle pair in the PPair vector based on the pair key.
- * Pair keys are how particle pairs are specified in
- * the setup files, but may not correspond to the position of the particle pair in the PPair vector.
- * If the pair exists, the position in the vector is returned.  Otherwise, the function returns 0.
- */
-
-int CompoundSystem::GetPairNumFromKey(int key) const {
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumPairs()) {
-    if (key == this->GetPair(c + 1)->GetPairKey()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
 }
 
 /*!
@@ -499,84 +384,6 @@ int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
 }
 
 /*!
- * Marks the final state of each photon pair with external capture (`ecPairs`: pair number -> multipole mask) and
- * stores its N_f integrals and Whittaker conversion factors; the final states are decided by
- * experiment::ExternalCaptureFinalStates on the <levels> `rows`, as the validation decides them.
- */
-
-int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
-                               const std::vector<azure2::io::LevelRow> &rows) {
-  std::vector<int> ecKeys;
-  for (const auto &ec : ecPairs) ecKeys.push_back(this->Pair(ec.first)->GetPairKey());
-  const azure2::experiment::LevelTables tables = azure2::experiment::LevelTablesOfRows(rows);
-  const std::vector<azure2::experiment::FinalStateOfPair> finals = azure2::experiment::ExternalCaptureFinalStates(tables, ecKeys);
-  std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
-  // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
-  if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
-    for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);
-  for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
-    PPair *exitPair = this->Pair(ec->first);
-    if (exitPair->GetPType() != 10) {
-      configure.outStream << "Final state is not a capture pair." << std::endl;
-      continue;
-    }
-    // The final state must be a level of the project (user guide, "Gamma-Ray Calculations"; it carries the ANC and the
-    // gamma widths): refused for a pair an active data set (or the rate) exits into, else warned about and switched off,
-    // so no level is ever made up.  tests/ec_final_state_listed.
-    double jValue = exitPair->GetJ(2);
-    int parity = exitPair->GetPi(2);
-    JGroup newJGroup(jValue, parity);
-    newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
-    int jGroupNum = this->IsJGroup(newJGroup);
-    const azure2::experiment::FinalStateOfPair &finalState = *azure2::experiment::FinalStateOf(finals, exitPair->GetPairKey());
-    if (finalState.levels.empty()) {
-      const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
-      configure.outStream << (used ? "ERROR" : "WARNING") << ": external capture into pair " << exitPair->GetPairKey()
-                          << " needs its final state, J^pi = " << jValue << (parity > 0 ? "+" : "-") << " at E_x = "
-                          << exitPair->GetHeavyExE() << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
-                          << (jGroupNum ? " within 1 keV in that J^pi group." : " and that J^pi group does not exist.")
-                          << (used ? "" : "  No segment uses this pair: external capture into it is switched off for this run.")
-                          << std::endl;
-      if (used) return -1;
-      continue;
-    }
-    // Two levels of one J^pi within 1 keV of each other (different level IDs): the final state is ambiguous.
-    if (finalState.levels.size() > 1) {
-      configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << finalState.levels.size()
-                          << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
-                          << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
-                          << " or give the pair the energy of the one it decays to." << std::endl;
-      return -1;
-    }
-    const azure2::experiment::LevelInfo &level = tables.levels[finalState.levels[0]];
-    if (level.group != jGroupNum) throw std::logic_error("ParseExternalCapture: the level tables number J^pi groups unlike Fill");
-    const int levelNum = level.level;
-    if (finalState.sharedWithPairKey != 0) {
-      FinalStateOfAnotherPair(*this, configure, finalState.sharedWithPairKey, levelNum, ec->first);
-      return -1;
-    }
-    this->Group(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
-    for (int ch = 1; ch <= this->Group(jGroupNum)->NumChannels(); ch++) {
-      PPair *theFinalPair = this->Pair(this->Group(jGroupNum)->GetChannel(ch)->GetPairNum());
-      double nfIntegralValue = 0.;
-      double ecConvert = 0.;
-      if (theFinalPair->GetPType() == 0) {
-        NFIntegral newNFIntegral(theFinalPair);
-        nfIntegralValue = newNFIntegral(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
-        WhitFunc newWhitFunc(theFinalPair);
-        double whitConv = newWhitFunc(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
-                                      theFinalPair->GetChRad(),
-                                      fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
-        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
-      }
-      this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
-      this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
-    }
-  }
-  return 0;
-}
-
-/*!
  * Initializes the compound nucleus object.  This includes calculating the boundary conditions, transforming from
  * physical to formal parameters, creating and sorting all reaction pathways, and calculating angular interference
  * contributions and coefficients.  A CompoundSystem object can only be initialized for use AFTER it is filled.
@@ -635,135 +442,6 @@ void CompoundSystem::AddJGroup(JGroup jGroup) {
   jgroups_.push_back(jGroup);
 }
 
-namespace phys = azure2::physics;
-
-/*!
- * Performs the initial parameter transformations from physical to formal parameters: the observed widths, ANCs and
- * amplitudes of the levels become Brune's (or Park's) reduced width amplitudes, the external-capture amplitude is
- * subtracted from the photon channels, and, with the Brune parametrization off, the levels become formal ones.  The
- * arithmetic is physics/ level_parameters' (docs/upgrade/level_parameters.md sections 2-4), with the engine's channel
- * functions (EngineChannelFunctions); the formal parameters take B_c at the lowest level of a group, and each formal
- * level the orientation of its Brune level (HANDOFF decision 10, cnuc_split.md section 7).  This function words the
- * warnings and keeps the bound-state normalization of external capture.
- */
-
-bool CompoundSystem::TransformIn(const Config &configure, LevelState &state, LevelInputs &inputs) const {
-  inputs.StartTransformation();
-  // Park (2021): the fit parameter is the observed reduced width amplitude, Gamma = 2 P gamma^2 (Eqs. 31-33), so the
-  // factor that turns an observed width into Brune's reduced width is not applied; its J (Eq. 28) must stay positive.
-  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
-  try {
-    const SystemOfCompound &structure = this->SystemStructure();
-    const phys::System &system = structure.system;
-    const SystemOfCompoundMap &map = structure.map;
-    const phys::ChannelFunctions cf = EngineChannelFunctions(*this, map, configure);
-
-    // 1. Observed widths, ANCs and amplitudes -> Brune or Park amplitudes (Eqs. 2.1-2.3).
-    for (std::size_t b = 0; b < system.num_blocks(); b++) {
-      const int j = map.groupOfBlock[b];
-      const JGroup *theJGroup = this->GetJGroup(j);
-      const std::vector<int> &levels = map.levelOfBlockLevel[b];
-      const std::size_t nc = theJGroup->NumChannels();
-      const phys::ProjectLevels in = ProjectLevelsOfInputs(*this, inputs, map, b);
-      const phys::BasisAmplitudes amp = phys::amplitudes_from_observed(
-          system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
-      for (std::size_t lb = 0; lb < levels.size(); lb++) {
-        const int la = levels[lb];
-        const ALevel *theLevel = theJGroup->GetLevel(la);
-        for (std::size_t k = 0; k < nc; k++) {
-          const int ch = (int)k + 1;
-          const double input = in.value[lb * nc + k];
-          // The --ignore-externals mask is a property of the input (external_capture.md section 3).
-          state.SetZeroInputWidth(j, la, ch, input == 0.0);
-          WarnInputColumn(*this, inputs, configure, j, la, ch, amp.notes[lb * nc + k], input);
-        }
-        WarnObservedOutOfReach(*this, inputs, configure, j, la, amp, in, lb, nc);
-        const double parkNorm = amp.park_norm[lb];
-        // The bound-state normalization of an external-capture final state is defined with Brune's reduced widths
-        // gamma_obs^2 / J, so with Park's amplitudes it becomes 1 / sqrt(J + sum_c A_c gamma_obs^2) (see
-        // CalcShiftFunctions).
-        if (park) state.SetParkNorm(j, la, parkNorm);
-        const std::vector<double> g(amp.gamma.begin() + lb * nc, amp.gamma.begin() + (lb + 1) * nc);
-        for (std::size_t k = 0; k < nc; k++) inputs.SetGamma(j, la, (int)k + 1, g[k]);
-        state.SetSqrtNF(j, la, SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
-      }
-    }
-
-    // 2. External capture subtracted from the photon amplitudes (Eq. 3.2) of every group, while every level still
-    // holds its Brune (Park) amplitudes: the final state enters external capture with its own pole's amplitude in
-    // every basis (cnuc_split.md section 8).  The subtraction changes photon amplitudes only, which no other
-    // level's external capture reads.
-    for (std::size_t b = 0; b < system.num_blocks(); b++) {
-      const int j = map.groupOfBlock[b];
-      const JGroup *theJGroup = this->GetJGroup(j);
-      const std::vector<int> &levels = map.levelOfBlockLevel[b];
-      const std::size_t nc = theJGroup->NumChannels();
-      std::vector<double> E, gamma;
-      for (int la : levels) {
-        E.push_back(inputs.E(j, la));
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(inputs.Gamma(j, la, (int)k + 1));
-      }
-      const std::vector<phys::ExternalWidth> ext = ExternalWidthsOfInputs(*this, state, inputs, map, b, configure);
-      std::vector<std::string> warnings;
-      std::vector<std::size_t> exceeded;
-      phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
-      for (std::size_t i : exceeded) {
-        WarnExternalExceedsTotal(*this, inputs, configure, j, levels[i / nc], (int)(i % nc) + 1);
-      }
-      for (std::size_t lb = 0; lb < levels.size(); lb++)
-        for (std::size_t k = 0; k < nc; k++) inputs.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);
-    }
-    // 3. Without the Brune parametrization, the formal parameters (Eq. 4.1), group by group.
-    for (std::size_t b = 0; b < system.num_blocks() && formal; b++) {
-      const int j = map.groupOfBlock[b];
-      const JGroup *theJGroup = this->GetJGroup(j);
-      const std::vector<int> &levels = map.levelOfBlockLevel[b];
-      const std::size_t nc = theJGroup->NumChannels();
-      std::vector<double> E, gamma;
-      for (int la : levels) {
-        E.push_back(inputs.E(j, la));
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(inputs.Gamma(j, la, (int)k + 1));
-      }
-      // A hard-sphere group (includeAllJPi) has channels but no levels: nothing to transform.
-      if (!E.empty()) {
-        std::vector<double> B(nc);
-        for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
-        phys::LevelSet f;
-        try {
-          // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy, so a level
-          // listed first (a background pole, say) keeps its own energy, widths and fix flags.  TransformOut uses the
-          // same rank mapping in the other direction.
-          f = phys::formal_from_brune(system, b, E, gamma, B, cf);
-        } catch (const std::domain_error &) {
-          // N a = E M a has a real solution only for a positive-definite M (Brune, PRC 66, 044611 (2002)); M is
-          // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.
-          std::ostringstream msg;
-          msg << "No standard R-matrix (constant boundary conditions) corresponds to the levels of J^pi = "
-              << theJGroup->GetJ() << (theJGroup->GetPi() > 0 ? "+" : "-")
-              << ": the observed widths are too large for the channel radii (the matrix 1 - sum gamma gamma' dS/dE "
-              << "of the transformation is not positive definite).  Use the Brune parametrization (the default; "
-              << "drop --no-brune) or smaller widths for these levels:";
-          for (int la : levels)
-            msg << std::endl
-                << "    " << AZURELabel::Level(theJGroup, inputs.E(j, la), j, la);
-          inputs.SetTransformError(msg.str());
-          return false;
-        }
-        E.swap(f.E);
-        gamma.swap(f.gamma);
-        for (std::size_t lb = 0; lb < levels.size(); lb++) inputs.SetE(j, levels[lb], E[lb]);
-      }
-      for (std::size_t lb = 0; lb < levels.size(); lb++)
-        for (std::size_t k = 0; k < nc; k++) inputs.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);
-    }
-  } catch (const std::exception &e) {
-    inputs.SetTransformError(std::string("Parameter transformation: ") + e.what());
-    return false;
-  }
-  return true;
-}
-
 /*!
  * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
@@ -805,178 +483,68 @@ void CompoundSystem::CalcBoundaryConditions(const Config &configure, const Level
   }
 }
 
-/*!
- * Performs the final parameter transformations from formal to physical parameters.
- */
 
-ObservedLevelTable CompoundSystem::TransformOut(const Config &configure, LevelState &state, const LevelInputs &inputs) const {
-  ObservedLevelTable table = this->EmptyObservedTable();
-  this->TransformToBrune(configure, Messages::kPrint, state, inputs, table);
-  this->ObservedWidths(configure, state, table);
-  return table;
-}
-
-/*!
- * The Brune (Park) values of the fit parameters, E and gamma, with N_f^-1/2 formed from them, in `table`: in the
- * formal basis by physics/ brune_from_formal, otherwise a copy (N_f^-1/2 the fit's).  kPrint: print the warnings
- * for levels that do not convert.
- */
-
-void CompoundSystem::TransformToBrune(const Config &configure, Messages messages, LevelState &state, const LevelInputs &inputs,
-                            ObservedLevelTable &table) const {
-  // Park (2021): the fit parameters already are the observed reduced width
-  // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
-  // Refresh J and the bound-state normalization for the current parameters.
-  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  if (park) {
-    this->CalcShiftFunctions(configure, state);
-    for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-        const ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (messages == Messages::kPrint && theLevel->IsInRMatrix() && state.ParkNorm(j, la) <= 0.0) WarnParkNormNotPositive(*this, state, inputs, configure, j, la);
+/// The external-capture final states of the compound after Fill, in J-group and level order: what physics/
+/// reaction_pathways needs of each (2J, parity, photon partition, multipoles, channels) and its J-group and level.
+static std::vector<azure2::PathwayFinalState> ECFinalStates(const CompoundSystem &c) {
+  std::vector<azure2::PathwayFinalState> out;
+  for (int j = 1; j <= c.NumJGroups(); j++) {
+    const JGroup *theFinalJGroup = c.GetJGroup(j);
+    for (int la = 1; la <= theFinalJGroup->NumLevels(); la++) {
+      const ALevel *theFinalLevel = theFinalJGroup->GetLevel(la);
+      if (!theFinalLevel->IsECLevel()) continue;
+      azure2::PathwayFinalState f;
+      f.state.two_J = Twice(theFinalJGroup->GetJ());
+      f.state.parity = theFinalJGroup->GetPi();
+      f.state.photon_partition = theFinalLevel->GetECPairNum() - 1;
+      f.state.multipoles = theFinalLevel->GetECMultMask();
+      for (int chp = 1; chp <= theFinalJGroup->NumChannels(); chp++) {
+        const AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
+        f.state.channels.push_back(azure2::physics::FinalStateChannel{
+            finalChannel->GetPairNum() - 1, c.GetPair(finalChannel->GetPairNum())->GetPType() == 0, finalChannel->GetL(),
+            Twice(finalChannel->GetS())});
       }
-  }
-  // Every level first as a copy of its fit values; the formal basis then converts the levels of the R-matrix.
-  for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      const ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-      ObservedLevel &out = table.Level(j, la);
-      out.E = state.E(j, la);
-      out.iterations = 0;
-      out.sqrtNF = state.SqrtNF(j, la);
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) out.gamma[ch - 1] = state.Gamma(j, la, ch);
-    }
-  if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-    // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
-    // the fit values.  A level not in the R-matrix keeps its values.
-    const phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
-    const SystemOfCompound &structure = this->SystemStructure();
-    const phys::ChannelFunctions cf = EngineChannelFunctions(*this, structure.map, configure);
-    for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
-      const int j = structure.map.groupOfBlock[b];
-      const JGroup *theJGroup = this->GetJGroup(j);
-      const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
-      const std::size_t nc = theJGroup->NumChannels();
-      std::vector<double> E, gamma, B(nc);
-      for (int la : levels) {
-        E.push_back(state.E(j, la));
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(state.Gamma(j, la, (int)k + 1));
-      }
-      for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
-      const phys::LevelSet converted = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
-      for (std::size_t lb = 0; lb < levels.size(); lb++) {
-        const int la = levels[lb];
-        if (messages == Messages::kPrint) WarnFormalToBrune(*this, inputs, configure, j, la, converted, lb, nc, options);
-        ObservedLevel &out = table.Level(j, la);
-        out.E = converted.E[lb];
-        out.iterations = converted.iterations[lb];
-        const std::vector<double> g(converted.gamma.begin() + lb * nc, converted.gamma.begin() + (lb + 1) * nc);
-        for (std::size_t k = 0; k < nc; k++) out.gamma[k] = g[k];
-        out.sqrtNF = SqrtNFFactor(*this, theJGroup, theJGroup->GetLevel(la), 1.0, g);
-      }
+      f.group = j;
+      f.level = la;
+      out.push_back(f);
     }
   }
+  return out;
+}
+
+
+const azure2::PathwayTable &CompoundSystem::Pathways() const {
+  if (!pathways_) throw std::logic_error("CompoundSystem::Pathways: the compound nucleus has not been initialized");
+  return *pathways_;
+}
+
+void CompoundSystem::RequestCaptureAy(int entrancePair, int exitPair) {
+  const std::pair<int, int> request(entrancePair, exitPair);
+  for (const std::pair<int, int> &r : captureAyRequests_)
+    if (r == request) return;
+  captureAyRequests_.push_back(request);
+}
+
+void CompoundSystem::RequestEntrance(int pair) {
+  for (int r : entranceRequests_)
+    if (r == pair) return;
+  entranceRequests_.push_back(pair);
 }
 
 /*!
- * The observed quantities of every level (cnuc_split.md section 8) from its Brune (Park) values in `table`
- * (TransformToBrune) and, with external capture, the external part of its photon amplitudes: physics/
- * observed_levels.  Sets the external amplitude, W and the reported value with its kind in `table`.
+ * Builds the pathway table from the System's structure, the external-capture final states and the configuration:
+ * R-matrix capture, the largest Legendre order, the entrance pairs (RequestEntrance, flagged on their PPair here)
+ * and the capture-A_y requests.  Run by Initialize after the input transformation; nothing writes the table
+ * afterwards.
  */
-
-void CompoundSystem::ObservedWidths(const Config &configure, const LevelState &state, ObservedLevelTable &table) const {
-  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  const bool external = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE);
-  const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
-  const SystemOfCompound &all = this->SystemAllGroups();
-  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, all.map, configure);
-  for (std::size_t b = 0; b < all.system.num_blocks(); b++) {
-    const int j = all.map.groupOfBlock[b];
-    const JGroup *theJGroup = this->GetJGroup(j);
-    const std::vector<int> &levels = all.map.levelOfBlockLevel[b];
-    const std::size_t nc = theJGroup->NumChannels();
-    std::vector<double> E, gamma;
-    std::vector<unsigned char> rwa;
-    std::vector<phys::ExternalWidth> ext(levels.size() * nc);
-    for (std::size_t lb = 0; lb < levels.size(); lb++) {
-      const ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
-      ObservedLevel &out = table.Level(j, levels[lb]);
-      E.push_back(out.E);
-      for (std::size_t k = 0; k < nc; k++) {
-        const int ch = (int)k + 1;
-        const AChannel *theChannel = theJGroup->GetChannel(ch);
-        gamma.push_back(out.gamma[k]);
-        rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
-        complex externalWidth(0.0, 0.0);
-        if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
-            external && !(ignoreZero && state.ZeroInputWidth(j, levels[lb], ch))) {
-          externalWidth = ExternalReducedWidthOfTable(*this, table, j, levels[lb], theChannel, configure);
-          ext[lb * nc + k].present = true;
-          ext[lb * nc + k].value = externalWidth;
-        }
-        out.external[k] = externalWidth;
-      }
-    }
-    const phys::ObservedLevels obs =
-        phys::observed_levels(all.system, b, phys::internal_channels(all.system, b), E, gamma, ext, rwa,
-                              park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
-    for (std::size_t lb = 0; lb < levels.size(); lb++)
-      for (std::size_t k = 0; k < nc; k++) {
-        ObservedLevel &out = table.Level(j, levels[lb]);
-        out.W[k] = obs.W[lb * nc + k];
-        out.value[k] = obs.value[lb * nc + k];
-        out.kind[k] = (unsigned char)obs.kind[lb * nc + k];
-      }
-  }
-}
-
-/*!
- * The observed widths of a parameter vector, as parameters.out reports them (TransformOut without its messages):
- * particle and photon widths with the level's normalization and, with external capture, the external part of the
- * photon amplitude (physics/ observed_levels).  The fit state is set back to the vector afterwards, since
- * TransformToBrune in Park's basis recomputes the shift functions and the bound-state normalizations.
- */
-
-std::optional<ObservedLevelTable> CompoundSystem::ObservedWidthsAt(const Config &configure, const vector_r &params, LevelState &state,
-                                                       const LevelInputs &inputs) const {
-  this->FillCompoundFromParams(params, state);
-  ObservedLevelTable table = this->EmptyObservedTable();
-  try {
-    this->TransformToBrune(configure, Messages::kQuiet, state, inputs, table);
-    this->ObservedWidths(configure, state, table);
-  } catch (const std::exception &) {
-    this->FillCompoundFromParams(params, state);
-    return std::nullopt;
-  }
-  this->FillCompoundFromParams(params, state);
-  return table;
-}
-
-/*!
- * Returns a pointer to the particle pair specified by a position in the PPair vector.
- */
-
-PPair *CompoundSystem::Pair(int pairNum) {
-  return &pairs_[pairNum - 1];
-}
-
-const PPair *CompoundSystem::GetPair(int pairNum) const {
-  return &pairs_[pairNum - 1];
-}
-
-const PPair *CompoundSystem::GetPairFromKey(int key) const {
-  const int num = GetPairNumFromKey(key);
-  return num > 0 ? GetPair(num) : nullptr;
-}
-
-/*!
- * Returns a pointer to the \f$ J^\pi \f$ group specified by a position in the JGroup vector.
- */
-
-JGroup *CompoundSystem::Group(int jGroupNum) {
-  return &jgroups_[jGroupNum - 1];
-}
-
-const JGroup *CompoundSystem::GetJGroup(int jGroupNum) const {
-  return &jgroups_[jGroupNum - 1];
+void CompoundSystem::BuildPathways(const Config &configure) {
+  for (int pair : entranceRequests_) pairs_[pair - 1].SetEntrance();
+  azure2::PathwayTableOptions options;
+  options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;
+  options.max_l_order = configure.maxLOrder;
+  for (int aa = 1; aa <= this->NumPairs(); aa++)
+    if (pairs_[aa - 1].IsEntrance()) options.entrances.push_back(aa);
+  options.capture_ay = captureAyRequests_;
+  pathways_ = azure2::BuildPathwayTable(this->SystemStructure(),
+                                        ECFinalStates(*this), options);
 }

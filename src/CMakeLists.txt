@@ -1,6 +1,6 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
-ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystemPathways.cpp CaptureAyRequests.cpp AngCoeff.cpp
+ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
@@ -39,7 +39,7 @@ ShiftFrames.cpp
 ShiftedFold.cpp
 THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
-SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
+SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
 LevelInputMessages.cpp ProjectSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
