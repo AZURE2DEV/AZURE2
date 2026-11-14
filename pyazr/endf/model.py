@@ -243,6 +243,13 @@ def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwr
                              f"'{out['status'][i]}'; its formal values were written")
         notes.extend(out["warnings"])
     notes.append("the particles' g-factors are not in an ENDF file: 0 written")
+    both = [p.mt for p in lrf7.pairs if p.spin_a != 0 and p.spin_b != 0]
+    if both:
+        notes.append(f"the channel spins of the pairs with MT {', '.join(map(str, both))} are coupled in AZURE2's "
+                     "order (light particle first; ENDF-102 does not state one): unpolarized cross sections and "
+                     "angular "
+                     "distributions do not depend on it, an analysing power does -- a fit to analysing powers rests "
+                     "on that order")
     project.save()
     return project, Conversion(path, s_ent, source, tuple(mass_checks), tuple(pair_rows), tuple(levels),
                                tuple(skipped), tuple(notes))

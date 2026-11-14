@@ -108,3 +108,29 @@ def refine(start, model, tolerance, max_points):
     refined["check_rounds"] = rounds
     refined["evaluations"] = len(cache)
     return refined
+
+
+def thin(x, f, tolerance):
+    """The subset of a refined grid ``x`` that one component ``f`` needs: the points kept so that linear
+    interpolation between them gives every dropped point of ``x`` to the rule of :func:`refine`,
+    |f - chord| <= tolerance x max(|f|, 1e-3 max|f|) (a recursive split at the worst point, as Douglas and
+    Peucker's).  For a table whose rows are tabulated each on its own abscissae (the cosines of a LAW=5 panel), from a
+    grid refined for all rows at once.  Returns the indices kept, increasing (the ends always)."""
+    x = np.asarray(x, float)
+    f = np.asarray(f, float)
+    scale = 1e-3 * np.max(np.abs(f)) if f.size else 0.0
+    keep = {0, len(x) - 1}
+    stack = [(0, len(x) - 1)]
+    while stack:
+        i, j = stack.pop()
+        if j - i < 2:
+            continue
+        inner = np.arange(i + 1, j)
+        chord = f[i] + (f[j] - f[i]) * (x[inner] - x[i]) / (x[j] - x[i])
+        dev = _deviation(f[inner], chord, scale)
+        k = int(np.argmax(dev))
+        if dev[k] > tolerance:
+            m = int(inner[k])
+            keep.add(m)
+            stack += [(i, m), (m, j)]
+    return np.array(sorted(keep))
