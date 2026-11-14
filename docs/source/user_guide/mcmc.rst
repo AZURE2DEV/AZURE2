@@ -101,7 +101,7 @@ Brune's and Park's bases is converted).
    recorded where AZURE2 creates it; :doc:`../reference/output_files`, "Kinds
    of parameter"), not by its name. A row of the ``<mcmc>`` ``<parameters>``
    block names its parameter by the whole name of ``param.par``
-   (``energy_1``, ``width_1_2``, ``segment_1_norm``, ...), optionally as
+   (``energy_1``, ``width_1_2``, ``s01.norm``, ...), optionally as
    ``label (name)``, or by the short forms ``E<n>``, ``G<n><c>``, ``N<k>``,
    ``S<k>``, followed by the value, prior mean, prior sigma and the use flag
    (0 or 1). A row that names no parameter of the model stops the run with a

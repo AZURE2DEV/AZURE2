@@ -4,8 +4,8 @@
   (a) the two record kinds "<thm>" and "experiment" with the shape of a schema's fields; their keys are the ones the
       engine's refusals name: the unknown experiment key lists the table's keys in order, the refused option lists
       the table's options;
-  (b) the table agrees with the web page's own table today (pyazr/ui/thm.py KEYS): the same kinds, keys, types,
-      values, defaults, units, titles, grammars, conditions and docs -- so the page can take kinds()["thm"] instead;
+  (b) the web page serves this table as it is (pyazr/ui/thm.py keys(), GET /api/thm/keys): it holds no table of
+      its own;
   (c) every key reads a value the table offers: each enum word, and a sample of each other key, is read by the
       engine's reader in an edit of examples/o18_lacognata2010 (Project.set_thm / set_thm_experiment; a refusal by a
       rule between keys, as psNodes without ps, is not the reader's), and a word outside an enum is refused;
@@ -65,16 +65,16 @@ except FormatError as e:
     check("the refused option lists every option of the table",
           all(f"{k}=" in text for k in thm["<thm>"]["fields"]) and "spectatorEnergy[<pair key>]=" in text, text)
 
-print("(b) the web page's table agrees")
+print("(b) the web page serves the table")
 try:
-    from pyazr.ui.thm import KEYS
+    from pyazr.ui import thm as ui_thm
 except Exception as err:  # the page's extra (fastapi) not installed
     print(f"  skip (b): pyazr.ui not importable ({type(err).__name__}: {err})")
-    KEYS = None
-if KEYS is not None:
-    check("kinds()['thm'] == pyazr.ui.thm.KEYS (kinds, keys in order, every field of every key)", thm == KEYS,
-          next((f"{k}.{key}: {thm[k]['fields'].get(key)} != {KEYS[k]['fields'].get(key)}" for k in KEYS
-                for key in KEYS[k]["fields"] if thm[k]["fields"].get(key) != KEYS[k]["fields"].get(key)), "kinds"))
+    ui_thm = None
+if ui_thm is not None:
+    check("pyazr.ui.thm.keys() == kinds()['thm'] (kinds, keys in order, every field of every key)",
+          ui_thm.keys() == thm)
+    check("the page has no key table of its own", not hasattr(ui_thm, "KEYS"))
 
 print("(c) every key reads what the table offers")
 SAMPLES = {"spectatorEnergy": "0.1", "beam": "18O", "target": "d", "spectator": "n", "Ebeam": "54",

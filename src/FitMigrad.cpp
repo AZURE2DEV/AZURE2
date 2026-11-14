@@ -71,9 +71,12 @@ void ReportMigrad(const ROOT::Minuit2::FunctionMinimum &m, long calls, const Fit
       why << "; " << calls << " function calls";
     }
     why << "; EDM " << m.Edm() << " (goal " << goal << ")";
-    log << std::endl << "WARNING: MIGRAD did NOT converge: " << why.str()
-        << ".  The parameters and outputs written are its last point, not a minimum; rerun"
-        << " the fit from param.sav" << (status == "call_limit" ? " or raise --max-calls" : "") << "." << std::endl;
+    // At the call limit the fit ends at the lowest objective MIGRAD evaluated (FitMigradRows); otherwise at
+    // Minuit2's end state.
+    log << std::endl << "WARNING: MIGRAD did NOT converge: " << why.str() << ".  The parameters and outputs written are "
+        << (status == "call_limit" ? "the lowest point it evaluated" : "its end point")
+        << ", not a minimum; rerun the fit from param.sav" << (status == "call_limit" ? " or raise --max-calls" : "")
+        << "." << std::endl;
   }
   result.status = status;
   result.converged = m.IsValid();

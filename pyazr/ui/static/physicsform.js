@@ -97,7 +97,7 @@ export function formSchema(row, axis, ctx = {}) {
     const kind = ARGUMENT_KINDS[a.kind];
     const field = kind ? kind.field(a, ctx) : { type: "text" };
     fields[a.name] = { title: a.unit ? `${a.name} (${a.unit})` : a.name, doc: `${a.doc} (${a.domain})`,
-      required: a.default === null || a.default === undefined, ...field };
+      required: a.required ?? (a.default === null || a.default === undefined), ...field };
   }
   const kind = `${row.name}()`;
   return { kind, schema: { records: { [kind]: { title: row.name, doc: row.summary, fields } } } };

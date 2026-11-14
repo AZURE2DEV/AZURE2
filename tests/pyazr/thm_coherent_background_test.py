@@ -203,7 +203,7 @@ with tempfile.TemporaryDirectory() as tmp:
               [p.name for p in cb])
         check("cbkg records: value, J^pi, entrance channel, exit pair",
               [p.value for p in cb] == [0.3, -0.2, 0.05, 0.1] and
-              all(p.jpi == "0.5+" and p.L == 0 and p.S == 0.5 and p.pair == 2 for p in cb),
+              all(p.jpi == "1/2+" and p.L == 0 and p.S == 0.5 and p.pair == 2 for p in cb),
               [str(p) for p in cb])
         x = np.asarray(s.parameters.x0, float)
         check("ten free parameters", x.size == 10, x.size)

@@ -193,13 +193,45 @@ and a ``pyazr`` keyword under one name.
    ``tests/pyazr/config_options_test.py``; its line in
    ``reference/command_line.rst``.
 
-An option that is not project state (a file of this machine, the menu's mode)
+An option that is not project state (a file of this machine, the program's command)
 is a field of ``RuntimeOptions`` (``api/src/pybind_api.cpp``) with its row and
 reason in ``NotProjectOptionRows()`` (``api/src/pybind_describe.cpp``).
 
-A command-line flag that is not an option of the calculation:
+A command-line flag that is not an option of the calculation nor of a command:
 ``parseOptions`` and ``printHelp`` (``src/AZURE2.cpp``) and
 ``reference/command_line.rst`` (check 1).
+
+A command of the program, or a question of a command
+----------------------------------------------------
+
+The program's run modes and every answer a run needs are one table,
+``include/RunRequest.h`` and ``src/RunRequest.cpp``; the command line
+(``ReadRunCommand``), the text menu (``RunMenu``, ``src/RunMenu.cpp``),
+``--help`` (``RunCommandsHelp``) and ``--describe --json``
+(``RunCommandsJson``) read it, and ``PrepareRun``
+(``src/RunPreparation.cpp``) turns the answers into the run's ``Config`` for
+both readers.
+
+A new question of a command:
+
+1. Its member in ``RunRequest`` (with its unit in the comment).
+2. Its row in ``MakeQuestions()`` (``src/RunRequest.cpp``), at the place the
+   menu asks it: option, kind (flag, word, number, whole number, file), the
+   commands that take it and whose menu asks it, the condition
+   (``AskedWhen``), required or its default, its range, help, the menu's
+   prompt and retry text, and the member it fills.  A rule between two
+   answers is a row of ``RunRules()``.
+3. Where the answer goes in ``Config``: ``ApplyAnswers``
+   (``src/RunPreparation.cpp``).
+4. Its row in the options table of ``reference/command_line.rst``
+   (``tests/cli_help``, ``tests/cli_commands``) and, when it changes what a
+   command writes, a case of ``tests/cli_commands/check.sh``.
+
+A new command: a ``RunCommand`` value and its row of ``RunCommands()``
+(name, menu number and line, help), its bits in ``SelectCalculation``
+(``src/RunPreparation.cpp``), the ``Commands(...)`` of the rows it takes, what
+``main`` (``src/AZURE2.cpp``) runs for it if it is not ``AZUREMain``, and its
+row in the commands table of ``reference/command_line.rst``.
 
 A fitter
 --------
@@ -360,12 +392,13 @@ A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports
 a project that may be absent, as the THM tab) and one row of ``TABS`` in
 ``pyazr/ui/static/app.js``; add its view to ``VIEWS`` of
 ``tests/pyazr/ui/smoke_test.py``. A function of the session drawn by a tab is
-a row of the session's functions naming that tab in ``tab`` (the THM
-diagnostics: ``THM_ROWS`` and their answers ``ANSWERS`` in
-``pyazr/ui/thm.py``, an operation of ``Engine``, a route row); the tab draws
-it with ``functionview.js``. A key of ``<thm>`` is one entry of ``KEYS`` in
-``pyazr/ui/thm.py`` (``tests/pyazr/ui/thm_routes_test.py`` fails for an
-experiment key the engine reads and the table lacks). No test fails when a tab module is left out
+a row of the session's functions (``Session.describe()["functions"]``,
+``pyazr/session_functions.py``) and its entry in ``PAGE`` of
+``pyazr/ui/physics.py`` or ``pyazr/ui/thm.py`` naming that tab in ``tab`` (a
+row without an entry is drawn by the Physics tab); the server walks the
+session's answer by the row's ``path`` and ``lines`` and the tab draws it with
+``functionview.js``. A key of ``<thm>`` is one row of ``src/ThmKeys.cpp``,
+served as ``pyazr.kinds()["thm"]``: nothing in the page. No test fails when a tab module is left out
 of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).

@@ -121,14 +121,6 @@ class Parameter(_Record):
         """``(Z, A)`` of an abundance parameter's compound nucleus, else ``None``."""
         return None if self.nucleus_Z is None else (self.nucleus_Z, self.nucleus_A)
 
-    @property
-    def jpi(self) -> Optional[str]:
-        """The J group's spin-parity as text, e.g. ``"2+"``, ``"0.5-"`` (``None`` for a parameter of no J group)."""
-        if self.J is None or self.parity is None:
-            return None
-        j = int(self.J) if float(self.J).is_integer() else self.J
-        return f"{j}{'+' if self.parity > 0 else '-'}"
-
     def owner_text(self):
         """What the parameter belongs to, as the parameter table shows it: its kind's owner fields, ``field=value``."""
         return " ".join(f"{f}={_text(getattr(self, f))}" for f in _owner_fields(self.kind)

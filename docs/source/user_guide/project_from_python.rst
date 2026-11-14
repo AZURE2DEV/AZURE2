@@ -3,7 +3,7 @@ Writing a project from Python
 
 A format-3 project (:doc:`../reference/format3`) is a set of named records: data
 sets, targets, beams, detectors, normalizations, energy scales, extrapolations,
-model data and potentials.  :class:`pyazr.Project` writes and edits them from
+model data and potentials.  ``pyazr.Project`` writes and edits them from
 Python, for a person or an agent, in five steps: read the schema, add the
 records, read the diagnostics, look at the description, calculate.  Nothing in
 pyazr spells a field, a quantity or a unit: the ``add_<kind>`` methods, their
@@ -38,12 +38,12 @@ What each step gives:
    whole project.  Data files are named relative to the project's directory.
 3. **Records.** One call per record; the keyword arguments are the field keys.
    A value is the text the file holds, a number, a ``(value, "unit")`` tuple, a
-   :class:`pyazr.Nuisance` (``Nuisance(1, "fit", prior=(1, "3%"))`` is
+   ``pyazr.Nuisance`` (``Nuisance(1, "fit", prior=(1, "3%"))`` is
    ``1 fit prior 1 3%``) or a list for a field given more than once.  A record
    that names another (a data set's ``target``) is checked against the project
    as it stands: add the target first.
 4. **Diagnostics.** A record or an edit the engine refuses raises
-   :class:`pyazr.FormatError`: ``.codes`` are the engine's diagnostic codes,
+   ``pyazr.FormatError``: ``.codes`` are the engine's diagnostic codes,
    ``.diagnostics`` its dicts (``code``, ``record``, ``field``, ``found``,
    ``allowed``, ``message``, a syntax-only ``fix``), the message its text.  Every
    problem is reported at once and the project is left as it was.
@@ -53,7 +53,7 @@ What each step gives:
    of that record: the observable, the reaction with the pair keys of
    ``<levels>``, the units, the data file and its rows, the effects and the fit
    parameters.  ``p.session(**options)`` saves the project and returns a
-   :class:`pyazr.Session` session on it.
+   ``pyazr.Session`` session on it.
 
 Edits after the first save change only the lines of the fields they name:
 ``p[name].set(field=value)`` (``None`` removes a field), ``p.rename(old, new)``
@@ -70,12 +70,12 @@ project=p)`` reads a CSV file whose header row holds field keys (a ``name``
 column among them; one row per data set: ``name, reaction, quantity, unit, file,
 columns, norm, ...``; a value with a comma, as a reaction, in quotes).  Every row
 is checked by the engine against the project as it would stand; all refusals
-come at once in one :class:`pyazr.FormatError`, each diagnostic with its
+come at once in one ``pyazr.FormatError``, each diagnostic with its
 ``row``.  It returns ``(kind, name, fields)`` triples for ``p.add``.
 
 **The session's data sets.** On a format-3 project ``m.datasets``,
 ``m.active_datasets`` and ``m.extrapolations`` are the engine's description of
-the built project (:class:`pyazr.DescribedDatasets`: record name, quantity,
+the built project (``pyazr.DescribedDatasets``: record name, quantity,
 reaction with pair keys, windows, data file, rows read and kept, parameters),
 and ``m.evaluate().data[i].name`` are the data sets' record names.
 
@@ -87,13 +87,13 @@ edits them through the engine as well (the engine reads each line, makes each
 new or edited line and refuses what a run would refuse; a row or line an edit
 does not name keeps its bytes, and a number replaced in a ``<levels>`` row keeps
 its column).  Every edit is validated on the project as it would stand, returns
-the engine's new warnings and raises :class:`pyazr.FormatError` on an error,
+the engine's new warnings and raises ``pyazr.FormatError`` on an error,
 the project unchanged.  A level is named by its label, ``"<J^pi> <E_x as
 written>"``, by J^pi and E_x within 1 keV, or by the engine's ``(group,
 level)``; a channel by its pair key and (l, s).
 
 ``p.levels()`` and ``p.level(name)``
-    The levels in the order of their first rows (:class:`pyazr.ProjectLevel`:
+    The levels in the order of their first rows (``pyazr.ProjectLevel``:
     label, J^pi, E_x in MeV, fixed, active, the engine's group and level, the
     channels with their width columns)::
 
@@ -101,7 +101,7 @@ level)``; a channel by its pair key and (l, s).
         print(lv.label, lv.channel(1, 1, 0.5).width)
 
 ``p.pairs()`` and ``p.reaction(entrance, exit)``
-    The pairs of ``<levels>`` (:class:`pyazr.ProjectPair`: particles, masses in
+    The pairs of ``<levels>`` (``pyazr.ProjectPair``: particles, masses in
     u, separation energy in MeV, channel radius in fm) and the reaction label
     of two pair keys, as a data set names it::
 
@@ -184,7 +184,7 @@ level)``; a channel by its pair key and (l, s).
         p.set_thm(kinematics="triple")
         p.set_thm_experiment("LC10", Ebeam=55)
 
-:meth:`pyazr.Session.save_fit` of a format-3 project writes the fitted level
+``pyazr.Session.save_fit()`` of a format-3 project writes the fitted level
 values into the rows they come from with the same engine edits, the THM
 coherent backgrounds into their experiments and the free nuisances into their
 records.

@@ -22,11 +22,13 @@
 #include "Config.h"
 #include "Fitters.h"
 #include "RunDiagnostics.h"
-#include "azure2/io/LevelRows.h"
 #include "azure2/io/ConfigSection.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
+#include "RunMenu.h"
+#include "RunPreparation.h"
+#include "RunRequest.h"
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -43,26 +45,15 @@
 #include <vector>
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <tuple>
 #include <gsl/gsl_errno.h>
-#ifdef _WIN32
-#include <io.h>
-#define AZURE2_ISATTY(fd) _isatty(fd)
-#else
-#include <unistd.h>
-#define AZURE2_ISATTY(fd) isatty(fd)
-#endif
 #ifndef NO_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
 #endif
 #include <string.h>
 #include <cstdlib>
-
-struct SegPairs {
-  int firstPair;
-  int secondPair;
-};
 
 /*!
  * This function displays the welcome banner.
@@ -153,7 +144,9 @@ void printHelp() {
             << FitterSwitchesHelp()
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
             << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
-            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
+            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl
+            << std::endl
+            << RunCommandsHelp();
 }
 
 
@@ -209,7 +202,7 @@ int buildCoulombTable(const std::string &path) {
  * std::invalid_argument naming it (include/CommandLineValues.h).
  */
 
-bool parseOptions(int argc, char *argv[], Config &configure) {
+bool parseOptions(const std::vector<std::string> &arguments, Config &configure) {
 #ifndef NO_READLINE
   bool useReadline = true;
 #else
@@ -217,8 +210,7 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
 #endif
   configure.configfile = "";
   std::vector<std::string> options;
-  for (int i = 1; i < argc; i++) {
-    std::string arg = argv[i];
+  for (const std::string &arg : arguments) {
     if (!arg.empty() && arg.substr(0, 2) == "--")
       options.push_back(arg);
     else
@@ -260,646 +252,12 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
     else if (*it == "--no-gui")
       continue;
+    else if (const RunQuestion *question = FindRunQuestion(OptionName(*it)))
+      throw std::invalid_argument(CommandOptionWithoutCommand(*question));  // the menu asks it
     else  // a mistyped flag must not run another calculation: exit 2 with the usage line (main, OptionError)
       throw std::invalid_argument("Unknown option " + *it + ".");
   }
   return useReadline;
-}
-
-/*!
- * Ends the run when the input is exhausted at a prompt that needs an answer.
- *
- * A prompt loop re-asks until it gets a valid answer; at end of file (a piped
- * script one line short, a closed stdin, Ctrl-D) getline() fails at once on
- * every pass, so such a loop used to print its prompt forever -- one run wrote
- * 10 GB of "Number of Threads" prompts.  Prompts whose blank answer is a
- * documented default (the parameter and integral file names, the band and
- * overwrite questions, the MCMC spreads) take that default at end of file
- * instead, as before.
- */
-
-[[noreturn]] static void inputEnded(const Config &configure, const char *prompt) {
-  configure.outStream << std::endl
-                      << "ERROR: the input ended (end of file) at the prompt \"" << prompt
-                      << "\", which needs an answer.  AZURE2 stops." << std::endl;
-  configure.outStream.flush();
-  ExitRun(configure, 1);
-}
-
-/*!
- * One answer from std::cin for the prompt \p prompt (named in the error);
- * ends the run at end of file (inputEnded).
- */
-
-static std::string readAnswer(const Config &configure, const char *prompt) {
-  std::string answer;
-  if (!getline(std::cin, answer)) inputEnded(configure, prompt);
-  return answer;
-}
-
-/*!
- * One answer for a prompt whose blank answer means its default: at end of
- * file the answer is blank, i.e. the default.
- */
-
-static std::string readAnswerOrDefault() {
-  std::string answer;
-  if (!getline(std::cin, answer)) answer.clear();
-  return answer;
-}
-
-/*!
- * This function handles the command shell in AZURE2.  The function will not terminate until the user
- * enters a valid integer option, or the input ends (an error).  Upon successful entry, the integer
- * option is returned.
- */
-
-int commandShell(const Config &configure) {
-  int command = 0;
-
-  configure.outStream << "Please select from the following options: " << std::endl
-                      << "\t1. Calculate Segments From Data" << std::endl
-                      << "\t2. Fit Segments From Data" << std::endl
-                      << "\t3. Calculate Segments Without Data" << std::endl
-                      << "\t4. Perform MINOS Error Analysis" << std::endl
-                      << "\t5. Calculate Reaction Rate" << std::endl
-#ifdef USE_MCMC
-                      << "\t6. Perform MCMC Bayesian Sampling" << std::endl
-                      << "\t7. Exit" << std::endl;
-#else
-                      << "\t6. Exit" << std::endl;
-#endif
-
-#ifdef USE_MCMC
-  while (command < 1 || command > 7) {
-#else
-  while (command < 1 || command > 6) {
-#endif
-    configure.outStream << "azure2: ";
-    std::string inString = readAnswer(configure, "azure2: (menu option)");
-    if (inString.empty()) continue;
-    std::istringstream in;
-    in.str(inString);
-    if (!(in >> command))
-      configure.outStream << "Please enter an integer." << std::endl;
-#ifdef USE_MCMC
-    else if (command < 1 || command > 7)
-#else
-    else if (command < 1 || command > 6)
-#endif
-      configure.outStream << "Invalid option.  Please try again."
-                          << std::endl;
-  }
-  return command;
-}
-
-/*!
- * This function takes the returned option from the commandShell function and
- * sets the appropriate flags in the Config structure.
- */
-
-// Read a yes/no answer from stdin; empty/unrecognized input counts as "no".
-/*!
- * A y/n question of the text menu.  Answers (any case): y, yes, 1, t, true; n, no, 0, f, false; a blank line is "no"
- * (1 and t were "yes" before, and job scripts answer 1).  Anything else is refused.  From a pipe or a file the run stops with exit status 1: asking again would hand the NEXT scripted line to
- * this question, and that is how the trap worked -- a script that left out the band question of modes 2 and 3
- * ('3\nparam.sav\n\n7') gave the parameter-file name to it, which was read as "no", and the blank line after it to
- * the parameter-file prompt, so the run used the <levels> of the .azr without a word.  At a terminal the question is
- * asked again.  Before 2026-11-01 any answer not starting with y, 1 or t was "no".
- */
-static bool askYesNo(Config &configure, const std::string &prompt) {
-  const bool terminal = AZURE2_ISATTY(0) != 0;
-  while (true) {
-    configure.outStream << prompt << " (y/n): ";
-    std::string in;
-    if (!getline(std::cin, in)) return false;  // end of input: the next prompt stops the run
-    const size_t a = in.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return false;
-    const size_t b = in.find_last_not_of(" \t\r\n");
-    const std::string answer = in.substr(a, b - a + 1);
-    std::string lower = answer;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    if (lower == "y" || lower == "yes" || lower == "1" || lower == "t" || lower == "true") return true;
-    if (lower == "n" || lower == "no" || lower == "0" || lower == "f" || lower == "false") return false;
-    configure.outStream << std::endl
-                        << "ERROR: \"" << prompt << "\" takes y or n, not \"" << answer << "\"." << std::endl;
-    if (terminal) continue;
-    configure.outStream << "Modes 2 and 3 ask about the uncertainty band BEFORE the parameter file, so a script answers"
-                        << std::endl
-                        << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-readline project.azr"
-                        << std::endl
-                        << "(--covariance-band answers it yes without a prompt).  Nothing was calculated." << std::endl;
-    ExitRun(configure, EXIT_FAILURE);
-  }
-}
-
-// Offer the cross-section uncertainty band (and, for fit modes, the reduced-chi^2
-// covariance scaling).  If --covariance-band was passed the choice is already
-// made non-interactively, so no prompt appears -- this keeps scripted/headless
-// runs deterministic while interactive runs are asked.
-static void promptBandOptions(Config &configure, bool fitMode) {
-  if (configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) return;  // set via flag
-  if (!askYesNo(configure, "Calculate cross-section uncertainty band?")) return;
-  configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
-  if (fitMode && !(configure.paramMask & Config::SCALE_COVARIANCE_BY_CHI2)) {
-    if (askYesNo(configure, "Scale covariance to reduced chi-squared = 1?"))
-      configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
-  }
-}
-
-void processCommand(int command, Config &configure) {
-  if (command == 2) {
-    configure.paramMask |= Config::PERFORM_FIT;
-    promptBandOptions(configure, true);
-  } else if (command == 3) {
-    configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
-    promptBandOptions(configure, false);  // extrapolation reuses a saved covariance
-  } else if (command == 4) {
-    bool goodAnswer = false;
-    while (!goodAnswer) {
-      configure.outStream << std::setw(30) << "Allowed Chi-Squared Variance: ";
-      std::string inString = readAnswer(configure, "Allowed Chi-Squared Variance");
-      std::istringstream stm;
-      stm.str(inString);
-      if (!(stm >> configure.chiVariance) || configure.chiVariance < 0.)
-        configure.outStream << "Please enter a positive number." << std::endl;
-      else
-        goodAnswer = true;
-    }
-    configure.paramMask |= Config::PERFORM_FIT;
-    configure.paramMask |= Config::PERFORM_ERROR_ANALYSIS;
-    promptBandOptions(configure, true);
-  } else if (command == 5) {
-    configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
-    configure.paramMask |= Config::CALCULATE_REACTION_RATE;
-#ifdef USE_MCMC
-  } else if (command == 6) {
-    configure.paramMask |= Config::PERFORM_MCMC;
-  } else if (command == 7) {
-    exitMessage(configure);
-    ExitRun(configure, 0);
-  }
-#else
-  } else if (command == 6) {
-    exitMessage(configure);
-    ExitRun(configure, 0);
-  }
-#endif
-}
-
-/*!
- * Reads one line of user input, either through readline or from std::cin.
- *
- * Returns false once the input stream is exhausted (end of a piped script, or
- * Ctrl-D at the terminal) and leaves \p inFile empty.  Callers must honour that:
- * readline() hands back a null pointer at EOF, and assigning it to a std::string
- * used to dereference null, so any scripted run that fell one line short of the
- * prompts crashed instead of stopping.  The plain std::cin branch had the mirror
- * problem -- getline() simply kept failing, so a prompt that insists on a
- * non-empty answer spun forever.
- */
-
-static bool getInputLine(bool useReadline, const char *prompt, std::string &inFile) {
-  inFile.clear();
-#ifndef NO_READLINE
-  if (useReadline) {
-    char *line = readline(prompt);
-    if (!line) return false;
-    inFile = line;
-    size_t endpos = inFile.find_last_not_of(" \t");
-    if (std::string::npos != endpos)
-      inFile = inFile.substr(0, endpos + 1);
-    else
-      inFile.clear();
-    if (*line) add_history(line);
-    free(line);
-    return true;
-  }
-#else
-  (void)prompt;
-  (void)useReadline;
-#endif
-  if (!getline(std::cin, inFile)) {
-    inFile.clear();
-    return false;
-  }
-  return true;
-}
-
-/*!
- * This function prompts for a parameter file and sets the corresponding configure
- * flags and variables based on the user response.
- */
-
-void getParameterFile(bool useReadline, Config &configure) {
-  bool validInfile = false;
-  configure.outStream << std::endl;
-  if (!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
-  while (!validInfile) {
-    std::string inFile;
-    // At EOF fall back to the "leave blank" behaviour: build a new parameter file.
-    if (!getInputLine(useReadline, "External Parameter File (leave blank for new file): ", inFile)) return;
-    if (!inFile.empty()) {
-      std::ifstream in;
-      in.open(configure.OpenPath(inFile).c_str());  // a name typed at a prompt is relative to the project, as its paths
-      if (in) {
-        validInfile = true;
-        configure.paramMask |= Config::USE_PREVIOUS_PARAMETERS;
-        configure.paramfile = inFile;
-        in.close();
-      }
-      in.clear();
-    } else
-      validInfile = true;
-    if (!validInfile) {
-      configure.outStream << "Cannot Read From " << inFile << ". Please reenter file." << std::endl;
-      if (!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
-    }
-  }
-}
-
-/*!
- * The section <name> of the project as a stream over its text (Config::SectionStream: io::Document, whole-line
- * tags; docs/upgrade/project.md), or a stream in the fail state when there is no such section.
- */
-static std::istringstream SectionText(const Config &configure, const std::string &name) {
-  std::istringstream in;
-  if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
-    std::ostringstream text;
-    text << section->rdbuf();
-    in.str(text.str());
-  } else {
-    in.setstate(std::ios::failbit);
-  }
-  return in;
-}
-
-/*!
- * This function reads the segment file, and stores the active entrance and exit pair keys
- * for cross reference with the External capture file.  Only if an active external capture segment
- * is required is the user prompted for an external integrals file.
- */
-
-bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
-  // the active data sets (or extrapolations, for a run without data) from their specs (ProjectSetup.h)
-  for (const std::pair<int, int> &p : ProjectReactionPairs(configure, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0))
-    segPairs.push_back({p.first, p.second});
-  return true;
-}
-
-/*!
- * If reaction rate is desired, the user may specify a file containing temperatures for the calculation.
- * This function prompts for that file name, checks for access, and stores path.
- */
-
-void getTemperatureFile(bool useReadline, Config &configure) {
-  bool validInfile = false;
-  if (!useReadline) configure.outStream << std::setw(38) << "Temperature File Name: ";
-  while (!validInfile) {
-    std::string inFile;
-    // No file name can be obtained at EOF, and the rate needs one.
-    if (!getInputLine(useReadline, "               Temperature File Name: ", inFile))
-      inputEnded(configure, "Temperature File Name");
-    if (!inFile.empty()) {
-      std::ifstream in;
-      in.open(configure.OpenPath(inFile).c_str());  // a name typed at a prompt is relative to the project, as its paths
-      if (in) {
-        validInfile = true;
-        configure.rateParams.temperatureFile = inFile;
-        in.close();
-      }
-      in.clear();
-    }
-    if (!validInfile) {
-      if (inFile.empty())
-        configure.outStream << "Please enter a file name." << std::endl;
-      else
-        configure.outStream << "Cannot Read From " << inFile << ". Please reenter file." << std::endl;
-      if (!useReadline) configure.outStream << "               Temperature File Name: ";
-    }
-  }
-}
-
-/*!
- * This function prompts the user for MCMC sampling parameters.
- */
-
-#ifdef USE_MCMC
-// Upper bound on the initial spread of a level-energy parameter, in keV.
-// Scattering level energies by a percentage of their value puts walkers on
-// unrelated resonance structures and the ensemble never contracts.
-static const double kMaxEnergySpreadKeV = 1.0;
-
-struct MCMCParams {
-  int nwalkers;
-  int nsteps;
-  double chainSpread;
-  double energySpreadKeV;
-  int nthreads;
-  bool useRWA;
-  bool overwriteSamples;
-};
-
-void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
-  mcmcParams.nwalkers = 0;
-  mcmcParams.nsteps = 0;
-  mcmcParams.chainSpread = -1.0;      // Will be prompted
-  mcmcParams.energySpreadKeV = -1.0;  // Will be prompted
-  mcmcParams.nthreads = 1;
-  mcmcParams.useRWA = false;
-
-  // Get number of walkers
-  while (mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000) {
-    configure.outStream << std::setw(38) << "Number of Walkers (2-1000): ";
-    std::string inString = readAnswer(configure, "Number of Walkers");
-    std::istringstream stm;
-    stm.str(inString);
-    if (!(stm >> mcmcParams.nwalkers) || mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000)
-      configure.outStream << "Please enter an integer between 2 and 1000." << std::endl;
-  }
-
-  // Get number of steps
-  while (mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000) {
-    configure.outStream << std::setw(38) << "Number of Steps (100-10000000): ";
-    std::string inString = readAnswer(configure, "Number of Steps");
-    std::istringstream stm;
-    stm.str(inString);
-    if (!(stm >> mcmcParams.nsteps) || mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000)
-      configure.outStream << "Please enter an integer between 100 and 10000000." << std::endl;
-  }
-
-  // Get initial parameter spread percentage
-  while (mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0) {
-    configure.outStream << std::setw(38) << "Initial Parameter Spread % (0.001-50) [default=5]: ";
-    std::string inString = readAnswerOrDefault();
-
-    // Allow empty input for default
-    if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
-      mcmcParams.chainSpread = 5.0;
-      break;
-    }
-
-    std::istringstream stm;
-    stm.str(inString);
-    if (!(stm >> mcmcParams.chainSpread) || mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0)
-      configure.outStream << "Please enter a number between 0.001 and 50, or press Enter for default (5%)." << std::endl;
-  }
-
-  // Get the initial spread of the level energies, which is absolute rather than
-  // a percentage of the level energy.
-  while (mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
-    configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
-    std::string inString = readAnswerOrDefault();
-
-    // Allow empty input for default
-    if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
-      mcmcParams.energySpreadKeV = kMaxEnergySpreadKeV;
-      break;
-    }
-
-    std::istringstream stm;
-    stm.str(inString);
-    if (!(stm >> mcmcParams.energySpreadKeV) || mcmcParams.energySpreadKeV <= 0.0 ||
-        mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV)
-      configure.outStream << "Please enter a number between 0.001 and " << kMaxEnergySpreadKeV
-                          << ", or press Enter for default (1 keV)." << std::endl;
-  }
-
-  // Get number of threads
-  mcmcParams.nthreads = 0;
-  while (mcmcParams.nthreads < 1) {
-    configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
-    std::string inString = readAnswer(configure, "Number of Threads");
-    std::istringstream stm;
-    stm.str(inString);
-    if (!(stm >> mcmcParams.nthreads) || mcmcParams.nthreads < 1)
-      configure.outStream << "Please enter a positive integer." << std::endl;
-  }
-
-  // Ask if using RWA parameters
-  bool goodAnswer = false;
-  std::string rwaAnswer = "";
-  while (!goodAnswer) {
-    configure.outStream << std::setw(38) << "Use Reduced Width Amplitudes (yes/no): ";
-    rwaAnswer = readAnswer(configure, "Use Reduced Width Amplitudes");
-    std::string trimmedAnswer;
-    for (int i = 0; i < rwaAnswer.length(); i++)
-      if (rwaAnswer[i] != ' ' && rwaAnswer[i] != '\t' && rwaAnswer[i] != '\n')
-        trimmedAnswer += rwaAnswer[i];
-    if (trimmedAnswer != "yes" && trimmedAnswer != "no")
-      configure.outStream << "Please type 'yes' or 'no'." << std::endl;
-    else {
-      goodAnswer = true;
-      rwaAnswer = trimmedAnswer;
-    }
-  }
-  mcmcParams.useRWA = (rwaAnswer == "yes");
-
-  // Ask if overwriting existing samples.mcmc file
-  goodAnswer = false;
-  std::string overwriteAnswer = "";
-  while (!goodAnswer) {
-    configure.outStream << std::setw(38) << "Overwrite existing samples.mcmc? (yes/no) [default=no]: ";
-    overwriteAnswer = readAnswerOrDefault();
-
-    // Allow empty input for default (no)
-    if (overwriteAnswer.empty() || overwriteAnswer.find_first_not_of(" \t\n") == std::string::npos) {
-      mcmcParams.overwriteSamples = false;
-      break;
-    }
-
-    std::string trimmedAnswer;
-    for (int i = 0; i < overwriteAnswer.length(); i++)
-      if (overwriteAnswer[i] != ' ' && overwriteAnswer[i] != '\t' && overwriteAnswer[i] != '\n')
-        trimmedAnswer += overwriteAnswer[i];
-    if (trimmedAnswer != "yes" && trimmedAnswer != "no")
-      configure.outStream << "Please type 'yes' or 'no', or press Enter for default (no)." << std::endl;
-    else {
-      goodAnswer = true;
-      mcmcParams.overwriteSamples = (trimmedAnswer == "yes");
-    }
-  }
-}
-#endif
-
-/*!
- * This function  prompts the user for the required parameters if reaction rate is
- * to be calculated.
- */
-
-void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useReadline) {
-  configure.rateParams.entrancePair = 0;
-  configure.rateParams.exitPair = 0;
-  configure.rateParams.minTemp = -1.;
-  configure.rateParams.maxTemp = -1.;
-  configure.rateParams.tempStep = -1.;
-  while (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
-    while (!configure.rateParams.entrancePair) {
-      configure.outStream << std::setw(38) << "Reaction Rate Entrance Pair: ";
-      std::string inString = readAnswer(configure, "Reaction Rate Entrance Pair");
-      std::istringstream stm;
-      stm.str(inString);
-      if (!(stm >> configure.rateParams.entrancePair) || configure.rateParams.entrancePair == 0)
-        configure.outStream << "Please enter an integer greater than zero." << std::endl;
-    }
-    while (!configure.rateParams.exitPair) {
-      configure.outStream << std::setw(38) << "Reaction Rate Exit Pair: ";
-      std::string inString = readAnswer(configure, "Reaction Rate Exit Pair");
-      std::istringstream stm;
-      stm.str(inString);
-      // -1: the total radiative capture, summed over every capture pair of the entrance nucleus (the exit
-      // key a total-capture segment line carries).
-      if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0 ||
-          configure.rateParams.exitPair < -1) {
-        configure.outStream << "Please enter an integer greater than zero, or -1 for the total radiative capture."
-                            << std::endl;
-        configure.rateParams.exitPair = 0;
-      }
-    }
-    if (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
-      configure.outStream << "Cannot calculate rate for elastic scattering." << std::endl;
-      configure.rateParams.entrancePair = 0;
-      configure.rateParams.exitPair = 0;
-    }
-  }
-  SegPairs tempSet = {configure.rateParams.entrancePair, configure.rateParams.exitPair};
-  segPairs.push_back(tempSet);
-  bool goodAnswer = false;
-  std::string fileAnswer = "";
-  while (!goodAnswer) {
-    configure.outStream << std::setw(38) << "Use temperatures from file (yes/no): ";
-    fileAnswer = readAnswer(configure, "Use temperatures from file");
-    std::string trimmedAnswer;
-    for (int i = 0; i < fileAnswer.length(); i++)
-      if (fileAnswer[i] != ' ' && fileAnswer[i] != '\t' && fileAnswer[i] != '\n')
-        trimmedAnswer += fileAnswer[i];
-    if (trimmedAnswer != "yes" && trimmedAnswer != "no")
-      configure.outStream << "Please type 'yes' or 'no'." << std::endl;
-    else {
-      goodAnswer = true;
-      fileAnswer = trimmedAnswer;
-    }
-  }
-  configure.rateParams.useFile = (fileAnswer == "yes") ? (true) : (false);
-  if (configure.rateParams.useFile)
-    getTemperatureFile(useReadline, configure);
-  else {
-    while (configure.rateParams.minTemp < 0.) {
-      configure.outStream << std::setw(38) << "Reaction Rate Min Temp [GK]: ";
-      std::string inString = readAnswer(configure, "Reaction Rate Min Temp");
-      std::istringstream stm;
-      stm.str(inString);
-      if (!(stm >> configure.rateParams.minTemp) || configure.rateParams.minTemp < 0.)
-        configure.outStream << "Please enter a positive number." << std::endl;
-    }
-    while (configure.rateParams.maxTemp < 0.) {
-      configure.outStream << std::setw(38) << "Reaction Rate Max Temp [GK]: ";
-      std::string inString = readAnswer(configure, "Reaction Rate Max Temp");
-      std::istringstream stm;
-      stm.str(inString);
-      if (!(stm >> configure.rateParams.maxTemp) || configure.rateParams.maxTemp < 0.)
-        configure.outStream << "Please enter a positive number." << std::endl;
-    }
-    while (configure.rateParams.tempStep < 0.) {
-      configure.outStream << std::setw(38) << "Reaction Rate Temp Step [GK]: ";
-      std::string inString = readAnswer(configure, "Reaction Rate Temp Step");
-      std::istringstream stm;
-      stm.str(inString);
-      if (!(stm >> configure.rateParams.tempStep) || configure.rateParams.tempStep < 0.)
-        configure.outStream << "Please enter a positive number." << std::endl;
-    }
-  }
-}
-
-/*!
- * This function checks the external capture file against a vector of segment key
- * pairs. Only if the calculation includes external capture segments is the user
- * prompted for an integrals file.  The appropriate configure flag is set here.
- */
-
-bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPairs) {
-  std::istringstream in = SectionText(configure, "levels");
-  if (!in) {
-    configure.outStream << "Cannot read nuclear information. Check configuration file." << std::endl;
-    return false;
-  }
-  std::string line = "";
-  while (line != "<levels>" && !in.eof()) getline(in, line);
-  if (line != "<levels>") {
-    configure.outStream << "Cannot read nuclear information. Check configuration file." << std::endl;
-    return false;
-  }
-  line = "";
-  while (line != "</levels>" && !in.eof() &&
-         !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) {
-    getline(in, line);
-    bool empty = true;
-    for (unsigned int i = 0; i < line.size(); ++i)
-      if (line[i] != ' ' && line[i] != '\t') {
-        empty = false;
-        break;
-      }
-    if (empty == true) continue;
-    if (line != "</levels>" && !in.eof()) {
-      std::istringstream stm;
-      stm.str(line);
-      azure2::io::LevelRow tempNucLine(stm);
-      if ((stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit))) {
-        configure.outStream << "Problem reading nuclear information. Check configuration file.  The line:\n  "
-                            << line << std::endl;
-        return false;
-      }
-      if (tempNucLine.ecMultMask() != 0) {
-        for (int i = 0; i < segPairs.size(); i++) {
-          if (tempNucLine.ir() == segPairs[i].secondPair || segPairs[i].secondPair == -1) {
-            configure.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-            break;
-          }
-        }
-      }
-    }
-  }
-  in.clear();
-  if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && (configure.paramMask & Config::USE_RMC_FORMALISM)) {
-    configure.outStream << "WARNING: External capture is not compatible with Reich-Moore.  Ignoring external capture." << std::endl;
-    configure.paramMask &= ~Config::USE_EXTERNAL_CAPTURE;
-  }
-  return true;
-}
-
-/*!
- * This function promps the user for an external capture integrals file, checks for it's validity,
- * and stores the path.
- */
-
-void getExternalCaptureFile(bool useReadline, Config &configure) {
-  if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) &&
-      !(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
-    configure.outStream << std::endl;
-    if (!useReadline) configure.outStream << "External Capture Amplitude File (leave blank for new file): ";
-    bool validInfile = false;
-    while (!validInfile) {
-      std::string inFile;
-      // At EOF fall back to the "leave blank" behaviour: build a new integrals file.
-      if (!getInputLine(useReadline, "External Capture Amplitude File (leave blank for new file): ", inFile)) return;
-      if (!inFile.empty()) {
-        std::ifstream in;
-        in.open(configure.OpenPath(inFile).c_str());
-        if (in) {
-          validInfile = true;
-          configure.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
-          configure.integralsfile = inFile;
-          in.close();
-        }
-        in.clear();
-      } else
-        validInfile = true;
-      if (!validInfile) {
-        configure.outStream << "Cannot Read From " << inFile << ". Please reenter file." << std::endl;
-        if (!useReadline) configure.outStream << "External Capture Amplitude File (leave blank for new file): ";
-      }
-    }
-  }
 }
 
 /*!
@@ -1024,7 +382,7 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
   return -1;
 }
 
-int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
+int runMCMC(Config &configure, const RunRequest &request) {
   try {
     CNuc *compound = new CNuc();
     WorkingCopy *data = new WorkingCopy();
@@ -1121,7 +479,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Extract initial parameter values (only non-fixed parameters)
     std::vector<double> initialParams;
-    if (mcmcParams.useRWA) {
+    if (request.reducedWidthAmplitudes) {
       // Use RWA parameters directly
       for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
         if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
@@ -1323,7 +681,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     configure.outStream << std::endl;
 
     // Handle overwriting existing samples.mcmc file if requested
-    if (mcmcParams.overwriteSamples) {
+    if (request.overwriteSamples) {
       std::string samplesFile = configure.outputdir + "samples.mcmc";
       std::ifstream checkFile(configure.OpenPath(samplesFile).c_str());
       if (checkFile.good()) {
@@ -1338,12 +696,12 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     configure.outStream << std::endl;
     configure.outStream << "MCMC Configuration:" << std::endl;
-    configure.outStream << "  Number of walkers: " << mcmcParams.nwalkers << std::endl;
-    configure.outStream << "  Number of steps: " << mcmcParams.nsteps << std::endl;
-    configure.outStream << "  Initial parameter spread: " << mcmcParams.chainSpread << "%" << std::endl;
-    configure.outStream << "  Level energy spread: " << mcmcParams.energySpreadKeV << " keV" << std::endl;
-    configure.outStream << "  Number of threads: " << mcmcParams.nthreads << std::endl;
-    configure.outStream << "  Parameter mode: " << (mcmcParams.useRWA ? "RWA" : "Physical") << std::endl;
+    configure.outStream << "  Number of walkers: " << request.walkers << std::endl;
+    configure.outStream << "  Number of steps: " << request.steps << std::endl;
+    configure.outStream << "  Initial parameter spread: " << request.parameterSpread << "%" << std::endl;
+    configure.outStream << "  Level energy spread: " << request.energySpread << " keV" << std::endl;
+    configure.outStream << "  Number of threads: " << request.samplerThreads << std::endl;
+    configure.outStream << "  Parameter mode: " << (request.reducedWidthAmplitudes ? "RWA" : "Physical") << std::endl;
     configure.outStream << "  Number of free parameters: " << initialParams.size() << std::endl;
     configure.outStream << std::endl;
 
@@ -1371,9 +729,9 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
-    const bool sampled = mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
-                                                  samples, mcmcParams.chainSpread, mcmcParams.nthreads,
-                                                  mcmcParams.useRWA, mcmcParams.energySpreadKeV);
+    const bool sampled = mcmcCalc.RunMCMCSampling(request.walkers, request.steps, initialParams,
+                                                  samples, request.parameterSpread, request.samplerThreads,
+                                                  request.reducedWidthAmplitudes, request.energySpread);
 
     if (!sampled) {
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache(configure);
@@ -1453,9 +811,19 @@ int main(int argc, char *argv[]) {
   InitializeECAmplitudeCache(configure);
   // An unknown option, a value-taking flag without its value or with one that does not parse, or a bad
   // AZURE_REFINE_QUADRATURE: exit 2
+  // A command (AZURE2 <command> [options] FILE) and its options: a refused command line exits 2 in three parts
+  // (src/RunRequest.cpp); the rest of the arguments are the program's options and the project file.
+  RunRequest request;
+  bool byCommand = false;
+  std::vector<std::string> programArguments;
+  try {
+    byCommand = ReadRunCommand(arguments, request, programArguments);
+  } catch (const std::invalid_argument &e) {
+    return CommandError(e.what());
+  }
   bool useReadline = false;
   try {
-    useReadline = parseOptions(argc, argv, configure);
+    useReadline = parseOptions(programArguments, configure);
   } catch (const std::invalid_argument &e) {
     return azure2::OptionError(e.what());
   }
@@ -1489,6 +857,10 @@ int main(int argc, char *argv[]) {
   else if (configure.CheckForInputFiles() == -1)
     return -1;
 #endif
+  // A file a command's option names, relative to the project's directory: refused before anything is calculated
+  if (byCommand)
+    if (const std::string refusal = RequestFileRefusal(configure, request); !refusal.empty())
+      return CommandError(refusal);
   // Joint THM+direct fits couple an arbitrary HOES scale (~1e-4) to widths in
   // eV; MIGRAD's own numerical differences stall far from the minimum on that
   // scaling (7Li(p,a) Tumino+Rolfs benchmark: default MIGRAD stops at
@@ -1521,51 +893,30 @@ int main(int argc, char *argv[]) {
     welcomeMessage(configure);
     configure.outStream << "Threads: " << threads.count << " (" << threads.source << ")" << std::endl;
 
-    // Read and process command, setting appropriate configuration flags
-    processCommand(commandShell(configure), configure);
-
-    // Open history file for readline
+    // The command and its answers: from the command line, else asked in the menu as the walk of the questions reaches
+    // them (PrepareRun); what follows does not know which.
+    if (!byCommand) {
+      RunMenu menu(configure, useReadline);
+      const std::optional<RunCommand> chosen = menu.AskCommand();
+      if (!chosen) {
+        exitMessage(configure);
+        ExitRun(configure, 0);
+      }
+      request.command = *chosen;
 #ifndef NO_READLINE
-    if (useReadline) read_history("./.azure_history");
+      if (useReadline) read_history("./.azure_history");  // the history of the file names typed at the prompts
 #endif
-
-    // Read the external parameter file to be used, if any
-    getParameterFile(useReadline, configure);
-
-    // Parse the segment files for entrance,exit pairs
-    std::vector<SegPairs> segPairs;
-#ifdef USE_MCMC
-    // For MCMC, we still need to check for external capture but use segments from config file
-    if (configure.paramMask & Config::PERFORM_MCMC) {
-      if (!readSegmentFile(configure, segPairs)) ExitRun(configure, 1);
-      if (!checkExternalCapture(configure, segPairs)) ExitRun(configure, 1);
-      getExternalCaptureFile(useReadline, configure);
+      PrepareRun(configure, request, &menu);
     } else {
-#endif
-      if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
-        if (!readSegmentFile(configure, segPairs)) ExitRun(configure, 1);
-      } else
-        getRateParams(configure, segPairs, useReadline);
-
-      // Check if the entrance,exit pairs are in the external capture file
-      //  If so, external capture will be needed
-      if (!checkExternalCapture(configure, segPairs)) ExitRun(configure, 1);
-
-      // Read the external capture file name to be used, if any
-      getExternalCaptureFile(useReadline, configure);
-#ifdef USE_MCMC
+      PrepareRun(configure, request, nullptr);
     }
-#endif
 
 #ifdef USE_MCMC
     // Handle MCMC separately
     if (configure.paramMask & Config::PERFORM_MCMC) {
-      MCMCParams mcmcParams;
-      getMCMCParams(configure, mcmcParams);
-
       configure.outStream << std::endl;
       startMessage(configure);
-      returnValue = runMCMC(configure, mcmcParams);
+      returnValue = runMCMC(configure, request);
 
       if (returnValue != 0) {
         configure.outStream << "MCMC sampling failed." << std::endl;
@@ -1595,9 +946,9 @@ int main(int argc, char *argv[]) {
     exitMessage(configure);
   }
 
-  // Write readline history file
+  // Write readline history file (the menu's; a command reads nothing from standard input)
 #ifndef NO_READLINE
-  if (useReadline) write_history("./.azure_history");
+  if (useReadline && !byCommand) write_history("./.azure_history");
 #endif
 
   // Cleanup caches

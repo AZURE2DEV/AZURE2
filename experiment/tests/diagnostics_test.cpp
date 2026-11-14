@@ -467,6 +467,13 @@ int main() {
                      m.message.find("AZURE2_SRIM_DATA_DIR") != std::string::npos;
     check("E_STOPPING_DATA: the target's stopping, and where the files are read from", okM);
     if (okM) tested.insert(m.code);
+    // the table's row (the schema and the format-3 page copy it) names both ways the refusal names
+    std::string meaning;
+    for (const DiagnosticCode &c : DiagnosticCodes())
+      if (std::string(c.code) == "E_STOPPING_DATA") meaning = c.meaning;
+    check("E_STOPPING_DATA: the table's row names --srim-data-dir=DIR and AZURE2_SRIM_DATA_DIR, as the refusal",
+          meaning.find("--srim-data-dir=DIR") != std::string::npos &&
+              meaning.find("AZURE2_SRIM_DATA_DIR") != std::string::npos);
     const Diagnostic r = StoppingOutOfRange("TP", "1H", 0.85, "outside the table's 0.93 - 1.5 MeV");
     const bool okR = r.code == "E_STOPPING_RANGE" && r.record == "TP" && r.found == "0.85" &&
                      r.message.find("0.85 MeV") != std::string::npos && r.message.find("1H") != std::string::npos;

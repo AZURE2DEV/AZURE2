@@ -23,8 +23,9 @@ them.
 
 **Optional:**
 
-- **Readline** -- line editing at the command-line prompts
-  (``USE_READLINE``)
+- **Readline** -- line editing at the prompts of the menu (``USE_READLINE``);
+  the commands (``AZURE2 fit FILE``, :doc:`../reference/command_line`) read no
+  input and do not need it
 - **pybind11** -- the ``_azure2`` module that ``pyazr`` drives
   (``USE_API``); without it CMake warns and builds no module
 
@@ -138,7 +139,7 @@ wheel instead of installing it. The wheel holds:
   vendored plotly);
 - two commands on the ``PATH``: ``pyazr`` (:doc:`../user_guide/pyazr_command_line`;
   the same as ``python -m pyazr``) and the program ``AZURE2``, built without
-  readline (its menus read plain lines);
+  readline (its menu reads plain lines; its commands read no input);
 - the licence files: AZURE2's (GPL-3.0), the notice of the SRIM-2013 data
   files, plotly's.
 

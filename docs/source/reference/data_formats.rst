@@ -224,9 +224,9 @@ The file contains sections for:
 - Test segment definitions
 - Experimental effects configuration
 - Fitting parameter settings (``<parameterSettings>``: limits, errors and
-  nuisance flags, and optional ``segment_N_norm prior_centre c`` rows that
-  hold the centre of a normalization or energy-shift prior apart from the
-  segment's own value; see :ref:`nominal-norm`)
+  nuisance flags; a data set's normalization and energy-shift priors, with
+  their centres apart from the start values, are written in its ``norm`` and
+  ``shift`` fields, see :ref:`nominal-norm`)
 - MCMC settings (if enabled)
 
 The ``<config>`` block holds a fixed sequence of lines (formalism, output and
@@ -272,7 +272,7 @@ lines, which a reader that does not know a key skips:
    covariance::
 
        #parametrization 1
-       width_2_1 segment_4_norm
+       width_2_1 s04.norm
        0.8206 1.05
        5.0e-5 1.0e-6
        1.0e-6 4.0e-4
@@ -470,7 +470,7 @@ and under a sub-point target effect the transform comes before the kernel
 Yield"). An engine older than November 2026 ignores both keywords silently.
 The fit form ``transmission <n> <vary> <sigma>`` (``vary`` 0 or 1, ``sigma`` the
 Gaussian prior width in atoms/barn, 0 = none) makes :math:`n` the fit parameter
-``segment_<key>_thickness``, and ``thicknessgroup <label>`` makes the segments
+``<target>.areal_density`` (atoms/barn), and ``thicknessgroup <label>`` makes the segments
 with the label share the thickness of the first of them (each member needs its
 own ``transmission`` or ``yield`` block); a malformed fit form is refused. The
 engines of early November 2026 without the fit form read :math:`n` and ignore

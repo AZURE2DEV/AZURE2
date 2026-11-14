@@ -117,6 +117,40 @@ try:
     expect("Project.set_pair with a negative radius", lambda: project.set_pair(1, radius=-1.0), pyazr.FormatError,
            ValueError, ["pair 1", "the channel radius -1 fm is out of range", "a number > 0 (fm)",
                         "give a positive channel radius"])
+    # The refusals of the engine's edit functions (experiment::SetPair, RemovePair, AddPair, AddLevel, SetLevel,
+    # SetChannel, AllowedChannels) carry their three parts from where the text is built, through the binding, to
+    # e.what, e.allowed, e.fix (None before); the object edited is named once.
+    def edit_refusal(label, call, words):
+        try:
+            call()
+        except pyazr.FormatError as e:
+            text, parts = str(e), [e.what, e.allowed, e.fix]
+            check(f"{label}: e.what, e.allowed and e.fix are set and in the message",
+                  all(parts) and all(q in text for q in parts), f"{parts} / {text[:300]}")
+            check(f"{label}: the message says {words}", all(w in text for w in words), text[:300])
+            return text
+        except Exception as e:  # noqa: BLE001
+            check(f"{label}: raises FormatError", False, f"{type(e).__name__}: {e}")
+            return ""
+        check(f"{label}: raises FormatError", False, "no exception")
+        return ""
+
+    text = edit_refusal("set_pair(1, radius=-1)", lambda: project.set_pair(1, radius=-1.0),
+                        ["pair 1: the channel radius -1 fm", "give a positive channel radius"])
+    check("set_pair(1, radius=-1): the pair is named once", text.count("pair 1") == 1, text[:200])
+    edit_refusal("remove_pair(1) while levels name it", lambda: project.remove_pair(1),
+                 ["remove pair 1: the pair", "is a channel of the levels", "remove_channels=True"])
+    edit_refusal("set_pair(9) of an unknown pair", lambda: project.set_pair(9, radius=4.0),
+                 ["no pair has the key 9", "the pairs: 1 ("])
+    edit_refusal("set_level of an unknown level", lambda: project.set_level("7/2+ 99.0", energy=1.0),
+                 ["no 7/2+ level within 1 keV of 99.0 MeV", "Project.levels()"])
+    edit_refusal("add_pair with a key in use", lambda: project.add_pair(
+        light={"J": 0.5, "parity": 1, "Z": 1, "mass": 1.00728}, heavy={"J": 0, "parity": 1, "Z": 6, "mass": 12.0},
+        separation_energy=1.94, radius=5.0, key=1), ["pair key 1 is taken", "the next free one"])
+    edit_refusal("add_level naming no pair", lambda: project.add_level(
+        0.5, 1, 3.0, [{"pair": 9, "l": 0, "s": 0.5}]), ["no pair has the key 9", "add_pair"])
+    edit_refusal("allowed_channels with a negative limit", lambda: project.allowed_channels(0.5, 1, l_max=-1),
+                 ["a negative limit", "whole numbers >= 0"])
     expect("whittaker_wave with rho <= 0", lambda: pyazr.whittaker_wave(0, 1.0, [1.0, -1.0]),
            pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.physics.whittaker_wave)"])
     expect("penetrability below threshold", lambda: pyazr.physics.penetrability(0, 1, 6, 1.00728, 12.0, 5.0, -0.1),

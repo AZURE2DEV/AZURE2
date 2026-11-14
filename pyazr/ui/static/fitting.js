@@ -44,6 +44,10 @@ export const PARAMETER_COLUMNS = [
     doc: "the MINOS lower interval of the job shown (the engine's or iminuit's), in the fit basis" },
   { key: "minos_upper", title: "MINOS +", numeric: true, digits: 4,
     doc: "the MINOS upper interval of the job shown (the engine's or iminuit's), in the fit basis" },
+  { key: "minos_valid", title: "MINOS validity", wrap: true,
+    doc: "whether MINOS found each side's crossing: valid, or the flags the fitter set (at_limit: the scan reached "
+      + "the parameter's limit; call_limit: it ran out of calls; new_minimum: it found a lower point, the fit was "
+      + "not at its minimum), per side where the fitter gives them (the engine's), else one word (iminuit's)" },
   { key: "physical", title: "physical value", numeric: true, digits: 8,
     doc: "the session's physical value of the parameter at the text's start values (GET /api/parameters, "
       + "physical_value); its unit is not sent: a width is in the project's convention" },
@@ -81,7 +85,24 @@ export function parameterRows(params, { x = {}, job = null } = {}) {
     bounds: boundsOf(p.bounds), prior: priorOf(p),
     start: start[p.name] ?? null, fit: best[p.name] ?? null, error: errors[p.name] ?? null,
     minos_lower: minos[p.name]?.lower ?? null, minos_upper: minos[p.name]?.upper ?? null,
+    minos_valid: minosValidity(minos[p.name]),
   }));
+}
+
+/** The words of a MINOS interval's validity: per side the flags set (the engine's {valid, at_limit, call_limit,
+ * new_minimum}), "valid" where only valid is set; one word where the fitter gives no sides (iminuit). */
+export function minosValidity(m) {
+  if (!m) return null;
+  if (m.sides) {
+    const side = (flags) => {
+      const set = Object.entries(flags || {}).filter(([k, v]) => v && k !== "valid").map(([k]) => k);
+      return set.length ? set.join(", ") : (flags?.valid ? "valid" : "not valid");
+    };
+    const lower = side(m.sides.lower);
+    const upper = side(m.sides.upper);
+    return lower === upper ? lower : `− ${lower}; + ${upper}`;
+  }
+  return m.valid === true ? "valid" : (m.valid === false ? "not valid" : null);
 }
 
 /** The rows a filter keeps: one kind ("" for all) and, with `freeOnly`, the free parameters only. */
@@ -91,7 +112,7 @@ export function filterParameters(rows, { kind = "", freeOnly = false } = {}) {
 
 /** The columns to show: those with numbers in some row (a job's columns appear with a job), start when comparing. */
 export function shownColumns(rows, { compare = false } = {}) {
-  const jobColumns = new Set(["start", "fit", "error", "minos_lower", "minos_upper"]);
+  const jobColumns = new Set(["start", "fit", "error", "minos_lower", "minos_upper", "minos_valid"]);
   return PARAMETER_COLUMNS.filter((c) => {
     if (c.compare && !compare) return false;
     if (!jobColumns.has(c.key)) return true;
@@ -205,7 +226,8 @@ export function resultView(rec, table = []) {
     bestObjective: rec.best?.objective ?? null, edm: r.edm ?? null, valid: r.valid ?? null,
     hasBest: Boolean(rec.best?.x), covariance: r.covariance || null, correlation: r.correlation || null,
     errorsFrom: r.errors ? (r.errors_from || "the recipe") : "", minos: r.minos || null, followers,
-    notices: Array.isArray(r.notices) ? r.notices : [], fitter: r.fitter || null,
+    notices: Array.isArray(r.notices) ? r.notices : [], fitter: r.fitter || null, outcome: r.outcome ?? null,
+    minosInvalid: Object.entries(r.minos || {}).filter(([, m]) => m.valid === false).map(([n]) => n),
   };
 }
 

@@ -1,7 +1,8 @@
 // The THM tab (docs/upgrade/web_ui.md section 6.7), shown when the project has THM content: the model options of
-// <thm> and its experiments as forms of the form generator (the keys are record kinds of a schema of their own,
-// GET /api/thm/keys), the THM pairs and channels of the session (read-only: pyazr has no edit of them), and the
-// session's THM diagnostics, drawn as the Physics tab draws its functions (functionview.js).
+// <thm> and its experiments as forms of the form generator (the keys are the engine's table, pyazr.kinds()["thm"],
+// GET /api/thm/keys; a nucleus or global optical potential offered from pyazr's lists), the THM pairs and channels
+// of the session (edited in the Nucleus tab), and the session's THM diagnostics, drawn as the Physics tab draws its
+// functions (functionview.js).
 //
 // Every edit is a project edit through the THM routes (PATCH /api/project/thm, PUT and DELETE
 // /api/project/thm/experiments/{name}): one history entry each, refused with the engine's words.  The tab holds no
@@ -23,8 +24,15 @@ const SOURCES = [{ rows: "/api/session/functions", call: "/api/session/functions
 export const JOIN = "@join";
 const NEW = "+new";
 
-/** Page state: the key schema and the rows read once per page, each diagnostic's state. */
-const page = { keys: null, rows: null, states: {}, project: null };
+/** Page state: the key schema, pyazr's lists and the rows read once per page, each diagnostic's state. */
+const page = { keys: null, choices: null, rows: null, states: {}, project: null };
+
+/** The suggestions of the key forms' free-text fields, by the grammar token that names them (forms.js
+ * suggestionsOf): the nuclides and the global optical potentials the engine knows (GET /api/kinds). */
+export function choicesOf(kinds) {
+  return { "<nucleus>": Object.keys(kinds?.nuclides || {}),
+    "<global set>": Object.keys(kinds?.optical_potentials || {}) };
+}
 
 /** Whether the project has THM content: a <thm> section, or a data set that names an experiment (its `thm`
  * field). */
@@ -40,14 +48,14 @@ export async function shown(ctx) {
 
 /**
  * The schema the forms are made from: the key table's record kind with, for every key the project has and the table
- * lacks (spectatorEnergy[<pair key>], a key newer than the table), a text field of its own; `extra`: more fields.
+ * does not list by its name (spectatorEnergy[<pair key>]), a text field of its own; `extra`: more fields.
  */
 export function keySchema(keys, kind, written, extra = {}) {
   const rec = keys[kind];
   const fields = { ...rec.fields };
   for (const k of Object.keys(written || {})) {
-    if (!fields[k]) fields[k] = { type: "text", title: k, doc: "a key the page's table does not describe (the engine "
-      + "reads it)" };
+    if (!fields[k]) fields[k] = { type: "text", title: k, doc: "a key the key table does not list by this name (the "
+      + "engine reads it)" };
   }
   Object.assign(fields, extra);
   return { records: { [kind]: { ...rec, fields } } };
@@ -74,6 +82,7 @@ export async function render(ctx, el, args) {
   if (page.project !== ctx.project.path) Object.assign(page, { project: ctx.project.path, states: {}, rows: null });
   const [thm, records] = await Promise.all([ctx.api.get("/api/project/thm"), ctx.api.get("/api/project/records")]);
   if (!page.keys) page.keys = await ctx.api.get("/api/thm/keys");
+  if (!page.choices) page.choices = choicesOf(await ctx.api.get("/api/kinds"));
   if (!page.rows) page.rows = await loadRows(ctx, SOURCES, ID);
   const msg = h("div.messages");
   el.appendChild(msg);
@@ -94,8 +103,8 @@ export async function render(ctx, el, args) {
  * one the table does not list (spectatorEnergy[<pair key>]). */
 function optionsSection(ctx, options, msg) {
   const schema = keySchema(page.keys, "<thm>", options);
-  const form = describeForm(schema, "<thm>", options, { schema });
-  const element = renderForm(document, form, { schema }, {
+  const form = describeForm(schema, "<thm>", options, { schema, choices: page.choices });
+  const element = renderForm(document, form, { schema, choices: page.choices }, {
     onApply: (changed) => ctx.edit("set <thm> options", () => ctx.api.patch("/api/project/thm",
       { options: changed }), msg) });
   element.onrevert = () => ctx.refresh();
@@ -127,7 +136,7 @@ function experimentsSection(ctx, experiments, groups, selected, msg) {
     () => ctx.navigate(`#/thm/${NEW}`))));
   const join = { [JOIN]: { type: "text", title: "data sets that join", doc: "THM data sets (names separated by "
     + "blanks) whose thm field is set to this experiment in the same edit", required: false } };
-  const fctx = (schema) => ({ schema, pairLabels: [], spins: [] });
+  const fctx = (schema) => ({ schema, pairLabels: [], spins: [], choices: page.choices });
   if (selected === NEW) {
     const schema = keySchema(page.keys, "experiment", {}, join);
     const form = renderForm(document, describeForm(schema, "experiment", {}, fctx(schema)), fctx(schema), {
@@ -163,12 +172,11 @@ function hintOfNames(groups) {
   return h("p.hint", {}, `THM data sets of the project: ${groups.names.join(", ") || "none"}.`);
 }
 
-/** The THM pairs of the session (binding energy B) and their channels (whether the width is an amplitude):
- * read-only. */
+/** The THM pairs of the session (binding energy B) and their channels (whether the width is an amplitude), as the
+ * session reads them; both are edited in the Nucleus tab (a pair's B, a channel's amplitude flag). */
 async function channelsSection(ctx) {
-  const why = "Read-only: the binding energy and the amplitude flag are columns of the pair and channel in <levels>; "
-    + "pyazr's set_pair and set_channel have no argument for them (web_ui.md finding 11), so the page shows what the "
-    + "session reads.";
+  const why = "As the session reads them. A pair's binding energy B is edited with the pair, a channel's amplitude "
+    + "flag with its level, in the Nucleus tab (set_pair, set_channel): one edit each, Undo takes it back.";
   let session;
   try {
     session = await ctx.api.get("/api/session", { quiet: true });
@@ -183,11 +191,13 @@ async function channelsSection(ctx) {
     .map((p) => ({ name: p.name, level: p.level_label, pair: p.pair_key, L: p.L, S: p.S,
       amplitude: p.width_is_amplitude }));
   const pairTable = renderTable(document, { rows: pairs.map((p) => ({ ...p, name: String(p.key) })),
+    onSelect: (r) => ctx.navigate(`#/nucleus/pair/${r.key}`),
     withFilter: false, label: "THM pairs", caption: "THM pairs (a nonzero binding energy)",
     columns: [{ key: "key", title: "pair", numeric: true }, { key: "label", title: "particles (J^π)" },
       { key: "binding_energy", title: "B", unit: "MeV", numeric: true, doc: "the THM binding energy of the pair's "
         + "composite projectile" }, { key: "channel_radius", title: "radius", unit: "fm", numeric: true }] });
   const channelTable = renderTable(document, { rows: channels, label: "THM channels",
+    onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.level)}`),
     caption: "their channels", columns: [{ key: "level", title: "level" }, { key: "pair", title: "pair",
       numeric: true }, { key: "L", title: "l", numeric: true }, { key: "S", title: "s", numeric: true },
     { key: "amplitude", title: "width is an amplitude" }, { key: "name", title: "parameter" }] });

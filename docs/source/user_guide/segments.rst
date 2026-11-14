@@ -216,8 +216,8 @@ appears with the following fields:
 
    fits one normalization for the three segments with one 10 % penalty.
    A member whose own line varies its normalization keeps its
-   ``segment_<key>_norm`` entry in ``param.sav`` (fixed, written with the
-   shared value), so parameter files and parameter numbering do not depend
+   ``<norm record>.value[<data set>]`` entry in ``param.sav`` (fixed, written
+   with the shared value), so parameter files and parameter numbering do not depend
    on the groups. ``chiSquared.out`` lists every member's (shared)
    normalization and the penalty on the first member only. The run log notes
    each group and its members. The keyword may be combined with
@@ -307,7 +307,7 @@ appears with the following fields:
 
    frees :math:`b` from 0 with a penalty width of 0.01 MeV\ :sup:`1/2`
    (:doc:`chi_squared`). A line without the block behaves exactly as before.
-   The fit parameter is named ``segment_<key>_energy_shift_sqrt`` in
+   The fit parameter is named ``<data set>.shift.sqrt`` in
    ``param.sav``, and ``shifts.out`` reports it in its last column. The GUI
    preserves the block when it loads and saves a file but does not edit it.
 
@@ -324,8 +324,8 @@ appears with the following fields:
       1 2 1 0 3.567 148 153 4 1 1 10 0 0.02 1 data/pa0.dat 0 0 shiftgroup Frawley_pa0
 
    fits one shift for both, with one 20 keV penalty. Each member keeps its
-   ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
-   the shared value), so parameter files stay compatible. The
+   ``<energy_scale record>.offset[<data set>]`` entry in ``param.sav`` (fixed,
+   written with the shared value), so parameter files stay compatible. The
    :math:`\sqrt{E}` term is not shared (use a shift function for that, below).
    The run log notes each group and its members. In the GUI the label is the
    **Energy Shift** field of **Groups** in the data segment dialog (below),
@@ -421,8 +421,8 @@ appears with the following fields:
 
    Choose the form from the apparatus, not from :math:`\chi^2`.
 
-   The parameters are named ``segment_<key>_energy_shift_fn<j>`` in
-   ``param.sav`` (``<key>`` the segment declaring the function) and come after
+   The parameters are named ``<energy_scale record>.a<j>`` in
+   ``param.sav`` (the energy scale of the data set declaring the function) and come after
    every other parameter, so files without a function keep their parameters
    exactly. Each free :math:`a_j` with a nonzero uncertainty adds a penalty
    :math:`(a_j/\delta a_j)^2`, measured from zero; the value on the line is
@@ -560,9 +560,10 @@ Editing and Managing Data Segments
 - Use the **entrance** and **exit pair filter** dropdowns to show only segments
   for specific particle pairs.
 
-A segment is referred to by its line number elsewhere in the project: the
-``segment_N_norm`` and ``segment_N_energy_shift`` rows of the fitting settings
-(limits, nuisance flag, prior centre), the segment lists of the experimental
+A segment is referred to elsewhere in the project: by its data set's name in
+the rows of the fitting settings that name its parameters (``<data set>.norm``,
+``<data set>.shift.offset``: limits, nuisance flag), and by its line number in
+the segment lists of the experimental
 effects, and the THM experiments and ``weight[k]`` of the ``<thm>`` block.
 When a data segment is moved or deleted, these follow it. The rows of a
 deleted segment are dropped; an experimental effect or a THM experiment left
@@ -755,8 +756,8 @@ flag and a prior width to it:
 
 ``vary`` is 0 or 1 and ``sigma`` is the width, in atoms/barn, of a Gaussian
 prior about the line's :math:`n` (0 = no prior). The line then has the
-parameter ``segment_<key>_thickness`` (atoms/barn; ``<key>`` the segment's
-number, as in ``segment_<key>_norm``). It is fixed for ``vary 0``. Its lower
+parameter ``<target>.areal_density`` (atoms/barn; ``<target>`` the data set's
+target, as in ``param.sav``). It is fixed for ``vary 0``. Its lower
 limit is 0, where :math:`T = 1` and :math:`Y_0 = 0`. With a prior the fit adds
 :math:`\left((n - n_0)/\sigma\right)^2`. chiSquared.out reports the sum of
 these terms as ``Total-Thickness-Chi-Squared``. A plain ``transmission <n>``
@@ -772,7 +773,7 @@ thickness through a **thickness group**, ``thicknessgroup <label>``. It works as
 ``normgroup`` does for normalizations: every active segment with the label
 uses the thickness of the group's *first* active segment in file order, that
 is its :math:`n`, vary flag and prior. A later member keeps no free parameter
-of its own. If its line has the fit form, its ``segment_<key>_thickness`` is
+of its own. If its line has the fit form, its ``<target>.areal_density[<data set>]`` is
 fixed at the leader's value, and param.sav records it so. Each member needs
 its own ``transmission`` or ``yield`` block; a ``thicknessgroup`` on a line
 without one is refused with an error.

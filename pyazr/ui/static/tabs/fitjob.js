@@ -176,10 +176,22 @@ function resultBlock(ctx, rec, table, view) {
   const ev = view.evals[rec.id];
   const written = view.written[rec.id];
   const n = (x, d = 10) => (x === null || x === undefined ? "—" : formatNumber(x, d));
-  const box = h("div.job-result", { data: { status: v.status } });
+  const box = h("div.job-result", { data: { status: v.status, outcome: v.outcome ?? "" } });
   box.append(h("h3", {}, "Result"), h("p.recipe-words", {}, h("strong", {}, v.words),
     v.message ? ` · in its own words: “${v.message}”` : ""));
-  // the engine's notices of the run (a least-squares fitter that ran MIGRAD in its place), with the fitter that ran
+  // the fit's outcome in the words every engine fitter shares: one that did not converge is a warning
+  if (v.outcome) {
+    box.appendChild(h(`div.${v.outcome === "converged" ? "ok-box" : "warn-box"}.fit-outcome`, { role: "status",
+      data: { outcome: v.outcome } }, h("strong", {}, "Outcome: "), v.outcome, v.outcome === "converged" ? ""
+      : " — not converged: the best point is where the fitter stopped, not a minimum"));
+  }
+  if (v.minosInvalid.length) {
+    box.appendChild(h("div.warn-box.minos-invalid", { role: "note" }, h("strong", {}, "MINOS: "),
+      `an interval is not valid for ${v.minosInvalid.join(", ")} (the parameter table's column MINOS validity says `
+      + "which side and why)"));
+  }
+  // the engine's notices of the run (a fallback to another fitter, a call limit the fitter ignored), with the fitter
+  // that ran
   for (const notice of v.notices) {
     box.appendChild(h("div.warn-box.engine-notice", { role: "note" }, h("strong", {}, "The engine: "), notice,
       v.fitter && v.fitter.ran !== v.fitter.asked ? ` — the fitter that ran: ${v.fitter.ran} (asked: `

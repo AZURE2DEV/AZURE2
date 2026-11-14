@@ -35,8 +35,10 @@ def check(name, ok, detail=""):
 
 
 def objective_of(path, work):
+    """The objective at the start, a float (``Session.evaluate().objective``; ``Session.objective()`` is the
+    callable object, not a number)."""
     from pyazr import Session
-    return Session(path, cwd=work).objective()
+    return Session(path, cwd=work).evaluate().objective
 
 
 if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "--fresh":
