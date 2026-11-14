@@ -8,13 +8,18 @@ atoms/cm^2): least_squares takes ``x_scale="jac"``, and minimize works on x divi
 inverse length of the Jacobian's column at the start (``scale_of``; |x0| where the engine has no Jacobian).  On T2
 from its start: least_squares in 8 evaluations, L-BFGS-B in about 35 (tests/pyazr/fit_recipes_test.py).
 
-    python fit_scipy.py path/to/project.azr
+Usage (from the repository's root; T3 fits in about a second, T2 in about a minute at one thread):
+
+    python3 pyazr/examples/fit_scipy.py tests/upgrade/T3/T3.azr
 """
+import os
 import sys
 
-import numpy as np
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-import pyazr
+import numpy as np  # noqa: E402
+
+import pyazr  # noqa: E402
 
 
 def scale_of(f):
@@ -59,7 +64,7 @@ def least_squares(f, **options):
 
 def main(path):
     with pyazr.Session(path) as s:
-        f = s.objective()(s.parameters.x0)
+        f = s.objective()
         r, x = minimize(f)
         print(f"minimize (L-BFGS-B): objective {r.fun:.10g}, {r.nfev} evaluations, {r.message}")
         q = least_squares(f)
@@ -69,4 +74,6 @@ def main(path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "T2.azr")
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    main(sys.argv[1])

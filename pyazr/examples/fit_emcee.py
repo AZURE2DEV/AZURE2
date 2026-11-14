@@ -9,7 +9,17 @@ A session cannot be pickled and is not shared between processes: with a pool, ev
 (``_open`` as the pool's initializer) and the walkers' points travel as arrays.  One thread per worker
 (``OMP_NUM_THREADS=1``) keeps processes x threads within the machine.
 
-    python fit_emcee.py path/to/project.azr [walkers steps processes]
+The script prints what the objective holds besides the data (its prior terms at the start and the parameters with
+finite limits), samples, and prints the diagnostics (acceptance fraction; the integrated autocorrelation time tau
+of each parameter beside the chain's length, which should exceed 50 tau) and the posterior mean and standard
+deviation with units.  ``--rate ENTRANCE EXIT`` adds a quantity derived per sample: the reaction rate
+N_A<sigma v> at ``--t9`` temperatures for up to ``--draws`` draws of the chain (``pyazr.rate.rate_band(...,
+draws=)``), as the 16th, 50th and 84th percentiles.
+
+Usage (from the repository's root):
+
+    python3 pyazr/examples/fit_emcee.py tests/upgrade/T3/T3.azr --steps 200 [--walkers 20] [--processes 0] \\
+        [--rate 2 1 --t9 0.5 1] [--out chain.npy]
 """
 import os
 import sys
@@ -74,16 +84,59 @@ def sample(path, nwalkers=None, nsteps=100, spread=1e-3, seed=1, processes=0, th
     return sampler, f.names
 
 
-def main(path, nwalkers=None, nsteps=200, processes=2):
-    sampler, names = sample(path, nwalkers, nsteps, processes=processes)
-    chain = sampler.get_chain(discard=nsteps // 2, flat=True)
-    for name, column in zip(names, chain.T):
-        print(f"  {name:<24} {np.mean(column):14.7g} +- {np.std(column):.3g}")
-    print(f"acceptance {np.mean(sampler.acceptance_fraction):.2f}")
-    np.save("chain.npy", sampler.get_chain())
+def main():
+    import argparse
+    import emcee
+    from pyazr import rate
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("project", help="the format-3 project (.azr)")
+    ap.add_argument("--walkers", type=int, default=None, help="default: 2 x the free parameters + 2")
+    ap.add_argument("--steps", type=int, default=200)
+    ap.add_argument("--processes", type=int, default=0, help="worker processes (0: none)")
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--rate", type=int, nargs=2, metavar=("ENTRANCE", "EXIT"), default=None,
+                    help="the rate of these pair keys per sample")
+    ap.add_argument("--t9", type=float, nargs="+", default=[0.5, 1.0], help="temperatures for --rate (GK)")
+    ap.add_argument("--draws", type=int, default=30, help="draws of the chain for --rate")
+    ap.add_argument("--out", default=None, help="save the chain (steps x walkers x parameters) as .npy here")
+    args = ap.parse_args()
+
+    with pyazr.Session(args.project) as s:
+        ev = s.evaluate()
+        unit = {q.name: q.unit for q in s.parameters.free}
+        f = s.objective()
+        names, bounds = f.names, f.bounds
+    priors = {k: v for k, v in ev.terms.items() if k != "data, normalizations and energy shifts" and v}
+    print(f"objective at the start {ev.objective:.6g}: data {ev.chi2:.6g}, other terms {priors or 'none'}")
+    limited = [(n, lo, hi) for n, (lo, hi) in zip(names, bounds) if np.isfinite(lo) or np.isfinite(hi)]
+    print(f"{len(names)} free parameters, {len(limited)} with finite limits"
+          + "".join(f"\n  {n:<24} [{lo:.4g}, {hi:.4g}] {unit[n]}" for n, lo, hi in limited))
+
+    sampler, names = sample(args.project, args.walkers, args.steps, seed=args.seed, processes=args.processes)
+    chain = sampler.get_chain()
+    burn = args.steps // 2
+    flat = sampler.get_chain(discard=burn, flat=True)
+    tau = emcee.autocorr.integrated_time(chain[burn:], tol=0)
+    print(f"\n{chain.shape[1]} walkers x {args.steps} steps; acceptance {np.mean(sampler.acceptance_fraction):.2f}; "
+          f"after a burn-in of {burn} steps the chain is {args.steps - burn} steps long, "
+          f"{(args.steps - burn) / tau.max():.1f} x the longest tau (50 x is the usual minimum)")
+    print(f"{'parameter':<24} {'mean':>14} {'std':>10} {'unit':<8} {'tau (steps)':>11}")
+    for name, column, t_ in zip(names, flat.T, tau):
+        print(f"{name:<24} {np.mean(column):14.7g} {np.std(column):10.3g} {unit[name]:<8} {t_:11.1f}")
+
+    if args.rate:
+        with rate.RateSession(args.project, *args.rate) as r:
+            band = rate.rate_band(r, draws=flat, names=names, temperatures=args.t9, max_draws=args.draws,
+                                  seed=args.seed)
+        print(f"\nN_A<sigma v> of pair {args.rate[0]} -> {args.rate[1]} ({band.units['rate']}), {band.how}:")
+        for T, lo, med, hi in zip(band.T9, band.low, band.median, band.high):
+            print(f"  T9 = {T:g} GK: {med:.5g} (16 %: {lo:.5g}, 84 %: {hi:.5g})")
+    if args.out:
+        np.save(args.out, chain)
+        print(f"wrote {args.out}")
     return sampler
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    main(args[0] if args else "T2.azr", *(int(a) for a in args[1:4]))
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    main()

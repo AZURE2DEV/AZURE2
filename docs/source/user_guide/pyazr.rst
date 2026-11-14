@@ -1419,7 +1419,9 @@ call.
 Examples
 --------
 
-Worked scripts ship in ``pyazr/examples/``:
+Worked scripts ship in ``pyazr/examples/``; each takes the project as its first argument and runs from the
+repository's root on a project of ``tests/`` (the command is in its docstring; ``tests/pyazr/examples_test.py`` runs
+every one):
 
 .. list-table::
    :widths: 32 68
@@ -1428,62 +1430,53 @@ Worked scripts ship in ``pyazr/examples/``:
    * - Script
      - What it shows
    * - ``print_scheme.py``
-     - Reading a model's level scheme and dataset provenance.
-   * - ``edit_scheme.py``
-     - Adding and removing levels, writing a new ``.azr``.
+     - The level scheme and the data sets the engine read from a project.
    * - ``edit_model.py``
-     - The full edit loop: add/remove resonances *and* data segments,
-       recalculate the external-capture integrals when the data change, and
-       save the edited file.
+     - Levels and data sets added, removed and switched off with ``Project``; the edited copy calculated.
    * - ``exfor_fetch.py``
-     - Pulling data from the IAEA EXFOR/NDS web services (cross sections,
-       S-factors, differentials, analyzing powers, levels) and dropping it
-       into a model as new segments — with the DOI of the paper behind the
-       dataset.
-   * - ``deactivate_level.py``
-     - Switching a resonance off without removing it.
-   * - ``transform_widths.py``
-     - Reduced width amplitudes to physical partial widths with ``Session.transform``, beside the naive
-       2γ²P; a chain's samples mapped onto physical values.
-   * - ``dimensionless_widths.py``
-     - θ² and Weisskopf units for a whole fit.
-   * - ``channel_functions.py``
-     - Coulomb functions, penetrability and hard-sphere phase over an
-       energy grid.
-   * - ``ec_integrals.py``
-     - External-capture integrals per pathway, and what caching them buys.
-   * - ``save_fit_to_azr.py``
-     - Writing a fit back into a ``.azr``, verifying it round-trips.
-   * - ``uncertainty_band.py``
-     - Cross-section uncertainty bands from a saved fit covariance.
-   * - ``sensitivities.py``
-     - Which parameters a dataset constrains, as d ln σ / d ln p; and the
-       analytic sensitivities checked against finite differences.
-   * - ``fit_scipy.py``
-     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
-   * - ``fit_iminuit.py``
-     - MIGRAD and HESSE of iminuit on ``Objective``.
-   * - ``fit_emcee.py``
-     - MCMC sampling with ``emcee`` on ``Objective.log_prob``, one session per pool worker.
-   * - ``fit_zeus.py``
-     - The same with ``zeus``.
+     - A data set fetched from EXFOR (or a local copy of it) into a project, with its reference.
+   * - ``covariance_builder.py``
+     - A data set's covariance file from named parts (:doc:`covariance_builder`).
+   * - ``project_from_python.py``
+     - A project written record by record from Python (:doc:`project_from_python`).
+   * - ``per_dataset_chi2.py``
+     - The χ² of each data set, worst first, and its whitened rows of the objective.
+   * - ``decompose_cross_section.py``
+     - A cross section split into each level, its interference and the background; a level off or alone.
    * - ``angular_distribution.py``
      - Legendre coefficients at chosen energies, with an optional plot.
-   * - ``per_dataset_chi2.py``
-     - Slicing the residual vector to get the χ² of each experiment.
-   * - ``decompose_cross_section.py``
-     - Separating resonance, interference and background contributions at
-       the fitted parameters.
+   * - ``channel_radius_scan.py``
+     - χ² against a channel radius, one edited copy and one session per radius.
+   * - ``nuclear_potential.py``
+     - The hybrid nuclear potential of a pair: a depth scan, and why a fit vector belongs to its session.
+   * - ``tabulate_cross_sections.py``
+     - σ(E) tabulated on an adaptive grid to a stated interpolation tolerance.
+   * - ``fit_engine.py``
+     - The engine's fit (MIGRAD, HESSE, MINOS) in-process, saved with ``save_fit`` as a project that reopens as the fit.
+   * - ``fit_iminuit.py``
+     - MIGRAD and HESSE of iminuit on ``Objective``.
+   * - ``fit_scipy.py``
+     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
+   * - ``fit_emcee.py``
+     - emcee on ``Objective.log_prob``: autocorrelation times, and the rate per posterior sample.
+   * - ``sensitivities.py``
+     - Which parameters a data set constrains, as d ln σ / d ln p; analytic against finite differences.
+   * - ``uncertainty_band.py``
+     - The 1σ band of an S factor from the fit's covariance, on an extrapolation and on a new grid.
+   * - ``reaction_rate.py``
+     - N\ :sub:`A`\ ⟨σv⟩ computed by the engine, the Gamow window and a band (:doc:`reaction_rate`).
    * - ``sfactor_extrapolation.py``
      - An S factor below the measured range, and S(0).
-   * - ``channel_radius_scan.py``
-     - χ² against the channel radius, one in-process session per radius.
-   * - ``reaction_rate.py``
-     - N\ :sub:`A`\ ⟨σv⟩ computed by the engine (``pyazr.rate``), the Gamow
-       window and the band of a fit's covariance (:doc:`reaction_rate`).
-   * - ``covariance_builder.py``
-     - A data set's covariance file from named parts (``pyazr.covariance``,
-       :doc:`covariance_builder`).
+   * - ``endf_evaluation.py``
+     - An ENDF-6 evaluation beside a project: read, drawn over the data, checked (:doc:`endf`).
+   * - ``channel_functions.py``
+     - Coulomb functions, penetrability, shift and hard-sphere phase over an energy grid.
+   * - ``ec_integrals.py``
+     - External-capture integrals per pathway.
+   * - ``dimensionless_widths.py``
+     - θ² and Weisskopf units for a whole fit.
+   * - ``transform_widths.py``
+     - Reduced-width amplitudes to physical widths with ``Session.transform``, beside the naive 2γ²P; a chain mapped.
 
 Running in parallel
 -------------------
@@ -1505,8 +1498,7 @@ per walker:
    def log_prob(theta):
        return f.log_prob(theta)
 
-See ``pyazr/examples/fit_emcee.py`` for the full recipe (``fit_zeus.py`` is the older pattern: the data χ² from
-``evaluate`` with priors of its own).
+See ``pyazr/examples/fit_emcee.py`` for the full recipe.
 
 Inside one session the engine uses threads: every evaluation (``evaluate``, the objective, its gradient and
 rows) spreads its data points over ``OMP_NUM_THREADS`` threads, as the command-line χ² does, and so

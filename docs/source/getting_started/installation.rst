@@ -117,7 +117,7 @@ builds and installs it with its engine from a checkout:
 .. code-block:: bash
 
    pip install .             # from the repository root: compiles the engine (a few minutes)
-   pip install ".[all]"      # plus what the examples use (matplotlib, emcee, zeus, scipy)
+   pip install ".[all]"      # plus what the examples use (matplotlib, emcee, iminuit, scipy)
    pip install ".[web]"      # plus the web page's server (fastapi, uvicorn, scipy)
 
 ``pyproject.toml`` builds with scikit-build-core, which runs CMake with the

@@ -10,17 +10,15 @@ by decades where S is nearly flat.  The extrapolation itself is an ordinary
 calculation on a `<segmentsTest>` grid, so the only work is defining the grid
 and switching the session into extrapolation mode.
 
-Two things to keep straight, both of which silently give a wrong answer:
+The grid is an ``extrapolation`` record of an edited copy of the project, given in c.m. energies of the entrance
+pair (the engine takes them to the lab); ``evaluate(x).data[i].energies`` are c.m. as always.  The copy is written to
+``--out`` (default: a new temporary directory, printed); its session reads the project's files from the project's
+directory (``Session(..., cwd=)``).
 
-  * `add_extrapolation` takes LAB energies, while `evaluate(x).data[i].energies` is
-    c.m.  Divide the c.m. range by m_target / (m_beam + m_target).
-  * `output/intEC.extrap` caches external-capture integrals for the grid it was
-    built on and is reused without checking.  A changed grid means a stale
-    cache; delete it.
+Usage (from the repository's root):
 
-Usage:
-    python3 sfactor_extrapolation.py <file.azr> --entrance 1 --exit 2 \\
-        --emin 0.01 --emax 2.0 [--params output/param.sav] [--plot s.pdf]
+    python3 pyazr/examples/sfactor_extrapolation.py tests/upgrade/T1/T1.azr --entrance 1 --exit 2 \\
+        [--emin 0.01] [--emax 2.0] [--params output/param.sav] [--plot s.pdf] [--out DIR]
 """
 
 from __future__ import annotations
@@ -28,9 +26,10 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 import numpy as np
 
@@ -48,16 +47,15 @@ def entrance_pair(mdl: Project, pair: int):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
+    ap.add_argument("azr", type=Path, help="the format-3 project (.azr)")
     ap.add_argument("--entrance", type=int, default=1)
     ap.add_argument("--exit", dest="exit_pair", type=int, default=2)
     ap.add_argument("--emin", type=float, default=0.01, help="c.m. MeV")
     ap.add_argument("--emax", type=float, default=2.0, help="c.m. MeV")
     ap.add_argument("--npts", type=int, default=400)
-    ap.add_argument("--params", type=Path, default=None)
-    ap.add_argument("--plot", type=Path, default=None)
-    ap.add_argument("--keep", action="store_true",
-                    help="keep the generated .azr instead of removing it")
+    ap.add_argument("--params", type=Path, default=None, help="a parameter file (param.sav) of a fit")
+    ap.add_argument("--plot", type=Path, default=None, help="draw S(E) into this file (needs matplotlib)")
+    ap.add_argument("--out", default=None, help="the directory of the edited copy (default: a new temporary one)")
     args = ap.parse_args()
 
     mdl = Project.open(args.azr)
@@ -74,16 +72,13 @@ def main() -> int:
     # sigma on a c.m. grid of the entrance pair (the engine takes it to lab energies)
     mdl.add_extrapolation("grid", reaction=mdl.reaction(args.entrance, args.exit_pair), quantity="sigma", unit="b",
                           energies=f"range {args.emin!r} {args.emax!r} MeV cm step {step!r}")
-    out = args.azr.with_name("_sfactor.azr")
-    mdl.save(out)
-
-    stale = args.azr.parent / "output" / "intEC.extrap"
-    if stale.exists():
-        stale.unlink()
-        print(f"removed stale {stale}")
+    out_dir = args.out or tempfile.mkdtemp(prefix="sfactor_extrapolation.")
+    os.makedirs(out_dir, exist_ok=True)
+    out = mdl.save(os.path.join(out_dir, args.azr.name))
+    print(f"the project with the grid: {out}")
 
     # a session for the extrapolations, with the fit's parameter file (fixed values included) when given
-    with Session(str(out), extrapolations=True, parameter_file=args.params) as azr:
+    with Session(out, extrapolations=True, parameter_file=args.params, cwd=str(args.azr.parent)) as azr:
         x = np.asarray(azr.parameters.x0, float)
 
         grid = azr.evaluate(x).data[0]          # the first extrapolation
@@ -116,10 +111,6 @@ def main() -> int:
         fig.tight_layout()
         fig.savefig(args.plot, dpi=200)
         print(f"wrote {args.plot}")
-    # The grid has to live beside the original, because AZURE2 resolves data
-    # paths relative to the .azr; do not leave it there.
-    if not args.keep:
-        out.unlink(missing_ok=True)
     return 0
 
 
