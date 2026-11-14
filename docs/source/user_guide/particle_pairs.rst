@@ -28,7 +28,7 @@ Managing Particle Pairs
 Each particle pair is automatically assigned a numerical key (displayed on the
 far left), which is referenced when creating segments.
 
-In ``pyazr`` the same three actions are edits of a :class:`pyazr.Project`:
+In ``pyazr`` the same three actions are edits of a ``pyazr.Project``:
 ``p.add_pair(light=dict(J=, parity=, Z=, mass=), heavy=..., separation_energy=,
 radius=)`` (it returns the key), ``p.remove_pair(key)`` (refused while a level
 has a channel of the pair, unless ``remove_channels=True``) and
@@ -319,7 +319,7 @@ appear on the :doc:`fitting` and :doc:`mcmc` tabs. In the file the table is
 the ``<abundances>`` block and the sum sigma the ``abundanceSumSigma`` key
 (:doc:`../reference/data_formats`), named samples as ``<name>:``-prefixed
 lines; a project without the block has no abundance parameters at all. The pyazr function
-:func:`pyazr.system.merge_projects` builds such a project from several
+``pyazr.system.merge_projects()`` builds such a project from several
 single-nucleus ones.
 
 .. note::
@@ -374,7 +374,7 @@ the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
 In pyazr, ``pyazr.sources.masses`` gives the table (``atomic_mass("12C")``,
 ``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
 ``masses.mass_check(project)`` / ``masses.fill_masses(project)`` do what the
-dialog does for a :class:`pyazr.Project` (see the pyazr page).
+dialog does for a ``pyazr.Project`` (see the pyazr page).
 
 Filling S moves that pair's threshold, and with it the energy scale of every
 channel of the pair. A typical archive mismatch is a few keV, so compare the

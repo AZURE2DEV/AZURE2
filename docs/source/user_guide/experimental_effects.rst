@@ -470,7 +470,7 @@ In the GUI the effect is set up under **Include Beam Profile** in the
 truncation, and the **Weight by detailed balance** box.  The tab reads and
 writes the tokens, so a project can be loaded, edited and saved without
 losing them.  In a format-3 project the resolution is a field of a ``detector``
-record, added and edited from a script with :class:`pyazr.Project`
+record, added and edited from a script with ``pyazr.Project``
 (``add_detector``, ``set``).
 
 User-defined numerical resolution function (SAMMY UDR)
@@ -558,7 +558,7 @@ In the GUI, check **Include User-Defined Resolution Function** in the
 *Add/Edit Experimental Effect* dialog and give the file (``Browse...``),
 the flight path, the burst and channel widths and the centring choice.
 In a format-3 project the UDR is a field of a ``detector`` record, added and
-edited from a script with :class:`pyazr.Project` (``add_detector``, ``set``).
+edited from a script with ``pyazr.Project`` (``add_detector``, ``set``).
 
 Rectangular energy resolution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

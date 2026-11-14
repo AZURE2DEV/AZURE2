@@ -21,7 +21,7 @@ anything of it.  The command line exits with status 3 and ends with::
           Convert it:  AZURE2 --convert T2.azr T2_f3.azr     (or pyazr.convert_azr("T2.azr", "T2_f3.azr"))
           The converter keeps T2.azr unchanged and reports every change it makes.
 
-pyazr raises :class:`pyazr.FormatError` with the same text.  A file that says
+pyazr raises ``pyazr.FormatError`` with the same text.  A file that says
 ``format=3`` but still holds an old section is refused the same way (convert
 the original instead), and so is a file without ``<config>`` (an empty file,
 or not a project).

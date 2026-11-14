@@ -195,7 +195,7 @@ other widths. The engine offers no inverse: a new ``x`` is made from ``x0`` (``p
    The two differ by factors of 10² to 10⁷, and a file written with the wrong
    one loads without complaint and is wrong. Convert with ``s.transform(x)``.
 
-``s.parameters`` is the table of the fit parameters (a :class:`pyazr.Parameters`), one row per parameter in the
+``s.parameters`` is the table of the fit parameters (a ``pyazr.Parameters``), one row per parameter in the
 order of the engine's vector. Each row is the engine's record of the parameter, written where the parameter is
 created, never parsed from its name, which is only a label: ``name``, ``kind``, ``unit``, ``start`` (in the fit
 vector's basis and ``unit``), ``value`` (as the project states it: a partial width in eV, an ANC, an energy in MeV),
@@ -224,7 +224,7 @@ records as plain data.
 ``free_mask`` and ``bounds`` are its columns (``bounds`` the limits the engine creates the parameter with,
 ``(-inf, inf)`` where it sets none). A level is named by its ``level_label`` (``"3/2- 3.5032"``, as
 ``Project.levels()`` gives it) or by ``(jgroup, level)``: AZURE2 restarts the level numbering inside every J group.
-``pyazr.snapshot.write_values(s, project, x)`` writes the values of ``x`` into a :class:`pyazr.Project` of the
+``pyazr.snapshot.write_values(s, project, x)`` writes the values of ``x`` into a ``pyazr.Project`` of the
 session's file in memory (what ``save_fit`` writes, without saving).
 
 ``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in the order of the
@@ -275,8 +275,8 @@ reaction through ``s.pairs`` rather than by reading the key as the number.
 ``Pair.excitation`` is the pair's **total** excitation, light plus heavy particle, so ``Pair.threshold`` =
 ``sep_energy + excitation`` is where its channels open. ``Pair.light_excitation`` is the light particle's share (the
 optional 32nd column of a ``<levels>`` line) and ``Pair.heavy_excitation`` the heavy one's; ``Pair.label`` marks an
-excited particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's ``light_excitation`` and
-``heavy_excitation`` are fields of :meth:`~pyazr.Project.pairs`; ``set_pair(key, light_excitation=E)`` writes the
+excited particle (``'2+*(4.439 MeV) + 0+'``). In a ``pyazr.Project`` the pair's ``light_excitation`` and
+``heavy_excitation`` are fields of ``pairs()``; ``set_pair(key, light_excitation=E)`` writes the
 32nd column on every row of the pair (a row without the column gets it only for a value other than 0),
 ``heavy_excitation=`` the heavy one's (:doc:`../reference/data_formats`).
 
@@ -324,7 +324,7 @@ points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,
 external-capture amplitudes, and the target-integration sub-point grid. A fit
 with many free shifts is dominated by their columns. This covers the
 :math:`\sqrt{E}` coefficients and the shift-function parameters
-(``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well; their priors are terms of the objective, and
+(``kind == "shift_fn"``, ``Parameter.fn_term`` = j) as well; their priors are terms of the objective, and
 ``ev.data[i].shift_constant_chi2``, ``.shift_sqrt_chi2`` and ``.shift_function_chi2`` give them per data set
 (``.shift_chi2`` their sum).
 
@@ -336,7 +336,7 @@ rmfit's ``polish`` passes the columns its bounds hold.
 
 A fitted target density (``areal_density ... fit [prior ...]`` on a ``target`` record, shared by every data set that
 names the target, :doc:`experimental_effects`) is a parameter ``<target>.areal_density`` of kind ``"density"``
-(``parameters.of_kind("density")``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its
+(``parameters.of_kind("density")``; ``Parameter.effect`` is its target, ``prior_centre`` / ``prior_sigma`` its
 prior and
 ``layout_max`` the largest density its grids span). Its column is finite-differenced the same way, and
 ``ev.terms["density priors"]`` is its prior, a term of the objective.  The field is read and written as any record
@@ -345,7 +345,7 @@ prior=(5e17, "5%")))``.
 
 A fitted free-gas Doppler temperature (``doppler free_gas T K fit [prior T0 sigma] [grid_max Tmax]`` on a ``target``
 record, :doc:`experimental_effects`) is a parameter ``<target>.doppler`` of kind ``"doppler"``
-(``parameters.of_kind("doppler")``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its
+(``parameters.of_kind("doppler")``; ``Parameter.effect`` is its target, ``prior_centre`` / ``prior_sigma`` its
 prior and
 ``layout_max`` the layout temperature its grids span). Unlike a density its gradient entry and Jacobian column are
 analytic, through the Doppler weights. ``ev.terms["Doppler priors"]`` is its prior, a term of the objective.  The
@@ -353,7 +353,7 @@ field is edited as any record field (``project.set("D0", doppler="free_gas 300 K
 
 A fitted sample thickness (``areal_density n atoms/b fit [prior n sigma]`` on a ``target`` record of kind ``sample``,
 named by ``transmission`` or ``neutron_yield`` data sets, :doc:`segments`) is a parameter ``<target>.areal_density``
-of kind ``"thickness"`` (``parameters.of_kind("thickness")``; :attr:`Parameter.segment_key` is the first data set on the
+of kind ``"thickness"`` (``parameters.of_kind("thickness")``; ``Parameter.segment_key`` is the first data set on the
 target, ``prior_centre`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"`` or ``"yield"``); data sets
 that name one target share the parameter. Its gradient entry and Jacobian column are analytic. ``ev.terms["thickness
 priors"]`` is its prior, a term of the objective.
@@ -368,7 +368,7 @@ of ``ev.chi2``); ``prior_covariance_residuals(x)`` returns the whitened residual
 ``prior_covariance_names``, which are rows of ``f.residuals(x)``, with the constant Jacobian :math:`L^{-1}` on the
 prior's columns. ``Project.config()["priorCovariance"]`` reads the key and
 ``Project.set_config(priorCovariance=...)`` sets it (``None`` removes it).
-:mod:`pyazr.priors` needs no engine: ``prior_from_fit(sav_path, covariance_path,
+``pyazr.priors`` needs no engine: ``prior_from_fit(sav_path, covariance_path,
 out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
 (means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
 widths; ``names`` picks a subset, i.e. the marginal block; ``columns`` names the
@@ -387,7 +387,7 @@ The objective and the evaluation
 
 Two objects hold what a fit and a calculation need, every number from the engine.
 
-``s.objective()`` returns a :class:`pyazr.Objective`: the objective the program's fit minimises (the data χ²
+``s.objective()`` returns a ``pyazr.Objective``: the objective the program's fit minimises (the data χ²
 and every prior and constraint) as one callable on the free vector ``x``, in the basis the session fits in.
 ``f(x)`` is ``s.evaluate(x).objective`` bit for bit; ``f.grad(x)`` and ``f.value_and_grad(x)`` its gradient;
 ``f.residuals(x)`` and ``f.jacobian(x)`` the objective as least-squares rows, ``sum(f.residuals(x)**2) == f(x)``
@@ -397,7 +397,7 @@ program's sampler puts zero probability (outside ``f.bounds``, the fit's limits 
 ``f.names``, ``f.bounds`` and ``f.errordef`` (1) for the minimiser.  Calls from several threads on one session run one after the
 other.
 
-``s.evaluate(x)`` returns a :class:`pyazr.Evaluation` from one engine evaluation: ``objective``; ``chi2``, the data
+``s.evaluate(x)`` returns a ``pyazr.Evaluation`` from one engine evaluation: ``objective``; ``chi2``, the data
 χ² (``Total-Chi-Squared`` of ``chiSquared.out``); ``terms``, each term of the engine's objective by its name;
 ``data[i]`` per data set with ``model``, ``residuals``, ``chi2`` (its row of ``chiSquared.out``), ``norm``,
 ``energies``, ``angles``, ``values``, ``errors`` and ``extra`` (the lab energy and angle, the S-factor conversion,
@@ -484,13 +484,13 @@ least squares finds); ``lm`` or the scipy recipes go further.
 Editing the model
 -----------------
 
-pyazr reads project format 3 only: a session or :meth:`pyazr.Project.open` on a format-1 or format-2 file raises
-:class:`pyazr.FormatError` with the engine's message, which names the conversion (``AZURE2 --convert OLD NEW``, or
+pyazr reads project format 3 only: a session or ``pyazr.Project.open()`` on a format-1 or format-2 file raises
+``pyazr.FormatError`` with the engine's message, which names the conversion (``AZURE2 --convert OLD NEW``, or
 ``pyazr.convert_azr(old, new)`` from Python).
 
-:class:`pyazr.Project` edits a project the way the engine reads it: records by name and field, the ``<levels>`` rows
+``pyazr.Project`` edits a project the way the engine reads it: records by name and field, the ``<levels>`` rows
 by level and channel, ``<config>`` and ``<thm>`` by key.  The engine owns every grammar (it makes each edited line and
-refuses what a run would refuse); every edit is validated, a new error raises :class:`~pyazr.FormatError` and leaves
+refuses what a run would refuse); every edit is validated, a new error raises ``FormatError`` and leaves
 the project unchanged, and the lines an edit does not touch keep their bytes.  Nothing is written until ``save``:
 
 .. code-block:: python
@@ -517,8 +517,8 @@ the project unchanged, and the lines an edit does not touch keep their bytes.  N
    with p.session() as m:                                             # a calculation of the edited project
        print(m.evaluate().chi2)
 
-A level is named by its label (``"3/2- 3.5032"``, as :meth:`~pyazr.Project.levels` gives it), by ``(J^pi, E_x)``
-within 1 keV, or by the :class:`~pyazr.ProjectLevel` itself; ``levels()`` gives each level's rows, its compound
+A level is named by its label (``"3/2- 3.5032"``, as ``levels()`` gives it), by ``(J^pi, E_x)``
+within 1 keV, or by the ``ProjectLevel`` itself; ``levels()`` gives each level's rows, its compound
 nucleus and the engine's (group, level) indices, ``pairs()`` the particle pairs (masses, charges, spins, radius,
 excitations).
 
@@ -544,10 +544,10 @@ DWBA surface term; ``spectatorAngles="cm:135-180"`` averages over the accepted s
 reports what they do: ``thm_background(name)``, ``thm_lineshape(name, energies)``, ``thm_vertex(name, energies,
 strict=False)`` (its ``reached`` entry is False at an energy the window or the DW vertex grid does not reach; such
 energies raise a ``UserWarning``, with ``strict=True`` a ``ValueError``) and ``thm_distortion(name, energies)``.  A
-``<thm>`` edit is checked as the engine reads a format-3 block; a refusal raises :class:`~pyazr.FormatError` with the
+``<thm>`` edit is checked as the engine reads a format-3 block; a refusal raises ``FormatError`` with the
 engine's message and leaves the project unchanged.
 
-To snapshot a fit, use :meth:`~pyazr.Session.save_fit`:
+To snapshot a fit, use ``save_fit()``:
 
 .. code-block:: python
 
@@ -556,7 +556,7 @@ To snapshot a fit, use :meth:`~pyazr.Session.save_fit`:
 ``save_fit(path, x=None, param_sav=True, verify=True, norms="fitted", close_session=False)`` converts the fit to the
 physical values a ``<levels>`` row holds and writes them into the rows they come from (fixed widths included, at the
 physical value the fit had: a fixed Brune amplitude keeps its amplitude, not its width; a level by the engine's
-(group, level), a channel by its pair key, l and s -- :func:`pyazr.snapshot.place_level_values`), writes the fitted
+(group, level), a channel by its pair key, l and s -- ``pyazr.snapshot.place_level_values()``), writes the fitted
 free nuisances (normalizations, energy-scale terms, fitted densities, temperatures, thicknesses, abundances) into the
 records they come from, writes the companion ``param.sav`` carrying every parameter, and then reopens what it wrote
 and checks it against the fit (``verify``: the physical values transformed back, the reduced-width amplitudes the file
@@ -604,7 +604,7 @@ by what the file is to do:
 
 ``pyazr.bands.best_fit_params(s, path)`` gives the bands the fit vector of a parameter file: the session's own
 ``parameters.x0`` when it was made with ``parameter_file=path``, else the vector of a second session of the same
-project made with it (``s`` is not changed), refused with :class:`~pyazr.ParameterError` when the file sets a fixed
+project made with it (``s`` is not changed), refused with ``ParameterError`` when the file sets a fixed
 parameter to another value than ``s`` holds. Do not read these files by row position: rows are added as the code
 grows (the :math:`\sqrt{E}` coefficients, the tag line), and a positional read of a file from another layout is
 silently off by one or more rows.
@@ -678,7 +678,7 @@ one record whose reaction is the sum of the members':
 
 Member 0's ``<config>``, ``<thm>``, ``<parameterSettings>`` and ``<mcmc>`` are kept, the others' are not (a warning
 says so).  On the file side the isotopes are record fields (``project["natural"]["isotope"]``,
-``project.set("natural", isotope=[...])``) and :attr:`ProjectLevel.nucleus` gives each level's compound nucleus;
+``project.set("natural", isotope=[...])``) and ``ProjectLevel.nucleus`` gives each level's compound nucleus;
 ``Pair.nucleus`` and ``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a fitted abundance
 back into its isotope field.
 
@@ -1038,7 +1038,7 @@ In a project it is the pair's ``potential`` record (below); a session reads what
    azr.nuclear_potentials()          # {0: no default, 1: ..., 2: ...}, resolved
    azr.nuclear_potential(1)          # one pair; .own says if it has a record
 
-A potential, like a channel radius, is changed by an edit of the :class:`pyazr.Project` and a new session (the session
+A potential, like a channel radius, is changed by an edit of the ``pyazr.Project`` and a new session (the session
 reads its model when it is made):
 
 .. code-block:: python
@@ -1059,7 +1059,7 @@ Two things that will bite:
   to reduced-width amplitudes --- so the ``parameters.x0`` of a session of the
   edited project differs from the old session's, and the old one fed to the new
   session gives a chi-squared that is quietly wrong. A channel radius changed by
-  :meth:`pyazr.Project.set_pair` has the same caveat, for the same reason.
+  ``pyazr.Project.set_pair()`` has the same caveat, for the same reason.
 - **A fit made without the potential is not a fit made with it.** Refit before
   reading anything off the model.
 
@@ -1105,7 +1105,7 @@ set in pyazr as a field of the record:
 The channel functions of such a pair depend on J: ``channel_functions`` needs ``J`` for it (``E_SO_NEEDS_J``) and
 refuses one for any other pair (``E_SO_NO_TERM``).  A term on a pair whose two particles both have spin
 (``E_SO_TWO_SPINS``) or on a spin-0 particle (``E_SO_ZERO_SPIN``) is refused by the edit with a
-:class:`~pyazr.FormatError`.
+``FormatError``.
 
 ``save_fit`` of a format-3 project writes the ``<potentials>`` section as the project has it.
 
@@ -1149,7 +1149,7 @@ P, S and the phases fast.
 A project as records (format 3)
 -------------------------------
 
-:class:`pyazr.Project` builds and edits a format-3 project as named records (``docs/upgrade/project_format3.md``
+``pyazr.Project`` builds and edits a format-3 project as named records (``docs/upgrade/project_format3.md``
 section 4); the recipe from schema to calculation is :doc:`project_from_python`.
 
 .. code-block:: python
@@ -1172,9 +1172,9 @@ sections without records.  There is one ``add_<kind>`` per record kind of the en
 ``add_normalization``, ``add_energy_scale``, ``add_extrapolation``, ``add_target``, ``add_beam``, ``add_detector``,
 ``add_datum``, ``add_potential``), generated at import from ``pyazr.schema()``: ``help(Project.add_dataset)`` lists
 the fields with their help text and units. A value is the file's text, a number, a ``(value, "unit")`` tuple, a
-:class:`pyazr.Nuisance` or a list (a field given more than once); ``#`` starts the field's comment, as in the file.
+``pyazr.Nuisance`` or a list (a field given more than once); ``#`` starts the field's comment, as in the file.
 Every edit is checked by the engine's validator on the project as it would stand and refused with
-:class:`pyazr.FormatError` (``.diagnostics``, ``.codes``: the engine's) when it adds an error; the project is then
+``pyazr.FormatError`` (``.diagnostics``, ``.codes``: the engine's) when it adds an error; the project is then
 unchanged.  The project is the engine's lossless document: opened and saved without an edit it is written byte for
 byte, and an edit changes only the lines of the fields it names.
 
@@ -1219,7 +1219,7 @@ is averaged over those that have it (``coverage`` is their summed weight).
 ``G[<Jπ>#<n>;p<pair key>;L<l>;S<s>]``, with ``n`` the engine's level number
 within the :math:`J^\pi` group, so the name depends on the ``.azr`` and not on
 the radius or the THM options. ``write_averaged_azr`` sets the averaged energies
-and widths of a template into its rows through :class:`pyazr.Project` (names it does not find are
+and widths of a template into its rows through ``pyazr.Project`` (names it does not find are
 skipped with a warning) and keeps everything else, so the result opens in the
 GUI. It is a representative model, not a fit.
 
@@ -1248,7 +1248,7 @@ The names of the package
 ------------------------
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
-lists): the classes and functions above, the libraries' functions of :mod:`pyazr.sources.nds`, the modules
+lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
 ``system``, ``sources``, ``stopping`` and ``physics``, and the error classes.
 
 .. code-block:: text
@@ -1328,7 +1328,7 @@ call.
      - ``len(s.parameters.free.of_kind("energy", "width"))``
    * - ``ParameterSet`` and its views ``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
        ``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``, ``.cbkg``
-     - :class:`pyazr.Parameters`; ``P.of_kind("energy")``, ``"width"``, ``"norm"``, ``"shift"``, ``"shift_sqrt"``,
+     - ``pyazr.Parameters``; ``P.of_kind("energy")``, ``"width"``, ``"norm"``, ``"shift"``, ``"shift_sqrt"``,
        ``"shift_fn"``, ``"abundance"``, ``"screening"``, ``"density"``, ``"doppler"``, ``"thickness"``, ``"cbkg"``
    * - ``P.fixed``, ``P.indices()``, ``P.values()``, ``P.wigner_limits()``
      - ``[p for p in P if p.fixed]``, ``[p.free_index for p in P.free]``, ``[p.value for p in P]``,
