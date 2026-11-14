@@ -2,6 +2,65 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 17:30) — merged: ENDF read and check; the covariance builder, the rate, the rate libraries
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 76 (rehearsal 75 plus
+`feature/upgrade-8-endf-read-check` and `feature/upgrade-9-webui-utilities`). The agents' entries follow.
+
+- **ENDF, read and check** (`pyazr/endf/`, no C++): a file read into a `Material`; `summary()` in an
+  evaluator's words; `curves(data, session=s)` at a data set's points in its own quantity and units; the
+  module's own format check with the manual's page per finding; the checking codes (CHECKR, FIZCON, PSYCHE,
+  STANEF, INTER, PREPRO) found through `AZURE2_ENDF_UTILITIES`, `AZURE2_PREPRO` or `PATH`, run on a copy
+  with a time limit, their reports parsed; `standardize` gives a candidate and its difference per section,
+  never replaces silently. Commands `pyazr endf summary|curves|check|standardize`. Test data: an extract of
+  the ENDF/B-VIII.1 3He + 4He file (the PI's yes, source and citation in the README) and a hand-written
+  p + 12C file that goes with T1.
+- **The covariance builder and the rate** (`pyazr/covariance.py`, `pyazr/rate.py`, `pyazr/rate_formats.py`,
+  the page's `tabs/covariance.js` and `tabs/rate.js`, `pyazr/ui/utilities.py`): a data set's covariance from
+  named parts; the rate from the engine through `Session.reaction_rate` (new arguments `rate_entrance`,
+  `rate_exit` of the binding's session; `ReactionRate::Rates()`), a band, the Gamow window, the table in
+  STARLIB and REACLIB forms.
+- **Conflicts and their resolutions**: the class scheme tables (both sides kept, figures regenerated: the
+  front ends' figure has 26 boxes); `pyazr.rst` (one names line); `docs/upgrade/web_ui.md` (the first view
+  keeps 11.11, the utilities are 11.12). **One semantic conflict**: the binding's rate called
+  `WarnLargeRadiativeWidths` with the signature of before the readers' branch; ported as the program's own
+  call (`compound->Inputs()`).
+- **Not done**: the start model from an evaluation and the writer (the next ENDF branch); MF=32;
+  `check_resonances`; a builder for a prior's covariance; the Rate tab and the covariance builder are not in
+  the first view (the Rate tab has its link in the expert's depth only; the builder is reached from a data
+  set's form): the next page branch puts the rate in the first view (the director's interim choice).
+- **What the checking codes really do** (the agent's findings, two of them seen again in my run below):
+  STANEF 8.10 rewrites MF=2 and corrupts a float written without a decimal point; CHECKR 8.24 rejects
+  LTP=15; PSYCHE 8.11 reads the LRF=7 record as SPI, AP ("AP NOT IN RANGE"); LRP=2 is an error to CHECKR on
+  the library's own file. A deck must end with `DONE`; the exit status says nothing about findings.
+- **Open, for the PI**: STARLIB's 60 temperatures are from the agent's memory of the grid, not checked
+  against a library file; REACLIB's default tolerance (5 %) and set label (`azr2`); the rate at the
+  project's values differs by 1e-9 between the rate session's reading and the data session's start vector
+  (capture amplitudes differ by 1e-10 relative on T1).
+
+**Verified on the merged tree** (build `work/b-trial76`, eight threads): 0 warnings; all projects in the
+three bases against `tab-t74-1`, run twice (the second time with the final binary, tag `tab-t76-2`): Brune
+887, formal 851, Park 887 files, all identical; the eight fits by command identical to `b-trial75`; the
+quick tests 283 of 283 (277 before; six new); the consistency test passes. The first build failed on the
+semantic conflict above and the merge check went on past it: `work/director/verify_light.sh` now stops on a
+failed build.
+
+**The director's own runs**, `b-trial76` against `b-trial75`, by command, every output file compared: MINOS,
+a fit with band, the rate for one exit pair and for all, three `gamma_decay` fits, a T1 extrapolation with
+band: all identical. By hand: `pyazr endf summary` and `check` on the two test files with the real codes
+(CHECKR 5 findings, FIZCON 1, PSYCHE 1 on the library extract, each with its meaning; the hand-written file
+clean in the module's own check); `pyazr.rate.reaction_rate` on T1 for 12C(p,g)13N at five temperatures
+(9.17e-14 at 0.03 GK, 5.31e+02 at 1 GK, cm^3 mol^-1 s^-1); the screenshots of the Rate tab and of a data
+set's covariance builder read.
+
+**Seen in those runs, not repaired**: a `pyazr.rate.reaction_rate` call prints the engine's progress bars
+on standard output and tries to write `output/cross_section_grid.dat` under the working directory ("could
+not write" when there is none; `src/ReactionRate.cpp`): a library call should do neither. In the covariance
+builder the data sets and the file are typed (the next page branch's lists and file choosers).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial76`; the quick test set has 283 tests.
+
 ## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
 
 Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page
