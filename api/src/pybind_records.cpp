@@ -171,7 +171,9 @@ const std::vector<ParameterField> &ParameterFields() {
       {"level_number", "", kLevel, false, "the level counted over all J groups, from 1 (param files, energy_<n>)",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->levelNumber); }},
       {"level_energy", "MeV", kLevel, false, "the level's energy E_lambda as the session holds it (excitation energy)",
-       [](const ParameterView &v) -> py::object { return py::float_(v.level->GetE()); }},
+       [](const ParameterView &v) -> py::object {
+         return py::float_(v.nuc->Inputs().E(v.record->jGroup, v.record->level));
+       }},
       {"level_label", "", kLevel, true,
        "the level's label in the project, '<J^pi> <E_x as written>' (Project.levels())",
        [](const ParameterView &v) -> py::object {

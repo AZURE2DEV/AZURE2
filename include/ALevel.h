@@ -16,10 +16,12 @@ class LevelRow;
 /*!
  * An R-matrix level  represents a specific eigenstate of the compound nucleus.
  *
- * A level carries its set-up data (IDs, fix flags, the external-capture final-state data) and its input values,
- * GetE and GetGamma: what the nuclear input file said, in the engine's basis after CNuc::TransformIn.  The values a
- * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the
- * external-capture amplitudes and N_f^1/2) are not the level's: they are the compound's LevelState (CNuc::State).
+ * A level carries its set-up data only: IDs, fix flags, the external-capture final-state data, and the values of its
+ * <levels> lines (FileE, FileGamma, FileZeroWidth), which CNuc::Fill reads to group the levels and to make the
+ * compound's LevelInputs.  Nothing of a level is written after set-up.  The input values in the engine's basis (what
+ * CNuc::TransformIn makes of the file's) are the compound's LevelInputs (CNuc::Inputs); the values a calculation reads
+ * at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the external-capture amplitudes
+ * and N_f^1/2) are its LevelState (CNuc::State).
  *
  * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
  * ObservedLevelTable.
@@ -45,14 +47,9 @@ class ALevel {
   /// Does this channel's <levels> gamma field hold a reduced-width amplitude
   /// directly, rather than a physical width? (The 33-field THM line's flag.)
   bool GammaIsRWA(int) const;
-  /// Was this channel's input width exactly zero (a zero in the <levels> line, a channel the level does not list,
-  /// or a zero in the physical vector handed to CNuc::TransformIn)?  With IGNORE_ZERO_WIDTHS (--ignore-externals,
-  /// the default) such a radiative channel has no external part: neither in the observed width (TransformIn /
-  /// TransformOut) nor in the resonant channel capture through the level (AMatrixFunc).  It is a property of the
-  /// input, fixed when the width is read, and not a test on the working amplitude: the external part used to be
-  /// dropped whenever |gamma| < 1e-8 MeV^1/2, which made every cross section jump when a fitted or profiled
-  /// amplitude crossed 1e-8.
-  bool ZeroInputWidth(int) const;
+  /// Was this channel's width in the <levels> lines exactly zero (or the level lists no line for it)?  The start of
+  /// LevelInputs::ZeroInputWidth, which TransformIn sets again from the values it transforms.
+  bool FileZeroWidth(int) const;
   /// Is the level a final state for external capture?
   bool IsECLevel() const;
   int NumNFIntegrals() const;
@@ -61,11 +58,12 @@ class ALevel {
   /// Bit mask of the external-capture multipolarities feeding this level.
   unsigned char GetECMultMask() const;
 
-  // -- input / formal parameters ---------------------------------------------
-  /// Level energy as read from the input file (MeV).
-  double GetE() const;
-  /// Formal internal reduced width amplitude for a channel.
-  double GetGamma(int) const;
+  // -- the <levels> values --------------------------------------------------
+  /// Level energy as the <levels> line gives it (MeV, E_x).
+  double FileE() const;
+  /// The channel's width as the <levels> lines give it (partial width in eV, ANC, or an amplitude: GammaIsRWA); 0
+  /// for a channel the level does not list.
+  double FileGamma(int) const;
 
   // -- external capture ------------------------------------------------------
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
@@ -82,9 +80,6 @@ class ALevel {
   void SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLine);
   /// Pad the width vectors with zero, fixed widths up to n channels.
   void PadChannels(int n);
-  void SetGamma(int, double);
-  void SetZeroInputWidth(int, bool);
-  void SetE(double);
   void AddNFIntegral(double);
   void SetECEnergy(double);
   void AddECConversionFactor(double);
@@ -108,7 +103,7 @@ class ALevel {
   /// Per-channel input convention: true = gamma column was a reduced width
   /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
   std::vector<bool> gamma_is_rwa_;
-  /// See ZeroInputWidth.
+  /// See FileZeroWidth.
   std::vector<bool> zero_input_;
   vector_r gammas_;
   double ec_energy_ = 0.0;

@@ -104,12 +104,12 @@ void WriteCompoundNucleusCheck(const CNuc &compound, const Config &configure) {
               << std::setw(5) << group->GetJ()
               << std::setw(4) << group->GetPi()
               << std::setw(9) << ii
-              << std::setw(14) << group->GetLevel(ii)->GetE()
+              << std::setw(14) << compound.Inputs().E(i, ii)
               << std::setw(11) << iii
               << std::setw(3) << group->GetChannel(iii)->GetL()
               << std::setw(5) << group->GetChannel(iii)->GetS()
               << std::setw(8) << group->GetChannel(iii)->GetPairNum()
-              << std::setw(11) << group->GetLevel(ii)->GetGamma(iii)
+              << std::setw(11) << compound.Inputs().Gamma(i, ii, iii)
               << std::setw(11) << group->GetChannel(iii)->GetRadType() << std::endl;
         }
       }

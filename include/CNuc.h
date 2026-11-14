@@ -14,6 +14,7 @@
 #include "ModelData.h"
 #include "GammaDecayMap.h"
 #include "ObservedLevelTable.h"
+#include "LevelInputs.h"
 #include "LevelState.h"
 #include "LevelParameterLayout.h"
 #include "azure2/experiment/SetupSpecs.h"
@@ -95,10 +96,9 @@ class CNuc {
   std::string RatePairsProblem(int entranceKey, int exitKey) const;
   /// \f$J^\pi\f$ group \p i, 1-based (read-only, as GetPair).
   const JGroup *GetJGroup(int) const;
-  /// Level \p la of J-group \p j, both 1-based, for writing its input values after set-up (a gamma_decay record's
-  /// widths, GammaDecayMap.cpp).  Its set-up data (IDs, flags, the external-capture final state) are written by Fill
-  /// and Initialize only.
-  ALevel *MutableLevel(int j, int la);
+  /// The levels' input values in the engine's basis (LevelInputs.h): made by Fill from the <levels> rows and the
+  /// gamma_decay records, rewritten by TransformIn and FillCompoundFromParamsPhysical.
+  const LevelInputs &Inputs() const { return levelInputs_; }
   /// The levels at the current parameter vector: fit energies and amplitudes, shift functions, Park's J, the
   /// external-capture amplitudes and N_f^1/2 (LevelState.h).  Written by this class's fills only.
   const LevelState &State() const { return levelState_; }
@@ -145,16 +145,9 @@ class CNuc {
   /// External reduced width amplitude for one channel.
 
   // -- parameter transformations --------------------------------------------
-  /// Observed widths and energies to formal R-matrix parameters. Returns false
-  /// if a level could not be transformed.
+  /// Observed widths and energies to formal R-matrix parameters, in Inputs(). Returns false if a level could not be
+  /// transformed; Inputs().TransformError() says why.
   bool TransformIn(const Config &);
-  /// Why the last TransformIn returned false (empty if it did not).
-  const std::string &TransformError() const { return transformError_; }
-  /// Has TransformIn run on the current level scheme?  Until it has, the
-  /// level gammas are the input values (partial widths in eV, ANCs, gamma
-  /// widths in eV), not reduced width amplitudes -- consumers that need to
-  /// estimate a resonance width before initialisation completes must check.
-  bool IsTransformedIn() const { return transformedIn_; };
   /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
   /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
   bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
@@ -167,7 +160,7 @@ class CNuc {
     std::vector<double> projector;  ///< row-major, levels x levels; empty: Pi = P (no masked level, or all decoupled)
   };
   /// The formal-basis mask of (group, photon channel), or nullptr: the mask is then diagonal, a level whose input
-  /// width in the channel is zero (ALevel::ZeroInputWidth) is left out (Brune, Park, a block of one level).
+  /// width in the channel is zero (LevelInputs::ZeroInputWidth) is left out (Brune, Park, a block of one level).
   const CaptureMask *FormalCaptureMask(int group, int channel) const;
   /// Formal basis, --ignore-externals, channel capture through a block of several levels: the masks are recomputed
   /// with the fit parameters.  True when the adjoint does not differentiate that dependence: a slot has a projector,
@@ -257,7 +250,6 @@ class CNuc {
   /// TransformOut, second part: the observed quantities from the Brune (Park) values of `table` (physics/
   /// observed_levels).
   void ObservedWidths(const Config &, ObservedLevelTable &table);
-  std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
   /// The pathway table (Initialize) and the capture-A_y requests it is built with.
@@ -275,11 +267,8 @@ class CNuc {
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
   std::vector<GammaDecayFill> gammaDecayFills_;
-  /// The input numbers of the gamma_decay records (per record, slot order; Gamma_gamma in eV), which FillMnParams puts
-  /// into the parameter vector as it puts a level's input widths: the file's, or the last
-  /// FillCompoundFromParamsPhysical's.
-  std::vector<std::vector<double>> gammaDecayInputs_;
-  bool transformedIn_ = false;
+  /// The levels' input values (Inputs); made by Fill.
+  LevelInputs levelInputs_;
   /// The levels at the current parameter vector (State); shaped by Fill.
   LevelState levelState_;
   /// The level block of the parameter vector (ParameterLayout); built by Fill.

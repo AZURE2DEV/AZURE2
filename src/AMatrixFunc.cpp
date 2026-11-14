@@ -483,8 +483,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
       for (int la = 1; la < (int)map.size(); la++) {
         const int row = map[la];
         if (row == 0) continue;
-        const ALevel *level = jGroup->GetLevel(la);
-        if (maskChannel && level->ZeroInputWidth(maskChannel)) continue;
+        if (maskChannel && compound()->Inputs().ZeroInputWidth(jGroupNum, la, maskChannel)) continue;
         chan_cap_entrance_[row - 1] = compound()->State().Gamma(jGroupNum, la, chNum);
         chan_cap_exit_[row - 1] = compound()->State().Gamma(jGroupNum, la, chpNum);
       }
@@ -1216,11 +1215,11 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                jgcc->GetLevel(la)->ZeroInputWidth(internalChannel)) continue;
+                compound()->Inputs().ZeroInputWidth(jcc, la, internalChannel)) continue;
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
+                  compound()->Inputs().ZeroInputWidth(jcc, lap, internalChannel)) continue;
               umatrix_cc += I2 * sqrtPcc *
                   compound()->State().Gamma(jcc, la, ccChN) *
                   compound()->State().Gamma(jcc, lap, ccChpN) *
@@ -1235,12 +1234,12 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                jgcc->GetLevel(la)->ZeroInputWidth(internalChannel)) continue;
+                compound()->Inputs().ZeroInputWidth(jcc, la, internalChannel)) continue;
             double gEn = compound()->State().Gamma(jcc, la, ccChN);
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
+                  compound()->Inputs().ZeroInputWidth(jcc, lap, internalChannel)) continue;
               double gEx = compound()->State().Gamma(jcc, lap, ccChpN);
               complex Aval = this->GetAMatrixElement(jcc, la, lap);
               complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]

@@ -151,7 +151,7 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
     for (const int ch : L.photonChannels) {
       const AChannel *c = group->GetChannel(ch);
       const PPair *pair = compound.GetPair(c->GetPairNum());
-      if (std::fabs(level->GetE() - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2))
+      if (std::fabs(level->FileE() - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2))
         return refuse(s, "a photon channel to the level's own state is a static moment, not a decay");
     }
     // The record's numbers, in slot order: Gamma_gamma, the branchings but the remainder, the mixing ratios.
@@ -163,10 +163,8 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
     if (L.slots.size() != L.photonChannels.size())
       return refuse(s, "internal error: " + std::to_string(L.slots.size()) + " numbers for " +
                            std::to_string(L.photonChannels.size()) + " photon channels (report it)");
-    // The partial widths of the record as the level's input widths (eV): TransformIn converts them.
+    // The partial widths of the record, which CNuc::Fill makes the level's input widths (eV, WriteInputWidths).
     const std::vector<double> widths = PartialWidths(L, SpecNumbers(L));
-    for (std::size_t k = 0; k < L.photonChannels.size(); k++)
-      compound.MutableLevel(s.group, s.level)->SetGamma(L.photonChannels[k], widths[k]);
     // The external part of each slot (section 2.7): the final state whose capture covers the channel's multipolarity,
     // none under --ignore-externals for a width given as 0 (TransformIn's rule on the input).
     L.external.assign(L.photonChannels.size(), GammaDecayLevel::External());
@@ -252,6 +250,16 @@ std::vector<std::vector<double>> GammaDecaySet::NumbersAt(const vector_r &p) con
     for (const int ch : L.photonChannels) numbers.back().push_back(p[L.energyIndex + ch]);
   }
   return numbers;
+}
+
+void GammaDecaySet::WriteInputWidths(LevelInputs &inputs) const {
+  const std::vector<std::vector<double>> &numbers = inputs.GammaDecayNumbers();
+  for (std::size_t r = 0; r < levels_.size(); r++) {
+    const GammaDecayLevel &L = levels_[r];
+    const std::vector<double> widths = PartialWidths(L, numbers[r]);
+    for (std::size_t k = 0; k < L.photonChannels.size(); k++)
+      inputs.SetGamma(L.spec.group, L.spec.level, L.photonChannels[k], widths[k]);
+  }
 }
 
 vector_r GammaDecaySet::WithPartialWidths(const vector_r &observed) const {

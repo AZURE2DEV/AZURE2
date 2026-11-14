@@ -14,6 +14,7 @@
 class AZUREParams;
 class CNuc;
 class Config;
+class LevelInputs;
 class ObservedLevelTable;
 class ParamIndexMap;
 struct GradAccum;
@@ -80,10 +81,11 @@ class GammaDecaySet {
  public:
   /*!
    * The <gammaDecays> section of the project (as ModelData::Read: records validated by the format-3 table, built
-   * against <levels>), placed in the compound, with the partial widths of every record written as the level's input
-   * widths (eV) for TransformIn.  Refused with a message (nullptr): the reader's diagnostics, the formal basis or
-   * --no-transform, a photon channel that is a static moment, a level outside the R-matrix.  An empty set without the
-   * section.  The set keeps `configure` (the run's, which outlives the compound) for the external-capture integrals.
+   * against <levels>), placed in the compound; CNuc::Fill writes the partial widths of every record as the level's
+   * input widths (eV) for TransformIn (WriteInputWidths).  Refused with a message (nullptr): the reader's
+   * diagnostics, the formal basis or --no-transform, a photon channel that is a static moment, a level outside the
+   * R-matrix.  An empty set without the section.  The set keeps `configure` (the run's, which outlives the compound)
+   * for the external-capture integrals.
    */
   static std::shared_ptr<const GammaDecaySet> Read(CNuc &compound, const Config &configure,
                                                    const std::vector<azure2::io::LevelRow> &rows);
@@ -105,6 +107,9 @@ class GammaDecaySet {
   /// The numbers of every record at its slots of a full vector (the fit's or the observed one: the record's slots
   /// hold the same numbers in both, gamma_parametrisation.md section 2.8).
   std::vector<std::vector<double>> NumbersAt(const vector_r &p) const;
+  /// The partial widths (eV) of every record's input numbers (inputs.GammaDecayNumbers()) written as its level's input
+  /// widths in `inputs`, which TransformIn converts (CNuc::Fill).
+  void WriteInputWidths(LevelInputs &inputs) const;
   /// The vector of observed parameters (CNuc::GetTransformParams' form) with every record's numbers replaced by the
   /// partial widths (eV) they give (PartialWidths): the levels' observed widths, which CNuc::
   /// FillCompoundFromParamsPhysical writes into the levels.  The one place a record slot of that vector is read.

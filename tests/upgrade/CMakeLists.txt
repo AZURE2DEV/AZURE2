@@ -255,3 +255,17 @@ add_test(NAME upgrade_level_parameter_layout
                  ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/record.azr
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(upgrade_level_parameter_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
+# The levels' input values (LevelInputs.h): after Fill the <levels> rows' (a gamma_decay record's partial widths at its
+# photon channels), after Initialize transformed without writing a level, a physical vector at the layout's slots; in
+# the Brune and the formal basis.  Reads the projects in place and writes nothing.
+add_executable(level_inputs_test level_inputs_test.cpp)
+target_link_libraries(level_inputs_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_level_inputs
+         COMMAND level_inputs_test
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+                 ${CMAKE_SOURCE_DIR}/tests/13N/13N.azr
+                 ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/record.azr
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(upgrade_level_inputs PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)

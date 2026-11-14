@@ -65,12 +65,8 @@ bool ALevel::GammaIsRWA(int channelNum) const {
   return gamma_is_rwa_[channelNum - 1];
 }
 
-bool ALevel::ZeroInputWidth(int channelNum) const {
+bool ALevel::FileZeroWidth(int channelNum) const {
   return zero_input_[channelNum - 1];
-}
-
-void ALevel::SetZeroInputWidth(int channelNum, bool zero) {
-  zero_input_[channelNum - 1] = zero;
 }
 
 /*!
@@ -106,18 +102,18 @@ unsigned char ALevel::GetECMultMask() const {
 }
 
 /*!
- *  Returns the energy of the level.
+ * The level energy of its <levels> line.
  */
 
-double ALevel::GetE() const {
+double ALevel::FileE() const {
   return level_e_;
 }
 
 /*!
- * Returns the internal reduced width amplitude for a given channel number.
+ * The width of the channel in the <levels> lines.
  */
 
-double ALevel::GetGamma(int channelNum) const {
+double ALevel::FileGamma(int channelNum) const {
   return gammas_[channelNum - 1];
 }
 
@@ -154,22 +150,6 @@ void ALevel::SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLin
   // The THM field 33 (gammaIsRWA) goes with its width to the group channel.
   gamma_is_rwa_[channelNum - 1] = (nucLine.gammaIsRWA() == 1);
   zero_input_[channelNum - 1] = (nucLine.gamma() == 0.0);
-}
-
-/*!
- * This function sets the internal reduced width amplitude for a given channel number.
- */
-
-void ALevel::SetGamma(int channelNum, double reducedWidth) {
-  gammas_[channelNum - 1] = reducedWidth;
-}
-
-/*!
- * This function sets the level energy.
- */
-
-void ALevel::SetE(double energy) {
-  level_e_ = energy;
 }
 
 /*!

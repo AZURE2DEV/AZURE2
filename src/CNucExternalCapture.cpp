@@ -139,17 +139,17 @@ complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChann
   return value;
 }
 
-complex ExternalReducedWidthOfInputs(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel,
+complex ExternalReducedWidthOfInputs(CNuc &compound, const LevelInputs &inputs, int j, int la, const AChannel *channel,
                                      const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
-  const ALevel *finalLevel = compound.GetJGroup(finalState.first)->GetLevel(finalState.second);
+  const JGroup *group = compound.GetJGroup(j);
   ExternalCaptureInputs values;
-  values.levelEnergy = level->GetE();
-  values.finalEnergy = finalLevel->GetE();
-  for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(level->GetGamma(ch));
+  values.levelEnergy = inputs.E(j, la);
+  values.finalEnergy = inputs.E(finalState.first, finalState.second);
+  for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(inputs.Gamma(j, la, ch));
   for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
-    values.finalGamma.push_back(finalLevel->GetGamma(ch));
+    values.finalGamma.push_back(inputs.Gamma(finalState.first, finalState.second, ch));
   values.finalSqrtNF = compound.State().SqrtNF(finalState.first, finalState.second);
   return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
 }
@@ -191,7 +191,7 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
       if (this->Group(j)->GetLevel(la)->IsECLevel())
-        this->Group(j)->GetLevel(la)->SetECEnergy(this->Group(j)->GetLevel(la)->GetE());
+        this->Group(j)->GetLevel(la)->SetECEnergy(levelInputs_.E(j, la));
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE))
     return;
   auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
@@ -203,10 +203,11 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
     // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3), as long as its
     // energy stays there.  So does the only level of a block.
-    const JGroup *group = this->Group(record->structure->map.groupOfBlock[b]);
+    const int j = record->structure->map.groupOfBlock[b];
+    const JGroup *group = this->Group(j);
     std::size_t lowest = 0;
     for (std::size_t lb = 1; lb < levels.size(); lb++)
-      if (group->GetLevel(levels[lb])->GetE() < group->GetLevel(levels[lowest])->GetE()) lowest = lb;
+      if (levelInputs_.E(j, levels[lb]) < levelInputs_.E(j, levels[lowest])) lowest = lb;
     // A lowest-level final state whose energy a fit may move leaves the energy where B_c was taken, and its formal
     // amplitude then differs from its Brune one at second order: it is recomputed too (external_capture.md section 4).
     for (std::size_t lb = 0; lb < levels.size(); lb++)
@@ -221,13 +222,14 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure->map, record->gslCoulomb, record->rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : record->blocks) {
-    JGroup *group = this->Group(record->structure->map.groupOfBlock[b]);
+    const int j = record->structure->map.groupOfBlock[b];
+    JGroup *group = this->Group(j);
     const std::vector<int> &levels = record->structure->map.levelOfBlockLevel[b];
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
-      E.push_back(group->GetLevel(la)->GetE());
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetGamma((int)k + 1));
+      E.push_back(levelInputs_.E(j, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelInputs_.Gamma(j, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(record->structure->system, b, E, gamma, B, cf, options);
@@ -337,7 +339,7 @@ void CNuc::FormalCaptureMasksFromParams() {
     std::vector<unsigned char> masked(n, 0);
     bool any = false;
     for (std::size_t lb = 0; lb < n; lb++) {
-      masked[lb] = group->GetLevel(mask.levels[lb])->ZeroInputWidth(s.channel) ? 1 : 0;
+      masked[lb] = levelInputs_.ZeroInputWidth(s.group, mask.levels[lb], s.channel) ? 1 : 0;
       any = any || masked[lb];
     }
     mask.projector.clear();
@@ -370,7 +372,7 @@ bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, i
     if (!mask.projector.empty()) return true;
     JGroup *group = this->Group(mask.group);
     for (int la : mask.levels) {
-      if (!group->GetLevel(la)->ZeroInputWidth(mask.channel)) continue;
+      if (!levelInputs_.ZeroInputWidth(mask.group, la, mask.channel)) continue;
       for (int ch = 1; ch <= group->NumChannels(); ch++)
         if (group->GetChannel(ch)->GetRadType() == 'P' && freeGamma(mask.group, la, ch)) return true;
     }

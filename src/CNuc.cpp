@@ -199,7 +199,7 @@ int CNuc::GetPairNumFromKey(int key) const {
  */
 
 int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
-  transformedIn_ = false;
+  levelInputs_ = LevelInputs();
   if (configure.relativistic && configure.useHybridMethod) {
     // The hybrid potential acts in a Schrodinger equation between a_c and the matching radius: no relativistic form.
     configure.outStream << "ERROR: relativistic=1 cannot be combined with the hybrid nuclear-potential "
@@ -314,19 +314,19 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       // The level of the line: io::LevelGrouper, the rule pyazr uses too (docs/upgrade/project.md, P2).
       ALevel NewLevel(Line);
       JGroup *group = this->Group(JGroupNum);
-      const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
+      const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.FileE(), Line.levelID());
       if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
       LevelNum = slot.level;
       group->GetLevel(LevelNum)->AddID(Line.levelID());
       if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
         configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
-                            << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                            << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.FileE()
                             << " MeV) have the same J^pi and energy; their lines are read as one level." << std::endl;
       if (slot.kind == azure2::io::LevelGrouper::Kind::NewNearby)
         configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
-                            << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                            << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.FileE()
                             << " MeV) is within 1 keV of level ID " << slot.otherID << " (E = "
-                            << group->GetLevel(slot.other)->GetE() << " MeV); they are kept as two levels."
+                            << group->GetLevel(slot.other)->FileE() << " MeV); they are kept as two levels."
                             << std::endl;
       // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
       // lines in a different order, or not list a channel another level of the group carries.
@@ -348,7 +348,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     ALevel *level = group->GetLevel(entry.first.second);
     const std::vector<int> &listed = entry.second;
     std::ostringstream what;
-    what << "level J = " << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << level->GetE() << " MeV";
+    what << "level J = " << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << level->FileE() << " MeV";
     std::set<int> seen;
     bool reordered = false;
     for (size_t k = 0; k < listed.size(); k++) {
@@ -414,7 +414,19 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
-  gammaDecayInputs_ = gammaDecays_->FileNumbers();
+  // The input values: the <levels> rows', a gamma_decay record's level with the partial widths of the record.
+  levelInputs_ = LevelInputs(numLevels, numChannels);
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+      const ALevel *level = this->Group(j)->GetLevel(la);
+      levelInputs_.SetE(j, la, level->FileE());
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
+        levelInputs_.SetGamma(j, la, ch, level->FileGamma(ch));
+        levelInputs_.SetZeroInputWidth(j, la, ch, level->FileZeroWidth(ch));
+      }
+    }
+  levelInputs_.SetGammaDecayNumbers(gammaDecays_->FileNumbers());
+  gammaDecays_->WriteInputWidths(levelInputs_);
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 
@@ -585,7 +597,7 @@ void CNuc::Initialize(const Config &configure) {
     if (!(configure.paramMask & Config::USE_API))
       configure.outStream << "Performing Input Parameter Transformation..." << std::endl;
     // No standard R-matrix may correspond to the input (TransformIn): stop, as for any other GSL failure here.
-    if (!this->TransformIn(configure)) throw GSLException(this->TransformError());
+    if (!this->TransformIn(configure)) throw GSLException(levelInputs_.TransformError());
   }
 
   this->SetUpECFinalBlocks(configure);
@@ -629,14 +641,14 @@ void CNuc::AddJGroup(JGroup jGroup) {
 
 void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
   const vector_r &p = gammaDecays_->Empty() ? observed : gammaDecays_->WithPartialWidths(observed);
-  if (!gammaDecays_->Empty()) gammaDecayInputs_ = gammaDecays_->NumbersAt(observed);
+  if (!gammaDecays_->Empty()) levelInputs_.SetGammaDecayNumbers(gammaDecays_->NumbersAt(observed));
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
     const int j = slots.group, la = slots.level;
-    ALevel *level = this->Group(j)->GetLevel(la);
-    level->SetE(p[slots.energy]);
+    const ALevel *level = this->Group(j)->GetLevel(la);
+    levelInputs_.SetE(j, la, p[slots.energy]);
     std::vector<double> g;
     for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++) {
-      level->SetGamma(ch, p[slots.amplitude[ch - 1]]);
+      levelInputs_.SetGamma(j, la, ch, p[slots.amplitude[ch - 1]]);
       g.push_back(p[slots.amplitude[ch - 1]]);
     }
     levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
@@ -656,8 +668,7 @@ namespace phys = azure2::physics;
  */
 
 bool CNuc::TransformIn(const Config &configure) {
-  transformedIn_ = true;
-  transformError_.clear();
+  levelInputs_.StartTransformation();
   // Park (2021): the fit parameter is the observed reduced width amplitude, Gamma = 2 P gamma^2 (Eqs. 31-33), so the
   // factor that turns an observed width into Brune's reduced width is not applied; its J (Eq. 28) must stay positive.
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
@@ -674,17 +685,17 @@ bool CNuc::TransformIn(const Config &configure) {
       JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
-      const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, map, b);
+      const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, levelInputs_, map, b);
       const phys::BasisAmplitudes amp = phys::amplitudes_from_observed(
           system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
         const int la = levels[lb];
-        ALevel *theLevel = theJGroup->GetLevel(la);
+        const ALevel *theLevel = theJGroup->GetLevel(la);
         for (std::size_t k = 0; k < nc; k++) {
           const int ch = (int)k + 1;
           const double input = in.value[lb * nc + k];
           // The --ignore-externals mask is a property of the input (external_capture.md section 3).
-          theLevel->SetZeroInputWidth(ch, input == 0.0);
+          levelInputs_.SetZeroInputWidth(j, la, ch, input == 0.0);
           WarnInputColumn(*this, configure, j, la, ch, amp.notes[lb * nc + k], input);
         }
         WarnObservedOutOfReach(*this, configure, j, la, amp, in, lb, nc);
@@ -694,7 +705,7 @@ bool CNuc::TransformIn(const Config &configure) {
         // CalcShiftFunctions).
         if (park) levelState_.SetParkNorm(j, la, parkNorm);
         const std::vector<double> g(amp.gamma.begin() + lb * nc, amp.gamma.begin() + (lb + 1) * nc);
-        for (std::size_t k = 0; k < nc; k++) theLevel->SetGamma((int)k + 1, g[k]);
+        for (std::size_t k = 0; k < nc; k++) levelInputs_.SetGamma(j, la, (int)k + 1, g[k]);
         levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
       }
     }
@@ -710,10 +721,10 @@ bool CNuc::TransformIn(const Config &configure) {
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma;
       for (int la : levels) {
-        E.push_back(theJGroup->GetLevel(la)->GetE());
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetGamma((int)k + 1));
+        E.push_back(levelInputs_.E(j, la));
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelInputs_.Gamma(j, la, (int)k + 1));
       }
-      const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, map, b, configure);
+      const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, levelInputs_, map, b, configure);
       std::vector<std::string> warnings;
       std::vector<std::size_t> exceeded;
       phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
@@ -721,7 +732,7 @@ bool CNuc::TransformIn(const Config &configure) {
         WarnExternalExceedsTotal(*this, configure, j, levels[i / nc], (int)(i % nc) + 1);
       }
       for (std::size_t lb = 0; lb < levels.size(); lb++)
-        for (std::size_t k = 0; k < nc; k++) theJGroup->GetLevel(levels[lb])->SetGamma((int)k + 1, gamma[lb * nc + k]);
+        for (std::size_t k = 0; k < nc; k++) levelInputs_.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);
     }
     // 3. Without the Brune parametrization, the formal parameters (Eq. 4.1), group by group.
     for (std::size_t b = 0; b < system.num_blocks() && formal; b++) {
@@ -731,8 +742,8 @@ bool CNuc::TransformIn(const Config &configure) {
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma;
       for (int la : levels) {
-        E.push_back(theJGroup->GetLevel(la)->GetE());
-        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetGamma((int)k + 1));
+        E.push_back(levelInputs_.E(j, la));
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelInputs_.Gamma(j, la, (int)k + 1));
       }
       // A hard-sphere group (includeAllJPi) has channels but no levels: nothing to transform.
       if (!E.empty()) {
@@ -755,19 +766,19 @@ bool CNuc::TransformIn(const Config &configure) {
               << "drop --no-brune) or smaller widths for these levels:";
           for (int la : levels)
             msg << std::endl
-                << "    " << AZURELabel::Level(theJGroup, theJGroup->GetLevel(la), j, la);
-          transformError_ = msg.str();
+                << "    " << AZURELabel::Level(theJGroup, levelInputs_.E(j, la), j, la);
+          levelInputs_.SetTransformError(msg.str());
           return false;
         }
         E.swap(f.E);
         gamma.swap(f.gamma);
-        for (std::size_t lb = 0; lb < levels.size(); lb++) theJGroup->GetLevel(levels[lb])->SetE(E[lb]);
+        for (std::size_t lb = 0; lb < levels.size(); lb++) levelInputs_.SetE(j, levels[lb], E[lb]);
       }
       for (std::size_t lb = 0; lb < levels.size(); lb++)
-        for (std::size_t k = 0; k < nc; k++) theJGroup->GetLevel(levels[lb])->SetGamma((int)k + 1, gamma[lb * nc + k]);
+        for (std::size_t k = 0; k < nc; k++) levelInputs_.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);
     }
   } catch (const std::exception &e) {
-    transformError_ = std::string("Parameter transformation: ") + e.what();
+    levelInputs_.SetTransformError(std::string("Parameter transformation: ") + e.what());
     return false;
   }
   return true;
@@ -788,7 +799,8 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       JGroup *theJGroup = this->Group(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
-      for (int la : structure.map.levelOfBlockLevel[b]) energies.push_back(theJGroup->GetLevel(la)->GetE());
+      for (int la : structure.map.levelOfBlockLevel[b])
+        energies.push_back(levelInputs_.E(structure.map.groupOfBlock[b], la));
       const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies, cf);
       const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
       for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
@@ -824,13 +836,14 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
     const ALevel *level = this->Group(j)->GetLevel(la);
     const std::string varname = LevelParameterLayout::Name(slot);
     if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy) {
-      params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, slot.levelNumber));
+      const double energy = levelInputs_.E(j, la);
+      params.Add(varname, energy, 0.1 * energy, ParameterRecord::LevelEnergy(j, la, slot.levelNumber));
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
         PPair *pair = this->Pair(ir);
         if (pair->GetNucleus() != this->Group(j)->GetNucleus()) continue;   // thresholds of this nucleus only
         if (pair->GetPType() == 0 &&
-            level->GetE() > (pair->GetSepE() + pair->GetExE())) isUnbound = true;
+            energy > (pair->GetSepE() + pair->GetExE())) isUnbound = true;
       }
       // Jakub's Fix: it can create problems with the fit with pyazr and brick
       if (!isUnbound) p.Fix(varname);
@@ -838,12 +851,14 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       continue;
     }
     // Parameter settings will be applied by ParameterLimitsManager during fit
-    if (gammaDecays_->AddParameter(params, gammaDecayInputs_, j, la, ch, slot.levelNumber)) continue;  // a gamma_decay record's number
-    params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, slot.levelNumber));
+    if (gammaDecays_->AddParameter(params, levelInputs_.GammaDecayNumbers(), j, la, ch, slot.levelNumber))
+      continue;  // a gamma_decay record's number
+    const double gamma = levelInputs_.Gamma(j, la, ch);
+    params.Add(varname, gamma, 0.1 * gamma, ParameterRecord::Width(j, la, ch, slot.levelNumber));
     // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
     // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
     // transformation the input is the parameter.
-    if (this->IsTransformedIn() ? level->ZeroInputWidth(ch) : level->GetGamma(ch) == 0.0) p.Fix(varname);
+    if (levelInputs_.TransformedIn() ? levelInputs_.ZeroInputWidth(j, la, ch) : gamma == 0.0) p.Fix(varname);
     if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
     // Wigner-limit bounds: GetWignerLimit is gamma^2_W = 3 hbar^2/(2 mu a^2) (MeV), the limit on the reduced width
     // squared; the fit parameter is the amplitude (MeV^1/2), so the bound is its square root (gamma^2_W itself
@@ -963,7 +978,7 @@ void CNuc::ObservedWidths(const Config &configure, ObservedLevelTable &table) {
         rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
         complex externalWidth(0.0, 0.0);
         if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
-            external && !(ignoreZero && theLevel->ZeroInputWidth(ch))) {
+            external && !(ignoreZero && levelInputs_.ZeroInputWidth(j, levels[lb], ch))) {
           externalWidth = ExternalReducedWidthOfTable(*this, table, j, levels[lb], theChannel, configure);
           ext[lb * nc + k].present = true;
           ext[lb * nc + k].value = externalWidth;
@@ -1097,10 +1112,6 @@ const PPair *CNuc::GetPairFromKey(int key) const {
 
 JGroup *CNuc::Group(int jGroupNum) {
   return &jgroups_[jGroupNum - 1];
-}
-
-ALevel *CNuc::MutableLevel(int j, int la) {
-  return jgroups_[j - 1].GetLevel(la);
 }
 
 const JGroup *CNuc::GetJGroup(int jGroupNum) const {

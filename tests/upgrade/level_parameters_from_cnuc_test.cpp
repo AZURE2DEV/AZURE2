@@ -111,18 +111,17 @@ bool IsPhoton(const phys::System &s, int c) {
   return s.channel(c).kind == phys::ChannelKind::Electric || s.channel(c).kind == phys::ChannelKind::Magnetic;
 }
 
-// Input amplitudes and energies of a block as the CNuc's levels hold them.
+// Input amplitudes and energies of a block as the CNuc's input values hold them.
 std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b) {
-  const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
+  const int j = map.groupOfBlock[b];
   std::vector<double> out;
   for (int la : map.levelOfBlockLevel[b])
-    for (int ch : map.channelOfBlockChannel[b]) out.push_back(g->GetLevel(la)->GetGamma(ch));
+    for (int ch : map.channelOfBlockChannel[b]) out.push_back(cn.Inputs().Gamma(j, la, ch));
   return out;
 }
 std::vector<double> CNucE(CNuc &cn, const CNucSystemMap &map, std::size_t b) {
-  const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
   std::vector<double> out;
-  for (int la : map.levelOfBlockLevel[b]) out.push_back(g->GetLevel(la)->GetE());
+  for (int la : map.levelOfBlockLevel[b]) out.push_back(cn.Inputs().E(map.groupOfBlock[b], la));
   return out;
 }
 // The same of CNuc::TransformOut's table.
@@ -180,6 +179,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
   std::unique_ptr<Loaded> refP = Load(azr, Basis::Park, true);
   std::unique_ptr<Loaded> refF = Load(azr, Basis::Formal, true);
   std::unique_ptr<Loaded> emul = Load(azr, Basis::Brune, true);  // Brune CNuc, made formal group by group (below)
+  LevelInputs emulInputs = emul->compound.Inputs();               // its input values, made formal group by group
   const CNucSystem built = BuildSystemFromCNuc(refB->compound, refB->cfg);
   const CNucSystem builtF = BuildSystemFromCNuc(refF->compound, refF->cfg);
   const phys::System &sys = built.system;
@@ -204,9 +204,8 @@ void CheckProject(const std::string &name, const std::string &azr) {
     LevelState loaded(numLevels, numChannels);
     for (int j = 1; j <= cn.NumJGroups(); j++)
       for (int la = 1; la <= cn.GetJGroup(j)->NumLevels(); la++) {
-        const ALevel *lev = cn.GetJGroup(j)->GetLevel(la);
-        loaded.SetE(j, la, lev->GetE());
-        for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) loaded.SetGamma(j, la, ch, lev->GetGamma(ch));
+        loaded.SetE(j, la, cn.Inputs().E(j, la));
+        for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) loaded.SetGamma(j, la, ch, cn.Inputs().Gamma(j, la, ch));
       }
     cn.CopyFitEnergiesAndAmplitudes(loaded);
     outF = cn.TransformOut(refF->cfg);
@@ -216,13 +215,13 @@ void CheckProject(const std::string &name, const std::string &azr) {
     const phys::JpiBlock &blk = sys.block(b);
     const std::size_t nc = blk.num_channels(), nl = blk.num_levels();
     const std::vector<phys::ProjectChannel> own = phys::internal_channels(sys, b);
-    const phys::ProjectLevels in = ProjectLevelsFromCNuc(filled->compound, map, b);
+    const phys::ProjectLevels in = ProjectLevelsFromCNuc(filled->compound, filled->compound.Inputs(), map, b);
     for (std::size_t la = 0; la < nl; la++)
       for (std::size_t k = 0; k < nc; k++)
         if (IsPhoton(sys, blk.channel(k)) && cf(b, k, in.E[la]).static_moment) staticMoments++;
 
     // (a) Brune.
-    const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, map, b, refB->cfg);
+    const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
     phys::LevelParameterOptions opt;
     opt.external = &extB;
         opt.formal = false;
@@ -234,7 +233,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     CompareB(sys, b, pb.B, bruneB);
 
     // (a) Park.
-    const std::vector<phys::ExternalWidth> extP = ExternalWidthsFromCNuc(refP->compound, map, b, refP->cfg);
+    const std::vector<phys::ExternalWidth> extP = ExternalWidthsFromCNuc(refP->compound, refP->compound.Inputs(), map, b, refP->cfg);
     phys::Convention convP;
     convP.basis = phys::LevelBasis::Park;
     opt.external = &extP;
@@ -249,7 +248,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
 
     // (a) formal.  External capture as the engine's TransformIn computes it: final states in earlier groups are
     // already formal (emul has groups < b replaced by the formal CNuc's values).
-    const std::vector<phys::ExternalWidth> extF = ExternalWidthsFromCNuc(emul->compound, map, b, emul->cfg);
+    const std::vector<phys::ExternalWidth> extF = ExternalWidthsFromCNuc(emul->compound, emulInputs, map, b, emul->cfg);
     phys::Convention convF;
     convF.basis = phys::LevelBasis::Formal;
     opt.external = &extF;
@@ -264,7 +263,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     }
     CompareB(builtF.system, b, pf.B, formalB);
     {  // the same with the Brune final states throughout: how much the engine's order moves the photon amplitudes
-      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsFromCNuc(refB->compound, map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extAll = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
       for (std::size_t i = 0; i < extF.size(); i++) {
         if (extF[i].present && std::abs(extF[i].value) > 0.0) nonzeroExt++;
         if (extF[i].value != extAll[i].value) movedExt++;
@@ -279,11 +278,10 @@ void CheckProject(const std::string &name, const std::string &azr) {
     }
     // emul: group b becomes formal for the later groups.
     {
-      const JGroup *gf = refF->compound.GetJGroup(map.groupOfBlock[b]);
+      const int j = map.groupOfBlock[b];
       for (int la : map.levelOfBlockLevel[b]) {
-        ALevel *level = emul->compound.MutableLevel(map.groupOfBlock[b], la);
-        level->SetE(gf->GetLevel(la)->GetE());
-        for (int ch : map.channelOfBlockChannel[b]) level->SetGamma(ch, gf->GetLevel(la)->GetGamma(ch));
+        emulInputs.SetE(j, la, refF->compound.Inputs().E(j, la));
+        for (int ch : map.channelOfBlockChannel[b]) emulInputs.SetGamma(j, la, ch, refF->compound.Inputs().Gamma(j, la, ch));
       }
     }
 
@@ -367,7 +365,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
         if (firstGap.empty()) firstGap = gaps[0];
         continue;
       }
-      const phys::ProjectLevels in = ProjectLevelsFromCNuc(filled->compound, map, b);
+      const phys::ProjectLevels in = ProjectLevelsFromCNuc(filled->compound, filled->compound.Inputs(), map, b);
       const phys::ConventionTransform T = phys::convention_transform(sys, b, conv, cols);
       // The file's values written in the project's columns; amplitude-input (gammaIsRWA) entries stay amplitudes
       // only where the column maps one to one, which holds for T1-T3 (their amplitude inputs are on single channels).
@@ -379,7 +377,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
               if (std::fabs(T(k, m)) > 0.0) rwa[la * cols.size() + m] = 1;
       const std::vector<double> gp = T.to_project(preEC[b], nl);
       const phys::ProjectLevels pin = phys::observed_from_amplitudes(sys, b, cols, in.E, gp, rwa, phys::LevelBasis::Brune, cf);
-      const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, map, b, refB->cfg);
+      const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, refB->compound.Inputs(), map, b, refB->cfg);
       phys::LevelParameterOptions opt;
       opt.external = &extB;
             const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
