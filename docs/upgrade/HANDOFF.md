@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder on the page
+
+- **Done**: the screen `pyazr/ui/static/tabs/prior.js` (`#/prior`, no header link), reached by "Prior on the
+  parameters…" above the Fit tab's parameter table (both depths): the parameter table with check boxes, parts with a
+  control per field type (a select of the project's files, the checked names, number boxes, pairs from two lists),
+  Build (refusal or eigenvalues and condition number, notes, centres and sigmas, the correlation heat map, the
+  file's text), Write and use, Remove the prior (the config route).  Server: `pyazr/ui/prior.py` (`prior_open`,
+  `prior_build`, `prior_write`; its files are the page's one listing with `output`, `Server.files(outputs=True)`),
+  `pyazr.session.basis_of` (`Session.basis` uses it).  `web_ui.md` section 11.15; `prior_builder.rst` "On the page",
+  `web_interface.rst`, `web_ui_api.rst`, `fitting.rst`, the Developer Guide.
+- **Lines in shared files**: `pyazr/ui/static/app.js` (the import of `tabs/prior.js`; the `TABS` row `prior`),
+  `pyazr/ui/static/tabs/fit.js` (the link, one line in the parameters' bar), `pyazr/ui/server.py` (the import of
+  `prior`; three methods under "the prior builder"), `pyazr/ui/routes.py` (three rows after the rate's grids),
+  `tests/pyazr/ui/smoke_test.py` (`VIEWS`: `("prior", "prior")`), `tests/pyazr/CMakeLists.txt` (the UI test list).
+- **Fixed**: `State.edit_with_files` dropped a write whose text was unchanged (a file rewritten under the name the
+  project already holds) and answered as if written; it now keeps it as one entry (the covariance builder's
+  "Write and use" under its own field's name had the same defect).  `Server.parameters` set `x` to null for fixed
+  rows on the cached session description itself, so a later reader of that description (the prior's table) got no
+  start value for a fixed parameter; it now answers copies.
+- **Verified**: `tests/pyazr/ui/prior_builder_test.py` (new; the injected `edit_with_files` error failed it), the
+  UI tests, the smoke test with its screenshots, `ctest -LE slow`, the consistency test, `docs_build` (numbers in
+  the report).
+
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder in pyazr
+
+- **Done**: `pyazr.priors.build(parameters, parts, directory=)` makes the prior on the fit parameters
+  (`priorCovariance`) from named parts over a session's parameter table (`PART_KINDS`: `fit`, an earlier fit's
+  `param.sav` + `covariance.dat`, the numbers `prior_from_fit` writes; `width`, a sigma or a percentage per parameter
+  around its start value or a given centre; `correlation`, pairs or a matrix between parameters of other parts;
+  `chain`, the mean and covariance of a sampler job's `chain_<id>.npy` with its JSON) and returns a `Prior` that
+  prints itself, writes the file (`write`, the parts on its `#pyazr.prior` line, `read_parts`), names it in a
+  project (`use`: `Project.set_config`) and gives `summary()`.  `read_chain`, `kinds_table`, `Parameters.basis`.
+  User guide `prior_builder.rst`; `chi_squared.rst`, `fitting.rst`, `pyazr.rst`, the Developer Guide's "A part of a
+  builder"; example `pyazr/examples/prior_builder.py`.
+- **One reader of the grammar**: `read_prior` now reads as the engine's `PriorCovariance::Read` and refuses what it
+  refuses; before, it accepted a tag 3 or 1.5 or without a value, a name twice, nan, inf, `1_0`, a no-break space,
+  a matrix not symmetric or not positive definite, and refused a hexadecimal number the engine reads.  A table of
+  35 small files with the engine's verdicts is `tests/pyazr/prior_builder_test.py` part 1 (measured through
+  `Session` in its part 2).
+- **Measured**: a parameter with a prior of its own and a line in the prior file: the engine adds the file's term
+  only (`ReplaceDiagonalPriors`, `src/RunSetUp.cpp`); `chi_squared.rst` said a fit applies both (corrected).
+- **Verified**: `tests/pyazr/prior_builder_test.py` (new, 131 checks), `prior_covariance_test.py`, the consistency
+  test, `docs_build`.
+- **Open**: the page's screen (next commit).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-lists`) — the page's lists in words, its controls not typed
 
 `web_ui.md` section 11.14 has the whole; the user guide `web_interface.rst`, `web_ui_api.rst`, the Developer Guide

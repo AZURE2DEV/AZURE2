@@ -123,6 +123,7 @@ function parametersSection(ctx, params, x, job, records, view) {
     h("span.hint", {}, `${params.length} parameters, ${nFree} free`
       + (job?.best?.x ? ` · fit, error: job ${job.id}` : "")),
     h("span.spacer"),
+    h("a", { href: "#/prior", title: "a prior on several parameters, correlated" }, "Prior on the parameters…"),
     button("Reset x", "Set the working x back to the values of the project text (PATCH /api/x, reset)",
       () => ctx.edit("reset x to the text's values", () => ctx.api.patch("/api/x", { reset: true })).catch(() => {})));
   const holder = h("div.parameter-table");

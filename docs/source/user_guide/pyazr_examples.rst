@@ -37,6 +37,9 @@ Build and edit a project
    * - ``covariance_builder.py``
      - Build a data set's covariance file from named parts and name it on the data set (:doc:`covariance_builder`).
      - ``covariance_builder.py tests/upgrade/T1/T1.azr el_lab090 --out DIR/T1_cov.azr``
+   * - ``prior_builder.py``
+     - Build a prior on the fit parameters from named parts and name it in the project (:doc:`prior_builder`).
+     - ``prior_builder.py tests/upgrade/T1/T1.azr --out DIR/T1_prior.azr``
    * - ``nuisances.py``
      - Give data sets one shared normalization and one shared energy shift, each with a prior, and fit them.
      - ``nuisances.py tests/upgrade/T1/T1.azr el_lab090 el_lab125 el_lab160``

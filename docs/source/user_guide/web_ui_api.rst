@@ -110,6 +110,10 @@ What the server keeps
   ``timeout``), the rewrite the job ``endf_standardize``/``program`` (``pyazr.endf.standardize``; settings ``path``,
   ``program``, ``mf2``, ``timeout``), whose candidate ``POST /api/endf/accept`` (``{"job_id", "to", "overwrite"}``)
   keeps; these jobs build no session. A path outside the root is refused (403) before anything reads it.
+- ``GET /api/prior``, ``POST /api/prior/build`` (``{"parts": [...]}``), ``POST /api/prior/write`` (``{"parts":
+  [...], "path": ..., "rev": ...}``) serve the prior builder (``pyazr.priors.build`` on the session's parameter
+  table; the write sets ``priorCovariance`` and writes the file as one history entry); removing the prior is ``PATCH
+  /api/project/config`` with ``{"entries": {"priorCovariance": null}}``.
 
 A session from Python
 ---------------------

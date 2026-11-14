@@ -846,6 +846,14 @@ add_test(NAME pyazr_prior_covariance
                  ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
 set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The prior builder (pyazr.priors.build): the reader of the prior file against the engine's verdicts on a table of
+# small files, a built prior's term through a session = d^T C^-1 d, the part fit = prior_from_fit, the part chain = the
+# draws' mean and covariance, every refusal and note (tests/norm_groups model).
+add_test(NAME pyazr_prior_builder
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/prior_builder_test.py)
+set_tests_properties(pyazr_prior_builder PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # Upgrade identity checks (docs/upgrade/ARCHITECTURE.md section 10; list and status in tests/upgrade/README.md).
 # They use the test projects tests/upgrade/T1, T3 or small models built by tests/upgrade/lib, on temporary copies.
 #   coulomb_identity: F, G, F', G' of the engine against mpmath, the Wronskian, P, S and the hard-sphere phase.
@@ -1017,9 +1025,11 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # and the program, the refusals on T1.  nucleus_routes_test: the Nucleus tab's pair, binding-energy, amplitude-flag
 # and new-level edits against the same Project calls (T1, T2).  utilities_test: the covariance builder's routes (the
 # file and the field as one history entry) and the rate job against pyazr.covariance and pyazr.rate (T1).
+# prior_builder_test: the prior builder's routes against pyazr.priors.build, the file and the key as one entry (T1).
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
         ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py ui/thm_routes_test.py
-        ui/nucleus_routes_test.py ui/utilities_test.py ui/endf_test.py)
+        ui/nucleus_routes_test.py ui/utilities_test.py ui/endf_test.py
+        ui/prior_builder_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

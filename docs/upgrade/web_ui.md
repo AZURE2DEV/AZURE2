@@ -1702,9 +1702,8 @@ ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one 
   `JobRow.files` (settings naming a file: the server refuses a path outside the root, 403, before the job starts).
 - **Files**: `pyazr/ui/evaluations.py` (the listing `endf_files`, the only place that says what an ENDF-6 file is:
   its first two lines read by `pyazr.endf.records.split_line`; the listing is a filter over the page's one file
-  listing, `Server.files` of `GET /api/files`, since the merge; its `job_rows()`, the two job rows, joined to the table by `jobs.job_rows`), `tabs/endf.js`,
-  five rows of `routes.py`, `Engine.endf_curves`, server
-  methods `endf_*`; lines in shared files: `app.js` (one import, one `TABS` row), `style.css` (a block at the end),
+  listing, `Server.files` of `GET /api/files`, since the merge; its `job_rows()`, the two job rows, joined to the
+  table by `jobs.job_rows`), `tabs/endf.js`, five rows of `routes.py`, `Engine.endf_curves`, server methods `endf_*`; lines in shared files: `app.js` (one import, one `TABS` row), `style.css` (a block at the end),
   `selftest.js` (the ENDF views and Check pressed), `smoke_test.py` (two views, the ENDF files and the stand-in codes
   in the server's environment).
 - **Extensibility**: a new checking code is a row of `PROGRAMS` (with its numbers text) and its deck in
@@ -1778,6 +1777,42 @@ description refused), `static_test.py` (the files route, the preview against `Pr
 smoke test (the tabs shown on T1 and T2, the preview and "new …" pressed by the self-test, the Fit tab's kinds in
 both depths; views first-rate, first-physics, first-dataset, first-file-preview, first-new-detector, first-fit,
 fit-minos, first-new-pair).
+
+### 11.15 The prior builder (2026-11-14)
+
+The prior on the fit parameters (`priorCovariance`) from named parts, as the covariance builder is for a data set:
+pyazr's arithmetic with a screen that calls it (user guide `prior_builder.rst`).
+
+- **pyazr** (`pyazr/priors.py`): `build(parameters, parts, directory=)` over a session's parameter table (names,
+  kinds, units, fixed marks, limits, the priors of their own, the basis come from `Session.parameters`; nothing is
+  listed twice); parts `PART_KINDS`: `fit` (an earlier fit's `param.sav` and `covariance.dat`, the numbers of
+  `prior_from_fit`, the tag checked against the run's basis), `width`, `correlation`, `chain` (a sampler job's
+  `chain_<id>.npy` with its JSON: what pyazr reads of a chain today, `read_chain`).  The `Prior` record prints
+  itself; its checks are the engine's (symmetric, the engine's Cholesky rule) with the eigenvalues and the condition
+  number; its notes say what the engine does: a fixed parameter marginalized, a prior of its own replaced (measured:
+  `ReplaceDiagonalPriors`), a centre outside the limits.  `read_prior` reads the grammar as `PriorCovariance::Read`
+  does (a table of 35 files, `tests/pyazr/prior_builder_test.py`).
+- **Server** (`pyazr/ui/prior.py`, three methods of `server.py`, three rows of `routes.py`): `GET /api/prior` (the
+  key, the parts from the file's `#pyazr.prior` line, the proposed name, `kinds_table()`, the project's files: the
+  page's one listing, `Server.files(outputs=True)`, which adds the program's `output`, where a fit's `param.sav` and
+  `covariance.dat` and a sampler's chain are, since the merge), `POST /api/prior/build` (the session's
+  parameter rows made back into a `pyazr.Parameters` with `session.basis_of(options)`, then `build`), `POST
+  /api/prior/write` (`State.edit_with_files`: the file and `set_config(priorCovariance=)` as one entry).  Removing is
+  the config route.  `State.edit_with_files` now keeps an entry when only a file changed (a rewrite under the name
+  the text already holds); before, such a write was undone at once and the answer said it was written (the
+  covariance builder had the same defect).
+- **Page** (`tabs/prior.js`, `#/prior`, no header link): the parameter rows of `fitting.js` with check boxes; a part
+  per row with a control per field type (`path:<suffixes>` a select of the project's files, `names` the checked
+  parameters, `number`, `integer`, `pairs` two selects and a coefficient, `matrix` shown only); Build; the heat map
+  of the server's correlation; Write and use; Remove the prior.  Shared files, one line each: `app.js` (the import,
+  the `TABS` row), `tabs/fit.js` (the link "Prior on the parameters…"), `smoke_test.py` (`VIEWS`).
+
+**Tests.** `tests/pyazr/prior_builder_test.py` (pyazr: the readers' table, the term through a session = d^T C^-1 d,
+the fit part = `prior_from_fit`, the chain part, every refusal and note), `tests/pyazr/ui/prior_builder_test.py`
+(the routes against the direct calls on T1, the history), the smoke test's view `prior`.
+
+**Extensibility.** A new kind of part: a row of `PART_KINDS` and a function of `_BLOCKS`; a new type of field: its
+control in `fieldInput` of `tabs/prior.js`.
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 

@@ -50,6 +50,8 @@ ROWS = [
     Row("thm_dataset", [T2], "norm (profiled) = 0.00196953 +- 1.8e-05"),
     Row("covariance_builder", [T1, "el_lab090", "--out", "{out}/T1_cov.azr"],
         "chi2 of el_lab090: 72.8685301 without, 47.34670333 with the covariance", slow=True),
+    Row("prior_builder", [T1, "--out", "{out}/T1_prior.azr"],
+        "prior on 1 parameter(s), parametrization 1 (Brune), from 1 part(s)"),
     # calculate and compare
     Row("per_dataset_chi2", [T2], "T2.azr: chi2 = 10905.2 over 330 points"),
     Row("decompose_cross_section", [T1, "--level", "1/2+ 2.365"], "1/2+ 2.365       7.841e-01"),

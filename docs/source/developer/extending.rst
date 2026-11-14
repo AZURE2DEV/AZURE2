@@ -526,6 +526,23 @@ A **view of the first view** is a row of ``FIRST_VIEW`` (``layout.js``); a
 row with ``when`` is shown under the condition of that name (``CONDITIONS``
 in ``app.js``).
 
+A part of a builder (a data covariance, a prior)
+------------------------------------------------
+
+The two builders make a file the engine reads from named parts; the page's forms come from their tables.
+
+- **A data covariance** (``pyazr/covariance.py``): one row of ``PART_KINDS`` (its fields: name, type, default,
+  unit, doc) and a branch of ``_terms`` that returns the part's terms (``diagonal``, ``vector``, ``relvector``,
+  ``block``); a case in ``tests/pyazr/covariance_builder_test.py`` against a matrix worked by hand.
+- **A prior on the parameters** (``pyazr/priors.py``): one row of ``PART_KINDS`` and one function of ``_BLOCKS``
+  that returns the part's ``_Block`` (its parameter names, centres, covariance and notes); a case in
+  ``tests/pyazr/prior_builder_test.py``.  A new type of field also needs its control in ``fieldInput`` of
+  ``pyazr/ui/static/tabs/prior.js`` (the types: ``path:<suffixes>``, ``names``, ``number``, ``integer``, ``pairs``,
+  ``matrix``).
+
+Nothing else: the checks and the notes are made on the whole matrix, and the screens (``tabs/covariance.js``,
+``tabs/prior.js``) read the tables through their routes (``pyazr/ui/utilities.py``, ``pyazr/ui/prior.py``).
+
 Other tables
 ------------
 

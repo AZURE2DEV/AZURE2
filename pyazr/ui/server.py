@@ -51,7 +51,7 @@ def _glance(full):
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
-from . import evaluations, utilities
+from . import evaluations, prior, utilities
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -147,15 +147,17 @@ class Server:
             more = bool(f.read(1))
         return {"path": path, "lines": lines, "more": more, "cut": cut}
 
-    def files(self):
+    def files(self, outputs=False):
         """The files of the project's directory (and of its subdirectories, to :data:`FILES_DEPTH` levels; not the
         program's ``output`` and ``checks``, nor hidden ones), at most :data:`FILES_MAX`: each with its path relative
         to the project (as a record's field names it), its size in bytes and what it holds at a glance (``kind``:
         ``project`` for a ``.azr``, ``table`` with ``columns`` when its first line that is not a comment is numbers,
-        ``text``, ``binary``).  Whether a data set can read it is the engine's answer: :meth:`field_preview`."""
+        ``text``, ``binary``).  Whether a data set can read it is the engine's answer: :meth:`field_preview`.
+        ``outputs`` lists the program's ``output`` too (a fit's ``param.sav`` and ``covariance.dat``, a sampler's
+        chain: what the parts of the prior builder name)."""
         with self.state.lock:
             top = self.state.directory
-            hidden = {"output", "checks"}
+            hidden = {"checks"} if outputs else {"output", "checks"}
             out, more = [], False
             for here, dirs, names in os.walk(top):
                 depth = os.path.relpath(here, top).count(os.sep) + (here != top)
@@ -374,7 +376,7 @@ class Server:
                     "session_options": session_options(session=self.session)}
 
     def parameters(self):
-        rows = self.session_describe()["parameters"]
+        rows = [dict(r) for r in self.session_describe()["parameters"]]  # the session's description stays as built
         for r in rows:
             r["x"] = self.x.get(r["name"]) if r["free"] else None
         return rows
@@ -465,6 +467,17 @@ class Server:
         with job.lock:
             job.record.setdefault("kept", []).append(dict(answer, time=time.time()))
         return answer
+
+    # -- the prior builder (pyazr/ui/prior.py) ----------------------------------------------------------------------
+
+    def prior_open(self):
+        return prior.prior_open(self.state, [f["path"] for f in self.files(outputs=True)["files"]])
+
+    def prior_build(self, parts):
+        return prior.prior_build(self.state, self.session_describe(), parts)
+
+    def prior_write(self, parts, path, rev=None):
+        return prior.prior_write(self.state, self.session_describe(), parts, path, rev)
 
     # -- jobs -------------------------------------------------------------------------------------------------------
 

@@ -59,7 +59,9 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the free parameters as check boxes
          ("first-fit", "fit"), ("fit-minos", "fit?job=minos&method=iminuit"),
          # the form of a new pair: the partners' fields and the pair's in pyazr's words, the parity a choice
-         ("first-new-pair", "nucleus/pair/+new"))
+         ("first-new-pair", "nucleus/pair/+new"),
+         # the prior builder (the Fit tab's link "Prior on the parameters…")
+         ("prior", "prior"))
 # The ENDF-6 files copied into each project's folder (tests/pyazr/data/endf: a hand-written p + 12C file and an
 # extract of the ENDF/B-VIII.1 3He + 4He evaluation, in a subdirectory), and the stand-in of the checking codes the
 # server finds (tests/pyazr/endf_standin, linked under the codes' names; its report has findings).
