@@ -125,7 +125,7 @@ ratio_check() {  # ratio_check TAG ON OFF
       if (want < rmin || n == 1) rmin = want; if (want > rmax) rmax = want; zl = zeta }
     END { if (!bad) printf "%d %.3e %.4f %.4f %.4f %.4f %.5f\n", n, w, lo, hi, rmin, rmax, zl }' > "$WORK/$1.ratio"
   read -r n w lo hi rmin rmax zl < "$WORK/$1.ratio"
-  if [ -n "${w:-}" ] && awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w < 1e-6) }'; then
+  if [ -n "${w:-}" ] && awk -v w="$w" -v n="$n" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 30 && w < 1e-6) }'; then
     ok "$1: on/off = exp[2 zeta arctan(2(E_l-E)/G_l)] at $n points, E $lo-$hi MeV, G_l = $G MeV, zeta ~ $zl, ratio $rmin-$rmax: worst rel $w"
   else
     bad "$1: ratio check failed ($(cat "$WORK/$1.ratio"))"

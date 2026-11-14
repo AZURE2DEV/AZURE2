@@ -209,6 +209,17 @@ for the first line, a flag instead of ``exit`` in ``awk``). ``head -c N`` is
 a cap and allowed. Check 50 of ``tests/consistency/repo_consistency_test.py``
 finds such a pipe.
 
+A comparison's failure must reach the caller. An ``awk`` program that prints a
+mismatch mark (``grid``, ``x``) prints the mark alone: ``END`` tests the flag
+the body set before it prints a number (``END { if (e) exit; printf ... }``),
+or the caller reads two lines and never sees the mark. A value handed to
+``awk`` with ``-v`` and compared with an upper bound is first tested to be a
+number (``v ~ /^ *[-+]?\.?[0-9]/ && v + 0 <= tol``): ``awk`` compares an
+empty value or a mark as text, or after ``v + 0`` as 0, and it passes. Check
+56 (``tests/consistency/comparison_scan.py``) finds both forms in
+``tests/*/check.sh`` and ``tests/lib/``. A tolerance read from a file is
+refused when it is not a number (``tests/run_tests.sh``).
+
 Skipped tests: exit 77
 ^^^^^^^^^^^^^^^^^^^^^^
 

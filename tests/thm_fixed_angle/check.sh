@@ -75,7 +75,7 @@ worst() {
 check_worst() {
   local n w
   read -r n w <<< "$(worst "$1" "$2" "$3")"
-  awk -v w="$w" -v n="$n" -v t="$4" 'BEGIN { exit !(n > 10 && w <= t) }' && ok "$5: $n points, worst rel $w" \
+  awk -v w="$w" -v n="$n" -v t="$4" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 10 && w <= t) }' && ok "$5: $n points, worst rel $w" \
     || bad "$5: $n points, worst rel $w (tol $4)"
 }
 same_chi2() {  # same_chi2 A B LABEL
@@ -130,7 +130,7 @@ if ran p0 && ran p05 && ran p1; then
   read -r n q lo hi <<< "$(paste -d' ' <(model p0) <(model p05) <(model p1) |
     awk '{ d1 = $4 - $2; d2 = $6 - $2; if (d1 * d1 < 1e-14 * $2 * $2) next; q = d2 / d1; s += q; n++;
            if (n == 1 || q < lo) lo = q; if (n == 1 || q > hi) hi = q } END { printf "%d %.6f %.6f %.6f\n", n, s / n, lo, hi }')"
-  awk -v lo="$lo" -v hi="$hi" -v n="$n" 'BEGIN { exit !(n > 10 && lo > 3.99 && hi < 4.01) }' \
+  awk -v lo="$lo" -v hi="$hi" -v n="$n" 'BEGIN { exit !(hi ~ /^ *[-+]?\.?[0-9]/ && n > 10 && lo > 3.99 && hi < 4.01) }' \
     && ok "windows 0-1 and 0-0.5 deg approach 0-0 as t^2: ratio of differences $lo..$hi over $n points" \
     || bad "not t^2: ratio $lo..$hi over $n points"
   run 7Li_p_a coherent "entranceL=coherent"

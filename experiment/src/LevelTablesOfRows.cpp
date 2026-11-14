@@ -33,6 +33,8 @@ PairInfo PairInfoOfRow(const io::LevelRow &r) {
   p.twoJHeavy = (int)std::lround(2.0 * r.j2());
   p.identical = io::IdenticalParticles(r);
   p.heavyParity = r.pi2();
+  p.lightParity = r.pi1();
+  p.bindingEnergy = r.bindingE();
   return p;
 }
 

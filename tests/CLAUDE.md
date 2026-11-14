@@ -54,6 +54,16 @@ case.
   the writer's SIGPIPE makes the pipeline fail at random on a loaded machine
   (a match read as "not found"); use `grep -q PATTERN <<< "$text"` or capture
   the command's output first [`repo_consistency_test.py` check 50].
+- A comparison's failure must reach the caller: an awk program that prints a
+  mismatch mark prints it alone (`END { if (e) exit; ... }`), and a value
+  given with `-v` is tested to be a number before an upper bound
+  (`v ~ /^ *[-+]?\.?[0-9]/ && v + 0 <= tol`; an empty value or a mark passes
+  otherwise) [check 56, `tests/consistency/comparison_scan.py`]. A Python
+  test asserts every difference it computes, never only prints it.
+- The names the published pages show (program options, pyazr calls) exist:
+  `tools/check_doc_names.py` lists those that do not (it needs the build:
+  `AZURE2_BIN`, `PYTHONPATH`, `PYAZR_ENGINE_DIR`; not a consistency check,
+  since the pages show other programs' options too).
 - Keep fixtures small: trim data files to the points the test needs. Keep
   every file under 1 MB.
 - pyazr tests print `skip:` and exit 77 when `pyazr`/`_azure2` cannot be

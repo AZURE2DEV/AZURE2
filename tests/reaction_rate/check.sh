@@ -81,7 +81,7 @@ compare() {
   case "$worst" in
     nrows*) bad "$label: $worst temperature rows (want 5)"; return ;;
   esac
-  if awk -v w="${worst%% *}" -v tol="$tol" 'BEGIN { exit !(w <= tol) }'; then
+  if awk -v w="${worst%% *}" -v tol="$tol" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w <= tol) }'; then
     ok "$label: largest deviation $worst (tol $tol)"
   else
     bad "$label: largest deviation $worst (tol $tol)"
@@ -115,7 +115,7 @@ sum_check() {
       d = ($2 - s) / s; if (d < 0) d = -d; if (d > w) { w = d; wt = $1 } }
     END { if (n != 5) { print "nrows", n; exit } printf "%.2e T9=%s\n", w, wt }')"
   case "$worst" in nrows*) bad "$label: $worst temperature rows (want 5)"; return ;; esac
-  if awk -v w="${worst%% *}" -v tol="$tol" 'BEGIN { exit !(w <= tol) }'; then ok "$label: largest deviation $worst (tol $tol)"
+  if awk -v w="${worst%% *}" -v tol="$tol" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w <= tol) }'; then ok "$label: largest deviation $worst (tol $tol)"
   else bad "$label: largest deviation $worst (tol $tol)"; fi
 }
 if rate p12C "" 2 && rate p12C "" -1; then

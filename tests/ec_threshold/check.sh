@@ -57,14 +57,14 @@ for r in tables direct; do
     }' "$f")
   set -- $res
   if [ "$2" -eq 0 ]; then ok "(a, $r) all $1 cross sections finite and positive"; else bad "(a, $r) $2 of $1 cross sections not finite/positive (or > 1e300)"; fi
-  if awk -v w="$3" 'BEGIN { exit !(w < 1e-5) }'; then ok "(b, $r) smooth: largest deviation from the neighbours' line $3"
+  if awk -v w="$3" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-5) }'; then ok "(b, $r) smooth: largest deviation from the neighbours' line $3"
   else bad "(b, $r) not smooth: largest deviation from the neighbours' line $3"; fi
 done
 if [ -s "$WORK/tables/$OUT" ] && [ -s "$WORK/direct/$OUT" ]; then
   dev=$(paste "$WORK/tables/$OUT" "$WORK/direct/$OUT" |
     awk 'NF >= 8 && $4 != 0 { n++; d = ($4 - $(NF/2+4)) / $4; if (d < 0) d = -d; if (d > w) w = d }
          END { if (n) printf "%.2e", w; else print "none" }')
-  if [ "$dev" != none ] && awk -v d="$dev" 'BEGIN { exit !(d < 1e-6) }'; then ok "(c) energy tables = direct integrals ($dev)"
+  if [ "$dev" != none ] && awk -v d="$dev" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d < 1e-6) }'; then ok "(c) energy tables = direct integrals ($dev)"
   else bad "(c) energy tables differ from the direct integrals ($dev)"; fi
 fi
 

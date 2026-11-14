@@ -71,7 +71,9 @@ class ProjectLevel:
 @dataclass(frozen=True)
 class ProjectPair:
     """A particle pair of ``<levels>`` (the columns of its first row): ``kind`` 0 particles, 10 photon, 20 beta;
-    ``light`` and ``heavy`` (Z, A); masses in u, energies in MeV, ``radius`` the channel radius in fm."""
+    ``light`` and ``heavy`` (Z, A); masses in u, energies in MeV, ``radius`` the channel radius in fm;
+    ``binding_energy`` the THM binding energy B (MeV) of the composite projectile whose transferred particle is the
+    light partner (0: none)."""
     key: int
     label: str
     kind: int
@@ -87,6 +89,8 @@ class ProjectPair:
     two_j_light: int
     two_j_heavy: int
     heavy_parity: int
+    light_parity: int = 1
+    binding_energy: float = 0.0
 
 
 def _level_name(level):
@@ -115,6 +119,23 @@ def _two_s(s):
     if abs(2 * float(s) - two) > 1e-9:
         raise ValueError(f"a channel spin is a multiple of 1/2, not {s}")
     return int(two)
+
+
+def _flag(name, value):
+    """A flag argument as a bool: True, False (or 1, 0); TypeError otherwise."""
+    if isinstance(value, bool) or value in (0, 1):
+        return bool(value)
+    raise TypeError(f"{name} is True or False, not {value!r}")
+
+
+def _partner(which, d):
+    """(2j, parity, Z, mass, g) of a pair partner given as ``{J, parity, Z, mass, g}``."""
+    if not isinstance(d, dict) or not {"J", "parity", "Z", "mass"} <= set(d):
+        raise ValueError(f"{which} is a dict {{J, parity, Z, mass (u), g (default 0)}}, not {d!r}")
+    unknown = set(d) - {"J", "parity", "Z", "mass", "g"}
+    if unknown:
+        raise ValueError(f"{which}: unknown keys {sorted(unknown)} (the keys: J, parity, Z, mass, g)")
+    return (_two_s(d["J"]), int(d["parity"]), int(d["Z"]), float(d["mass"]), float(d.get("g", 0.0)))
 
 
 def _replace(doc, replacements):
@@ -163,7 +184,8 @@ class NuclearPart:
         """The particle pairs of ``<levels>`` (:class:`ProjectPair`), in the order of their first rows."""
         return [ProjectPair(d["key"], d["label"], d["kind"], tuple(d["light"]), tuple(d["heavy"]), d["light_mass"],
                      d["heavy_mass"], d["light_excitation"], d["heavy_excitation"], d["separation_energy"],
-                     d["threshold"], d["radius"], d["two_j_light"], d["two_j_heavy"], d["heavy_parity"])
+                     d["threshold"], d["radius"], d["two_j_light"], d["two_j_heavy"], d["heavy_parity"],
+                     d["light_parity"], d["binding_energy"])
                 for d in self._level_table()["pairs"]]
 
     def reaction(self, entrance, exit):
@@ -182,41 +204,132 @@ class NuclearPart:
         return self._edit_levels(f"level {_level_name(level)!r}", _engine_module().set_level_edits, _level_address(level),
                                  energy=None if energy is None else float(energy), fixed=fixed, active=active)
 
-    def set_channel(self, level, pair, l, s, *, width=None, fixed=None):
+    def set_channel(self, level, pair, l, s, *, width=None, fixed=None, width_is_amplitude=None):
         """Set the width column of channel (pair key, l, s) of a level -- in the row's convention: eV for an open
         channel or a photon, the ANC in fm^-1/2 for a closed channel, MeV^1/2 for a reduced-width amplitude row
-        (:attr:`ProjectChannel.amplitude`) -- or whether it is fixed in a fit."""
+        (:attr:`ProjectChannel.amplitude`) -- whether it is fixed in a fit, or ``width_is_amplitude``: whether the
+        width column is a reduced-width amplitude (MeV^1/2, column 33 ``gammaIsRWA``) instead of a partial width or
+        ANC, a particle channel only (a level known from THM data alone, say).  The value is not converted when the
+        flag changes: give ``width`` in the new convention in the same call."""
         return self._edit_levels(f"level {_level_name(level)!r}, channel ({pair}, {l}, {s})", _engine_module().set_channel_edits,
                                  _level_address(level), int(pair), int(l), _two_s(s),
-                                 width=None if width is None else float(width), fixed=fixed)
+                                 width=None if width is None else float(width), fixed=fixed,
+                                 width_is_amplitude=None if width_is_amplitude is None else _flag(
+                                     "width_is_amplitude", width_is_amplitude))
 
     def set_pair(self, pair, *, radius=None, light_mass=None, heavy_mass=None, separation_energy=None,
-                 light_excitation=None, heavy_excitation=None):
-        """Set a pair's channel radius (fm), masses (u), separation energy (MeV) or the excitation energies of its
-        light and heavy partner (MeV) on every row of the pair (the separation energy also in the entrance-pair copy
-        of the rows whose entrance it is).  The light partner's excitation is the optional last column of a row: a
-        row that does not write it gets it only for a value other than 0.
+                 light_excitation=None, heavy_excitation=None, binding_energy=None):
+        """Set a pair's channel radius (fm), masses (u), separation energy (MeV), the excitation energies of its
+        light and heavy partner (MeV) or its THM binding energy (MeV) on every row of the pair (the separation energy
+        also in the entrance-pair copy of the rows whose entrance it is).  The light partner's excitation is the
+        optional last column of a row: a row that does not write it gets it only for a value other than 0.
+
+        ``binding_energy`` is B of the Trojan horse a = x + s whose transferred particle x is the pair's light
+        partner (column 32): the entrance vertex of a THM experiment whose entrance this pair is reads it.  A particle
+        pair only; a number >= 0 (0: none); a row without the THM columns gets them only for a value other than 0.
 
         The channel radius is the matching surface of the R-matrix: a new radius changes every penetrability, shift
         function and external-capture integral, so the level parameters no longer describe a fit -- refit before
         reading anything off the result."""
         floats = {k: float(v) for k, v in
                   dict(radius=radius, light_mass=light_mass, heavy_mass=heavy_mass, separation_energy=separation_energy,
-                       light_excitation=light_excitation, heavy_excitation=heavy_excitation).items() if v is not None}
+                       light_excitation=light_excitation, heavy_excitation=heavy_excitation,
+                       binding_energy=binding_energy).items() if v is not None}
         return self._edit_levels(f"pair {pair}", _engine_module().set_pair_edits, int(pair), **floats)
 
     def add_level(self, J, parity, energy, channels, *, fixed=True):
         """Add a level of spin ``J``, parity ``parity`` (+1 or -1) at E_x ``energy`` (MeV) with ``channels``, a list
-        of dicts ``{pair, l, s, width (row convention, default 0), fixed (default False)}`` naming existing pairs.
+        of dicts ``{pair, l, s, width (row convention, default 0), fixed (default False)}`` naming existing pairs,
+        or ``"allowed"``: the channels of the J^pi group when the project has one, else every channel
+        :meth:`allowed_channels` gives with its default limits, each with width 0, fixed.
         The levels of a J^pi share one channel set: a J^pi the project has gets the rows of its group, the channels
         not given with width 0, fixed (a channel outside the set is refused); a new J^pi gets one row per channel,
         the pair's columns copied from a row of the pair.  The level gets the next free level ID and goes at the end
-        of ``<levels>``; ``fixed`` fixes its energy."""
+        of ``<levels>``; ``fixed`` fixes its energy.  A pair row (:meth:`add_pair`) of a pair the level names is
+        removed: the level now holds the pair."""
+        if isinstance(channels, str):
+            if channels != "allowed":
+                raise ValueError(f"channels is a list of dicts or 'allowed', not {channels!r}")
+            two_j, par = _two_s(J), int(parity)
+            if any(lv.active and round(2 * lv.J) == two_j and lv.parity == par for lv in self.levels()):
+                channels = []  # the group's channels, width 0, fixed
+            else:
+                channels = [dict(c, width=0.0, fixed=True) for c in self.allowed_channels(J, parity)]
         rows = [(int(c["pair"]), int(c["l"]), _two_s(c["s"]), float(c.get("width", 0.0)), bool(c.get("fixed", False)))
                 for c in channels]
         return self._edit_levels(f"new level {J}{'+' if parity > 0 else '-'} at {energy} MeV",
                                  _engine_module().add_level_edits, _two_s(J), int(parity), float(energy),
                                  fixed=bool(fixed), channels=rows)
+
+    def allowed_channels(self, J, parity, *, l_max=2, multipolarity_max=2, multipolarities_max=2, pairs=None):
+        """The channels a level of spin ``J`` and parity ``parity`` (+1 or -1) has with the project's pairs (or the
+        pair keys ``pairs``), as dicts ``{pair, l, s}`` in pair order, then s and l ascending.  The rule is the Qt
+        GUI's (``LevelsTab::calculateChannels``), the engine's ``experiment::AllowedChannels``:
+
+        - a particle pair (spins j1, j2, parities pi1, pi2): every channel spin s = |j1 - j2| ... j1 + j2 and every
+          whole l = |s - J| ... s + J with pi1 pi2 (-1)^l = parity and l <= ``l_max``;
+        - a photon pair (the final level J_f): s = J_f and the multipolarities L = 1 ... ``multipolarity_max`` with
+          |L - J_f| <= J <= L + J_f, the lowest ``multipolarities_max`` of them (E or M follows from the parities);
+        - a beta pair (parent j2, pi2), parity = pi2: J = j2 gives s = 0 with l = 1 (Gamow-Teller) and l = 0
+          (Fermi), |J - j2| = 1 gives s = 1, l = 1 (Gamow-Teller).
+
+        The pairs of every compound nucleus are taken; a level has the channels of one nucleus (``pairs`` chooses
+        them).  :class:`pyazr.FormatError` for a J or parity out of range, a negative limit or an unknown key."""
+        found = _engine_call("allowed channels", _engine_module().allowed_channels, self._doc, _two_s(J), int(parity),
+                             l_max=int(l_max), multipolarity_max=int(multipolarity_max),
+                             multipolarities_max=int(multipolarities_max),
+                             pairs=[int(k) for k in (pairs or ())])
+        return [{"pair": k, "l": l, "s": two_s / 2} for k, l, two_s in found]
+
+    def add_pair(self, *, kind="particle", light=None, heavy, separation_energy, radius=None, light_excitation=0.0,
+                 heavy_excitation=0.0, external_capture=0, binding_energy=0.0, key=None):
+        """Add a pair; returns its key (``key``, or the next free key when None).
+
+        ``kind``: ``"particle"``, ``"photon"`` (capture to a level of the compound nucleus: ``heavy`` is that
+        nucleus in the final level, ``heavy_excitation`` its E_x) or ``"beta"``.  ``light`` and ``heavy``: dicts
+        ``{J, parity, Z, mass (u), g}`` (``g`` the g-factor, default 0; a photon pair takes no ``light``).
+        ``separation_energy`` S (MeV), ``radius`` the channel radius (fm, a particle pair), ``light_excitation`` and
+        ``heavy_excitation`` (MeV), ``external_capture`` the external-capture multipole mask, ``binding_energy`` the
+        THM binding energy (MeV, see :meth:`set_pair`).  The pair opens at E_x = S + e1 + e2 of the compound
+        nucleus.
+
+        ``<levels>`` holds a pair only in its rows, so a pair no level names yet is kept by a row of its own (a
+        "pair row": inactive, level ID 0), which :meth:`levels` does not list and :meth:`add_level` removes once a
+        level names the pair.  Every number is checked by the engine (:class:`pyazr.FormatError` with the reason);
+        a key in use is refused."""
+        kinds = {"particle": 0, "photon": 10, "beta": 20}
+        if kind not in kinds:
+            raise ValueError(f"kind is one of {', '.join(kinds)}, not {kind!r}")
+        if kind == "photon" and light is not None:
+            raise ValueError("a photon pair has no light partner to give: the photon is implied (light=None)")
+        if kind != "photon" and light is None:
+            raise ValueError(f"a {kind} pair needs light={{J, parity, Z, mass}}")
+        lt = _partner("light", light or {"J": 1, "parity": 1, "Z": 0, "mass": 0.0})
+        hv = _partner("heavy", heavy)
+        replacements_and_key = []
+
+        def edit(doc):
+            replacements, used = _engine_call(
+                "new pair", _engine_module().add_pair_edits, doc, key=int(key or 0), kind=kinds[kind],
+                two_j_light=lt[0], parity_light=lt[1], z_light=lt[2], mass_light=lt[3], g_light=lt[4],
+                two_j_heavy=hv[0], parity_heavy=hv[1], z_heavy=hv[2], mass_heavy=hv[3], g_heavy=hv[4],
+                light_excitation=float(light_excitation), heavy_excitation=float(heavy_excitation),
+                separation_energy=float(separation_energy), radius=float(radius or 0.0),
+                external_capture=int(external_capture), binding_energy=float(binding_energy))
+            _replace(doc, replacements)
+            replacements_and_key.append(used)
+        self._apply("new pair", edit)
+        return replacements_and_key[-1]
+
+    def remove_pair(self, pair, *, remove_channels=False):
+        """Remove pair ``pair`` (its key).  Refused (:class:`pyazr.FormatError`) while a level has a channel of it,
+        naming the levels and channels -- or, with ``remove_channels=True``, those channel rows go with the pair
+        (refused when a level would be left without a channel: remove that level first).  The default refuses
+        because removing channels removes fit parameters and changes every level that has them; asking for it is
+        explicit.  A data set or record that names the pair (its reaction, a potential) is refused by the validator,
+        and the project is unchanged."""
+        return self._edit_levels(f"remove pair {pair}", _engine_module().remove_pair_edits, int(pair),
+                                 remove_channels=_flag("remove_channels", remove_channels))
 
     def remove_level(self, level):
         """Remove every row of a level."""

@@ -43,7 +43,7 @@ a0() {
     "$WORK/$1/output/scatteringLengths.out"
 }
 # close A B TOL: |A - B| <= TOL |B|
-close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(a != "" && d <= t * m) }'; }
+close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; exit !(b ~ /^ *[-+]?\.?[0-9]/ && a != "" && d <= t * m) }'; }
 check() {  # check LABEL VALUE REFERENCE TOL
   if close "$2" "$3" "$4"; then ok "$1: $2 (reference $3)"; else bad "$1: ${2:-missing}, reference $3 (rel. tol. $4)"; fi
 }
@@ -58,7 +58,7 @@ check "7Be+p 1-, a01" "$(a0 be7p 1 1-)" 17.06776438 1e-5
 check "7Be+p 2-, a02" "$(a0 be7p 1 2-)" -5.018395912 1e-5
 check "n+16O 1/2+ (neutral, a (1 - g^2/E))" "$(a0 n16o 1 1/2+)" "$(awk 'BEGIN { printf "%.10f", 4.0 * (1 - 0.64 / (6.0 - 4.1431)) }')" 1e-7
 im="$(a0 be7p 2 1- im)"
-if awk -v x="$im" 'BEGIN { exit !(x + 0 < -1e-3) }'; then ok "7Be*+p 1-: complex (Im a0 = $im fm, the 7Be+p channel is open)"
+if awk -v x="$im" 'BEGIN { exit !(x ~ /^ *[-+]?\.?[0-9]/ && x + 0 < -1e-3) }'; then ok "7Be*+p 1-: complex (Im a0 = $im fm, the 7Be+p channel is open)"
 else bad "7Be*+p 1-: Im a0 = ${im:-missing}, expected negative (open 7Be+p channel)"; fi
 
 # 2. The same lengths from AZURE2's own phase shifts: effective-range expansion fitted in k^2 (ere.py).
@@ -102,7 +102,7 @@ for form in "" --no-brune --use-park; do
   log="$WORK/grad${form}/run.log"
   worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0 } END { print m + 0 }' "$log")"
   n="$(grep -c '\[grad-check\] idx' "$log")"
-  if [ "$n" -ge 8 ] && awk -v w="$worst" -v l="$limit" 'BEGIN { exit !(w < l) }'; then ok "gradient ${form:---use-brune}: $n parameters, worst relative difference $worst (limit $limit)"
+  if [ "$n" -ge 8 ] && awk -v w="$worst" -v l="$limit" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < l) }'; then ok "gradient ${form:---use-brune}: $n parameters, worst relative difference $worst (limit $limit)"
   else bad "gradient ${form:---use-brune}: $n parameters checked, worst relative difference ${worst} (limit $limit)"; grep '\[grad-check\] idx' "$log"; fi
 done
 
@@ -110,7 +110,7 @@ done
 run lm be7p_fit.azr 2 --use-lm
 fitted="$(awk '/^Total model-data chi2/ { print $NF }' "$WORK/lm/output/modelData.out")"
 data="$(sed -n 's/^Total-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/lm/output/chiSquared.out")"
-if awk -v a="$fitted" -v b="$data" 'BEGIN { exit !(a != "" && b != "" && a + b < 6) }'; then ok "--use-lm fit: data chi2 $data + scattering-length chi2 $fitted (start 227.0 + 48.3)"
+if awk -v a="$fitted" -v b="$data" 'BEGIN { exit !(b ~ /^ *[-+]?\.?[0-9]/ && a != "" && b != "" && a + b < 6) }'; then ok "--use-lm fit: data chi2 $data + scattering-length chi2 $fitted (start 227.0 + 48.3)"
 else bad "--use-lm fit: data chi2 ${data:-missing} + scattering-length chi2 ${fitted:-missing}, expected below 6"; fi
 
 # 7. Errors in a scattering-length datum stop the run with a message (the datum scattering_length_1, p+7Be s = 1,

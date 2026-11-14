@@ -76,7 +76,7 @@ maxrel() {
               r = d / m; if (r > worst) worst = r; rows++ }
     END { if (rows == 0 || bad) print "nan"; else printf "%.3e\n", worst }'
 }
-within() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r != "nan" && r + 0 <= t) }'; }
+within() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r != "nan" && r + 0 <= t) }'; }
 
 for S in 0.030 -0.030; do
   mkdir -p "$WORK/moved_$S"

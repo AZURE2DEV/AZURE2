@@ -32,7 +32,7 @@ seg() { awk -F, -v k="$2" '$1 == k { print $2 }' "$1/output/chiSquared.out" 2>/d
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
 par() { awk -v n="$2" '$1 == n { print $2 }' "$1/output/param.sav" 2>/dev/null; }
 # relclose A B TOL -> 0 when |A-B| <= TOL*max(|B|,1e-300)
-relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
+relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= t * m) }'; }
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < t) }'; }
 
 # ds NAME FILE ANGLE [FIELD...]: a data set of the model (p + p elastic at ANGLE degrees, data/FILE) with these extra
@@ -98,7 +98,7 @@ fit_common() {  # NAME EXTRA_FLAGS
   a1="$(par "$dir" F.offset)"; a2="$(par "$dir" 'F.offset[xs_90_off6]')"; t="$(total "$dir")"
   if absclose "$a1" -0.006 1e-5; then ok "$1: shared shift a = $a1 (truth -0.006)"; else bad "$1: shared shift a = $a1, expected -0.006"; fi
   if relclose "$a2" "$a1" 1e-12; then ok "$1: second data set's row written with the shared value ($a2)"; else bad "$1: second data set's row $a2, the record's $a1"; fi
-  if awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
+  if awk -v t="$t" 'BEGIN { exit !(t ~ /^ *[-+]?\.?[0-9]/ && t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
   if [ "$(awk -F, 'NR > 1 { print $1 }' "$dir/output/shifts.out" | tr '\n' ' ')" = "1 2 " ]; then ok "$1: shifts.out lists both members"; else bad "$1: shifts.out rows: $(awk -F, 'NR > 1 { print $1 }' "$dir/output/shifts.out" | tr '\n' ' ')"; fi
 }
 fit_common fit_numerical ""
@@ -110,7 +110,7 @@ mk compromise 1 "$(printf 'energy_scale F\n    offset         0 MeV fit prior 0 
                    ds xs_90_off2 xs_90_off2.dat 90 'shift          F')"
 if run compromise 2 "--use-gradient"; then
   a1="$(par "$WORK/compromise" F.offset)"; a2="$(par "$WORK/compromise" 'F.offset[xs_90_off2]')"
-  if awk -v a="$a1" 'BEGIN { exit !(a > -0.0059 && a < -0.0021) }' && relclose "$a2" "$a1" 1e-12; then
+  if awk -v a="$a1" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a > -0.0059 && a < -0.0021) }' && relclose "$a2" "$a1" 1e-12; then
     ok "one shift for both, between the two truths (a = $a1; truths -0.006 / -0.002)"
   else
     bad "expected one shift strictly between -0.006 and -0.002, got $a1 / $a2"

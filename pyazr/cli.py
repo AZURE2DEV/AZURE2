@@ -335,7 +335,10 @@ def _run_ui(v, ctx):
         raise CallError(1, f"the web UI cannot start here: {e}", "pyazr with its extra 'web' (fastapi, uvicorn)",
                         "pip install pyazr[web]  (not done by this command)", "ImportError")
     with ctx.first_line(lambda line: {"url": line.strip()}):
-        main(v.file, v.port, v.threads, v.token)
+        try:
+            main(v.file, v.port, v.threads, v.token)
+        except KeyboardInterrupt:  # the end the command names: "until interrupted"
+            pass
     return None
 
 
@@ -667,6 +670,9 @@ class _Context:
 
             def flush(self):
                 sys.stderr.flush()
+
+            def isatty(self):  # asked by logging set-ups (uvicorn's formatter) of the stream they write to
+                return False
 
         sys.stdout = Catcher()
         try:

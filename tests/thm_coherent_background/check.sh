@@ -71,7 +71,7 @@ total() { tr -d '\r' < "$1/log" | awk '/Total Chi-Squared:/ { c = $3 } END { pri
 # worst |a/b - 1| of column 4 (the model) of two output files, data lines only
 worst4() { paste <(tr -d '\r' < "$1" | awk 'NF > 3 { print $4 }') <(tr -d '\r' < "$2" | awk 'NF > 3 { print $4 }') |
   awk -v f="${3:-1}" '{ d = ($1 * f - $2) / $2; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%.2e %d", w, n }'; }
-lt() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a != "" && a + 0 <= b + 0) }'; }
+lt() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a != "" && a + 0 <= b + 0) }'; }
 started() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -f "$WORK/$1/output/$OUT" ] || { bad "$1: the run failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; }; }
 
 # (a), (b) ------------------------------------------------------------------

@@ -62,14 +62,14 @@ run lab
 chi2=$(awk -F, 'NR > 1 && $1 + 0 == 1 { print $2 }' "$WORK/run_lab/output/chiSquared.out")
 if [ -z "$chi2" ]; then
   bad "(a) no chi2 for the lab segment"
-elif awk -v c="$chi2" -v n="$n" 'BEGIN { exit !(c / n < 1e-6) }'; then
+elif awk -v c="$chi2" -v n="$n" 'BEGIN { exit !(n ~ /^ *[-+]?\.?[0-9]/ && c / n < 1e-6) }'; then
   ok "(a) lab-frame data boosted from the c.m. model: chi2 = $chi2 over $n points"
 else
   bad "(a) lab-frame data boosted from the c.m. model: chi2 = $chi2 over $n points (expected ~0)"
 fi
 # (b) output columns: E_lab Ex angle model_lab S_model data_lab err ...
 dev=$(awk 'NF >= 7 && $6 != 0 { d = ($4 - $6) / $6; if (d < 0) d = -d; if (d > w) w = d } END { printf "%.2e", w }' "$WORK/run_lab/$OUT")
-if awk -v d="$dev" 'BEGIN { exit !(d < 1e-6) }'; then
+if awk -v d="$dev" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d < 1e-6) }'; then
   ok "(b) lab-frame model column equals the lab data (max rel. deviation $dev)"
 else
   bad "(b) lab-frame model column differs from the lab data (max rel. deviation $dev)"

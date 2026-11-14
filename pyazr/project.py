@@ -296,7 +296,8 @@ class Project(NuclearPart):
                     return s, r
         names = [_text(r["name"]) for s in self._sections(doc) for r in s["records"]]
         raise ParameterKeyError(f"no record {name!r} in {self.path}{close_names(name, names)}; its records: "
-                                f"{listed(names)}; Project.records() lists them by name.")
+                                f"{listed(names)}; Project.records() lists them by name.", what=f"no record {name!r}",
+                                allowed=f"its records: {listed(names)}", fix="Project.records() lists them by name")
 
     def records(self):
         """``{name: Record}`` of every record, in file order."""

@@ -53,7 +53,7 @@ prep desc desc.azr; extrap desc
 f="$WORK/asc/output/AZUREOut_aa=1_TOTAL_CAPTURE.extrap"; g="$WORK/desc/output/AZUREOut_aa=1_TOTAL_CAPTURE.extrap"
 [ -s "$f" ] && [ -s "$g" ] || { bad "no extrapolation output"; tail -5 "$WORK/desc/run.log"; exit 1; }
 w="$(paste "$f" "$g" | awk 'NF >= 10 { d = $4 - $9; if (d < 0) d = -d; m = $4 < 0 ? -$4 : $4; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ } END { printf "%.2e %d", w + 0, n + 0 }')"
-if [ "${w##* }" -gt 5 ] && awk -v r="${w%% *}" 'BEGIN { exit !(r + 0 <= 1e-10) }'; then ok "(a) asc and desc give the same total capture cross section (${w##* } energies, worst ${w%% *})"
+if [ "${w##* }" -gt 5 ] && awk -v r="${w%% *}" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= 1e-10) }'; then ok "(a) asc and desc give the same total capture cross section (${w##* } energies, worst ${w%% *})"
 else bad "(a) asc and desc differ: $w"; fi
 
 # ---- (b) the formal energies belong to the listed levels
@@ -83,7 +83,7 @@ n="$(grep -c . "$WORK/fit/data/cap.dat")"
 (cd "$WORK/fit" && printf '2\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-brune --no-gui --no-readline t.azr > run.log 2>&1)
 chi2="$(sed -n 's/^Total-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit/output/chiSquared.out" | tail -1)"
 es="$(energies fit)"; fe="${es%% *}"; me="$(echo "$es" | awk '{ print $2 }')"
-if near "$fe" 3.791 1e-4 && near "$me" "$te" 1e-3 && awk -v c="$chi2" 'BEGIN { exit !(c != "" && c + 0 < 1) }'; then ok "(d) the fit moved the free level to $me (truth $te) and kept the fixed one at $fe (chi2 $chi2, $n points)"
+if near "$fe" 3.791 1e-4 && near "$me" "$te" 1e-3 && awk -v c="$chi2" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c != "" && c + 0 < 1) }'; then ok "(d) the fit moved the free level to $me (truth $te) and kept the fixed one at $fe (chi2 $chi2, $n points)"
 else bad "(d) fit: levels '$es', chi2 '$chi2' (expected 3.791 fixed, $te fitted, chi2 ~ 0)"; fi
 
 echo

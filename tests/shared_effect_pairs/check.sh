@@ -77,9 +77,9 @@ n2="$(wc -l < "$WORK/shared.y2" | tr -d ' ')"; n4="$(wc -l < "$WORK/shared.y4" |
 if [ "$n2" -eq 41 ] && [ "$n4" -eq 41 ]; then ok "the runs wrote 41 yields per segment (n + 20Ne, n + 22Ne)"; else bad "shared run wrote $n2 / $n4 yields, expected 41 / 41"; tail -3 "$WORK/shared/run.log"; fi
 
 r1="$(maxrel "$WORK/shared.y2" "$WORK/split.y2")"; r2="$(maxrel "$WORK/shared.y4" "$WORK/split.y4")"
-if awk -v a="$r1" -v b="$r2" 'BEGIN { exit !(a <= 1e-9 && b <= 1e-9) }'; then ok "(a) one line for both pairs == one line per pair: n + 20Ne to $r1, n + 22Ne to $r2"; else bad "(a) the shared line differs from one line per pair: n + 20Ne by $r1, n + 22Ne by $r2 (expected <= 1e-9: the 22Ne kernel was converted with 20Ne's mass ratio)"; fi
+if awk -v a="$r1" -v b="$r2" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && b ~ /^ *[-+]?\.?[0-9]/ && a <= 1e-9 && b <= 1e-9) }'; then ok "(a) one line for both pairs == one line per pair: n + 20Ne to $r1, n + 22Ne to $r2"; else bad "(a) the shared line differs from one line per pair: n + 20Ne by $r1, n + 22Ne by $r2 (expected <= 1e-9: the 22Ne kernel was converted with 20Ne's mass ratio)"; fi
 w1="$(maxrel "$WORK/wrong.y2" "$WORK/split.y2")"; w2="$(maxrel "$WORK/wrong.y4" "$WORK/split.y4")"
-if awk -v a="$w1" -v b="$w2" 'BEGIN { exit !(a <= 1e-9 && b > 1e-5) }'; then ok "(b) the 20Ne-ratio kernel on the 22Ne segment moves its yields by up to $w2 (segment 1 untouched: $w1), so (a) has teeth"; else bad "(b) the wrong-ratio kernel moves the 22Ne yields by only $w2 (segment 1: $w1); expected > 1e-5 and 0"; fi
+if awk -v a="$w1" -v b="$w2" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a <= 1e-9 && b > 1e-5) }'; then ok "(b) the 20Ne-ratio kernel on the 22Ne segment moves its yields by up to $w2 (segment 1 untouched: $w1), so (a) has teeth"; else bad "(b) the wrong-ratio kernel moves the 22Ne yields by only $w2 (segment 1: $w1); expected > 1e-5 and 0"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

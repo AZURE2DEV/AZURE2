@@ -99,9 +99,11 @@ maxrel() {
   for f in "$a"/output/AZUREOut_aa=*."$3"; do
     [ -e "$f" ] || continue
     [ -e "$b/output/$(basename "$f")" ] || { echo "missing"; return; }
-    r="$(awk 'NR == FNR { if (NF >= 4) v[FNR] = $4; next }
-              NF >= 4 { d = $4 - v[FNR]; if (d < 0) d = -d; s = v[FNR] < 0 ? -v[FNR] : v[FNR]; if (s > 0 && d / s > w) w = d / s; n++ }
-              END { printf "%d %.3e", n, w }' "$f" "$b/output/$(basename "$f")")"
+    r="$(awk 'NR == FNR { if (NF >= 4) { na++; e[na] = $1; v[na] = $4 } next }
+              NF >= 4 { n++; if (n > na || $1 != e[n]) { g = 1; next }
+                        d = $4 - v[n]; if (d < 0) d = -d; s = v[n] < 0 ? -v[n] : v[n]; if (s > 0 && d / s > w) w = d / s }
+              END { if (g || n != na) print "grid"; else printf "%d %.3e", n, w }' "$f" "$b/output/$(basename "$f")")"
+    [ "$r" = grid ] && { echo "missing"; return; }
     n=$((n + ${r%% *})); w="$(awk -v a="$w" -v b="${r##* }" 'BEGIN { print (b > a ? b : a) }')"
   done
   echo "$n $w"
@@ -112,7 +114,7 @@ for kind in "data out ''" "extrapolation extrap x"; do
   set -- $kind; what="$1"; ext="$2"; p="${3//\'/}"
   read -r n w <<< "$(maxrel "$WORK/${p}sum" "$WORK/${p}total" "$ext")"
   if [ "$n" = missing ] || [ -z "$n" ] || [ "$n" -lt 100 ]; then bad "(a) $what: outputs missing ($n points)"
-  elif awk -v w="$w" 'BEGIN { exit !(w <= 1e-9) }'; then ok "(a) $what: total = sum of every exit pair at $n points (max rel $w)"
+  elif awk -v w="$w" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w <= 1e-9) }'; then ok "(a) $what: total = sum of every exit pair at $n points (max rel $w)"
   else bad "(a) $what: total vs sum of every exit pair: max rel $w at $n points"; fi
   read -r n w <<< "$(maxrel "$WORK/${p}sum" "$WORK/${p}elast" "$ext")"
   if awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }'; then ok "(a) $what: elastic alone differs (max rel $w): the reaction channels matter"
@@ -144,9 +146,9 @@ else
                                d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
                                e = $1 - $3; if (e < 0) e = -e; if (e > v) v = e }
                              END { printf "%.2e %.2e", w / m, v / m }' "$WORK/fit/rows")"
-  awk -v w="$fd" 'BEGIN { exit !(w + 0 <= 1e-5) }' && ok "(b) gradient = finite differences for $nrow parameters ($fd of the largest)" \
+  awk -v w="$fd" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }' && ok "(b) gradient = finite differences for $nrow parameters ($fd of the largest)" \
     || bad "(b) gradient vs finite differences: $fd of the largest"
-  awk -v w="$jac" 'BEGIN { exit !(w + 0 <= 1e-10) }' && ok "(b) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
+  awk -v w="$jac" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }' && ok "(b) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
     || bad "(b) Jacobian-path vs adjoint gradient: $jac of the largest"
 fi
 

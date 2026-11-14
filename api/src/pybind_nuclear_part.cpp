@@ -15,6 +15,7 @@
 
 #include "ThmBlockEdits.h"
 #include "ThmExperiment.h"
+#include "ThmKeys.h"
 #include "azure2/experiment/LevelEdits.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/ConfigSection.h"
@@ -110,6 +111,8 @@ py::dict LevelTable(const io::Document &doc) {
     d["two_j_light"] = p.twoJLight;
     d["two_j_heavy"] = p.twoJHeavy;
     d["heavy_parity"] = p.heavyParity;
+    d["light_parity"] = p.lightParity;
+    d["binding_energy"] = p.bindingEnergy;
     pairs.append(d);
   }
   py::dict out;
@@ -159,6 +162,38 @@ py::list ThmReplacements(const io::Document &doc, std::size_t open, const std::v
   return Replacements(out);
 }
 
+// A key of <thm> as a field of a record kind of the schema (the shape pyazr.schema() gives a field).
+py::dict ThmKeyField(const ThmKeyRow &r) {
+  py::dict f;
+  f["type"] = r.type;
+  f["doc"] = r.doc;
+  f["required"] = false;
+  if (!r.title.empty() || !r.unit.empty()) f["title"] = r.title;
+  if (!r.unit.empty()) f["unit"] = r.unit;
+  if (!r.values.empty()) f["values"] = r.values;
+  if (!r.defaultValue.empty()) f["default"] = r.defaultValue;
+  if (!r.grammar.empty()) f["grammar"] = r.grammar;
+  if (!r.presentWith.empty()) {
+    py::dict when;
+    when["if"] = "field_present";
+    when["field"] = r.presentWith;
+    when["text"] = r.presentWith + " is given";
+    f["applies_when"] = when;
+  }
+  return f;
+}
+
+template <class Key>
+py::dict ThmKeyKindDict(const ThmKeyKind &kind, const std::vector<Key> &keys) {
+  py::dict fields;
+  for (const Key &k : keys) fields[py::str(k.row.key)] = ThmKeyField(k.row);
+  py::dict d;
+  d["title"] = kind.title;
+  d["doc"] = kind.doc;
+  d["fields"] = fields;
+  return d;
+}
+
 }  // namespace
 
 void BindNuclearPart(py::module_ &m) {
@@ -166,9 +201,9 @@ void BindNuclearPart(py::module_ &m) {
         "The <levels> section as levels and pairs (experiment::ReadLevelRowTable): {'levels': [dicts with label, "
         "two_j, parity, jpi, energy_text, energy (MeV), fixed, active, ids, group and level (the engine's indices, 0 "
         "for an inactive level), nucleus (Z, A), channels: [dicts with pair, l, two_s, width_text, width, fixed, "
-        "amplitude, channel (the group's channel index), line (1-based)]], 'pairs': [dicts with key, label, kind, "
+        "amplitude, channel (the group's channel index), line (1-based)]] (a pair row, experiment::AddPair, is no level), 'pairs': [dicts with key, label, kind, "
         "light and heavy (Z, A), light_mass, heavy_mass (u), light_excitation, heavy_excitation, separation_energy, "
-        "threshold (MeV), radius (fm), two_j_light, two_j_heavy, heavy_parity]}.  ValueError when a row does not read.");
+        "threshold (MeV), radius (fm), two_j_light, two_j_heavy, heavy_parity, light_parity, binding_energy (MeV)]}.  ValueError when a row does not read.");
   m.def(
       "reaction_label",
       [](const io::Document &doc, int entrance, int exit) {
@@ -218,21 +253,23 @@ void BindNuclearPart(py::module_ &m) {
   m.def(
       "set_channel_edits",
       [](const io::Document &doc, const py::object &level, int pair, int l, int twoS, std::optional<double> width,
-         std::optional<bool> fixed) {
+         std::optional<bool> fixed, std::optional<bool> widthIsAmplitude) {
         ex::ChannelChange c;
         c.width = width;
         c.fixed = fixed;
+        c.widthIsAmplitude = widthIsAmplitude;
         return Done(ex::SetChannel(doc, Address(level), ex::LevelChannelInfo{pair, l, twoS}, c));
       },
       py::arg("doc"), py::arg("level"), py::arg("pair"), py::arg("l"), py::arg("two_s"), py::kw_only(),
-      py::arg("width") = py::none(), py::arg("fixed") = py::none(),
-      "The replacements that set the width column (the row's convention: eV, fm^-1/2, or MeV^1/2 with gammaIsRWA) or "
-      "the fixed flag of one channel (pair key, l, 2s) of a level.");
+      py::arg("width") = py::none(), py::arg("fixed") = py::none(), py::arg("width_is_amplitude") = py::none(),
+      "The replacements that set the width column (the row's convention: eV, fm^-1/2, or MeV^1/2 with gammaIsRWA), "
+      "the fixed flag or the amplitude flag (gammaIsRWA, a particle channel only) of one channel (pair key, l, 2s) of "
+      "a level.");
   m.def(
       "set_pair_edits",
       [](const io::Document &doc, int pair, std::optional<double> radius, std::optional<double> lightMass,
          std::optional<double> heavyMass, std::optional<double> separationEnergy, std::optional<double> lightExcitation,
-         std::optional<double> heavyExcitation) {
+         std::optional<double> heavyExcitation, std::optional<double> bindingEnergy) {
         ex::PairChange c;
         c.radius = radius;
         c.lightMass = lightMass;
@@ -240,14 +277,16 @@ void BindNuclearPart(py::module_ &m) {
         c.separationEnergy = separationEnergy;
         c.lightExcitation = lightExcitation;
         c.heavyExcitation = heavyExcitation;
+        c.bindingEnergy = bindingEnergy;
         return Done(ex::SetPair(doc, pair, c));
       },
       py::arg("doc"), py::arg("pair"), py::kw_only(), py::arg("radius") = py::none(), py::arg("light_mass") = py::none(),
       py::arg("heavy_mass") = py::none(), py::arg("separation_energy") = py::none(),
       py::arg("light_excitation") = py::none(), py::arg("heavy_excitation") = py::none(),
-      "The replacements that set a pair's channel radius (fm), masses (u), separation energy or excitation energies "
-      "of its light and heavy partner (MeV) on every row of the pair (the separation energy also in the entrance copy "
-      "of the rows whose entrance pair it is).");
+      py::arg("binding_energy") = py::none(),
+      "The replacements that set a pair's channel radius (fm), masses (u), separation energy, excitation energies "
+      "of its light and heavy partner or THM binding energy (MeV, a particle pair only) on every row of the pair (the "
+      "separation energy also in the entrance copy of the rows whose entrance pair it is).");
   m.def(
       "add_level_edits",
       [](const io::Document &doc, int twoJ, int parity, double energy, bool fixed,
@@ -266,6 +305,68 @@ void BindNuclearPart(py::module_ &m) {
       "The replacements that add a level (2J, parity, E_x in MeV, fixed) with channels [(pair, l, 2s, width, fixed)]: "
       "the rows of its J^pi group (channels not given: width 0, fixed), or one row per channel cloned from a row of "
       "its pair; the next free level ID; at the end of <levels>.");
+  m.def(
+      "add_pair_edits",
+      [](const io::Document &doc, int key, int kind, int twoJLight, int parityLight, int zLight, double massLight,
+         double gLight, int twoJHeavy, int parityHeavy, int zHeavy, double massHeavy, double gHeavy,
+         double lightExcitation, double heavyExcitation, double separationEnergy, double radius, int externalCapture,
+         double bindingEnergy) {
+        ex::NewPair n;
+        n.key = key;
+        n.kind = kind;
+        n.twoJLight = twoJLight;
+        n.parityLight = parityLight;
+        n.zLight = zLight;
+        n.massLight = massLight;
+        n.gLight = gLight;
+        n.twoJHeavy = twoJHeavy;
+        n.parityHeavy = parityHeavy;
+        n.zHeavy = zHeavy;
+        n.massHeavy = massHeavy;
+        n.gHeavy = gHeavy;
+        n.lightExcitation = lightExcitation;
+        n.heavyExcitation = heavyExcitation;
+        n.separationEnergy = separationEnergy;
+        n.radius = radius;
+        n.externalCapture = externalCapture;
+        n.bindingEnergy = bindingEnergy;
+        int used = 0;
+        const ex::LevelEdit e = ex::AddPair(doc, n, used);
+        return py::make_tuple(Done(e), used);
+      },
+      py::arg("doc"), py::kw_only(), py::arg("key"), py::arg("kind"), py::arg("two_j_light"), py::arg("parity_light"),
+      py::arg("z_light"), py::arg("mass_light"), py::arg("g_light"), py::arg("two_j_heavy"), py::arg("parity_heavy"),
+      py::arg("z_heavy"), py::arg("mass_heavy"), py::arg("g_heavy"), py::arg("light_excitation"),
+      py::arg("heavy_excitation"), py::arg("separation_energy"), py::arg("radius"), py::arg("external_capture"),
+      py::arg("binding_energy"),
+      "(replacements, key): the pair row of a new pair (experiment::AddPair: inactive, level ID 0) at the end of "
+      "<levels>; key 0 takes the next free key.  Masses in u, energies in MeV, the radius in fm; kind 0 particle, 10 "
+      "photon, 20 beta.");
+  m.def(
+      "remove_pair_edits",
+      [](const io::Document &doc, int pair, bool removeChannels) { return Done(ex::RemovePair(doc, pair, removeChannels)); },
+      py::arg("doc"), py::arg("pair"), py::kw_only(), py::arg("remove_channels"),
+      "The replacements that remove pair `pair` (experiment::RemovePair): its pair row and, with remove_channels, the "
+      "channel rows of the levels that name it; ValueError while a level names it without remove_channels, or when a "
+      "level would be left without a channel.");
+  m.def(
+      "allowed_channels",
+      [](const io::Document &doc, int twoJ, int parity, int lMax, int multipolarityMax, int multipolaritiesMax,
+         const std::vector<int> &pairs) {
+        ex::ChannelLimits limits;
+        limits.lMax = lMax;
+        limits.multipolarityMax = multipolarityMax;
+        limits.multipolaritiesMax = multipolaritiesMax;
+        const ex::AllowedChannelList a = ex::AllowedChannels(doc, twoJ, parity, limits, pairs);
+        if (!a.error.empty()) throw py::value_error(a.error);
+        py::list out;
+        for (const ex::LevelChannelInfo &c : a.channels) out.append(py::make_tuple(c.pairKey, c.l, c.twoS));
+        return out;
+      },
+      py::arg("doc"), py::arg("two_j"), py::arg("parity"), py::kw_only(), py::arg("l_max"),
+      py::arg("multipolarity_max"), py::arg("multipolarities_max"), py::arg("pairs"),
+      "[(pair key, l, 2s)]: the channels a level of 2J and parity has with the pairs of <levels> (pairs: keys, or [] "
+      "for all), by the rule of experiment::AllowedChannels (the Qt LevelsTab's).");
   m.def(
       "remove_level_edits", [](const io::Document &doc, const py::object &level) { return Done(ex::RemoveLevel(doc, Address(level))); },
       py::arg("doc"), py::arg("level"), "The replacements that remove every row of a level.");
@@ -354,6 +455,18 @@ void BindNuclearPart(py::module_ &m) {
       py::arg("doc"), py::arg("name"), py::arg("value"), py::kw_only(), py::arg("remove") = false,
       "The replacements that set a <config> entry (io::ConfigEdits) or, with remove, remove a key.");
 
+  m.def(
+      "thm_keys",
+      []() {
+        py::dict out;
+        out[py::str(ThmOptionKind().name)] = ThmKeyKindDict(ThmOptionKind(), ThmOptionKeys());
+        out[py::str(ThmExperimentKind().name)] = ThmKeyKindDict(ThmExperimentKind(), ThmExperimentKeys());
+        return out;
+      },
+      "The keys of <thm> as two record kinds of a schema, '<thm>' (the global options) and 'experiment' (the keys of "
+      "an experiment[<name>] line): {kind: {title, doc, fields: {key: {type, doc, required, title, unit, values, "
+      "default, grammar, applies_when}}}}, from the tables the engine's parser reads (ThmOptionKeys, "
+      "ThmExperimentKeys).");
   m.def(
       "thm_entries",
       [](const io::Document &doc) {

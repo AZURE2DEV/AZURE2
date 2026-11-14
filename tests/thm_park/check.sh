@@ -101,7 +101,7 @@ models() {
     r="$(paste <(tr -d '\r' < "$WORK/$1/output/$f" | awk 'NF > 4 { print $1, $4 }') \
                <(tr -d '\r' < "$WORK/$2/output/$f" | awk 'NF > 4 { print $1, $4 }') |
       awk '{ if (e) next; if ($1 != $3 || NF != 4) { print "x"; e = 1; next } d = $2 - $4; if (d < 0) d = -d; s = $2 < 0 ? -$2 : $2
-             if (s > 0 && d / s > w) w = d / s; else if (s == 0 && d > 0) w = 1 } END { if (NR == 0) print "x"; else printf "%.3e\n", w }')"
+             if (s > 0 && d / s > w) w = d / s; else if (s == 0 && d > 0) w = 1 } END { if (e) exit; if (NR == 0) print "x"; else printf "%.3e\n", w }')"
     [ "$r" = x ] && { echo x; return; }
     w="$(awk -v a="$w" -v b="$r" 'BEGIN { print (b > a ? b : a) }')"
     n=$((n + 1))
@@ -134,7 +134,7 @@ widthdiff() {
     awk '{ if (NF != 2) { bad = 1; next } d = $1 - $2; if (d < 0) d = -d; s = $1 < 0 ? -$1 : $1
            if (s > 0 && d / s > w) w = d / s; n++ } END { if (bad || n == 0) print "x"; else printf "%.3e %d\n", w, n }'
 }
-below() { awk -v a="$1" -v t="$2" 'BEGIN { exit !(a != "x" && a + 0 <= t + 0) }'; }
+below() { awk -v a="$1" -v t="$2" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a != "x" && a + 0 <= t + 0) }'; }
 
 # same_physics TAG SRC [BLOCK]: Brune and Park runs of the same .azr agree.
 same_physics() {
@@ -224,7 +224,7 @@ run fit.b '2\nn\n\n\n7\n'; run fit.p '2\nn\n\n\n7\n' --use-park
 if okrun fit.b && okrun fit.p; then
   cb="$(tr -d '\r' < "$WORK/fit.b/log" | awk '/^Total Chi-Squared:/ { v = $3 } END { print v }')"
   cp="$(tr -d '\r' < "$WORK/fit.p/log" | awk '/^Total Chi-Squared:/ { v = $3 } END { print v }')"
-  awk -v a="$cb" -v b="$cp" 'BEGIN { d = (a - b) / a; if (d < 0) d = -d; exit !(a != "" && b != "" && d < 1e-6 && a < 2228) }' \
+  awk -v a="$cb" -v b="$cp" 'BEGIN { d = (a - b) / a; if (d < 0) d = -d; exit !(a ~ /^ *[-+]?\.?[0-9]/ && a != "" && b != "" && d < 1e-6 && a < 2228) }' \
     && ok "fit: the same minimum, Brune $cb, Park $cp (start 2228.9)" || bad "fit: minimum Brune '$cb', Park '$cp'"
   read -r w n <<< "$(widthdiff fit.b fit.p)"
   below "$w" "$TOL_FIT" && ok "fit: the $n physical widths agree (max rel $w)" || bad "fit: widths differ (max rel $w)"

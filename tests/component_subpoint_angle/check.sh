@@ -75,13 +75,13 @@ for n in P Q Qc; do grep -q "^exit 0" "$WORK/$n/run.log" || bad "$n did not run:
 col "$WORK/Q/output/AZUREOut_aa=1_R=1.extrap" > "$WORK/q.txt"
 col "$WORK/Qc/output/AZUREOut_aa=1_R=1.extrap" > "$WORK/qc.txt"
 r="$(maxrel "$WORK/q.txt" "$WORK/qc.txt")"
-if [ -s "$WORK/q.txt" ] && [ "$(wc -l < "$WORK/q.txt")" = "$(wc -l < "$WORK/qc.txt")" ] && awk -v r="$r" 'BEGIN { exit !(r < 1e-6) }'; then
+if [ -s "$WORK/q.txt" ] && [ "$(wc -l < "$WORK/q.txt")" = "$(wc -l < "$WORK/qc.txt")" ] && awk -v r="$r" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < 1e-6) }'; then
   ok "(a) the SUM with a 0.1 keV convolution equals the SUM without it (max rel. $r, $(wc -l < "$WORK/q.txt" | tr -d ' ') energies)"
 else bad "(a) convolved SUM vs plain SUM: max rel. $r ($(wc -l < "$WORK/q.txt" | tr -d ' ') vs $(wc -l < "$WORK/qc.txt" | tr -d ' ') energies)"; fi
 
 paste <(col "$WORK/P/output/AZUREOut_aa=1_R=1.extrap") <(col "$WORK/P/output/AZUREOut_aa=2_R=2.extrap") | awk '{ print $1 + $2 }' > "$WORK/p.txt"
 r="$(maxrel "$WORK/q.txt" "$WORK/p.txt")"
-if [ -s "$WORK/p.txt" ] && awk -v r="$r" 'BEGIN { exit !(r < 1e-5) }'; then ok "(b) the lab SUM equals the sum of its terms' lab cross sections (max rel. $r)"
+if [ -s "$WORK/p.txt" ] && awk -v r="$r" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < 1e-5) }'; then ok "(b) the lab SUM equals the sum of its terms' lab cross sections (max rel. $r)"
 else bad "(b) SUM vs P1 + P2: max rel. $r"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi

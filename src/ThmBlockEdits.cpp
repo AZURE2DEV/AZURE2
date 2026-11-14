@@ -1,5 +1,6 @@
 // The writer of the <thm> block beside its reader (ThmBlockEdits.h).
 #include "ThmBlockEdits.h"
+#include "ThmKeys.h"
 
 #include <algorithm>
 
@@ -81,9 +82,7 @@ bool ThmOptionEdits(const std::vector<std::string> &lines, const std::string &ke
     return false;
   }
   if (change == ThmChange::Set && !ParseThmOptionLine(key, value, parsed)) {
-    why = "<thm> line not understood: '" + key + "=" + value + "' (the options: vertex=onshell|constant|perlevel, "
-          "kinematics=lacognata|triple|kf3body|lambda32, entranceL=coherent|incoherent, coulombIntegral=0|1, "
-          "spectatorEnergy=<MeV>, spectatorEnergy[<pair key>]=<MeV>)";
+    why = "<thm> line not understood: '" + key + "=" + value + "' (the options: " + ThmOptionUsage() + ")";
     return false;
   }
   std::vector<int> own;

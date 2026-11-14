@@ -70,7 +70,7 @@ for v in experiment distortion dw lineshape ps; do
   c1="$(total "$WORK/$v")"
   e1="$(energy "$WORK/$v/output/param.sav")"
   awk -v a="$c0" -v b="$c1" -v e="$e1" 'BEGIN { d = e - 8.6126; if (d < 0) d = -d
-      exit !(b != "" && b <= a * (1 + 1e-12) && d > 1e-6) }' \
+      exit !(b ~ /^ *[-+]?\.?[0-9]/ && b != "" && b <= a * (1 + 1e-12) && d > 1e-6) }' \
     && ok "$v: E moved 8.6126 -> $e1 MeV, chi2 $c0 -> $c1" || bad "$v: chi2 $c0 -> $c1, E $e1"
   # A calculation from the fit's parameters gives the fit's chi2.
   setup "$v.check" "$block"
@@ -115,7 +115,7 @@ for v in experiment ps shift shiftfree; do
     [ "$c" = "shift J-1" ] && [ -z "$shiftline" ] && continue
     line="$(grep -a "\[grad-check\] .*$c" "$d/log")"
     rel="$(printf '%s\n' "$line" | awk '{ print $NF }')"
-    if grep -aq 'analytic block used' "$d/log" && [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-5) }'; then
+    if grep -aq 'analytic block used' "$d/log" && [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r < 1e-5) }'; then
       ok "folded $v: the analytic gradient (${c% *}) agrees with central differences (rel $rel)"
     else
       bad "folded $v: $line"
