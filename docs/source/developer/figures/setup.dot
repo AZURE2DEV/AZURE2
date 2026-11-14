@@ -13,6 +13,7 @@ digraph setup {
   n_JGroup [label=<<b>JGroup</b><br/><font point-size="12">one J^pi group: its<br/>channels and levels</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_AChannel [label=<<b>AChannel</b><br/><font point-size="12">a channel (pair, l, s)<br/>with its boundary<br/>value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_ALevel [label=<<b>ALevel</b><br/><font point-size="12">a level: E and gamma<br/>at the vector, flags</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_ObservedLevelTable [label=<<b>ObservedLevelTable</b><br/><font point-size="12">the observed values of<br/>the levels at one<br/>vector, for the<br/>reports</font>>, shape=box, style="filled", fillcolor="white"];
   n_CNucSystem [label=<<b>CNucSystem</b><br/><font point-size="12">the physics System of<br/>a CNuc and its index<br/>map</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_azure2__physics__System [label=<<b>azure2::physics::System</b><br/><font point-size="12">partitions, channels<br/>and J^pi blocks</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_azure2__PathwayTable [label=<<b>azure2::PathwayTable</b><br/><font point-size="12">reaction pathways and<br/>interference terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
@@ -31,6 +32,7 @@ digraph setup {
   n_CNuc -> n_JGroup [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_JGroup -> n_AChannel [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_JGroup -> n_ALevel [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CNuc -> n_ObservedLevelTable [style=dotted, penwidth=1.6, arrowhead=empty];
   n_CNuc -> n_CNucSystem [style=dashed, arrowhead=vee];
   n_CNucSystem -> n_azure2__physics__System [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_CNuc -> n_azure2__PathwayTable [style=dashed, arrowhead=vee];

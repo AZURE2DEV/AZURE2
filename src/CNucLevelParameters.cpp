@@ -98,7 +98,7 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CN
         continue;
       out[la * channels.size() + k].present = true;
       out[la * channels.size() + k].value =
-          ExternalReducedWidth(compound, group, group->GetLevel(levels[la]), channel, true, configure);
+          ExternalReducedWidthOfInputs(compound, group, group->GetLevel(levels[la]), channel, configure);
     }
   return out;
 }

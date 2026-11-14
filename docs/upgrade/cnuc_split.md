@@ -1742,6 +1742,40 @@ about 200 reader calls; `ALevel` −250 lines; new `LevelState` ≈ 350 and `Obs
   merged, no copy reads a stale value).
 - The check: the moved `ALevel` accessors abort (one commit, the tree run), then deleted; `ALevel` keeps (a) only.
 
+*Step 2b as found* (branch `feature/upgrade-5-cnuc-level-state`, start 8bdd3a90). The copy does read a stale N_f^½,
+and a worse one than §12.4 says: after the first hand-over its N_f^½ is the one `FillCompoundFromParamsPhysical`
+forms from the observed values (an ANC taken as an amplitude), not the start value. Traced under `gdb` on a fit of a
+13N project with external capture, a free ground-state amplitude and a layer target on the elastic data (scratch
+`work/cnuc3/de/m1/`): the evaluation's N_f^½ of the ground state 0.885416, the copy's 0.832687. It cannot move a
+grid: the observed photon widths it spoils enter only the anchors' total width, which the lattice does not read
+(`MeshPlanner.h`: `MeshAnchor::totalWidth` "not used for the lattice"; `SameAnchors` and the plan compare the energy
+and the particle width), and a particle width does not depend on the external part (physics/ `observed_levels`:
+the external amplitude enters the photon columns only, the normalization sums particle columns). The one way left is
+the test "has a width" of `AdaptiveIntegrationGrid::LevelResonances` (a level whose every particle value is at most
+1e-6 and whose photon value crosses 1e-6). So nothing was changed; the copy keeps its behaviour through step 3,
+which therefore needs no exception to bit-identity.
+
+*Step 3 as built, first part: the report set* (same branch). Measured first on the start commit, calls outside
+`ALevel.cpp`: the report set 48 (`GetTransformE` 9, `GetTransformGamma` 7, `GetBigGamma` 7, `GetObservedValue` 5,
+`GetObservedKind` 5, `GetTransformIterations` 2, `GetExternalGamma` 1, the setters 12, all in `CNuc.cpp`); the fit set
+about 180 (`GetFitGamma` 55 in 14 files, `GetFitE` 39 in 15, `GetParkNorm` 14, `GetShiftFunction` 11,
+`GetShiftDerivative` 9, `SetFitE`/`SetFitGamma`/`SetSqrtNFFactor` 8 each, the rest under 6).
+- `CNuc::TransformOut` returns an `ObservedLevelTable` (`include/ObservedLevelTable.h`: per level the Brune (Park)
+  E, γ, iterations and N_f^½, per channel the external part, W, the observed value and its kind); `TransformToBrune`
+  and `ObservedWidths` write the table and no level. `GetTransformParams`, `WriteParametersOut`,
+  `WriteRelativisticOut`, `WarnLargeRadiativeWidths`, `LevelValue` (model data), `GammaDecaySet::Report` and the
+  extrapolation seeds read it; `ObservedWidthsAt` and `ObservedOfFitValues` return one (empty when the transformation
+  fails). The report set's seven members and thirteen accessors of `ALevel` are deleted, so the compiler checks
+  that nothing reads the old place (the abort commit of the pattern is not needed for a member that no longer exists).
+- `ExternalReducedWidth(..., bool initial, ...)` (§12.4 defect 7) is two functions: `ExternalReducedWidthOfInputs`
+  (the input set, for `TransformIn`) and `ExternalReducedWidthOfTable` (the table's Brune values and N_f^½).
+- What differed from the design: in the formal basis `TransformToBrune` wrote the final states' N_f^½ into the levels
+  (the fit set), and `TransformOut` (not `ObservedOfFitValues`) left it there; the table holds that value now and the
+  levels keep the evaluation's. `ObservedOfFitValues` still puts the N_f^½ back, for Park's basis, where
+  `TransformToBrune` recomputes the shift functions. A snapshot of a chain sampled in the RWA basis printed in its
+  `parameters.out` the observed values the sampler's set-up left in the compound (the start vector's): it reads a table
+  of the start vector now (`AZURECalcMCMC::StartObservedLevels`), the same numbers; a defect, named in the handoff.
+
 **Step 4. The parameter vector; the copies replaced.** (≈ 600 lines changed; `CNuc.cpp` −400 into
 `LevelParameterVector.cpp` and `LevelInputs.cpp`; files: `CNuc.*`, `AZUREGrad.cpp`, `AZUREParams.cpp`,
 `ParameterLabel.cpp`, `AZURECalc.*`, `AZURECalcMCMC.*`, `AZUREAPI.*`, `AZUREAPIModelData.cpp`, `AZURE2.cpp`,

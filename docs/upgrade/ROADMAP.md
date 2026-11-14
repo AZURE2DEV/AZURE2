@@ -203,6 +203,10 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 - [x] Abundances, THM coherent values and the two penalties out of `CNuc`: the samples in the `DataSet`, the values in
       the working copy, one place for the abundance block of the parameter vectors (`AbundanceSamples`), the Park
       wall and the abundance penalties the bodies of their objective terms (`cnuc_split.md` §12.3, step 2 as built).
+- [ ] The level values out of `ALevel`. Done: the report set (`CNuc::TransformOut` returns an `ObservedLevelTable`;
+      the reports, the model data and the observed vector read it). Open: the fit set into a `LevelState`
+      (`cnuc_split.md` §12.3, step 3 as built). The stale copy the sub-point grids are laid out from was measured
+      and cannot move a grid (step 2b as found).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

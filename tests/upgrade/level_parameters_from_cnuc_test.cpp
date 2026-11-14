@@ -111,19 +111,30 @@ bool IsPhoton(const phys::System &s, int c) {
   return s.channel(c).kind == phys::ChannelKind::Electric || s.channel(c).kind == phys::ChannelKind::Magnetic;
 }
 
-// Amplitudes of a block as the CNuc's levels hold them.
-std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b, bool transformOut) {
+// Input amplitudes and energies of a block as the CNuc's levels hold them.
+std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b) {
   const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
   std::vector<double> out;
   for (int la : map.levelOfBlockLevel[b])
-    for (int ch : map.channelOfBlockChannel[b])
-      out.push_back(transformOut ? g->GetLevel(la)->GetTransformGamma(ch) : g->GetLevel(la)->GetGamma(ch));
+    for (int ch : map.channelOfBlockChannel[b]) out.push_back(g->GetLevel(la)->GetGamma(ch));
   return out;
 }
-std::vector<double> CNucE(CNuc &cn, const CNucSystemMap &map, std::size_t b, bool transformOut) {
+std::vector<double> CNucE(CNuc &cn, const CNucSystemMap &map, std::size_t b) {
   const JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
   std::vector<double> out;
-  for (int la : map.levelOfBlockLevel[b]) out.push_back(transformOut ? g->GetLevel(la)->GetTransformE() : g->GetLevel(la)->GetE());
+  for (int la : map.levelOfBlockLevel[b]) out.push_back(g->GetLevel(la)->GetE());
+  return out;
+}
+// The same of CNuc::TransformOut's table.
+std::vector<double> TableGamma(const ObservedLevelTable &t, const CNucSystemMap &map, std::size_t b) {
+  std::vector<double> out;
+  for (int la : map.levelOfBlockLevel[b])
+    for (int ch : map.channelOfBlockChannel[b]) out.push_back(t.Level(map.groupOfBlock[b], la).gamma[ch - 1]);
+  return out;
+}
+std::vector<double> TableE(const ObservedLevelTable &t, const CNucSystemMap &map, std::size_t b) {
+  std::vector<double> out;
+  for (int la : map.levelOfBlockLevel[b]) out.push_back(t.Level(map.groupOfBlock[b], la).E);
   return out;
 }
 
@@ -182,6 +193,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
   std::vector<std::vector<double> > preEC(sys.num_blocks());  // Brune amplitudes before external capture
 
   // Formal -> Brune by the engine: CNuc::TransformOut on the formal CNuc, its fit values set to the loaded ones.
+  ObservedLevelTable outF;
   {
     CNuc &cn = refF->compound;
     for (int j = 1; j <= cn.NumJGroups(); j++)
@@ -190,7 +202,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
         lev->SetFitE(lev->GetE());
         for (int ch = 1; ch <= cn.GetJGroup(j)->NumChannels(); ch++) lev->SetFitGamma(ch, lev->GetGamma(ch));
       }
-    cn.TransformOut(refF->cfg);
+    outF = cn.TransformOut(refF->cfg);
   }
 
   for (std::size_t b = 0; b < sys.num_blocks(); b++) {
@@ -210,7 +222,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     phys::Convention conv;
     const phys::InternalParameters pb = phys::level_parameters(sys, b, conv, own, in, cf, opt);
     preEC[b] = phys::amplitudes_from_observed(sys, b, own, in, phys::LevelBasis::Brune, cf).gamma;
-    const std::vector<double> gB = CNucGamma(refB->compound, map, b, false);
+    const std::vector<double> gB = CNucGamma(refB->compound, map, b);
     for (std::size_t i = 0; i < gB.size(); i++) bruneG.add(pb.basis_gamma[i], gB[i], std::fmax(std::fabs(gB[i]), 1e-300));
     CompareB(sys, b, pb.B, bruneB);
 
@@ -220,7 +232,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     convP.basis = phys::LevelBasis::Park;
     opt.external = &extP;
     const phys::InternalParameters pp = phys::level_parameters(sys, b, convP, own, in, cf, opt);
-    const std::vector<double> gP = CNucGamma(refP->compound, map, b, false);
+    const std::vector<double> gP = CNucGamma(refP->compound, map, b);
     for (std::size_t i = 0; i < gP.size(); i++) parkG.add(pp.basis_gamma[i], gP[i], std::fmax(std::fabs(gP[i]), 1e-300));
     {
       const JGroup *g = refP->compound.GetJGroup(map.groupOfBlock[b]);
@@ -236,7 +248,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     opt.external = &extF;
     opt.formal = true;
     const phys::InternalParameters pf = phys::level_parameters(sys, b, convF, own, in, cf, opt);
-    const std::vector<double> gF = CNucGamma(refF->compound, map, b, false), EF = CNucE(refF->compound, map, b, false);
+    const std::vector<double> gF = CNucGamma(refF->compound, map, b), EF = CNucE(refF->compound, map, b);
     const double scaleF = MaxAbs(gF);
     for (std::size_t la = 0; la < nl; la++) {
       levels++;
@@ -280,14 +292,13 @@ void CheckProject(const std::string &name, const std::string &azr) {
 
       // (a) formal -> Brune against CNuc::TransformOut.
       const phys::LevelSet back = phys::brune_from_formal(sys, b, EF, gF, builtF.system.block(b).B(), cf);
-      const std::vector<double> gOut = CNucGamma(refF->compound, map, b, true), EOut = CNucE(refF->compound, map, b, true);
+      const std::vector<double> gOut = TableGamma(outF, map, b), EOut = TableE(outF, map, b);
       const double scaleO = MaxAbs(gOut);
-      const JGroup *g = refF->compound.GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++) {
         outE.add(back.E[la], EOut[la], std::fabs(EOut[la]));
         for (std::size_t k = 0; k < nc; k++) outG.add(back.gamma[la * nc + k], gOut[la * nc + k], scaleO);
         maxIterMine = std::max(maxIterMine, back.iterations[la]);
-        maxIterCNuc = std::max(maxIterCNuc, g->GetLevel(map.levelOfBlockLevel[b][la])->GetTransformIterations());
+        maxIterCNuc = std::max(maxIterCNuc, outF.Level(map.groupOfBlock[b], map.levelOfBlockLevel[b][la]).iterations);
       }
 
       // (b) round trips.
@@ -365,7 +376,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       phys::LevelParameterOptions opt;
       opt.external = &extB;
             const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
-      const std::vector<double> gB = CNucGamma(refB->compound, map, b, false);
+      const std::vector<double> gB = CNucGamma(refB->compound, map, b);
       const double scale = MaxAbs(gB);
       for (std::size_t i = 0; i < gB.size(); i++) amp.add(ip.basis_gamma[i], gB[i], scale);
       phys::Convention internal;

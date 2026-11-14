@@ -233,7 +233,7 @@ bool AZUREAPI::UpdateParameters() {
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
 
   compound()->CalcShiftFunctions(configure());
-  compound()->TransformOut(configure());
+  const ObservedLevelTable observed = compound()->TransformOut(configure());
 
   records_ = params.Records();
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
@@ -247,7 +247,7 @@ bool AZUREAPI::UpdateParameters() {
     }
   }
 
-  all_ = compound()->GetTransformParams(configure());
+  all_ = compound()->GetTransformParams(observed);
   data()->Data().Abundances().AppendTo(all_rwa_, all_);
 
   // Norms and shifts are missing from all_ and need to be added using the all_rwa_ values
@@ -289,8 +289,7 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
   compound()->FillCompoundFromParams(all_rwa_);
   data()->FillAbundancesFromVector(all_rwa_);
   compound()->CalcShiftFunctions(configure());
-  compound()->TransformOut(configure());
-  all_ = compound()->GetTransformParams(configure());
+  all_ = compound()->GetTransformParams(compound()->TransformOut(configure()));
   data()->Data().Abundances().AppendTo(all_rwa_, all_);
   for (size_t i = all_.size(); i < all_rwa_.size(); ++i) all_.push_back(all_rwa_[i]);
 
@@ -465,9 +464,7 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
   localCompound->FillCompoundFromParams(params);
   localData->FillAbundancesFromVector(params);
 
-  localCompound->TransformOut(configure());
-
-  vector_r transformedParams = compound()->GetTransformParams(configure());
+  vector_r transformedParams = localCompound->GetTransformParams(localCompound->TransformOut(configure()));
   data()->Data().Abundances().AppendTo(params, transformedParams);
 
   // Get only non fixed parameters
@@ -499,9 +496,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
   localCompound->FillCompoundFromParams(params);
   localData->FillAbundancesFromVector(params);
 
-  localCompound->TransformOut(configure());
-
-  vector_r transformedParams = compound()->GetTransformParams(configure());
+  vector_r transformedParams = localCompound->GetTransformParams(localCompound->TransformOut(configure()));
   data()->Data().Abundances().AppendTo(params, transformedParams);
 
   if (includeFixed) return transformedParams;
@@ -530,8 +525,7 @@ vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
   CNuc *localCompound = compound();
   localCompound->FillCompoundFromParams(params);
   data()->FillAbundancesFromVector(params);
-  localCompound->TransformOut(configure());
-  vector_r transformed = compound()->GetTransformParams(configure());
+  vector_r transformed = localCompound->GetTransformParams(localCompound->TransformOut(configure()));
   data()->Data().Abundances().AppendTo(params, transformed);
   return transformed;
 }

@@ -2,6 +2,63 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-level-state`) — grid copy measured; report set out of `ALevel`
+
+**The stale copy the sub-point grids are laid out from** (`cnuc_split.md` §12.4 defect 1): real, and worse than
+written, but it cannot move a grid, so nothing was changed. Measured on a scratch project (13N levels, the LUNA
+capture data with external capture, the Meyer 84° elastic data on a carbon layer, the ground-state amplitude free;
+`work/cnuc3/de/m1/proj`), fitted with the base build (`--use-gradient`, 1963 calls, χ² 2077.666) and traced under
+`gdb` (`work/cnuc3/de/m1/gdb`): the copy is made once (3 clones, 104 hand-overs in 60 calls) and from the second
+hand-over on it forms the external part with the N_f^½ that `FillCompoundFromParamsPhysical` made from the previous
+hand-over's observed values (0.832687 where the evaluation has 0.885416). Those values reach only the observed photon
+widths, which the mesh does not read: the lattice is planned from the anchors' energy and particle width
+(`MeshPlanner.h`, `SameAnchors`), and the particle widths do not depend on the external part (`observed_levels`).
+The only remaining path is the "has a width" test of `LevelResonances` (every particle value ≤ 1e-6 and a photon
+value crossing 1e-6). Details in `cnuc_split.md` §12.3 "Step 2b as found". No test project was registered (no output
+can show it).
+
+**The report set out of `ALevel`** (design step 3, first part). Counts on the start commit (8bdd3a90), calls
+outside `ALevel.cpp`:
+
+| set of `ALevel` | members | calls outside | files |
+|---|---|---|---|
+| report set (Brune E, γ, iterations, W, observed value and kind, external part) | 7 | 48 | 7 (setters in `CNuc.cpp`) |
+| fit set (fit E, γ, EC amplitude, N_f^½, S_c, Park J, dS/dE, d²S/dE², the two energies, stamp) | 13 | ≈ 180 | 20 |
+
+- `CNuc::TransformOut` returns an `ObservedLevelTable` (`include/ObservedLevelTable.h`, `src/ObservedLevelTable.cpp`);
+  `TransformToBrune` and `ObservedWidths` write the table only. Readers moved: `GetTransformParams(table)`,
+  `WriteParametersOut`/`WriteRelativisticOut` (`CNucReport.cpp`), `WarnLargeRadiativeWidths` (`CNucChecks.cpp`),
+  `LevelValue` (`ModelData.cpp`), `GammaDecaySet::Report`, the extrapolation seeds (`AdaptiveExtrapolation.cpp`);
+  `ObservedWidthsAt` / `ObservedOfFitValues` return `std::optional<ObservedLevelTable>`. Callers changed:
+  `AZUREMain.cpp` (`RunReactionRate`, the final transformation), `RunSetUp.cpp`, `AZURECalc.cpp` (snapshot),
+  `AZURECalcMCMC.cpp` (set-up, snapshot), `AZURE2.cpp`, `ParameterLimitsManager.cpp`, `TargetSetup.cpp`,
+  `ReactionRate.cpp`, `api/src/AZUREAPI.cpp` (`Initialize`'s vectors, `SetParamsAllRWA`, `TransformRWAParameters`,
+  `TransformAllRWAParameters`, `TransformAllRWAParametersFull`: one line each), two tests.
+- The report set's seven members and thirteen accessors of `ALevel` are deleted (the compiler is the check that
+  nothing reads them). `ExternalReducedWidth(..., bool initial, ...)` is `ExternalReducedWidthOfInputs` and
+  `ExternalReducedWidthOfTable`.
+- In the formal basis the levels keep the evaluation's N_f^½ now (the transformation wrote the Brune one into them).
+- Lines: `CNuc.cpp` 1355 → 1355 (the table's helper in `CNucObserved.cpp`), `CNuc.h` 272 → 279, `ALevel.h`
+  214 → 185, `ALevel.cpp` 494 → 392.
+
+**Verified how** (build `work/b-cnuc3`, 2 threads, 0 warnings): consistency test; all projects in the three bases
+against `tab-t64-1` (tag `tab-cnuc3-1`): 887 / 851 / 887 identical; the eight fits of `fits_vs_base2.sh`
+identical to `work/b-trial64`; `angle_mapping` fitted (gradient, LM) and T2 sampled (8 walkers, 100 steps) in both
+sampling bases identical to `b-trial64` (`work/cnuc3/de/extra.sh`; the RWA chain writes the snapshots' `parameters.out`
+through `StartObservedLevels`); `OMP_NUM_THREADS=1 ctest -LE slow -j1` without the five tests that start more
+threads (`gsl_quiet`, `pyazr_park_gradient`, `pyazr_parallel_points`, `pyazr_upgrade_thread_independence`,
+`channel_table_unit`): 262 of 262 pass. An error injected into the table (the Brune energy × (1 + 1e-9), W × 1.001)
+made `physics_level_parameters_from_cnuc` fail and T2's `parameters.out` differ; removed.
+
+**Open.**
+- The fit set (energies, amplitudes, N_f^½, shift functions, Park J and derivatives, the stamp) is still on `ALevel`:
+  the `LevelState` half of the step, with `ChannelSpace`'s memo key, is not started.
+- A defect kept as it was (bit-identity): a snapshot of a chain sampled in the RWA basis writes the observed values
+  of the start vector into its `parameters.out` (`AZURECalcMCMC::StartObservedLevels` makes that table explicitly
+  now); a snapshot in the physical basis reports its own vector.
+- The copy of the sub-point grids keeps its stale N_f^½ (harmless to the grids, see above); `ReactionRate`'s copy
+  is fresh.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-libraries`) — pyazr: the libraries, `write_outputs`, the bindings
 
 **Measured first.** `python -X importtime -c "import pyazr"` and `sys.modules` after the import (build `b-pysess5`):

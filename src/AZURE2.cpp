@@ -1143,8 +1143,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       }
     } else {
       // Use physical parameters
-      compound->TransformOut(configure);
-      vector_r physicalParams = compound->GetTransformParams(configure);
+      vector_r physicalParams = compound->GetTransformParams(compound->TransformOut(configure));
       data->Data().Abundances().AppendTo(params.GetMinuitParams().Params(), physicalParams);
 
       // Extend with data parameters if needed

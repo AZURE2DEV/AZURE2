@@ -190,7 +190,7 @@ int WarnMassSeparationMismatch(const CNuc &compound, const Config &configure) {
  * width and are skipped; levels with no open particle channel are not checked.  One warning lists every flagged
  * level, worst first.
  */
-void WarnLargeRadiativeWidths(const CNuc &compound, const Config &configure) {
+void WarnLargeRadiativeWidths(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
   namespace phys = azure2::physics;
   const double warningRatio = 0.1;
   struct FlaggedLevel {
@@ -207,15 +207,16 @@ void WarnLargeRadiativeWidths(const CNuc &compound, const Config &configure) {
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
       const ALevel *theLevel = theJGroup->GetLevel(la);
       if (!theLevel->IsInRMatrix()) continue;
+      const ObservedLevel &observed = table.Level(j, la);
       double particleWidth = 0.0;
       double radiativeWidth = 0.0;
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        if (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch)) != phys::ObservedKind::Width) continue;
+        if (static_cast<phys::ObservedKind>(observed.kind[ch - 1]) != phys::ObservedKind::Width) continue;
         const char type = theJGroup->GetChannel(ch)->GetRadType();
         if (type == 'P')
-          particleWidth += fabs(theLevel->GetBigGamma(ch));
+          particleWidth += fabs(observed.W[ch - 1]);
         else if (type == 'M' || type == 'E')
-          radiativeWidth += fabs(theLevel->GetBigGamma(ch));
+          radiativeWidth += fabs(observed.W[ch - 1]);
       }
       if (particleWidth <= 0.0 || radiativeWidth <= 0.0) continue;
 

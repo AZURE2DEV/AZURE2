@@ -36,6 +36,7 @@ PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	im
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	evaluation
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
 ALevel	include/ALevel.h	a level: E and gamma at the vector, flags	setup	class	evaluation
+ObservedLevelTable	include/ObservedLevelTable.h	the observed values of the levels at one vector, for the reports	setup	class	run
 CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	setup	class	immutable
 azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable
 azure2::PathwayTable	include/PathwayTable.h	reaction pathways and interference terms	setup	class	immutable

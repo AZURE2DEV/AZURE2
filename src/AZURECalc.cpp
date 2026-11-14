@@ -525,8 +525,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ld->SyncNormGroupParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), results, true);
-    lc->TransformOut(configure());
-    WriteParametersOut(*lc, configure());
+    WriteParametersOut(*lc, lc->TransformOut(configure()), configure());
   } catch (...) {
     // An intermediate snapshot is a convenience, never a reason to abort a fit.
     // A failure may leave the copies half-filled: drop them so the next
