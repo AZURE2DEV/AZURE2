@@ -147,6 +147,11 @@ class ProjectPair:
         "g": {"title": "g-factor", "unit": "", "doc": "the partner's g-factor (magnetic moment / (J nuclear "
               "magnetons)); 0 when not needed", "default": 0},
     }
+    # add_pair's other arguments that are not a field of a pair, with the same words.
+    ARGUMENTS = {
+        "external_capture": {"title": "EC multipolarities", "unit": "",
+                             "doc": "the external-capture multipole mask of a photon pair (0: none)"},
+    }
     # add_pair's kinds, in the order the <levels> numbers them.
     KINDS = {"particle": 0, "photon": 10, "beta": 20}
 

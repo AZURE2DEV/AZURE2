@@ -287,3 +287,5 @@ table.settings-group th { border-top: 1px solid var(--grid); }
 .file-preview { flex-basis: 100%; width: 100%; }
 .file-preview:empty { display: none; }
 .file-choice datalist { display: none; }
+.name-choice .name-boxes { max-height: 180px; overflow: auto; columns: 2; font-size: 12px; }
+.name-choice .name-boxes label { display: block; }

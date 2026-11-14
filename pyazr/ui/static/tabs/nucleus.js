@@ -11,16 +11,19 @@ import { formatNumber, renderTable } from "../tables.js";
 import { button, h, section } from "../ui.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel, recordRoute } from "./records.js";
 
-// The units of the pairs' numbers as the routes document them (PATCH and POST /api/project/pairs); the fields
-// themselves are the routes' arguments (GET /api/describe), so a field a route gains is shown with its name alone.
-const UNITS = { radius: "fm", light_mass: "u", heavy_mass: "u", separation_energy: "MeV", light_excitation: "MeV",
-  heavy_excitation: "MeV", binding_energy: "MeV", mass: "u" };
-// A new pair's partners: add_pair's dicts {J, parity, Z, mass (u), g}; a photon pair takes no light partner.
-export const PARTNER = [["J", "spin"], ["parity", "+1 or -1"], ["Z", "charge number"], ["mass", "u"],
-  ["g", "g-factor, default 0"]];
-// add_pair's kinds; the arguments of the route that are not numbers.
-export const PAIR_KINDS = ["particle", "photon", "beta"];
+// A pair's numbers and a new pair's partners are described by pyazr's table (kinds()["pairs"]: `fields` with title,
+// unit and doc, `partner_fields` of add_pair's dicts {J, parity, Z, mass, g}, `kinds`); the fields a form offers are
+// the routes' arguments (GET /api/describe), so a field a route gains is shown with its name where the table lacks
+// it.
+/** A field's words for a form: {title, unit, doc} from pyazr's table, or the name alone. */
+export function pairWords(table, name) {
+  const f = table?.fields?.[name] || table?.arguments?.[name];
+  return f ? { title: f.title, unit: f.unit || "", doc: f.doc || "" } : { title: name.replace(/_/g, " "), unit: "",
+    doc: "" };
+}
 const STRUCTURED = new Set(["kind", "light", "heavy"]);
+/** The fields of a new pair's partner (add_pair's dicts), from pyazr's table: [[key, {title, unit, doc, values?}]]. */
+export const partnerFields = (table) => Object.entries(table?.partner_fields || {});
 
 /** The arguments of a route of the server's table (GET /api/describe: routes[].arguments), without the path's own
  * and the revision. */
@@ -35,12 +38,12 @@ const valueOf = (t) => (t !== "" && Number.isFinite(Number(t)) ? Number(t) : t);
 
 /** The body of POST /api/project/pairs from a new pair's texts ({kind, "light.J", ..., field: text}): the partners
  * as add_pair's dicts (none for a photon's light partner), the route's other arguments where typed. */
-export function newPairRequest(texts, fields) {
-  const body = { kind: texts.kind || PAIR_KINDS[0] };
+export function newPairRequest(texts, fields, table) {
+  const body = { kind: texts.kind || (table?.kinds || ["particle"])[0] };
   for (const side of ["light", "heavy"]) {
     if (side === "light" && body.kind === "photon") continue;
     const partner = {};
-    for (const [k] of PARTNER) {
+    for (const [k] of partnerFields(table)) {
       const t = String(texts[`${side}.${k}`] ?? "").trim();
       if (t !== "") partner[k] = valueOf(t);
     }
@@ -93,11 +96,11 @@ export async function render(ctx, el, args) {
   function showPair(p) {
     const fields = routeArguments(routes, "PATCH", "/api/project/pairs/{key}");
     const inputs = fields.map((k) => {
-      const unit = UNITS[k] || "";
+      const w = pairWords(ctx.kinds.pairs, k);
       const input = h("input.num", { type: "text", value: p[k] === undefined ? "" : String(p[k]), size: 12,
-        "aria-label": unit ? `${k} (${unit})` : k });
-      return [k, input, h("label.ctl", {}, h("span.ctl-label", {}, `${k.replace(/_/g, " ")}${unit ? ` (${unit})`
-        : ""}`), input)];
+        "aria-label": w.unit ? `${k} (${w.unit})` : k });
+      return [k, input, h("label.ctl", { title: `${w.doc} (${k})` }, h("span.ctl-label", {},
+        `${w.title}${w.unit ? ` (${w.unit})` : ""}`), input)];
     });
     const apply = button(`Apply to pair ${p.key}`, "set_pair with the changed values", () => {
       const changed = Object.fromEntries(inputs.filter(([k, i]) => i.value.trim() !== String(p[k] ?? ""))
@@ -126,21 +129,35 @@ export async function render(ctx, el, args) {
   function newPairForm() {
     const fields = routeArguments(routes, "POST", "/api/project/pairs");
     const texts = {};
-    const box = (name, label, title, value = "") => {
+    const box = (name, label, title, value = "", words = label) => {
       texts[name] = value;
       const input = h("input.num", { type: "text", value, size: 10, "aria-label": label, title });
       input.addEventListener("input", () => { texts[name] = input.value; });
-      return h("label.ctl", { title }, h("span.ctl-label", {}, label), input);
+      return h("label.ctl", { title }, h("span.ctl-label", {}, words), input);
     };
-    const kind = h("select", { "aria-label": "kind" }, PAIR_KINDS.map((k) => h("option", { value: k }, k)));
+    const table = ctx.kinds.pairs;
+    const kind = h("select", { "aria-label": "kind" }, (table?.kinds || []).map((k) => h("option", { value: k }, k)));
     texts.kind = kind.value;
     kind.addEventListener("change", () => { texts.kind = kind.value; });
+    // a choice where the table lists the values (the parity: + or -), a box otherwise; labelled in the table's words
+    const choice = (name, label, f) => {
+      const select = h("select", { "aria-label": label, title: f.doc }, f.values.map((v, i) => h("option",
+        { value: String(v) }, f.labels?.[i] ?? String(v))));
+      texts[name] = select.value;
+      select.addEventListener("change", () => { texts[name] = select.value; });
+      return h("label.ctl", { title: f.doc }, h("span.ctl-label", {}, f.title), select);
+    };
     const partner = (side) => h("div.inline-form", {}, h("span.k", {}, `${side} partner `),
-      ...PARTNER.map(([k, doc]) => box(`${side}.${k}`, `${side} ${k}`, doc)));
-    const others = fields.filter((f) => !STRUCTURED.has(f)).map((f) => box(f, UNITS[f] ? `${f.replace(/_/g, " ")} `
-      + `(${UNITS[f]})` : f.replace(/_/g, " "), f));
+      ...partnerFields(table).map(([k, f]) => (f.values ? choice(`${side}.${k}`, `${side} ${k}`, f)
+        : box(`${side}.${k}`, `${side} ${k}`, `${f.doc}${f.unit ? ` (${f.unit})` : ""}`, "",
+          `${f.title}${f.unit ? ` (${f.unit})` : ""}`))));
+    const others = fields.filter((f) => !STRUCTURED.has(f)).map((f) => {
+      const w = pairWords(table, f);
+      return box(f, w.unit ? `${f.replace(/_/g, " ")} (${w.unit})` : f.replace(/_/g, " "), `${w.doc} (${f})`, "",
+        `${w.title}${w.unit ? ` (${w.unit})` : ""}`);
+    });
     const add = button("Add pair", "add_pair (POST /api/project/pairs): the engine checks every number", () => ctx.edit(
-      "add a pair", () => ctx.api.post("/api/project/pairs", newPairRequest(texts, fields)), msg)
+      "add a pair", () => ctx.api.post("/api/project/pairs", newPairRequest(texts, fields, table)), msg)
       .then((answer) => ctx.navigate(`#/nucleus/pair/${answer?.result ?? ""}`), () => {}), "primary");
     add.dataset.action = "add-pair";
     return h("div.new-pair", {}, h("h3", {}, "New pair"), h("p.hint", {}, "A pair no level names yet is kept in "

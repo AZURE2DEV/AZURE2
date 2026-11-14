@@ -373,6 +373,7 @@ def _pairs_kind():
     return {"doc": _first_line(ProjectPair.__doc__), "built_by": ProjectPair.BUILT_BY,
             "fields": {k: dict(v) for k, v in ProjectPair.FIELDS.items()},
             "partner_fields": {k: dict(v) for k, v in ProjectPair.PARTNER_FIELDS.items()},
+            "arguments": {k: dict(v) for k, v in ProjectPair.ARGUMENTS.items()},
             "kinds": list(ProjectPair.KINDS)}
 
 

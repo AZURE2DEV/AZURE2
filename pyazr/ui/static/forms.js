@@ -79,7 +79,13 @@ export const WIDGETS = {
     controls: [input("v", t, { numeric: true, placeholder: f.min !== undefined ? `integer ≥ ${f.min}` : "integer" })],
     compose: (v) => v.v.trim(),
   }),
-  number_list: (f, t) => whole(f, t, { numeric: true }),
+  // a list of numbers: one box per number and two empty ones for more (an emptied box removes its number)
+  number_list: (f, t) => {
+    const numbers = tokenize(t);
+    const controls = [...numbers, "", ""].map((v, i) => input(`n${i}`, v, { numeric: true,
+      placeholder: i < numbers.length ? "" : "+", ariaLabel: `${f.title || "number"} ${i + 1}` }));
+    return { controls, compose: (v) => join(controls.map((c) => String(v[c.name] ?? "").trim())) };
+  },
   unit: (f, t, ctx) => {
     const units = unitsOf(f, ctx);
     if (!units.length) return whole(f, t);

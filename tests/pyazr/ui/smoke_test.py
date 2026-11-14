@@ -51,7 +51,12 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # a file of the folder previewed in a data set's file field (as the field's change shows it)
          ("first-file-preview", "data/{dataset}?field=file&preview=data/{file}"),
          # "new …" of a data set's detector: the form of a new detector
-         ("first-new-detector", "data/+new?kind=detector&section=targets"))
+         ("first-new-detector", "data/+new?kind=detector&section=targets"),
+         # the Fit tab: the first view (a fit; MINOS, the sampler and the bands one click away) and MINOS's form with
+         # the free parameters as check boxes
+         ("first-fit", "fit"), ("fit-minos", "fit?job=minos&method=iminuit"),
+         # the form of a new pair: the partners' fields and the pair's in pyazr's words, the parity a choice
+         ("first-new-pair", "nucleus/pair/+new"))
 
 
 def extra_projects():
@@ -173,6 +178,12 @@ def test_selftest_and_screenshots(name, tmp_path):
                          "Plot", *(["Physics", "THM"] if with_thm else []), "Reaction Rate"] \
             or label not in ("T1", "T2"), shown
         assert all(s["depth"] == "expert" for s in result["steps"] if s not in first), "a view not in its depth"
+        # the Fit tab's two depths (the PI's decision): a fit first, the other kinds one click away; all in the expert's
+        fit_first = next(s for s in first if s["route"] == "#/fit")
+        fit_expert = next(s for s in result["steps"] if s["route"] == "#/fit" and s["depth"] == "expert")
+        assert fit_first["jobKinds"] == ["fit"] and fit_first["moreKinds"], fit_first
+        assert {"fit", "minos", "sample", "bands"} <= set(fit_expert["jobKinds"]) and not fit_expert["moreKinds"], \
+            fit_expert
         if result["chi2"] is not None:
             opened = [s for s in first if s["route"].startswith("#/data/")]
             assert opened and opened[0]["forms"] == 1 and opened[0]["folded"] == 1 and opened[0]["tab"] == "Segments", \

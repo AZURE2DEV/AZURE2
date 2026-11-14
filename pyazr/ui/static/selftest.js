@@ -142,6 +142,8 @@ export function selftest(ctx, tabs, draw) {
         facts: document.querySelectorAll("dl.function-facts dd").length,
         tabListed: !document.querySelector('a.tab[data-tab="thm"]')?.hidden,
         tabsShown: [...document.querySelectorAll("a.tab:not([hidden])")].map((a) => a.textContent),
+        jobKinds: [...document.querySelectorAll('[aria-label="job kind"] option')].map((o) => o.value),
+        moreKinds: Boolean(document.querySelector('[data-action="more-kinds"]')),
         depth: document.documentElement.dataset.depth, tab: document.querySelector("a.tab.active")?.textContent || "",
         folded: document.querySelectorAll("details.form-more").length,
         changes: document.querySelectorAll('[aria-label^="changes"]').length,
@@ -204,9 +206,9 @@ export function selftest(ctx, tabs, draw) {
     Object.assign(pair, { before: pairs.length, chi2_before: ctx.evaluation?.chi2, rev_before: ctx.project.rev });
     await visit("#/nucleus/pair/+new");
     const type = (label, value) => {
-      const input = document.querySelector(`.new-pair input[aria-label="${label}"]`);
+      const input = document.querySelector(`.new-pair [aria-label="${label}"]`);  // a box or a choice
       input.value = String(value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event(input.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
     };
     // a copy of the first pair would make the data sets' reactions ambiguous: the heavy partner's charge differs
     type("light J", first.two_j_light / 2); type("light parity", first.light_parity); type("light Z", first.light[0]);

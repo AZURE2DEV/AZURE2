@@ -128,7 +128,7 @@ export function jobChoices(table) {
   const kinds = [];
   for (const row of table) {
     let k = kinds.find((x) => x.kind === row.kind);
-    if (!k) { k = { kind: row.kind, methods: [] }; kinds.push(k); }
+    if (!k) { k = { kind: row.kind, methods: [], firstView: Boolean(row.first_view) }; kinds.push(k); }
     const reason = row.available ? "" : (row.missing ? `waits for pyazr: ${row.missing}`
       : `needs the package ${row.needs}, not installed`);
     k.methods.push({ method: row.method, doc: row.doc, available: row.available, reason,

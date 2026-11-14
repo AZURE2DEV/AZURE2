@@ -90,3 +90,13 @@ test("a reference offers the existing records and \"new …\", which is never a 
   const norm = forms.widgetOf(schema.records.dataset.fields.norm, "D", ctx);
   assert.ok(norm.controls.some((c) => c.options?.some((o) => o.value === `${forms.NEW_RECORD}:normalization`)));
 });
+
+test("a list of numbers is a box per number, two more for new ones; an emptied box removes its number", { skip },
+  async () => {
+    const forms = await mod("forms.js");
+    const w = forms.widgetOf(schema.records.detector.fields.attenuation, "1 0.98 0.95", { schema });
+    assert.equal(w.controls.length, 5);
+    const v = forms.valuesOf(w);
+    assert.equal(w.compose(v), "1 0.98 0.95");
+    assert.equal(w.compose({ ...v, n1: "", n3: "0.9" }), "1 0.95 0.9");
+  });
