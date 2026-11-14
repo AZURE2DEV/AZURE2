@@ -28,6 +28,11 @@ export const SETTING_WIDGETS = {
       placeholder: s.default === null ? "default" : String(s.default), "aria-label": s.name });
     return { el: input, read: () => input.value.trim() };
   },
+  text: (s, typed) => {
+    const input = h("input.mono", { type: "text", size: 24, value: typed ?? (s.default ?? ""), "aria-label": s.name,
+      title: s.doc });
+    return { el: input, read: () => input.value.trim() };
+  },
   names: (s, typed) => {
     const input = h("input.mono", { type: "text", size: 36, value: typed ?? "", placeholder: "every free parameter",
       "aria-label": s.name });

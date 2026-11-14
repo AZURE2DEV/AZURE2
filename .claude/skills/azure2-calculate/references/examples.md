@@ -13,7 +13,7 @@ this list to stay complete. Owner skill of each task in the last column.
 | observables | `angular_distribution.py` | Legendre coefficients at given energies (`pyazr.angular_distribution`) | this skill |
 | | `sfactor_extrapolation.py` | S factor below the data and S(0) | this skill |
 | | `decompose_cross_section.py` | level, interference and external-capture parts | this skill |
-| | `reaction_rate.py` | N_A⟨σv⟩ from an extrapolated σ, in Python | this skill |
+| | `reaction_rate.py` | N_A⟨σv⟩ by the engine (`pyazr.rate`), Gamow window, band from a covariance | this skill |
 | | `tabulate_cross_sections.py` | adaptive σ(E) tables (`pyazr.tabulate`) | this skill |
 | fitting and UQ | `fit_emcee.py`, `fit_zeus.py` | ensemble MCMC on the objective | azure2-uncertainty |
 | | `per_dataset_chi2.py` | χ² per data set (several segments) | azure2-check |

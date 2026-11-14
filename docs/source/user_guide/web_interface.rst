@@ -146,8 +146,8 @@ default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-g
 engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow,
 whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
-on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the rate is
-listed greyed with the pyazr call it waits for.  A job runs in its own process on the text of
+on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the reaction rate (drawn by the
+Rate tab).  A job runs in its own process on the text of
 the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
 χ² —).  On the right the job: its calls, the objective (χ² + priors) at the last call and the best so far, the
 time, a plot of the objective against the call (log scale), the last lines of its log, **Stop** (it ends before its
@@ -212,6 +212,15 @@ program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and th
 directory and lists them with their first rows.  Each plot exports its numbers as CSV (17 significant digits) and
 the figure as SVG or PNG.  The view is also a link: ``#/results?x=e_x&y=s_factor&logy=1&levels=1&show=a,b``.
 
+Rate and covariance
+-------------------
+
+The **Rate** tab computes the reaction rate of a pair of pairs as the program's ``rate`` command does, at the working
+x or at a fit's or a sampler's best point, with the band of that fit's covariance or that sampler's draws, the Gamow
+window per temperature, a comparison table and the table as CSV (:doc:`reaction_rate`).  **Covariance…** on a data set
+of the Data tab opens the covariance builder (``#/covariance/<name>``): the data set's covariance from named parts,
+checked as the engine will read it, written and named on the data set as one edit (:doc:`covariance_builder`).
+
 Physics
 -------
 
@@ -254,8 +263,7 @@ Not there yet
 In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are
 edited in the Nucleus tab, not in the THM tab.  The session's options as editable keys, the file browser, EXFOR and
 ENSDF imports, the Wigner limits and physical
-widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction
-rate, and live updates pushed by the server (the page asks every three seconds whether another
+widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, and live updates pushed by the server (the page asks every three seconds whether another
 client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is
 part of the package, so the page loads nothing from the network, and without it the plots appear as tables of their
 numbers.

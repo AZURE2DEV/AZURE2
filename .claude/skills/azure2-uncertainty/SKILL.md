@@ -135,10 +135,9 @@ ext = extrapolation_bands("model.azr", keys=[1])  # trimmed private model: cost 
 - `quantity="sfactor"` gives S-factor bands. Bands on the CLI's own grid: `--covariance-band` writes `.band` files,
   which `uncertainty_bands` reproduces to six decimals (`pyazr/examples/uncertainty_band.py`).
 - Elasticities ∂ln y/∂ln p (`pyazr/examples/sensitivities.py`) say which parameters a data set constrains.
-- **Reaction rates** have no band output. Propagate by recomputing N_A⟨σv⟩(T_9) for parameter draws (posterior
-  samples, or draws from N(p̂, C_p)) and quote percentiles per temperature. `pyazr/examples/reaction_rate.py` computes
-  the rate integral in Python for that purpose; its grid must resolve the Gamow window at the lowest T_9 and every
-  narrow resonance (`azure2-calculate` owns rates).
+- **Reaction rates**: `pyazr.rate.rate_band` gives the band by the engine's rate, from a covariance (linear in
+  ln N_A⟨σv⟩) or from parameter draws (posterior samples, or draws from N(p̂, C_p): the 16th, 50th and 84th
+  percentiles per temperature) (`azure2-calculate` owns rates).
 - A band from C_p is statistical only (plus nuisances that were free in the fit). Systematic axes come next.
 
 ## 6. Prior parameter covariance (sequential update)

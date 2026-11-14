@@ -1634,6 +1634,47 @@ a data set's form (one "More fields") and Calculate twice; with `edit=1` it pres
 and `smoke_test.py` checks that the comparison is the engine's two χ² (before, after) and that the Plot tab is
 marked.
 
+### 11.12 The covariance builder and the reaction rate (2026-11-14)
+
+Both are arithmetic of pyazr with a screen of the page that calls it; the page computes no matrix, rate, ratio or
+window.
+
+- **Covariance builder** (`pyazr/covariance.py`, user guide `covariance_builder.rst`).  The rows of a data set's
+  file come from the engine's reader (`_azure2.data_rows`, `api/src/pybind_data_rows.cpp`: every data row in the
+  engine's unit, its record number, whether the window keeps it, the normalization's fit flag and prior).  Parts
+  (`PART_KINDS`: own, scale, range, length, correlation) become the engine's terms (diagonal, vector, relvector,
+  block); the checks are the engine's (own variance positive definite on the fitted rows, sqrt(C_ii) against the
+  column at 1 %), plus a refusal of a part that is not positive semi-definite.  The parts are kept on the file's
+  `#pyazr.covariance` line.  Routes `GET /api/covariance/{name}`, `POST /api/covariance/build`, `POST
+  /api/covariance/write` (server methods over `pyazr/ui/utilities.py`); the write is `State.edit_with_files`: the
+  file and the field in one history entry whose undo restores the file as it was (removed when new) and whose redo
+  writes it again.  The screen is `tabs/covariance.js` (a tab without a header link, `#/covariance/<name>`), opened
+  by "Covariance…" in `tabs/data.js` for a record whose kind has a `covariance` field in the schema.
+- **Reaction rate** (`pyazr/rate.py`, user guide `reaction_rate.rst`).  A rate session is the binding's Session made
+  with `rate_entrance=`, `rate_exit=` (set up as the program's `rate` command; the API now checks the
+  pairs with `CNuc::RatePairsProblem`, so exit -1 works), and `Session.reaction_rate(params, min, max, step, file)`
+  runs `ReactionRate` as `RunReactionRate` does (`ReactionRate::Rates()` added in `include/ReactionRate.h` to read the
+  numbers; `src/ReactionRate.cpp` unchanged).  Named grids `TEMPERATURE_GRIDS` (a new grid: one row), the band
+  (`rate_band`: linear in ln rate with `bands.step_sizes`, or 16/50/84 % of draws), `gamow_window` (from
+  `physics.sommerfeld_eta`), CSV with header, a comparison table.  The page: the job `rate`/`engine` (`utilities.py
+  rate_engine`, a row of `jobs.py`, setting type `text` added with its widget in `fitjob.js`), the tab
+  `tabs/rate.js` (`#/rate`), route
+  `GET /api/rate/grids`.
+
+**Measured** (`tests/pyazr/covariance_builder_test.py`, `reaction_rate_test.py`, `ui/utilities_test.py`): the
+engine's chi-squared of p12c_60 with a built file (own, 5 % scale, 3 % over 0.2 MeV) 9.38942514115 equals v^T C^-1
+v; pyazr's rates equal the program's `reactionrates.out` on a grid, a list, with a parameter file, and T1's and T3's
+golden files; the bands equal direct loops; the routes' answers equal the direct calls; undo removes the file.
+
+**Rate libraries** (`pyazr/rate_formats.py`, a second commit): the rate job also writes the rate as a STARLIB
+entry (on `grid="starlib"` with a band only) and as REACLIB sets (fitted on 0.01-10 GK within a tolerance), each
+the file's text or the refusal's three parts in `result.formats`; the Rate tab has the labels and flags as controls
+and the two downloads beside the CSV.
+
+**Extensibility.**  A new kind of covariance part: a row of `PART_KINDS` and a branch in `_terms` returning its
+terms (the page's form comes from the row).  A new named temperature grid: a row of `TEMPERATURE_GRIDS` (the page
+lists it from `GET /api/rate/grids`).
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
