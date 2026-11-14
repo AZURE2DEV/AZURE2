@@ -348,7 +348,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       (`pyazr.covariance`: a data set's covariance file from named parts, checked as the engine reads it; the Data
       tab's "Covariance…", the file and the field as one history entry) and the reaction rate (`pyazr.rate`: the
       engine's rate in-process at any parameters, its band from a covariance or draws, the Gamow window; the Rate
-      tab as a job). The prior-covariance builder and the rate libraries' formats are open.
+      tab as a job). The rate in the libraries' formats (`pyazr.rate_formats`: STARLIB's table with
+      the band's factor uncertainty, REACLIB sets fitted with a stated tolerance); the prior-covariance builder is
+      open.
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).

@@ -204,12 +204,16 @@ check("... the ratio to the comparison is 1/1.1", np.allclose(ratio, 1 / 1.1, rt
 print("\n7. the example pyazr/examples/reaction_rate.py")
 out = subprocess.run([sys.executable, os.path.join(ROOT, "pyazr", "examples", "reaction_rate.py"),
                       os.path.join(work, "T1", "T1.azr"), "--entrance", "1", "--exit", "2", "--csv",
-                      os.path.join(work, "ex.csv")], capture_output=True, text=True, timeout=600,
+                      os.path.join(work, "ex.csv"), "--reaclib", os.path.join(work, "ex.reaclib")],
+                     capture_output=True, text=True, timeout=600,
                      env=dict(os.environ, PYTHONPATH=ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")))
 row = [ln.split() for ln in out.stdout.splitlines() if ln.strip().startswith("0.1 ")]
 check("it runs on T1 and prints the golden rate at T9 = 0.1 (5.59562e-07) with its Gamow peak (0.0847 MeV)",
       out.returncode == 0 and len(row) == 1 and row[0][1] == "5.59562e-07" and row[0][2] == "0.0847"
       and os.path.isfile(os.path.join(work, "ex.csv")), out.stdout[-800:] + out.stderr[-400:])
+check("... and writes REACLIB sets (2 sets, within 5 %)",
+      os.path.isfile(os.path.join(work, "ex.reaclib")) and "REACLIB: 2 set(s)" in out.stdout,
+      [ln for ln in out.stdout.splitlines() if "REACLIB" in ln])
 
 shutil.rmtree(work, ignore_errors=True)
 print(f"\n{len(failures)} failure(s)" if failures else "\nall ok")

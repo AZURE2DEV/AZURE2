@@ -14,7 +14,8 @@ import { button, download, drawPlot, h, section } from "../ui.js";
 
 export async function render(ctx, el, args) {
   const view = ctx.rateView || (ctx.rateView = { entrance: null, exit: null, grid: "table", t_min: "", t_max: "",
-    t_step: "", start: "x", band: "none", comparison: "", draws: "100" });
+    t_step: "", start: "x", band: "none", comparison: "", draws: "100", starlib_label: "azr2", starlib_flag: "",
+    reaclib_label: "azr2", reaclib_flag: "n", reaclib_tolerance: "0.05" });
   const [pairs, grids, jobs] = await Promise.all([ctx.api.get("/api/project/pairs"), ctx.api.get("/api/rate/grids"),
     ctx.api.get("/api/jobs")]);
   const particles = pairs.filter((p) => p.kind === 0);
@@ -76,9 +77,28 @@ export async function render(ctx, el, args) {
       + "optionally its uncertainty" });
   comparison.addEventListener("change", () => { view.comparison = comparison.value.trim(); });
 
+  // the libraries' labels: a text box for the label, the format's allowed values for a flag
+  const text = (key, label, size) => {
+    const input = h("input.mono", { type: "text", size, value: view[key], "aria-label": label });
+    input.addEventListener("change", () => { view[key] = input.value.trim(); });
+    return h("label", {}, `${label} `, input);
+  };
+  const choice = (key, label, values) => {
+    const select = h("select", { "aria-label": label }, values.map(([v, words]) => h("option", { value: v }, words)));
+    select.value = view[key];
+    select.addEventListener("change", () => { view[key] = select.value; });
+    return h("label", {}, `${label} `, select);
+  };
+  const libraries = h("div", {}, "STARLIB ", text("starlib_label", "label", 4), " ",
+    choice("starlib_flag", "flag", [["", "none"], ["w", "w: weak"], ["g", "g: γ-ray transition"],
+      ["v", "v: detailed balance"]]), " · REACLIB ", text("reaclib_label", "set label", 4), " ",
+    choice("reaclib_flag", "flag", [["n", "n: non-resonant"], ["r", "r: resonant"], ["w", "w: weak"]]), " ",
+    text("reaclib_tolerance", "tolerance", 5));
   const calculate = button("Calculate", "Start the rate job (POST /api/jobs, kind rate)", async () => {
     const settings = { entrance: view.entrance, exit: view.exit, grid: view.grid, band: view.band,
-      comparison: view.comparison, draws: view.draws };
+      comparison: view.comparison, draws: view.draws, starlib_label: view.starlib_label,
+      starlib_flag: view.starlib_flag, reaclib_label: view.reaclib_label, reaclib_flag: view.reaclib_flag,
+      reaclib_tolerance: view.reaclib_tolerance };
     if (view.grid === "custom") Object.assign(settings, { t_min: view.t_min, t_max: view.t_max, t_step: view.t_step });
     const body = { kind: "rate", method: "engine", settings };
     if (view.start === "text") body.x0 = "text";
@@ -100,6 +120,7 @@ export async function render(ctx, el, args) {
       h("div", {}, h("label", {}, "temperatures ", grid), " ", custom),
       h("div", {}, h("label", {}, "parameters ", start), " ", h("label", {}, "band ", band), " ",
         h("label", {}, "draws ", draws)),
+      libraries,
       h("div", {}, h("label", {}, "compare with ", comparison), " ", calculate))));
 
   const shownId = args[0] || rateJobs[rateJobs.length - 1]?.id;
@@ -167,7 +188,8 @@ function drawJob(ctx, panel, job) {
   panel.appendChild(section(`Rate job ${job.id}: ${rate.reaction}`, h("p.hint", {}, `Parameters: ${rate.source}. `
     + (res.band ? `Band: ${res.band.how}.` : "No band.")), top, bottom,
     button("Download the table (CSV)", "The table with its header: project, parameters, units",
-      () => download(`rate_${job.id}.csv`, res.table)), h("span.hint", {}, ` also written to ${res.csv}`)));
+      () => download(`rate_${job.id}.csv`, res.table)), h("span.hint", {}, ` also written to ${res.csv}`),
+    libraryExports(job, res.formats || {})));
   const usePlotly = ctx.route.params.plot !== "table";
   drawPlot(top, { title: `N_A<σv> of ${rate.reaction}`, x: { title: "T9", unit: "GK", log: true },
     y: { title: "N_A<σv>", unit: rate.units.rate, log: true }, traces }, `rate_${job.id}`, { usePlotly });
@@ -193,4 +215,25 @@ function drawJob(ctx, panel, job) {
       + "energy constrain the rate there (a narrow resonance inside it dominates instead); none for a neutral "
       + "entrance" });
   panel.appendChild(section("Gamow window", table.element));
+}
+
+/** The rate in the libraries' formats (pyazr.rate_formats, made by the job): a download each, with what it holds,
+ * or the refusal's words (STARLIB needs a band and its 60 temperatures; REACLIB the range 0.01-10 GK). */
+function libraryExports(job, formats) {
+  const sp = formats.species;
+  const box = h("div.rate-formats", {}, sp ? h("p.hint", {}, `${sp.reactants.join(" + ")} → ${sp.products.join(" + ")}`
+    + `, chapter ${sp.chapter}, Q = ${sp.Q} MeV (from the project's pairs)`) : null);
+  for (const [name, file] of [["starlib", "STARLIB"], ["reaclib", "REACLIB"]]) {
+    const f = formats[name];
+    if (!f) continue;
+    if (f.refused) {
+      box.appendChild(h("div.warn-box", {}, h("strong", {}, `${file}: `), f.what || f.refused,
+        f.allowed ? h("div", {}, `Allowed: ${f.allowed}`) : null, f.fix ? h("div", {}, `Fix: ${f.fix}`) : null));
+      continue;
+    }
+    box.appendChild(h("div", {}, button(`Download ${file}`, `The rate as a ${file} file`, () =>
+      download(`rate_${job.id}_${name}.dat`, f.text, "text/plain")), " ", h("span.hint", {},
+      `${f.summary || f.uncertainty || ""}; written to ${f.path}`)));
+  }
+  return box;
 }

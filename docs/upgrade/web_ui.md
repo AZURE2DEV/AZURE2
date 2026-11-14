@@ -1605,6 +1605,11 @@ engine's chi-squared of p12c_60 with a built file (own, 5 % scale, 3 % over 0.2 
 v; pyazr's rates equal the program's `reactionrates.out` on a grid, a list, with a parameter file, and T1's and T3's
 golden files; the bands equal direct loops; the routes' answers equal the direct calls; undo removes the file.
 
+**Rate libraries** (`pyazr/rate_formats.py`, a second commit): the rate job also writes the rate as a STARLIB
+entry (on `grid="starlib"` with a band only) and as REACLIB sets (fitted on 0.01-10 GK within a tolerance), each
+the file's text or the refusal's three parts in `result.formats`; the Rate tab has the labels and flags as controls
+and the two downloads beside the CSV.
+
 **Extensibility.**  A new kind of covariance part: a row of `PART_KINDS` and a branch in `_terms` returning its
 terms (the page's form comes from the row).  A new named temperature grid: a row of `TEMPERATURE_GRIDS` (the page
 lists it from `GET /api/rate/grids`).

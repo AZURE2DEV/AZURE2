@@ -590,7 +590,14 @@ JOBS = (
                              "computed at"),
                      Setting("seed", "integer", 1, "band from draws: the seed of the choice of vectors"),
                      Setting("comparison", "text", "", "a rate table of the project folder to compare with: T9 (GK), "
-                             "N_A<sigma v>, optionally its uncertainty")),
+                             "N_A<sigma v>, optionally its uncertainty"),
+                     Setting("starlib_label", "text", "azr2", "STARLIB: the reference label (one to four characters)"),
+                     Setting("starlib_flag", "text", "", "STARLIB: the interaction label: empty, w, g or v"),
+                     Setting("reaclib_label", "text", "azr2", "REACLIB: the set label (four characters)"),
+                     Setting("reaclib_flag", "text", "n", "REACLIB: the resonance flag: n, r or w"),
+                     Setting("reaclib_tolerance", "number", 0.05, "REACLIB: the largest relative deviation of the "
+                             "sets from the computed rate on 0.01-10 GK"),
+                     Setting("reaclib_sets", "integer", 3, "REACLIB: the most sets tried")),
            facts=(("program command", "AZURE2 rate"), ("table", "output/rate_<id>.csv"))),
 )
 

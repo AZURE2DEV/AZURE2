@@ -1256,8 +1256,8 @@ The names of the package
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
 lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
-``system``, ``sources``, ``stopping``, ``physics``, ``covariance`` (:doc:`covariance_builder`) and ``rate``
-(:doc:`reaction_rate`), and the error classes.
+``system``, ``sources``, ``stopping``, ``physics``, ``covariance`` (:doc:`covariance_builder`), ``rate`` and
+``rate_formats`` (:doc:`reaction_rate`), and the error classes.
 
 .. code-block:: text
 
@@ -1268,7 +1268,7 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
    uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
    azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat covariance rate
-   schema validate
+   rate_formats schema validate
    describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError

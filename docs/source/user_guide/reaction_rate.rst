@@ -87,16 +87,44 @@ sampler job's best point), the band (none; from that fit's covariance; from that
 number), and a comparison table of the project folder.  **Calculate** starts a job (kind ``rate``); its progress is
 the number of rates computed.  At its end: the rate against :math:`T_9` on log-log axes with the band shaded and the
 comparison dashed, the ratios to the median below, the Gamow window per temperature, and the table as CSV (also
-written to ``output/rate_<job>.csv``).  The page computes no rate, ratio or window: they are the job's.
+written to ``output/rate_<job>.csv``), and the STARLIB and REACLIB files (below).  The page computes no rate, ratio or
+window: they are the job's.
 
 For rate libraries
 ------------------
 
-The rate is not written in a library's format here.  An exporter to REACLIB would need: the seven-parameter fit
-:math:`\exp(a_0 + \sum_{i=1}^{5} a_i T_9^{(2i-5)/3} + a_6\ln T_9)` of the rate (one or several sets, resonant and
-non-resonant), fitted to the tabulated rate on 0.01 to 10 GK with a stated tolerance; the chapter of the reaction
-(number of reactants and products), the nuclide names, the Q value, the label of the source, and flags for a
-reverse rate and a weak rate.  An exporter to STARLIB would need the rate and its factor uncertainty
-(:math:`\exp(\sigma)` of a lognormal from the band) on STARLIB's temperature grid (0.001 to 10 GK), the
-reaction's header line (reactants, products, Q value, label) and the source.  Both need a decision on how the rate
-below the lowest temperature computed and the partition functions of the reverse rate are handled.
+``pyazr.rate_formats`` writes the rate in the formats of two rate libraries; the layouts are those of the formats'
+own descriptions: REACLIB's from the JINA REACLIB Database's help page "REACLIB File Format" (the chapters of its
+Table 1, the REACLIB 1 file: a header entry, then set entries of three lines of 74 characters,
+``format(i1,4x,6a5,8x,a4,a1,a1,3x,1pe12.5)``, ``format(4e13.6)``, ``format(3e13.6)``), the set's rate
+:math:`\exp(a_0 + \sum_{i=1}^{5} a_i T_9^{(2i-5)/3} + a_6\ln T_9)` of Cyburt et al. 2010 (ApJS 189, 240, eq. 1);
+STARLIB's from Sallaska et al. 2013 (ApJS 207, 18), Appendix A "STARLIB Format" (a header line of 64 fields, then
+:math:`T_9`, the recommended rate and its factor uncertainty on 60 temperatures from 1 MK to 10 GK).
+
+- The species, the chapter and the Q value come from the project's pairs (``species_of(file, entrance, exit)``):
+  :math:`Q` is the entrance pair's threshold minus the exit pair's (separation energies relative to the compound
+  nucleus, plus excitation energies); exit -1 ends in the compound nucleus's ground state.  The labels and flags are
+  the user's, among the formats' allowed values.
+- **STARLIB** (``write_starlib(path, rate, band, species, label, flag)``): the rate must be computed on
+  ``grid="starlib"`` (``STARLIB_T9``: the paper does not print the 60 temperatures; they are 0.001 to 0.009 GK and
+  the 51 temperatures of the paper's rate tables from 0.010 to 10 GK) and with a band.  From a covariance band the
+  recommended rate is the rate at the parameters and the factor uncertainty :math:`e^{\sigma}` of
+  :math:`\ln N_A\langle\sigma v\rangle`; from draws the recommended rate is the median and the factor uncertainty
+  :math:`(x_{84}/x_{16})^{1/2}` (the paper's :math:`x_{low} = e^{\mu-\sigma}`, :math:`x_{high} = e^{\mu+\sigma}`).
+  Without a band nothing is written: no uncertainty is made up.  The paper gives no number format: the columns are
+  written ``%.3e %.6e %.4e``.
+- **REACLIB** (``fit_reaclib(rate, tolerance=0.05, max_sets=3)``, ``write_reaclib(path, fit, species, label,
+  flag)``): one set is fitted to :math:`\ln N_A\langle\sigma v\rangle` by linear least squares, then two or three by
+  nonlinear least squares of the logarithm of their sum (scipy), until the largest relative deviation over the
+  computed temperatures in 0.01 to 10 GK is within the tolerance; the fit says how many sets it needed and its
+  largest deviation, and is refused, with what was wrong, what is allowed and how to fix it, when the tolerance is
+  not reached, when the rate is not computed over 0.01 to 10 GK (nothing is extrapolated) or when a rate there is
+  not positive.  The numbers are written as ``%13.6e``.
+- ``read_starlib(path)`` and ``read_reaclib(path)`` (with ``reaclib_rate(sets, T9)``) read a library's entry, e.g.
+  to compare it with this rate (``read_rate_table`` takes a two- or three-column table).
+
+T1's :math:`^{12}`\ C(p,γ\ :sub:`0`) on the table grid needs two sets (largest deviation 0.43 % at
+:math:`T_9` = 1.25); a rate made of one known set is recovered to :math:`10^{-13}`
+(``tests/pyazr/rate_formats_test.py``).
+The Rate tab offers both files beside the CSV, with the labels and flags as form controls; a refusal is shown in its
+words.

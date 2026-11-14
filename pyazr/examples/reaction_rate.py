@@ -5,13 +5,13 @@ The engine computes the rate as the program's ``AZURE2 rate`` command does (src/
 with a cluster of points around every level, a spline of ln sigma against ln E, the integral at each temperature);
 nothing is integrated here.  This script prints the rate on the rate tables' temperature grid, the Gamow window of
 each temperature, and, with a fit's parameter file and covariance, the 1-sigma band by linear propagation; it writes
-the table as CSV with its header.  For a rate per posterior sample, ``rate.rate_band(session, draws=..., names=...)``
-gives the 16th, 50th and 84th percentiles over the samples.
+the table as CSV with its header, and REACLIB sets fitted to it (pyazr.rate_formats).  For a rate per posterior
+sample, ``rate.rate_band(session, draws=..., names=...)`` gives the 16th, 50th and 84th percentiles over them.
 
 Usage (from the repository's root):
 
     python3 pyazr/examples/reaction_rate.py tests/upgrade/T1/T1.azr --entrance 1 --exit 2 \\
-        [--params output/param.sav --covariance output/covariance.dat] [--csv rate.csv]
+        [--params output/param.sav --covariance output/covariance.dat] [--csv rate.csv] [--reaclib rate.reaclib]
 """
 
 import argparse
@@ -20,7 +20,7 @@ import sys
 
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-from pyazr import rate, read_covariance_dat  # noqa: E402
+from pyazr import rate, rate_formats, read_covariance_dat  # noqa: E402
 
 
 def main():
@@ -32,6 +32,7 @@ def main():
     ap.add_argument("--params", default=None, help="a parameter file (param.sav) of a fit")
     ap.add_argument("--covariance", default=None, help="the fit's covariance.dat (with its #columns line)")
     ap.add_argument("--csv", default=None, help="write the table here")
+    ap.add_argument("--reaclib", default=None, help="write the rate as REACLIB sets here (pyazr.rate_formats)")
     args = ap.parse_args()
 
     with rate.RateSession(args.azr, args.entrance, args.exit_pair, parameter_file=args.params) as s:
@@ -48,6 +49,11 @@ def main():
         if band:
             line += f"  {band.low[i]:.4e} - {band.high[i]:.4e}"
         print(line)
+    if args.reaclib:
+        fit = rate_formats.fit_reaclib(r)
+        rate_formats.write_reaclib(args.reaclib, fit, rate_formats.species_of(args.azr, args.entrance,
+                                                                             args.exit_pair))
+        print(f"REACLIB: {fit.summary()}; written: {args.reaclib}")
     if args.csv:
         rate.write_rate_table(args.csv, r, band=band)
         print(f"written: {args.csv}")

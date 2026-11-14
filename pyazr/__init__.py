@@ -87,6 +87,7 @@ try:
     from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
     from . import covariance
     from . import rate
+    from . import rate_formats
     from .schema import schema, validate, describe, predictions
     from .described import kinds
     from .grids import extrapolation_grid, refine_grid
@@ -118,6 +119,7 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "covariance", "rate",
+           "rate_formats",
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid",
            "Project", "Record", "Nuisance", "FormatError", "records_from_csv",

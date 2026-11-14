@@ -325,6 +325,13 @@ set_tests_properties(pyazr_norm_group PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2"
 # Data covariance matrices ("covariance <file>"): the block read and written; with the
 # engine, chi2 = sum of the whitened residuals squared, the gradient against central
 # differences and 2 J^T w, and the relvector model frozen and refrozen.
+# The rate libraries' formats (pyazr/rate_formats.py): a REACLIB fit of known sets, the files written and read back,
+# STARLIB with a band on T1, the refusals.
+add_test(NAME pyazr_rate_formats
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rate_formats_test.py)
+set_tests_properties(pyazr_rate_formats PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # The data covariance builder (pyazr/covariance.py): parts against matrices worked by hand, its refusals, the file it
 # writes, and the engine's chi-squared with the file equal to v^T C^-1 v.
 add_test(NAME pyazr_covariance_builder

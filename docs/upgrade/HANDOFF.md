@@ -23,8 +23,13 @@ Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of py
   lines), `tabs/fitjob.js` (the `text` setting widget).  Server: `utilities.py`, four routes, `State.edit_with_files`.
 - **Verified**: `tests/pyazr/covariance_builder_test.py`, `reaction_rate_test.py`, `ui/utilities_test.py` (new), the
   UI tests, `ctest -LE slow`, the projects against `tab-t71-1` (numbers in the report).
-- **Open**: the prior-covariance builder (not started); the rate libraries' formats (the PI wants them: next
-  commit); the page's keys `1 … 7` do not reach the eighth tab (Rate); a data session's x0 and a rate session's
+- **Rate libraries** (the PI, relayed: "Yes, these reaction rate formats would be great!"), a second commit:
+  `pyazr.rate_formats` (`species_of`, `write_starlib`/`read_starlib`, `fit_reaclib`/`write_reaclib`/`read_reaclib`,
+  `reaclib_rate`, `STARLIB_T9`); layouts from the REACLIB help page "REACLIB File Format" and Sallaska et al. 2013
+  Appendix A (fetched to `work/utils/formats/`, not committed); the Rate tab offers both files beside the CSV.
+  STARLIB's 60 temperatures are not printed in the paper: 0.001-0.009 GK and the paper's 51 table temperatures
+  (to be checked against a STARLIB file).
+- **Open**: the prior-covariance builder (not started); the page's keys `1 … 7` do not reach the eighth tab (Rate); a data session's x0 and a rate session's
   own reading of the same `.azr` differ at 1e-10 in capture amplitudes (rate 1e-9).
 
 ## 2026-11-14 (director, 14:05) — merged: the program's commands, the page on new pyazr, ten small repairs

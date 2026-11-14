@@ -198,6 +198,45 @@ def rate_engine(tracker, x0, settings, names):
         ratios["comparison"] = (ref / median).tolist()
         out["comparison"]["at_T9"] = ref.tolist()
     out["ratios"] = ratios
+    out["formats"] = _library_formats(s.file, settings, best, band, tracker)
     how = f"N_A<sigma v> of {best.reaction} at {best.T9.size} temperatures" + (f"; {band.how}" if band else "")
     return "finished", how, out
 
+
+def _library_formats(file, settings, best, band, tracker):
+    """The rate as a STARLIB entry and as REACLIB sets (:mod:`pyazr.rate_formats`), each the file's text with what
+    it holds, or the refusal's three parts (STARLIB without a band or off its grid; REACLIB off 0.01-10 GK or above
+    the tolerance); the species, chapter and Q from the project's pairs."""
+    from pyazr import rate_formats as rf
+    from pyazr.errors import Error
+    out = {}
+    try:
+        species = rf.species_of(file, settings["entrance"], settings["exit"])
+    except Error as e:
+        refusal = {"refused": str(e), "what": e.what, "allowed": e.allowed, "fix": e.fix}
+        return {"starlib": refusal, "reaclib": refusal}
+    out["species"] = species
+
+    def attempt(name, make):
+        path = tracker.product(name, ".dat")
+        try:
+            facts = make(path)
+            with open(path) as fh:
+                out[name] = {"text": fh.read(), "path": path, **facts}
+        except Error as e:
+            out[name] = {"refused": str(e), "what": e.what, "allowed": e.allowed, "fix": e.fix}
+
+    def starlib(path):
+        rf.write_starlib(path, best, band, species, label=settings["starlib_label"], flag=settings["starlib_flag"])
+        return {"uncertainty": "f.u. = exp(sigma) of the covariance band" if band.method == "covariance"
+                else "f.u. = (x84 / x16)^(1/2) of the draws, the median as the rate"}
+
+    def reaclib(path):
+        fit = rf.fit_reaclib(best, tolerance=settings["reaclib_tolerance"], max_sets=settings["reaclib_sets"])
+        rf.write_reaclib(path, fit, species, label=settings["reaclib_label"], flag=settings["reaclib_flag"])
+        return {"summary": fit.summary(), "sets": fit.n_sets, "max_deviation": fit.max_deviation,
+                "deviation": fit.deviation.tolist(), "T9": fit.T9.tolist()}
+
+    attempt("starlib", starlib)
+    attempt("reaclib", reaclib)
+    return out

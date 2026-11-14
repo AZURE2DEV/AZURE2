@@ -7,7 +7,9 @@
      the objective then equals a session's on that text; the builder reopens with the parts; one Undo removes the
      file and restores the text byte for byte, Redo writes the same bytes again; a refused matrix is not written;
   2. the rate job: the rate of 12C(p,g) at the text's x0 equals pyazr.rate's at the same vector bit for bit, with the
-     Gamow window of pyazr.rate.gamow_window, the CSV in the output directory and the ratios; an unknown grid and a
+     Gamow window of pyazr.rate.gamow_window, the CSV in the output directory and the ratios; the libraries' files
+     refused off their grids (STARLIB without a band, REACLIB off 0.01-10 GK) and, on the table grid, the REACLIB
+     file pyazr.rate_formats writes from the same rate; an unknown grid and a
      covariance band without a fit are refused with their three parts.
 
 Run: python3 tests/pyazr/ui/utilities_test.py
@@ -110,6 +112,23 @@ def test_rate_job(t1):
     assert res["gamow"]["E0"] == g["E0"].tolist()
     assert res["ratios"]["rate"] == [1.0] * direct.T9.size and "band" not in res
     assert os.path.isfile(res["csv"]) and "units: T9 in GK" in res["table"]
+    formats = res["formats"]
+    assert formats["species"]["reactants"] == ["p", "c12"] and formats["species"]["products"] == ["n13"]
+    assert "no band" in formats["starlib"]["what"] and formats["starlib"]["fix"], formats["starlib"]
+    assert "a REACLIB set stands for 0.01 to 10 GK" in formats["reaclib"]["what"], formats["reaclib"]
+    # on the table grid the REACLIB file is the one pyazr.rate_formats writes from the same rate
+    from pyazr import rate_formats
+    r = t1.post("/api/jobs", json={"kind": "rate", "method": "engine", "x0": "text",
+                                   "settings": {"entrance": 1, "exit": 2, "grid": "table", "reaclib_flag": "r"}})
+    table_job = wait_job(t1, r.json()["id"])["result"]
+    with rate.RateSession(t1.path, 1, 2) as rs:
+        table = rs.rate(x0, grid="table")
+    path = os.path.join(os.path.dirname(t1.path), "direct.reaclib")
+    rate_formats.write_reaclib(path, rate_formats.fit_reaclib(table), rate_formats.species_of(t1.path, 1, 2),
+                               flag="r")
+    with open(path) as f:
+        assert table_job["formats"]["reaclib"]["text"] == f.read(), table_job["formats"]["reaclib"]
+    assert table_job["formats"]["reaclib"]["sets"] >= 1 and table_job["formats"]["reaclib"]["max_deviation"] <= 0.05
     for bad, words in (({"grid": "nope"}, "no temperature grid"), ({"band": "covariance"}, "no covariance")):
         r = t1.post("/api/jobs", json={"kind": "rate", "method": "engine", "settings": dict(settings, **bad)})
         failed = wait_job(t1, r.json()["id"])
