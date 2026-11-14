@@ -2,6 +2,54 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 13:05) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 69 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-7-tests-cannot-fail` and `feature/upgrade-8-pyazr3-project-edits`. Their
+entries follow.
+
+- 159 comparisons of the shell tests could not fail (a mark read as 0, a bound on a value never tested to be
+  a number); all are fixed and consistency check 56 (`tests/consistency/comparison_scan.py`) finds the two
+  forms. No test failed on real outputs once its comparison could fail.
+- Stale names in engine messages and pages; `tools/check_doc_names.py` checks the pages' literals against the
+  build (not a consistency check: it needs a build).
+- pyazr: `Project.add_pair`, `remove_pair`, `allowed_channels`, `set_pair(binding_energy=)`,
+  `set_channel(width_is_amplitude=)`; the `<thm>` keys are one table (`src/ThmKeys.cpp`) served by
+  `pyazr.kinds()["thm"]` with a generated reference page; `Session.describe()["functions"]`; `Error.what`,
+  `.allowed`, `.fix`; `kinds()["nuclides"]`, `["optical_potentials"]`; `save_fit(relative_to=)`.
+- A pair no level names yet is kept in `<levels>` by a row of its own (inactive, level ID 0). Accepted as the
+  file form for now; listed for the PI.
+
+**Verified on the merged tree** (build `work/b-trial69`, eight threads): 0 warnings; all projects in the three
+bases against `tab-t68-1`: Park 887 of 887 identical; Brune 885 of 887 and formal 849 of 851, the two files
+being the `run.log` of `ec_exit_position` (`neutron_pair_first`, `photon_pair_first`), where the reworded hint
+on wrong units is printed (and the progress bar's timing); no number differs. The eight fits identical to
+`work/b-trial68`; 272 of 272 quick tests; `docs_build` 55 pages. The director's own runs
+(`work/director/spot69/`): on a copy of T1 an unused pair added gives the same objective to the last digit
+(482.27523961726723, 13 parameters) and its removal too; `allowed_channels(1/2, +)` lists the expected five;
+T2 with B 2.224566 → 2.374566 gives 11034.520562844169; an unguarded bound put back into
+`tests/ratio_frame/check.sh` fails check 56. Not run here: the slow tests, `pyazr_wheel`, the long suite.
+
+**New reference**: tag `tab-t69-1`, base build `work/b-trial69`.
+
+**Open, for a later branch or a decision**:
+
+- `Session.save_fit` into another directory is refused on T2 (`E_COVARIANCE_FILE ... cannot open data file`):
+  the covariance file's rows name data files relative to the project's directory. Nothing is left behind; the
+  text does not say how to go on. T1 and 13N are written and reopen (objective equal to 2e-13, the text's
+  rounding, the same in the project's own directory).
+- `Error.what`, `.allowed`, `.fix` are None for the refusals of the engine's edit functions (a negative
+  radius, a pair in use), and that message carries its address twice ("pair 1: pair 1: ...").
+- Not done by the agent: the split of `pyazr/sources/nds.py`. `Parameter.jpi` reads "0.5+" where
+  `ChannelWidth.jpi` reads "1/2+". Old `segment_<N>_*` names remain in four pages
+  (`data_formats.rst`, `chi_squared.rst`, `fitting.rst`, `segments.rst`). The diagnostics table's row of
+  `E_STOPPING_DATA` names only the environment switch.
+- The web page still holds its own copies of the `<thm>` keys and of the diagnostics' arguments, and has no
+  form for a pair: the next page branch.
+- For the PI: the pair row as the file form; `add_level(..., "allowed")` gives every channel width 0, fixed
+  (Qt left them free); `width_is_amplitude` refused on photon channels (the Qt rule; the engine reads the flag
+  on any row).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — the `<thm>` keys as a table, error parts
 
 **Done** (`docs/upgrade/pyazr3.md` section 9, `web_ui.md` section 12 findings 9, 24, 27, 28):
