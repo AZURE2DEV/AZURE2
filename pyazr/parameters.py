@@ -443,3 +443,19 @@ class NuclearPotential:
                       f"a_so={so['diffuseness']:g} on {so['on']}")
         return (f"NuclearPotential({who}, {shape} R_C={self.coulomb_radius:g}"
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
+
+
+#: The kinds of parameter a data session and an extrapolation session of one project share, in the same order at the
+#: head of the fit vector (the nuisances that follow are the data sets' or the extrapolations').
+MODEL_KINDS = ("energy", "width", "abundance")
+
+
+def carry_model_parameters(x, source, target):
+    """A copy of ``target.x0`` (a :class:`Parameters`) with the free model parameters (``MODEL_KINDS``: level
+    energies, widths, abundances) taken from the fit vector ``x`` of ``source``, by name: a data session's fit
+    vector carried to the extrapolation session of the same project and options.  Raises
+    :class:`pyazr.ParameterError` when ``x`` is not a vector of ``source`` and
+    :class:`pyazr.ParameterKeyError` when a free model parameter of ``target`` is not one of ``source``."""
+    x = source._vector(x)
+    rows = [p for p in target.free if p.kind in MODEL_KINDS]
+    return target.put(target.x0, rows, [x[source.by_name(p.name).free_index] for p in rows]) if rows else target.x0

@@ -11,10 +11,9 @@ Checks, on tests/channel_space/channel_space.azr (p+12C and p+12C*, both 5.0 fm,
   1. set_channel_radius(1, 4.2) then (2, 6.3): both radii are in force, and chi2 equals a fresh
      session on an .azr with both radii written by Project.set_pair(radius=);
   2. a nuclear-potential change (clear_nuclear_potential, which rebuilds) keeps both;
-  3. a mode switch (data_mode, which re-initializes) keeps both;
   4. setting a pair back to its file radius is an override like any other (chi2 as the file);
   5. the wrapper raises RuntimeError when the rebuilt model does not have the radius asked for.
-The old engine fails 1-3 (pair 1 back at 5.0 fm), the old wrapper 5.
+The old engine fails 1-2 (pair 1 back at 5.0 fm), the old wrapper 5.
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -111,13 +110,6 @@ def main():
             check("radii after clear_nuclear_potential", radii() == [R1, R2], f"{radii()}")
             c = chi()
             check("chi2 after clear_nuclear_potential", rel(c, chi_ref) <= 1e-10, f"{c} vs {chi_ref}")
-
-            print("\n3. a mode switch (re-initialize) keeps them")
-            m.data_mode()
-            m.configure()
-            check("radii after data_mode", radii() == [R1, R2], f"{radii()}")
-            c = chi()
-            check("chi2 after data_mode", rel(c, chi_ref) <= 1e-10, f"{c} vs {chi_ref}")
 
             print("\n4. back to the file radii")
             m.set_channel_radius(1, 5.0)

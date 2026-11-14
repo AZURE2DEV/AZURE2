@@ -45,6 +45,50 @@ template.azr`, `transform_level_order/models/desc_fit.azr`).  The failure of the
 `energy_shift_sqrt`, `gamma_decay` ("the working copy has no node table") is not met here: a session made in
 extrapolation mode on those projects fails earlier, because they have no extrapolations.
 
+**Done.**
+- `pyazr/transform.py` deleted (the port above); `widths.teichmann_wigner`, `lane_thomas_wigner` deleted.  The one
+  formula pyazr keeps is `widths.weisskopf_width` (no engine counterpart), tested against its closed form from the
+  constants (`tests/pyazr/weisskopf_test.py`: E1-E3, M1-M3 to 4 %, E4, M4 to 8 %, the table's two digits; shown to
+  fail with the E1 coefficient changed by 15 %).  `pyazr/examples/transform_widths.py` uses `Session.transform` and
+  `channel_functions` (run on T1: the table and a three-sample chain).
+- `pyazr.system` (package): `pairs.py` (`Pair`, `PairSet`, out of `parameters.py`), `scheme.py`, `nuclei.py` moved
+  there; the top-level names go.
+- The mode switch: `Session(file, extrapolations=True)` replaces `data_mode=` (the option row of the binding,
+  `api/src/pybind_describe.cpp`: keyword `extrapolations`, default False, a field `bool_default` added to the
+  table); `extrap_mode`, `data_mode`, `_set_mode`, `_sync_layout`, `_mode_free_vector` gone;
+  `parameters.carry_model_parameters(x, source, target)` carries a data session's level parameters and abundances
+  (by name) to the extrapolation session.  Ported: `bands.py` (the trimmed band and the workers: the options carry
+  the keyword), `angular.py`, three examples, the web page's adapter (`pyazr/ui/engine.py`:
+  `Engine._extrapolations` (a second session, made on first use, closed with the first),
+  `Engine._extrapolation_vector`, `Engine._extrapolation_arrays`, `band_points`, `models_at`, `linear_sigma`),
+  `ui/state.py` (a docstring), the refusal of `objective()` / `fit_with_engine()` names the keyword.
+- Skills ported by hand (the checker found none, the names stay in the 3.0 column): `azure2-setup/references/
+  data-kinds.md` (`pyazr.system.merge_projects`), `azure2-calculate/scripts/extrapolate.py`, `decompose.py`,
+  `SKILL.md`, `azure2-targets/scripts/target_check.py`, `azure2-fit/references/parameters-and-sav.md`
+  (`extrapolations=True`).
+- Pages: `pyazr.rst` (the section "Data sets and extrapolations", the signature, the dimensionless widths, the
+  Whittaker paragraph, the examples table, four migration rows), `particle_pairs.rst`, `pyazr/CLAUDE.md`,
+  `web_ui.md`, `pyazr3.md` section 8.
+
+**Tests changed in more than names.** `physics_table` (the comparisons with the deleted Python formulas gone: they
+were printed, not asserted), `errors` (three cases of deleted functions), `wigner_convention` (the two deleted
+helpers' checks replaced by `physics.wigner_limit` = the session's limit to 1e-12), `convert_azr` (`levels_from_azr`
+no longer refused: gone), `extrap_layout` (two sessions instead of a switch: same counts, the carried vector gives
+the extrapolation session's own curves to 1e-12 as the switched one did, the round trip is a new data session),
+`radius_override` (step 3, the mode switch keeping the radii, gone with the switch), `config_options` (the keyword's
+name).
+
+**Open.**
+- Not done: `set_channel_radius`, `set_nuclear_potential`, `clear_nuclear_potential` still edit a live session
+  (callers: `radius_override`, `thm_vertex_memo_sessions`, `rebuild_resources`, `rebuild_nuisance`,
+  `potential_record`, `spin_orbit_potential`, `save_fit_format3`, `errors` tests, `tests/hybrid_potential/
+  check_per_pair.py`, the example `nuclear_potential.py`); `bands.best_fit_params` still uses
+  `_take_parameter_file`.  Slice 5 (the libraries, `write_outputs`, unused bindings) not started.
+- `wigner_widths` / `dimensionless_widths`: the probe is not `2 P gamma_W^2` where a level has fixed widths or
+  levels mix (numbers above): a decision for the PI (the probe, or P from `channel_functions`).
+- The engine refuses a session made for extrapolations on a project without one with "could not initialize ...;
+  check the output above" and prints nothing above.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page's sampler and bands
 
 **Done** (`web_ui.md` section 11.7).

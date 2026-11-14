@@ -134,8 +134,8 @@ try:
         mine = numbers(s)
     with pyazr.Session(base_path, **options) as s:
         check("options passed back as keywords rebuild the same session (on T1 without the key)", equal(numbers(s), mine))
-    check("options holds data_mode and coulomb_table besides the options of the calculation",
-          {"data_mode", "coulomb_table", "use_brune", "replace_grids"} <= set(options))
+    check("options holds extrapolations and coulomb_table besides the options of the calculation",
+          {"extrapolations", "coulomb_table", "use_brune", "replace_grids"} <= set(options))
 
     # 3. refusals
     p = pyazr.Project.open(base_path)
@@ -219,7 +219,7 @@ try:
           sorted(o["key"] for o in rows.values() if o["key"]) and len(option_keys) == 11)
     check("each other option (not project state) has its reason",
           all(o["reason"] for o in rows.values() if not o["key"]) and
-          {k for k, o in rows.items() if not o["key"]} == {"data_mode", "coulomb_table", "cwd"})
+          {k for k, o in rows.items() if not o["key"]} == {"extrapolations", "coulomb_table", "cwd"})
     positional, keys = _azure2.config_keys()
     check("the option keys are keys of <config> (bool)", all((k, "bool") in [(n, t) for n, t, _ in keys]
                                                                for k in option_keys))

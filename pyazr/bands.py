@@ -295,9 +295,7 @@ def _worker_setup(spec):
     os.close(fd)
     edited.save(path)
 
-    model = Session(path, cwd=cwd, **spec["options"])
-    if spec["mode"] == "extrap":
-        model.extrap_mode()
+    model = Session(path, cwd=cwd, **spec["options"])  # the options carry extrapolations=
     _WORKER.update(model=model, base=None)
 
 
@@ -328,7 +326,6 @@ def _parallel_columns(model, cols, h, p0, segments, quantity, method,
         "file": model.file,
         "cwd": model.cwd,
         "options": dict(getattr(model, "options", {})),
-        "mode": getattr(model, "mode", "data"),
         "workdir": os.path.join(model.cwd, "output", "sensitivities"),
     }
     tasks = [(k, cols[k], float(h[k]), p0, segments, quantity, method)
@@ -720,8 +717,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd)
 
     try:
-        with Session(tmp, cwd=cwd) as m:
-            m.extrap_mode()
+        with Session(tmp, cwd=cwd, extrapolations=True) as m:
             if params is None:
                 params = best_fit_params(
                     m, os.path.join(cwd, "output", "param.sav"))

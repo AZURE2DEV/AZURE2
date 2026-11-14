@@ -69,9 +69,9 @@ garbage collector; without it, call ``close()``. A closed session raises if used
 Session options
 ---------------
 
-``Session(file, *, cwd=None, data_mode=True, use_brune=True, ignore_externals=True, transform=True,
+``Session(file, *, cwd=None, extrapolations=False, use_brune=True, ignore_externals=True, transform=True,
 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
-CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``data_mode`` and ``coulomb_table`` are also
+CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``extrapolations`` and ``coulomb_table`` are also
 keys of the project's ``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword given wins over the
 key, the key over the default the signature shows, and a keyword left out is not given.  ``session.options`` holds the
 values in effect, ``session.option_sources`` where each came from (``"default"``, ``"project"``, ``"keyword"``);
@@ -684,7 +684,7 @@ At a fitted point, without refitting, each number is a component's raw contribut
 
 .. code-block:: python
 
-   azr.extrap_mode()
+   # azr = pyazr.Session(file, extrapolations=True); best its fit vector
    full = azr.evaluate(best).data[0].model
    P, lvl = azr.parameters, "5/2- 6.588"          # a level_label of P.of_kind("energy")
    off  = azr.evaluate(P.put(best, P.of_level(lvl).of_kind("width").free, 0.0)).data[0].model
@@ -1327,6 +1327,10 @@ call.
        ``pyazr.system.Nucleus``, ``pyazr.system.MergeReport``, ``pyazr.system.merge_projects``,
        ``pyazr.system.nucleus_of``, ``pyazr.system.nucleus_of_pair``; modules ``pyazr.system.scheme``,
        ``pyazr.system.nuclei``)
+   * - ``s.extrap_mode()``, ``s.data_mode()``, the keyword ``data_mode=`` of ``Session``
+     - ``Session(file, extrapolations=True)``: a session is made for the data sets or for the extrapolations;
+       ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's fit
+       vector to the extrapolation session ``t``
 
 Examples
 --------
@@ -1435,16 +1439,22 @@ on an 1845-point extrapolation grid (53 s serial, 56 s over four workers). It is
 ``method="analytic"``, which is one call whatever the parameter count. Reach for it only when the analytic path is
 unavailable and the model is large, and measure rather than assume.
 
-Data mode and extrapolation mode
---------------------------------
+Data sets and extrapolations
+----------------------------
 
-``data_mode()`` (the default) evaluates the active ``dataset`` records — this is what χ² uses. ``extrap_mode()``
-switches to the ``extrapolation`` grids for predictions on arbitrary energies and angles. Both re-initialise the
-engine, so switch sparingly and batch the work.
+A session evaluates one or the other, chosen when it is made: ``Session(file)`` the active ``dataset`` records (what
+χ² uses), ``Session(file, extrapolations=True)`` the ``extrapolation`` grids, for predictions on any energies and
+angles (the program's menu choice 3).  There is no switch of a live session: for both, make two sessions
+(``Session(file, **dict(s.options, extrapolations=True))`` rebuilds the same model for the extrapolations).  The two
+fit vectors differ in their tail (the data sets' nuisances, the extrapolations'); the level parameters and abundances
+lead both, and ``pyazr.parameters.carry_model_parameters(x, s.parameters, t.parameters)`` carries a data session's
+vector to the extrapolation session ``t``.  An extrapolation session has no χ²: its ``evaluate(x)`` has every χ² field
+``None``, ``objective()`` and the fits refuse.  A project without an active extrapolation cannot be made into one (the
+engine does not initialise).
 
-Segment indexing differs between them, and getting it wrong misaligns results silently: in data mode segment *i* is
-``azr.datasets[i]``; in extrapolation mode **only active extrapolations are returned**, so segment *i* is
-``azr.extrapolations.active[i]``.
+Segment indexing differs between them, and getting it wrong misaligns results silently: in a data session segment
+*i* is ``azr.active_datasets[i]``; in an extrapolation session **only active extrapolations are returned**, so
+segment *i* is ``azr.extrapolations.active[i]``.
 
 .. note::
 

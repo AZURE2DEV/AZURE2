@@ -79,7 +79,7 @@ def channel(project, pair_key, m1, m2, z1, z2, a):
 
 
 def _channel(work, project, pair_key, m1, m2, z1, z2, a, mu, energies, worst):
-    with Session(up.project_copy(project, work), data_mode=False) as m:
+    with Session(up.project_copy(project, work), extrapolations=True) as m:
         for l in range(5):
             cf = m.channel_functions(pair_key, energies, l=l)
             for i, e in enumerate(energies):

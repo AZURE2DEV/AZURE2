@@ -1122,7 +1122,7 @@ per data set from one forward pass the c.m. energy, excitation energy and c.m. a
 shifts, the datum and error as read and times the norm in use (`segment_norms`), the model at the point, the
 engine's standardized residual (m − n·d)/(n·σ) (`residuals`) and the sum of their squares (`segment_chi2`), the S
 factor (model, normalized datum and error times `calculated_conv`) where the engine unit is a cross section and the
-entrance pair charged; per active extrapolation the same on its grid (`extrap_mode`, `data_mode`); the model data
+entrance pair charged; per active extrapolation the same on its grid (a second session made with `extrapolations=True`); the model data
 (`pyazr.model_data`); the residual's definition. Every column equals the program's `AZUREOut_*` (menu 1) and
 `.extrap` (menu 3) to their eleven digits on T1 and T2, and the χ² table equals `chiSquared.out` (`results_test`).
 The squares of the residuals add up to each data set's χ² of `chiSquared.out` (to its six digits), except for the

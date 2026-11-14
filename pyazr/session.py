@@ -72,7 +72,7 @@ class Session(
     SHIFT_PENALTY_FROM_ZERO = True
 
     @session_options.records_given
-    def __init__(self, file, *, cwd=None, data_mode=True, use_brune=True,
+    def __init__(self, file, *, cwd=None, extrapolations=False, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
@@ -89,13 +89,17 @@ class Session(
             against it (Config::baseDirectory); the process's working
             directory is neither read nor changed, so sessions in different
             directories can run on different threads at once.
-        data_mode : evaluate the ``<segmentsData>`` blocks (the startup state);
-            ``False`` starts in extrapolation mode (``<segmentsTest>``).
+        extrapolations : make the session for the project's extrapolations (the program's menu choice 3): then
+            :meth:`evaluate` gives the model on the extrapolations' grids (``evaluate(x).data[i]`` belongs to
+            ``extrapolations[i]``), every chi-squared field ``None``, and the fit vector holds the extrapolations'
+            nuisances; :meth:`objective` and the fits refuse.  ``False`` (the default): the data sets.  Chosen when
+            the session is made: a session for the other is a second ``Session`` (``**s.options`` with this keyword
+            changed rebuilds the same model).
         use_brune, ignore_externals, transform, use_long_wavelength :
             R-matrix formalism options, matching the CLI's ``--use-brune``,
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
-            Every option below except ``cwd``, ``data_mode`` and ``coulomb_table`` is also a ``<config>`` key of the
+            Every option below except ``cwd``, ``extrapolations`` and ``coulomb_table`` is also a ``<config>`` key of the
             project under its name (``use_brune=0``; ``Project.set_config(use_brune=False)``): a keyword given here
             wins over the key, the key over the default shown; a keyword left out is not given.
             :attr:`options` holds the values in effect, :attr:`option_sources` where each came from
@@ -164,12 +168,12 @@ class Session(
         # rule); self.options holds the values in effect, so that a worker process can rebuild this same model
         # (pyazr.bands.sensitivities with nprocs > 1), and self.option_sources where each came from.
         given = {k: v for k, v in locals().items() if k in self._given_options}
-        opts = session_options.runtime_options(_azure2, given, data_mode, coulomb_table, self.cwd)
+        opts = session_options.runtime_options(_azure2, given, not extrapolations, coulomb_table, self.cwd)
         self._sess = _azure2.Session(self.file, opts)
-        self.options, self.option_sources = session_options.in_use(self._sess, data_mode, coulomb_table,
+        self.options, self.option_sources = session_options.in_use(self._sess, extrapolations, coulomb_table,
                                                                     self._parameter_file)
 
-        self.mode = "data" if data_mode else "extrap"
+        self.mode = "extrap" if extrapolations else "data"  # what the session evaluates, fixed when it is made
         self.configure()
 
     def __del__(self):
@@ -360,8 +364,8 @@ class Session(
         write a new file.
 
         The radius stays set for the life of the session, through later
-        rebuilds: another pair's ``set_channel_radius``, a nuclear-potential
-        change and :meth:`extrap_mode`/:meth:`data_mode` keep it.  (Before
+        rebuilds: another pair's ``set_channel_radius`` and a nuclear-potential
+        change keep it.  (Before
         2026-11-02 each rebuild re-read the ``.azr`` with only its own call's
         radius, so setting pair 2 put pair 1 back to its file value, silently.)
         The radius read back from the rebuilt model is checked against the
@@ -422,9 +426,8 @@ class Session(
         """Per-segment extrapolation grids (:class:`~pyazr.described.DescribedExtrapolations`).
 
         For each extrapolation record, the reaction channel, the energy / angle grid, and the observable
-        type.  These describe the segments AZURE2 reports in extrapolation mode
-        (:meth:`extrap_mode`), in the same order, so segment ``i`` of this set
-        corresponds to ``evaluate(x).data[i]`` there.
+        type.  These describe the segments a session made with ``extrapolations=True`` evaluates, in the same
+        order, so ``evaluate(x).data[i]`` of such a session belongs to ``extrapolations[i]``.
         A copy of the session's parse of the file (see :meth:`_parsed`).
         """
         return copy.deepcopy(self._parsed("extrapolations"))
@@ -669,54 +672,3 @@ class Session(
             out.update(input_files_read=int(resp[6]), input_files_served=int(resp[7]),
                        input_files_held=int(resp[8]))
         return out
-
-    def _mode_free_vector(self, params):
-        """A free RWA vector for the engine's current layout.
-
-        In extrapolation mode a data-mode vector (longer: the data segments'
-        norms and shifts) is accepted, as before the binding refused vectors
-        of the wrong length (dev, 2026-10): its free R-matrix (and abundance)
-        block, which comes first and is the same in both modes (see
-        :meth:`_sync_layout`), is taken, the tail is the session's.  Any other
-        length goes to the engine as given, which refuses it.
-        """
-        x = np.asarray(params, float).ravel()
-        cur = np.asarray(self.parameters.x0, float).ravel()
-        if self.mode != "extrap" or x.size <= cur.size:
-            return params
-        head = sum(1 for r in self._engine.parameter_records()
-                   if not r["fixed"] and r["kind"] in ("energy", "width", "abundance"))
-        y = cur.copy()
-        y[:head] = x[:head]
-        return y
-
-    # -- modes ----------------------------------------------------------------
-
-    def _set_mode(self, extrap):
-        """Switch the engine to data or extrapolation mode and re-initialize."""
-        if extrap:
-            self._engine.set_extrap()
-        else:
-            self._engine.set_data()
-        self._engine.initialize()
-        self.mode = "extrap" if extrap else "data"
-        self._sync_layout()
-        session_checks.warn_engine_notices(self._sess, stacklevel=3)
-
-    def _sync_layout(self):
-        """Follow the engine's parameter layout after a mode switch: an extrapolation run lists the extrapolations'
-        nuisances in place of the data sets' (another number of parameters), so the cached table and fixed flags are
-        rebuilt; the session's parameter file is applied again (the switch re-reads the project)."""
-        self._apply_parameter_file()
-        self._fixed = [bool(f) for f in self._engine.params_fixed()]
-        self._parameters = None
-
-    @engine_call
-    def extrap_mode(self):
-        """Switch to the <segmentsTest> grids. Re-initializes the engine."""
-        self._set_mode(True)
-
-    @engine_call
-    def data_mode(self):
-        """Switch back to the <segmentsData> segments, which is what chi-squared uses. Re-initializes the engine."""
-        self._set_mode(False)

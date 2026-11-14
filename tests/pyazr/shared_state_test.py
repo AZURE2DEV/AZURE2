@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("data session evaluates (reference cross sections)", xs0.size > 0 and np.all(np.isfinite(xs0)))
 
     # --- an extrapolation session on the same model, used, then closed
-    with Session(azr_b, data_mode=False) as B:
+    with Session(azr_b, extrapolations=True) as B:
         xsB = flat([d.model for d in B.evaluate(np.asarray(B.parameters.x0, float)).data])
         check("extrapolation session evaluates", xsB.size > 0 and np.all(np.isfinite(xsB)))
         # the data session, while B is open

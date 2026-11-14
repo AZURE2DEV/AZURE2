@@ -81,7 +81,7 @@ def main(argv=None):
     q.set_config(output_dir=f"{out.name}/")
     copy = q.save(azr.with_name(f"{azr.stem}_target_check.azr"))
     try:
-        with pyazr.Session(str(copy), data_mode=False) as s:
+        with pyazr.Session(str(copy), extrapolations=True) as s:
             xb = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
             sigma = np.asarray(next(d for d in s.evaluate(xb).data if d.name == "target_check_bare").model, float)
     finally:

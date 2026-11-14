@@ -60,9 +60,11 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
-  `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; in extrapolation mode the
-  extrapolations, with every chi-squared field `None`.  These two are the only ways to evaluate: a number of
-  `chiSquared.out` or `AZUREOut_*` is read from them, never rebuilt.
+  `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; of a session made with
+  `Session(file, extrapolations=True)` the extrapolations, with every chi-squared field `None`.  These two are the
+  only ways to evaluate: a number of `chiSquared.out` or `AZUREOut_*` is read from them, never rebuilt.  A session
+  never switches between data and extrapolations: the other is a second session
+  (`parameters.carry_model_parameters` carries a data session's vector to it).
 - **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
   `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
   (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
