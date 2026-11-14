@@ -2,6 +2,72 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 16:30) — merged: the page's first view, the original's face, the run settings
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 73 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-9-webui-first-view`. The agent's entry follows. No conflict but this file.
+
+- **The original's face**: the old program's icon in the header and as the browser tab's icon (one byte copy,
+  consistency check 57), the colours built on the icon's blue, red and green, About with the reference to cite.
+- **The first view**: the page opens in the old program's path and words (Project, Particle Pairs, Levels and
+  Channels, Segments, Experimental Effects, Fit, Plot); the fields the engine's table marks rare
+  (`FieldDef::rare`) fold under "More fields"; `expert` in the header shows everything as before.
+- **Calculate** in the header from every tab: the current text evaluated, the Plot tab opened with what changed
+  since the last Calculate, in total and per data set.
+- **Run settings**: every `<config>` entry as a row with its control, from the engine's table
+  (`io::ConfigKeys()` with `title`, `group`, `absent`, `rare`; `io::ConfigPositionals()`), not typed.
+- **Not done** of the brief's "nothing with a structure is typed": the file fields (need a file-list route),
+  the columns, a reaction, a grid and the attenuation list (typed in the grammar), a reference's "new…", the
+  MINOS parameter names, the pair form's units and partner fields (still the page's own lists), the Fit tab's
+  two depths. These are the next page branch's.
+
+**Verified on the merged tree** (build `work/b-trial73`, four threads): 0 warnings; all projects in the three
+bases against `tab-t72-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `b-trial72`; the quick tests 277 of 277; the consistency test passes.
+
+**The director's review.** The C++ of the branch was read whole: the `<config>` table gained columns and the
+positional entries became a table the reader uses; `FieldDef` gained `rare`; nothing an evaluation reads. The
+smoke test's screenshots (a headless Chrome is on this machine; `work/pagefv/shots/`) were looked at for T2:
+the icon and the blue accent are there, the first view's seven tabs, the run settings with switches, the Plot
+tab after Calculate with residuals. Seen by eye and **not right yet** (the next page branch's):
+- Experimental Effects: the list's column heads are a union of the three record kinds ("kind", "kind",
+  "active", "detailed_balance"); the column under "active" shows the target's nucleus; beam and detector rows
+  are empty. The list needs heads per kind in words, and a line of what each record is.
+- Segments: the shared normalisation and energy-scale records head the list of data sets under raw kind names.
+- Particle Pairs: "kind 0", "E_x2", raw field names as heads; the old program showed the particles by name.
+- Levels and Channels: the "label" column repeats J-pi and the energy.
+- Plot: the model is drawn through the data points only (straight segments between them).
+
+**The four servers** were restarted on `wt-trial73` with `b-trial73` (ports and token unchanged); the four
+objectives over HTTP are unchanged (482.27523961726735, 10905.2313020616, 518.7134358035224,
+336479.96147890214).
+
+**New reference**: result tag `tab-t73-1`, base build `work/b-trial73`.
+
+**The PI, 2026-11-14 afternoon, on ENDF** (the director's five questions; his answer: "Yes to all"):
+1. photon channels stay out of the resonance section (MF=2); capture is written pointwise in MF=3 and MF=6
+   from the engine;
+2. the exported file carries the full pointwise set beside the resonance parameters, LRP=2;
+3. the 11 kB extract of the ENDF/B-VIII.1 3He + 4He file (MAT 228) may be committed as test data, with its
+   source and citation;
+4. MF=32 covariances come from a HESSE run in the formal basis;
+5. the ENDF utility codes and PREPRO may be fetched and built under `opt/` only.
+Also his: the REACLIB and STARLIB rate formats are wanted ("Yes, these reaction rate formats would be
+great!"); `--no-readline` may be refused once the menus go ("It could be refused").
+
+**The checking codes are built** (outside the repository; record in `opt/README-endf-codes.md`): CHECKR,
+FIZCON, PSYCHE, STANEF, INTER from github.com/IAEA-NDS/ENDF-utility-codes (commit ea2638b2, MIT) in
+`opt/endf-utils/bin`; PREPRO from github.com/IAEA-NDS/PREPRO (commit cc5fd087, MIT; cite D. E. Cullen,
+IAEA-NDS-0241) in `opt/prepro/bin` (not to be put on PATH: its `activate` shadows conda's). First run on the
+library's own 3He + 4He file: CHECKR reports 5 errors (among them "LRP=2 ONLY ALLOWED IN DERIVED FILES" and
+NE above 200 in MF=6), FIZCON 1, PSYCHE a channel radius out of its range. So a file the library ships does
+not pass the checkers clean; the exporter's default (LRP=2, the PI's choice) will be flagged by CHECKR, and
+an LRP=1 option was suggested to the PI (not answered).
+
+**Open** (unchanged unless named above): the readers and owners of the compound (running), the commands'
+second part (running), the covariance builder with the rate and its library formats (running), ENDF reading
+and checking (parts 1 and 2 committed, the start model from an evaluation not begun), the ENDF writer.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-first-view`) — the page for the median user
 
 **Measured first** (before any code; the old setup program read in `/data0/skowrons/AZURE2/gui/src/`, the page at the
