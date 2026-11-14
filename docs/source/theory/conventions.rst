@@ -165,7 +165,8 @@ In the standard (``--no-brune``) parametrization, every particle channel of a
 
 where :math:`E_1` is the energy of the **lowest** R-matrix level of that
 :math:`J^\pi` (``boundary_values``,
-``physics/src/LevelParameters.cpp:307-325``, called by ``CNuc::CalcBoundaryConditions``). A group without levels has
+``physics/src/LevelParameters.cpp:307-325``, called by ``CompoundSystem::CalcBoundaryConditions``). A group without
+levels has
 :math:`B_c = 0`, which then has no effect on the result. Observables do not
 depend on :math:`B_c` as long as the transformation of the parameters
 (below) is exact. The formal parameters do depend on :math:`B_c`; with the
@@ -201,7 +202,7 @@ Park form uses Park's overlap :math:`J` (same page, "Channel-Space Solution").
 
 Which basis the numbers in ``<levels>`` belong to is set on the command line
 (:doc:`../reference/command_line`). The conversion at start-up is
-``CNuc::TransformIn``, which calls ``level_parameters``
+``CompoundSystem::TransformIn``, which calls ``level_parameters``
 (``physics/src/LevelParameters.cpp``; ``docs/upgrade/level_parameters.md``). For the Brune basis (the
 default) it is
 
@@ -238,7 +239,7 @@ with its sign.
   (\mathrm{Im}\,\gamma^{\rm ext})^2]^{1/2} - \mathrm{Re}\,\gamma^{\rm ext}`
   (``subtract_external_capture``, ``LevelParameters.cpp:329-353``), with :math:`\gamma^{\rm ext}` from
   ``external_reduced_width`` (``physics/src/ExternalCapture.cpp``, through
-  ``ExternalReducedWidthOfInputs`` of ``src/CNucExternalCapture.cpp``).
+  ``ExternalReducedWidthOfInputs`` of ``src/ExternalCaptureAmplitudes.cpp``).
 - **Static moments.** A photon channel of a level at the energy and
   :math:`J^\pi` of the final state carries a static moment (M1 or E2 only):
   a penetrability factor of its own applies (:math:`3J/[4(J+1)\mu_N^2]` for
@@ -305,7 +306,7 @@ with its sign.
 - **No transformation** (``--no-transform``). The ``<levels>`` values are
   used as :math:`E_\lambda` and :math:`\gamma_{\lambda c}` directly.
 
-On output (``CNuc::TransformOut``) the reported width carries the sign of the
+On output (``CompoundSystem::TransformOut``) the reported width carries the sign of the
 amplitude, and for photon channels with external capture the sign of the real
 part of the total amplitude (``CNuc.cpp:2483-2499``).
 

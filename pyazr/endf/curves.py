@@ -15,7 +15,8 @@ family (Appendix B, pp. 332, 339-341), k found by the file's own Q values, QM - 
   on the data set's pair; ``sfactor``: the row ``sfactor_conversion``.
 
 Angles stay c.m. cosines (pp. 143-144); the data set's angles are already c.m. (the engine's ``angles``).
-A quantity the file cannot give (an analyzing power, a phase shift, capture to one final state, ...) is refused
+Capture to one final state is MF=3/MT=102 times the yield of its primary photon in MF=6/MT=102 (and its LAW=2
+distribution for dsigma_domega).  A quantity the file cannot give (an analyzing power, a phase shift, ...) is refused
 with its three parts, never drawn as zero.
 """
 
@@ -115,6 +116,16 @@ class CoulombTerms:
         self.m1 = h.awi * M_NEUTRON_U
         self.m2 = h.awr * M_NEUTRON_U
 
+    @classmethod
+    def of(cls, z1, z2, m1_u, m2_u):
+        """The terms of a projectile (z1, mass m1_u in u) on a target (z2, m2_u) given directly (the writer's, before
+        its file exists)."""
+        from .. import physics
+        self = cls.__new__(cls)
+        self._physics = physics
+        self.z1, self.z2, self.m1, self.m2 = int(z1), int(z2), float(m1_u), float(m2_u)
+        return self
+
     def _ecm(self, energies_ev):
         return self._physics.lab_to_cm_energy(self.m1, self.m2, np.asarray(energies_ev, float) * 1e-6)
 
@@ -122,7 +133,9 @@ class CoulombTerms:
         return np.atleast_1d(self._physics.sommerfeld_eta(self.z1, self.z2, self.m1, self.m2, self._ecm(energies_ev)))
 
     def sigma(self, energies_ev, mu, identical=False, two_s=0):
-        theta = np.degrees(np.arccos(np.clip(np.asarray(mu, float), -1, 1)))
+        # the engine's rows take theta in (0, 180): mu = -1 is taken 1e-15 inside, where the Coulomb term differs
+        # from its value at 180 deg by about 1e-15 (it is smooth there)
+        theta = np.degrees(np.arccos(np.clip(np.asarray(mu, float), -1 + 1e-15, 1)))
         e = self._ecm(energies_ev)
         if identical:
             return self._physics.mott_cross_section(self.z1, self.m1, two_s, e, theta)["value"]
@@ -189,6 +202,37 @@ def _particle_mt(material, request):
                   "Material.summary() lists the reactions the file holds")
 
 
+def _final_state(material, request, lab, mu):
+    """Capture to one final state (p. 136): MF=3/MT=102 times the yield of the primary photon to that state, and
+    for dsigma_domega its LAW=2 distribution (eq. 6.1, p. 133: sigma y p / 2 pi).  The photon is found by its AWP,
+    the photon energy at zero incident energy (EG of MF=12 LP=2, p. 201): QI of MF=3/MT=102 minus the final state's
+    excitation, to 1 keV."""
+    from .distributions import two_body_probability
+    from .interpolation import interpolate
+    q = request.quantity
+    if q not in ("sigma", "sfactor", "dsigma_domega"):
+        raise _refuse(f"{q} of capture", "sigma, sfactor or dsigma_domega of capture to one final state",
+                      "an ENDF file holds no other quantity of capture")
+    if (6, 102) not in material.sections:
+        raise _refuse("capture to one final state without MF=6/MT=102", "a file with the primary photons in "
+                      "MF=6/MT=102 (p. 136)", "compare a data set of capture to every final state with MF=3/MT=102")
+    xs = material.cross_section(102)
+    eg = xs.qi - request.exit.excitation * 1e6
+    photons = [p for p in material.distribution(102).products if p.zap == 0 and p.law == 2]
+    match = [p for p in photons if abs(p.awp - eg) <= 1e3]
+    if len(match) != 1:
+        raise _refuse(f"no primary photon of {eg:.6g} eV (QI - the final state's {request.exit.excitation:g} MeV) "
+                      "in MF=6/MT=102", "its photons: " + ", ".join(f"{p.awp:.6g} eV" for p in photons),
+                      "compare a data set of a final state the file holds")
+    product = match[0]
+    t = product.yield_table
+    value = xs(lab) * interpolate(lab, t.x, t.y, t.nbt, t.interpolation)
+    source = f"MF=3/MT=102 x MF=6/MT=102 photon of {product.awp:.6g} eV"
+    if q == "dsigma_domega":
+        value = value * two_body_probability(product, lab, mu) / (2 * math.pi)
+    return value, source
+
+
 def curves(material, request, session=None):
     """The file's values at the request's points (see the module's text).  ``request``: a :class:`CurveRequest`, or
     an ``EvaluatedData`` with ``session`` (the session it came from)."""
@@ -214,12 +258,12 @@ def curves(material, request, session=None):
     lab = _lab_energies_ev(request, projectile)
     notes = []
     from .. import physics
-    if request.exit is None or request.exit.photon:
-        if request.exit is not None:
-            raise _refuse("capture to one final state", "capture to every final state (the data set's exit pair "
-                          "-1) from MF=3/MT=102", "the yields of each final state (MF=6/MT=102) are not built")
+    if request.exit is not None and request.exit.photon:
+        value, source = _final_state(material, request, lab, mu)
+    elif request.exit is None:
         if q not in ("sigma", "sfactor"):
-            raise _refuse(f"{q} of capture", "sigma or sfactor of MF=3/MT=102", "use an integrated data set")
+            raise _refuse(f"{q} of capture to every final state", "sigma or sfactor of MF=3/MT=102",
+                          "compare a data set of capture to one final state (MF=6/MT=102), or an integrated one")
         value, source = material.cross_section(102)(lab), "MF=3/MT=102"
     elif request.exit == e:
         source = "MF=6/MT=2 LAW=5"

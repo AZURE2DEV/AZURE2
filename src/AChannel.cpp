@@ -99,7 +99,7 @@ void AChannel::SetBoundaryCondition(double boundaryCondition) {
  */
 void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
   // Wigner limit gamma_W^2 = 3 hbar^2 / (2 mu a^2) (MeV), reduced mass in u, radius in fm (physics/Widths.h).
-  // No limit (0, skipped by CNuc::FillMnParams) for a channel without a radius, and for a photon or beta
+  // No limit (0, skipped by CompoundSystem::FillMnParams) for a channel without a radius, and for a photon or beta
   // channel: a photon pair has mu = 0, so the formula gave infinity whenever its radius was nonzero, and
   // FillMnParams then set Minuit limits (-inf, inf), which its sine transform turns into NaN (audit
   // 2026-10-25, item 32).  The Wigner limit is a statement about particle channels.

@@ -21,7 +21,7 @@ without penetrability suppression; the entrance channel is off the energy shell,
 
 A channel line can carry `gammaIsRWA` (field 33). Its `gamma` column is then an amplitude γ in MeV^½, not a partial
 width Γ in eV or an ANC in fm^−½: useful for a level known only from a THM measurement. The convention is kept on
-output (`CNuc::GetTransformParams` returns the amplitude unchanged), so a fit written back never flips it.
+output (`CompoundSystem::GetTransformParams` returns the amplitude unchanged), so a fit written back never flips it.
 
 ```python
 ch.gamma_is_rwa            # AzrChannel: is this channel's gamma an amplitude?

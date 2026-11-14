@@ -125,7 +125,9 @@ try:
     c.accept(to=hand)
     check("accept(to=original) without overwrite is refused", False, "nothing raised")
 except pyazr.FormatRefused as e:
-    check("accept(to=original) without overwrite is refused (three parts)", e.fix and "overwrite=True" in e.fix, e)
+    # the fix is read on the page and on the command line too: words, no Python call
+    check("accept(to=original) without overwrite is refused (three parts; the fix in words, no call)",
+          e.what and e.allowed and e.fix and "replaced" in e.fix and "(" not in e.fix.replace("(overwrite)", ""), e)
 check("accept(to=original, overwrite=True) replaces it", c.accept(to=hand, overwrite=True) == hand and
       open(hand).read() != original)
 open(hand, "w").write(original)

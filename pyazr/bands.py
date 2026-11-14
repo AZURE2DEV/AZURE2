@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .errors import MissingFile
 from .locking import session_lock
 
 __all__ = ["Band", "load_covariance", "rmatrix_columns", "best_fit_params",
@@ -276,7 +277,7 @@ def _worker_setup(spec):
     # The .sig sidecar goes with its file: without it AZURE2 cannot tell the
     # copy is valid and recomputes it.
     for cache in ("intEC.dat", "intEC.dat.sig", "intEC.extrap", "intEC.extrap.sig"):
-        seed = os.path.join(cwd, "output", cache)
+        seed = os.path.join(spec["outputs"], cache)
         if os.path.exists(seed):
             shutil.copyfile(seed, os.path.join(workdir, cache))
 
@@ -284,7 +285,7 @@ def _worker_setup(spec):
     # that directory takes the temporary file with it.
     # the engine reads a format-3 project's data files relative to cwd
     edited = Project.open(spec["file"])
-    edited.set_config(output_dir=os.path.relpath(workdir, cwd).rstrip("/") + "/")
+    edited.set_config(output_dir=workdir.rstrip("/") + "/")
     fd, path = tempfile.mkstemp(suffix=".azr", dir=workdir)
     os.close(fd)
     edited.save(path)
@@ -320,7 +321,9 @@ def _parallel_columns(model, cols, h, p0, segments, quantity, method,
         "file": model.file,
         "cwd": model.cwd,
         "options": dict(getattr(model, "options", {})),
-        "workdir": os.path.join(model.cwd, "output", "sensitivities"),
+        "outputs": model.output_dir,
+        # each worker's output directory under a temporary one, removed at the end: nothing beside the project
+        "workdir": tempfile.mkdtemp(prefix="pyazr_sensitivities_"),
     }
     tasks = [(k, cols[k], float(h[k]), p0, segments, quantity, method)
              for k in range(len(cols))]
@@ -601,42 +604,38 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
 def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
     """A ``.azr`` carrying only the requested extrapolation grids.
 
-    Returns ``(path, workdir)``: a temporary ``.azr`` (the caller owns it) whose
-    extrapolations are just ``keys`` / ``grids``, and the private
-    output directory it was pointed at.
+    Returns ``(path, workdir)``: the trimmed project (its extrapolations are just ``keys`` / ``grids``), written into
+    ``workdir``, which is also its output directory.  ``workdir`` defaults to a new temporary directory; the caller
+    owns it and removes it (``shutil.rmtree(workdir)``).  Nothing is written beside the project.
 
-    The private output directory is what makes this safe *and* fast.  AZURE2
-    caches its external-capture integrals in ``<output>/intEC.extrap`` and reads
-    them back even when the grid has changed -- silently mixing integrals from
-    another set of energies into the calculation.  Giving each grid its own
-    directory (named from a hash of the trimmed block) means the main run's
-    cache is never touched, and a repeat call on the same grid reuses its own
-    valid cache instead of rebuilding it.
+    A session of the trimmed project takes ``cwd`` (default: the project's directory) as its working directory, so
+    that it reads the project's data and tables there: ``Session(path, cwd=cwd, extrapolations=True)``.
+
+    The private output directory keeps the project's own ``output/`` as it is: the external-capture cache of the
+    trimmed grids (``intEC.extrap``) is written there, not over the project's.  The engine checks a cache against
+    the grid it was computed for (its ``.sig`` file) and recomputes it when the grid has changed, so a ``workdir``
+    the caller keeps between calls reuses its integrals while the grid is the same.  The project's data-segment
+    cache (``output/intEC.dat`` under ``cwd``, valid since the data sets are not trimmed) is copied in when there is
+    one, which saves recomputing it.
     """
-    import hashlib
-
     if (keys is None) == (grids is None):
         raise ValueError("give exactly one of keys= or grids=.")
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(azr_file)) or "."
+    cwd = os.path.abspath(cwd)
 
-    model_file, block = _trimmed_project(azr_file, keys, grids)
-    if workdir is None:
-        tag = hashlib.sha1(block.encode()).hexdigest()[:10]
-        workdir = os.path.join(cwd, "output", "bands", tag)
+    model_file, _ = _trimmed_project(azr_file, keys, grids)
+    workdir = os.path.abspath(workdir) if workdir is not None else tempfile.mkdtemp(prefix="pyazr_bands_")
     os.makedirs(workdir, exist_ok=True)
-    model_file.set_config(output_dir=os.path.relpath(workdir, cwd).rstrip("/") + "/")
+    model_file.set_config(output_dir=workdir.rstrip("/") + "/")
 
-    # Trimming touches the extrapolations only, so the data-segment external-capture
-    # integrals are unchanged and the main run's cache is valid here.  Seeding
-    # it saves rebuilding them -- the bulk of a capture model's startup.
     for cache in ("intEC.dat", "intEC.dat.sig"):
         seed = os.path.join(cwd, "output", cache)
         target = os.path.join(workdir, cache)
         if os.path.exists(seed) and not os.path.exists(target):
             shutil.copyfile(seed, target)
 
-    fd, path = tempfile.mkstemp(suffix=".azr", dir=cwd)
+    fd, path = tempfile.mkstemp(suffix=".azr", dir=workdir)
     os.close(fd)
     model_file.save(path)
     return path, workdir
@@ -670,7 +669,7 @@ def _trimmed_project(azr_file, keys, grids):
 def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
                         covariance=None, quantity="cross",
                         step=1e-4, method="analytic", cwd=None,
-                        progress=False, keep_tempfile=False, nprocs=1):
+                        progress=False, keep_tempfile=False, nprocs=1, workdir=None):
     """Uncertainty bands on extrapolation grids, in a dedicated session.
 
     Writes a temporary ``.azr`` whose extrapolations are **only**
@@ -691,16 +690,17 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     params : defaults to ``output/param.sav`` beside the model.
     covariance, quantity, step, method, progress, nprocs : see
         :func:`uncertainty_bands`.
-    cwd : working directory for the session; defaults to the ``.azr``'s.
-    keep_tempfile : leave the trimmed ``.azr`` on disk (for debugging).
+    cwd : working directory for the session (its data and tables are read there); defaults to the ``.azr``'s.
+    workdir : the directory the trimmed project and its outputs are written to (:func:`trimmed_model`); default a
+        temporary directory, removed at the end.  A directory of the caller's is kept (only the trimmed ``.azr`` is
+        removed), so that a second call on the same grid reuses its external-capture integrals.
+    keep_tempfile : leave the trimmed ``.azr`` and the temporary directory on disk (for debugging).
 
     Notes
     -----
-    The trimmed model writes to its own ``output/bands/<hash>/`` directory, so
-    the main run's ``output/`` -- including the external-capture cache
-    ``intEC.extrap``, which AZURE2 would otherwise reuse on the changed grid --
-    is left alone.  Building those integrals is the bulk of the startup cost
-    for a capture grid, so the second call on the same grid is much faster.
+    Nothing is written beside the project: the trimmed model writes into ``workdir``, so the project's ``output/``
+    (with its external-capture caches) is left alone.  Building the integrals of a capture grid is the bulk of the
+    start-up cost; a ``workdir`` kept between calls on the same grid saves it.
     """
     from .session import Session
 
@@ -708,15 +708,18 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
         cwd = os.path.dirname(os.path.abspath(azr_file)) or "."
     out_keys = list(keys) if keys is not None else list(
         range(1, len(list(grids)) + 1))
-    tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd)
+    own_workdir = workdir is None
+    tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd, workdir=workdir)
 
     try:
         # Without params, the session takes the fit's parameter file, fixed values included (best_fit_params).
         sav = None if params is not None else os.path.join(cwd, "output", "param.sav")
         if sav is not None and not os.path.exists(sav):
-            raise FileNotFoundError(
-                f"{sav} not found: the band must be evaluated at the fitted parameters the covariance belongs to.  "
-                f"Pass params= explicitly to override.")
+            raise MissingFile(sav, f"{sav} not found: the band must be evaluated at the fitted parameters the "
+                                   f"covariance belongs to.  Pass params= explicitly to override.",
+                              what=f"{sav} not found",
+                              allowed="the band must be evaluated at the fitted parameters the covariance belongs to",
+                              fix="Pass params= explicitly to override")
         with Session(tmp, cwd=cwd, extrapolations=True, parameter_file=sav) as m:
             if params is None:
                 params = best_fit_params(m, sav)
@@ -727,8 +730,11 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
                 covariance=covariance, quantity=quantity, step=step,
                 method=method, progress=progress, nprocs=nprocs)
     finally:
-        if not keep_tempfile and os.path.exists(tmp):
-            os.remove(tmp)
+        if not keep_tempfile:
+            if own_workdir:
+                shutil.rmtree(workdir, ignore_errors=True)
+            elif os.path.exists(tmp):
+                os.remove(tmp)
 
     # Re-key from the trimmed file's 1..N numbering to the caller's.
     return {out_keys[b.segment]: _rekey(b, out_keys[b.segment])

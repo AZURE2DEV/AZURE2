@@ -9,7 +9,7 @@
 
 // Forward declarations
 class Config;
-class CNuc;
+class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class WorkingCopy;
@@ -36,7 +36,7 @@ class ParameterLimitsManager {
  public:
   /// `state` and `inputs` are the caller's levels (the run's, the session's), which outlive this object: a conversion
   /// of a physical limit works on copies of them.
-  ParameterLimitsManager(const Config *config, const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+  ParameterLimitsManager(const Config *config, const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs,
                          WorkingCopy *data, AZUREParams *params);
 
   // Read parameter settings from AZURE2 file
@@ -51,7 +51,7 @@ class ParameterLimitsManager {
   /*!
    * Gaussian prior on the parameter at position actualIndex of the FULL Minuit
    * parameter vector (fixed parameters included -- the vector the chi-squared
-   * function, its gradient and CNuc::FillCompoundFromParams all index).
+   * function, its gradient and CompoundSystem::FillCompoundFromParams all index).
    * Returns false when that parameter carries no nuisance prior; otherwise sets
    * nominal and error in fit units (reduced amplitudes for widths).  Segment
    * normalizations and energy shifts always return false: their priors come
@@ -69,7 +69,7 @@ class ParameterLimitsManager {
 
  private:
   const Config *config_;
-  const CNuc *compound_;
+  const CompoundSystem *compound_;
   const LevelState &state_;
   const LevelInputs &inputs_;
   WorkingCopy *data_;

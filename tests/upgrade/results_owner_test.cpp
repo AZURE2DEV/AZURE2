@@ -33,7 +33,7 @@
 
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -69,17 +69,17 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
 
 // One evaluation, as AZURECalc::Chi2On does it: the hand-over into `results`, then every point's model value
 // (Results::model).
-std::vector<double> Evaluate(const CNuc *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
+std::vector<double> Evaluate(const CompoundSystem *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
   lc->FillCompoundFromParams(p, state);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, results, lc, &state, &inputs, &cfg);
-  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   azure2::EvaluateModel(*ld, lc, state, cfg, results, azure2::LeafValues::Calculate);
   return results.model;
 }
 
 struct Copy {
-  const CNuc *compound = nullptr;  // shared, constant
+  const CompoundSystem *compound = nullptr;  // shared, constant
   LevelState state;                // the copy's own levels
   LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = argv[1];
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
   }
   check("p1 moves " + std::to_string(moved) + " level parameters", moved > 0);
 
-  auto copyOf = [](const CNuc *c, const LevelState &state, const LevelInputs &inputs, WorkingCopy *d) {
+  auto copyOf = [](const CompoundSystem *c, const LevelState &state, const LevelInputs &inputs, WorkingCopy *d) {
     Copy k;
     k.compound = c;
     k.state = state;

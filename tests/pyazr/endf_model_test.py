@@ -196,7 +196,7 @@ g0 = r.groups[0]
 cases = [
     ("KRM=3", written(r, "krm3.endf", sub=(0.0, 0.0, 1, 3, len(r.groups), 0)), "KRM=3"),
     ("KRL=1", written(r, "krl1.endf", sub=(0.0, 0.0, 1, 4, len(r.groups), 1)), "KRL=1"),
-    ("IFG=0", written(r, "ifg0.endf", sub=(0.0, 0.0, 0, 4, len(r.groups), 0)), "IFG=0"),
+    ("IFG=2", written(r, "ifg2.endf", sub=(0.0, 0.0, 2, 4, len(r.groups), 0)), "IFG=2"),
     ("LRF=3", written(r, "lrf3.endf", range_cont=(1e4, 2e7, 1, 3, 0, 1)), "LRF=3"),
     ("NRO=1", written(r, "nro1.endf", range_cont=(1e4, 2e7, 1, 7, 1, 1)), "NRO=1"),
     ("KBK > 0", written(dataclasses.replace(r, groups=(dataclasses.replace(g0, kbk=1),) + r.groups[1:]),
@@ -218,6 +218,68 @@ for label, path, part in cases:
     check(f"refused: {label}", ok, text)
 ok, text = raises(lambda: E.read(path).resonances(isotope=1), pyazr.FormatRefused, "isotope")
 check("refused: an isotope the file does not have", ok, text)
+
+
+# ------------------------------------------------------------------------ (c2) IFG=0: widths instead of amplitudes
+# T2's nucleus as LRF=7 (from_session, IFG=1) and the same with GAM = sign(gamma) 2 gamma^2 P at |ER| (IFG=0, p. 73,
+# eq. D.45; P from the engine's row at the channel's c.m. energy |ER| m_B/(m_A + m_B) + Q, eq. D.82): to_project
+# gives the same levels from both.  A width on a channel closed at |ER| (a pair's Q made -20 MeV) is refused.
+print("(c2) IFG=0 converted (p. 73)")
+d = os.path.join(TMP, "ifg0")
+shutil.copytree(os.path.dirname(T2), d, ignore=shutil.ignore_patterns("output*", "checks*"))
+for sub in ("output", "checks"):
+    os.makedirs(os.path.join(d, sub), exist_ok=True)
+cwd = os.getcwd()
+os.chdir(d)
+try:
+    s2 = pyazr.Session("T2.azr")
+    rec1, _ = E.from_session(s2)
+    ent = next(p.to_dict() for p in s2.pairs if p.is_entrance)
+    s_t2 = ent["sep_energy"] + ent["excitation"]
+    s2.close()
+    m_n = 1.00866491595
+
+    def widths(record):
+        e0 = record.pairs[0]
+        groups = []
+        for g in record.groups:
+            levels = []
+            for lv in g.levels:
+                gam = []
+                for c, a in zip(g.channels, lv.gam):
+                    q = record.pairs[c.pair - 1]
+                    e_cm = abs(lv.energy) * e0.mb / (e0.ma + e0.mb) + q.q
+                    pen = pyazr.physics.penetrability(c.l, int(q.za), int(q.zb), q.ma * m_n, q.mb * m_n, c.radius * 10,
+                                                      e_cm * 1e-6)
+                    gam.append(np.copysign(2 * a * a * pen, a))
+                levels.append(dataclasses.replace(lv, gam=tuple(gam)))
+            groups.append(dataclasses.replace(g, levels=tuple(levels)))
+        return dataclasses.replace(record, ifg=0, groups=tuple(groups))
+
+    rec0 = widths(rec1)
+    convs = []
+    for tag, rec in (("ifg1", rec1), ("ifg0", rec0)):
+        w = Writer("widest")
+        w.rows = list(rec.rows("widest"))
+        path = material(os.path.join(d, f"{tag}.endf"), {(2, 151): w}, za=rec.za, awr=rec.awr, form="widest")
+        back = E.read(path).resonances()
+        check(f"IFG={back.ifg} read (not refused) and kept as the file holds it", back.ifg == rec.ifg, back.ifg)
+        convs.append(E.to_project(back, os.path.join(d, f"{tag}.azr"), separation_energy=s_t2)[1])
+    # relative, below 1e-6 eV (fm^-1/2) absolute: a width of 1e-12 eV is the formal basis' rounding of a zero
+    worst = max(abs(a - b) / max(abs(a), 1e-6) for l1, l0 in zip(*[c.levels for c in convs])
+                for a, b in [(l1.energy_MeV, l0.energy_MeV)] + list(zip(l1.values, l0.values)))
+    print(f"      largest relative difference of a level energy or width, IFG=1 against IFG=0: {worst:.2e}")
+    check("IFG=0 gives the levels of IFG=1 (energies, widths and ANCs to 2e-6)", worst < 2e-6, worst)
+    closed = dataclasses.replace(rec0, pairs=rec0.pairs[:1] + (dataclasses.replace(rec0.pairs[1], q=-2e7),)
+                                 + rec0.pairs[2:])
+    w = Writer("widest")
+    w.rows = list(closed.rows("widest"))
+    path = material(os.path.join(d, "closed.endf"), {(2, 151): w}, za=rec0.za, awr=rec0.awr, form="widest")
+    ok, text = raises(lambda: E.to_project(E.read(path).resonances(), os.path.join(d, "closed.azr"),
+                                           separation_energy=s_t2), pyazr.FormatRefused, "closed")
+    check("IFG=0: a width on a channel closed at |ER| is refused (three parts)", ok, text)
+finally:
+    os.chdir(cwd)
 
 
 # --------------------------------------------------------------------------- (d) write then read, T1 and T2
@@ -289,8 +351,10 @@ def roundtrip(azr, tolerance_model, tolerance_chi2):
         print(f"      {name}: chi2 {ev0.chi2:.10f} -> {ev2.chi2:.10f} (Delta {dchi2:+.3e}), max rel. model {worst:.2e}")
         check(f"{name}: the model back to {tolerance_model:g}", worst < tolerance_model, worst)
         check(f"{name}: chi-squared back to {tolerance_chi2:g}", abs(dchi2) < tolerance_chi2, dchi2)
-        check(f"{name}: the losses name the photon channels and the apparatus", any("photon" in t for t in
-              losses.items) and any("normalizations" in t for t in losses.items), str(losses))
+        photons = any(p.pair_kind == "photon" for p in s0.pairs)
+        check(f"{name}: the losses name the photon channels (when the project has them) and the data sets",
+              any("photon channels" in t for t in losses.items) == photons and
+              any("data set(s)" in t for t in losses.items), str(losses))
         for s in (s0, s1, s2):
             s.close()
     finally:

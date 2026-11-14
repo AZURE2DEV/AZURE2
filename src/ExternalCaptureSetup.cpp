@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "CoulombTable.h"
 #include "ECTable.h"
@@ -21,7 +21,7 @@
 #include "WorkingCopy.h"
 #include "GSLException.h"
 
-const azure2::ExitRow &ExternalCaptureExit(const CNuc &compound, int entrancePair, int exitPair, int segmentKey) {
+const azure2::ExitRow &ExternalCaptureExit(const CompoundSystem &compound, int entrancePair, int exitPair, int segmentKey) {
   const azure2::EntrancePathways &P = compound.Pathways().Entrance(entrancePair);
   const int exit = P.ExitOf(exitPair);
   if (!exit)
@@ -96,21 +96,21 @@ std::vector<LeafView> LeafViews(WorkingCopy &data) {
 }
 
 template <class Segments>
-long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CNuc *theCNuc, ECSignatureHash *hash,
+long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CompoundSystem *compound, ECSignatureHash *hash,
                            std::set<int> *pairs) {
   long long count = 0;
   for (auto segment = segments.begin(); segment != segments.end(); segment++) {
-    int aa = theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
-    if (theCNuc->GetPair(aa)->GetPType() == 20) continue;
-    if (!theCNuc->GetPair(aa)->IsEntrance()) continue;
-    const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
-    for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-      for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-        if (!theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) continue;
-        const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-        int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
+    int aa = compound->GetPairNumFromKey(segment->GetEntranceKey());
+    if (compound->GetPair(aa)->GetPType() == 20) continue;
+    if (!compound->GetPair(aa)->IsEntrance()) continue;
+    const azure2::EntrancePathways &P = compound->Pathways().Entrance(aa);
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
+        if (!compound->GetJGroup(j)->GetLevel(la)->IsECLevel()) continue;
+        const ALevel *ecLevel = compound->GetJGroup(j)->GetLevel(la);
+        int ir = compound->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
-        const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey());
+        const azure2::ExitRow &exit = ExternalCaptureExit(*compound, aa, ir, segment->GetSegmentKey());
         if (hash) {
           // Which block this is, and the final state it captures to.  The
           // level energy enters every integral (Unit::CalculateECAmplitudes);
@@ -120,7 +120,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CNuc *th
           hash->Add(segment->GetSegmentKey());
           hash->Add(segment->GetEntranceKey());
           hash->Add(segment->GetExitKey());
-          hash->Add(theCNuc->GetJGroup(j)->GetJ());
+          hash->Add(compound->GetJGroup(j)->GetJ());
           hash->Add(ecLevel->GetECEnergy());  // the energy the integrals use (Brune; cnuc_split.md section 8)
           pairs->insert(aa);
           // The pathways in the table's order, which is the order of the trees the signature was defined on: a file
@@ -130,19 +130,19 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CNuc *th
             hash->Add(group.s);
             for (int ecm = 1; ecm <= group.num_external; ecm++) {
               const azure2::ExternalRow &pathway = P.External(group, ecm);
-              const AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
+              const AChannel *finalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
               hash->Add(pathway.l);
               hash->Add(pathway.mult);
               hash->Add((int)pathway.rad_type);
               hash->Add(pathway.J);
               hash->Add(finalChannel->GetL());
               hash->Add(finalChannel->GetS());
-              hash->Add(theCNuc->GetPair(finalChannel->GetPairNum())->GetPairKey());
+              hash->Add(compound->GetPair(finalChannel->GetPairNum())->GetPairKey());
               pairs->insert(finalChannel->GetPairNum());
               hash->Add(pathway.channel_capture ? 1 : 0);
               if (pathway.channel_capture) {
                 const azure2::InternalRow &chanCap = P.internal[pathway.cc_row];
-                const AChannel *initial = theCNuc->GetJGroup(chanCap.group)->GetChannel(chanCap.chp);
+                const AChannel *initial = compound->GetJGroup(chanCap.group)->GetChannel(chanCap.chp);
                 hash->Add(initial->GetL());
                 hash->Add(initial->GetS());
               }
@@ -188,9 +188,9 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CNuc *th
  * different energies.
  */
 
-long long WorkingCopy::CountECAmplitudes(const CNuc *theCNuc, const Config &configure) {
+long long WorkingCopy::CountECAmplitudes(const CompoundSystem *compound, const Config &configure) {
   std::vector<LeafView> leaves = LeafViews(*this);
-  return WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
+  return WalkECAmplitudes(*this, Data().GetSegments(), compound, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, compound, nullptr, nullptr);
 }
 
 /*!
@@ -217,7 +217,7 @@ long long WorkingCopy::CountECAmplitudes(const CNuc *theCNuc, const Config &conf
  * calculation in both cases.
  */
 
-std::string WorkingCopy::ECSignature(const CNuc *theCNuc, const Config &configure) {
+std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
   // under the old definition are recomputed rather than wrongly matched.
@@ -252,13 +252,13 @@ std::string WorkingCopy::ECSignature(const CNuc *theCNuc, const Config &configur
 
   std::set<int> pairs;
   hash.Add("data segments");
-  WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, Data().GetSegments(), compound, &hash, &pairs);
   hash.Add("component segments");
   std::vector<LeafView> leaves = LeafViews(*this);
-  WalkECAmplitudes(*this, leaves, theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, leaves, compound, &hash, &pairs);
 
   for (std::set<int>::const_iterator it = pairs.begin(); it != pairs.end(); ++it) {
-    const PPair *pair = theCNuc->GetPair(*it);
+    const PPair *pair = compound->GetPair(*it);
     hash.Add("pair");
     hash.Add(pair->GetPairKey());
     hash.Add(pair->GetPType());
@@ -338,7 +338,7 @@ void WorkingCopy::ECProgressRedraw(const Config &configure, const char *segmentK
  * Otherwise, the amplitudes are read from the specified file.
  */
 
-int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalculateECAmplitudes(const CompoundSystem *compound, const Config &configure) {
   std::ifstream in;
   std::ofstream out;
   std::string outputfile;
@@ -357,7 +357,7 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
   // The walk of the signature is the first to resolve the exit of every data segment and leaf with external
   // capture; an entrance without a pathway to the photon pair is refused here, before any amplitude is computed.
   try {
-    ecSignature_ = ECSignature(theCNuc, configure);
+    ecSignature_ = ECSignature(compound, configure);
   } catch (const std::runtime_error &e) {
     configure.outStream << "ERROR: " << e.what() << "." << std::endl;
     return -1;
@@ -365,7 +365,7 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
   ecOutputFile_ = outputfile;
   bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
   if (usePrevious) {
-    long long expected = CountECAmplitudes(theCNuc, configure);
+    long long expected = CountECAmplitudes(compound, configure);
     std::ifstream check(configure.OpenPath(configure.integralsfile).c_str());
     if (!check) {
       configure.outStream << "Could not open external capture file '"
@@ -455,15 +455,15 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
       snprintf(segmentKeyOut, sizeof(segmentKeyOut), "%d (Total: %d)", segment->GetSegmentKey(), numSumSegments);
     else
       snprintf(segmentKeyOut, sizeof(segmentKeyOut), "%d", segment->GetSegmentKey());
-    int aa = theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
-    if (theCNuc->GetPair(aa)->GetPType() == 20) continue;
-    if (theCNuc->GetPair(aa)->IsEntrance()) {
-      const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
-      for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-          if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-            const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-            int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
+    int aa = compound->GetPairNumFromKey(segment->GetEntranceKey());
+    if (compound->GetPair(aa)->GetPType() == 20) continue;
+    if (compound->GetPair(aa)->IsEntrance()) {
+      const azure2::EntrancePathways &P = compound->Pathways().Entrance(aa);
+      for (int j = 1; j <= compound->NumJGroups(); j++) {
+        for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
+          if (compound->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
+            const ALevel *ecLevel = compound->GetJGroup(j)->GetLevel(la);
+            int ir = compound->GetPairNumFromKey(segment->GetExitKey());
             if (ecLevel->GetECPairNum() == ir) {
               if (!usePrevious) {
                 if (!(configure.paramMask & Config::USE_API)) {
@@ -484,7 +484,7 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
                   // then has the same layout with and without point mapping.
                   {
                     try {
-                      point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
+                      point->CalculateECAmplitudes(this, compound, configure, channelTable_.get());
                     } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                       {
@@ -505,7 +505,7 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
               }
-              const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey());
+              const azure2::ExitRow &exit = ExternalCaptureExit(*compound, aa, ir, segment->GetSegmentKey());
               for (UnitIterator point = segment->GetPoints(*this).begin();
                    point < segment->GetPoints(*this).end(); point++) {
                 {
@@ -557,17 +557,17 @@ int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &config
   return 0;
 }
 
-int WorkingCopy::LeafECAmplitudes(const CNuc *theCNuc, const Config &configure, bool usePrevious, std::ifstream &in,
+int WorkingCopy::LeafECAmplitudes(const CompoundSystem *compound, const Config &configure, bool usePrevious, std::ifstream &in,
                                   std::ofstream &out) {
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
-    int aa = theCNuc->GetPairNumFromKey(Draft().segments_[leaf.first].TermEntranceKey(leaf.second));
-    if (theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
-      const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
-      for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-          if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-            const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-            int ir = theCNuc->GetPairNumFromKey(Draft().segments_[leaf.first].TermExitKey(leaf.second));
+    int aa = compound->GetPairNumFromKey(Draft().segments_[leaf.first].TermEntranceKey(leaf.second));
+    if (compound->GetPair(aa)->GetPType() != 20 && compound->GetPair(aa)->IsEntrance()) {
+      const azure2::EntrancePathways &P = compound->Pathways().Entrance(aa);
+      for (int j = 1; j <= compound->NumJGroups(); j++) {
+        for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
+          if (compound->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
+            const ALevel *ecLevel = compound->GetJGroup(j)->GetLevel(la);
+            int ir = compound->GetPairNumFromKey(Draft().segments_[leaf.first].TermExitKey(leaf.second));
             if (ecLevel->GetECPairNum() == ir) {
               if (!usePrevious) {
                 char segmentKeyOut[256];
@@ -586,7 +586,7 @@ int WorkingCopy::LeafECAmplitudes(const CNuc *theCNuc, const Config &configure, 
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                   try {
-                    point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
+                    point->CalculateECAmplitudes(this, compound, configure, channelTable_.get());
                   } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                     {
@@ -615,7 +615,7 @@ int WorkingCopy::LeafECAmplitudes(const CNuc *theCNuc, const Config &configure, 
               // previously saved ones back in.  The iteration order matches the
               // regular-segment loop in CalculateECAmplitudes exactly.
               const azure2::ExitRow &exit = ExternalCaptureExit(
-                  *theCNuc, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second));
+                  *compound, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second));
               for (UnitIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
                    point < Draft().segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
                 for (int k = 1; k <= exit.num_groups; k++) {

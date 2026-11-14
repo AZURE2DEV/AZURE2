@@ -3,10 +3,6 @@
 # file, symbol, kind (thread_local, static, namespace, mutable), reason.  A reason starting 'table:' is permanent;
 # 'pending (milestone N)' names the milestone of evaluation.md section 5 that removes the row.  Remove a row when
 # its symbol goes; never add one for new code: new state is a caller-owned table or scratch (CLAUDE.md, 'Add a cache').
-api/include/AZUREAPI.h	nuisanceParams_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-api/include/AZUREAPI.h	nuisanceRead_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-api/include/AZUREAPI.h	nuisance_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-api/include/AZUREAPI.h	results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 include/AZURECalc.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	fixedMask_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
 include/AZURECalc.h	g2CacheP_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)

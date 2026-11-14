@@ -53,7 +53,10 @@ are the parameters in the fit basis, by name (``dict(zip(names, x))`` of a sessi
 not, normalizations and shifts, are left out) or as a vector of every rate parameter.
 
 ``RateSession(file, entrance, exit)`` keeps the session for many rates (``.rate(values, ...)``, ``.names``,
-``.values``); ``rate_band(session, values, covariance=C, names=...)`` propagates a covariance linearly in
+``.values``; ``close()`` or a ``with`` block ends it).  Its engine writes the program's rate files
+(``cross_section_grid.dat``, an external-capture cache) into a temporary directory of the session's, removed when it
+closes, so nothing appears beside the project, and its progress bars go to the logger ``pyazr.engine``, not to
+standard output; ``rate_band(session, values, covariance=C, names=...)`` propagates a covariance linearly in
 :math:`\ln N_A\langle\sigma v\rangle` (central differences of the engine's rate, the steps of
 ``pyazr.bands.step_sizes``; the band is the rate times :math:`e^{\mp\sigma}`), ``rate_band(session, values,
 draws=D, names=...)`` gives the 16th, 50th and 84th percentiles over the rates of drawn vectors (a sampler's chain

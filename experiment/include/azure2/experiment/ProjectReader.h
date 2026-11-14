@@ -27,7 +27,7 @@ struct Format3Project {
   ValidationResult validated;
   LevelTables levels;  ///< the pairs and levels of <levels> (LevelTablesOfRows)
   /// The <levels> section as read once (null when the file has none): the engine fills its compound nucleus from
-  /// these rows (CNuc::Fill), the tables above are made from them.
+  /// these rows (CompoundSystem::Fill), the tables above are made from them.
   std::shared_ptr<const io::LevelSection> levelSection;
   std::string projectDir;  ///< the directory the data files were read from ("" = the working directory)
   BuiltProject built;  ///< empty when the validation found an error (Build needs a valid project)
@@ -57,7 +57,7 @@ std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok);
 
 /*!
  * The pairs and levels of <levels> rows as the plain tables of LevelTables.h, made once and read by Schema::Build,
- * BuildModelData and the engine's model data.  The indices of a level are the ones CNuc::Fill gives: J^pi groups
+ * BuildModelData and the engine's model data.  The indices of a level are the ones CompoundSystem::Fill gives: J^pi groups
  * numbered by their first active row (a group is J, parity and compound nucleus), channels of a group by their first
  * active row (pair, l, s), levels of a group by io::LevelGrouper.  Pairs: one per key, from its first row, active or
  * not, in row order.

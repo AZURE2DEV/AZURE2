@@ -23,7 +23,7 @@
 #include "AZUREGrad.h"
 #include "ProjectSetup.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelPass.h"
 #include "Results.h"
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = argv[1];
-  CNuc compound;
+  CompoundSystem compound;
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
   WorkingCopy data;
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) {
-    compound.CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    compound.CalcShiftFunctions(cfg, state, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
     shiftDeriv = BuildShiftDerivTable(&compound, state, cfg);
     sdp = &shiftDeriv;
   }

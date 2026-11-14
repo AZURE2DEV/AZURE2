@@ -229,20 +229,30 @@ function fieldElement(doc, entry, ctx, state) {
         const tr = head.appendChild(doc.createElement("tr"));
         for (const label of [...headLabels, ""]) tr.appendChild(doc.createElement("th")).textContent = label;
       }
+      const changed = (ctl, value) => {
+        slot.values[ctl.name] = value;
+        if (ctl.rerender) {
+          slot.widget = widgetOf(entry.field, slot.widget.compose(slot.values), ctx);
+          slot.values = valuesOf(slot.widget);
+          draw();
+        } else if (ctl.grows && value.trim() && !ctl.grown) {
+          // the last box of a list typed in: an empty box after it, in the widget's controls (compose reads them)
+          ctl.grown = true;
+          const n = slot.widget.controls.length;
+          const next = { ...ctl, name: `${ctl.grows.prefix}${n}`, value: "", placeholder: "+", grown: false,
+            ariaLabel: `${ctl.grows.ariaLabel} ${n + 1}` };
+          slot.widget.controls.push(next);
+          slot.values[next.name] = "";
+          cell(controlElement(doc, next, changed, ctx));
+        }
+      };
       slot.widget.controls.forEach((control, i) => {
         // in a table the label is the column's title (kept in the row where this entry's control differs)
         const c = entry.repeatable && headLabels[i] === (control.label || "")
           ? { ...control, label: "",
             ariaLabel: control.ariaLabel || control.label || control.placeholder || control.name }
           : control;
-        cell(controlElement(doc, c, (ctl, value) => {
-          slot.values[ctl.name] = value;
-          if (ctl.rerender) {
-            slot.widget = widgetOf(entry.field, slot.widget.compose(slot.values), ctx);
-            slot.values = valuesOf(slot.widget);
-            draw();
-          }
-        }, ctx));
+        cell(controlElement(doc, c, changed, ctx));
       });
       if (entry.repeatable) {
         cell(button(doc, "−", `remove this ${entry.title}`, () => {

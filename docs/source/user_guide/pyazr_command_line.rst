@@ -286,7 +286,7 @@ Calls ``pyazr.endf.to_project``.
 ``endf write``
 --------------
 
-The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 from the engine (LRP=2); what the file does not carry is listed.
+The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 and MF=6 from the engine (LRP=2); what the file does not carry is listed.
 
 .. code-block:: text
 

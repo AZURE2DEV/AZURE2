@@ -1,7 +1,7 @@
 # level_at_threshold -- a level energy at a particle threshold
 
 Every place that evaluates the shift function, penetrability or dS/dE at a
-level energy (CNuc::CalcBoundaryConditions, CalcShiftFunctions, TransformIn,
+level energy (CompoundSystem::CalcBoundaryConditions, CalcShiftFunctions, TransformIn,
 TransformOut, ObservedWidthsAt; the THM vertex=constant shift
 ShiftAtLevelEnergy; AZUREGrad's dS/dE table; the adaptive grid's width
 estimate) and the external-capture entrance channel (Unit, ECIntegral) goes

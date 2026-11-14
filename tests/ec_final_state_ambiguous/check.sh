@@ -3,7 +3,7 @@
 # An external-capture final state that matches more than one level is refused (audit 2026-10-25, 03_rmatrix_core F9 /
 # checklist item 28; 2026-10-27).
 #
-# CNuc::ParseExternalCapture attaches a capture pair's final state to the level of the pair's J^pi group whose energy
+# CompoundSystem::ParseExternalCapture attaches a capture pair's final state to the level of the pair's J^pi group whose energy
 # lies within 1 keV of the pair's E_x (JGroup::IsLevel, an energy-only match that returns the FIRST fit).  Since
 # e239a12 two levels of one J^pi may sit within 1 keV of each other (they carry different level IDs), so the pair's
 # E_x can match both: the first one in the file took the ANC silently and the other was ignored.  Now that is an ERROR

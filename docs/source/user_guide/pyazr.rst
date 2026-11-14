@@ -113,6 +113,7 @@ otherwise look up in the sources:
                            # (type, values, default, unit, grammar, doc), the rows the engine's parser reads
    k["nuclides"]           # the built-in nuclei of a THM experiment (beam=18O): Z, A, nuclear mass (u)
    k["optical_potentials"] # the global optical potentials (opticalAA=kd03): projectiles, reference, ranges
+   k["parameter_settings"] # a <parameterSettings> row (a prior or limits on a level parameter): fields, units
    s = pyazr.Session("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
                            # parameters (name, kind, unit, value, free), options in effect, output directory,
@@ -150,9 +151,9 @@ class                     also a                                    raised for
 
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
 
-   pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
-   every entry must be a finite number.  Session.parameters.x0 is such a vector (the start values);
-   Session.parameters.free names its entries in order.
+   pyazr.ParameterVectorError: Objective(x): entry 0 of the free parameter vector (width_1_1) is nan; every entry
+   must be a finite number.  Session.parameters.x0 is such a vector (the start values); Session.parameters.free
+   names its entries in order.
 
 Where a message is built from these three parts they are also attributes of the error, ``e.what``, ``e.allowed`` and
 ``e.fix`` (texts, each a part of the message; ``None`` where the message is the engine's own text); a
@@ -170,6 +171,22 @@ A notice of the engine that a session meets -- an external-capture amplitude fil
 output directory does not exist, a normalization or shift file that cannot be written -- is a ``pyazr.EngineWarning``
 naming the file and the consequence (it was a line on standard output before).  Make it an error with
 ``warnings.simplefilter("error", pyazr.EngineWarning)``.
+
+A set-up the engine refuses (``pyazr.Session``, ``pyazr.rate.RateSession``) is an ``AZURE2Error`` whose ``e.what``
+quotes the engine's ERROR lines and whose message holds every line the engine wrote while setting up.
+
+A library call is quiet: it prints nothing on standard output.  The engine writes what it does (the progress bars of
+a rate, the external-capture integrals it recomputes, a stale cache it does not use) on the process's standard
+output; during every call of a session (its set-up included) and during a rate, pyazr points that output at a
+temporary file and hands the lines to Python's logger ``pyazr.engine`` (``pyazr/engine_text.py``): ERROR and WARNING
+lines at level WARNING (shown on standard error by Python's default handler), the others at INFO.  The calls of an
+``Objective`` (a fit's or a sampler's every step) are not held.  To see them all::
+
+   import logging
+   logging.basicConfig(level=logging.INFO)
+
+Python's own ``print`` is shown as before (also in a fit's ``progress`` callback): only what C code writes on
+descriptor 1 while a call is inside is held.
 
 Documented zeros stay zeros: ``channel_functions`` below threshold (E <= 0) gives the shift function alone, and an
 energy at which the Coulomb routine fails gives zeros; ``whittaker_wave`` gives ``W`` 0 or inf outside the double
@@ -189,7 +206,7 @@ start is ``s.parameters.x0``. Physical values are a transformation of ``x`` that
    s.objective()                # the objective: f(x), f.value_and_grad(x), f.residuals_and_jacobian(x)
    phys = s.transform(x)        # the physical value of every parameter (MeV, eV, ANCs), one per row of s.parameters
 
-``s.transform(x)`` is the engine's transformation (``CNuc::TransformOut``), the one the program uses to write
+``s.transform(x)`` is the engine's transformation (``CompoundSystem::TransformOut``), the one the program uses to write
 ``<levels>`` after a fit: a fixed width holds its reduced-width amplitude, so its physical value follows the level's
 other widths. The engine offers no inverse: a new ``x`` is made from ``x0`` (``put``) or from a parameter file
 (``read``).
@@ -262,7 +279,8 @@ parameter vector:
    * - ``apparatus``
      - a number of an apparatus record (a stopping scale, a kernel's parameter)
    * - ``radiative``
-     - a number of a level's ``gamma_decay`` record (``decay_record``, ``decay_part``, ``final_state``)
+     - a number of a level's ``gamma_decay`` record (``decay_record``, ``decay_part``, ``final_state``); its unit is
+       its part's: eV for ``total_width``, 1 for ``branching`` and ``mixing``
 
 A THM segment's free norm is profiled, not a parameter, and has no entry.
 
@@ -273,6 +291,12 @@ The session's set-up, in readable form:
    print(s.level_scheme)          # pairs -> J-groups -> levels -> channels
    print(s.datasets.table())      # per data set: record, file, reaction, E range
    print(s.pairs)                 # masses, charges, spins, separation energies
+
+The level scheme names each pair as the project does: by its key in ``<levels>`` and its kind (``particle``,
+``photon``, ``beta``), the numbers and words of ``Project.pairs()`` and of the page's list of pairs.  A channel's
+value is named by what its row holds: ``Gamma`` a partial width in eV, ``C`` the ANC in fm^-1/2 of a particle channel
+of a level below the pair's threshold, ``gamma`` a reduced-width amplitude in MeV^1/2 (a row flagged as one), ``B``
+the beta-feeding amplitude of a beta pair (``SchemeChannel.quantity``, ``SchemeChannel.VALUE_UNITS``).
 
 A pair prints as ``Pair(#7 key=8 ...)``: ``#7`` is the engine's internal pair number, which ``Parameter.pair``
 carries, and ``key=8`` the pair key of the ``.azr`` file, which the engine's messages and ``isospin.out`` use. The two
@@ -416,6 +440,29 @@ the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_o
 the extrapolations and every χ² field is ``None``.  ``ev.objective - ev.chi2`` are the priors: on the fitted T2 the
 objective is 297.86, the data χ² 293.94.
 
+``s.model_curve(name, x=None, points=200)`` gives the model of one data set on a fine grid over its range at ``x``
+(a ``pyazr.model_curve.ModelCurve``): per grid point ``energies`` (MeV c.m.), ``energy_lab`` (the beam's lab energy),
+``angles`` (deg c.m.), ``excitation_energies``, ``model`` (in the unit of ``ev.data[i].model``) and ``at_data``
+(True at the data set's own points, which the grid holds besides ``points`` values evenly spaced between the first
+and the last); ``branches``, one per fixed angle of an excitation function or per fixed lab energy of an angular
+distribution.  It is the engine's evaluation of extrapolation records made from the data set's record (its
+reaction, quantity, target, beam, detector, quadrature, ...) at the data's lab energies after the energy shift, in a
+session of the extrapolations opened and closed by the call.  At the data set's points it equals ``ev.data[i].model``
+to rounding where nothing is folded; a folded point (a target, a beam spread, a detector) is integrated on a mesh
+planned from the curve's own points, 2e-3 from the data session's on T2's thin target.
+``pyazr.model_curve.model_curves(s, names)`` makes several data sets' curves in one session (their folds on one
+mesh, as the data's: 4e-9 on T2) and returns a refusal for a data set it cannot draw instead of raising.  Refused
+with ``what``, ``allowed``, ``fix`` (``pyazr.ParameterError``): a data set whose columns give each point its own
+window or order, points that are not one function of one variable.
+
+.. code-block:: python
+
+   c = s.model_curve("cap_g0")                       # T1: capture to the ground state
+   for b in c.branches:
+       plt.plot(c.energies[b.start:b.stop], c.model[b.start:b.stop])
+   d = s.evaluate().dataset("cap_g0")
+   plt.errorbar(d.energies, d.values * d.norm, d.errors * d.norm, fmt="o")
+
 .. code-block:: python
 
    s = pyazr.Session("T2.azr")
@@ -527,6 +574,24 @@ the project unchanged, and the lines an edit does not touch keep their bytes.  N
    with p.session() as m:                                             # a calculation of the edited project
        print(m.evaluate().chi2)
 
+A prior or limits on a level parameter are an edit too (rows of ``<parameterSettings>``, which the engine applies to
+a free parameter in a fit, a sampler and the objective)::
+
+   p.set_parameter_setting("3/2- 3.5032", prior=(3.50, 0.01))          # the energy: prior centre, sigma (MeV)
+   p.set_parameter_setting("3/2- 3.5032", (1, 1, 0.5), limits=(1e3, 1e5))   # a channel's width: limits (eV)
+   p.parameter_settings()                                             # the rows, with the level and channel
+   p.set_parameter_setting("3/2- 3.5032", (1, 1, 0.5))                # both None: the row removed
+
+A session of the saved project has the prior as the objective's term ``nuisance priors`` and the limits as the
+parameter's ``bounds`` (converted to the fit's amplitude).  A channel's numbers are in the convention its row states
+(eV, fm^-1/2 for an ANC, MeV^1/2 for an amplitude).  A fixed parameter, an inactive level, a channel the level has
+not, a sigma that is not > 0 and limits out of order are refused.  The rows name levels by the engine's numbers
+(``Level 3 Energy (MeV)``: the parameter ``energy_3``), which follow the active levels: after adding, removing or
+switching off a level, ``parameter_settings()`` shows what each row names now.
+
+An edit that would leave a phase-shift data set or extrapolation without its partial wave (no active level with that
+J and a channel of its entrance pair with that l and s) is refused as the engine would refuse the project's session.
+
 A level is named by its label (``"3/2- 3.5032"``, as ``levels()`` gives it), by ``(J^pi, E_x)``
 within 1 keV, or by the ``ProjectLevel`` itself; ``levels()`` gives each level's rows, its compound
 nucleus and the engine's (group, level) indices, ``pairs()`` the particle pairs (masses, charges, spins, radius,
@@ -630,6 +695,13 @@ engine resolves it (not necessarily ``output/``).
 ``pyazr.bands`` (``sensitivities``, ``uncertainty_bands``, ``extrapolation_bands``) spans the columns the CLI's
 ``covariance.dat`` spans: level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 9); norms and shifts
 only rescale or move the data and carry no band.
+
+None of these calls writes beside the project.  ``trimmed_model(file, keys=)`` writes the trimmed project into a
+work directory it returns (a new temporary one unless ``workdir=`` names one; the caller removes it);
+``extrapolation_bands`` works in such a directory and removes it at the end (a ``workdir=`` of the caller's is kept,
+so that a second call on the same grid reuses its external-capture integrals); ``sensitivities`` with ``nprocs > 1``
+gives each worker an output directory under a temporary one; ``pyazr.tabulate`` builds its projects in a temporary
+directory, removed at the end.  The project's relative paths are read from ``cwd`` (default: the project's directory).
 
 Masses and separation energies
 ------------------------------
@@ -951,11 +1023,15 @@ integrals integrate.
    c = azr.channel_functions(1, E, l=0)               # radius=0 -> channel radius
    c["F"], c["G"], c["P"], c["S"], c["delta_hs"], c["open"]
 
-   paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
-   paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
+   paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway; pair: the key, E: c.m., MeV
+   paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"], paths[0]["unit"]   # "fm^2" for E1
 
    azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
                        # Coulomb-memo counters of earlier builds, now always 0)
+
+An external-capture integral is in fm^(L+1), L its multipolarity: the pathway's T-matrix element is the final state's
+ANC times ``k_gamma^(L+1/2)`` times the integral.  The pathways come in the engine's order (by final level, then spin
+group); the final state is not part of the answer.
 
 The engine's physics functions need no session: ``pyazr.physics`` has one function per row of the binding's physics
 table (kinematics, Coulomb functions and phase, penetrability, shift function and its energy derivative, hard-sphere

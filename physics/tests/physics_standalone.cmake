@@ -1,5 +1,5 @@
 # Configure, build and test physics/ as a project of its own (cmake -P; called by the ctest physics_standalone).
-# In a fresh tree nothing else of AZURE2 exists: an include of an engine header (CNuc.h, Config.h) or a call into
+# In a fresh tree nothing else of AZURE2 exists: an include of an engine header (CompoundSystem.h, Config.h) or a call into
 # the engine or a library it links fails to compile or link here, whatever the main build puts on its include path.
 # A header on the system include path (GSL, say) is still found; repo_consistency refuses those includes.
 #   cmake -DSRC=<physics dir> -DBIN=<scratch build dir> [-DGENERATOR=...] [-DCXX=...] -P physics_standalone.cmake

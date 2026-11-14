@@ -86,7 +86,8 @@ The nuclear part
 edits them through the engine as well (the engine reads each line, makes each
 new or edited line and refuses what a run would refuse; a row or line an edit
 does not name keeps its bytes, and a number replaced in a ``<levels>`` row keeps
-its column).  Every edit is validated on the project as it would stand, returns
+its column).  Every edit is validated on the project as it would stand (also: a
+phase-shift data set or extrapolation keeps its partial wave in an active level), returns
 the engine's new warnings and raises ``pyazr.FormatError`` on an error,
 the project unchanged.  A level is named by its label, ``"<J^pi> <E_x as
 written>"``, by J^pi and E_x within 1 keV, or by the engine's ``(group,
@@ -99,6 +100,20 @@ level)``; a channel by its pair key and (l, s).
 
         lv = p.level(("3/2-", 3.5))          # the 3/2- level within 1 keV of 3.5 MeV
         print(lv.label, lv.channel(1, 1, 0.5).width)
+
+``p.set_parameter_setting(level, channel=None, prior=, limits=)`` and ``p.parameter_settings()``
+    A prior ``(centre, sigma)`` and/or limits ``(lower, upper)`` on a free
+    level parameter: the level's energy (MeV), or with ``channel=(pair, l, s)``
+    that channel's width in its row's convention; a row of
+    ``<parameterSettings>`` (``prior=None, limits=None`` removes it).  A session
+    of the saved project has the prior in its objective (the term ``nuisance
+    priors``) and the limits as the parameter's bounds;
+    ``parameter_settings()`` lists the rows (``pyazr.parameter_settings
+    .ParameterSetting``: label, the level and channel it names, prior,
+    limits)::
+
+        p.set_parameter_setting("3/2- 3.5032", prior=(3.50, 0.01))
+        p.set_parameter_setting("3/2- 3.5032", (1, 1, 0.5), limits=(1e3, 1e5))
 
 ``p.pairs()`` and ``p.reaction(entrance, exit)``
     The pairs of ``<levels>`` (``pyazr.ProjectPair``: particles, masses in

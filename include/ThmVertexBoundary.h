@@ -9,7 +9,7 @@
 #include <optional>
 
 class ALevel;
-class CNuc;
+class CompoundSystem;
 class Config;
 class Segment;
 class JGroup;
@@ -58,7 +58,7 @@ struct ThmShiftMemo {
  *    channel constant of the R matrix is tied to the first level read);
  *  - perlevel: the shift S_c(E_lambda) of each level under Brune (mrmpy
  *    vertex_boundary="per_level"; Tumino et al. 2021 eq. 51) -- the value
- *    CNuc::CalcShiftFunctions stores in the level state -- and the channel
+ *    CompoundSystem::CalcShiftFunctions stores in the level state -- and the channel
  *    boundary constant B_c without Brune;
  *  - onshell: the log-derivative of the outgoing wave itself,
  *    L_c(E) = S_c(E) + i P_c(E) at the energy of the point (Tribble et al.
@@ -127,6 +127,6 @@ class ThmVertexBoundary {
  * ERROR E_THM_HYBRID_POTENTIAL written, for a THM segment (or test segment, isTest) #key whose entrance pair has a
  * potential (docs/upgrade/spin_orbit_potential.md section 3.4); true otherwise.
  */
-bool ThmVertexAllowsPair(const CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure);
+bool ThmVertexAllowsPair(const CompoundSystem *compound, const Segment &segment, int key, bool isTest, const Config &configure);
 
 #endif

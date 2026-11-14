@@ -10,7 +10,8 @@ Checks, on tests/angle_mapping/angle_mapping.azr (p+12C and p+13C, a shift group
 without the Coulomb table (which covers these channels and would leave the memo unused):
   1. 8 sessions at random radii of pair 1, one after the other: no Coulomb memo holds anything (keys 0 after each),
      and a session at a radius after them gives the chi2 of the first session at that radius (rel 1e-12);
-  2. every session prints the shift-function and shift-group Notes once;
+  2. every session prints the shift-function and shift-group Notes once (the engine's lines, which pyazr hands to the
+     logger pyazr.engine rather than standard output);
   3. the input files are cached per process: a session at a new radius reads its new .azr from disk and serves the
      unchanged data files from memory; an edited data file is read again (only it, with the new .azr) and its new
      values are used (chi2 equals a session on the edited file in its own directory).
@@ -44,19 +45,24 @@ def rel(a, b):
 
 @contextlib.contextmanager
 def captured_stdout(sink):
-    """Collects what the engine (C++ std::cout) writes to file descriptor 1."""
-    sys.stdout.flush()
-    saved = os.dup(1)
-    with tempfile.TemporaryFile(mode="w+b") as f:
-        os.dup2(f.fileno(), 1)
-        try:
-            yield
-        finally:
-            sys.stdout.flush()
-            os.dup2(saved, 1)
-            os.close(saved)
-            f.seek(0)
-            sink.append(f.read().decode(errors="replace"))
+    """Collects the engine's lines of the block: what it writes to file descriptor 1 (C++ std::cout), which pyazr
+    hands to the logger ``pyazr.engine`` (pyazr/engine_text.py) instead of standard output."""
+    import logging
+    lines = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            lines.append(record.getMessage())
+    logger = logging.getLogger("pyazr.engine")
+    handler, level = Collect(level=logging.DEBUG), logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(level)
+        sink.append("\n".join(lines))
 
 
 def notes(text, what):

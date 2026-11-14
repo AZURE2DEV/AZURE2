@@ -1,6 +1,6 @@
-// What the compound nucleus writes: its check files and parameters.out / relativistic.out (CNucReport.h).  Reads the
+// What the compound nucleus writes: its check files and parameters.out / relativistic.out (LevelReport.h).  Reads the
 // nucleus through const access only.
-#include "CNucReport.h"
+#include "LevelReport.h"
 
 #include <cmath>
 #include <cstdio>
@@ -11,7 +11,7 @@
 
 #include "AChannel.h"
 #include "ALevel.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
 #include "JGroup.h"
@@ -46,7 +46,7 @@ void WriteCheck(const Config &configure, unsigned int bit, const char *file, con
 
 }  // namespace
 
-void WriteCompoundNucleusCheck(const CNuc &compound, const LevelInputs &inputs, const Config &configure) {
+void WriteCompoundNucleusCheck(const CompoundSystem &compound, const LevelInputs &inputs, const Config &configure) {
   WriteCheck(configure, Config::CHECK_COMPOUND_NUCLEUS, "compoundnucleus.chk", "compound nucleus", [&](std::ostream &out) {
     out << std::endl
         << "************************************" << std::endl
@@ -118,7 +118,7 @@ void WriteCompoundNucleusCheck(const CNuc &compound, const LevelInputs &inputs, 
   });
 }
 
-void WritePathwaysCheck(const CNuc &compound, const Config &configure) {
+void WritePathwaysCheck(const CompoundSystem &compound, const Config &configure) {
   WriteCheck(configure, Config::CHECK_PATHWAYS, "pathways.chk", "pathways", [&](std::ostream &out) {
     out << std::endl
         << "************************************" << std::endl
@@ -217,7 +217,7 @@ void WritePathwaysCheck(const CNuc &compound, const Config &configure) {
   });
 }
 
-void WriteBoundaryConditionsCheck(const CNuc &compound, const Config &configure) {
+void WriteBoundaryConditionsCheck(const CompoundSystem &compound, const Config &configure) {
   WriteCheck(configure, Config::CHECK_BOUNDARY_CONDITIONS, "boundaryconditions.chk", "boundary conditions",
              [&](std::ostream &out) {
                out << std::endl
@@ -240,7 +240,7 @@ void WriteBoundaryConditionsCheck(const CNuc &compound, const Config &configure)
              });
 }
 
-void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configure) {
+void WriteAngularDistributionsCheck(const CompoundSystem &compound, const Config &configure) {
   WriteCheck(configure, Config::CHECK_ANGULAR_DISTS, "angulardistributions.chk", "angular distributions",
              [&](std::ostream &out) {
                out << std::endl
@@ -280,7 +280,7 @@ void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configur
              });
 }
 
-void WriteParametersOut(const CNuc &compound, const LevelState &state, const ObservedLevelTable &table,
+void WriteParametersOut(const CompoundSystem &compound, const LevelState &state, const ObservedLevelTable &table,
                         const Config &configure) {
   namespace phys = azure2::physics;
   char filename[256];
@@ -373,7 +373,7 @@ void WriteParametersOut(const CNuc &compound, const LevelState &state, const Obs
  * in both): Gamma' = Gamma (1 + T0/m0), gamma' = gamma sqrt(1 + T0/m0).  This is exact at each level energy; away
  * from it the two energy dependences differ at second order in T0/m0.
  */
-void WriteRelativisticOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure) {
+void WriteRelativisticOut(const CompoundSystem &compound, const ObservedLevelTable &table, const Config &configure) {
   char filename[256];
   snprintf(filename, sizeof(filename), "%srelativistic.out", configure.outputdir.c_str());
   std::ofstream out(configure.OpenPath(filename));

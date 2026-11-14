@@ -6,7 +6,7 @@
 #include "Config.h"
 #include "Constants.h"
 
-class CNuc;
+class CompoundSystem;
 class Site;
 struct TermSettings;
 
@@ -110,7 +110,7 @@ struct RecordCapacity {
 /// The capacity the records of the reactions of `compound` need: one more than their largest Legendre order (the
 /// pathway table's exits; at most Config::maxLOrder + 1) and the amplitudes (s v, s' v') of a reaction between
 /// particle pairs, ((2 j1 + 1)(2 j2 + 1))^2 for the largest pair.
-RecordCapacity RecordCapacityOf(const CNuc &compound);
+RecordCapacity RecordCapacityOf(const CompoundSystem &compound);
 
 /// What a reader brings to a slot: its angular row (P_L with its Q coefficients, Site::Row) and, for elastic
 /// scattering, its Coulomb amplitudes at the slot's energy (Site::CoulombAt).

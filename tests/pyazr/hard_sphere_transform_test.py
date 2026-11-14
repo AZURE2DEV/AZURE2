@@ -2,7 +2,7 @@
 """A project with hard-sphere J^pi groups (includeAllJPi=1) opened through pyazr.
 
 pyazr's default is transform=True (AZURE2's --transform-params path), which runs
-CNuc::TransformIn on every J-group.  A hard-sphere group has channels but no
+CompoundSystem::TransformIn on every J-group.  A hard-sphere group has channels but no
 levels, and the transform built a 0 x 0 eigenproblem for it, whose GSL workspace
 is a null pointer: a segfault on opening the session.  The CLI checks never saw
 it (tests/hard_sphere runs without the transform).

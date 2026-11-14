@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 #include "InputFiles.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "Kinematics.h"
 #include "DataCovariance.h"
@@ -376,7 +376,7 @@ int Segment::GetExitKey() const {
  * in the lab frame, conversions are performed to the center of mass frame.
  */
 
-int Segment::Fill(const CNuc *theCNuc, WorkingCopy *theData, const Config &configure) {
+int Segment::Fill(const CompoundSystem *compound, WorkingCopy *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
   std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.OpenPath(infile), configure.cacheInputFiles);
   std::istream &in = *inStream;
@@ -437,8 +437,8 @@ int Segment::Fill(const CNuc *theCNuc, WorkingCopy *theData, const Config &confi
     return -1;
   }
   this->SetMeasurementRows(*theData, rows, provenance, false);
-  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-  const PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *exitPair = compound->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
     // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet).
     azure2::experiment::AngleLimit lim;
@@ -917,12 +917,12 @@ double Segment::TermFrameFactor(const SegmentState &state, int t, int i) {
  * 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated,
  * phase shift) or a term without a proper exit pair (a total-capture term).
  */
-double Segment::RatioTermFrameFactor(int t, Unit *point, const CNuc *cnuc) const {
-  if (!point || !cnuc) return 1.0;
+double Segment::RatioTermFrameFactor(int t, Unit *point, const CompoundSystem *compound) const {
+  if (!point || !compound) return 1.0;
   if (!IsDifferential() || IsCMDifferential() || IsPhase() || IsAngularDist()) return 1.0;
-  if (!cnuc->IsPairKey(TermEntranceKey(t)) || !cnuc->IsPairKey(TermExitKey(t))) return 1.0;
-  const PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermEntranceKey(t)));
-  const PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermExitKey(t)));
+  if (!compound->IsPairKey(TermEntranceKey(t)) || !compound->IsPairKey(TermExitKey(t))) return 1.0;
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(TermEntranceKey(t)));
+  const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(TermExitKey(t)));
   if (entrancePair->GetPType() == 20) return 1.0;
   if (exitPair->GetPType() == 10) return point->CalculateCrossSectionGammaConversionFactor(entrancePair);
   if (exitPair->GetPType() != 0) return 1.0;

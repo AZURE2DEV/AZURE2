@@ -6,7 +6,7 @@
 
 #include "AZURECalcMCMC.h"
 #include "AZUREParams.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "WorkingData.h"

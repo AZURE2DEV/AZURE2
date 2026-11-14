@@ -4,10 +4,10 @@ The standard (non-Brune) parameter transformations hand the eigenvalues to the
 levels of a J^pi group by energy, not by their position in the project file
 (code audit item 13, fixed 2026-10-27).
 
-`CNuc::TransformIn` turns the physical level parameters into formal ones by a
+`CompoundSystem::TransformIn` turns the physical level parameters into formal ones by a
 generalized eigenproblem per J^pi group. GSL returns the eigenvalues in
 ascending order and AZURE2 assigned them to the levels in FILE order;
-`CNuc::TransformOut` followed the same positional index. A group listed out of
+`CompoundSystem::TransformOut` followed the same positional index. A group listed out of
 energy order (a 40 MeV background pole first, say) therefore had its energies,
 widths and fix flags permuted: the first-listed level carried the lowest
 formal energy, `parameters.out` listed the group in ascending order rather than

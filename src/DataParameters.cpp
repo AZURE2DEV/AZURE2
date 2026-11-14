@@ -449,7 +449,7 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   struct Layout {
     int abundance, norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
   } layout;
-  // The isotopic abundances first, right after the level block CNuc::FillMnParams wrote (AbundanceSamples.h).
+  // The isotopic abundances first, right after the level block CompoundSystem::FillMnParams wrote (AbundanceSamples.h).
   layout.abundance = (int)p.Params().size();
   Data().Abundances().AddParameters(abundances_, params);
   layout.norm = (int)p.Params().size();

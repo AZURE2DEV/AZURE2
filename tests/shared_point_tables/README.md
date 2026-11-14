@@ -18,7 +18,7 @@ segmentation faults), in dev 2d97b1f0 as well:
   components: the base points of natural-target and SUM segments kept mapping the ORIGINAL's component points,
   and every pooled copy filled them, from every thread at once.  `Clone` now checks that every mapped point
   belongs to the copy.
-- `CoulFuncCache::TransientScope` (used by `CNuc::TransformOut`, which grid re-placement calls on every
+- `CoulFuncCache::TransientScope` (used by `CompoundSystem::TransformOut`, which grid re-placement calls on every
   evaluation) counted its depth for all threads together, and the end of a scope on one thread cleared every
   thread's scratch memo while the others were using theirs.  The depth is now per thread;
   `tests/reference/coulfunc_transient_scope_test.cpp` checks it deterministically.

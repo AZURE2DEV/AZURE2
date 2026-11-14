@@ -16,7 +16,7 @@
 namespace azure2 {
 
 /*!
- * Park's numerical shift-function derivatives at level energies (CNuc::CalcShiftFunctions) by their exact arguments:
+ * Park's numerical shift-function derivatives at level energies (CompoundSystem::CalcShiftFunctions) by their exact arguments:
  * the pair's parameters, l, 2J and the level energy, compared bit for bit, and the settings that change the shift
  * function at those arguments (GSL or own Coulomb functions, a nuclear potential, the Coulomb table, relativistic
  * kinematics).  The pooled copies of a fit (evaluation, gradient, residual Jacobian) need the same values at the

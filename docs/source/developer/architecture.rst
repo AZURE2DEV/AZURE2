@@ -77,7 +77,7 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    program (``AZURE2 --convert``) and the Python module do.
 
 ``src/``, ``include/`` (``AZURE2Core``, the program ``AZURE2``)
-   The engine: the compound nucleus (``CNuc``), the data set and its working
+   The engine: the compound system (``CompoundSystem``), the data set and its working
    copies (``DataSet``, ``WorkingCopy``), the set-up of meshes and target
    effects, the point pass and the level-matrix routes, the model pass, the
    objective (``src/Objective.cpp``), the gradients, the fitters' adapters,
@@ -165,7 +165,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    for the program, ``AZUREAPI::Initialize`` (``api/src/AZUREAPI.cpp``) for a
    session, make the same calls in the same order:
 
-   * ``CNuc::Fill`` (``src/CNuc.cpp``): the pairs (``PPair``) and the
+   * ``CompoundSystem::Fill`` (``src/CompoundSystemBuild.cpp``): the pairs (``PPair``) and the
      :math:`J^\pi` groups (``JGroup``) with their channels (``AChannel``) and
      levels (``ALevel``), from the ``<levels>`` rows
      (``ProjectLevelSection``, ``src/ProjectSetup.cpp``).
@@ -182,16 +182,16 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    * The entrance pairs of the run, from the specs of its active data sets or
      extrapolations (``RequestDataEntrances``,
      ``RequestExtrapolationEntrances``, ``src/ProjectSetup.cpp``) or the
-     rate's entrance pair, requested with ``CNuc::RequestEntrance``, and the
+     rate's entrance pair, requested with ``CompoundSystem::RequestEntrance``, and the
      capture analyzing-power terms (``RequestCaptureAyTerms``).
-   * ``CNuc::Initialize``: channels, boundary conditions, the
+   * ``CompoundSystem::Initialize``: channels, boundary conditions, the
      transformation of the input parameters to the engine's basis
-     (``CNuc::TransformIn``) and the pathway table (``CNuc::BuildPathways``,
+     (``CompoundSystem::TransformIn``) and the pathway table (``CompoundSystem::BuildPathways``,
      for the requested entrance pairs).
-   * ``CNuc::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
+   * ``CompoundSystem::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
      parameters out in ``AZUREParams``, each with its ``ParameterRecord``: the
      level block (where each level's energy and amplitudes sit is the
-     ``LevelParameterLayout`` that ``CNuc::Fill`` builds, read by every walk
+     ``LevelParameterLayout`` that ``CompoundSystem::Fill`` builds, read by every walk
      of the block), then the abundance block (``AbundanceSamples::AddParameters``,
      the one place that writes the abundances into a parameter vector and
      reads them back), then the data's parameters.
@@ -205,7 +205,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      ``src/NodeTable.cpp``). At its end the ``DataSet`` is frozen
      (``WorkingCopy::Freeze``): from then on it is only read.
 
-3. **Hand-over of a parameter vector.** ``CNuc::FillCompoundFromParams``
+3. **Hand-over of a parameter vector.** ``CompoundSystem::FillCompoundFromParams``
    puts the vector's level parameters into the levels;
    ``WorkingCopy::FillNormsFromParams`` and
    ``WorkingCopy::FillEnergyShiftsFromParams`` set norms, energy shifts,
@@ -213,7 +213,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    apparatus parameters, re-place the slots of shifted folds where the shift
    leaves their reach (``WorkingCopy::ReplaceSubPointGrids``) and end with
    ``WorkingCopy::BeginEvaluation``, which sizes the caller's ``Results``.
-   With the Brune basis, ``CNuc::CalcShiftFunctions`` follows.
+   With the Brune basis, ``CompoundSystem::CalcShiftFunctions`` follows.
 
 4. **Point pass.** ``WorkingCopy::CalculatePointsInParallel``
    (``src/EnergyPass.cpp``): ``CalculationPlan::EnergyTasks`` groups every
@@ -274,7 +274,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    intermediate files through ``ProgramProgress``, then HESSE for the band,
    MINOS, ``fitStatus.out``, ``covariance_matrix.out`` and ``param.sav``.
    The sampler is ``runMCMC`` (``src/AZURE2.cpp``), which sets up its own
-   ``CNuc`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
+   ``CompoundSystem`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
    ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
    session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
    binding releases the GIL), or the fit is Python's (SciPy or iminuit on
@@ -289,18 +289,19 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``WorkingCopy::WriteOutputFiles``
    (``src/DataOutputFiles.cpp``: ``AZUREOut_*``, ``chiSquared.out``,
    normalizations, shifts), ``WriteParametersOut``
-   (``src/CNucReport.cpp``), ``CNuc::TransformOut`` (the observed and Brune
+   (``src/LevelReport.cpp``), ``CompoundSystem::TransformOut`` (the observed and Brune
    parameters) and ``ReactionRate``. A session writes the same files on
    request (``Session.write_outputs``).
 
+The compound side of an evaluation is ``CompoundSystem`` (``include/CompoundSystem.h``), the set-up only,
+shared constant by every evaluation and never copied, beside the levels' input values (``LevelInputs``) and
+the values at a vector (``LevelState``), which each owner holds and hands to the readers: an evaluation reads
+``(const CompoundSystem &, const LevelState &)``.
+
 .. note:: **Planned.**
-   ``CNuc`` will be split into an immutable ``CompoundSystem`` built once at
-   set-up and shared by every evaluation, the levels' input values
-   (``LevelInputs``) and a per-evaluation ``LevelState``. The readers already
-   take the ``LevelState`` (and the ``LevelInputs``) they read as arguments,
-   each owner holds its own, and ``CNuc`` holds the set-up only and is not
-   copied. An evaluation then reads
-   ``(const CompoundSystem &, const LevelState &)``. In ``pyazr`` the ``Objective`` and ``Evaluation``
+   The compound system is still made by four set-up calls (``Fill``, ``AddHardSphereGroups``,
+   ``ParseExternalCapture``, ``Initialize``) with the data's set-up between ``Fill`` and ``Initialize``; one
+   build that returns the finished object is the next step. In ``pyazr`` the ``Objective`` and ``Evaluation``
    objects take the place of the session's ``calculate_*`` methods.
 
 Caches and their signatures

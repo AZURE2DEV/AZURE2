@@ -67,3 +67,30 @@ test("routes: the files shown and the file checked", () => {
   assert.equal(e.routeOf(), "#/endf");
   assert.deepEqual(e.filesOf("a.endf, d/b.endf,"), ["a.endf", "d/b.endf"]);
 });
+
+test("with the model curve: the model and each file on the curve's grid, the ratios at the points", () => {
+  const withCurve = { ...entry, curve: { variable: "energy", e_cm: [0.1, 0.2, 0.3], angle_cm: [90, 90, 90],
+    model: [1, 2, 3], branches: [{ start: 0, stop: 3, fixed: "angle_cm", value: 90 }] },
+  curves: { ...entry.curves, "a.endf": { ...entry.curves["a.endf"], on_curve: { values: [5, 6, 7] } } } };
+  const { main, ratio } = e.evaluationPlots(withCurve, ["a.endf"], schema);
+  assert.deepEqual(main.traces.map((t) => [t.role, t.name]), [["model", "s (θ_cm = 90 deg): model, 3 points"],
+    ["line", "a.endf"], ["data", "data × norm"]]);
+  assert.deepEqual(main.traces[1].y, [5, 6, 7]);
+  assert.deepEqual(ratio.traces[0].y, [null, 2, 2]);
+});
+
+test("a finding of no section (MF 0, MT 0) reads 'whole file'", () => {
+  const rows = e.findingRows([{ severity: "note", line: 0, mat: 9, mf: 0, mt: 0, message: "no sequence numbers",
+    page: "", record: 0 }, { severity: "error", line: 3, mat: 9, mf: 1, mt: 451, message: "m", page: "41" }]);
+  assert.deepEqual(rows.map((r) => [r.mf, r.mt]), [["whole file", ""], [1, 451]]);
+});
+
+test("a new project's report: the pairs and the levels as rows, the values with their units", async () => {
+  const proj = await mod("tabs/endfproject.js");
+  const { pairs, levels } = proj.reportRows({ pairs: [{ key: 1, mt: 2, q_eV: 0 }], levels: [{ jpi: "3/2-",
+    er_eV: 1.5e6, formal_MeV: 2.1, energy_MeV: 2.0, values: [1.5, 0.2], kinds: ["width", "anc"],
+    status: "converged", background: true }] });
+  assert.deepEqual(pairs, [{ key: 1, mt: 2, q_eV: 0 }]);
+  assert.equal(levels[0].values, "1.5 eV, 0.2 fm^-1/2");
+  assert.equal(levels[0].background, "above EH: background");
+});

@@ -1,5 +1,5 @@
 // The observable coupling coefficients of physics/ (ObservableCoupling.h) against the engine's expressions before
-// step 5 (CNuc::CalcAngularDists, CNuc::CalcCaptureAnalyzingPower, ThmAngular's Zbar at 9be284f0), written here
+// step 5 (CompoundSystem::CalcAngularDists, CompoundSystem::CalcCaptureAnalyzingPower, ThmAngular's Zbar at 9be284f0), written here
 // with AngCoeff's Clebsch-Gordan and Racah coefficients and GSL's 9j, an independent implementation that physics/
 // does not link (docs/upgrade/cnuc_split.md section 9 (b)).  For every coefficient of each kind: the difference is
 // at most 1e-14 of the kind's largest magnitude, and the engine's keep test (|c| > 1e-10) gives the same answer.

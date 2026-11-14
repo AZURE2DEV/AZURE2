@@ -68,7 +68,8 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
 - Save before a run, the snapshot file (1.3, 14) → Project: `Project.session()` saves the user's file first. M (a
   session from the text).
 - Pairs: table, masses, AME2020 checks (4) → Nucleus: `Project.pairs`, `set_pair`; `sources.masses` (today
-  `masses`). E. As built (11.14): the table in the old program's columns, particles by name (`kinds()["pairs"]`).
+  `masses`). E. As built (11.14): the table in the old program's columns, particles by name (`kinds()["pairs"]`);
+  in the first view only those columns (11.16, `pyazr/ui/first_view.py`).
 - Pairs: add, delete, channel regeneration (4) → Nucleus: no call. M.
 - Levels and channels: table, edit, fix, Wigner limit (5) → Nucleus: `levels`, `add_level`, `remove_level`,
   `set_level`, `set_channel`; `Parameters.units`, `physics.wigner_limit`. E.
@@ -92,7 +93,9 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
   (section 11.6).
 - Reaction rate (10) → Results: no call. M.
 - MCMC (11) → Fit: the emcee recipe on `Objective.log_prob` (`pyazr3.md` 2.6), as a job. E (section 11.7).
-- Plots (12) → Results: `Evaluation.data[i]`; `physics.sfactor_conversion`; `pyazr.plot` for PDF. E, D, P.
+- Plots (12) → Results: `Evaluation.data[i]`; `physics.sfactor_conversion`; `pyazr.plot` for PDF. E, D, P. As built
+  (11.16): the model of each data set on a fine grid over its range (`Session.model_curve`), the points as points,
+  the residuals at the points (the old program plotted the model on its own grid as well).
 - THM workspace (13) → THM: `Project.thm`, `set_thm`, `set_thm_experiment`, `remove_thm_experiment`;
   `thm_experiments`, `thm_background`, `thm_vertex`, `thm_lineshape`, `thm_distortion`. E (the THM tab, section 11.8).
 - THM binding energy and amplitude flag per channel (13) → THM: `set_pair` has neither. M (shown read-only from the
@@ -526,7 +529,8 @@ on release only, with the rebuild's progress shown (15 s for a 13N radius).
 ## 6. The tabs
 
 The page has a header (project name, unsaved mark, revision, undo/redo, Save, the budget and the running job), seven
-tabs and a status line (the last message of the engine or a job). Keys: `1`–`7` switch tabs, `Ctrl+Z`/`Ctrl+Shift+Z`
+tabs and a status line (the last message of the engine or a job). Keys: `1`–`9` and `0` switch to the first ten
+tabs shown, `[` and `]` to the previous and the next (built: 11.16), `Ctrl+Z`/`Ctrl+Shift+Z`
 undo and redo, `Ctrl+S` save, `/` searches the current table, `Esc` closes a form.
 
 ### 6.1 Project
@@ -1743,7 +1747,7 @@ defaults (tolerance 5 %, set label azr2) stay as they are.
   kept per text.  Needed: a pyazr call `Session.model_curve(name, points=, params=)` (or `pyazr.curves`) returning
   the model on a fine grid over a data set that is a function of one variable, with the rule for the others
   (several angles, a ratio of two pairs), and its route `GET /api/evaluation/curve/{name}`.  Not built: the brief
-  stops this item where a new pyazr call is needed.
+  stops this item where a new pyazr call is needed.  (Built since: section 11.16.)
 - **First view**: `FIRST_VIEW` ends with Physics and THM (`when: "thm"`, shown by app.js `CONDITIONS.thm`, the THM
   tab's own rule `thm.js hasThm`: the server's `<thm>` or a data set naming an experiment) and Reaction Rate (the
   pairs, the temperatures and Calculate; the parameters, the band, the comparison and the library labels under one
@@ -1768,7 +1772,8 @@ defaults (tolerance 5 %, set label azr2) stay as they are.
   the expert's depth.  `#/fit?job=<kind>&method=<method>` opens a job's form.
 - **Still typed**: a data set's `columns`, a `reaction`, a `grid` (extrapolation energies and angles), a target's
   `composition` and `nucleus`, the structured fields (stopping, straggling, profile, isotopes) and a THM key's
-  name; the covariance builder's list of data sets.  A list of numbers grows by two boxes per Apply.
+  name; the covariance builder's list of data sets.  A list of numbers grows by two boxes per Apply (repaired:
+  section 11.16, a box follows as the last one is typed in).
 
 **Tests.** `tests/pyazr/ui/js/lists.test.mjs` (heads per kind, the description's columns, the norm's words, used
 by, the pairs' columns, "new …", a list of numbers), `nucleus.test.mjs` (the pair form's table),
@@ -1787,7 +1792,10 @@ pyazr's arithmetic with a screen that calls it (user guide `prior_builder.rst`).
   kinds, units, fixed marks, limits, the priors of their own, the basis come from `Session.parameters`; nothing is
   listed twice); parts `PART_KINDS`: `fit` (an earlier fit's `param.sav` and `covariance.dat`, the numbers of
   `prior_from_fit`, the tag checked against the run's basis), `width`, `correlation`, `chain` (a sampler job's
-  `chain_<id>.npy` with its JSON: what pyazr reads of a chain today, `read_chain`).  The `Prior` record prints
+  `chain_<id>.npy` with its JSON: `read_chain`; the JSON's `parametrization`, written by the sampler job since the
+  PI's decision of 2026-11-14 with the values of `BASES`, is read by `chain_basis` and checked as a fit's tag is:
+  another parametrization refused, none recorded taken as the run's with a note; the page asked nothing before
+  and showed the assumption as a note, it now shows the recorded parametrization in the same place).  The `Prior` record prints
   itself; its checks are the engine's (symmetric, the engine's Cholesky rule) with the eigenvalues and the condition
   number; its notes say what the engine does: a fixed parameter marginalized, a prior of its own replaced (measured:
   `ReplaceDiagonalPriors`), a centre outside the limits.  `read_prior` reads the grammar as `PriorCovariance::Read`
@@ -1813,6 +1821,67 @@ the fit part = `prior_from_fit`, the chain part, every refusal and note), `tests
 
 **Extensibility.** A new kind of part: a row of `PART_KINDS` and a function of `_BLOCKS`; a new type of field: its
 control in `fieldInput` of `tabs/prior.js`.
+
+### 11.16 The model as a curve; a project from an evaluation and back; the first view's rough edges (2026-11-14)
+
+- **The model as a curve** (`pyazr/model_curve.py`; `Session.model_curve(name, x=None, points=200)` forwards to
+  it).  The argument is `x` because `Session.evaluate(x)`, `transform(x)` and `write_outputs(x)` take the fit vector
+  so; `points` is the number of grid values per branch.  For each data set an extrapolation record is made from its
+  record (the fields the engine's extrapolation kind takes, `kinds()["records"]["extrapolation"]["fields"]`: the
+  reaction, quantity, unit, pair keys, target, beam, detector, quadrature, J, l, s, ...) with a grid of `points`
+  values between its first and last point and its own points; one record per branch (a fixed angle of an
+  excitation function, in the frame of the file's angle column where the angle is one value in both frames; a fixed
+  lab energy of an angular distribution, the angles c.m.).  Energies are the points' lab energies after the energy
+  shift at x (`extra["energy_lab"]`).  `bands._trimmed_project` makes the project of these records alone; a session
+  of the extrapolations (`CurveSession`) evaluates them at the data session's x carried by name
+  (`carry_model_parameters`).  `model_curves(session, names)` makes several in one session: their folds are then
+  planned on one mesh, as the data session's.  Measured (`tests/pyazr/model_curve_test.py`): at the data points the
+  curve equals `Session.evaluate` to rounding for every unfolded data set of T1, T2 and an alpha + 12C ratio to
+  Rutherford, to 4e-9 for T2's folded data sets without a shift, to 8e-5 for those with a shift and THM (the data
+  session folds them on grids of their own); one data set alone (`Session.model_curve`) on its own mesh: 2.4e-3 on
+  T2.  Between the points: the curve's grid read as a data file gives the curve to rounding (four data sets).
+  Cost: T2 0.6 s for all thirteen curves, T1 3.9 s, 13N 14.9 s (its external-capture integrals), then one
+  evaluation per x (13N: 0.015 s).  Refused with the three parts: a column that gives each point its own value
+  (T2's beam-profile windows: `CURVE_COLUMNS`), `columns from_file`, points not one function of one variable, more
+  than 64 branches or 20000 points, a record the engine refuses on a grid (an analyzing power at a lab angle: the
+  engine's words; the other data sets are made).
+- **Route and page**: `GET /api/evaluation/curve/{name}` (`Engine.curve`: the curves of every data set in one
+  `CurveSession`, kept while its records are the same, evaluated once per x).  The Plot tab draws the points at
+  once and the curves when they come (one line per branch, the residuals at the points; a refused data set keeps
+  its line through the points with the refusal under the plots).  The ENDF tab draws the model and each file on
+  the curve's grid (`POST /api/endf/curves` adds `curve` and per file `on_curve`: `Material.curves` takes a
+  `ModelCurve` as it takes a data set); the ratios stay at the points.
+- **A new project from an ENDF-6 file** (the ENDF tab, screen `#/endf/new?file=`, and "New project…" beside each
+  file): what MF=2 holds (`POST /api/endf/resonances`: `Material.resonances(isotope, energy_range)`, nothing
+  written, or the refusal); Convert, the job `endf_import`/`to_project` (`pyazr.endf.to_project` into a directory
+  of the job's own: the separation energy and its source, the masses against AME2020, the pairs, the levels with
+  their Brune iteration, what was not written, the notes, the project's text); "Write the new project"
+  (`POST /api/endf/keep_project`: a new `.azr` of the folder, never an existing file); then "Open … here"
+  (`POST /api/project/open`; disabled while the open project has unsaved edits) or `pyazr ui <file>` for a page of
+  its own.  The ENDF tab, because both ways start or end with an ENDF-6 file and the tab lists the folder's files.
+- **Export** (screen `#/endf/export`): before the run, `GET /api/endf/export` (`pyazr.endf.from_session(s, x)`: the
+  losses and the photon widths, or the refusal; the data's energy range; a file name not in use); the job
+  `endf_write`/`writer` (`pyazr.endf.write` on a session of the job's text under the project's name, so that the
+  MF=1 text names the project and not the server's working file; settings: the MF=1 fields, the range, the
+  tolerance, the number form); the result: the sections, each MF=3 grid, the MF=2 check, the losses, what is not
+  written, and "Check…" on the file, which the tab's file list now shows.
+- **The first view's rough edges.** (1) A finished job's follow-up buttons follow the job form's rule
+  (`fitting.js followersShown`: the kinds of `jobs.py FIRST_VIEW_KINDS`, the others behind "More: …", which opens
+  them all as the form's "More" does).  (2) A tab lists the jobs of its own rows (`fitting.js jobsOfTab`, by
+  `JobRow.tab`); the Fit tab says how many jobs other tabs started and lists every job with "Every job".  (3) The
+  first view's lists of data sets and pairs hold the old program's columns: one table,
+  `pyazr/ui/first_view.py FIRST_VIEW_COLUMNS`, served as `first_view` of `GET /api/describe`; the others stay in
+  the expert's depth and the record's form (the PI's decision of 2026-11-14).  (4) A finding of no section reads "whole file".  (5) A list of numbers
+  shows one empty box, and the form adds the next as soon as it is typed in (`grows`).  (6) Keys `0` (the tenth tab)
+  and `[` `]` (the previous and the next) reach every tab.  (7) The smoke test's header lines are within 120 columns.
+
+**Tests.** `tests/pyazr/model_curve_test.py` (the curve against `evaluate` and against the same points read as
+data; shifts; the grid; the refusals; an injected frame error, the energies written as c.m., failed 29 checks),
+`tests/pyazr/ui/curves_test.py` (the route against `model_curves` bit for bit on T1 and T2, at a moved x; the ENDF
+file on the curve's grid against `Material.curves`), `tests/pyazr/ui/endf_project_test.py` (resonances, the import
+job, keep and its refusals, opening the kept project; the export's preview against `from_session`; the written file
+byte for byte the direct `write`), node tests (`results`, `endf`, `fitting`, `firstview`, `lists`), the self-test
+(Convert pressed) and the smoke test's views `expert-endf-new`, `first-endf-export`.
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 

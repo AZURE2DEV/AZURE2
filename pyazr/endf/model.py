@@ -113,6 +113,38 @@ def _excitation_of(material, mt):
     return (xs.qm - xs.qi) / EV_PER_MEV
 
 
+def _amplitudes(lrf7, group):
+    """GAM of every level and channel of a spin group as reduced-width amplitudes on the lab scale (eV^1/2), level by
+    level.  IFG=1 holds them; IFG=0 holds the width at the level (eV), Gamma = 2 gamma^2 P (eq. D.45, p. 356) with P
+    the channel's penetrability "evaluated at the energy of the resonance", at |ER| for a negative ER, the sign of GAM
+    the sign of gamma (p. 73; the manual's "sign(GAM) x |GAM|/2P" is the square root of it: Gamma = 2 gamma^2 P).
+    P is the engine's row ``penetrability`` on the pair's masses, charges and APT at the channel's c.m. energy
+    |ER| m_B / (m_A + m_B) + Q of its pair (eq. D.82, p. 364); a width on a channel closed there is refused."""
+    if lrf7.ifg == 1:
+        return [v for lv in group.levels for v in lv.gam]
+    from .. import physics
+    ent = lrf7.pairs[lrf7.entrance - 1]
+    out = []
+    for lv in group.levels:
+        e_entrance_cm = abs(lv.energy) / lab_factor(ent)  # eV
+        for c, width in zip(group.channels, lv.gam):
+            if width == 0.0:
+                out.append(0.0)
+                continue
+            p = lrf7.pairs[c.pair - 1]
+            e_cm = e_entrance_cm + p.q
+            if e_cm <= 0.0:
+                raise FormatRefused(what=f"{lrf7.source}: spin group {group.jpi}, level ER = {lv.energy:.10g} eV: "
+                                    f"IFG=0 gives a width on channel (pair {c.pair}, l={c.l}), which is closed at "
+                                    f"|ER| (c.m. energy {e_cm:.6g} eV, p. 73)", allowed="widths of channels open at "
+                                    "the level (IFG=0) or reduced-width amplitudes (IFG=1)",
+                                    fix="read the evaluation with IFG=1 (reduced-width amplitudes)")
+            pen = float(physics.penetrability(int(c.l), int(round(p.za)), int(round(p.zb)), p.ma * M_NEUTRON_U,
+                                              p.mb * M_NEUTRON_U, c.radius * FM_PER_ENDF_LENGTH, e_cm / EV_PER_MEV))
+            out.append(math.copysign(math.sqrt(abs(width) / (2.0 * pen)), width))
+    return out
+
+
 def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwrite=False):
     """A new format-3 project at ``path`` (never an open one: an existing file is refused unless ``overwrite``) made
     of the resonance parameters ``lrf7`` (:meth:`pyazr.endf.Material.resonances`), in the Brune basis, every level
@@ -129,7 +161,8 @@ def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwr
     path = os.path.abspath(path)
     if os.path.exists(path) and not overwrite:
         raise FormatRefused(what=f"{path} exists", allowed="a new file (to_project never writes over a project)",
-                            fix="give another path, or overwrite=True to replace that file")
+                            fix="write to a file name that does not exist yet, or ask for the existing file to be "
+                            "replaced (overwrite)")
     entrance = lrf7.entrance
     ent = lrf7.pairs[entrance - 1]
     f_lab = lab_factor(ent)
@@ -141,7 +174,7 @@ def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwr
         except KeyError as e:
             raise FormatRefused(what=f"{lrf7.source}: the incident pair is not in AME2020 ({e})",
                                 allowed="a pair of nuclides AME2020 lists, or separation_energy= in MeV",
-                                fix="to_project(..., separation_energy=<S in MeV>)") from None
+                                fix="give the separation energy of the incident pair in MeV") from None
         source = "AME2020"
     else:
         s_ent = float(separation_energy)
@@ -193,7 +226,7 @@ def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwr
             continue
         chans = [(key_of[c.pair], c.l, int(round(2 * c.s))) for c in g.channels]
         E = [lv.energy / f_lab / EV_PER_MEV + s_ent for lv in g.levels]
-        gamma = [v / scale for lv in g.levels for v in lv.gam]
+        gamma = [v / scale for v in _amplitudes(lrf7, g)]
         B = [c.boundary for c in g.channels]
         out = _engine().observed_levels_of_block(records, int(round(2 * g.J)), g.parity, chans, E, gamma, B,
                                                  energy_tolerance_MeV=BRUNE_TOLERANCE_MEV)
@@ -210,6 +243,13 @@ def to_project(lrf7, path, *, separation_energy="ame2020", material=None, overwr
                              f"'{out['status'][i]}'; its formal values were written")
         notes.extend(out["warnings"])
     notes.append("the particles' g-factors are not in an ENDF file: 0 written")
+    both = [p.mt for p in lrf7.pairs if p.spin_a != 0 and p.spin_b != 0]
+    if both:
+        notes.append(f"the channel spins of the pairs with MT {', '.join(map(str, both))} are coupled in AZURE2's "
+                     "order (light particle first; ENDF-102 does not state one): unpolarized cross sections and "
+                     "angular "
+                     "distributions do not depend on it, an analysing power does -- a fit to analysing powers rests "
+                     "on that order")
     project.save()
     return project, Conversion(path, s_ent, source, tuple(mass_checks), tuple(pair_rows), tuple(levels),
                                tuple(skipped), tuple(notes))
@@ -251,7 +291,7 @@ def _mt_of_pairs(particle_pairs, entrance_key):
             raise _refuse_session(f"pair {p['key']}: the emitted particle (Z={p['Z1']}, A={round(p['M1'])}) has no "
                                   "discrete-level reaction family in ENDF-6 (Appendix B, pp. 339-341)",
                                   "exit pairs emitting n, p, d, t, 3He or an alpha",
-                                  "remove the pair from the session's project before writing")
+                                  "remove the pair from the project before writing")
         by_family.setdefault(first, []).append((p["excitation"], p["key"]))
     for first, rows in by_family.items():
         for k, (_, key) in enumerate(sorted(rows)):
@@ -282,7 +322,7 @@ def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
     if session.basis == 0:
         raise _refuse_session("the session is in the formal basis (use_brune=False)", "a session in the Brune or "
                               "Park basis (its formal levels and B_c are computed at its own energies)",
-                              "open the project with pyazr.Session(path) (Brune is the default)")
+                              "open the project in the Brune basis (the default) or the Park basis")
     if opts.get("use_rmc"):
         raise _refuse_session("the session uses Reich-Moore (use_rmc): its eliminated photon widths change the "
                               "particle channels", "a session without use_rmc (photon channels stay out of MF=2, "
@@ -297,7 +337,7 @@ def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
     if any(p.enabled for p in session.nuclear_potentials().values()):
         raise _refuse_session("a pair of the session has a nuclear potential (the hybrid model)", "plain Coulomb "
                               "functions (LRF=7 has no place for a potential: KPS would carry phases, not P and S)",
-                              "remove the <potential> record before writing")
+                              "remove the nuclear potential from the project before writing")
     pairs = [p.to_dict() for p in session.pairs]
     nuclei = {(p["nucleus_Z"], p["nucleus_A"]) for p in pairs}
     if len(nuclei) > 1:
@@ -318,18 +358,30 @@ def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
         endf_pairs.append(ParticlePair(p["M1"] / M_NEUTRON_U, p["M2"] / M_NEUTRON_U, float(p["Z1"]), float(p["Z2"]),
                                        ia, ib, q, 1, 1, mts[key], float(p["parity1"]), float(p["parity2"])))
     ppi = {key: i + 1 for i, key in enumerate(order)}
-    lost = ["external capture, the photon channels and their energy dependence: not in MF=2 (MF=3/MT=102 and "
-            "MF=6/MT=102 hold the engine's capture)",
-            "the data, normalizations, energy shifts, targets, beams and detectors of the project",
-            "the particles' g-factors and the light particle's excitation are not LRF=7 fields"]
+    # what the project holds and an LRF=7 record cannot: each item only when the project has it
+    lost = []
+    photon_pairs = [p for p in pairs if p["pair_kind"] == "photon"]
+    if photon_pairs:
+        lost.append(f"the photon channels ({len(photon_pairs)} photon pair(s), external capture where a pair has it): "
+                    "not in MF=2, where a photon channel would enter the level matrix and its radiative width the "
+                    "total width; their widths at the levels are listed in this text, capture is given pointwise")
+    records = project.records()
+    kinds = {}
+    for r in records.values():
+        kinds.setdefault(r.record_kind, []).append(r)
+    apparatus = [f"{len(v)} {k.replace('_', ' ')} record(s)" for k, v in sorted(kinds.items())
+                 if k not in ("dataset", "extrapolation")]
+    if kinds.get("dataset"):
+        lost.append(f"the {len(kinds['dataset'])} data set(s) of the fit" +
+                    (f" and their {', '.join(apparatus)}" if apparatus else ""))
+    thm = (project.thm() or {}).get("experiments", {})
+    if thm:
+        lost.append(f"the Trojan-horse experiment(s) {', '.join(sorted(thm))} (the <thm> records)")
     for p in pairs:
         if p["pair_kind"] == "beta":
             lost.append(f"pair {p['key']}: a beta-decay pair has no place in ENDF-6")
         if p["pair_kind"] == "particle" and p["light_excitation"]:
             lost.append(f"pair {p['key']}: the light particle's excitation ({p['light_excitation']} MeV) is in Q only")
-        if p["pair_kind"] == "particle" and p["Z1"] == p["Z2"] and abs(p["M1"] - p["M2"]) < 1e-9:
-            lost.append(f"pair {p['key']}: identical particles; MF=2 has no field for it (the writer sets LIDP in "
-                        "MF=6 LAW=5)")
     values = _full_values(session, x)
     physical = session.transform(session.parameters.x0 if x is None else np.asarray(x, float))
     rows = [p.to_dict() for p in session.parameters]

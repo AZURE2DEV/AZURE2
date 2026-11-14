@@ -59,7 +59,7 @@ Two things about this case are worth knowing before changing it.
 **The widths are reduced width amplitudes, not partial widths.** Every channel
 line carries the `gammaIsRWA` flag, so the `gamma` column holds an amplitude in
 MeV^(1/2) rather than a width in eV or an ANC. AZURE2 keeps that convention on
-output too — `CNuc::TransformOut` returns the amplitude unchanged for such a
+output too — `CompoundSystem::TransformOut` returns the amplitude unchanged for such a
 channel — so a fit written back does not silently flip the convention. This
 matters when editing the file by hand or through `pyazr`: converting rwa to
 physical before writing would corrupt it.

@@ -1,7 +1,7 @@
 // The two doors of the level parameters for pyazr.endf (docs/upgrade/endf.md section 8.2): one J^pi block of
 // particle channels, given by plain pair records and numbers, converted by the engine's own functions of
 // physics/LevelParameters.h with the engine's channel functions (ChannelFunc, WhitFunc on PPair objects built from
-// the records, as CNuc::Fill builds them).
+// the records, as CompoundSystem::Fill builds them).
 //
 //   formal_levels_of_block    the block's levels in the project's basis (Brune or Park amplitudes, or the observed
 //                             widths and ANCs) -> the formal levels with the engine's B_c = S_c(E_1)
@@ -26,11 +26,9 @@
 #include <string>
 #include <vector>
 
-#include "ChannelFunc.h"
-#include "Constants.h"
 #include "CoulombTable.h"
+#include "EngineChannelFunctions.h"
 #include "PPair.h"
-#include "WhitFunc.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/physics/LevelParameters.h"
 #include "azure2/physics/System.h"
@@ -179,7 +177,7 @@ Block MakeBlock(const py::list &pair_records, int two_J, int parity, const std::
 }
 
 /// The engine's channel functions of a particle channel at a level energy E (MeV, E_x), as the engine's adapter
-/// ChannelFunctionsFromCNuc (src/CNucLevelParameters.cpp) forms them: E_c = (E - S) - e; S, dS/dE; P above threshold,
+/// EngineChannelFunctions (src/EngineChannelFunctions.cpp) forms them: E_c = (E - S) - e; S, dS/dE; P above threshold,
 /// mu a / (hbar^2 W^2) below it, 0 at threshold.
 phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
   const Block *b = &blk;
@@ -189,19 +187,7 @@ phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
     const double Ec = E - pair->GetSepE() - pair->GetExE();
     const int l = ch.l;
     const int twoJ = pair->SpinOrbitTwoJ(b->J);
-    phys::ChannelValues v;
-    ChannelFunc cf(pair, b->gsl);
-    v.S = cf.Shift(l, twoJ, Ec);
-    if (Ec > 0.0) {
-      v.P = cf.Penetrability(l, twoJ, Ec);
-    } else if (Ec < 0.0) {
-      const double radius = pair->GetChRad();
-      WhitFunc whit(pair);
-      const double W = whit(l, twoJ, radius, std::fabs(Ec));
-      v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
-    }
-    v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
-    return v;
+    return ParticleChannelValues(*pair, l, twoJ, Ec, b->gsl);
   };
 }
 

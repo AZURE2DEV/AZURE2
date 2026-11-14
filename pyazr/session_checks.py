@@ -54,14 +54,48 @@ def require_extrapolations(project_file, cwd):
             allowed="a session for the extrapolations needs at least one active extrapolation record", fix=fix)
 
 
-def fit_vector(x, n, call):
-    """``x`` as a flat float array, checked to have the ``n`` entries of the session's fit vector."""
+def setup_refused(err, said, project_file):
+    """The error of a set-up the engine refused (``err``, its ``AZURE2Error``), with the engine's lines of the set-up
+    (``said``, :func:`pyazr.engine_text.held`) in its message and as its three parts: what the engine refused (its
+    ERROR lines, or its message), what a set-up needs, and where to look."""
+    errors = [line.strip() for line in said if line.lstrip("* \t").startswith(("ERROR", "Error"))]
+    text = str(err).replace("; check the output above.", ".").replace(" (see the ERROR lines above; ", " (")
+    text = text.replace(" (see the ERROR above).", ".")
+    what = f"the engine did not set up {project_file}: " + ("; ".join(errors) if errors else text)
+    allowed = "a project whose every set-up check passes (the engine's lines name the one that failed)"
+    fix = (f"correct what they name (pyazr.Project.open({project_file!r}) and its edits); Project.validate() lists "
+           f"what the validator finds, Project.describe() what the engine makes of each record")
+    shown = said[:40] + ([f"... ({len(said) - 40} more lines)"] if len(said) > 40 else [])
+    message = (f"{text}\n{what}\nallowed: {allowed}\n{fix}"
+               + ("\nThe engine's lines of the set-up:\n  " + "\n  ".join(shown) if shown else ""))
+    return type(err)(message, what=what, allowed=allowed, fix=fix)
+
+
+VECTOR_HINT = ("Session.parameters.x0 is such a vector (the start values); Session.parameters.free names its entries "
+               "in order")
+
+
+def fit_vector(x, n, call, names=None):
+    """``x`` as a flat float array, checked to be a free parameter vector of the session: ``n`` entries, every one
+    finite.  ``names``: a callable giving the free parameters' names (asked for only to name a bad entry).  The
+    refusal is a :class:`~pyazr.ParameterVectorError` with its three parts (the engine makes the same checks, with a
+    message only, when a vector reaches it unchecked)."""
     x = np.asarray(x, float).ravel()
     if x.size != n:
-        raise ParameterVectorError(f"{call}: x has {x.size} entries; the fit vector has {n} (Session.parameters.x0 is "
-                                   f"one, Session.parameters.free names its entries).",
-                                   what=f"x has {x.size} entries", allowed=f"the fit vector has {n}",
-                                   fix="Session.parameters.x0 is one, Session.parameters.free names its entries")
+        what = f"{call}: a vector of {x.size} values"
+        allowed = f"expected the free parameter vector ({n} values, in the order of the fit vector)"
+        raise ParameterVectorError(f"{what}; {allowed}, got {x.size}.  {VECTOR_HINT}.", what=what, allowed=allowed,
+                                   fix=VECTOR_HINT)
+    finite = np.isfinite(x)
+    if not finite.all():
+        bad = np.flatnonzero(~finite)
+        k = int(bad[0])
+        name = list(names())[k] if names is not None else f"free parameter {k}"
+        more = f" ({bad.size} entries are not finite)" if bad.size > 1 else ""
+        what = f"{call}: entry {k} of the free parameter vector ({name}) is {x[k]}{more}"
+        allowed = "every entry must be a finite number"
+        raise ParameterVectorError(f"{what}; {allowed}.  {VECTOR_HINT}.", what=what, allowed=allowed,
+                                   fix=VECTOR_HINT)
     return x
 
 
@@ -71,9 +105,11 @@ def snapshot_mismatch(what, got, want, rtol):
     cause = ("the objective holds the model terms (abundance priors, Park's wall, measured scattering lengths): a "
              "free target abundance whose prior the engine centres on its start value gives such a difference "
              "(docs/upgrade/pyazr3.md section 1.6).  " if what == "objective" else "")
-    return AZURE2Error(f"save_fit: the snapshot run on its own gives {what} = {got:.10g}, the fit {want:.10g} "
-                       f"(allowed: relative {rtol:g}); it has been removed.  {cause}Session.evaluate(x).terms shows "
-                       f"the terms; save_fit(..., verify=False) writes the files without this check.")
+    found = f"save_fit: the snapshot run on its own gives {what} = {got:.10g}, the fit {want:.10g}"
+    allowed = f"relative {rtol:g}"
+    fix = "Session.evaluate(x).terms shows the terms; save_fit(..., verify=False) writes the files without this check"
+    return AZURE2Error(f"{found} (allowed: {allowed}); it has been removed.  {cause}{fix}.", what=found,
+                       allowed=allowed, fix=fix)
 
 
 def channel_request(pairs, pair, L):

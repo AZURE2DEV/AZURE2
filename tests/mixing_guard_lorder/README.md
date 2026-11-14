@@ -15,7 +15,7 @@ every `R_k` is zero when its coupling is not allowed, so nothing else changes.
 
 **Legendre cap.** `Config::maxLOrder = 20` is the highest Legendre order computed, so a particle
 channel with l > 10 contributes terms (l + l' > 20) that were silently dropped from every differential
-cross section it entered. `CNuc::Initialize` now prints a WARNING per such channel; angle-integrated
+cross section it entered. `CompoundSystem::Initialize` now prints a WARNING per such channel; angle-integrated
 values were and are complete.
 
 ## Checks (`check.sh path/to/AZURE2`)

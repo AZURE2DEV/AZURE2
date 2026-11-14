@@ -39,7 +39,7 @@ struct HybridPotentialSetting {
 /*!
  * The hybrid potentials of a project, per pair key: a default for every pair without a section of its own (the old
  * <potential> block and a pyazr session only; a format-3 project has none), and the pairs' own settings.  Owned by the
- * Config of a run or a pyazr session; CNuc::Fill gives each pair the potential that applies to it
+ * Config of a run or a pyazr session; CompoundSystem::Fill gives each pair the potential that applies to it
  * (PPair::GetHybridPotential).
  */
 struct HybridPotentialSettings {

@@ -2,7 +2,7 @@
 #
 # A level energy exactly at, or within round-off of, a particle threshold.
 #
-# The shift function, penetrability and dS/dE at a level energy (CNuc's
+# The shift function, penetrability and dS/dE at a level energy (CompoundSystem's
 # boundary conditions, shift functions and parameter transformations, the THM
 # vertex=constant shift, the external-capture integral) all go through
 # ChannelFunc now, which continues S through threshold and treats a channel

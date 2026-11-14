@@ -440,8 +440,9 @@ def case_endf_write():
                        "--json")
     result = ok_doc("endf write", code, doc, "endf write") or {}
     sections = [(x["mf"], x["mt"]) for x in result.get("sections", [])]
-    check("endf write: pyazr.endf.write writes MF=1, MF=2 and MF=3/MT=102 of T1, read back by pyazr.endf.read",
-          result.get("file") == out and sections == [(1, 451), (2, 151), (3, 102)] and
+    check("endf write: pyazr.endf.write writes MF=1, MF=2, MF=3 and MF=6 (elastic, capture) of T1, read back by "
+          "pyazr.endf.read", result.get("file") == out and
+          sections == [(1, 451), (2, 151), (3, 2), (3, 102), (6, 2), (6, 102)] and
           pyazr.endf.read(out).header.lrp == 2, result)
 
 

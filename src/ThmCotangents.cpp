@@ -26,7 +26,7 @@ bool ThmThroughEnergyTasks(const WorkingCopy &data, const Config &config) {
   return true;
 }
 
-std::unique_ptr<ThmAdjointContext> ThmGradientContext(const CNuc *compound, const LevelState &state, const WorkingCopy &data, const Config &config,
+std::unique_ptr<ThmAdjointContext> ThmGradientContext(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config,
                                                       const vector_matrix_r *shiftDeriv) {
   bool any = false, lineshape = false;
   for (int s = 1; s <= data.Data().NumSegments(); s++) {

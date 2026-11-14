@@ -1,4 +1,4 @@
-// The level of a <levels> line (LevelGrouping.h): the rule of CNuc::Fill since 2026-10-24, moved here unchanged so
+// The level of a <levels> line (LevelGrouping.h): the rule of CompoundSystem::Fill since 2026-10-24, moved here unchanged so
 // that pyazr reads levels as the engine does.
 #include "azure2/io/LevelGrouping.h"
 

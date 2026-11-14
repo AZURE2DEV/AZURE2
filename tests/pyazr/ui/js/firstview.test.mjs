@@ -114,3 +114,15 @@ test("Calculate compares two calculations: the engine's numbers subtracted, the 
   assert.deepEqual([calc.changeText(-4.5), calc.changeText(0.5), calc.changeText(0), calc.changeText(null),
     calc.changeText(120000), calc.changeText(1.5e-7)], ["−4.5", "+0.5", "0", "—", "+120000", "+1.5e-7"]);
 });
+
+test("keys: 1-9 the first nine tabs shown, 0 the tenth, [ and ] the one before and after the active one", () => {
+  const links = Array.from({ length: 11 }, (_, i) => ({ id: i, classList: { contains: (c) => c === "active"
+    && i === 10 } }));
+  assert.equal(layout.tabByKey(links, "1").id, 0);
+  assert.equal(layout.tabByKey(links, "9").id, 8);
+  assert.equal(layout.tabByKey(links, "0").id, 9);
+  assert.equal(layout.tabByKey(links, "]").id, 0, "after the last, the first");
+  assert.equal(layout.tabByKey(links, "[").id, 9);
+  assert.equal(layout.tabByKey(links.slice(0, 7), "8"), null);
+  assert.equal(layout.tabByKey(links.slice(0, 7), "0"), null);
+});

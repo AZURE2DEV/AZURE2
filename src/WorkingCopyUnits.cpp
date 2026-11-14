@@ -14,7 +14,7 @@
 #include <iostream>
 
 #include "AngCoeff.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "PPair.h"
 #include "PolarizationFunc.h"
@@ -112,14 +112,14 @@ std::uint64_t Bits(double x) {
 
 }  // namespace
 
-std::vector<int> WorkingCopy::LabFrameRules(const CNuc *theCNuc, std::vector<azure2::experiment::FrameRule> &rules) const {
+std::vector<int> WorkingCopy::LabFrameRules(const CompoundSystem *compound, std::vector<azure2::experiment::FrameRule> &rules) const {
   std::vector<int> ruleOf((std::size_t)NumUnits(), -1);
   rules.clear();
   for (const Segment &segment : Data().GetSegments())
     for (int t = 0; t < segment.NumTerms(); t++) {
-      if (!theCNuc->IsPairKey(segment.TermEntranceKey(t))) continue;
-      const PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.TermEntranceKey(t)));
-      const PPair *exit = theCNuc->GetPairFromKey(segment.TermExitKey(t));  // nullptr for total capture (-1)
+      if (!compound->IsPairKey(segment.TermEntranceKey(t))) continue;
+      const PPair *entrance = compound->GetPair(compound->GetPairNumFromKey(segment.TermEntranceKey(t)));
+      const PPair *exit = compound->GetPairFromKey(segment.TermExitKey(t));  // nullptr for total capture (-1)
       const azure2::experiment::FrameRule rule = segment.TermFrameRule(t, entrance, exit);
       if (!azure2::experiment::AngleIsLab(rule)) continue;
       rules.push_back(rule);
@@ -129,12 +129,12 @@ std::vector<int> WorkingCopy::LabFrameRules(const CNuc *theCNuc, std::vector<azu
   return ruleOf;
 }
 
-void WorkingCopy::BuildRowSets(const CNuc *theCNuc, const Config &configure) {
+void WorkingCopy::BuildRowSets(const CompoundSystem *compound, const Config &configure) {
   rowSets_.clear();
   contractedSize_ = 0;
-  if (!theCNuc) return;
+  if (!compound) return;
   std::vector<azure2::experiment::FrameRule> rules;
-  const std::vector<int> ruleOf = LabFrameRules(theCNuc, rules);
+  const std::vector<int> ruleOf = LabFrameRules(compound, rules);
   std::map<RowIdentity, std::vector<int>> readers;  // in unit order
   for (int u = 0; u < NumUnits(); u++) {
     Unit &p = units_[u];
@@ -154,7 +154,7 @@ void WorkingCopy::BuildRowSets(const CNuc *theCNuc, const Config &configure) {
     }
     const int rule = ruleOf[(std::size_t)group.second.front()];
     azure2::RowSet set = units_[group.second.front()].RowSetOver(*this, first, end - first, configure.maxLOrder,
-                                                                   theCNuc, group.first.qEffect,
+                                                                   compound, group.first.qEffect,
                                                                    rule >= 0 ? &rules[(std::size_t)rule] : nullptr);
     set.valueOffset = (long)contractedSize_;
     contractedSize_ += (std::size_t)(end - first) * (std::size_t)set.valuesPerSlot;
@@ -188,13 +188,13 @@ void WorkingCopy::ContractRowSetOf(const Unit &point, azure2::Results &results) 
   }
 }
 
-long WorkingCopy::CheckReaderRows(const CNuc *theCNuc) const {
+long WorkingCopy::CheckReaderRows(const CompoundSystem *compound) const {
   long readers = 0, slots = 0, differ = 0;
   std::vector<std::string> reports;
   const int maxL = Config::maxLOrder;
   std::vector<double> row(maxL + 1);
   std::vector<azure2::experiment::FrameRule> rules;
-  const std::vector<int> ruleOf = LabFrameRules(theCNuc, rules);
+  const std::vector<int> ruleOf = LabFrameRules(compound, rules);
   auto same = [](const void *a, const void *b, std::size_t n) { return std::memcmp(a, b, n) == 0; };
   auto report = [&](int u, const Unit &p, const std::string &what) {
     if (reports.size() < 10)
@@ -208,7 +208,7 @@ long WorkingCopy::CheckReaderRows(const CNuc *theCNuc) const {
     const bool ay = p.Observable() == SiteObservable::kAnalyzingPower;
     const bool elastic = p.Observable() == SiteObservable::kElastic || (ay && p.GetEntranceKey() == p.GetExitKey());
     const azure2::experiment::FrameRule *lab = ruleOf[(std::size_t)u] >= 0 ? &rules[(std::size_t)ruleOf[u]] : nullptr;
-    const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
+    const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(p.GetEntranceKey()));
     readers++;
     const azure2::RowSet *set = p.RowSetOf();
     if (!set || p.RowSetIndex(1) < 0 || p.RowSetIndex(p.NumSubPoints()) >= set->count ||
@@ -233,7 +233,7 @@ long WorkingCopy::CheckReaderRows(const CNuc *theCNuc) const {
       const double heldAngle = p.SlotAngle(j), heldJacobian = p.SlotJacobian(j);
       if (!same(&angle, &heldAngle, sizeof angle) || !same(&jacobian, &heldJacobian, sizeof jacobian))
         what += " angle or Jacobian";
-      p.LegendreRowAt(e, angle, maxL, theCNuc, qEffect, row.data());
+      p.LegendreRowAt(e, angle, maxL, compound, qEffect, row.data());
       for (int l = 0; l <= maxL && what.empty(); l++) {
         const double held = p.RowP(j, l);
         if (!same(&row[l], &held, sizeof held)) what += " angular row";

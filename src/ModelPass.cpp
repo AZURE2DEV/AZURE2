@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "CoulombReference.h"
 #include "ReferenceTableLeaf.h"
@@ -34,10 +34,10 @@ const double kNaN = std::numeric_limits<double>::quiet_NaN();
  * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
  * R-matrix route came back 0 at 84 points.
  */
-bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, const CNuc *cnuc, const LevelState &state, const Config &configure,
+bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, const CompoundSystem *compound, const LevelState &state, const Config &configure,
                     azure2::Results &results) {
   try {
-    point->Calculate(&data, cnuc, state, configure, results);
+    point->Calculate(&data, compound, state, configure, results);
     return true;
   } catch (const std::exception &e) {
     point->MarkFailed(results, role, configure, e.what());
@@ -48,8 +48,8 @@ bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, const CNuc
 }
 
 // A sample segment's point whose combination fails: its per-nucleus terms are NaN too (written by this evaluation).
-double FailedSample(const Segment &segment, Unit *basePoint, const CNuc *cnuc, azure2::Results &results) {
-  if (segment.IsNatural()) basePoint->SetNaturalTerms(results, std::vector<double>(cnuc->NumNuclei(), kNaN));
+double FailedSample(const Segment &segment, Unit *basePoint, const CompoundSystem *compound, azure2::Results &results) {
+  if (segment.IsNatural()) basePoint->SetNaturalTerms(results, std::vector<double>(compound->NumNuclei(), kNaN));
   return kNaN;
 }
 
@@ -179,7 +179,7 @@ class BaseKernel : public azure2::experiment::SubPointFold {
  * fitted Doppler temperature.
  */
 struct PointInputs {
-  PointInputs(WorkingCopy &data, const Segment &segment, const Prediction &p, int pointIndex, const CNuc *cnuc,
+  PointInputs(WorkingCopy &data, const Segment &segment, const Prediction &p, int pointIndex, const CompoundSystem *compound,
               const Config &configure, const azure2::Results &results)
       : nl(p.leaves.size()), nf(p.factors.size()), np(p.params.size()), point(nl), leafValue(nl), factorValue(nf),
         paramValue(np + 1), leafArray(nl), factorArray(nf) {
@@ -190,7 +190,7 @@ struct PointInputs {
       leafValue[k] = part == LeafPart::Reference
                          ? azure2::ReferenceTableValue(data, point[k], segment.GetReaction().reference, configure)
                      : azure2::experiment::IsCoulombReference(part)
-                         ? azure2::CoulombReferenceValue(data, point[k], part, cnuc, configure)
+                         ? azure2::CoulombReferenceValue(data, point[k], part, compound, configure)
                          : LeafValue(point[k], point[k], 0, part, results);
       leafArray[k] = {&leafValue[k], 1};
     }
@@ -201,9 +201,9 @@ struct PointInputs {
         case FactorRef::Kind::TermFrame:
           factorValue[f] = basePoint && termPoint ? Segment::TermFrameFactor(data.State(segment), r.term, pointIndex) : 1.0;
           break;
-        case FactorRef::Kind::RatioFrame: factorValue[f] = segment.RatioTermFrameFactor(r.term, termPoint, cnuc); break;
+        case FactorRef::Kind::RatioFrame: factorValue[f] = segment.RatioTermFrameFactor(r.term, termPoint, compound); break;
         case FactorRef::Kind::SFactor:
-          factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc, r.shape_perMeV);
+          factorValue[f] = azure2::SFactorConversionValue(termPoint, compound, r.shape_perMeV);
           break;
         case FactorRef::Kind::Legendre:
           factorValue[f] = azure2::experiment::LegendreExpansionFactor(r.legendre, termPoint->GetCoefficientOrder());
@@ -259,24 +259,24 @@ const Prediction &PredictionOf(const Segment &segment) {
  * (PointInputs).  The per-nucleus terms of a sample segment go into the base point's leaf record (the decomposition
  * output).
  */
-double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointIndex, const CNuc *cnuc, const LevelState &state, const Config &configure,
+double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointIndex, const CompoundSystem *compound, const LevelState &state, const Config &configure,
                          azure2::Results &results, azure2::LeafValues leaves) {
   const Prediction &p = PredictionOf(segment);
   Unit *basePoint = segment.GetPoint(data, pointIndex + 1);
   // The terms' points, calculated here when the leaves are not in yet (in term order, the base first).
   for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
     Unit *termPoint = TermPoint(data, segment, leaf.term, pointIndex);
-    if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
+    if (!termPoint) return FailedSample(segment, basePoint, compound, results);  // a leaf has a point at every row
     if (azure2::experiment::IsReferenceLeaf(leaf.part)) continue;  // not the R-matrix's: nothing to calculate
     if (leaves == azure2::LeafValues::Calculate &&
-        !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, state, configure, results))
-      return FailedSample(segment, basePoint, cnuc, results);
+        !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), compound, state, configure, results))
+      return FailedSample(segment, basePoint, compound, results);
   }
-  PointInputs inputs(data, segment, p, pointIndex, cnuc, configure, results);
+  PointInputs inputs(data, segment, p, pointIndex, compound, configure, results);
   azure2::experiment::Workspace ws;
   double m;
   if (segment.IsNatural()) {
-    std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
+    std::vector<double> naturalTerms(compound->NumNuclei(), 0.0);
     m = p.tree.Value(inputs.in, 0, ws, naturalTerms.data());
     basePoint->SetNaturalTerms(results, naturalTerms);
   } else {
@@ -300,7 +300,7 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
 
 namespace azure2 {
 
-double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, const CNuc *compound, const LevelState &state, const Config &config,
+double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, const CompoundSystem *compound, const LevelState &state, const Config &config,
                           Results &results, LeafValues leaves) {
   Unit *point = (pointIndex >= 0 && pointIndex < segment.NumPoints()) ? segment.GetPoint(data, pointIndex + 1) : nullptr;
   if (!point) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
@@ -311,18 +311,18 @@ double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIn
   return m;
 }
 
-void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, const CNuc *compound, const LevelState &state, const Config &config, Results &results,
+void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, const CompoundSystem *compound, const LevelState &state, const Config &config, Results &results,
                           LeafValues leaves) {
   for (int pid = 0; pid < segment.NumPoints(); pid++)
     EvaluateModelPoint(data, segment, pid, compound, state, config, results, leaves);
 }
 
-void EvaluateModel(WorkingCopy &data, const CNuc *compound, const LevelState &state, const Config &config, Results &results, LeafValues leaves) {
+void EvaluateModel(WorkingCopy &data, const CompoundSystem *compound, const LevelState &state, const Config &config, Results &results, LeafValues leaves) {
   for (int i = 1; i <= data.Data().NumSegments(); i++)
     EvaluateModelSegment(data, *data.Data().GetSegment(i), compound, state, config, results, leaves);
 }
 
-bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, const CNuc *compound, const LevelState &state, const Config &config,
+bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, const CompoundSystem *compound, const LevelState &state, const Config &config,
                         const Results &results, double g, ModelCotangents &out) {
   const Prediction &p = PredictionOf(segment);
   for (const experiment::LeafSelector &leaf : p.leaves)

@@ -9,7 +9,7 @@
  * What a fit parameter is, and what it belongs to.
  *
  * Every entry of the parameter vector has one ParameterRecord, written where the
- * parameter is created (CNuc::FillMnParams, WorkingCopy::FillMnParams, through
+ * parameter is created (CompoundSystem::FillMnParams, WorkingCopy::FillMnParams, through
  * AZUREParams::Add) and held beside the Minuit parameters in AZUREParams.  It is
  * the one answer to "is this a normalization?", "which segment?", "does it carry
  * its own prior?": no code asks the parameter's name, which is a label for

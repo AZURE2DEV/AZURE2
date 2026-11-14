@@ -6,7 +6,7 @@
 
 /*!
  * Where each level's parameters sit in the fit's parameter vector: the level block, which opens the vector (the
- * abundances and the data's parameters follow it).  Every walk of the level block reads it (CNuc::FillMnParams, the
+ * abundances and the data's parameters follow it).  Every walk of the level block reads it (CompoundSystem::FillMnParams, the
  * fills from a fit or an observed vector, GetTransformParams, ConvertAmplitudeBasis, BuildParamIndexMap, the labels
  * of ParameterLabel.cpp, the gamma_decay records' slots, the model data's derivative columns), so that the order is
  * written once.
@@ -15,7 +15,7 @@
  * level after level; per level its energy, then one amplitude per channel of its group, in channel order.  So a
  * level's amplitude in channel ch sits at EnergyIndex + ch (the gamma_decay records' numbers rely on it).
  *
- * Built once from the structure (CNuc::Fill, when the groups, levels and channels are final); a value, shared by the
+ * Built once from the structure (CompoundSystem::Fill, when the groups, levels and channels are final); a value, shared by the
  * copies of the compound.
  */
 class LevelParameterLayout {

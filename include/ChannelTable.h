@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-class CNuc;
+class CompoundSystem;
 class PPair;
 class Config;
 
@@ -47,16 +47,16 @@ class ChannelTable {
   /// The table of the given keys (any order, duplicates allowed).  Rows of keys held by `previous` are copied from
   /// it when it was built for the same pairs (charges, masses, radii, thresholds, Coulomb route); the others are
   /// computed in parallel, each row by one thread.  Errors of the Coulomb routines are rethrown here.
-  static std::shared_ptr<const ChannelTable> Build(const CNuc *cnuc, const Config &configure, std::vector<Key> keys,
+  static std::shared_ptr<const ChannelTable> Build(const CompoundSystem *compound, const Config &configure, std::vector<Key> keys,
                                                    const ChannelTable *previous = nullptr);
 
   /// The table of rows already computed (a free-shift refill records the rows its points used): sorted, duplicates
   /// removed (a row is a pure function of its key, so duplicates are equal).
-  static std::shared_ptr<const ChannelTable> FromRows(const CNuc *cnuc, const Config &configure,
+  static std::shared_ptr<const ChannelTable> FromRows(const CompoundSystem *compound, const Config &configure,
                                                       std::vector<std::pair<Key, Row>> rows);
 
   /// True when the table was built for the present pairs (charges, masses, radii, thresholds, Coulomb route).
-  bool SameSystem(const CNuc *cnuc, const Config &configure) const;
+  bool SameSystem(const CompoundSystem *compound, const Config &configure) const;
 
   /// The row of a key, or nullptr when the table does not hold it.
   const Row *Find(const Key &key) const;

@@ -11,7 +11,7 @@
 #include <omp.h>
 #endif
 
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 
@@ -187,14 +187,14 @@ void WorkingCopy::FillNormsFromParams(const vector_r &p) {
  * Fills the Energy Shifts from the Minuit parameter array.
  */
 
-void WorkingCopy::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, const CNuc *theCNuc,
+void WorkingCopy::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, const CompoundSystem *compound,
                                              const LevelState *levels, const LevelInputs *inputs,
                                              const Config *configure) {
-  this->FillEnergyShiftsFromParamsImpl(p, theCNuc, levels, inputs, configure);
+  this->FillEnergyShiftsFromParamsImpl(p, compound, levels, inputs, configure);
   this->BeginEvaluation(results);
 }
 
-void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const CNuc *theCNuc, const LevelState *levels,
+void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const CompoundSystem *compound, const LevelState *levels,
                                                  const LevelInputs *inputs, const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
@@ -282,10 +282,10 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const CNuc *
   // The shared meshes, for the levels and shifts just set.
   // The plan tasks whose units move (re-placed grids, shifted points): their slots are looked up again at the end.
   std::vector<int> movedTasks;
-  if (theCNuc && configure) {
-    this->ReplaceSubPointGrids(theCNuc, *levels, *inputs, *configure, shiftActiveSegments, movedTasks);
+  if (compound && configure) {
+    this->ReplaceSubPointGrids(compound, *levels, *inputs, *configure, shiftActiveSegments, movedTasks);
     // Slots placed again: the row sets of their readers at the new energies (RowSet.h).
-    if (!movedTasks.empty()) this->BuildRowSets(theCNuc, *configure);
+    if (!movedTasks.empty()) this->BuildRowSets(compound, *configure);
   }
 
   const bool reenergise = !toUpdate.empty();
@@ -295,8 +295,8 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const CNuc *
       for (int i = 0; i < s.NumPoints(); i++)
         if (const Unit *pt = s.GetPoint(*this, i + 1))
           if (pt->PlanTask() >= 0) movedTasks.push_back(pt->PlanTask());
-    if (theCNuc && configure)
-      for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(*this, t.term, theCNuc, *configure);
+    if (compound && configure)
+      for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(*this, t.term, compound, *configure);
     // One work item per point (with its sub-points), largest first, so a
     // segment with thousands of sub-points per point does not serialize.
     struct Item { double cost; TermRef seg; int i; };
@@ -317,24 +317,24 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const CNuc *
     // indexed by thread number would then be shared between the outer threads.
     if (serial) {
       for (size_t q = 0; q < work.size(); q++)
-        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
       for (int q = 0; q < (int)work.size(); q++)
-        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
     }
-    if (theCNuc && configure)
-      for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, theCNuc, *configure);
+    if (compound && configure)
+      for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, compound, *configure);
   }
-  this->PlaceOverflowNodes(theCNuc, movedTasks, reenergise);
-  if (azure2::NodeCheckRequested() && theCNuc) {
+  this->PlaceOverflowNodes(compound, movedTasks, reenergise);
+  if (azure2::NodeCheckRequested() && compound) {
     // Every unit of every plan task on a node of the tables, as the hand-over leaves them (the point pass checks its
     // own tasks again; an evaluation inside an enclosing parallel region has no point pass).
     std::vector<int> all(plan_.NumTasks());
     for (int t = 0; t < plan_.NumTasks(); t++) all[t] = t;
     long differ;
 #pragma omp critical(azure_node_check)
-    differ = this->CheckNodeTable(theCNuc, all);
+    differ = this->CheckNodeTable(compound, all);
     if (differ) throw std::logic_error("AZURE_NODE_CHECK: " + std::to_string(differ) + " differ (listed above)");
   }
 }

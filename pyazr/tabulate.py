@@ -101,6 +101,10 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
 
     ``pairs`` is a list of ``(entrance, exit)`` tuples (file pair keys).
     Returns ``{(entrance, exit): TabulatedCrossSection}``.
+
+    ``cwd``: the directory the project's relative paths are read from (default: the project's own).  Nothing is
+    written there: the tabulation's projects, data files and outputs are in a temporary directory, removed at the
+    end (also when the call raises).
     """
     session_opts = dict(session_opts or {})
     pairs = [tuple(p) for p in pairs]
@@ -124,11 +128,23 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
     if de_min is None:
         de_min = (span[1] - span[0]) / 2 ** 16
 
-    work = tempfile.mkdtemp(prefix="azr_tab_", dir=base_cwd)
+    # the stripped project, its data files and its outputs in a temporary directory, removed at the end; its
+    # sessions read the project's other relative paths from base_cwd
+    work = tempfile.mkdtemp(prefix="pyazr_tabulate_")
+    try:
+        return _tabulate_in(work, base_cwd, model0, pairs, span, lab, rel_tol, x, min_points, max_points, max_rounds,
+                            de_min, observable, session_opts, verbose)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _tabulate_in(work, base_cwd, model0, pairs, span, lab, rel_tol, x, min_points, max_points, max_rounds, de_min,
+                 observable, session_opts, verbose):
+    """The adaptive tabulation of :func:`tabulate`, its files in ``work``."""
     os.makedirs(os.path.join(work, "output"), exist_ok=True)
     os.makedirs(os.path.join(work, "checks"), exist_ok=True)
     stripped = os.path.join(work, "_stripped.azr")
-    _strip_format3(model0, stripped, observable)
+    _strip_format3(model0, stripped, observable, work)
     knots = {p: None for p in pairs}     # (E_cm sorted, sigma) arrays
     active = {p: None for p in pairs}    # list of (lo, hi) c.m. intervals
 
@@ -146,10 +162,15 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
                        fmt="%.10g")
             # sigma at the lab energies of the file (a session of the data; one data set per pair combination)
             m.add_dataset(f"tab_{ent}_{ex}", reaction=m.reaction(ent, ex), quantity="sigma", unit="b",
-                          file=os.path.basename(fn), columns="E_lab[MeV] _ value error", norm="1 fixed")
+                          file=fn, columns="E_lab[MeV] _ value error", norm="1 fixed")
         m.save(run)
+        # each round asks for other energies: the external-capture cache of the round before is of no use (the engine
+        # would find it stale, say so and recompute)
+        for cache in ("intEC.dat", "intEC.dat.sig"):
+            if os.path.exists(os.path.join(work, "output", cache)):
+                os.remove(os.path.join(work, "output", cache))
         out = {}
-        with Session(run, cwd=work, **session_opts) as a:
+        with Session(run, cwd=base_cwd, **session_opts) as a:
             v = a.parameters.x0 if x is None else np.asarray(x, float)
             data = a.evaluate(v).data
             for i, p in enumerate(keys):
@@ -215,14 +236,13 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
         E, S = knots[p]
         out[p] = TabulatedCrossSection(p[0], p[1], E, E * lab[p[0]], S,
                                        rel_tol, n_rounds)
-    shutil.rmtree(work, ignore_errors=True)
     return out
 
 
-def _strip_format3(project, stripped, observable):
+def _strip_format3(project, stripped, observable, work):
     """The format-3 project without its data sets, normalizations, energy scales, extrapolations and the THM
-    experiments their data named, output and checks in the scratch directory: the model the tabulation adds its
-    data sets to (the potentials, targets and model data stay)."""
+    experiments their data named, output and checks in the scratch directory ``work``: the model the tabulation adds
+    its data sets to (the potentials, targets and model data stay)."""
     if observable != "angle-integrated":
         raise ValueError("tabulate of a format-3 project computes the angle-integrated cross section only "
                          f"(observable {observable!r})")
@@ -233,5 +253,5 @@ def _strip_format3(project, stripped, observable):
     thm = project.thm()
     for name in (thm or {}).get("experiments", {}):
         project.remove_thm_experiment(name)
-    project.set_config(output_dir="output/", checks_dir="checks/")
+    project.set_config(output_dir=os.path.join(work, "output", ""), checks_dir=os.path.join(work, "checks", ""))
     project.save(stripped)

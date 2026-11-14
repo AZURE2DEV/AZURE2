@@ -4,7 +4,7 @@
 # evaluated on the parameter it names, also when fixed parameters precede it.
 #
 # The chi-squared function receives the FULL parameter vector (fixed parameters
-# included, as CNuc::FillCompoundFromParams reads it), while the limits manager
+# included, as CompoundSystem::FillCompoundFromParams reads it), while the limits manager
 # numbers the parameters it knows by their position among the non-fixed ones.
 # AZURECalc used to index the full vector with that non-fixed index, so the
 # prior on energy_2 of tests/7Li_p_a (preceded by the fixed zero widths

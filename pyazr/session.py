@@ -25,8 +25,8 @@ except ImportError as err:                            # pragma: no cover
         "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
-from .errors import close_names, listed
-from . import session_checks, session_fit, session_options, session_physics, session_thm
+from .errors import AZURE2Error, close_names, listed
+from . import engine_text, session_checks, session_fit, session_options, session_physics, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
 from .parameters import Parameter, Parameters
@@ -181,12 +181,20 @@ class Session(
         # (pyazr.bands.sensitivities with nprocs > 1), and self.option_sources where each came from.
         given = {k: v for k, v in locals().items() if k in self._given_options}
         opts = session_options.runtime_options(_azure2, given, not extrapolations, coulomb_table, self.cwd)
-        self._sess = _azure2.Session(self.file, opts)
+        # the engine's text of the set-up goes to the logger pyazr.engine, not to standard output (pyazr.engine_text);
+        # a refused set-up quotes it in its error
+        said = []
+        try:
+            with engine_text.held() as said:
+                self._sess = _azure2.Session(self.file, opts)
+        except AZURE2Error as err:
+            raise session_checks.setup_refused(err, said, self.file) from None
         self.options, self.option_sources = session_options.in_use(self._sess, extrapolations, coulomb_table,
                                                                     self._parameter_file)
 
         self.mode = "extrap" if extrapolations else "data"  # what the session evaluates, fixed when it is made
-        self.configure()
+        with engine_text.held():
+            self.configure()
 
     def __del__(self):
         self.close()
@@ -397,7 +405,7 @@ class Session(
         eV (an ANC in fm^-1/2 for a closed channel, a channel entered as an amplitude as Brune's amplitude), every other
         kind as its fit value (``parameters.units``).
 
-        The engine's transformation (``CNuc::TransformOut``), as the program writes ``<levels>`` from a fit: a fixed
+        The engine's transformation (``CompoundSystem::TransformOut``), as the program writes ``<levels>`` from a fit: a fixed
         width holds its reduced-width amplitude, so its physical value follows the level's other widths through the
         Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE`` (under Park the amplitude is the observed width).  The
         inverse is not offered by the engine: a fit vector is made from ``parameters.x0`` (``Parameters.put``) or a
@@ -560,6 +568,18 @@ class Session(
         of the extrapolations the data sets are the extrapolations and every chi-squared field is ``None``."""
         from .evaluate import evaluate
         return evaluate(self, x)
+
+    def model_curve(self, name, x=None, points=200):
+        """The model of the data set ``name`` on a fine grid over its range at the fit vector ``x`` (default
+        ``parameters.x0``): a :class:`pyazr.model_curve.ModelCurve` (c.m. and lab energies, c.m. angles and the model
+        in the unit of ``evaluate(x).data[i].model``, at ``points`` values per branch and at the data set's own
+        points; one branch per fixed angle of an excitation function, or per fixed energy of an angular
+        distribution).  The engine's evaluation of extrapolation records made from the data set's record, in a
+        session of the extrapolations opened and closed by the call (:mod:`pyazr.model_curve`; several data sets in
+        one session: :func:`pyazr.model_curve.model_curves`).  A data set that is not one function of one variable,
+        or whose columns give each point its own window or order, raises :class:`pyazr.ParameterError`."""
+        from .model_curve import model_curve
+        return model_curve(self, name, x, points)
 
     # -- the external region, and the caches that make it affordable ----------
 

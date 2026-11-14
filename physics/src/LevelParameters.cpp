@@ -265,7 +265,7 @@ ObservedLevels observed_levels(const System &system, std::size_t b, const std::v
   // cnuc_split.md section 8, Eq. (8.1); the arithmetic of CNuc::TransformOut's second loop (9d50667f, 2423-2516).
   for (std::size_t la = 0; la < E.size(); la++) {
     double sum = 0.0;  // sum over particle columns of gamma_int^2 dS/dE
-    double J = 1.0;    // Park's J, accumulated as CNuc::CalcShiftFunctions does
+    double J = 1.0;    // Park's J, accumulated as CompoundSystem::CalcShiftFunctions does
     std::vector<ChannelValues> f(n);
     for (std::size_t m = 0; m < n; m++) {
       f[m] = cf(b, fk[m], E[la]);
@@ -336,7 +336,7 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   std::vector<double> B(nc, 0.0);
-  if (E.empty()) return B;  // a hard-sphere block: B drops out (CNuc.cpp CalcBoundaryConditions)
+  if (E.empty()) return B;  // a hard-sphere block: B drops out (CompoundSystemBuild.cpp CalcBoundaryConditions)
   std::size_t lowest = 0;
   for (std::size_t la = 1; la < E.size(); la++)
     if (E[la] < E[lowest]) lowest = la;

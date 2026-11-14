@@ -12,7 +12,7 @@
 class WorkingCopy;
 class Unit;
 class Site;
-class CNuc;
+class CompoundSystem;
 class LevelState;
 class Config;
 
@@ -146,13 +146,13 @@ class CalculationPlan {
 /// `tGroups` (one per unit, non-decreasing), or, if null, runs of one (entrance, exit) pair.  `progress`, if given,
 /// holds the index of the unit being calculated (so a caller that catches an exception knows whose it was: the fill's
 /// and factorisation's are units[0]'s).
-void SolveAtOneEnergy(const CNuc *cnuc, const LevelState &state, const std::vector<double> &thmCoherentValues, const Config &configure,
+void SolveAtOneEnergy(const CompoundSystem *compound, const LevelState &state, const std::vector<double> &thmCoherentValues, const Config &configure,
                       Results &results, Site *const *units, int n, const int *tGroups = nullptr, int *progress = nullptr);
 /// AZURE_PLAN_CHECK=1: every unit of `tasks` solved alone (fill and factorisation, T-matrix and record with it) and
 /// compared bit for bit with the shared solve of its task (the bilinear forms g^T A g of every J-group, the route, the
 /// T-matrix, the record), written into a copy of `results`.  Prints the counts and the first differences to stderr;
 /// returns the number of units that differ.
-long CheckEnergyTasks(WorkingCopy &data, const CNuc *cnuc, const LevelState &state, const Config &configure, const Results &results,
+long CheckEnergyTasks(WorkingCopy &data, const CompoundSystem *compound, const LevelState &state, const Config &configure, const Results &results,
                       const EnergyTaskList &tasks);
 
 /// Whether `point` carries a sub-point fold (a target effect whose kernel is evaluated on sub-points): its sub-points

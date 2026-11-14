@@ -13,7 +13,7 @@
 #include <Minuit2/MnUserCovariance.h>
 
 #include "AZURECalc.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "AZUREParams.h"
 #include "FitEvaluations.h"
 #include "Fitters.h"

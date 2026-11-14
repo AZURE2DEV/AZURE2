@@ -121,15 +121,21 @@ def save_fit(session, path, x=None, param_sav=True, verify=True, norms="fitted",
     """
     if norms not in ("fitted", "nominal"):
         raise ParameterError(f"save_fit: norms must be 'fitted' or 'nominal', not {norms!r} (see "
-                             f"help(pyazr.Session.save_fit)).")
+                             f"help(pyazr.Session.save_fit)).", what=f"save_fit: norms={norms!r}",
+                             allowed="norms must be 'fitted' or 'nominal'", fix="help(pyazr.Session.save_fit)")
     if norms == "nominal" and not param_sav:
         raise ParameterError("save_fit: norms='nominal' keeps the fitted norms in the .sav "
-                             "only; it needs param_sav=True.")
+                             "only; it needs param_sav=True.", what="save_fit: norms='nominal' with param_sav=False",
+                             allowed="norms='nominal' keeps the fitted norms in the .sav only",
+                             fix="it needs param_sav=True")
     x = np.asarray(session.parameters.x0 if x is None else x, float).ravel()
     free = [i for i, p in enumerate(session.parameters) if not p.fixed]
     if x.size != len(free):
         raise ParameterError(f"save_fit: x has {x.size} entries; the session has {len(free)} free parameters "
-                             f"(Session.parameters.x0 is such a vector, Session.parameters.free names its entries).")
+                             f"(Session.parameters.x0 is such a vector, Session.parameters.free names its entries).",
+                             what=f"save_fit: x has {x.size} entries",
+                             allowed=f"the session has {len(free)} free parameters",
+                             fix="Session.parameters.x0 is such a vector, Session.parameters.free names its entries")
     # Every parameter, with the free ones from x, and every parameter's
     # physical value, fixed ones included (see above).
     full = session._all_rwa(x)

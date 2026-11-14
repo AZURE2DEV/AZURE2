@@ -353,7 +353,7 @@ struct AbundanceRowSpec {
   PriorCentre centre;   ///< not written: the start `value`
 };
 
-/// The name of an abundance's fit parameter, made here only (CNuc::AbundanceParamName and the build's parameter sources
+/// The name of an abundance's fit parameter, made here only (the engine's AbundanceSamples and the build's parameter sources
 /// call it): `<sample>.isotope.<isotope>` for a format-3 isotope, else `abundance_[<sample>_]<Z>_<A>` with the Z and A of
 /// the compound nucleus (BuildEffects.cpp).
 std::string AbundanceParameterName(const std::string &sample, const std::string &isotope, int z, int a);
@@ -409,7 +409,7 @@ struct ThmMembershipSpec {
   std::vector<std::pair<int, std::string>> extrapolationWeights;  ///< (ExtrapolationSpec::key, weight file)
 };
 
-/// The abundances as CNuc consumes them, and why the reader stopped (`error` printed after the rows are applied).
+/// The abundances as the engine consumes them (AbundanceSamples.h), and why the reader stopped (`error` printed after the rows are applied).
 struct AbundanceSpecs {
   AbundancesSpec abundances;
   bool failed = false;

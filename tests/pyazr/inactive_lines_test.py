@@ -2,7 +2,7 @@
 """Inactive <levels> lines and inactive <segmentsData> lines must not shift
 pyazr's bookkeeping off the engine's.
 
-AZURE2 skips every level line with isActive == 0 (CNuc::Fill) and every data
+AZURE2 skips every level line with isActive == 0 (CompoundSystem::Fill) and every data
 segment with isActive == 0, so neither takes part in the engine's numbering.
 Two places in pyazr used to count them anyway:
 

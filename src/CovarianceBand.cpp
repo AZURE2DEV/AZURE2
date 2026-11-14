@@ -1,5 +1,5 @@
 #include "CovarianceBand.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "Config.h"
@@ -181,7 +181,7 @@ double BandData::dXS(const std::vector<double> &g) const {
   return (v > 0.0) ? std::sqrt(v) : 0.0;
 }
 
-bool BuildBandData(const CNuc *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool BuildBandData(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask) {
   out.compound = compound;

@@ -8,7 +8,7 @@
 import { createApi, watchRevision } from "./api.js";
 import { button, errorBox, h } from "./ui.js";
 import { baselineOf, changeText, remember, snapshotOf } from "./calculate.js";
-import { shownTabs as tabsOfDepth, tabOfRoute } from "./layout.js";
+import { shownTabs as tabsOfDepth, tabByKey, tabOfRoute } from "./layout.js";
 import { formatNumber } from "./tables.js";
 import * as projectTab from "./tabs/project.js";
 import * as nucleusTab from "./tabs/nucleus.js";
@@ -41,7 +41,8 @@ export const TABS = [
 
 /** The keys of the page, shown by "?" (the overlay lists exactly this table). */
 export const KEYS = [
-  ["1 … 9", "switch to the tab of that number (as the tab bar shows them)"],
+  ["1 … 9, 0", "switch to the tab of that number as the tab bar shows them (0: the tenth)"],
+  ["[ ]", "the previous and the next tab (every tab, also past the tenth)"],
   ["c", "Calculate: every data set with the model, the residuals and χ², and what changed since the last time"],
   ["e", "switch between the first view and the expert's (every tab, every field)"],
   ["Ctrl+Z", "undo the last edit (outside a text box)"],
@@ -388,8 +389,8 @@ function onKey(e) {
   if (mod && (key === "y" || (key === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
   else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
   else if (mod || e.altKey) return;
-  else if (/^[1-9]$/.test(e.key)) {
-    const link = [...ctx.tabBar.querySelectorAll("a.tab:not([hidden])")][+e.key - 1];  // the tabs as shown
+  else if (/^[0-9]$/.test(e.key) || e.key === "[" || e.key === "]") {
+    const link = tabByKey([...ctx.tabBar.querySelectorAll("a.tab:not([hidden])")], e.key);  // the tabs as shown
     if (link) ctx.navigate(link.dataset.view);
   } else if (e.key === "c") ctx.calculate().catch((err) => ctx.showError(err));
   else if (e.key === "e") toggleDepth();

@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"{tag}: all {len(TRUTH)} levels compared", seen == len(TRUTH), f"compared {seen}")
 
 # The two routes round differently, so identical numbers mean the second session read the first one's
-# derivatives (the process-wide memo of CNuc::CalcShiftFunctions was keyed without the table until 2026-10-24).
+# derivatives (the process-wide memo of CompoundSystem::CalcShiftFunctions was keyed without the table until 2026-10-24).
 # Only meaningful where a Coulomb table exists: without one (a fresh CI runner) both sessions take the exact route
 # and must agree bit for bit.
 table_file = os.environ.get("AZURE2_COULOMB_TABLE") or os.path.expanduser("~/.azure2/coulomb_table.bin")

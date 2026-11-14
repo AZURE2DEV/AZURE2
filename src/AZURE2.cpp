@@ -275,7 +275,7 @@ void startMessage(const Config &configure) {
  */
 
 #ifdef USE_MCMC
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "AZURECalcMCMC.h"
@@ -373,7 +373,7 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 
 int runMCMC(Config &configure, const RunRequest &request) {
   try {
-    CNuc *compound = new CNuc();
+    CompoundSystem *compound = new CompoundSystem();
     WorkingCopy *data = new WorkingCopy();
     // The run's levels (made by the set-up below) and the idle levels of the sampler's walkers.
     LevelState state;

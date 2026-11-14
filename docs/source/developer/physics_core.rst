@@ -89,14 +89,14 @@ How the engine uses it
 ----------------------
 
 The engine's compound-nucleus classes are the set-up view a ``System`` is
-built from: ``BuildSystemFromCNuc`` (``include/CNucSystem.h``) makes a
-``CNucSystem``, the ``System`` with the map from its 0-based indices to the
-engine's pairs, groups, levels and channels. ``CNuc::Fill`` builds it once,
-when the structure is complete (``CNuc::SystemStructure``: the R-matrix
-blocks; ``CNuc::SystemAllGroups``: every group, for the reports), and every
-reader takes that one; the structure does not change afterwards. ``CNuc::TransformIn``,
-``CNuc::CalcBoundaryConditions`` and ``CNuc::TransformOut`` call the
-conversions of ``LevelParameters.h`` on it; ``CNuc::BuildPathways`` builds
+built from: ``BuildSystemOfCompound`` (``include/SystemOfCompound.h``) makes a
+``SystemOfCompound``, the ``System`` with the map from its 0-based indices to the
+engine's pairs, groups, levels and channels. ``CompoundSystem::Fill`` builds it once,
+when the structure is complete (``CompoundSystem::SystemStructure``: the R-matrix
+blocks; ``CompoundSystem::SystemAllGroups``: every group, for the reports), and every
+reader takes that one; the structure does not change afterwards. ``CompoundSystem::TransformIn``,
+``CompoundSystem::CalcBoundaryConditions`` and ``CompoundSystem::TransformOut`` call the
+conversions of ``LevelParameters.h`` on it; ``CompoundSystem::BuildPathways`` builds
 the ``PathwayTable`` from it. The channel functions reach the engine through
 ``ChannelFunc`` and the stage's ``ChannelTable``; the THM distortions
 (``src/ThmDistortion.cpp``, ``src/ThmDwVertex.cpp``) call
@@ -106,7 +106,8 @@ The binding exposes the functions to Python with array arguments through one
 table, ``BuildTable()`` in ``api/src/pybind_physics.cpp`` (``pyazr.physics``;
 :doc:`extending`, "A physics function of the binding").
 
+The ``System`` is built once at set-up and held by the ``CompoundSystem``, which is constant after it.
+
 .. note:: **Planned.**
-   When ``CNuc`` is split, the ``System`` is built once at set-up and held by
-   an immutable ``CompoundSystem``; the per-vector level values are arrays in
-   ``JpiBlock``'s layout passed to these functions beside it.
+   The per-vector level values become arrays in ``JpiBlock``'s layout passed to these functions beside the
+   ``System``.

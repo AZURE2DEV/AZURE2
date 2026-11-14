@@ -8,7 +8,7 @@
 #include <tuple>
 
 #include "AdaptiveIntegrationGrid.h"
-#include "CNuc.h"
+#include "CompoundSystem.h"
 #include "Config.h"
 #include "PPair.h"
 #include "ShiftedFold.h"
@@ -86,7 +86,7 @@ azure2::MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSe
 /// The quantized anchors of a nucleus's mesh, in E_x: the levels as each entrance pair of its folded points sees them
 /// (AdaptiveIntegrationGrid::Anchors in that pair's frame), merged and sorted.  `inputWidthsArePhysical` as the grid
 /// configuration's: at the set-up the input widths, in the hand-over the observed parameters of the current values.
-std::vector<azure2::MeshAnchor> MeshAnchorsOf(const CNuc *nucleus, const LevelInputs &inputs, const DataSet::NucleusMesh &mesh,
+std::vector<azure2::MeshAnchor> MeshAnchorsOf(const CompoundSystem *nucleus, const LevelInputs &inputs, const DataSet::NucleusMesh &mesh,
                                               bool inputWidthsArePhysical) {
   std::vector<azure2::MeshAnchor> anchors;
   for (const std::pair<int, double> &frame : mesh.anchorFrames) {

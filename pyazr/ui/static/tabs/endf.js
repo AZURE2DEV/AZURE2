@@ -18,9 +18,10 @@
 
 import { pathOf } from "../api.js";
 import { isFinal, progressView } from "../fitting.js";
-import { PALETTE, axisOf, groupsAgainst } from "../plots.js";
+import { PALETTE, Y_CHOICES, axisOf, curveTraces, groupsAgainst } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, drawPlot, h, section } from "../ui.js";
+import { renderExport, renderNew } from "./endfproject.js";
 
 /** The colour of the i-th file shown (the palette's first colour is the model's). */
 export const fileColour = (i) => PALETTE[(i + 1) % PALETTE.length];
@@ -45,9 +46,11 @@ function go(ctx, hash) {
 /**
  * The plots of one data set of the curves' answer: the datum times its normalization with its error, the model, and
  * each file's values (a colour per file, in the order shown), against the data set's axis (energy, or angle at one
- * energy: plots.js axisOf), one group per value of the other coordinate where it repeats; below, per file its ratio
- * to the datum (with its error) and to the model.  `entry`: a data set of the answer; `files`: the names in the
- * order shown.  No number is computed: the points are the server's, sorted by x within a group.
+ * energy: plots.js axisOf), one group per value of the other coordinate where it repeats; the model and the files on
+ * the grid of the data set's model curve where the answer has one (`entry.curve`, each file's `on_curve`), else at
+ * the points; below, per file its ratio to the datum (with its error) and to the model, at the points.  `entry`: a
+ * data set of the answer; `files`: the names in the order shown.  No number is computed: the points are the
+ * server's, sorted by x within a group.
  */
 export function evaluationPlots(entry, files, schema) {
   const q = schema?.quantities?.[entry.quantity] || {};
@@ -59,17 +62,33 @@ export function evaluationPlots(entry, files, schema) {
   const pick = (arr, idx) => idx.map((i) => (arr || [])[i]);
   const main = [], ratio = [];
   const drawn = files.filter((f) => entry.curves[f] && !entry.curves[f].refused);
+  // the model and each file on the grid of the data set's model curve, where the server sent one along this axis
+  const curve = curveTraces(entry, axis.key, Y_CHOICES[0], { color: PALETTE[0] });
+  if (curve) {
+    main.push(...curve);
+    const c = entry.curve;
+    for (const f of drawn.filter((name) => entry.curves[name].on_curve?.values)) {
+      const values = entry.curves[f].on_curve.values;
+      for (const b of c.branches) {
+        main.push({ role: "line", name: `${f}${curve.length > 1 ? ` (${b.value})` : ""}`,
+          x: c[axis.key].slice(b.start, b.stop), y: values.slice(b.start, b.stop),
+          color: fileColour(files.indexOf(f)), dash: "dash" });
+      }
+    }
+  }
   for (const g of groups) {
     const order = [...g.index].sort((a, b) => xs[a] - xs[b]);
     const suffix = g.value === null ? "" : ` (${g.key === "angle_cm" ? "θ_cm" : "E_cm"} = ${g.value})`;
     const x = pick(xs, order);
     main.push({ role: "data", name: `data × norm${suffix}`, x, y: pick(entry.value_norm, order),
       error: pick(entry.error_norm, order), color: null, marker: "circle" });
-    main.push({ role: "model", name: `model${suffix}`, x, y: pick(entry.model, order), color: PALETTE[0] });
+    if (!curve) main.push({ role: "model", name: `model${suffix}`, x, y: pick(entry.model, order), color: PALETTE[0] });
     for (const f of drawn) {
       const c = entry.curves[f];
       const colour = fileColour(files.indexOf(f));
-      main.push({ role: "line", name: `${f}${suffix}`, x, y: pick(c.values, order), color: colour, dash: "dash" });
+      if (!curve || !c.on_curve?.values) {
+        main.push({ role: "line", name: `${f}${suffix}`, x, y: pick(c.values, order), color: colour, dash: "dash" });
+      }
       ratio.push({ role: "data", name: `${f} / data${suffix}`, x, y: pick(c.ratio_to_data, order),
         error: pick(c.ratio_to_data_error, order), color: colour, marker: "circle" });
       ratio.push({ role: "line", name: `${f} / model${suffix}`, x, y: pick(c.ratio_to_model, order), color: colour });
@@ -85,11 +104,15 @@ export function evaluationPlots(entry, files, schema) {
 }
 
 /** The rows of a check's findings: the module's own (line, MF, MT, message, page) or a code's (MF, MT, record,
- * text, meaning), in the report's order. */
+ * text, meaning), in the report's order; a finding of no section (MF 0, MT 0: the file as a whole) reads "whole
+ * file" in the MF column and nothing in the MT column. */
 export function findingRows(findings) {
-  return findings.map((f, i) => ({ k: i, severity: f.severity, line: f.line || null, mat: f.mat, mf: f.mf,
-    mt: f.mt, record: f.record || null, message: f.message, page: f.page ? `p. ${f.page}` : "",
-    meaning: f.meaning || "" }));
+  return findings.map((f, i) => {
+    const whole = !f.mf && !f.mt;
+    return { k: i, severity: f.severity, line: f.line || null, mat: f.mat, mf: whole ? "whole file" : f.mf,
+      mt: whole ? "" : f.mt, record: f.record || null, message: f.message, page: f.page ? `p. ${f.page}` : "",
+      meaning: f.meaning || "" };
+  });
 }
 
 /** A count line: "2 errors, 1 warning, 0 notes" from the server's counts. */
@@ -108,12 +131,17 @@ export async function render(ctx, el, args) {
   const files = params.files !== undefined ? filesOf(params.files) : remembered[project] || [];
   remembered[project] = files;
   const listing = await ctx.api.get("/api/endf/files");
-  const checking = args[0] === "check";
+  const screen = ["check", "new", "export"].includes(args[0]) ? args[0] : "over";
+  const first = params.file || files[0] || listing.files[0]?.path || "";
+  const link = (name, href, title) => h("a", { href, class: screen === name ? "active" : null }, title);
   el.appendChild(h("nav.subtabs", { "aria-label": "ENDF screens" },
-    h("a", { href: routeOf({ files }), class: checking ? null : "active" }, "Over the data"), " · ",
-    h("a", { href: routeOf({ file: params.file || files[0] || listing.files[0]?.path || "" }),
-      class: checking ? "active" : null }, "Check and correct")));
-  if (checking) await renderCheck(ctx, el, listing, params);
+    link("over", routeOf({ files }), "Over the data"), " · ",
+    link("check", routeOf({ file: first }), "Check and correct"), " · ",
+    link("new", `#/endf/new${first ? `?file=${encodeURIComponent(first)}` : ""}`, "New project from a file"), " · ",
+    link("export", "#/endf/export", "Export this project")));
+  if (screen === "check") await renderCheck(ctx, el, listing, params);
+  else if (screen === "new") await renderNew(ctx, el, listing, params, { showJob, go });
+  else if (screen === "export") await renderExport(ctx, el, params, { showJob, routeOf, go });
   else await renderOver(ctx, el, listing, files);
 }
 
@@ -136,8 +164,9 @@ function fileChooser(ctx, listing, files, onChange) {
         ? h("span.swatch", { style: `color: ${fileColour(files.indexOf(r.path))}` }, "●") : null) },
       { key: "path", title: "file" },
       { key: "size", title: "size", unit: "bytes", numeric: true },
-      { key: "check", title: "", sortable: false, render: (r) => h("a", { href: routeOf({ file: r.path }) },
-        "Check…") },
+      { key: "check", title: "", sortable: false, render: (r) => h("span", {}, h("a", { href: routeOf({
+        file: r.path }) }, "Check…"), " ", h("a", { href: `#/endf/new?file=${encodeURIComponent(r.path)}`,
+        title: "a new project from the file's resonance parameters" }, "New project…")) },
     ],
     rows, rowKey: (r) => r.path, withFilter: rows.length > 8, label: "ENDF-6 files",
     caption: `ENDF-6 files of the project folder (${listing.how})` });
@@ -382,7 +411,8 @@ async function showJob(ctx, panel, id, draw) {
 const findingColumns = (own) => [
   { key: "severity", title: "severity", render: (r) => h(`span.severity.${r.severity}`, {}, r.severity) },
   ...(own ? [{ key: "line", title: "line", numeric: true }] : []),
-  { key: "mf", title: "MF", numeric: true }, { key: "mt", title: "MT", numeric: true },
+  { key: "mf", title: "MF", doc: "the file (MF) of the finding; whole file: a finding of no section" },
+  { key: "mt", title: "MT", numeric: true },
   ...(own ? [] : [{ key: "record", title: "record", numeric: true }]),
   { key: "message", title: own ? "message" : "the code's text", wrap: true },
   own ? { key: "page", title: "ENDF-102" } : { key: "meaning", title: "what it means (pyazr.endf)", wrap: true },
