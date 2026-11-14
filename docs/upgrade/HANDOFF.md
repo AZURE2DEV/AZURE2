@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 13:10) — merged: one layout of the level block of the parameter vector
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 70 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-5-cnuc-parameter-layout` and one rewrapped comment line of
+`src/ModelData.cpp`. The agent's entry follows.
+
+- `LevelParameterLayout` (`include/LevelParameterLayout.h`) lists the slots of the level block in the format's
+  order; `CNuc::Fill` builds it once. The twelve places that each counted positions of their own read it
+  (the design had counted eight). Read by the director: every reader's loop gives the old order (the slots are
+  listed in the order of the old loops), and the test writes the order out independently.
+- The copies of the compound were measured and not replaced: an owner writes on its copy the levels' input
+  values, the `gamma_decay` inputs and fills and the capture masks, not only a `LevelState`. **Decided by the
+  director**: the next branch carries `LevelInputs`, moves the fills and masks into the evaluation's state and
+  gives the readers the state they read (the part of the design's last step that the owners need); the set-up
+  and the name `CNuc` stay for the last step.
+
+**Verified on the merged tree** (build `work/b-trial70`, five threads): 0 warnings; all projects in the three
+bases against `tab-t69-1`: Brune 887 of 887, formal 851 of 851, Park 887 of 887 identical; the eight fits
+identical to `work/b-trial69`; 273 of 273 quick tests (with `docs_build`). The director's own runs
+(`work/director/spot70/`): the natural-target fit of `angle_mapping` in two fitters and a sampler chain of T2 in
+both bases (8 walkers, 100 steps), every output file identical to `work/b-trial69`. Not run here: the slow
+tests, MINOS, the rate and the band (the agent ran them on its branch: identical), the long suite.
+
+**New reference**: tag `tab-t70-1`, base build `work/b-trial70`.
+
+**Decided by the PI (2026-11-14)**: a pair no level names yet is kept in `<levels>` by a pair row (inactive,
+level ID 0); `add_level(..., "allowed")` gives every channel width 0, fixed (as built; the question was put as
+either this or free as Qt, and the answer was "yes to all": read as keeping what is built, and the PI was told
+so); the `width_is_amplitude` flag stays refused on photon channels. Recorded in `pyazr3.md` section 5.
+
+**Open** (beside the earlier lists): the `gamma_decay` records' numbers still sit at energy + channel by
+arithmetic (`GammaDecayMap.cpp`; the layout states it as part of its order); the long suite of the earlier
+batch (rehearsal 69) is still running.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-parameter-layout`) — one layout of the level block
 
 **Measured first** (start f0b17b19). The places that count positions of the level block of the parameter vector
@@ -58,7 +92,7 @@ s branch; the same pair of builds measured on the start commit (identical code) 
 **Open.** The copies (above). The two defects kept as they were: the sub-point-grid copy's stale N_f^½ and the RWA
 chain's snapshot `parameters.out`.
 
-## 2026-11-14 (director, 13:05) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
+## 2026-11-14 (director, 11:30) — merged: tests whose comparisons can fail; pair and THM edits in pyazr
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 69 (a true merge of the rehearsal branch; its tree
 plus this entry): `feature/upgrade-7-tests-cannot-fail` and `feature/upgrade-8-pyazr3-project-edits`. Their
