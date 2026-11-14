@@ -160,6 +160,9 @@ option_flags = {f for row in re.findall(r'Option\("[a-z_]+", "(--[a-z0-9-]*)?", 
 if not option_flags or "printOptionFlags();" not in help_text:
     problems.append("io/src/ConfigSection.cpp: no option flags found, or printHelp() does not call printOptionFlags()")
 flags |= option_flags
+# The fitters' switches and --max-calls: printed from the fitter table (FitterSwitchesHelp, src/Fitters.cpp; check 46).
+fitter_help = function_body(read("src/Fitters.cpp"), "std::string FitterSwitchesHelp(") \
+    if "FitterSwitchesHelp()" in help_text else ""
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
 handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
@@ -177,7 +180,7 @@ removed = {"--use-api"}
 for flag in sorted(flags):
     if flag not in cli_doc:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from docs/source/reference/command_line.rst")
-    if flag not in removed and flag not in option_flags and flag not in help_text:
+    if flag not in removed and flag not in option_flags and flag not in help_text and flag not in fitter_help:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from printHelp()")
 
 for flag in sorted(set(re.findall(r"\\t(--[a-z0-9-]+)", help_text))):
@@ -1182,32 +1185,39 @@ try:
 except (OSError, IndexError, KeyError) as e:
     problems.append(f"check 44: {e}")
 
-# 46. The engine's fitters are one table (src/Fitters.cpp, Fitters(); docs/upgrade/fit.md): every row's switch is an
-#     option the program parses (a string literal outside src/Fitters.cpp, in src/AZURE2.cpp or support/) and a row of
-#     docs/source/reference/command_line.rst; every row's name is in the fitter table of
-#     docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets (Config::USE_*_MINIMIZER,
-#     Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be selected outside the table.
+# 46. The engine's fitters are one table (src/Fitters.cpp, Fitters(); docs/upgrade/fit.md): the program parses the
+#     fitters' switches from it (ApplyFitterSwitch) and prints their usage lines from it (FitterSwitchesHelp), and
+#     src/AZURE2.cpp names no row's switch itself (no second list); every row's switch, and the switch of a fitter the
+#     build may leave out (AbsentFitters()), is a row of docs/source/reference/command_line.rst; every row's name is
+#     in the fitter table of docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets
+#     (Config::USE_*_MINIMIZER, Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be
+#     selected outside the table.
 _fitter_rows = []
 try:
     _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
     if not _fitter_rows:
         problems.append("src/Fitters.cpp: no row found in Fitters() (check 46)")
+    _fitters_src = read("src/Fitters.cpp")
+    _fitter_rows += [(_n, _o, "absent") for _n, _o in
+                     re.findall(r'\{"([\w-]+)", "(--[\w-]+)", "[^"]*"\}', _fitters_src)]
     _parser = read("src/AZURE2.cpp")
-    for _f in glob.glob(os.path.join(ROOT, "support", "**", "*.cpp"), recursive=True):
-        _parser += read(os.path.relpath(_f, ROOT))
+    for _call in ("ApplyFitterSwitch(configure, *it)", "FitterSwitchesHelp()"):
+        if _call not in _parser:
+            problems.append(f"src/AZURE2.cpp: {_call} is not called: the fitters' switches and their usage lines come "
+                            "from the fitter table (check 46)")
     _cli_page = read("docs/source/reference/command_line.rst")
     _fit_page = read("docs/source/user_guide/fitting.rst")
     _fit_table = _fit_page.split("The Engine's Fitters", 1)[1] if "The Engine's Fitters" in _fit_page else ""
     if not _fit_table:
         problems.append("docs/source/user_guide/fitting.rst: no section \"The Engine's Fitters\" (check 46)")
     for _name, _option, _bit in _fitter_rows:
-        if _option and f'"{_option}"' not in _parser:
-            problems.append(f"src/Fitters.cpp: the switch {_option} of the fitter '{_name}' is not parsed by the "
-                            "program (src/AZURE2.cpp, support/) (check 46)")
+        if _option and f'"{_option}"' in _parser:
+            problems.append(f"src/AZURE2.cpp: names the switch {_option} of the fitter '{_name}' itself; the parser "
+                            "and the usage text take the fitters' switches from src/Fitters.cpp (check 46)")
         if _option and f"``{_option}``" not in _cli_page:
             problems.append(f"docs/source/reference/command_line.rst: the switch {_option} of the fitter '{_name}' is "
                             "not listed (check 46)")
-        if _fit_table and f"``{_name}``" not in _fit_table:
+        if _bit != "absent" and _fit_table and f"``{_name}``" not in _fit_table:
             problems.append(f"docs/source/user_guide/fitting.rst: the fitter '{_name}' is not in the table of "
                             "\"The Engine's Fitters\" (check 46)")
     _row_bits = {_bit for _n, _o, _bit in _fitter_rows}

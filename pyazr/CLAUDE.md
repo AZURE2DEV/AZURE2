@@ -58,6 +58,12 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   `f.residuals`/`f.jacobian(x, skip=None)` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
   rule: -f/2, -inf outside its support), `f.x0`, `f.names`, `f.bounds`, `f.errordef`.  Recipes:
   `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
+- The program's fitters on a session: `r = s.fit_with_engine(method, minos=, max_calls=, progress=, stop=)`
+  (`session_fit.py`, rows of `kinds()["fitters"]` with their columns `call_limit` and `fallback`).  Every fitter's
+  `EngineFitResult` has the same fields: `x`/`objective` the lowest objective reached (at a call limit the lowest
+  evaluated), `status` the fitter's word, `outcome` the shared word (`fitStatus.out`'s status), `notices` (fallback,
+  a setting ignored, the best point kept), `minos` with `minos_valid` per side.  A new field is a member of
+  `FitResult` (`include/FitControl.h`), a key of `FitWithEngineDict` and a field here.
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
   `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; of a session made with

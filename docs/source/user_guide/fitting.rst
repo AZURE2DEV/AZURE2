@@ -223,34 +223,54 @@ without one; a session names the row, ``Session.fit_with_engine(method=...)`` (:
 
 .. list-table::
    :header-rows: 1
-   :widths: 14 14 72
+   :widths: 13 13 9 9 56
 
    * - Method
      - Switch
+     - Call limit
+     - Fallback
      - What it does
    * - ``nlopt``
      - ``--use-nlopt``
+     - yes
+     - (none)
      - NLopt's derivative-free Subplex (SBPLX) within the parameters' limits (unbounded: :math:`\pm10^{10}`); relative
-       tolerances :math:`10^{-8}` in the objective and the parameters; ``--max-calls`` applies. No covariance, no
-       MINOS. Only in builds configured with ``-DUSE_NLOPT=ON``.
+       tolerances :math:`10^{-8}` in the objective and the parameters. No covariance, no MINOS. Only in builds
+       configured with ``-DUSE_NLOPT=ON``; elsewhere the switch is refused (exit 2) with the switches of the build.
    * - ``gsl-lm``
      - ``--use-gsl-lm``
+     - no
+     - ``migrad``
      - GSL's geodesic-accelerated trust-region least squares on the residual rows and their analytic Jacobian (priors
        as rows, limits by projection); at most 200 iterations, tolerances :math:`10^{-9}`. Covariance
-       :math:`(J^TJ + \text{priors})^{-1}`. Without an analytic Jacobian for the project: MIGRAD instead.
+       :math:`(J^TJ + \text{priors})^{-1}`.
    * - ``lm``
      - ``--use-lm``
+     - no
+     - ``migrad``
      - Levenberg-Marquardt on the same rows: at most 200 iterations, ending when the largest gradient component is
        below :math:`10^{-8}` or a step lowers the objective by less than :math:`10^{-9}` of it. Covariance
-       :math:`(J^TJ + \text{priors})^{-1}`; MIGRAD instead without an analytic Jacobian.
+       :math:`(J^TJ + \text{priors})^{-1}`.
    * - ``migrad-gradient``
      - ``--use-gradient``
+     - yes
+     - (none)
      - Minuit2's MIGRAD with the analytic gradient of the objective and a Gauss-Newton second-derivative seed. HESSE
        covariance (the program runs HESSE with ``--covariance-band``), MINOS. The program also takes it for a project
        with THM data.
    * - ``migrad``
      - (none)
+     - yes
+     - (none)
      - Minuit2's MIGRAD with its own numerical gradient: the default. HESSE covariance, MINOS.
+
+*Call limit*: the fitter honours ``--max-calls`` (``max_calls=`` of a session). A fitter that does not ends by its own
+criterion and says so: a line ``Note: lm does not honour a call limit ...`` in the program's output, the same sentence
+in the session result's ``notices``, and ``call_limit N (--max-calls) ignored`` in ``fitStatus.out``. *Fallback*: the
+fitter that runs in its place for a model without an analytic Jacobian (no HESSE, no MINOS after it; its covariance is
+MIGRAD's error matrix); the session result says so in ``fell_back_to_migrad`` and ``notices``, ``fitStatus.out`` in
+``minimizer``. The program's usage text (``AZURE2 --help``) lists the switches of the fitters of the build from the
+same table.
 
 After a MIGRAD fit of a project whose data covariance has ``relvector`` terms, the model of those terms is re-frozen at
 the fitted point and MIGRAD rerun up to ``--refreeze-covariance`` times. The program prints a progress line every
@@ -274,9 +294,13 @@ MIGRAD ended:
   failed).
 
 The same is written to ``fitStatus.out`` in the output directory (see
-:doc:`../reference/output_files`).  A fit that did not converge still writes
-``param.sav``, ``chiSquared.out`` and the other outputs, from MIGRAD's last
-point: rerun the fit from ``param.sav``.  Before 2026-10-31 MIGRAD and NLopt
+:doc:`../reference/output_files`), by every fitter with the same keys.  A fit
+that did not converge still writes ``param.sav``, ``chiSquared.out`` and the
+other outputs, from the lowest objective the fit reached: a MIGRAD stopped at
+its call limit ends at the lowest objective it evaluated, which can lie below
+Minuit2's last state (Minuit2 returns its start when the limit falls while it
+seeds the gradient); the run says so in a line, and the covariance is the one
+of Minuit2's last state.  Rerun the fit from ``param.sav``.  Before 2026-10-31 MIGRAD and NLopt
 stopped at a fixed 50,000 function calls without a message, which fits with
 roughly a hundred or more free parameters could reach; their outputs looked
 like a converged fit's.

@@ -311,23 +311,35 @@ minimizer converged.
 fitStatus.out
 ^^^^^^^^^^^^^
 
-Written by every MIGRAD or NLopt fit (and removed at the start of a fit, so it
-never describes an earlier one)::
+Written by every fit, whatever the fitter, with the same keys (and removed at
+the start of a fit, so it never describes an earlier one)::
 
-    minimizer   MIGRAD
-    status      converged
-    valid       1
-    edm         6.06159e-08
-    edm_goal    0.0002
-    calls       489
-    call_limit  none
+    minimizer      migrad
+    fitter         migrad
+    status         converged
+    fitter_status  converged
+    valid          1
+    edm            6.06159e-08
+    edm_goal       0.0002
+    calls          489
+    call_limit     none
 
-``status`` is ``converged``, ``call_limit`` (stopped at the ``--max-calls``
-limit) or ``invalid`` (MIGRAD's minimum is not valid: EDM above its goal or no
-valid covariance); NLopt writes ``converged_<reason>``, ``call_limit`` or
-``failed_<reason>`` and no EDM lines.  ``calls`` counts objective evaluations as
-the minimizer counts them.  The Levenberg-Marquardt and GSL minimizers do not
-write this file unless they fall back to MIGRAD.
+``minimizer`` is the fitter that ran and ``fitter`` the one the switches chose
+(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when
+``lm`` or ``gsl-lm`` ran ``migrad`` for a model without an analytic Jacobian.
+``status`` is the outcome in the words every fitter shares: ``converged``,
+``call_limit`` (stopped at the ``--max-calls`` limit), ``iteration_limit``
+(LM's or GSL's 200 iterations), ``stopped``, ``invalid`` (MIGRAD's minimum is
+not valid: EDM above its goal or no valid covariance) or ``failed``.
+``fitter_status`` is the fitter's own word: MIGRAD's as ``status``; LM
+``no_decrease`` (no damped step lowers the objective: a minimum within
+rounding, ``valid 1``) or ``failed_jacobian``; GSL ``failed_<reason>``; NLopt
+``converged_<reason>`` or ``failed_<reason>``.  ``valid`` is 1 when the fitter
+reached a minimum by its own criterion.  ``edm`` and ``edm_goal`` are
+MIGRAD's, ``none`` for the other fitters.  ``calls`` counts objective
+evaluations (LM and GSL: residual passes).  ``call_limit`` is ``none``, the
+limit with its source (``200 (--max-calls)``), or the limit followed by
+``ignored`` for a fitter that does not honour one.
 
 With a ``<scatteringLengths>`` block the totals line ends with
 ``Total-Scattering-Length-Chi-Squared``, the constraint term of

@@ -359,7 +359,8 @@ def kinds():
       argument ``formula`` first) with ``citation``, SRIM's, owed by every use (:func:`pyazr.stopping.evaluate`);
     - ``fitters``: the engine's fitters by name (``Session.fit_with_engine(method=)``), in the program's precedence:
       option (the program's switch, "" for the default), gradient, residual_rows, bounds, covariance, minos,
-      progress_label, doc;
+      call_limit (honours ``max_calls``; the others ignore it with a notice), fallback (the fitter that runs in its
+      place for a model without an analytic Jacobian, "" for none), progress_label, doc;
     - ``errors``: pyazr's error classes with their bases;
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 

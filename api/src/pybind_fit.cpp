@@ -107,6 +107,24 @@ py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos,
   py::list m;
   for (const auto &interval : r.minos) m.append(py::make_tuple(interval.first, interval.second));
   d["minos"] = m;
+  const auto side = [](const MinosSide &s) {
+    py::dict v;
+    v["valid"] = s.valid;
+    v["at_limit"] = s.atLimit;
+    v["call_limit"] = s.callLimit;
+    v["new_minimum"] = s.newMinimum;
+    return v;
+  };
+  py::list mv;
+  for (const MinosValidity &v : r.minosValidity) {
+    py::dict sides;
+    sides["lower"] = side(v.lower);
+    sides["upper"] = side(v.upper);
+    mv.append(sides);
+  }
+  d["minos_validity"] = mv;
+  d["outcome"] = FitOutcome(r);
+  d["notices"] = r.notices;
   d["log"] = fit.log;
   return d;
 }
@@ -131,6 +149,8 @@ void BindFit(py::module_ &m) {
           d["bounds"] = row.bounds;
           d["covariance"] = row.covariance;
           d["minos"] = row.minos;
+          d["call_limit"] = row.callLimit;
+          d["fallback"] = row.fallback;
           d["progress_label"] = row.progressLabel;
           d["doc"] = row.doc;
           rows.append(d);

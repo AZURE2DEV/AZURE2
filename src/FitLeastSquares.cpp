@@ -412,13 +412,17 @@ FitResult FitByLeastSquares(AZURECalc &objective, AZUREParams &params, const Fit
   const LeastSquaresOutcome ls = solver(objective, params, 200, fitter, control);
   if (ls.objective < 0.0) {
     // The analytic Jacobian is not available for this model -> MIGRAD (numerical; no HESSE, no MINOS).
+    const std::string notice = std::string(fitter) +
+                               ": the analytic Jacobian is unsupported for this model; falling back to MIGRAD "
+                               "(numerical gradient; its covariance, no HESSE, no MINOS).";
     *control.log << "Analytic Jacobian unsupported for this model; "
                     "falling back to MIGRAD."
                  << std::endl;
     result = MigradPass(objective, params.GetMinuitParams(), false, control);
-    params.GetMinuitParams() = result.minimum->UserParameters();
+    AdoptMigradEndPoint(params, result);
     result.fitter = fitter;
     result.fellBackToMigrad = true;
+    result.notices.insert(result.notices.begin(), notice);
     return result;
   }
   result.objective = ls.objective;
