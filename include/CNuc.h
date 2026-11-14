@@ -106,7 +106,7 @@ class CNuc {
   /// Returns -1 if a file cannot be read. \p radii overrides channel radii, pair number (1-based) -> fm, as the
   /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.  `state` and `inputs`
   /// are the caller's (the run's, the session's): shaped for the levels, the inputs made from the <levels> rows and
-  /// the gamma_decay records, the state given the input energies and zero-width flags.  This object keeps neither.
+  /// the gamma_decay records, the state given the zero-width flags.  This object keeps neither.
   int Fill(const Config &, LevelState &state, LevelInputs &inputs,
            const std::map<int, double> &radii = std::map<int, double>());
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to

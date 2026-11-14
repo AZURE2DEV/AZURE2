@@ -420,7 +420,6 @@ int CNuc::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, 
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
       const ALevel *level = this->Group(j)->GetLevel(la);
       inputs.SetE(j, la, level->FileE());
-      state.SetInputEnergy(j, la, level->FileE());
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         inputs.SetGamma(j, la, ch, level->FileGamma(ch));
         state.SetZeroInputWidth(j, la, ch, level->FileZeroWidth(ch));
@@ -753,10 +752,7 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
         }
         E.swap(f.E);
         gamma.swap(f.gamma);
-        for (std::size_t lb = 0; lb < levels.size(); lb++) {
-          inputs.SetE(j, levels[lb], E[lb]);
-          state.SetInputEnergy(j, levels[lb], E[lb]);
-        }
+        for (std::size_t lb = 0; lb < levels.size(); lb++) inputs.SetE(j, levels[lb], E[lb]);
       }
       for (std::size_t lb = 0; lb < levels.size(); lb++)
         for (std::size_t k = 0; k < nc; k++) inputs.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);

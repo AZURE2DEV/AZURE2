@@ -9,7 +9,9 @@
 //  (d) What a fill computes beside the levels is the state's: a copy of the LevelState keeps the gamma_decay records'
 //      fills of its vector when the compound is filled at another; the state has a capture-mask projector for every
 //      slot of the set-up.
+//  (e) The THM line shape's test for a ground-state moment reads the level's file energy, not one a vector moved.
 // Arguments: .azr files, each run in the Brune and the formal basis.  Reads them in place and writes nothing.
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <sstream>
@@ -24,11 +26,13 @@
 #include "ECAmplitudeCache.h"
 #include "GammaDecayMap.h"
 #include "JGroup.h"
+#include "ThmLineshape.h"
 
 namespace {
 
 int failures = 0;
 
+int groundStateMoments = 0;  // the cases of (e)
 void Check(bool ok, const std::string &what) {
   if (!ok) {
     std::printf("  FAIL  %s\n", what.c_str());
@@ -140,6 +144,29 @@ void OnProject(const std::string &file, bool brune) {
       const std::size_t size = fresh->state.CaptureProjector(slot).size();
       Check(size == 0 || size == n * n, tag + ": a projector over the slot's levels");
     }
+  // (e) The THM line shape tells a ground-state moment by the level's file energy: after a physical vector that moves
+  // every level by 10 keV, a photon channel of a level that is its pair's final state still adds no width.
+  vector_r shiftedE(ci.ParameterLayout().Size());
+  for (std::size_t i = 0; i < shiftedE.size(); i++) shiftedE[i] = 1.0;
+  for (const LevelParameterLayout::Level &slots : ci.ParameterLayout().Levels())
+    shiftedE[slots.energy] = ci.GetJGroup(slots.group)->GetLevel(slots.level)->FileE() + 0.01;
+  initialized->compound.FillCompoundFromParamsPhysical(shiftedE, initialized->state, initialized->inputs);
+  for (int j = 1; j <= ci.NumJGroups(); j++)
+    for (int la = 1; la <= ci.GetJGroup(j)->NumLevels(); la++)
+      for (int ch = 1; ch <= ci.GetJGroup(j)->NumChannels(); ch++) {
+        const JGroup *g = ci.GetJGroup(j);
+        const AChannel *c = g->GetChannel(ch);
+        const PPair *pair = ci.GetPair(c->GetPairNum());
+        if ((c->GetRadType() != 'E' && c->GetRadType() != 'M') || g->GetJ() != pair->GetJ(2) ||
+            g->GetPi() != pair->GetPi(2) || std::fabs(g->GetLevel(la)->FileE() - pair->GetExE()) >= 1.0e-3)
+          continue;
+        groundStateMoments++;
+        std::vector<double> gammas(g->NumChannels(), 0.0);
+        gammas[ch - 1] = 1.0;
+        Check(ThmLevelWidth(&ci, j, la, g->GetLevel(la)->FileE() + 0.01, gammas,
+                            initialized->cfg) == 0.0,
+              tag + ": a ground-state moment adds no THM width when the level moves");
+      }
 }
 
 }  // namespace
@@ -149,6 +176,7 @@ int main(int argc, char **argv) {
     OnProject(argv[a], true);
     OnProject(argv[a], false);
   }
+  std::printf("ground-state moments checked: %d\n", groundStateMoments);
   std::printf("%s: %d failure(s)\n", failures ? "FAIL" : "ok", failures);
   return failures ? 1 : 0;
 }

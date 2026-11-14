@@ -25,7 +25,6 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed, LevelState &
     const int j = slots.group, la = slots.level;
     const ALevel *level = this->GetJGroup(j)->GetLevel(la);
     inputs.SetE(j, la, p[slots.energy]);
-    state.SetInputEnergy(j, la, p[slots.energy]);
     std::vector<double> g;
     for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++) {
       inputs.SetGamma(j, la, ch, p[slots.amplitude[ch - 1]]);

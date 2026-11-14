@@ -450,16 +450,16 @@ ThmAdjointContext BuildThmAdjointContext(const CNuc *compound, const LevelState 
         for (int ch = 1; ch <= numChannels; ch++) gamma[ch - 1] = state.Gamma(j, la, ch);
         {
           const double x0 = state.E(j, la), h = 1.0e-6 * (std::fabs(x0) + 1.0);
-          double wp = ThmLevelWidth(compound, state, j, la, x0 + h, gamma, configure);
-          double wm = ThmLevelWidth(compound, state, j, la, x0 - h, gamma, configure);
+          double wp = ThmLevelWidth(compound, j, la, x0 + h, gamma, configure);
+          double wm = ThmLevelWidth(compound, j, la, x0 - h, gamma, configure);
           d[0] = (wp - wm) / (2.0 * h);
         }
         for (int ch = 1; ch <= numChannels; ch++) {
           const double x0 = gamma[ch - 1], h = 1.0e-6 * (std::fabs(x0) + 1.0);
           gamma[ch - 1] = x0 + h;
-          double wp = ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
+          double wp = ThmLevelWidth(compound, j, la, state.E(j, la), gamma, configure);
           gamma[ch - 1] = x0 - h;
-          double wm = ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
+          double wm = ThmLevelWidth(compound, j, la, state.E(j, la), gamma, configure);
           gamma[ch - 1] = x0;
           d[ch] = (wp - wm) / (2.0 * h);
         }
