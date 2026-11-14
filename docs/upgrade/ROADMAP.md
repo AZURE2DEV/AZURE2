@@ -329,7 +329,14 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 - [x] The experts' examples: every script of `pyazr/examples/` runs from the root on a project of `tests/` and is run
       by `tests/pyazr/examples_test.py` (one row each, a pinned number); the page `user_guide/pyazr_examples.rst` lists
-      them by task; check 58 keeps the files, the table and the page one set.
+      them by task; check 58 keeps the files, the table and the page one set, and the skills' pages to the files.
+- [x] The library calls the examples met, repaired: quiet (the engine's lines to the logger `pyazr.engine`), nothing
+      written beside a project (the rate, the bands, `tabulate`), refusals with three parts (a refused set-up, a
+      wrong fit vector, a Project edit that leaves a phase shift without its partial wave), the level scheme's keys
+      and words, units (external-capture integrals, extrapolations, gamma_decay numbers); a prior or a limit on a
+      level parameter as a `Project` edit.  Open (the engine): the final state of an external-capture integral, the
+      engine's text kept by the session instead of descriptor 1, the rate's files, a session's threads, the units of
+      `shift_fn` and `apparatus` parameters, a project started from nothing (`FOR_THE_OWNER.md`).
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
