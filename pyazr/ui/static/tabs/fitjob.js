@@ -262,8 +262,13 @@ function resultBlock(ctx, rec, table, view) {
     actions.appendChild(accept);
   }
   for (const f of v.followers) {
-    actions.appendChild(button(`${f.kind} (${f.method})…`, `${f.doc}: fills the job form, from this job's best point`,
-      () => { view.form = { kind: f.kind, method: f.method, start: `job:${rec.id}` }; ctx.navigate(location.hash); }));
+    // a job another tab starts (the rate: the row's `tab`) opens there, this job's best point as its parameters
+    const own = (f.tab || "fit") === "fit";
+    actions.appendChild(button(`${f.kind} (${f.method})…`, own
+      ? `${f.doc}: fills the job form, from this job's best point`
+      : `${f.doc}: opens its tab, the parameters this job's best point`,
+    own ? () => { view.form = { kind: f.kind, method: f.method, start: `job:${rec.id}` }; ctx.navigate(location.hash); }
+      : () => ctx.navigate(`#/${f.tab}?start=${rec.id}`)));
   }
   box.appendChild(actions);
   return box;

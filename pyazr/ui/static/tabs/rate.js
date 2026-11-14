@@ -16,6 +16,7 @@ export async function render(ctx, el, args) {
   const view = ctx.rateView || (ctx.rateView = { entrance: null, exit: null, grid: "table", t_min: "", t_max: "",
     t_step: "", start: "x", band: "none", comparison: "", draws: "100", starlib_label: "azr2", starlib_flag: "",
     reaclib_label: "azr2", reaclib_flag: "n", reaclib_tolerance: "0.05" });
+  if (ctx.route.params.start) view.start = ctx.route.params.start;  // a fit's "rate …" button: its best point
   const [pairs, grids, jobs] = await Promise.all([ctx.api.get("/api/project/pairs"), ctx.api.get("/api/rate/grids"),
     ctx.api.get("/api/jobs")]);
   const particles = pairs.filter((p) => p.kind === 0);
