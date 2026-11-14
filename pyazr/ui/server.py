@@ -468,6 +468,31 @@ class Server:
             job.record.setdefault("kept", []).append(dict(answer, time=time.time()))
         return answer
 
+    def endf_resonances(self, path, isotope=0, energy_range=0):
+        """What MF=2 of an ENDF-6 file inside the root holds for a new project (``Material.resonances``), nothing
+        written; in the server's process."""
+        return evaluations.resonances(self.state.inside_root(path), path, isotope, energy_range)
+
+    def endf_keep_project(self, job_id, to=None):
+        """Put the new project of a finished ``endf_import`` job into the project folder (a new file only); the open
+        project is not changed."""
+        job = self.jobs.get(job_id)
+        answer = evaluations.keep_project(self.state, job.view(), to)
+        with job.lock:
+            job.record.setdefault("kept", []).append(dict(answer, time=time.time()))
+        return answer
+
+    def endf_export(self):
+        """What an ENDF-6 file of the current text at the working x would lose (the session worker:
+        ``pyazr.endf.from_session``), the writer's default energy range, and a file name not in use for it."""
+        answer = self.session_request("endf_export")
+        stem = os.path.splitext(os.path.basename(self.state.path))[0]
+        name, k = f"{stem}.endf", 1
+        while os.path.exists(os.path.join(self.state.directory, name)):
+            k += 1
+            name = f"{stem}_{k}.endf"
+        return dict(answer, name=name)
+
     # -- the prior builder (pyazr/ui/prior.py) ----------------------------------------------------------------------
 
     def prior_open(self):
@@ -552,9 +577,11 @@ class Server:
     def describe(self):
         import pyazr
         from .routes import describe_routes
+        from .first_view import first_view_columns
         return {"server": "pyazr.ui", "package": pyazr.describe(), "python": sys.version.split()[0],
                 "budget": self.budget.describe(), "project": self.state.describe(), "jobs": job_table(),
-                "session_options": self._project_options(), "routes": describe_routes()}
+                "session_options": self._project_options(), "routes": describe_routes(),
+                "first_view": first_view_columns()}
 
     def _project_options(self):
         with self.state.lock:

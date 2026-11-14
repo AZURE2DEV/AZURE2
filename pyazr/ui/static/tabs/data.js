@@ -7,7 +7,7 @@ import { plotOf } from "../plots.js";
 import { renderTable } from "../tables.js";
 import { button, drawPlot, h } from "../ui.js";
 import { FIRST_VIEW, SECTION_TITLES } from "../layout.js";
-import { listColumns, listKinds, usersOf } from "../lists.js";
+import { listColumns, listKinds, onlyColumns, usersOf } from "../lists.js";
 import { NUCLEUS_SECTIONS, newRecordPanel, recordPanel } from "./records.js";
 
 /** The sections the Data tab shows, in the schema's order, with their record kinds. */
@@ -74,10 +74,13 @@ export async function render(ctx, el, args) {
   for (const kind of listKinds(ctx.schema, kinds)) {
     const rows = mine.filter((r) => r.kind === kind).map((r) => ({ ...r, problems: problemsOf(r.name).length || "" }));
     if (!rows.length) continue;
-    const columns = [...listColumns({ schema: ctx.schema, kind, rows, described,
+    const all = [...listColumns({ schema: ctx.schema, kind, rows, described,
       descriptionFields: ctx.kinds?.description?.fields || {}, users, evaluated }),
     { key: "problems", title: "⚠", numeric: true, doc: "messages of the engine's validator" },
     { key: "line", title: "line", numeric: true, doc: "the record's first line in the project file" }];
+    // the first view: the old program's columns of a list the engine describes (the server's table)
+    const describedKind = rows.some((r) => described[r.name]);
+    const columns = !ctx.expert && describedKind ? onlyColumns(all, ctx.describe?.first_view?.description) : all;
     const rec = ctx.schema.records[kind] || {};
     const table = renderTable(document, { columns, rows, selected: selected?.name, label: `${rec.title || kind}`,
       withFilter: rows.length > 8, onSelect: (r) => ctx.navigate(`#/data/${encodeURIComponent(r.name)}`) });

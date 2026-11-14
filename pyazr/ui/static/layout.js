@@ -52,3 +52,13 @@ export function tabOfRoute(shown, route, section) {
     || mine.find((t) => t.sections && section && t.sections.includes(section))
     || mine.find((t) => !t.part && !t.sections) || mine[0] || null;
 }
+
+/** The tab a key goes to among the tabs shown (`links`, in the bar's order): 1-9 the first nine, 0 the tenth, [ and ]
+ * the one before and after the active tab (around the ends). */
+export function tabByKey(links, key) {
+  if (/^[1-9]$/.test(key)) return links[+key - 1] || null;
+  if (key === "0") return links[9] || null;
+  const at = links.findIndex((a) => a.classList?.contains("active"));
+  const step = key === "]" ? 1 : -1;
+  return links.length ? links[((at < 0 ? 0 : at + step) + links.length) % links.length] : null;
+}

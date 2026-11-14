@@ -30,6 +30,7 @@ digraph frontends {
   n_pyazr__endf__Material [label=<<b>pyazr::endf::Material</b><br/><font point-size="12">one material of an<br/>ENDF-6 file: sections,<br/>header, curves</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__endf__resonances__LRF7 [label=<<b>pyazr::endf::resonances::LRF7</b><br/><font point-size="12">MF=2 R-Matrix Limited<br/>parameters in the<br/>file&#x27;s units and frame</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_RateSession [label=<<b>RateSession</b><br/><font point-size="12">a session set up for a<br/>reaction rate, as the<br/>program&#x27;s rate command</font>>, shape=box, style="filled", fillcolor="white"];
+  n_CurveSession [label=<<b>CurveSession</b><br/><font point-size="12">the session of the<br/>extrapolations that<br/>draws data sets&#x27; model<br/>curves</font>>, shape=box, style="filled", fillcolor="white"];
   n_Covariance [label=<<b>Covariance</b><br/><font point-size="12">a data covariance<br/>built from named<br/>parts, checked</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
   n_AZUREMain -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
@@ -60,6 +61,8 @@ digraph frontends {
   n_Server -> n_JobTable [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_Engine -> n_pyazr__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_RateSession -> n__azure2__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CurveSession -> n_pyazr__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CurveSession -> n_pyazr__Session [style=dashed, arrowhead=vee];
   n_Covariance -> n_Project [style=dashed, arrowhead=vee];
   n_pyazr__endf__Material -> n_pyazr__Session [style=dashed, arrowhead=vee];
   n_pyazr__endf__Material -> n_pyazr__endf__resonances__LRF7 [style=dotted, penwidth=1.6, arrowhead=empty];

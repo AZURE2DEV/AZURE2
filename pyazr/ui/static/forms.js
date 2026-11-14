@@ -79,11 +79,14 @@ export const WIDGETS = {
     controls: [input("v", t, { numeric: true, placeholder: f.min !== undefined ? `integer ≥ ${f.min}` : "integer" })],
     compose: (v) => v.v.trim(),
   }),
-  // a list of numbers: one box per number and two empty ones for more (an emptied box removes its number)
+  // a list of numbers: one box per number and an empty one for the next, which brings another as soon as it is typed
+  // in (`grows`: the form adds the box, so a list takes any count before one Apply); an emptied box removes its number
   number_list: (f, t) => {
     const numbers = tokenize(t);
-    const controls = [...numbers, "", ""].map((v, i) => input(`n${i}`, v, { numeric: true,
+    const controls = [...numbers, ""].map((v, i) => input(`n${i}`, v, { numeric: true,
       placeholder: i < numbers.length ? "" : "+", ariaLabel: `${f.title || "number"} ${i + 1}` }));
+    controls[controls.length - 1].grows = { prefix: "n", ariaLabel: f.title || "number" };
+    // `controls` is the widget's own list: a box the form adds is in it, and composed with the others
     return { controls, compose: (v) => join(controls.map((c) => String(v[c.name] ?? "").trim())) };
   },
   unit: (f, t, ctx) => {

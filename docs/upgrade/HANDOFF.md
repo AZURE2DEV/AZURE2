@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-curve-export`) — the model as a curve; ENDF in and out
+
+`web_ui.md` section 11.16 has the whole; user guide `web_interface.rst`, `web_ui_api.rst`, `endf.rst`, `pyazr.rst`,
+`pyazr_examples.rst`; Developer Guide `extending.rst`, `api.rst`; the class scheme (`CurveSession`).
+
+- **The model as a curve**: `pyazr/model_curve.py` (`plan_curves`, `CurveSession`, `model_curves`, `ModelCurve`);
+  `Session.model_curve(name, x=None, points=200)` (`pyazr/session.py`, one method after `evaluate`, 12 lines);
+  `bands._trimmed_project` used as it is (`bands.py` unchanged).  Route `GET /api/evaluation/curve/{name}`
+  (`Engine.curve`, one `CurveSession` for every data set, kept while its records are the same); the Plot tab and the
+  ENDF tab draw it (`plots.js curveTraces`; `POST /api/endf/curves` adds `curve` and each file's `on_curve`).
+  Example `pyazr/examples/model_curve.py` (a row of `examples_test.py` and of `pyazr_examples.rst`).
+- **A project from an evaluation and back** (the ENDF tab, `tabs/endfproject.js`): `POST /api/endf/resonances`, the
+  job `endf_import`/`to_project`, `POST /api/endf/keep_project`; `GET /api/endf/export`, the job
+  `endf_write`/`writer` (on a session of the job's text under the project's name: `engine.session_named`,
+  `state.project_file_of`).
+- **The first view's rough edges**: the follow-up buttons by the form's rule; each tab its own jobs ("Every job" in
+  the Fit tab); `pyazr/ui/first_view.py` (the lists' first-view columns, the PI's decision of 2026-11-14, served in
+  `GET /api/describe`); "whole
+  file"; a list of numbers that grows as it is typed (the "two boxes per Apply" item: a list took at most two new
+  numbers per Apply); keys `0`, `[`, `]`; the smoke test's header within 120 columns.
+- **Lines in shared files**: `app.js` (the import of `tabByKey`, the key rows and the key handler), `layout.js`
+  (`tabByKey`), `fitting.js` (`followersShown`, `tabOfJob`, `jobsOfTab`), `forms.js` (`number_list`), `formview.js`
+  (`grows`), `tabs/fit.js`, `tabs/fitjob.js`, `tabs/data.js`, `tabs/nucleus.js`, `lists.js` (`onlyColumns`),
+  `tabs/results.js`, `tabs/endf.js`, `style.css` (a block at the end), `selftest.js` (Convert pressed),
+  `routes.py` (four rows; the describe row's doc), `server.py` (three `endf_*` methods; `first_view` in describe),
+  `engine.py`, `evaluations.py`, `state.py`, `tests/pyazr/CMakeLists.txt`, `smoke_test.py` (two views).
+- **Verified**: see the branch's report (the new tests, `tests/pyazr/ui/` whole, node tests, the smoke test with its
+  screenshots read, the consistency test, the documents built, `ctest -LE slow`).  No C++ changed: no project
+  comparison.
+- **Open**: `POST /api/project/open` resolves a relative path in the server's working directory, not the project's
+  (the kept project's answer carries `open_path`, absolute); `pyazr.endf.write` names `session.file` in the MF=1
+  text (the page writes through a session under the project's name); a folded data set's curve alone
+  (`Session.model_curve`) is folded on its own mesh (2.4e-3 from the data session's on T2's thin target), all of
+  them together (`model_curves`, the page) on one (4e-9); the curve's grid is linear (a resonance narrower than
+  its spacing is missed: `points=`).
+
 ## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits
@@ -198,6 +234,11 @@ output files. Outside: the timing check of `pyazr_evaluation` fails under load.
   `prior_build`, `prior_write`; its files are the page's one listing with `output`, `Server.files(outputs=True)`),
   `pyazr.session.basis_of` (`Session.basis` uses it).  `web_ui.md` section 11.15; `prior_builder.rst` "On the page",
   `web_interface.rst`, `web_ui_api.rst`, `fitting.rst`, the Developer Guide.
+- **A chain records its parametrization** (the PI, 2026-11-14): the sampler job writes `parametrization` (the
+  session's basis, the values of `priors.BASES`) into `chain_<id>.json` (`jobs.py`, one statement);
+  `priors.chain_basis(path)` reads it (`read_chain` unchanged); the prior builder's part `chain` refuses another
+  parametrization and notes a chain that does not record it.  The page asked nothing; it showed the assumption as a
+  note, now the recorded parametrization (the build's notes).
 - **Lines in shared files**: `pyazr/ui/static/app.js` (the import of `tabs/prior.js`; the `TABS` row `prior`),
   `pyazr/ui/static/tabs/fit.js` (the link, one line in the parameters' bar), `pyazr/ui/server.py` (the import of
   `prior`; three methods under "the prior builder"), `pyazr/ui/routes.py` (three rows after the rate's grids),

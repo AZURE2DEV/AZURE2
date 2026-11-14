@@ -530,13 +530,18 @@ for a kind the engine describes, the entries of
 one row there for a new entry of ``describe``); the list of pairs shows
 ``ProjectPair.FIELDS`` marked ``list`` (``pyazr/nuclear_part.py``, a new
 field of a pair is one row with its title and unit; the pair form takes
-``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). A **control** of a form
+``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). Which of those columns the
+first view keeps is one table, ``FIRST_VIEW_COLUMNS`` (``pyazr/ui/first_view.py``,
+served as ``first_view`` of ``GET /api/describe``). A **control** of a form
 is the row of its value type in ``WIDGETS`` (``pyazr/ui/static/forms.js``):
 a ``path`` offers the project folder's files (``GET /api/files``) and is
 previewed under the field (``tabs/records.js`` ``filePreview``, ``GET
 /api/project/records/{name}/preview``), a ``reference`` offers the records and
-"new …", a ``number_list`` a box per number. A **kind of job** the Fit tab's
-first view offers is a kind of ``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``).
+"new …", a ``number_list`` a box per number and one that ``grows`` (the form
+adds the next box as it is typed in). A **kind of job** the Fit tab's
+first view offers, and whose button follows a finished job there, is a kind of
+``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``); a tab lists the jobs of the rows
+whose ``tab`` it is.
 A **view of the first view** is a row of ``FIRST_VIEW`` (``layout.js``); a
 row with ``when`` is shown under the condition of that name (``CONDITIONS``
 in ``app.js``).

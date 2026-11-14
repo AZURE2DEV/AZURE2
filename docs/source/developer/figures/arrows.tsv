@@ -136,6 +136,8 @@ Server	SessionWorker	owns	frontends		Server.worker = SessionWorker(...)
 Server	JobTable	owns	frontends		Server.jobs = JobTable(...)
 Engine	pyazr::Session	owns	frontends		Engine.s = pyazr.Session(file, cwd=cwd)
 RateSession	_azure2::Session	owns	frontends		RateSession._engine = _azure2.Session(self.file, opts) (opts.rate_entrance, rate_exit)
+CurveSession	pyazr::Session	owns	frontends		CurveSession.session = Session(a trimmed copy, extrapolations=True)
+CurveSession	pyazr::Session	reads	frontends	const	CurveSession.data_session: the data session the curves are planned from
 Covariance	Project	reads	frontends	const	covariance.build(project, ...) reads the rows through _azure2.data_rows of its text
 WorkingCopy	azure2::Results	reads	evaluation	nonconst	WorkingCopy::CalculatePointsInParallel(..., Results &), WorkingCopy::BeginEvaluation(Results &): the caller's buffer
 AZURECalc	Objective	reads	inference	const	Objective::Engine() (const Objective &) in AZURECalc::operator() and AZURECalc::Chi2OnWith

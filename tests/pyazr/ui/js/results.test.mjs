@@ -161,3 +161,29 @@ test("a band's legend names its job and the point it is drawn around; the job wh
     upper: [1, 1] }] } }, "band of job b");
   assert.equal(s.series[0].d.band.label, "band of job b");
 });
+
+test("the model curve: one line per branch along its variable, the server's numbers; the points stay points", () => {
+  const curve = { variable: "energy", e_cm: [0.1, 0.15, 0.2, 0.1, 0.2], e_x: [7.1, 7.15, 7.2, 7.1, 7.2],
+    angle_cm: [90, 90, 90, 150, 150], model: [1, 5, 2, 3, 4], s_factor: { model: [10, 50, 20, 30, 40] },
+    branches: [{ start: 0, stop: 3, fixed: "angle_lab", value: 90 }, { start: 3, stop: 5, fixed: "angle_lab",
+      value: 150 }] };
+  const s = r.seriesOf({ datasets: [set("a", "q_s", "b", { curve, s_factor: { model: [29, 11, 21],
+    value: [30, 10, 20], error: [3, 1, 2], unit: "MeV*b" } })] }, records, schema);
+  const [plot] = p.resultsPlots(s, all, { schema });
+  const models = plot.traces.filter((t) => t.role === "model");
+  assert.deepEqual(models.map((t) => t.name), ["a (θ_lab = 90 deg): model, 3 points",
+    "a (θ_lab = 150 deg): model, 2 points"]);
+  assert.deepEqual(models.map((t) => [t.x, t.y]), [[[0.1, 0.15, 0.2], [1, 5, 2]], [[0.1, 0.2], [3, 4]]]);
+  assert.deepEqual(plot.traces.find((t) => t.role === "data").x, [0.1, 0.2, 0.3]);
+  assert.deepEqual(plot.traces.find((t) => t.role === "residual").y, [1, 0.5, -1]);
+  const sf = p.resultsPlots(s, { ...all, y: "s_factor" }, { schema })[0].traces.filter((t) => t.role === "model");
+  assert.deepEqual(sf[0].y, [10, 50, 20]);
+  // against the angle an energy curve is not drawn: the line through the points is
+  const byAngle = p.resultsPlots(s, { ...all, x: "angle_cm" }, { schema })[0].traces.filter((t) => t.role === "model");
+  assert.deepEqual(byAngle.map((t) => t.name), ["a: model at the points"]);
+  // a refused curve: the line through the points
+  const refused = r.seriesOf({ datasets: [set("a", "q_s", "b", { curve: { refused: { what: "w" } } })] }, records,
+    schema);
+  assert.deepEqual(p.resultsPlots(refused, all, { schema })[0].traces.filter((t) => t.role === "model")
+    .map((t) => t.name), ["a: model at the points"]);
+});

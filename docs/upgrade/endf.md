@@ -735,7 +735,9 @@ model and two ratios formed in the server's Python (`ratio_to_data` with its err
 accept is `POST /api/endf/accept` (job id, `to`, `overwrite`), not a route of the job table; the two jobs build no
 session. Two rows of `MEANINGS` were added for CHECKR's LTP=15 messages ("INVALID ANGULAR REPRESENTATION LTP=15",
 "NW SHOULD BE SET TO ****"), seen with the built CHECKR 8.24 on a LAW=5 LTP=15 file. Not built here: "New project
-from ENDF" and the export (another branch), extrapolations' curves (only data sets).
+from ENDF" and the export (built since, `web_ui.md` section 11.16: the jobs `endf_import` and `endf_write`, the
+routes `POST /api/endf/resonances`, `POST /api/endf/keep_project`, `GET /api/endf/export`), extrapolations' curves
+(only data sets; the curves route also gives each file's values on the grid of a data set's model curve).
 
 The list as designed:
 

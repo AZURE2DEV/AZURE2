@@ -90,6 +90,14 @@ add_test(NAME pyazr_endf_read
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_read_test.py)
 set_tests_properties(pyazr_endf_read PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# The model as a curve over a data set (Session.model_curve): at the data points equal to Session.evaluate on T1, T2
+# and a ratio to Rutherford (unfolded to rounding, folded to the quadrature), between the points equal to the same
+# points read as data, energy shifts, the grid, the refusals with their three parts (about 25 s).
+add_test(NAME pyazr_model_curve
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/model_curve_test.py)
+set_tests_properties(pyazr_model_curve PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # pyazr.endf's start model: the engine's two level doors against its own transformation (T1, T2, 13N), the
 # ENDF/B-VIII.1 extract into a project reproducing its MF=3/MT=600, the refusals, write then read of T1 and T2.
 add_test(NAME pyazr_endf_model
@@ -1026,10 +1034,12 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # and new-level edits against the same Project calls (T1, T2).  utilities_test: the covariance builder's routes (the
 # file and the field as one history entry) and the rate job against pyazr.covariance and pyazr.rate (T1).
 # prior_builder_test: the prior builder's routes against pyazr.priors.build, the file and the key as one entry (T1).
+# curves_test: the model curve route and an ENDF file on the curve's grid against pyazr.model_curve (T1, T2).
+# endf_project_test: a new project from an ENDF-6 file and the project written as one, against pyazr.endf (T1).
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
         ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py ui/thm_routes_test.py
         ui/nucleus_routes_test.py ui/utilities_test.py ui/endf_test.py
-        ui/prior_builder_test.py)
+        ui/prior_builder_test.py ui/curves_test.py ui/endf_project_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

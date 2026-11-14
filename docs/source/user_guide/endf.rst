@@ -284,7 +284,15 @@ The web interface's **ENDF** tab (:doc:`web_interface`) makes the same calls: th
 what each holds (``summary()``), every data set with the files' values, the data and the model and the ratios
 (``curves(data, session=s)``), the codes found (``checkers()``), **Check** (``check(path, codes=...)``) and
 **Correct** (``standardize(path, program=...)``, then ``accept(to=...)`` or, after a second question,
-``accept(overwrite=True)``) as jobs.
+``accept(overwrite=True)``) as jobs.  **New project from a file** shows ``read(path).resonances(isotope=,
+energy_range=)`` (or its refusal) before anything is written, runs ``to_project(record, path,
+separation_energy=..., material=m)`` as a job into a directory of its own and shows the report (``print(conversion)``
+in Python), then writes the project as a new file of the folder; the page serves one project, so **Open … here**
+replaces the open one (``pyazr ui new.azr`` opens a page of its own).  **Export this project** shows
+``from_session(s, x)[1]`` (the losses and the photon widths) before the run and runs ``write(s, path, x,
+header={...}, energy_range_MeV=..., tolerance=..., number_form=...)`` as a job; the file then appears among the tab's
+files, ready for **Check**.  The model is drawn on the grid of ``Session.model_curve`` and each file's values on the
+same grid (``curves(curve, session=s)``: a curve is taken as a data set is).
 
 What reading refuses and what it reports
 ----------------------------------------

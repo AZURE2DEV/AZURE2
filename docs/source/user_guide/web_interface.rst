@@ -45,8 +45,12 @@ The first view and the expert's
 
 The page opens in its **first view**: the tabs follow the old setup program's path and words, **Project**,
 **Particle Pairs**, **Levels and Channels**, **Segments** (Segments From Data, Segments Without Data, Model
-data), **Experimental Effects** (targets, beams, detectors), **Fit**, **Plot** and **Reaction Rate**; a project
-with THM content also shows **Physics** and **THM** (after Plot).  Each screen holds what its task
+data), **Experimental Effects** (targets, beams, detectors), **Fit**, **Plot**, **ENDF** and **Reaction Rate**; a
+project with THM content also shows **Physics** and **THM** (after Plot).  The lists of data sets and of particle
+pairs hold the old program's columns (the reaction, the observable, the data file, the energy and angle ranges,
+active, the normalization; the partners with their spins, parities and masses, the excitation and separation
+energies, the pair type, the channel radius); the other columns are in the expert's view and in each record's
+form.  Each screen holds what its task
 needs: a field the engine's table marks as rarely set (the source, EXFOR and DOI of a data set, its pair keys,
 THM experiment, reference cross section, UPOS, a target's phase, Doppler broadening or screening, ...) waits under
 **More fields** unless the record sets it, and every field's meaning is written under its title.  The Project tab
@@ -89,7 +93,8 @@ normalization also offers **new …**, which opens the form of a new record of t
 
 *Run a fit and look at it.*  **Fit** › the method › **Run**; follow its progress; **Accept into project** ›
 **Calculate**: every data set against the new model, with what the fit changed.  The first view offers fits; MINOS,
-the sampler and the bands are under **More: …** in the job form (the expert's view offers every kind).  MINOS's
+the sampler and the bands are under **More: …** in the job form, and beside a finished fit's result (the expert's
+view offers every kind).  MINOS's
 parameters are ticked among the free parameters (none ticked: every one).
 
 *Calculate a reaction rate.*  **Reaction Rate** › the entrance and exit pairs, the temperatures › **Calculate**: the
@@ -109,7 +114,8 @@ program and of pyazr, the reference every publication that uses AZURE2's results
 *Physical Review C* **81**, 045805 (2010)) and the link to this documentation.  The page's colours are the icon's:
 its blue is the accent, its red marks an error and its green a success, and each of these states also carries a
 symbol (✕, ⚠, ✓), so that nobody has to tell red from green.  The line at the bottom shows the engine's last
-message.  The keys are listed by ``?``: ``1`` … ``9`` switch to the tabs as the bar shows them, Ctrl+Z and
+message.  The keys are listed by ``?``: ``1`` … ``9`` and ``0`` switch to the first ten tabs as the bar shows
+them, ``[`` and ``]`` to the previous and the next tab, Ctrl+Z and
 Ctrl+Shift+Z undo and redo,
 ``/`` filters the current table, the arrow keys and Enter move through a table, Ctrl+Enter applies a form, Esc
 reverts it, ``t`` switches between the system's theme, light and dark.  Each view has its own address
@@ -164,8 +170,9 @@ engine's description of the fitter and what it gives (the program's switch, a co
 whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
 on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the reaction rate (drawn by the
-Rate tab).  A job runs in its own process on the text of
-the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
+Rate tab).  Under the form, the Fit tab's jobs (newest first; the ENDF tab's checks and conversions and the Rate tab's rates are
+listed in their own tabs, and **Every job** lists the jobs of every tab here).  A job runs in its own process on the
+text of the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
 χ² —).  On the right the job: its calls, the objective (χ² + priors) at the last call and the best so far, the
 time, a plot of the objective against the call (log scale), the last lines of its log, **Stop** (it ends before its
 next objective call and keeps its best point) and **Kill** (at once; the best point reported so far is kept).  A
@@ -215,9 +222,14 @@ server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show
 S factor where the data set is a cross section with a charged entrance; **log y**).  Each series gets a plot of its
 own (**together** draws them in one plot per unit), with the data times the normalization in use and their errors,
 the model, and under it, on the same x axis, the engine's residuals (m − n·d)/(n·σ), whose squares are the χ² of the
-fit.  The model of a data set is drawn at its points (a resonance narrower than their spacing is not drawn); an
-extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid over a data set's range shows the
-model between its points.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
+fit.  The model of a data set is drawn on a fine grid over its range (``Session.model_curve``: values evenly
+spaced between its first and last point and at the points themselves; one line per angle of an excitation function
+measured at several angles, or per energy of an angular distribution), the points stay points and the residuals
+are at the points.  The curves come a moment after the points (the first time the engine sets them up; on a capture
+project with external capture, such as 13N, about 15 s); until then, and for a data set that cannot be drawn as a
+curve (its columns give each point its own window, or its points are not one function of one variable), the line
+joins the model at the points, and the reason is written under the plots.  A resonance narrower than the grid's
+spacing is not drawn; an extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid shows it.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
 shades the band of the newest band job of the Fit tab around each series; the head says which job and project text
 it belongs to and which parameters it varied, and its legend names the job and the point it is drawn around (the
 model at that job's start point: accept the point to see the model line inside it).  When the project's text is a
@@ -244,16 +256,16 @@ read it, written and named in ``<config>`` as one edit, or removed (:doc:`prior_
 ENDF evaluations
 ----------------
 
-The **ENDF** tab (in the expert's view; ``#/endf``) puts an evaluated file beside the project, with
-``pyazr.endf`` (:doc:`endf`). It is named after the format because that is the word an evaluator searches for, and
-both of its screens start from an ENDF-6 file.
+The **ENDF** tab (``#/endf``) puts an evaluated file beside the project, with ``pyazr.endf`` (:doc:`endf`). It is
+named after the format because that is the word an evaluator searches for, and each of its screens starts or ends
+with an ENDF-6 file.
 
 - **Over the data** (``#/endf?files=a.endf,lib/b.endf``): the ENDF-6 files of the project folder (and four levels
   below) with a box each; a path inside the project's root can be typed. Each file shown has a colour, and a line
   that opens what it holds (MAT, target and projectile, library, lab, date, authors, LRP, EMAX, the sections in the
-  manual's words and the header text). For every data set, the files' values at its points in its quantity and unit
-  are drawn over the data (times its normalization) and the model at the working x, with the ratios of each file
-  to the data and to the model below; where a file has nothing for a data set (another reaction, a quantity an ENDF
+  manual's words and the header text). For every data set, the files' values in its quantity and unit are drawn
+  over the data (times its normalization) and the model at the working x, on the grid of the data set's model curve
+  where it has one, with the ratios of each file to the data and to the model at the points below; where a file has nothing for a data set (another reaction, a quantity an ENDF
   file does not hold), its refusal says what, what is allowed and what to do, in the data set's place. Which files
   are shown is part of the address, not of the project.
 - **Check and correct** (``#/endf/check?file=a.endf``): the checking codes pyazr knows, each found or not (found
@@ -265,7 +277,21 @@ both of its screens start from an ENDF-6 file.
   click away. **Correct** runs a code that rewrites (STANEF, FIXUP, DICTIN, ENDF2C) on a copy, after saying what it
   does to numbers; the candidate's difference per section (unchanged, bookkeeping, form, numbers with the digits
   lost, restructured) is shown, then **Keep as a new file** (beside the original unless named) or **Replace**, which
-  asks a second time. Neither changes the project text.
+  asks a second time. Neither changes the project text. A finding that concerns no section reads "whole file".
+- **New project from a file** (``#/endf/new?file=a.endf``, or **New project…** beside a file): what the file's MF=2
+  holds (its pairs, spin groups and levels; or, for a file without R-Matrix Limited parameters, the reason, what is
+  allowed and what to do), with nothing written; the isotope and the energy range of MF=2, the separation energy
+  (AME2020's by default, or a number in MeV) and the new project's name; **Convert** starts a job that makes the
+  project in a directory of its own and shows the report of every conversion (the separation energy and its
+  source, each mass against AME2020, the pairs, the levels with the file's ER, the formal and the Brune energy and
+  the widths written, what was not written, the notes) and the project's text; **Write the new project** puts it
+  into the folder as a new file (never over an existing one); then **Open … here** makes this page serve it (the
+  page serves one project; save the open one first), or ``pyazr ui <file>`` in a terminal opens a page of its own.
+- **Export this project** (``#/endf/export``): what an ENDF-6 file of the project at the working x will not hold,
+  before it is written (the losses, the photon widths, the sections not written), the MF=1 fields (MAT, authors,
+  laboratory, date, reference, library), the energy range (the data's by default), the grid's tolerance and the
+  number form; **Write** starts a job that writes a new file of the folder; its result lists the sections, the grid
+  of each MF=3 section, how closely MF=2 reproduces MF=3, the losses, and **Check…** on the file.
 
 Physics
 -------
@@ -309,7 +335,7 @@ Not there yet
 In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are
 edited in the Nucleus tab, not in the THM tab.  The session's options as editable keys, the file browser, EXFOR and
 ENSDF imports, the Wigner limits and physical
-widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, and live updates pushed by the server (the page asks every three seconds whether another
+widths of the channels, the lab energy as an x axis, and live updates pushed by the server (the page asks every three seconds whether another
 client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is
 part of the package, so the page loads nothing from the network, and without it the plots appear as tables of their
 numbers.

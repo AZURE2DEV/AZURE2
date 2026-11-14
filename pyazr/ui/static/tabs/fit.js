@@ -8,8 +8,8 @@
 // or after a second with its progress); a reload finds it again in GET /api/jobs.
 
 import { pathOf } from "../api.js";
-import { chainRows, filterParameters, isFinal, jobToShow, kindsOf, matrixCsv, matrixRows, parameterRows, variedText,
-  shownColumns } from "../fitting.js";
+import { chainRows, filterParameters, isFinal, jobToShow, jobsOfTab, kindsOf, matrixCsv, matrixRows, parameterRows,
+  variedText, shownColumns } from "../fitting.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, download, h, section } from "../ui.js";
 import { jobPanel, jobsList, jobForm } from "./fitjob.js";
@@ -21,7 +21,9 @@ export async function render(ctx, el, args) {
   if (!ctx.kinds) ctx.kinds = await ctx.api.get("/api/kinds");
   const [table, jobs, records] = await Promise.all([ctx.api.get("/api/jobs/kinds"), ctx.api.get("/api/jobs"),
     ctx.api.get("/api/project/records")]);
-  const listed = jobToShow(jobs, args[0] === "job" ? args[1] : null);
+  // this tab's jobs (a job of another tab is shown here only by its link, #/fit/job/<id>)
+  const own = jobsOfTab(jobs, table, "fit");
+  const listed = args[0] === "job" ? jobToShow(jobs, args[1]) : jobToShow(own, null);
   const job = listed ? await ctx.api.get(pathOf("/api/jobs", listed.id)) : null;
 
   // the parameter rows need the session of the current text; refused only while a job holds the budget and the
@@ -49,7 +51,9 @@ export async function render(ctx, el, args) {
   if (asked.job && view.form.kind !== asked.job) Object.assign(view, { form: { kind: asked.job,
     method: asked.method }, allKinds: true });
   ctx.freeNames = Object.keys(x || {});  // the free parameters a job's list of names is chosen from
-  const left = h("div", {}, jobForm(ctx, table, job, view), jobsList(ctx, jobs, job));
+  const left = h("div", {}, jobForm(ctx, table, job, view), jobsList(ctx, view.allJobs ? jobs : own, job, {
+    table, others: jobs.filter((j) => !own.includes(j)), all: Boolean(view.allJobs),
+    toggle: () => { view.allJobs = !view.allJobs; ctx.navigate(location.hash); } }));
   const right = h("div", {}, job ? jobPanel(ctx, job, table, view)
     : section("Job shown", h("p.hint", {}, "No job yet: choose a recipe and press Run. A job runs in its own process "
       + "on the text of the current revision; the page follows its progress, and Stop ends it before its next "

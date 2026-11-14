@@ -561,6 +561,18 @@ class Session(
         from .evaluate import evaluate
         return evaluate(self, x)
 
+    def model_curve(self, name, x=None, points=200):
+        """The model of the data set ``name`` on a fine grid over its range at the fit vector ``x`` (default
+        ``parameters.x0``): a :class:`pyazr.model_curve.ModelCurve` (c.m. and lab energies, c.m. angles and the model
+        in the unit of ``evaluate(x).data[i].model``, at ``points`` values per branch and at the data set's own
+        points; one branch per fixed angle of an excitation function, or per fixed energy of an angular
+        distribution).  The engine's evaluation of extrapolation records made from the data set's record, in a
+        session of the extrapolations opened and closed by the call (:mod:`pyazr.model_curve`; several data sets in
+        one session: :func:`pyazr.model_curve.model_curves`).  A data set that is not one function of one variable,
+        or whose columns give each point its own window or order, raises :class:`pyazr.ParameterError`."""
+        from .model_curve import model_curve
+        return model_curve(self, name, x, points)
+
     # -- the external region, and the caches that make it affordable ----------
 
     @engine_call
