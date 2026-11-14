@@ -313,9 +313,9 @@ int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
 }
 
 /*!
- * Builds the parameter-index map by mirroring, in the exact same order, the
+ * Builds the parameter-index map: the level block from the compound's layout
+ * (CNuc::ParameterLayout), then by mirroring, in the exact same order, the
  * assignment loops in:
- *   - CNuc::FillCompoundFromParams      (level energies + gammas)
  *   - WorkingCopy::FillNormsFromParams        (norms, only for IsVaryNorm segments)
  *   - WorkingCopy::FillEnergyShiftsFromParams (one energy shift per segment, then
  *                                        one sqrt(E) coefficient per segment,
@@ -331,28 +331,27 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
   ParamIndexMap map;
   int i = 0;
 
-  // --- R-matrix parameters: mirror FillCompoundFromParams exactly. ---
+  // --- R-matrix parameters: the level block, as the compound's layout places it. ---
   map.eFlat_.assign(compound->NumJGroups(), {});
   map.gammaFlat_.assign(compound->NumJGroups(), {});
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     const JGroup *jGroup = compound->GetJGroup(j);
     map.eFlat_[j - 1].assign(jGroup->NumLevels(), -1);
     map.gammaFlat_[j - 1].assign(jGroup->NumLevels(), std::vector<int>(jGroup->NumChannels(), -1));
-    for (int la = 1; la <= jGroup->NumLevels(); la++) {
-      // Energy parameter.
+  }
+  for (const LevelParameterLayout::Slot &slot : compound->ParameterLayout().Slots()) {
+    const int j = slot.group, la = slot.level, ch = slot.channel;
+    if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy) {
       map.eFlat_[j - 1][la - 1] = i;
       map.eIndex_[{j, la}] = i;
       map.desc_.push_back(ParamDesc{ParamKind::LevelEnergy, j, la, -1, -1, false});
-      i++;
-      // One gamma per channel.
-      for (int ch = 1; ch <= jGroup->NumChannels(); ch++) {
-        map.gammaFlat_[j - 1][la - 1][ch - 1] = i;
-        map.gammaIndex_[{j, la, ch}] = i;
-        const bool radiative = compound->GetGammaDecays().OwnsSlot(j, la, ch);
-        map.desc_.push_back(ParamDesc{radiative ? ParamKind::RadiativeDecay : ParamKind::Gamma, j, la, ch, -1, false});
-        i++;
-      }
+    } else {
+      map.gammaFlat_[j - 1][la - 1][ch - 1] = i;
+      map.gammaIndex_[{j, la, ch}] = i;
+      const bool radiative = compound->GetGammaDecays().OwnsSlot(j, la, ch);
+      map.desc_.push_back(ParamDesc{radiative ? ParamKind::RadiativeDecay : ParamKind::Gamma, j, la, ch, -1, false});
     }
+    i++;
   }
 
   // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---

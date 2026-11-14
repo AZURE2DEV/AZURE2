@@ -22,21 +22,17 @@
 
 void CNuc::FillCompoundFromParams(const vector_r &params) {
   const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, params);  // GammaDecayMap.h
-  int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      ALevel *level = this->Group(j)->GetLevel(la);
-      levelState_.SetE(j, la, p[i]);
-      i++;
-      std::vector<double> g;
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
-        levelState_.SetGamma(j, la, ch, p[i]);
-        levelState_.SetECGamma(j, la, ch, p[i]);
-        g.push_back(p[i]);
-        i++;
-      }
-      levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
+  for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
+    const int j = slots.group, la = slots.level;
+    levelState_.SetE(j, la, p[slots.energy]);
+    std::vector<double> g;
+    for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++) {
+      const double gamma = p[slots.amplitude[ch - 1]];
+      levelState_.SetGamma(j, la, ch, gamma);
+      levelState_.SetECGamma(j, la, ch, gamma);
+      g.push_back(gamma);
     }
+    levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), this->Group(j)->GetLevel(la), 1.0, g));
   }
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
   if (captureMaskSetup_) this->FormalCaptureMasksFromParams();

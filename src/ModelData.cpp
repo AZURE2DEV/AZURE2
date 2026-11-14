@@ -149,8 +149,9 @@ struct Column {
 
 /// The columns of every level parameter the level rows depend on that has a packed column in pmap: the parameters of
 /// the rows' J^pi groups, of all groups with external capture (a photon width's external part depends on the final
-/// state).  Each parameter is set back exactly (CNuc::SetFitLevelParameter); Park's shift functions, which the
-/// transformation moved with the energies, are recomputed at the end.
+/// state), in the layout's order (CNuc::ParameterLayout).  Each parameter is set back exactly
+/// (CNuc::SetFitLevelParameter); Park's shift functions, which the transformation moved with the energies, are
+/// recomputed at the end.
 std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const ModelDataSet &set,
                                   const ParamIndexMap &pmap) {
   std::vector<Column> cols;
@@ -159,30 +160,27 @@ std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const
     if (!row.isScatteringLength) groups.insert(row.datum.group);
   const bool allGroups = configure.paramMask & Config::USE_EXTERNAL_CAPTURE;
   std::vector<double> qp, qm;
-  for (int j = 1; j <= compound->NumJGroups(); j++) {
+  for (const LevelParameterLayout::Slot &slot : compound->ParameterLayout().Slots()) {
+    const int j = slot.group, la = slot.level, ch = slot.channel;
     if (!allGroups && !groups.count(j)) continue;
-    const JGroup *group = compound->GetJGroup(j);
-    for (int la = 1; la <= group->NumLevels(); la++)
-      for (int ch = 0; ch <= group->NumChannels(); ch++) {
-        const int f = ch == 0 ? pmap.EIndexFlat(j, la) : pmap.GammaIndexFlat(j, la, ch);
-        if (f < 0 || f >= pmap.NumFull() || pmap.FullToPacked(f) < 0) continue;
-        const double v = ch == 0 ? compound->State().E(j, la) : compound->State().Gamma(j, la, ch);
-        const double h = ch == 0 ? kEnergyStep * std::max(1.0, std::fabs(v)) : kAmplitudeStep * std::max(std::fabs(v), kAmplitudeFloor);
-        const double up = v + h, down = v - h;
-        compound->SetFitLevelParameter(j, la, ch, up);
-        LevelValues(compound, configure, set, qp);
-        compound->SetFitLevelParameter(j, la, ch, down);
-        LevelValues(compound, configure, set, qm);
-        compound->SetFitLevelParameter(j, la, ch, v);
-        Column c;
-        c.j = j;
-        c.la = la;
-        c.ch = ch;
-        c.dq.assign(set.rows.size(), 0.0);
-        for (std::size_t k = 0; k < set.rows.size(); k++)
-          if (!set.rows[k].isScatteringLength) c.dq[k] = (qp[k] - qm[k]) / (up - down);
-        cols.push_back(c);
-      }
+    const int f = ch == 0 ? pmap.EIndexFlat(j, la) : pmap.GammaIndexFlat(j, la, ch);
+    if (f < 0 || f >= pmap.NumFull() || pmap.FullToPacked(f) < 0) continue;
+    const double v = ch == 0 ? compound->State().E(j, la) : compound->State().Gamma(j, la, ch);
+    const double h = ch == 0 ? kEnergyStep * std::max(1.0, std::fabs(v)) : kAmplitudeStep * std::max(std::fabs(v), kAmplitudeFloor);
+    const double up = v + h, down = v - h;
+    compound->SetFitLevelParameter(slot, up);
+    LevelValues(compound, configure, set, qp);
+    compound->SetFitLevelParameter(slot, down);
+    LevelValues(compound, configure, set, qm);
+    compound->SetFitLevelParameter(slot, v);
+    Column c;
+    c.j = j;
+    c.la = la;
+    c.ch = ch;
+    c.dq.assign(set.rows.size(), 0.0);
+    for (std::size_t k = 0; k < set.rows.size(); k++)
+      if (!set.rows[k].isScatteringLength) c.dq[k] = (qp[k] - qm[k]) / (up - down);
+    cols.push_back(c);
   }
   if (configure.paramMask & Config::USE_PARK_FORMALISM) compound->CalcShiftFunctions(configure);
   return cols;

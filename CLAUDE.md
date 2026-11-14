@@ -373,10 +373,11 @@ parameter name].
    `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
    `WorkingCopy::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
-3. Follow the layout in `BuildParamIndexMap`; the fields that say what it belongs to are rows of the record table
-   `ParameterFields()` (`api/src/pybind_records.cpp`: name, unit, the kinds it describes, owner flag, doc, reader),
-   which pyazr's `Parameter` and `Parameters.table()` read with no Python edit (`tests/pyazr/parameter_records_test.py`
-   fails for a kind no owner field describes).
+3. Follow the layout in `BuildParamIndexMap` (a number of a level: a slot of `LevelParameterLayout`, which every
+   walk of the level block reads; Developer Guide, "A level parameter"); the fields that say what it belongs to are
+   rows of the record table `ParameterFields()` (`api/src/pybind_records.cpp`: name, unit, the kinds it describes,
+   owner flag, doc, reader), which pyazr's `Parameter` and `Parameters.table()` read with no Python edit
+   (`tests/pyazr/parameter_records_test.py` fails for a kind no owner field describes).
 4. Docs: the kinds table of `reference/output_files.rst` and `parameter_kinds.md` section 1 [check 23]; a project
    with the kind in `tests/pyazr/parameter_kinds_test.py` (its names rebuilt from the records).
 
