@@ -15,6 +15,8 @@ for bit; the plain capture segment's total differs from its E1 part (control); p
 gives the part, and times extra["sfactor_conversion"] the S factor.  The start-head engine fails the first checks.
 
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/api_model_value_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -68,10 +70,10 @@ def main():
                   E1 in obs and E2 in obs, f"{obs}")
             k1, k2 = obs.index(E1), obs.index(E2)
             kt = k1 - 1  # the plain capture segment, written just before the two copies
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             entry = {
                 "update_segments_rwa": lambda: s.update_segments_rwa(x),
-                "update_segments": lambda: s.update_segments(np.asarray(m.params, float)),
+                "update_segments": lambda: s.update_segments(np.asarray(s.params_values(), float)),
                 "update_segments_all_rwa": lambda: s.update_segments_all_rwa(np.asarray(s.params_all_rwa(), float)),
             }
             for name, call in entry.items():

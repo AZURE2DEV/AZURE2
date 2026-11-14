@@ -79,7 +79,7 @@ With a spin–orbit term every channel function of the pair depends on :math:`(l
 - external capture: the entrance wave of :math:`(l_i, J_i)` and the bound state of :math:`(l_f, J_f)`.
 
 The Coulomb phase :math:`e^{i(\sigma_l - \sigma_0)}` is the point-Coulomb one in every case.  In pyazr,
-``coulomb_functions(pair, E, L, J=...)`` needs :math:`J` for a pair with the term (``E_SO_NEEDS_J``) and refuses it
+``channel_functions(pair, E, l, J=...)`` needs :math:`J` for a pair with the term (``E_SO_NEEDS_J``) and refuses it
 for any other (``E_SO_NO_TERM``).
 
 Checks

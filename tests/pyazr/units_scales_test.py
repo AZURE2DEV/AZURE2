@@ -104,7 +104,7 @@ def write_project(work, name, text, files):
 def terms_of(d):
     """(model values, chi^2 terms) at the project's start parameters."""
     with Session(os.path.join(d, "m.azr"), cwd=d) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         model = np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(x).data]])
         return model, np.asarray([m.evaluate(x).chi2], float)
 
@@ -218,7 +218,7 @@ with tempfile.TemporaryDirectory() as work:
         "    norm           1 fixed\n", "    norm           1 fit prior 1 5%\n    shift          offset 2 keV fit\n")),
         {"s.dat": rows_s})
     with Session(os.path.join(in_sg, "m.azr"), cwd=in_sg) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         c, g = m.objective().value_and_grad(x)
         worst = 0.0
         for i in range(len(x)):

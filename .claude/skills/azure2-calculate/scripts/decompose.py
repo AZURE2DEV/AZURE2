@@ -101,7 +101,7 @@ def main(argv=None):
     ap.add_argument("--with", dest="other", help="a second level for the pairwise interference term")
     ap.add_argument("--dataset", required=True, help="the data set's (or extrapolation's) record name")
     ap.add_argument("--extrapolations", action="store_true", help="evaluate the project's extrapolations")
-    ap.add_argument("--params", help="parameter file (param.sav), by name")
+    ap.add_argument("--params", dest="parameter_file", help="parameter file (param.sav), by name")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--zero-bound", action="store_true", help="also zero the bound final states' ANCs")
     ap.add_argument("--out", help="write the table here (default: standard output)")
@@ -110,7 +110,7 @@ def main(argv=None):
     opts = {k: option_value(v) for k, v in (o.split("=", 1) for o in a.option)}
     try:
         with pyazr.Session(a.azr, data_mode=not a.extrapolations, **opts) as s:
-            x = s.parameters.read(a.params) if a.params else s.parameters.x0
+            x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
             r = decompose(s, x, a.level, a.dataset, a.other, a.zero_bound)
     except (KeyError, pyazr.Error) as err:
         print(f"error: {err}", file=sys.stderr)

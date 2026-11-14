@@ -20,6 +20,8 @@ A reader of the file per call fails 1.
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/azr_parse_cache_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import builtins
 import os
@@ -89,7 +91,7 @@ def main():
         text = open(azr).read()
 
         with Session(azr, cwd=work) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             n = m.nsegments
             names = [d.name for d in m.active_datasets]
             check("the model has the E1 data set", "capture_e1" in names, f"{names}")

@@ -14,7 +14,7 @@ of the engine (api/src/pybind_records.cpp: _azure2.parameter_record_fields(), pa
      Project.levels(): a level energy fixed as written or below every particle threshold of its nucleus, a channel
      row fixed as written or written as 0, a channel without a row fixed at zero; a data set's nuisance through the
      engine's description of the project; a THM background term through the program's thm_experiments.out);
-  3. on the same projects: x0 is params_rwa (a copy), free / of_kind / of_level / by_name select rows, put and take
+  3. on the same projects: x0 is parameters.x0 (a copy), free / of_kind / of_level / by_name select rows, put and take
      write and read x by row, write and read a parameter file give x back, a fixed row is refused by put; on 13N
      pyazr.snapshot.write_values puts x into a Project in memory (the file untouched) and the project saved
      from it starts at x;
@@ -24,6 +24,8 @@ of the engine (api/src/pybind_records.cpp: _azure2.parameter_record_fields(), pa
 Needs the compiled engine and the program (AZURE2_BIN); without them exits 77 (ctest: Skipped).
 
 Run from anywhere:  AZURE2_BIN=<build>/src/AZURE2 python3 tests/pyazr/parameter_records_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import glob
 import os
@@ -168,8 +170,8 @@ def check_project(label, path, cwd, write_back=False):
         check(f"{label}: table(): every row says what it belongs to (an owner field of its kind)",
               all(p.owner_text() for p in P), [p.name for p in P if not p.owner_text()][:5])
         x0 = P.x0
-        check(f"{label}: x0 is params_rwa, and a copy",
-              np.array_equal(x0, np.asarray(s.params_rwa, float)) and P.x0 is not P.x0 and not np.shares_memory(x0, P.x0))
+        check(f"{label}: x0 is parameters.x0, and a copy",
+              np.array_equal(x0, np.asarray(s.parameters.x0, float)) and P.x0 is not P.x0 and not np.shares_memory(x0, P.x0))
         free = P.free
         check(f"{label}: free is the rows of x in order", [p.free_index for p in free] == list(range(len(x0))))
         check(f"{label}: names, kinds, units, free_mask, bounds: one per row",

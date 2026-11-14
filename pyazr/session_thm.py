@@ -1,6 +1,6 @@
 """The Trojan-horse experiments of one session (the ``<thm>`` ``experiment[...]`` lines): their profiled norms and
 backgrounds, line shapes, vertex functions and distortion factors as the engine evaluates them.  Mixed into
-:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``_engine``, ``mode`` and ``params_rwa``."""
+:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``_engine``, ``mode`` and ``parameters``."""
 
 import numpy as np
 
@@ -22,7 +22,7 @@ class SessionTHM:
         Empty without experiments (or in extrapolation mode).  Runs a
         chi-squared evaluation.
         """
-        x = np.asarray(self.params_rwa if params is None else params, float)
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
         if self.mode == "data":
             self._engine.calculate_chi2_rwa(x)
         out = {}
@@ -113,7 +113,7 @@ class SessionTHM:
         Raises the engine error if the experiment is unknown or has no line
         shape.
         """
-        x = np.asarray(self.params_rwa if params is None else params, float)
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
         if self.mode == "data":
             self._engine.calculate_chi2_rwa(x)
         r = self._engine.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
@@ -192,7 +192,7 @@ class SessionTHM:
 
         Raises the engine error if the experiment is unknown.
         """
-        x = np.asarray(self.params_rwa if params is None else params, float)
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
         if self.mode == "data":
             self._engine.calculate_chi2_rwa(x)
         r = self._engine.thm_vertex(str(experiment), np.asarray(energies, float).ravel())

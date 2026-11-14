@@ -140,7 +140,7 @@ The phases are
 
 - **Hard-sphere phase.** :math:`\phi_c = \arctan(F_l/G_l)` at
   :math:`\rho`, as in LT. The hard-sphere phase *shift* is :math:`-\phi_c`;
-  pyazr's ``coulomb_functions`` returns this value as ``delta_hs``
+  pyazr's ``Session.channel_functions`` returns this value as ``delta_hs``
   (``AZUREAPI.cpp:1871``).
 - **Coulomb-phase reference.** :math:`\omega_c = \sigma_l - \sigma_0`, as in
   LT. All amplitudes are therefore relative to the common factor
@@ -218,7 +218,7 @@ default) it is
 (``amplitudes_from_observed``, ``LevelParameters.cpp:105-244``). Here :math:`\Gamma_{\lambda c}` is the signed
 input (eV; the code divides it by :math:`10^6` to MeV), :math:`S' = dS/dE` (MeV\ :sup:`-1`), the
 sums run over particle channels only, and "rwa" denotes the channels flagged
-``gammaIsRWA`` (``input_is_rwa`` in the API's parameter records). The input of
+``gammaIsRWA`` (``width_is_amplitude`` in the API's parameter records). The input of
 such a channel is :math:`\tilde\gamma_{\lambda c}` itself, in MeV\ :sup:`1/2`,
 with its sign.
 

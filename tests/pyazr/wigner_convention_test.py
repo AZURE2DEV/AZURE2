@@ -38,7 +38,7 @@ except ImportError as e:
 
 work = os.path.join(ROOT, "tests", "13N")
 m = Session(os.path.join(work, "13N.azr"), cwd=work)
-widths = [p for p in m.parameters.widths if p.wigner_limit]
+widths = [p for p in m.parameters.of_kind("width") if p.wigner_limit]
 check("the 13N widths carry a Wigner limit", len(widths) >= 3, f"{len(widths)} widths with a limit")
 n = 0
 for p in widths:

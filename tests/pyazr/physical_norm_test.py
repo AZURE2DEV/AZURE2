@@ -65,7 +65,7 @@ def main():
 
         print("1. a moved normalization moves calculate_chi2_physical as it moves calculate_chi2_rwa")
         with Session(azr, cwd=work) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]
             inorm = kinds.index("norm")
             ref = float(m._engine.calculate_chi2_rwa(x))
@@ -73,11 +73,11 @@ def main():
             x8[inorm] = 0.8
             ref8 = float(m._engine.calculate_chi2_rwa(x8))
             check("the norm matters in the RWA basis", rel(ref, ref8) > 1e-3, f"{ref} vs {ref8}")
-            # transform_rwa maps the free R-matrix block; the tail (norms, shifts, screening)
-            # is the same in both bases, so the physical free vector is the two joined
-            lev = np.asarray(m.transform_rwa(x), float)
-            check("transform_rwa covers the level block only", lev.size == inorm, f"{lev.size} vs {inorm}")
-            ph = np.concatenate([lev, x[lev.size:]])
+            # transform maps the R-matrix block; the tail (norms, shifts, screening) is the same in both bases,
+            # so the physical free vector is transform's free entries
+            ph = m.transform(x)[m.parameters.free_mask]
+            check("transform keeps the tail after the level block", np.array_equal(ph[inorm:], x[inorm:]),
+                  f"{ph[inorm:]} vs {x[inorm:]}")
             ph8 = ph.copy()
             ph8[inorm] = 0.8
             p1 = float(m._engine.calculate_chi2_physical(ph))
@@ -95,7 +95,7 @@ def main():
         model.add_datum("a_p12C", quantity="scattering_length", pair="p+12C", s="1/2", value="1.0 fm", error="0.2 fm")
         azr2 = model.save(os.path.join(work, "free_norm_sl.azr"))
         with Session(azr2, cwd=work) as m:
-            x = np.asarray(m.params_rwa, float)
+            x = np.asarray(m.parameters.x0, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]
             inorm = kinds.index("norm")
             x8 = x.copy()
@@ -103,8 +103,7 @@ def main():
             r = float(m._engine.calculate_chi2_rwa(x8))
             sl = m.evaluate(x8).terms["model data"]
             check("the constraint term is nonzero", sl > 1e-3, f"{sl}")
-            lev8 = np.asarray(m.transform_rwa(x8), float)
-            ph8 = np.concatenate([lev8, x8[lev8.size:]])
+            ph8 = m.transform(x8)[m.parameters.free_mask]
             p = float(m._engine.calculate_chi2_physical(ph8))
             check("physical == RWA with the constraint", rel(p, r) <= 1e-6, f"{p} vs {r}")
     finally:

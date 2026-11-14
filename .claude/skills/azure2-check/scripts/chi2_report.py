@@ -92,7 +92,8 @@ def total_from_chisquared_out(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr", help="the format-3 project")
-    ap.add_argument("--params", help="parameter file (param.sav), applied by name; default: the project's values")
+    ap.add_argument("--params", dest="parameter_file",
+                    help="parameter file (param.sav), applied by name; default: the project's values")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE",
                     help="a session option (use_brune=0, use_long_wavelength=0, ...); the project's <config> keys "
                          "apply without it")
@@ -106,7 +107,7 @@ def main(argv=None):
         print(f"error: {err}", file=sys.stderr)
         return 2
     with s:
-        x = s.parameters.read(a.params) if a.params else s.parameters.x0
+        x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
         rep = report(s, x)
     print(f"{'data set':24s} {'N':>5s} {'chi2':>11s} {'chi2/N':>8s} {'norm':>7s} {'max pt':>9s} {'share':>6s} "
           f"{'<1s':>5s} {'<2s':>5s} {'med|r|':>6s} {'run':>4s}")

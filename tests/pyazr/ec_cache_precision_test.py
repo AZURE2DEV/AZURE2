@@ -29,7 +29,7 @@ def worker(model_dir, out):
     import numpy as np
     from pyazr import Session
     a = Session(os.path.join(model_dir, "13N.azr"), cwd=model_dir)
-    x = np.array(a.params_rwa, float)
+    x = np.array(a.parameters.x0, float)
     res = {"chi2": [a.evaluate(x).chi2],
            "segments": [np.asarray(c, float).ravel().tolist() for c in [d.model for d in a.evaluate(x).data]]}
     json.dump(res, open(out, "w"))

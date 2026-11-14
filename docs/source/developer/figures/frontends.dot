@@ -15,7 +15,7 @@ digraph frontends {
   n_pyazr__Session [label=<<b>pyazr::Session</b><br/><font point-size="12">pyazr&#x27;s session: one<br/>project set up by the<br/>engine</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__Objective [label=<<b>pyazr::Objective</b><br/><font point-size="12">the fit&#x27;s objective as<br/>a callable</font>>, shape=box, style="filled", fillcolor="white"];
   n_pyazr__Evaluation [label=<<b>pyazr::Evaluation</b><br/><font point-size="12">the numbers at one x<br/>(copies)</font>>, shape=box, style="filled", fillcolor="white"];
-  n_ParameterSet [label=<<b>ParameterSet</b><br/><font point-size="12">the fit parameters as<br/>a table</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Parameters [label=<<b>Parameters</b><br/><font point-size="12">the fit parameters as<br/>a table</font>>, shape=box, style="filled", fillcolor="white"];
   n_Project [label=<<b>Project</b><br/><font point-size="12">the project, edited<br/>with the engine&#x27;s<br/>grammars</font>>, shape=box, style="filled", fillcolor="white"];
   n_Record [label=<<b>Record</b><br/><font point-size="12">one record of the<br/>project</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2__io__Document [label=<<b>azure2::io::Document</b><br/><font point-size="12">_azure2.Document: the<br/>lossless project text</font>>, shape=box, style="filled", fillcolor="white"];
@@ -38,7 +38,7 @@ digraph frontends {
   n__azure2__Session -> n_AZUREAPI [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n__azure2__Session -> n_RuntimeOptions [style=dashed, arrowhead=vee];
   n_pyazr__Session -> n__azure2__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_pyazr__Session -> n_ParameterSet [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_pyazr__Session -> n_Parameters [style=dotted, penwidth=1.6, arrowhead=empty];
   n_pyazr__Objective -> n_pyazr__Session [style=dashed, arrowhead=vee, label=" nc"];
   n_pyazr__Session -> n_pyazr__Evaluation [style=dotted, penwidth=1.6, arrowhead=empty];
   n_Project -> n_azure2__io__Document [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];

@@ -58,7 +58,7 @@ def main():
     # Cheap, and it tells you whether the model has angular-distribution
     # segments of its own before you go making new ones.
     with Session(args.azr) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         declared = m.evaluate(x).data
     with_coeffs = sum(1 for d in declared for row in d.extra.get("legendre", []) if row.size)
     print(f"{args.azr}: {len(declared)} data segments, "

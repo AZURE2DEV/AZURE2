@@ -4,7 +4,7 @@
 The engine lists one normalization (when varied) and two energy-shift
 parameters per segment of the current segment set, so extrapolation mode
 (the <segmentsTest> grids) has a different parameter count from data mode.
-pyazr cached ``fixed_params`` in data mode only: after ``extrap_mode()`` the
+pyazr cached the fixed flags in data mode only: after ``extrap_mode()`` the
 parameter table raised "N parameter records but M fixed flags" and ``_all_rwa`` indexed past the cached flags (seen on a 12C+12C
 model: 220 against 212 with eight test segments).
 
@@ -15,15 +15,17 @@ segments added:
   2. in every mode, parameter_records, params_fixed (engine and cached) and
      ``parameters`` have the same length, also when the table is first built
      in extrapolation mode;
-  3. the free R-matrix block (names, n_rmatrix) is the same in both modes;
+  3. the free R-matrix block (names, count) is the same in both modes;
   4. in extrapolation mode a data-mode free vector still works:
      ``_all_rwa`` and ``evaluate().data[i].model`` give what the engine's own vector gives;
-  5. a free vector set by the caller survives extrap -> data, and chi2 back in
-     data mode equals the chi2 before the switch (1e-12);
+  5. back in data mode x0 is the first one, and chi2 equals the chi2 before the
+     switch (1e-12);
   6. a session started in extrapolation mode switches to data mode with the
      data layout and the chi2 of a fresh data-mode session.
 
 Run from anywhere:  python3 tests/pyazr/extrap_layout_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import os
 import shutil
@@ -57,7 +59,7 @@ except Exception as err:                                   # engine not built
 def counts(m, table=True):
     s = m._engine
     rows = len(s.parameter_records())
-    return rows, len(s.params_fixed()), len(m.fixed_params), (len(m.parameters) if table else rows)
+    return rows, len(s.params_fixed()), len(m._fixed), (len(m.parameters) if table else rows)
 
 
 def rmatrix_names(m):
@@ -80,7 +82,7 @@ with tempfile.TemporaryDirectory() as tmp:
     path = mdl.save(os.path.join(work, "layout.azr"))
 
     with Session(path, cwd=work) as m:
-        x0 = np.asarray(m.params_rwa, float).copy()
+        x0 = np.asarray(m.parameters.x0, float).copy()
         chi0 = m.evaluate(x0).chi2
         n_data = counts(m, table=False)       # leave pyazr's parameter table unbuilt
         # 2 (extrapolation first): the table is first built in extrapolation mode
@@ -94,31 +96,26 @@ with tempfile.TemporaryDirectory() as tmp:
         if built:
             check("engine layouts differ between the modes", n_ext[0] != n_data[0], f"{n_data} {n_ext}")
             check("extrapolation mode: all counts agree", len(set(n_ext)) == 1, str(n_ext))
-            names_ext, nrm_ext = rmatrix_names(m), m.n_rmatrix
-            y_own = [d.model for d in m.evaluate(m.params_rwa).data]
+            names_ext, nrm_ext = rmatrix_names(m), len(m.parameters.free.of_kind("energy", "width"))
+            y_own = [d.model for d in m.evaluate(m.parameters.x0).data]
             y_x0 = [d.model for d in m.evaluate(x0).data]
             same = all(np.allclose(a, b, rtol=1e-12, atol=0) for a, b in zip(y_own, y_x0))
             check("extrapolation mode: data-mode vector gives the engine's curves", same)
             try:
                 a = m._all_rwa(x0)
-                ok = a.size == n_ext[0] and np.allclose(a[:nrm_ext], m._all_rwa(m.params_rwa)[:nrm_ext], rtol=0, atol=0)
+                ok = a.size == n_ext[0] and np.allclose(a[:nrm_ext], m._all_rwa(m.parameters.x0)[:nrm_ext], rtol=0, atol=0)
                 check("extrapolation mode: _all_rwa of a data-mode vector", ok, f"{a.size} vs {n_ext[0]}")
             except Exception as err:
                 check("extrapolation mode: _all_rwa of a data-mode vector", False, repr(err))
-        # 5: a caller's vector survives the round trip
-        xs = np.asarray(m.params_rwa, float).copy()
-        xs[0] *= 1.01
-        m.params_rwa = xs
+        # 5: back to data mode
         m.data_mode()
         n_back = counts(m)
         check("data mode again: all counts agree with the first data-mode table", len(set(n_back)) == 1 and n_back == n_data,
               f"{n_data} {n_back}")
         if built:
-            check("free R-matrix block identical in both modes", rmatrix_names(m) == names_ext and m.n_rmatrix == nrm_ext)
-        xb = np.asarray(m.params_rwa, float)
-        check("caller's R-matrix value kept through extrap -> data", xb.size == x0.size and abs(xb[0] / (x0[0] * 1.01) - 1) < 1e-14,
-              f"{xb[0]} vs {x0[0] * 1.01}")
-        check("caller's norm/shift tail kept as the engine's", np.array_equal(xb[m.n_rmatrix:], x0[m.n_rmatrix:]))
+            check("free R-matrix block identical in both modes", rmatrix_names(m) == names_ext and len(m.parameters.free.of_kind("energy", "width")) == nrm_ext)
+        xb = m.parameters.x0
+        check("data mode again: x0 is the first data-mode x0", np.array_equal(xb, x0))
         chi1 = m.evaluate(x0).chi2
         check("chi2 unchanged after the round trip", abs(chi1 / chi0 - 1) < 1e-12, f"{chi0!r} {chi1!r}")
 
@@ -129,7 +126,7 @@ with tempfile.TemporaryDirectory() as tmp:
         m.data_mode()
         n1 = counts(m)
         check("extrapolation start -> data mode: data layout", n1 == n_data, f"{n1} vs {n_data}")
-        chi2 = m.evaluate(np.asarray(m.params_rwa, float)).chi2
+        chi2 = m.evaluate(np.asarray(m.parameters.x0, float)).chi2
         check("extrapolation start -> data mode: chi2 of a data session", abs(chi2 / chi0 - 1) < 1e-12, f"{chi0!r} {chi2!r}")
 
 print("FAILED: " + ", ".join(failures) if failures else "all checks passed")

@@ -101,7 +101,7 @@ class SessionFit:
             with the list.  The program runs ``migrad-gradient`` for a project with THM data when no switch is
             given; here the method is the one named.
         minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); MIGRAD rows only.
-        x0 : the free start vector (default ``params_rwa``).
+        x0 : the start fit vector (default ``parameters.x0``).
         max_calls : MIGRAD's and NLopt's call limit (``--max-calls``); None: no limit.
         progress : called with a dict per progress record, from the engine's threads with the GIL taken: ``fitter``,
             ``stage`` ("fit", then "hesse" and "minos" for the error analysis after a MIGRAD row; each stage counts its

@@ -76,7 +76,7 @@ class _HybridPotentials:
         spinning particles (E_SO_TWO_SPINS), the term on a spin-0 particle
         (E_SO_ZERO_SPIN) and a term on the default (``pair=0``) are refused.
         The channel functions of such a pair depend on J:
-        :meth:`coulomb_functions` then needs ``J``.
+        :meth:`channel_functions` then needs ``J``.
 
         The potential is read by ``CoulFunc`` when it is constructed, deep
         inside a calculation, so a change only reaches the model once the model
@@ -90,10 +90,10 @@ class _HybridPotentials:
 
         **Re-read the parameter vector afterwards.**  The potential changes the
         penetrabilities and shift functions, and those are what map physical
-        widths to reduced-width amplitudes -- so ``params_rwa`` is re-derived by
+        widths to reduced-width amplitudes -- so ``parameters.x0`` is re-derived by
         the rebuild and a vector captured beforehand no longer describes the
         same model.  Feeding the old one back gives a quietly wrong chi-squared;
-        re-reading ``m.params_rwa`` after the call reproduces exactly what
+        re-reading ``m.parameters.x0`` after the call reproduces exactly what
         loading a ``.azr`` carrying the same potential gives.
         """
         pair = self._check_potential_pair(pair)

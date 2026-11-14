@@ -12,7 +12,8 @@
 #       energies and values identical); the run log carries the note;
 #   (b) a data set's offset (one.shift.offset = 0.01) in a run WITH data (mode 1 on a two-point data set) does apply
 #       the shift, as before;
-#   (c) pyazr (skipped without the extension): load_sav in extrapolation mode leaves the energies alone.
+#   (c) pyazr (skipped without the extension): a session with parameter_file= in extrapolation mode leaves the
+#       energies alone.
 #
 #   ./tests/extrap_sav_segments/check.sh path/to/AZURE2
 
@@ -77,7 +78,7 @@ e0="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out"
 e1="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out")"
 if awk -v a="$e0" -v b="$e1" 'BEGIN { d = b - a; exit !(d > 0.005 && d < 0.009) }'; then ok "(b) with data the file's shift moves the point as before (E_cm $e0 -> $e1)"; else bad "(b) with data the shift did not apply as expected ($e0 -> $e1)"; fi
 
-# ---- (c) pyazr load_sav in extrapolation mode
+# ---- (c) pyazr parameter_file= in extrapolation mode
 PY="$(command -v python3 || true)"
 if [ -n "$PY" ] && (cd /tmp && PYTHONPATH="$ROOT" "$PY" -c "import pyazr._azure2" > /dev/null 2>&1); then
   prep py; cp "$WORK/shift.sav" "$WORK/py/"
@@ -85,14 +86,14 @@ if [ -n "$PY" ] && (cd /tmp && PYTHONPATH="$ROOT" "$PY" -c "import pyazr._azure2
 import numpy as np
 from pyazr import Session
 with Session("t.azr", cwd=".", data_mode=False) as m:
-    e0 = np.asarray(m.evaluate(m.params_rwa).data[0].energies, float)
-    x = m.load_sav("shift.sav")
-    e1 = np.asarray(m.evaluate(x).data[0].energies, float)
+    e0 = np.asarray(m.evaluate(m.parameters.x0).data[0].energies, float)
+with Session("t.azr", cwd=".", data_mode=False, parameter_file="shift.sav") as m:
+    e1 = np.asarray(m.evaluate(m.parameters.x0).data[0].energies, float)
 print("MAXDIFF", np.max(np.abs(e1 - e0)))
 EOF
 )"
   d="$(echo "$out" | awk '/^MAXDIFF/ { print $2 }')"
-  if [ -n "$d" ] && awk -v d="$d" 'BEGIN { exit !(d + 0 < 1e-12) }'; then ok "(c) pyazr load_sav in extrapolation mode leaves the grid alone (max |dE| $d)"; else bad "(c) pyazr load_sav in extrapolation mode: $(echo "$out" | tail -3)"; fi
+  if [ -n "$d" ] && awk -v d="$d" 'BEGIN { exit !(d + 0 < 1e-12) }'; then ok "(c) pyazr parameter_file= in extrapolation mode leaves the grid alone (max |dE| $d)"; else bad "(c) pyazr parameter_file= in extrapolation mode: $(echo "$out" | tail -3)"; fi
 else
   echo "  skip  (c) pyazr extension not importable"
 fi

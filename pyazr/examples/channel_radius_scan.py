@@ -62,7 +62,7 @@ def main() -> int:
                 f.unlink()
         try:
             with Session(str(path), cwd=str(here)) as m:
-                x = np.asarray(m.params_rwa, float)
+                x = np.asarray(m.parameters.x0, float)
                 n = int(sum(len(m.energies[i]) for i in range(m.nsegments)))
                 chi2 = m.evaluate(x).chi2
         except Exception as err:

@@ -67,7 +67,8 @@ def extrapolate(azr, fields, params=None, options=None, name="skill_grid", keep=
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr")
-    ap.add_argument("--params", help="parameter file (param.sav), by name; default: the project's values")
+    ap.add_argument("--params", dest="parameter_file",
+                    help="parameter file (param.sav), by name; default: the project's values")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--reaction", required=True, help='as in a record: "12C(p,g)13N", "12C(p,p)12C", '
                     '"12C(p,g)13N[1.0]" (capture to the 1.0 MeV state)')
@@ -91,7 +92,7 @@ def main(argv=None):
     fields.update(f.split("=", 1) for f in a.field)
     opts = {k: option_value(v) for k, v in (o.split("=", 1) for o in a.option)}
     try:
-        r = extrapolate(a.azr, fields, a.params, opts, keep=a.keep)
+        r = extrapolate(a.azr, fields, a.parameter_file, opts, keep=a.keep)
     except Exception as err:
         print(f"error: {type(err).__name__}: {err}", file=sys.stderr)
         return 1

@@ -82,7 +82,7 @@ def main():
             path = os.path.join(work, f"m_{int(amatrix)}{int(target_int)}{int(brune)}.azr")
             write_model(path, amatrix, target_int)
             with Session(path, cwd=work, use_brune=brune, ignore_externals=False) as a:
-                return np.asarray(a.evaluate(np.array(a.params_rwa, float)).data[0].model, float)
+                return np.asarray(a.evaluate(np.array(a.parameters.x0, float)).data[0].model, float)
 
         def calc_project(name, amatrix, brune):
             pw = os.path.join(work, f"{name}_{int(amatrix)}{int(brune)}")
@@ -98,7 +98,7 @@ def main():
             open(path, "w").write("\n".join(lines))
             try:
                 with Session(path, cwd=pw, use_brune=brune, ignore_externals=False) as a:
-                    v = [d.model for d in a.evaluate(np.array(a.params_rwa, float)).data]
+                    v = [d.model for d in a.evaluate(np.array(a.parameters.x0, float)).data]
                     return np.concatenate([np.ravel(np.asarray(x, float)) for x in v]), ""
             except Exception as err:
                 return None, f"{type(err).__name__}: {err}"

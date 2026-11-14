@@ -85,14 +85,14 @@ if have_engine:
         azr = os.path.join(work, "t.azr")
         proj.save(azr)
         with Session(azr, cwd=work) as mdl:
-            sq = mdl.parameters.sqrt_shifts
+            sq = mdl.parameters.of_kind("shift_sqrt")
             check("five sqrt_shift parameters (one per data set)", len(sq) == 5, len(sq))
             free = [p for p in sq if not p.fixed]
             check("exactly segment 1's is free", [p.segment_key for p in free] == [1], [p.segment_key for p in free])
             check("named xs_40.shift.sqrt", free[0].name == "xs_40.shift.sqrt", free[0].name)
             check("value read from the file", abs(free[0].value - 0.003) < 1e-12, free[0].value)
             idx = free[0].free_index
-            x0 = np.asarray(mdl.params_rwa, float)
+            x0 = np.asarray(mdl.parameters.x0, float)
             # The data chi-squared must respond to b: at the file value the
             # shifted segment 1 equals the pre-shifted segment 2.
             c = np.array([d.chi2 for d in mdl.evaluate(x0).data])

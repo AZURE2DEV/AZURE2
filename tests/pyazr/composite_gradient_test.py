@@ -55,7 +55,7 @@ def check_one(work):
     """Analytic gradient against central differences; prints and returns the relative error."""
     os.chdir(work)
     m = pyazr.Session("p.azr")
-    x = np.asarray(m.params_rwa, float)
+    x = np.asarray(m.parameters.x0, float)
     f0, g = m.objective().value_and_grad(x)
     fd = np.zeros_like(g)
     for k in range(len(x)):

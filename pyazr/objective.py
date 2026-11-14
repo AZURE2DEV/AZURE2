@@ -77,13 +77,13 @@ class Objective:
         free = session.parameters.free
         self._session = session
         self._lock = session_lock(session)
-        self._x0 = np.array(session.params_rwa, float).ravel()
+        self._x0 = session.parameters.x0
         self.names = list(free.names)
         self.bounds = [(float(lo), float(hi)) for lo, hi in free.bounds]
 
     @property
     def x0(self):
-        """A copy of the start of the free vector (the session's ``params_rwa`` when the object was made)."""
+        """A copy of the start of the free vector (the session's ``parameters.x0`` when the object was made)."""
         return self._x0.copy()
 
     def _open(self):

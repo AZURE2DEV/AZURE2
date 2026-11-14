@@ -88,14 +88,14 @@ try:
         session = Session(os.path.join(work, "grad.azr"))
 
     if session is not None:
-        scr = list(session.parameters.screenings)
+        scr = list(session.parameters.of_kind("screening"))
         check("one screening parameter", len(scr) == 1, scr)
         p = scr[0]
         check("tgt_targetInt3.screening: free, U_e 1000 eV, prior 1000 +- 200, effect 1",
               p.name == "tgt_targetInt3.screening" and not p.fixed and close(p.value, 1000.0, 1e-12)
-              and p.effect == 1 and close(p.prior_nominal, 1000.0, 1e-12) and close(p.prior_sigma, 200.0, 1e-12), p)
+              and p.effect == 1 and close(p.prior_centre, 1000.0, 1e-12) and close(p.prior_sigma, 200.0, 1e-12), p)
 
-        x = np.asarray(session.params_rwa, float).copy()
+        x = np.asarray(session.parameters.x0, float).copy()
         k = p.free_index
         x[k] = 1100.0
         pen = session.evaluate(x).terms["screening priors"]
@@ -107,7 +107,7 @@ try:
         data = session.evaluate(x).chi2
         check("objective = data chi2 + norm/shift terms + screening prior", close(obj, data + rest + 0.25, 1e-12),
               (obj, data, rest))
-        x0 = np.asarray(session.params_rwa, float)
+        x0 = np.asarray(session.parameters.x0, float)
         check("U_e moves the data chi2", abs(data - session.evaluate(x0).chi2) > 1e-6)
 
         value, grad = session.objective().value_and_grad(x)

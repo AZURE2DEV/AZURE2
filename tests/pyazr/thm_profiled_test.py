@@ -13,7 +13,7 @@ leave the THM points out of objective().value_and_grad altogether.
 Checked here on tests/7Li_p_a (one THM segment, free norm):
 
   1. evaluate().chi2 equals a fresh CLI run (rel 1e-6), and the CLI still
-     lands on the recorded pin; parameters / parameter_records / params_rwa
+     lands on the recorded pin; parameters / parameter_records / parameters.x0
      agree in count and the THM norm is not among them; residuals and
      evaluate().data[i].chi2 add up to chi2; data[i].norm reports n*;
      write_output_files reproduces the CLI's chiSquared.out and AZUREOut_*.
@@ -25,6 +25,8 @@ Checked here on tests/7Li_p_a (one THM segment, free norm):
 Needs the compiled engine and an AZURE2 binary; skips cleanly without them.
 
 Run from anywhere:  python3 tests/pyazr/thm_profiled_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import glob
 import os
@@ -114,7 +116,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the CLI still lands on the pin (rel 1e-3)", rel(cli_chi2, PIN) < 1e-3,
           f"{cli_chi2} vs {PIN}")
     with Session(os.path.join(py_dir, "7Li_p_a.azr"), cwd=py_dir) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         chi2 = m.evaluate(x).chi2
         print(f"        pyazr chi2 {chi2!r}")
         check("evaluate().chi2 == CLI (rel 1e-6)", rel(chi2, cli_chi2) < 1e-6,
@@ -122,19 +124,19 @@ with tempfile.TemporaryDirectory() as tmp:
 
         n_info = len(m._engine.parameter_records())
         check("parameter_records has one record per parameter",
-              n_info == len(m.fixed_params), f"{n_info} vs {len(m.fixed_params)}")
+              n_info == len(m.parameters), f"{n_info} vs {len(m.parameters)}")
         try:
             ps = m.parameters
             check("m.parameters builds", True)
-            check("free parameters == params_rwa",
+            check("free parameters == parameters.x0",
                   len(ps.free) == x.size, f"{len(ps.free)} vs {x.size}")
             check("the profiled THM norm is not a parameter",
-                  not any(p.segment_key == 1 for p in ps.norms),
-                  [p.name for p in ps.norms])
+                  not any(p.segment_key == 1 for p in ps.of_kind("norm")),
+                  [p.name for p in ps.of_kind("norm")])
         except Exception as err:
             check("m.parameters builds", False, f"{type(err).__name__}: {err}")
-        check("norm_indices is empty (the only norm is profiled)",
-              len(m.norm_indices()) == 0, m.norm_indices())
+        check("no free norm (the only norm is profiled)",
+              len(m.parameters.of_kind("norm").free) == 0, m.parameters.of_kind("norm").free.names)
 
         r = m.objective().residuals(x)
         check("one residual per point", r.size == sum(len(e) for e in m.energies),
@@ -179,7 +181,7 @@ with tempfile.TemporaryDirectory() as tmp:
     model.save(os.path.join(small, "small.azr"))
 
     with Session(os.path.join(small, "small.azr"), cwd=small) as m:
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         print(f"        {x.size} free parameters: "
               + ", ".join(p.name for p in m.parameters.free))
         check("a handful of free parameters", 2 <= x.size <= 12, x.size)

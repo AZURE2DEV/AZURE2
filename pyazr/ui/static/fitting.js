@@ -12,6 +12,7 @@ export const STATES = {
   stopped: { words: "stopped on request: the best point so far is kept", final: true },
   converged: { words: "converged", final: true },
   ended: { words: "ended without convergence", final: true },
+  finished: { words: "finished: it ran all its steps", final: true },
   failed: { words: "failed", final: true },
   killed: { words: "killed: the best point reported before the kill is kept", final: true },
   interrupted: { words: "interrupted: the server ended while it ran; its checkpoint is kept", final: true },
@@ -37,11 +38,12 @@ export const PARAMETER_COLUMNS = [
   { key: "fit", title: "fit", numeric: true, digits: 10,
     doc: "the best point of the job shown (GET /api/jobs/{id}, best.x); every digit sent on hover" },
   { key: "error", title: "error", numeric: true, digits: 4,
-    doc: "the recipe's error of the job shown (iminuit's HESSE), in the fit basis" },
+    doc: "the error of the job shown, in the fit basis (its result says where it comes from: HESSE, the engine's "
+      + "(JᵀJ + priors)⁻¹)" },
   { key: "minos_lower", title: "MINOS −", numeric: true, digits: 4,
-    doc: "iminuit's MINOS lower interval of the job shown, in the fit basis" },
+    doc: "the MINOS lower interval of the job shown (the engine's or iminuit's), in the fit basis" },
   { key: "minos_upper", title: "MINOS +", numeric: true, digits: 4,
-    doc: "iminuit's MINOS upper interval of the job shown, in the fit basis" },
+    doc: "the MINOS upper interval of the job shown (the engine's or iminuit's), in the fit basis" },
   { key: "physical", title: "physical value", numeric: true, digits: 8,
     doc: "the session's physical value of the parameter at the text's start values (GET /api/parameters, "
       + "physical_value); its unit is not sent: a width is in the project's convention" },
@@ -59,8 +61,8 @@ export function kindsOf(params, kindsTable = {}) {
     n: params.filter((p) => p.kind === k).length, free: params.filter((p) => p.kind === k && p.free).length }));
 }
 
-const priorOf = (p) => (p.prior_nominal !== undefined && p.prior_nominal !== null
-  ? `${p.prior_nominal} ± ${p.prior_sigma}` : "");
+const priorOf = (p) => (p.prior_centre !== undefined && p.prior_centre !== null
+  ? `${p.prior_centre} ± ${p.prior_sigma}` : "");
 const boundsOf = (b) => (Array.isArray(b) ? `[${b.map((v) => (v === null ? "" : v)).join(", ")}]` : "");
 
 /**
@@ -109,7 +111,8 @@ export function jobChoices(table) {
     const reason = row.available ? "" : (row.missing ? `waits for pyazr: ${row.missing}`
       : `needs the package ${row.needs}, not installed`);
     k.methods.push({ method: row.method, doc: row.doc, available: row.available, reason,
-      settings: row.settings || [], follows: row.follows || null });
+      settings: row.settings || [], follows: row.follows || null, takes: row.takes || null,
+      facts: row.facts || {} });
   }
   kinds.forEach((k) => { k.available = k.methods.some((m) => m.available); });
   return kinds;
@@ -142,6 +145,16 @@ export function startPoints(job) {
   return out;
 }
 
+/** A row's facts (name -> value, GET /api/jobs/kinds) as words: "covariance: yes · MINOS can follow: no". */
+export function factsText(facts = {}) {
+  const word = (v) => (v === true ? "yes" : v === false ? "no" : String(v));
+  return Object.entries(facts).map(([k, v]) => `${k}: ${word(v)}`).join(" · ");
+}
+
+/** The numbers of a job's progress every job sends; others (a fitter's stage, a sampler's acceptance) are shown by
+ * their names, as sent. */
+export const PROGRESS_KEYS = ["calls", "objective", "best", "elapsed"];
+
 /** The view of a job's progress (the progress reducer): what the running panel shows, from the job's record. */
 export function progressView(rec) {
   const p = rec.progress || {};
@@ -151,21 +164,36 @@ export function progressView(rec) {
     calls: p.calls ?? 0, objective: p.objective ?? null, best: p.best ?? rec.best?.objective ?? null,
     elapsed: p.elapsed ?? null, build: rec.build_s ?? null,
     canStop: !state.final && rec.state !== "stopping", canKill: !state.final,
+    more: Object.entries(p).filter(([k]) => !PROGRESS_KEYS.includes(k)),
     trace: Array.isArray(rec.trace) ? rec.trace : [], log: Array.isArray(rec.log) ? rec.log : [],
   };
+}
+
+/** Whether a row of the job table follows the job `rec`: its `follows` names the job's kind and its method (or any
+ * method of that kind, null). */
+export function follows(row, rec) {
+  return Array.isArray(row.follows) && Boolean(rec) && row.follows[0] === rec.kind
+    && (row.follows[1] === null || row.follows[1] === rec.method);
+}
+
+/** The rows of a sampler's summary (its result: mean, errors, quantiles, tau, effective_draws, rhat by name). */
+export function chainRows(result) {
+  return Object.keys(result.quantiles || {}).map((name) => ({ name, mean: result.mean?.[name] ?? null,
+    sd: result.errors?.[name] ?? null, ...Object.fromEntries(Object.entries(result.quantiles[name])
+      .map(([q, v]) => [`q${q}`, v])), tau: result.tau?.[name] ?? null,
+    n_eff: result.effective_draws?.[name] ?? null, rhat: result.rhat?.[name] ?? null }));
 }
 
 /** The view of a finished job: the recipe's own words, its numbers, and what can be done with it. */
 export function resultView(rec, table = []) {
   const r = rec.result || {};
-  const followers = table.filter((row) => row.available && Array.isArray(row.follows)
-    && row.follows[0] === rec.kind && row.follows[1] === rec.method);
+  const followers = table.filter((row) => row.available && follows(row, rec) && (!row.takes || r[row.takes]));
   return {
     status: r.status || rec.state, words: STATES[rec.state]?.words || rec.state, message: r.message || r.error || "",
     calls: r.calls ?? null, elapsed: r.elapsed ?? null, startObjective: r.start_objective ?? null,
     bestObjective: rec.best?.objective ?? null, edm: r.edm ?? null, valid: r.valid ?? null,
     hasBest: Boolean(rec.best?.x), covariance: r.covariance || null, correlation: r.correlation || null,
-    errorsFrom: r.errors ? "HESSE (iminuit)" : "", minos: r.minos || null, followers,
+    errorsFrom: r.errors ? (r.errors_from || "the recipe") : "", minos: r.minos || null, followers,
   };
 }
 

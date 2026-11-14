@@ -61,7 +61,8 @@ def inspect(session, x, distortion=False):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr")
-    ap.add_argument("--params", help="parameter file (param.sav), by name; default: the project's values")
+    ap.add_argument("--params", dest="parameter_file",
+                    help="parameter file (param.sav), by name; default: the project's values")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--distortion", action="store_true", help="also R(E) of experiments with distortion=")
     ap.add_argument("--max-norm-error", type=float, default=0.5)
@@ -69,7 +70,7 @@ def main(argv=None):
     import pyazr
     opts = {k: option_value(v) for k, v in (o.split("=", 1) for o in a.option)}
     with pyazr.Session(a.azr, **opts) as s:
-        x = s.parameters.read(a.params) if a.params else s.parameters.x0
+        x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
         reports = inspect(s, x, a.distortion)
     if not reports:
         print("error: the project has no THM experiment (<thm> experiment[...] lines)", file=sys.stderr)

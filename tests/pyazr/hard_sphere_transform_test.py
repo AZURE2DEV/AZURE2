@@ -50,7 +50,7 @@ def evaluate(path, transform, where):
     local = os.path.join(where, "m.azr")
     Project.open(path).save(local)
     with Session(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
-        x = np.array(m.params_rwa)
+        x = np.array(m.parameters.x0)
         return [np.array(seg) for seg in [d.model for d in m.evaluate(x).data]]
 
 

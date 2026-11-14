@@ -79,7 +79,7 @@ def main():
             os.makedirs(os.path.join(tmp, d), exist_ok=True)
         print("1. session")
         s = p.session()
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         vals = [d.model for d in s.evaluate(x).data]
         y, back = np.asarray(vals[0], float), np.asarray(vals[1], float)
         ok("1. a session of the project runs (two data sets)", len(vals) == 2 and len(y) == len(E0))

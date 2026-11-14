@@ -217,12 +217,12 @@ def _forward_pass(engine, x):
 
 def evaluate(session, x=None):
     """One engine evaluation of ``session`` (a :class:`pyazr.Session`) at the free vector ``x`` (default its start,
-    ``params_rwa``): an :class:`Evaluation`.  In extrapolation mode its data sets are the extrapolations (a vector of
+    ``parameters.x0``): an :class:`Evaluation`.  In extrapolation mode its data sets are the extrapolations (a vector of
     the data's layout is taken for its free R-matrix block, as the session's other calls take it) and it has no
     chi-squared."""
     has_data = session.mode == "data"
     with session_lock(session):
-        x = np.asarray(session.params_rwa if x is None else x, float).ravel()
+        x = np.asarray(session.parameters.x0 if x is None else x, float).ravel()
         if has_data:
             raw = session._engine.evaluation_rwa(x)
         else:

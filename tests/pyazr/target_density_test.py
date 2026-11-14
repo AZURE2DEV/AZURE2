@@ -119,21 +119,21 @@ try:
 
     print("1. parameters")
     a = session(work)
-    dens = list(a.parameters.densities)
+    dens = list(a.parameters.of_kind("density"))
     names = [p.name for p in dens]
     check("two density parameters, d1.areal_density and g.areal_density",
           names == ["d1.areal_density", "g.areal_density"], names)
     if len(dens) == 2:
         d1, d3 = dens
         check("d1.areal_density: free, N0, prior 5 % = 5e16, max 1.15 N0",
-              not d1.fixed and d1.value == N0 and d1.prior_nominal == N0 and abs(d1.prior_sigma - 5e16) < 1e4
-              and abs(d1.density_max - 1.15e18) < 1e6, d1)
+              not d1.fixed and d1.value == N0 and d1.prior_centre == N0 and abs(d1.prior_sigma - 5e16) < 1e4
+              and abs(d1.layout_max - 1.15e18) < 1e6, d1)
         check("g.areal_density (shared by g_a, g_b): prior 1e16, max 1.1 N0", abs(d3.prior_sigma - 1e16) < 1e4
-              and abs(d3.density_max - 1.1e18) < 1e6, d3)
+              and abs(d3.layout_max - 1.1e18) < 1e6, d3)
     free = [p for p in a.parameters if not p.fixed]
     k1 = [i for i, p in enumerate(free) if p.name == "d1.areal_density"][0]
     k3 = [i for i, p in enumerate(free) if p.name == "g.areal_density"][0]
-    x0 = np.array(a.params_rwa, float)
+    x0 = np.array(a.parameters.x0, float)
 
     # result segments are the active data sets in order: meyer_84 (3), fine (17), plain (18), g_a (19), g_b (20);
     # F = m2/(m1+m2) of p + 12C from the session's own conversion, E_cm / E_lab of the fine grid
@@ -207,7 +207,7 @@ try:
 
     print("\n7. an energy shift moves the window with the point")
     b = session(work, shift=0.005)
-    xb = np.array(b.params_rwa, float)
+    xb = np.array(b.parameters.x0, float)
     enb = [d.energies for d in b.evaluate().data]
     vb = [d.model for d in b.evaluate(xb).data]
     e_shift = np.asarray(enb[0], float)

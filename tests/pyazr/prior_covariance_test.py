@@ -160,7 +160,7 @@ try:
         azr, work = project("corr", S0, f"{N1} width_1_1\n1.02 0.6\n4e-4 1.2e-4\n1.2e-4 9e-4\n")
         with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
-            x = np.asarray(mdl.params_rwa, float).copy()
+            x = np.asarray(mdl.parameters.x0, float).copy()
             x[fi[N1]], x[fi["width_1_1"]] = 1.07, 0.63
             d = np.array([1.07 - 1.02, 0.63 - 0.6])
             want = float(d @ np.linalg.solve(Cb, d))
@@ -193,7 +193,7 @@ try:
         azr, work = project("diag", S0, f"{N1} {N2}\n1 1\n0.01 0\n0 0.0025\n")
         azr2, work2 = project("normerr", SE)
         with Session(azr, cwd=work) as a, Session(azr2, cwd=work2) as b:
-            x = np.asarray(a.params_rwa, float).copy()
+            x = np.asarray(a.parameters.x0, float).copy()
             fa = {q.name: q.free_index for q in a.parameters if not q.fixed}
             fb = {q.name: q.free_index for q in b.parameters if not q.fixed}
             check("same free-parameter layout", fa == fb)
@@ -211,7 +211,7 @@ try:
         azr, work = project("fixed", S0, f"{N1} energy_2\n1.02 0.81\n4e-4 1.5e-4\n1.5e-4 1e-4\n", fixed_levels=True)
         with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
-            x = np.asarray(mdl.params_rwa, float).copy()
+            x = np.asarray(mdl.parameters.x0, float).copy()
             x[fi[N1]] = 1.07
             check("a fixed listed parameter is marginalized", mdl.prior_covariance_names == [N1],
                   mdl.prior_covariance_names)

@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     A = Session(azr_a)
     A.__enter__()
-    x = np.asarray(A.params_rwa, float)
+    x = np.asarray(A.parameters.x0, float)
 
     def probe(m, z):
         # cross sections and per-segment chi2: cheap, and exactly what the bug moved
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- an extrapolation session on the same model, used, then closed
     with Session(azr_b, data_mode=False) as B:
-        xsB = flat([d.model for d in B.evaluate(np.asarray(B.params_rwa, float)).data])
+        xsB = flat([d.model for d in B.evaluate(np.asarray(B.parameters.x0, float)).data])
         check("extrapolation session evaluates", xsB.size > 0 and np.all(np.isfinite(xsB)))
         # the data session, while B is open
         r1, seg1 = probe(A, x)
@@ -100,7 +100,7 @@ with tempfile.TemporaryDirectory() as tmp:
               r1.shape == r0.shape and np.allclose(r1, r0, rtol=1e-10, atol=0.0),
               f"per-segment chi2 {seg0} -> {seg1}")
         # and B's own numbers are not disturbed by A's evaluation
-        xsB2 = flat([d.model for d in B.evaluate(np.asarray(B.params_rwa, float)).data])
+        xsB2 = flat([d.model for d in B.evaluate(np.asarray(B.parameters.x0, float)).data])
         check("extrapolation cross sections stable while the data session evaluates",
               np.allclose(xsB2, xsB, rtol=1e-12, atol=0.0))
 
@@ -114,7 +114,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # --- a second DATA session on the same model
     azr_c = stage(tmp, ".data2")
     with Session(azr_c) as C:
-        xc = np.asarray(C.params_rwa, float)
+        xc = np.asarray(C.parameters.x0, float)
         rc, _ = probe(C, xc)
         check("second data session reproduces the first's cross sections",
               rc.shape == r0.shape and np.allclose(rc, r0, rtol=1e-10, atol=0.0))

@@ -108,17 +108,17 @@ if Session is not None:
         work = os.path.join(tmp, "w")
         fresh_copy(work)
         with Session(os.path.join(work, AZR), cwd=work) as s:
-            norms = s.parameters.norms
+            norms = s.parameters.of_kind("norm")
             idx = [p.free_index for p in norms if not p.fixed]
             keys = [p.segment_key for p in norms if not p.fixed]
             check("three free norms", len(idx) == 3, keys)
-            x = list(s.params_rwa)
+            x = list(s.parameters.x0)
             want = {}
             for k, i, f in zip(keys, idx, (0.93, 1.07, 1.11)):
                 x[i] = x[i] * f
                 want[k] = x[i]
             chi_fit = s.evaluate(x).chi2     # x is a list: this used to segfault
-            chi_old = s.evaluate(s.params_rwa).chi2
+            chi_old = s.evaluate(s.parameters.x0).chi2
             check("the moved norms change chi2", rel(chi_fit, chi_old) > 1e-3, (chi_fit, chi_old))
 
             # 2. ---------------------------------------------------------------
@@ -134,8 +134,8 @@ if Session is not None:
             pen_fit_norm = float(sum(d.norm_chi2 for d in pen_fit.data))
             check("the fit pays a norm prior", pen_fit_norm > 0.1, pen_fit)
             with Session(fit_azr, cwd=work) as t:
-                chi_alone = t.evaluate(t.params_rwa).chi2
-                pen = t.evaluate(t.params_rwa)
+                chi_alone = t.evaluate(t.parameters.x0).chi2
+                pen = t.evaluate(t.parameters.x0)
             check("the snapshot alone gives the fit's chi2", rel(chi_alone, chi_fit) < 1e-9,
                   (chi_alone, chi_fit))
             print(f"        chi2 fit {chi_fit:.6f}, snapshot alone {chi_alone:.6f}, "
@@ -162,7 +162,7 @@ if Session is not None:
             check("the .sav has the fitted norms",
                   all(rel(sav[names[k]], want[k]) < 1e-7 for k in want), sav)
             with Session(nom_azr, cwd=work) as t:
-                chi_nom = t.evaluate(t.params_rwa).chi2
+                chi_nom = t.evaluate(t.parameters.x0).chi2
             check("alone it is not the fit (the trade-off)", rel(chi_nom, chi_fit) > 1e-3,
                   (chi_nom, chi_fit))
             try:
@@ -180,7 +180,7 @@ if Session is not None:
         check("the snapshot is written and verified (same norms as 2)",
               norm_fields(last_azr) == norm_fields(fit_azr))
         with Session(last_azr, cwd=work) as t:
-            chi_last = t.evaluate(t.params_rwa).chi2
+            chi_last = t.evaluate(t.parameters.x0).chi2
         check("alone it gives the fit's chi2", rel(chi_last, chi_fit) < 1e-9, (chi_last, chi_fit))
         try:
             s.evaluate(x)

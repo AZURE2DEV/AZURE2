@@ -212,17 +212,17 @@
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M380.25,-80.27C385.81,-80.27 391.49,-80.27 397.16,-80.27"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="397.31,-83.77 407.31,-80.27 397.31,-76.77 397.31,-83.77"/>
 </g>
-<!-- n_ParameterSet -->
+<!-- n_Parameters -->
 <g id="node14" class="node">
-<title>n_ParameterSet</title>
+<title>n_Parameters</title>
 <polygon fill="white" stroke="black" points="530.5,-45.27 410.5,-45.27 410.5,-1.27 530.5,-1.27 530.5,-45.27"/>
-<text text-anchor="start" x="426" y="-32.07" font-family="Helvetica" font-weight="bold" font-size="14.00">ParameterSet</text>
+<text text-anchor="start" x="433" y="-32.07" font-family="Helvetica" font-weight="bold" font-size="14.00">Parameters</text>
 <text text-anchor="start" x="416.5" y="-19.67" font-family="Helvetica" font-size="12.00">the fit parameters as</text>
 <text text-anchor="start" x="452" y="-7.67" font-family="Helvetica" font-size="12.00">a table</text>
 </g>
-<!-- n_pyazr__Session&#45;&gt;n_ParameterSet -->
+<!-- n_pyazr__Session&#45;&gt;n_Parameters -->
 <g id="edge15" class="edge">
-<title>n_pyazr__Session&#45;&gt;n_ParameterSet</title>
+<title>n_pyazr__Session&#45;&gt;n_Parameters</title>
 <path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M380.25,-57.41C387.37,-54.69 394.68,-51.89 401.91,-49.12"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="403.59,-52.23 411.68,-45.39 401.09,-45.69 403.59,-52.23"/>
 </g>

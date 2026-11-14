@@ -404,7 +404,7 @@ class StrengthCalc:
                 if q.kind != "width":
                     continue
                 pr = pairs[q.pair]
-                if q.input_is_rwa:
+                if q.width_is_amplitude:
                     raise ValueError(f"strength {name}: channel {q.name} is entered "
                                      "as a reduced-width amplitude; omega*gamma "
                                      "needs partial widths.")
@@ -443,7 +443,7 @@ def fit_variant(path, cwd, args, strengths, log):
     t0 = time.time()
     phook = load_hook(args.penalty_hook, "penalty") if args.penalty_hook else None
     with Session(path, cwd=cwd) as m:
-        x0 = np.asarray(m.params_rwa, float)
+        x0 = np.asarray(m.parameters.x0, float)
         objective = m.objective()
         data_rows = slice(0, m.evaluate(x0).data[-1].rows.stop)   # the data rows of the objective's rows
         nres = data_rows.stop
@@ -495,8 +495,7 @@ def fit_variant(path, cwd, args, strengths, log):
             cov_x = (P @ P.T) / np.outer(cn, cn)
         else:
             cov_x = np.zeros((0, 0))
-        allx = lambda xx: np.asarray(m.transform_all_rwa(m._all_rwa(xx),
-                                                         include_fixed=True), float)
+        allx = m.transform       # the physical value of every parameter at a fit vector
         params = list(m.parameters)
         free = [p for p in params if not p.fixed and p.free_index is not None]
         names = [ma.parameter_label(p, m.pairs) for p in free]

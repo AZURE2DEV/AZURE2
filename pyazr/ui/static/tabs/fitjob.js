@@ -5,7 +5,8 @@
 // list of the project's jobs.  A row of the job table that waits for pyazr is shown with what it waits for.
 
 import { pathOf } from "../api.js";
-import { defaultMethod, isFinal, jobChoices, progressView, resultView, settingsOf, startPoints } from "../fitting.js";
+import { defaultMethod, factsText, follows, isFinal, jobChoices, progressView, resultView, settingsOf,
+  startPoints } from "../fitting.js";
 import { plotOf, plotlyFigure } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, drawPlot, h, section, themeColours } from "../ui.js";
@@ -21,6 +22,11 @@ export const SETTING_WIDGETS = {
     const input = h("input", { type: "checkbox", "aria-label": s.name });
     input.checked = typed === undefined ? Boolean(s.default) : typed === "true";
     return { el: input, read: () => String(input.checked) };
+  },
+  number: (s, typed) => {
+    const input = h("input.num", { type: "text", inputmode: "decimal", size: 10, value: typed ?? (s.default ?? ""),
+      placeholder: s.default === null ? "default" : String(s.default), "aria-label": s.name });
+    return { el: input, read: () => input.value.trim() };
   },
   names: (s, typed) => {
     const input = h("input.mono", { type: "text", size: 36, value: typed ?? "", placeholder: "every free parameter",
@@ -56,11 +62,11 @@ export function jobForm(ctx, table, job, view) {
     return [s, w];
   });
   const points = startPoints(job);
-  const follows = method.follows && job && job.kind === method.follows[0] && job.method === method.follows[1];
+  const startsFromShown = follows(method, job);
   const startSelect = h("select", { "aria-label": "start point" }, points.map((p) => h("option", { value: p.id },
     p.title)));
   startSelect.value = form.start && points.some((p) => p.id === form.start) ? form.start
-    : (follows && job.best?.x ? `job:${job.id}` : "x");
+    : (startsFromShown && job.best?.x ? `job:${job.id}` : "x");
   startSelect.addEventListener("change", () => { form.start = startSelect.value; });
   const budget = ctx.describe?.budget || {};
   const run = button("Run", "Start the job (POST /api/jobs)", async () => {
@@ -81,7 +87,8 @@ export function jobForm(ctx, table, job, view) {
   const box = section("Job",
     h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "kind"), kindSelect),
       h("label.ctl", {}, h("span.ctl-label", {}, "method"), methodSelect)),
-    h("p.hint", {}, method.doc),
+    h("p.hint", {}, method.doc), Object.keys(method.facts).length ? h("p.hint.job-facts", {}, factsText(method.facts))
+      : null,
     h("div.inline-form.settings", {}, widgets.map(([s, w]) => h("label.ctl", { title: `${s.doc} (${s.allowed})` },
       h("span.ctl-label", {}, s.name.replace(/_/g, " ")), w.el))),
     h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "start"), startSelect),
@@ -95,11 +102,11 @@ export function jobForm(ctx, table, job, view) {
 function jobTable(table) {
   const rows = table.map((r) => ({ key: `${r.kind}/${r.method}`, kind: r.kind, method: r.method, doc: r.doc,
     status: r.available ? "runs today" : (r.missing ? `waits for pyazr: ${r.missing}` : `needs ${r.needs}`),
-    _class: r.available ? "" : "unavailable" }));
+    facts: factsText(r.facts), _class: r.available ? "" : "unavailable" }));
   const t = renderTable(document, { rows, rowKey: (r) => r.key, withFilter: false, label: "job table",
     caption: "The server's job table (GET /api/jobs/kinds)",
     columns: [{ key: "kind", title: "kind" }, { key: "method", title: "method" },
-      { key: "status", title: "status", wrap: true }] });
+      { key: "facts", title: "gives", wrap: true }, { key: "status", title: "status", wrap: true }] });
   return h("details.job-table", {}, h("summary", {}, `job table: ${table.filter((r) => r.available).length} of `
     + `${table.length} rows run today`), t.element);
 }
@@ -135,7 +142,9 @@ export function jobPanel(ctx, rec, table, view) {
       ["objective", n(v.objective, 10), "χ² + priors at the last call (the engine's)"],
       ["best", n(v.best, 10), "the lowest objective so far"],
       ["time", v.elapsed === null ? "—" : `${v.elapsed.toFixed(1)} s`, "since the recipe started"],
-      ["session build", v.build === null ? "—" : `${v.build.toFixed(2)} s`, "the job's own session"]]) {
+      ["session build", v.build === null ? "—" : `${v.build.toFixed(2)} s`, "the job's own session"],
+      ...v.more.map(([k, x]) => [k.replace(/_/g, " "), typeof x === "number" ? n(x, 6) : (x ?? "—"),
+        "as the job reports it"])]) {
       facts.append(h("dt", { title }, k), h("dd", {}, value));
     }
     stop.disabled = !v.canStop;
@@ -168,14 +177,14 @@ function resultBlock(ctx, rec, table, view) {
   const written = view.written[rec.id];
   const n = (x, d = 10) => (x === null || x === undefined ? "—" : formatNumber(x, d));
   const box = h("div.job-result", { data: { status: v.status } });
-  box.append(h("h3", {}, "Result"), h("p.recipe-words", {}, h("strong", {}, v.words), v.message ? ` · the recipe: “${
-    v.message}”` : ""));
+  box.append(h("h3", {}, "Result"), h("p.recipe-words", {}, h("strong", {}, v.words),
+    v.message ? ` · in its own words: “${v.message}”` : ""));
   const facts = h("dl.facts", {}, h("dt", {}, "objective"), h("dd", {}, `${n(v.startObjective)} at the start → `
     + `${n(v.bestObjective)} at the best point`),
   h("dt", {}, "calls, time"), h("dd", {}, `${v.calls ?? "—"} calls, ${v.elapsed === null ? "—"
     : `${v.elapsed.toFixed(1)} s`}${v.edm !== null ? ` · EDM ${n(v.edm, 3)}` : ""}`),
   h("dt", {}, "errors"),
-  h("dd", {}, v.errorsFrom || "none (this recipe gives none; iminuit's MIGRAD with HESSE does)"));
+  h("dd", {}, v.errorsFrom || "none (this job gives none: see the job table's column \u201cgives\u201d)"));
   if (ev?.chi2 !== undefined) {
     facts.append(h("dt", {}, "at the best point"), h("dd", { data: { chi2Fit: String(ev.chi2) } },
       `χ² ${n(ev.chi2)} · N ${ev.n ?? "—"} (the engine's, on the text of rev ${rec.text_rev})`));

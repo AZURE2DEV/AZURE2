@@ -28,7 +28,7 @@ import numpy as np
 from pyazr import Session
 try:
     with Session(sys.argv[2], cwd=sys.argv[3], use_brune=sys.argv[4] == "1") as a:
-        v = [d.model for d in a.evaluate(np.array(a.params_rwa, float)).data]
+        v = [d.model for d in a.evaluate(np.array(a.parameters.x0, float)).data]
         print("RESULT opened", int(all(np.all(np.isfinite(np.asarray(x, float))) for x in v)))
 except Exception as err:
     print("RESULT", type(err).__name__, str(err).replace(chr(10), " "))

@@ -278,7 +278,7 @@ the fitted χ² (data + priors).
 ### Stage 5. Derive the quantities
 
 1. **Widths and strengths.** Take physical widths from the Brune transform
-   (`transform_rwa`, `parameters.out`). Keep signs. Never convert a `gammaIsRWA`
+   (`Session.transform(x)`, `parameters.out`). Keep signs. Never convert a `gammaIsRWA`
    channel by hand. ωγ = g_J Γ_in Γ_out / Γ, × (1+δ₁₂) for identical entrance nuclei.
 2. **Anchor formula.** It turns peak areas into strengths (narrow, isolated levels):
 

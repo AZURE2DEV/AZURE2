@@ -47,7 +47,7 @@ except Exception as err:  # engine not built
     sys.exit(77)
 
 # Public members that never reach the engine: the raw handle itself, values read from the options or the file.
-NO_ENGINE = {"output_dir", "is_alive", "basis", "read_sav", "read_sav_basis"}
+NO_ENGINE = {"output_dir", "is_alive", "basis"}
 
 
 def members():
