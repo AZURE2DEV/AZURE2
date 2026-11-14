@@ -174,6 +174,9 @@ def test_standardize_and_accept(t1, monkeypatch):
     named = t1.post("/api/endf/accept", json={"job_id": job["id"], "to": "kept/new.endf"})
     assert named.status_code == 422 and "no directory" in named.json()["what"], named.text
     assert t1.post("/api/endf/accept", json={"job_id": job["id"], "to": "../../x.endf"}).status_code == 403
+    project = os.path.basename(t1.path)
+    not_endf = t1.post("/api/endf/accept", json={"job_id": job["id"], "to": project, "overwrite": True})
+    assert not_endf.status_code == 422 and "not an ENDF-6 file" in not_endf.json()["what"], not_endf.text
     no_overwrite = t1.post("/api/endf/accept", json={"job_id": job["id"], "to": EXTRACT})
     assert no_overwrite.status_code == 422
     with open(original) as f:

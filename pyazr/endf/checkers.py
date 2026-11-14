@@ -53,7 +53,7 @@ PROGRAMS = {
                "rewrites every number in the classic standard form, 7 significant digits (measured: 2 digits lost "
                "in MF=2, MF=3 and MF=6 of a file written with more), MF=2 included even with the standard options; "
                "a number written without a decimal point (35070343) is misread and written 1e4 too small "
-               "(3.507034+3)"),
+               "(3.507034+3): the code reads with E11.4 (stanef.f line 1131) where the manual says F11.0 (p. 31)"),
     "fixup": ("prepro", "rewrite", "ZA and AWR made consistent, sums redefined, sequence numbers",
               "rewrites the directory and the summed cross sections; measured: 4 numbers of an MF=3 section lost "
               "1 digit (2.5e-6 relative), the numbers of MF=2 and MF=6 written another way with equal values"),

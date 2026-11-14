@@ -185,7 +185,8 @@ def standardize_job(tracker, x0, settings, names):
 def accept(state, record, to=None, overwrite=False):
     """Keep the candidate of a finished rewrite job (its ``record``): ``Candidate.accept(to=, overwrite=)`` with
     ``to`` inside the root (relative to the project's directory; none: beside the original as
-    ``<name>.<program>.endf``), an existing file replaced only with ``overwrite`` (the page asks twice).  The project
+    ``<name>.<program>.endf``), an existing file replaced only with ``overwrite`` (the page asks twice) and only
+    when it is itself an ENDF-6 file (never the project file or a data file).  The project
     text is not changed (an ENDF file is not part of it): no history entry."""
     from pyazr import endf
     from .errors import Refused
@@ -203,6 +204,10 @@ def accept(state, record, to=None, overwrite=False):
     if target and not os.path.isdir(os.path.dirname(target)):
         raise Refused(f"{to}: no directory {os.path.dirname(to) or '.'} to write it in", allowed="a file in an "
                       "existing directory inside the root", fix="name a file beside the original")
+    if target and os.path.exists(target) and not _looks_like_endf(target):
+        raise Refused(f"{to} exists and is not an ENDF-6 file: a candidate replaces an ENDF-6 file only",
+                      allowed="a new file, or (with overwrite) an existing ENDF-6 file inside the root",
+                      fix="name a new file beside the original")
     written = endf.Candidate(original, cand["path"], cand["program"], cand["report"]).accept(
         to=target, overwrite=bool(overwrite))
     state.inside_root(written)

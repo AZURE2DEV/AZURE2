@@ -680,7 +680,11 @@ programs' behaviour was taken:
   the 67 changed numbers of the 3He + 4He MF=2 with blank options as with `0,Y,Y,Y`).
 - **STANEF corrupts a float written without a decimal point**: `35070343` and `12377043` (ER of background poles,
   eV) became `3.507034+3` and `1.237704+3`. The manual allows such a field (p. 31: "digits optionally containing a
-  decimal symbol").
+  decimal symbol"). The cause (the director, read in the sources and reproduced with STANEF): the four utility
+  codes read floats with `E11.4` (`stanef.f` line 1131; 7 READ statements in STANEF, 10 in CHECKR, 8 in FIZCON, 9
+  in PSYCHE) where the manual says `F11.0`; a field without a decimal point then takes its last four digits as the
+  fraction. The whole library file has ten such lines (four values) in MF=2/MT=151. That CHECKR, FIZCON and PSYCHE
+  test the misread value is read from their sources, not run.
 - **FIXUP 2023-1 refuses to run without option 5** ("Cross Section Reconstruction is MANDATORY"): the deck sets
   column 1 (ZA, AWR) and column 5 = 2 (built-in summation rules), every other test off.
 - **CHECKR 8.24 does not know LTP=15** (p. 147 of the 2023 manual defines it).
