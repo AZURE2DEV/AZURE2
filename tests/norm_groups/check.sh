@@ -38,7 +38,7 @@ total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>
 normtotal() { awk '/^Total-Chi-Squared:/ { print $4 }' "$1/output/chiSquared.out" 2>/dev/null; }
 par() { awk -v n="$2" '$1 == n { print $2 }' "$1/output/param.sav" 2>/dev/null; }
 # relclose A B TOL -> 0 when |A-B| <= TOL*max(|B|,1e-300)
-relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
+relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= t * m) }'; }
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < t) }'; }
 
 # mk NAME LEVELS_FIXED RECORD... -> $WORK/NAME/t.azr with those records as its <data> section (format 3)
@@ -119,7 +119,7 @@ fit_common() {  # NAME EXTRA_FLAGS
   n1="$(par "$dir" F.value)"; n2="$(par "$dir" "F.value[xs_90_s08]")"; t="$(total "$dir")"
   if absclose "$n1" 1.25 1e-4; then ok "$1: shared norm n = $n1 (truth 1.25)"; else bad "$1: shared norm n = $n1, expected 1.25"; fi
   if relclose "$n2" "$n1" 1e-12; then ok "$1: follower written with the shared value ($n2)"; else bad "$1: follower written as $n2, leader $n1"; fi
-  if awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
+  if awk -v t="$t" 'BEGIN { exit !(t ~ /^ *[-+]?\.?[0-9]/ && t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
 }
 fit_common fit_numerical ""
 fit_common fit_analytic "--use-gradient"
@@ -129,7 +129,7 @@ fit_common fit_lm "--use-lm"
 mk compromise 1 "$(nr F "1 fit")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s09 90 F)"
 if run compromise 2 "--use-gradient"; then
   n1="$(par "$WORK/compromise" F.value)"; n2="$(par "$WORK/compromise" "F.value[xs_90_s09]")"
-  if awk -v n="$n1" 'BEGIN { exit !(n > 1.1112 && n < 1.2499) }' && relclose "$n2" "$n1" 1e-12; then
+  if awk -v n="$n1" 'BEGIN { exit !(n ~ /^ *[-+]?\.?[0-9]/ && n > 1.1112 && n < 1.2499) }' && relclose "$n2" "$n1" 1e-12; then
     ok "one norm for both, between the two truths (n = $n1; truths 1.111 / 1.25)"
   else
     bad "expected one norm strictly between 1.111 and 1.25, got $n1 / $n2"
@@ -146,7 +146,7 @@ if run penalty 2 "--use-gradient"; then
   want="$(awk -v n="$n" 'BEGIN { printf "%.10g", ((n - 1) / 0.1) ^ 2 }')"
   if relclose "$pt" "$want" 1e-4 && [ "$p2" = 0 ]; then ok "one penalty ((n-1)/0.1)^2 = $pt at n = $n; follower row 0"
   else bad "norm penalty $pt (follower row $p2), expected one term $want at n = $n"; fi
-  if awk -v n="$n" 'BEGIN { exit !(n > 1.0 && n < 1.25) }'; then ok "penalty pulls the shared norm below the data's 1.25 (n = $n)"; else bad "n = $n not between 1 and 1.25"; fi
+  if awk -v n="$n" 'BEGIN { exit !(n ~ /^ *[-+]?\.?[0-9]/ && n > 1.0 && n < 1.25) }'; then ok "penalty pulls the shared norm below the data's 1.25 (n = $n)"; else bad "n = $n not between 1 and 1.25"; fi
 fi
 
 # ---- 5. analytic norm gradient == finite difference ----------------------------

@@ -71,7 +71,7 @@ fi
 # (a)
 run fit "$WORK/fit.azr" 2 "--use-gradient"
 n="$(par fit tgt_meyer_84.areal_density)"; c="$(chi fit Total-Chi-Squared)"
-if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
+if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
   ok "(a) a SUM segment under a fitted density: N $n from 1e18 (truth 1.1e18), chi2 $c"
 else bad "(a) a SUM segment under a fitted density: N ${n:-missing}, chi2 ${c:-missing}"; tail -3 "$WORK/fit/run.log"; fi
 

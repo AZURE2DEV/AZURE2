@@ -415,7 +415,8 @@ the cross-checks are in `references/calibration.md`.
 ## Pitfalls checklist
 
 - [ ] Penetrability-corrected points fitted as HOES (7Li/6Li: S(0) halved through direct norms 0.4–0.6).
-- [ ] Wrong carrier or B in field 32 (³He 5.4935, not d 2.2246 or 6Li 1.4735).
+- [ ] Wrong carrier or B in field 32 (³He 5.4935, not d 2.2246 or 6Li 1.4735); set it with
+  `Project.set_pair(key, binding_energy=B)`, never by editing the row.
 - [ ] Wrong `kinematics=`: the KF convention changes relative peak heights, and for several exit channels their α/p
   weight (×5 for 12C+12C).
 - [ ] Lab vs c.m. energy column (17O lab; 12C+12C E_lab = 2E_cm); a beam `spread` is lab and a standard deviation, not

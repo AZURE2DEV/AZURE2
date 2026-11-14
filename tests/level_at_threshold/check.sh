@@ -94,10 +94,11 @@ case_set() {  # case_set LABEL SRC_AZR DATA_DIR SEP RWA
       b="$(basename "$f")"
       paste "$WORK/${label}-1e-9/output/$b" "$f" "$WORK/${label}1e-9/output/$b"
     done | awk '{ n = NF / 3; if (n < 4) next
-      m = $(n + 4); if (m == 0) next
+      if (NF % 3 || $1 != $(n + 1) || $1 != $(2 * n + 1)) { g = 1; next }
+      c++; m = $(n + 4); if (m == 0) next
       for (k = 0; k <= 2; k += 2) { d = ($(k * n + 4) - m) / m; if (d < 0) d = -d; if (d > w) w = d }
-    } END { printf "%.3g\n", w + 0 }')"
-  if awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then
+    } END { if (g) print "grid"; else if (c == 0) print "none"; else printf "%.3g\n", w + 0 }')"
+  if awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-6) }'; then
     echo "  ok    $label: model continuous through threshold (max rel diff $worst)"
   else
     echo "  FAIL  $label: model jumps across threshold (max rel diff $worst)"; fail=1

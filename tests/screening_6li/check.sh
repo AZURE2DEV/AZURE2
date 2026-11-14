@@ -67,7 +67,7 @@ if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
       eta = sqrt(uconv / 2) * fs * 3 * sqrt(mu / E)
       d = s / b / exp(pi * eta * u * 1e-6 / E) - 1; if (d < 0) d = -d; if (d > w) w = d }
     END { printf "%.3e %d\n", w, r }')"
-  if [ "$nrow" = 23 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-8) }'; then
+  if [ "$nrow" = 23 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-8) }'; then
     ok "screened / bare = exp(pi eta U_e / E) at all 23 points (worst $worst)"
   else
     bad "screened / bare (worst $worst over $nrow rows)"

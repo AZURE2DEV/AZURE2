@@ -137,11 +137,11 @@ en="$(field "$X" norm)"; b0="$(field "$X" b0)"; b1="$(field "$X" b1)"; echi="$(f
 near "$en" "$(awk -v s="$S_TRUE" 'BEGIN { printf "%.17e", 1 / s }')" 1e-8 && ok "n = 1/s recovered: $en" || bad "n $en, want 1/$S_TRUE"
 near "$b0" "$(awk -v s="$S_TRUE" -v a="$A0" 'BEGIN { printf "%.17e", a / s }')" 1e-8 && ok "b0 = a0/s recovered: $b0" || bad "b0 $b0"
 near "$b1" "$(awk -v s="$S_TRUE" -v a="$A1" 'BEGIN { printf "%.17e", a / s }')" 1e-8 && ok "b1 = a1/s recovered: $b1" || bad "b1 $b1"
-awk -v c="$echi" 'BEGIN { exit !(c != "" && c < 1e-8) }' && ok "chi2 ~ 0 ($echi)" || bad "chi2 $echi"
+awk -v c="$echi" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c != "" && c < 1e-8) }' && ok "chi2 ~ 0 ($echi)" || bad "chi2 $echi"
 grep -q "^status: profiled" "$X" && ok "status: profiled" || bad "status: $(grep status "$X")"
 # The fitted curve written is m + b(E) = the data scaled by n (chi2 ~ 0).
 worst="$(tr -d '\r' < "$WORK/bkg/output/$OUT" | awk 'NF >= 6 { d = ($4 - $6) / $6; if (d < 0) d = -d; if (d > w) w = d } END { printf "%.2e", w }')"
-awk -v w="$worst" 'BEGIN { exit !(w < 1e-8) }' && ok "output: model + b(E) = data x n (worst rel $worst)" || bad "output curve off the data by $worst"
+awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-8) }' && ok "output: model + b(E) = data x n (worst rel $worst)" || bad "output curve off the data by $worst"
 # The background is not a shift of the data: without it the same data do not fit.
 run nobkg "experiment[A]"
 cp "$WORK/syn/"*.dat "$WORK/nobkg/data/"

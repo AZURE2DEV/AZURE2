@@ -127,7 +127,7 @@ if [ "$n" -lt 5 ]; then
 else
   fd="$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a; d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d }
              END { printf "%.2e", w / m }' "$WORK/rows")"
-  awk -v w="$fd" 'BEGIN { exit !(w + 0 <= 1e-5) }' && ok "(d) gradient = finite differences for $n parameters ($fd of the largest)" \
+  awk -v w="$fd" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }' && ok "(d) gradient = finite differences for $n parameters ($fd of the largest)" \
     || bad "(d) gradient vs finite differences: $fd of the largest"
 fi
 

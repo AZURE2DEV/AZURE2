@@ -733,7 +733,7 @@ every data set it records:
    natural abundances; inverse kinematics (tautology) resolved to the forward form, with the experiment's form stored.
 4. **Units and frame**: each column's heading and unit from Dict. 24 and Dict. 25, converted with the dictionary's
    factor (not by prefix matching), `-CM` headings recorded as frame; energy as lab or c.m.; masses from AME2020
-   (`pyazr.masses`), never mass numbers.
+   (`pyazr.sources.masses`; moved there from `pyazr.masses`), never mass numbers.
 5. **Errors**: every error column with its heading and the `ERR-ANALYS` text and correlation flag. Mapping:
    point error e_i = quadrature sum of `ERR-S` and partial errors flagged U; normalization uncertainty = quadrature sum
    of partials flagged F (and `ERR-SYS` when no partials are given and the text says systematic); partials flagged P or

@@ -108,7 +108,7 @@ line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed 
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
 if grep -q "energy 0/3 gamma 0/3 norm 0/1; Jacobian path: energy 0/3 gamma 0/3 norm 0/1" <<< "$line" &&
-   awk -v w="$worst" 'BEGIN { exit !(w < 1e-5) }'; then
+   awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-5) }'; then
   ok "story with a beam spread: analytic gradient = finite differences (7 parameters, largest relative $worst)"
 else
   bad "gradient check: ${line:-no [grad-check] line} (largest relative $worst)"; tail -5 "$WORK/grad/run.log"

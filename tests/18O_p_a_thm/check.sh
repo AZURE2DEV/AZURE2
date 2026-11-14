@@ -79,7 +79,7 @@ compare() {
     }' "$HERE/lc723_band.txt" "$out"
 }
 
-le() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a <= b)}'; }
+le() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a ~ /^ *[-+]?\.?[0-9]/ && a <= b)}'; }
 
 run default ""
 read -r rms pk mx inb N <<< "$(compare default)"

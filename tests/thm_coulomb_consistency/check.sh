@@ -137,7 +137,7 @@ if ran c_none && ran c_ls && ran c_r && ran c_r_ls; then
   paste -d' ' <(ratios c_r_ls c_r) <(ratios c_ls c_none) > "$WORK/fac.txt"
   worst=$(awk '{ d = $2 / $4 - 1; if (d < 0) d = -d; if (d > m) m = d } END { printf "%.3e", m }' "$WORK/fac.txt")
   spread=$(awk 'NR == 1 { lo = $4; hi = $4 } { if ($4 < lo) lo = $4; if ($4 > hi) hi = $4 } END { printf "%.3f-%.3f", lo, hi }' "$WORK/fac.txt")
-  awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-9) }' &&
+  awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-9) }' &&
     ok "model(R,N_C)/model(R) == model(N_C)/model: worst $worst (N_C factor $spread)" ||
     bad "N_C and R do not factorize: worst $worst"
   awk -v s="$spread" 'BEGIN { split(s, a, "-"); exit !(a[2] - a[1] > 0.05) }' &&

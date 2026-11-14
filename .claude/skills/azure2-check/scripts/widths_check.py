@@ -40,12 +40,6 @@ def option_value(text):
         return text
 
 
-def jpi_text(jpi):
-    """'0.5+' -> '1/2+'."""
-    j, parity = float(jpi[:-1]), jpi[-1]
-    return (f"{int(round(2 * j))}/2" if round(2 * j) % 2 else f"{int(round(j))}") + parity
-
-
 def widths_report(session, x):
     """(channel rows, level rows) at the fit vector x."""
     from pyazr import physics
@@ -53,7 +47,7 @@ def widths_report(session, x):
     channels = []
     levels = {}
     for c in table:
-        jpi = jpi_text(c.jpi)
+        jpi = c.jpi
         theta2, wigner_width = getattr(c, "theta2", None), getattr(c, "wigner_width", None)
         if not c.is_photon and c.is_open and wigner_width is None and c.value is not None:
             # a fixed channel: the session gives no Gamma_W; the engine's single-particle width at the level energy

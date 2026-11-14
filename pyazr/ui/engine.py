@@ -302,7 +302,7 @@ class Engine:
     def snapshot(self, path, x):
         """The project's text with the values of x written into it (``save_fit``: level values, the free nuisances
         into their records; the result read back and checked), written to ``path``; returns the text."""
-        written, _ = self.s.save_fit(path, np.asarray(x, float), param_sav=False)
+        written, _ = self.s.save_fit(path, np.asarray(x, float), param_sav=False, relative_to=self.s.cwd)
         with open(written, "rb") as f:
             return f.read().decode("utf-8", "surrogateescape")
 

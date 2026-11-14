@@ -28,6 +28,14 @@ Managing Particle Pairs
 Each particle pair is automatically assigned a numerical key (displayed on the
 far left), which is referenced when creating segments.
 
+In ``pyazr`` the same three actions are edits of a :class:`pyazr.Project`:
+``p.add_pair(light=dict(J=, parity=, Z=, mass=), heavy=..., separation_energy=,
+radius=)`` (it returns the key), ``p.remove_pair(key)`` (refused while a level
+has a channel of the pair, unless ``remove_channels=True``) and
+``p.set_pair(key, radius=, ..., binding_energy=)``; ``p.allowed_channels(J,
+parity, l_max=2)`` gives the channels the **Levels and Channels** tab would
+calculate (:doc:`project_from_python`).
+
 .. important::
 
    The **first** particle pair must always be of type **(Particle, Particle)**.

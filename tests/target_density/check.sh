@@ -74,7 +74,7 @@ for v in "fit:--use-gradient" "fit_lm:--use-lm" "fit_gsl:--use-gsl-lm"; do
   name="${v%%:*}"; flags="${v#*:}"
   run "$name" "$HERE/fit.azr" 2 "$flags"
   n="$(par "$name" tgt_meyer_84.areal_density)"; c="$(chi "$name" Total-Chi-Squared)"
-  if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
+  if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
     ok "$name ($flags): N $n from 1e18 (truth 1.1e18), chi2 $c"
   else bad "$name ($flags): N ${n:-missing}, chi2 ${c:-missing}"; tail -5 "$WORK/$name/run.log"; fi
 done
@@ -89,14 +89,14 @@ else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/ru
 run prior "$HERE/fit_prior.azr" 2 "--use-gradient"
 n="$(par prior tgt_meyer_84.areal_density)"; dc="$(chi prior Total-Density-Chi-Squared)"
 if [ -n "$n" ] && [ -n "$dc" ] && awk -v n="$n" -v s="$dc" 'BEGIN { p = ((n - 1e18) / 2e16)^2; d = s - p; if (d < 0) d = -d
-       exit !(n > 1.0e18 && n < 1.1e18 && d <= 1e-4 * (p + 1)) }'; then
+       exit !(n ~ /^ *[-+]?\.?[0-9]/ && n > 1.0e18 && n < 1.1e18 && d <= 1e-4 * (p + 1)) }'; then
   ok "a 2 % prior pulls N to $n; Total-Density-Chi-Squared $dc = ((N - 1e18)/2e16)^2"
 else bad "prior fit: N ${n:-missing}, Total-Density-Chi-Squared ${dc:-missing}"; tail -5 "$WORK/prior/run.log"; fi
 
 # ---- 4. a density group -----------------------------------------------------------------------
 run group "$HERE/fit_group.azr" 2 "--use-gradient"
 n="$(par group t.areal_density)"; n2="$(awk '$1 ~ /areal_density/ && $1 != "t.areal_density" { print $1 }' "$WORK/group/output/param.sav")"; c="$(chi group Total-Chi-Squared)"
-if [ -n "$n" ] && [ -z "$n2" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
+if [ -n "$n" ] && [ -z "$n2" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c ~ /^ *[-+]?\.?[0-9]/ && c < 1e-2) }'; then
   ok "a density group: one parameter, N $n from both segments, chi2 $c"
 else bad "group fit: N ${n:-missing}, density_2 '${n2}', chi2 ${c:-missing}"; tail -5 "$WORK/group/run.log"; fi
 # the old group's second line carried a density of its own, which the old engine replaced by the group's: the

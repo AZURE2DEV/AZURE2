@@ -32,7 +32,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/sum_lab_frame.XXXXXX")"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^[0-9.]+([eE][-+]?[0-9]+)?$/ && r + 0 <= t + 0) }'; }
 
 # run DIR MODEL MODE KINFLAG [FLAGS] [ENV...] -> $WORK/DIR
 run() {
@@ -56,7 +56,7 @@ maxrel() {
     { if (e) next; if ($1 != $4 || $2 != $5) { print "grid"; e = 1; next }
       d = $3 - $6; if (d < 0) d = -d; m = $6 < 0 ? -$6 : $6; if (m < 1e-300) m = 1e-300
       r = d / m; if (r > w) w = r; n++ }
-    END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
+    END { if (e) exit; if (n == 0) print "nan"; else printf "%.3e\n", w }'
 }
 
 # ---- (a) extrapolations ------------------------------------------------------------------------------------------

@@ -19,14 +19,20 @@ def session_closed(project_file, caller):
     return SessionClosed(
         f"{call}: this session of {os.path.basename(project_file)} is closed (close() or the end of its with "
         f"block released the engine); a closed session cannot be reopened.  Open a new one: "
-        f"pyazr.Session({project_file!r}); is_alive() tells whether a session is open.")
+        f"pyazr.Session({project_file!r}); is_alive() tells whether a session is open.",
+        what=f"this session of {os.path.basename(project_file)} is closed", allowed="a closed session cannot be reopened",
+        fix=f"Open a new one: pyazr.Session({project_file!r}); is_alive() tells whether a session is open")
 
 
 def missing_directory(cwd, project_file):
     """The error of a working directory (``cwd=``) that does not exist."""
     return MissingFile(cwd, f"working directory {cwd!r} (cwd=) does not exist; the project's relative paths are read "
                             f"and written there.  Give an existing directory, or leave cwd=None for the project "
-                            f"file's own ({os.path.dirname(project_file)}).")
+                            f"file's own ({os.path.dirname(project_file)}).",
+                       what=f"working directory {cwd!r} (cwd=) does not exist",
+                       allowed="an existing directory",
+                       fix=f"Give an existing directory, or leave cwd=None for the project file's own "
+                           f"({os.path.dirname(project_file)})")
 
 
 def require_extrapolations(project_file, cwd):
@@ -37,11 +43,15 @@ def require_extrapolations(project_file, cwd):
     if not any(e.active for e in described):
         what = (f"its {len(described)} extrapolation record(s) are all inactive" if len(described)
                 else "it has no extrapolation record")
+        fix = (f"Add one (pyazr.Project.open({project_file!r}).add_extrapolation(...), then save), or make a session "
+               f"for the data sets: pyazr.Session({project_file!r})")
         raise AZURE2Error(
             f"Session(extrapolations=True): {os.path.basename(project_file)} has nothing to extrapolate ({what}); a "
             f"session for the extrapolations needs at least one active extrapolation record.  Add one "
             f"(pyazr.Project.open({project_file!r}).add_extrapolation(...), then save), or make a session for the "
-            f"data sets: pyazr.Session({project_file!r}).")
+            f"data sets: pyazr.Session({project_file!r}).",
+            what=f"{os.path.basename(project_file)} has nothing to extrapolate ({what})",
+            allowed="a session for the extrapolations needs at least one active extrapolation record", fix=fix)
 
 
 def fit_vector(x, n, call):
@@ -49,7 +59,9 @@ def fit_vector(x, n, call):
     x = np.asarray(x, float).ravel()
     if x.size != n:
         raise ParameterVectorError(f"{call}: x has {x.size} entries; the fit vector has {n} (Session.parameters.x0 is "
-                                   f"one, Session.parameters.free names its entries).")
+                                   f"one, Session.parameters.free names its entries).",
+                                   what=f"x has {x.size} entries", allowed=f"the fit vector has {n}",
+                                   fix="Session.parameters.x0 is one, Session.parameters.free names its entries")
     return x
 
 
@@ -75,15 +87,20 @@ def channel_request(pairs, pair, L):
     except (TypeError, ValueError):
         key = None
     if key is None or key != pair or key not in known:
+        pairs = listed([f'{k} ({q.label})' for k, q in known.items()])
         raise ParameterIndexError(
             f"channel_functions: pair {pair!r} is not a pair key of this model; its pairs are "
-            f"{listed([f'{k} ({q.label})' for k, q in known.items()])}; Session.pairs lists them (Pair.key).")
+            f"{pairs}; Session.pairs lists them (Pair.key).",
+            what=f"pair {pair!r} is not a pair key of this model", allowed=f"its pairs are {pairs}",
+            fix="Session.pairs lists them (Pair.key)")
     if known[key].is_photon:
         particles = [f"{k} ({q.label})" for k, q in known.items() if not q.is_photon]
         raise DomainError(
             f"channel_functions: pair {key} ({known[key].label}) is a photon pair, which has no Coulomb functions "
             f"(they were returned as zeros before); the particle pairs are {listed(particles)} "
-            f"(Session.pairs.particles).")
+            f"(Session.pairs.particles).",
+            what=f"pair {key} ({known[key].label}) is a photon pair, which has no Coulomb functions",
+            allowed=f"the particle pairs are {listed(particles)}", fix="Session.pairs.particles")
     try:
         whole = float(L) == int(L) and int(L) >= 0
     except (TypeError, ValueError):
@@ -91,7 +108,9 @@ def channel_request(pairs, pair, L):
     if not whole:
         raise DomainError(
             f"channel_functions: L = {L!r} is not an orbital angular momentum; L must be a whole number >= 0.  The "
-            f"channels of a pair: Session.parameters.of_kind('width') (Parameter.L).")
+            f"channels of a pair: Session.parameters.of_kind('width') (Parameter.L).",
+            what=f"L = {L!r} is not an orbital angular momentum", allowed="L must be a whole number >= 0",
+            fix="Session.parameters.of_kind('width') (Parameter.L)")
     return key, int(L)
 
 

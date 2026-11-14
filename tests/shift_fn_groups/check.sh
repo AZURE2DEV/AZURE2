@@ -121,7 +121,7 @@ mk member 0 "$(scale F 'a0*x' 'a0 0.003 fixed'
                 ds xs_90_3 xs_90.dat 90 'shift          offset 0.001 MeV fixed' 'shift          H')"
 if run member 1 ""; then
   d23="$(blockdiff "$WORK/member" 2 3)"; d24="$(blockdiff "$WORK/member" 2 4)"
-  if awk -v d="$d23" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "member = the function given directly with its own constant ($d23)"; else bad "member vs direct: $d23"; fi
+  if awk -v d="$d23" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "member = the function given directly with its own constant ($d23)"; else bad "member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "member does not take the leader's constant ($d24 from it)"; else bad "member uses the leader's constant ($d24)"; fi
   if grep -q "shift function on segment #1 (shift-function group 'F', segments #1 2; each keeps its own constant shift)" "$WORK/member/run.log"; then ok "group noted in the log"; else bad "no shift-function-group note in the log"; grep -i "shift function" "$WORK/member/run.log" | sed -n '1,3p'; fi
 fi
@@ -140,7 +140,7 @@ fit() {  # NAME FLAGS [strict|info]
     ok "$1: a1 = $a1, a2 = $a2, a0 = $a0 (truth -0.004, -0.007018, 0.006)"
   else bad "$1: a1 = $a1, a2 = $a2, a0 = $a0, expected -0.004, -0.007018, 0.006"; fi
   if [ "${3:-strict}" = info ]; then echo "  info  $1: chi2 $t (not checked: the parameters above decide)"
-  elif awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth ($t)"; else bad "$1: chi2 $t, expected ~0"; fi
+  elif awk -v t="$t" 'BEGIN { exit !(t ~ /^ *[-+]?\.?[0-9]/ && t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth ($t)"; else bad "$1: chi2 $t, expected ~0"; fi
   if [ "$(awk '$1 ~ /a0/' "$dir/output/param.sav" | wc -l | tr -d ' ')" = 1 ]; then ok "$1: one a0 parameter, the record's"; else bad "$1: a0 rows: $(awk '$1 ~ /a0/ { printf "%s ", $1 }' "$dir/output/param.sav")"; fi
   if grep -q "^# 1,1 2,a0\*(x-1)," "$dir/output/shifts.out"; then ok "$1: shifts.out function line lists both members"; else bad "$1: shifts.out function line: $(grep '^# 1' "$dir/output/shifts.out")"; fi
 }
@@ -158,7 +158,7 @@ else bad "Jacobian-path gradient check: $(grep -E 'Jacobian path|components with
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > adjoint.log 2>&1)
 nchk="$(grep -c 'shift-grad-check' "$WORK/gradcheck/adjoint.log")"
 worst="$(grep -o 'reldiff=[-0-9.e+]*' "$WORK/gradcheck/adjoint.log" | cut -d= -f2 | sort -g | tail -1)"
-if [ "$nchk" -ge 4 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 < 1e-6) }'; then ok "adjoint path: shift columns = full differences ($nchk checks, worst $worst)"
+if [ "$nchk" -ge 4 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 < 1e-6) }'; then ok "adjoint path: shift columns = full differences ($nchk checks, worst $worst)"
 else bad "adjoint-path shift gradient check: $nchk checks, worst reldiff '$worst'"; fi
 
 # ---- 4. invalid input ---------------------------------------------------------------
@@ -181,7 +181,7 @@ mk composite 0 "$(scale F 'a0*x' 'a0 0.003 fixed'
                    ds xs_90_3 xs_90.dat 90 'shift          offset 0.002 MeV fixed' 'shift          H')"
 if run composite 1 ""; then
   d23="$(blockdiff "$WORK/composite" 2 3)"; d24="$(blockdiff "$WORK/composite" 2 4)"
-  if awk -v d="$d23" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "composite member = the composite with the function given directly ($d23)"; else bad "composite member vs direct: $d23"; fi
+  if awk -v d="$d23" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d != "mismatch" && d + 0 <= 1e-10) }'; then ok "composite member = the composite with the function given directly ($d23)"; else bad "composite member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "the component is included ($d24 from the plain segment)"; else bad "composite equals the plain segment ($d24)"; fi
 fi
 

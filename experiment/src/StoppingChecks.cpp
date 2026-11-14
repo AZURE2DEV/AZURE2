@@ -22,7 +22,7 @@ Diagnostic StoppingDataMissing(const std::string &target, const std::string &why
   Diagnostic d = Base(target, codes::kStoppingData);
   d.message = "the stopping cannot be evaluated: " + why +
               " (an evaluation needs SRIM-2013's SCOEF03.DAT and SNUC03.dat, compiled in from stopping/data/srim/ or in "
-              "the directory AZURE2_SRIM_DATA_DIR names; a table needs its file)";
+              "the directory --srim-data-dir=DIR (the switch AZURE2_SRIM_DATA_DIR) names; a table needs its file)";
   return d;
 }
 

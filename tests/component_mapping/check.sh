@@ -124,7 +124,7 @@ if [ -s "$sum" ] && [ -s "$cap" ]; then
                 r = d / (x < 0 ? -x : x); if (r > w) w = r }
               END { printf "%d %d %d %.2e", n, m, bad + 0, w }' "$sum" "$cap")"
   read -r n m nbad worst <<< "$res"
-  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-10) }'; then
+  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }'; then
     ok "(a) extrapolated SUM capture + 1000 x capture = 1001 x capture at $n energies (worst $worst relative)"
   else bad "(a) extrapolated SUM against its terms: $n and $m rows, $nbad energies differ, worst $worst"; fi
 else
@@ -143,7 +143,7 @@ elif run xalone alone.azr 3 X=0; then
                 r = d / (x < 0 ? -x : x); if (r > w) w = r }
               END { printf "%d %d %d %.2e", n, m, bad + 0, w }' "$sum" "$el" "$cap")"
   read -r n m nbad worst <<< "$res"
-  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-10) }'; then
+  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }'; then
     ok "(d) SUM elastic + 1000 x capture alone = its terms at $n energies (worst $worst of the sum)"
   else bad "(d) SUM elastic + 1000 x capture alone against its terms: $n and $m rows, $nbad energies differ, worst $worst of the sum"; fi
   if [ -s "$WORK/xalone/output/intEC.extrap" ]; then ok "(d) the run calculated external capture (intEC.extrap written)"
@@ -169,11 +169,11 @@ if [ "$nrow" -lt 5 ]; then bad "(c) gradient check listed $nrow parameters"
 else
   fd="$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a; d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d }
              END { printf "%.2e", w / m }' "$WORK/fit/rows")"
-  awk -v w="$fd" 'BEGIN { exit !(w + 0 <= 1e-5) }' && ok "(c) gradient = finite differences for $nrow parameters ($fd of the largest)" \
+  awk -v w="$fd" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-5) }' && ok "(c) gradient = finite differences for $nrow parameters ($fd of the largest)" \
     || bad "(c) gradient vs finite differences: $fd of the largest"
   jac="$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a; e = $1 - $3; if (e < 0) e = -e; if (e > v) v = e }
               END { printf "%.2e", v / m }' "$WORK/fit/rows")"
-  awk -v w="$jac" 'BEGIN { exit !(w + 0 <= 1e-10) }' && ok "(c) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
+  awk -v w="$jac" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w + 0 <= 1e-10) }' && ok "(c) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
     || bad "(c) Jacobian-path vs adjoint gradient: $jac of the largest"
 fi
 

@@ -348,7 +348,8 @@ const std::vector<PairField> &PairFields() {
        }},
       {"ptype", "", "the pair type as <levels> writes it: 0 particle, 10 photon, 20 beta",
        [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::int_(q.GetPType()); }},
-      {"is_entrance", "", "the pair the calculation is driven from",
+      {"is_entrance", "", "an entrance pair of the calculation: of an active data set (of an active extrapolation in a "
+                          "session of the extrapolations), set when the session is built",
        [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::bool_(q.IsEntrance()); }},
       {"J1", "", "the light particle's spin", [](const CNuc &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetJ(1));

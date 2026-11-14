@@ -98,7 +98,7 @@ setup grad "$WORK/grad.azr"
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
-if grep -q "energy 0/4 gamma 0/10; Jacobian path: energy 0/4 gamma 0/10" <<< "$line" && awk -v w="$worst" 'BEGIN { exit !(w < 1e-5) }'; then
+if grep -q "energy 0/4 gamma 0/10; Jacobian path: energy 0/4 gamma 0/10" <<< "$line" && awk -v w="$worst" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-5) }'; then
   ok "folded ratio: analytic gradient = finite differences (14 parameters, largest relative $worst)"
 else
   bad "gradient check: ${line:-no [grad-check] line} (largest relative $worst)"

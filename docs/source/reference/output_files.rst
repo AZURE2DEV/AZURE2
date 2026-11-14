@@ -21,25 +21,24 @@ param.sav
 Contains the best-fit formal R-matrix parameters after a fit is completed. This
 file can be loaded back into AZURE2 to reproduce a fit or to use as starting
 parameters for subsequent calculations (extrapolation, reaction rate, etc.).
-In a project with an ``<abundances>`` block the isotopic abundances follow the
-level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
-experimental-effect line with a ``screening`` block adds its screening potential
-(eV) as ``screening_<n>`` after the energy-shift parameters, and a fitted target
-density (``densityfit``, one per line or ``densitygroup``) adds ``density_<n>``
-(atoms/cm²) after those, and a fitted Doppler temperature (``doppler T vary sigma``)
-adds ``doppler_<n>`` (K) after the densities. A transmission or yield segment
-whose block has the fit form (``transmission n vary sigma``) adds its sample
-thickness ``segment_<k>_thickness`` (atoms/barn) after the Doppler temperatures; a
-``thicknessgroup`` follower's is written as its leader's value.
+A parameter is named after the record it belongs to (:doc:`format3`). A sample's
+isotopic abundances follow the level parameters as ``<sample>.isotope.<isotope>``
+(:doc:`data_formats`). A target with electron screening adds its screening
+potential (eV) as ``<target>.screening`` after the energy-shift parameters, a
+fitted areal density ``<target>.areal_density`` (atoms/cm²) after those, and a
+fitted Doppler temperature ``<target>.doppler`` (K) after the densities. A
+transmission or yield data set whose sample thickness is fitted adds
+``<target>.areal_density`` (atoms/barn) after the Doppler temperatures; a later
+member of a thickness group is written as ``<target>.areal_density[<data set>]``
+with its leader's value.
 
-The ``segment_<k>_*`` lines (normalizations, energy shifts and sample thicknesses) belong to the
-data segments of the fit that wrote the file. A run without data -- an
+The data-set lines (``<data set>.norm``, ``<data set>.shift.offset``, ...)
+belong to the data sets of the fit that wrote the file. A run without data -- an
 extrapolation (**Calculate Segments Without Data**) or a reaction rate --
-numbers its own test grids 1, 2, ... and does not apply those lines (the run
-log says so): a test segment's energies are the ones its line asks for. Until
-October 2026 data segment *k*'s fitted shift was handed to test segment *k* by
-name and moved its grid. ``pyazr``'s ``Session(file, parameter_file=path)`` does the same in
-extrapolation mode.
+names its extrapolations' parameters after their own records and does not apply
+the data sets' lines (the run log says so): an extrapolation's energies are the
+ones its record asks for. ``pyazr``'s ``Session(file, extrapolations=True,
+parameter_file=path)`` does the same.
 
 ``param.par`` and ``param.sav`` hold one row per parameter, ``name value
 error``, after a first line ``#parametrization`` with the basis 0, 1 or 2
@@ -48,7 +47,7 @@ parametrizations"), a comment line to positional readers such as
 ``numpy.loadtxt``. The rows are
 matched **by name** when a file is read, by AZURE2 and by ``pyazr``: a name
 the file lacks keeps its value from the project, and rows are appended as
-parameters are added (``segment_N_energy_shift_sqrt``, the THM ``cbkg_*``),
+parameters are added (``<data set>.shift.sqrt``, the THM ``cbkg_*``),
 so read them by name in your own scripts too.
 
 **Kinds of parameter.** A name is a label for people and files: AZURE2 does
@@ -76,41 +75,41 @@ vector:
      - MeV\ :sup:`1/2`
      - reduced-width amplitude of level *n* in channel *c*, in the run's basis
    * - ``abundance``
-     - ``abundance[_<sample>]_<Z>_<A>``
+     - ``<sample>.isotope.<isotope>``
      - 1
      - isotopic abundance (``<abundances>``)
    * - ``norm``
-     - ``segment_<k>_norm``
+     - ``<data set>.norm``; a norm group's ``<norm record>.value``
      - 1
-     - normalization of data segment *k*
+     - normalization of a data set
    * - ``shift``
-     - ``segment_<k>_energy_shift``
+     - ``<data set>.shift.offset``; a shift group's ``<energy_scale record>.offset``
      - MeV (lab)
-     - constant energy shift of segment *k*
+     - constant energy shift of a data set
    * - ``shift_sqrt``
-     - ``segment_<k>_energy_shift_sqrt``
+     - ``<data set>.shift.sqrt``
      - MeV\ :sup:`1/2`
-     - coefficient of the :math:`\sqrt{E}` shift of segment *k*
+     - coefficient of the :math:`\sqrt{E}` shift of a data set
    * - ``shift_fn``
-     - ``segment_<k>_energy_shift_fn<j>``
+     - ``<energy_scale record>.a<j>``
      - as the function defines
-     - parameter :math:`a_j` of segment *k*'s shift function
+     - parameter :math:`a_j` of an energy scale's shift function
    * - ``screening``
-     - ``screening_<n>``
+     - ``<target>.screening``
      - eV
-     - electron-screening potential of target effect *n*
+     - electron-screening potential of a target
    * - ``density``
-     - ``density_<n>``
+     - ``<target>.areal_density``
      - atoms/cm²
-     - fitted target density of target effect (or density group) *n*
+     - fitted areal density of a target (or of its density group)
    * - ``doppler``
-     - ``doppler_<n>``
+     - ``<target>.doppler``
      - K
-     - fitted Doppler temperature of target effect *n*
+     - fitted Doppler temperature of a target
    * - ``thickness``
-     - ``segment_<k>_thickness``
+     - ``<target>.areal_density``
      - atoms/barn
-     - fitted sample thickness of transmission or yield segment *k*
+     - fitted sample thickness of a transmission or yield data set
    * - ``cbkg``
      - ``cbkg_<experiment>_...``
      - HOES amplitude (:math:`c_1` per MeV)

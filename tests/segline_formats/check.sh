@@ -89,7 +89,7 @@ n="$(wc -l < "$WORK/tplain.x" | tr -d ' ')"
 maxrel() { paste "$1" "$2" | awk 'BEGIN { m = 0 } { r = ($2 - $4) / $2; if (r < 0) r = -r; if (r > m) m = r } END { printf "%.3e", m }'; }
 w="$(maxrel "$WORK/tbare.x" "$WORK/tplain.x")"; d="$(maxrel "$WORK/tplain.x" "$WORK/tkeys.x")"
 if [ "$n" -ge 5 ] && awk -v w="$w" 'BEGIN { exit !(w > 0.01) }'; then ok "(c) 'sample 1' weights the plain n + 20Ne test line by the abundance (moves it by $w)"; else bad "(c) 'sample 1' does not change the test line ($w): the check has no teeth"; fi
-if [ "$n" -ge 5 ] && awk -v d="$d" 'BEGIN { exit !(d <= 1e-9) }'; then ok "(c) with sqrtshift and shiftgroup before 'sample 1' the line equals the plain 'sample 1' line ($n energies, $d)"; else bad "(c) the test line with data-only keywords differs from the plain one by $d ($n energies): 'sample 1' was lost"; fi
+if [ "$n" -ge 5 ] && awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d <= 1e-9) }'; then ok "(c) with sqrtshift and shiftgroup before 'sample 1' the line equals the plain 'sample 1' line ($n energies, $d)"; else bad "(c) the test line with data-only keywords differs from the plain one by $d ($n energies): 'sample 1' was lost"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

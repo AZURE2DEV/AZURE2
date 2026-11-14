@@ -49,7 +49,7 @@ maxrel() {
               r = d / m; if (r > worst) worst = r; rows++ }
     END { if (rows == 0) print "nan"; else printf "%.3e\n", worst }'
 }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= t + 0) }'; }
 nlines() { awk 'END { print NR }' "$1"; }
 
 # Test segments only, target integration off (first field of each <targetInt> line set to 0)

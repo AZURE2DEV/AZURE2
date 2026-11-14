@@ -370,6 +370,13 @@ negative one, and two different values on lines of one pair. Two particles of
 a particle pair are identical when Z, mass, spin, parity, g-factor and
 excitation (``e1 = e2``) are all equal (:doc:`../user_guide/particle_pairs`).
 
+A pair that no level names yet is held by a line of its own, a *pair row*:
+inactive (``active`` 0) with level ID 0, J 0+, E 0, l 0, s 0 and width 0, the
+pair's columns as on any line. The engine reads it as any inactive line (its
+pair belongs to the system only with ``includeAllJPi``); pyazr's
+``Project.levels()`` lists no level for it, ``Project.add_pair`` writes it and
+``Project.add_level`` removes it once a level names the pair.
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project

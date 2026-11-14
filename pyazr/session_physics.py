@@ -184,7 +184,8 @@ class SessionPhysics:
             photon = p.radiation_type in ("E", "M")
             row = ChannelWidth(
                 name=p.name, index=p.index, free_index=p.free_index,
-                fixed=p.fixed, jgroup=p.jgroup, level=p.level, jpi=p.jpi,
+                fixed=p.fixed, jgroup=p.jgroup, level=p.level,
+                jpi=p.level_label.split()[0] if p.level_label else p.jpi,  # the engine's J^pi text, "1/2+"
                 level_energy=ex, pair=p.pair, L=p.L, S=p.S,
                 radiation_type=p.radiation_type or "P",
                 gamma=g, value=value, is_photon=photon,

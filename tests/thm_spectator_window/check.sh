@@ -116,7 +116,7 @@ run pt_gauss "experiment[A] $KIN ps=gauss:60:29.9999-30.0001"
 if ran pt_se && ran pt_one && ran pt_narrow && ran pt_gauss; then
   for r in pt_one pt_narrow pt_gauss; do
     read -r n w <<< "$(worst $r pt_se)"
-    awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w < 1e-8) }' \
+    awk -v w="$w" -v n="$n" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 30 && w < 1e-8) }' \
       && ok "$r vs spectatorEnergy=$T30: $n points, worst rel $w" || bad "$r vs spectatorEnergy: $n points, worst rel $w"
   done
   grep -q "one node" "$WORK/pt_one/log" && ok "pmin = pmax is one node" || bad "pmin = pmax: no 'one node' in the log"
@@ -140,7 +140,7 @@ awk '{ s[$1] += $3; e[$1] = $2; n = ($1 > n ? $1 : n) } END { for (i = 1; i <= n
   "$WORK/simpson.txt" > "$WORK/simpson.avg"
 read -r n w <<< "$(paste -d' ' <(model flat) "$WORK/simpson.avg" |
   awk '{ if (e) next; if ($1 != $3) { print "0 ENERGY"; e = 1; next } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e\n", n, w }')"
-awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w < 1e-6) }' \
+awk -v w="$w" -v n="$n" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && n > 30 && w < 1e-6) }' \
   && ok "table (16 Gauss-Legendre nodes) vs Simpson (41 runs, h = 0.5 MeV/c): $n points, worst rel $w" \
   || bad "table vs Simpson: $n points, worst rel $w"
 same "$WORK/flat/output/$OUT" "$WORK/se20/output/$OUT" && bad "the flat window equals its midpoint" || true
@@ -152,7 +152,7 @@ run h32 "experiment[A] $KIN ps=hulthen:0-40 psNodes=32"
 if ran h16 && ran h8 && ran h32; then
   read -r n w16 <<< "$(worst h16 h32)"
   read -r n w8 <<< "$(worst h8 h32)"
-  counted "$n" && awk -v w="$w16" 'BEGIN { exit !(w < 1e-6) }' && ok "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16 (8 vs 32: $w8)" \
+  counted "$n" && awk -v w="$w16" 'BEGIN { exit !(w ~ /^ *[-+]?\.?[0-9]/ && w < 1e-6) }' && ok "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16 (8 vs 32: $w8)" \
     || bad "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16"
   read -r n w <<< "$(worst h16 nokey)"
   ok "(size) hulthen [0, 40] vs the quasi-free point p_s = 0: worst rel $w"
@@ -168,7 +168,7 @@ if ran h16 && ran h8 && ran h32; then
     # Linear in the nodes to 1 % (the bytes are vector capacities, which an
     # implementation may round up), not byte for byte.
     awk -v n="$np32" -v a="$b8" -v b="$b16" -v c="$b32" 'BEGIN { d = (c - b) * 8 - (b - a) * 16; if (d < 0) d = -d
-      exit !(c / n < 4096 && d <= 0.01 * c && b > a) }' \
+      exit !(n ~ /^ *[-+]?\.?[0-9]/ && c / n < 4096 && d <= 0.01 * c && b > a) }' \
       && ok "ps_table: $np32 points (with sub-points), $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes ($(awk -v n="$np32" -v c="$b32" 'BEGIN { printf "%.0f", c / n }') B per point at 32)" \
       || bad "ps_table not bounded/linear: $np32 points, $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes"
   else
@@ -183,7 +183,7 @@ run fill "experiment[A] $KIN ps=hulthen:0-40" NOFOLD
 if ran node && ran fill; then
   read -r en mn mx wn wx <<< "$(paste -d' ' <(model node) <(model fill) |
     awk 'NR == 1 || $2 < mn { mn = $2; en = $1; wn = $4 } $2 > mx { mx = $2 } $4 > wx { wx = $4 } END { print en, mn, mx, wn, wx }')"
-  awk -v mn="$mn" -v mx="$mx" -v wn="$wn" -v wx="$wx" 'BEGIN { exit !(mn / mx < 1e-3 && wn / wx > 0.05) }' \
+  awk -v mn="$mn" -v mx="$mx" -v wn="$wn" -v wx="$wx" 'BEGIN { exit !(mx ~ /^ *[-+]?\.?[0-9]/ && mn / mx < 1e-3 && wn / wx > 0.05) }' \
     && ok "at E = $en MeV: point p_s = 24: model/max = $(awk -v a="$mn" -v b="$mx" 'BEGIN { printf "%.2e", a / b }'), window: $(awk -v a="$wn" -v b="$wx" 'BEGIN { printf "%.3f", a / b }') (filled by a factor $(awk -v a="$wn" -v b="$mn" 'BEGIN { printf "%.2e", a / b }'))" \
     || bad "node not filled: E = $en, point $mn/$mx, window $wn/$wx"
 fi

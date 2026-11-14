@@ -44,7 +44,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/ratio_frame.XXXXXX")"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
+le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 <= t + 0) }'; }
 
 # run DIR MODEL MODE KINFLAG [FLAGS] [ENV...] -> $WORK/DIR (a data/ directory placed there beforehand is kept)
 run() {
@@ -66,11 +66,11 @@ rows() { block "$1" "$2" | awk 'NF >= 5 { printf "%.10f %.10f %.12e\n", $2, $3, 
 ratio_dev() {
   paste "$1" "$3" > "$WORK/nr"
   awk 'FNR == NR { d[$1, $2] = $3; n[$1]++; s[$1] = $3; next }
-       { if ($1 != $4 || $2 != $5) { print "grid"; exit }
-         den = (n[$1] == 1) ? s[$1] : d[$1, $2]; if (den == "" ) { print "nodenominator"; exit }
+       { if ($1 != $4 || $2 != $5) { print "grid"; g = 1; exit }
+         den = (n[$1] == 1) ? s[$1] : d[$1, $2]; if (den == "" ) { print "nodenominator"; g = 1; exit }
          e = $3 / den; x = $6 - e; if (x < 0) x = -x; m = e < 0 ? -e : e; if (m < 1e-300) m = 1e-300
          r = x / m; if (r > w) w = r; c++ }
-       END { if (c == 0) print "nan"; else printf "%.3e\n", w }' "$2" "$WORK/nr"
+       END { if (g) exit; if (c == 0) print "nan"; else printf "%.3e\n", w }' "$2" "$WORK/nr"
 }
 # reldiff A B -> the largest relative difference of the third columns
 reldiff() {

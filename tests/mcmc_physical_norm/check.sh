@@ -36,9 +36,9 @@ read -r step walker logL norm < <(awk -F, -v n="$nfree" 'NR > 1 { s = $1 } END {
        END { n = split(line, f, ","); print f[1], f[2], f[4], f[n] }' output/samples.mcmc; })
 pnorm="$(awk '$1 ~ /\.norm$/ { print $2 }' output/param.mcmc)"
 echo "  last step $step, best walker $walker: sampled norm $norm, param.mcmc norm $pnorm, logL $logL"
-rel() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; m = (a < 0 ? -a : a); if (m == 0) m = 1; printf "%.2e", d / m }'; }
+rel() { awk -v a="$1" -v b="$2" 'BEGIN { if (a !~ /^ *[-+]?\.?[0-9]/ || b !~ /^ *[-+]?\.?[0-9]/) { print "x"; exit } d = a - b; if (d < 0) d = -d; m = (a < 0 ? -a : a); if (m == 0) m = 1; printf "%.2e", d / m }'; }
 d="$(rel "$pnorm" "$norm")"
-if awk -v d="$d" 'BEGIN { exit !(d + 0 <= 1e-6) }'; then ok "(a) param.mcmc carries the sampled norm (rel $d)"
+if awk -v d="$d" 'BEGIN { exit !(d ~ /^ *[-+]?\.?[0-9]/ && d + 0 <= 1e-6) }'; then ok "(a) param.mcmc carries the sampled norm (rel $d)"
 else bad "(a) param.mcmc norm $pnorm is not the sampled norm $norm (rel $d)"; fi
 # (b) re-evaluate the sampled point two ways: param.mcmc (the full RWA set, 7 digits) with the norm set
 # to the sampled value, and with the norm at its start value 1.  The likelihood the sampler recorded must
@@ -57,7 +57,7 @@ cs="$(chi2_at sampled.par)"; c0="$(chi2_at start.par)"
 m2="$(awk -v l="$logL" 'BEGIN { printf "%.10g", -2 * l }')"
 echo "  -2 logL = $m2; mode-1 chi2 with the sampled norm $norm: $cs, with the start norm $norm0: $c0"
 ds="$(rel "$cs" "$m2")"; d0="$(rel "$c0" "$m2")"
-if awk -v a="$ds" -v b="$d0" 'BEGIN { exit !(a + 0 <= 1e-4 && a + 0 < b + 0) }'; then
+if awk -v a="$ds" -v b="$d0" 'BEGIN { exit !(a ~ /^ *[-+]?\.?[0-9]/ && a + 0 <= 1e-4 && a + 0 < b + 0) }'; then
   ok "(b) the recorded log-likelihood is the chi2 of the sampled parameters (rel $ds; at the start norm $d0)"
 else
   bad "(b) -2 logL $m2 vs chi2 at the sampled norm $cs (rel $ds) and at the start norm $c0 (rel $d0): the likelihood did not use the sampled norm"

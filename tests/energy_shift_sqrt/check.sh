@@ -27,7 +27,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 seg() { awk -F, -v k="$2" '$1 == k { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
 # relclose A B TOL -> 0 when |A-B| <= TOL*max(|B|,1e-300)
-relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
+relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(b ~ /^ *[-+]?\.?[0-9]/ && d <= t * m) }'; }
 
 # ---- 1. the shift equals re-labelled data ---------------------------------
 mkdir -p "$WORK/calc/output" "$WORK/calc/checks"
@@ -76,7 +76,7 @@ fit_variant() {  # NAME EXTRA_FLAGS
   t="$(total "$dir")"
   if awk -v a="$a" 'BEGIN { d = a + 0.006; if (d < 0) d = -d; exit !(d < 1e-4) }'; then ok "$1: fitted constant shift a = $a (truth -0.006)"; else bad "$1: fitted constant shift a = $a, expected -0.006"; fi
   if awk -v b="$b" 'BEGIN { d = b - 0.005; if (d < 0) d = -d; exit !(d < 1e-4) }'; then ok "$1: fitted sqrt(E) coefficient b = $b (truth 0.005)"; else bad "$1: fitted sqrt(E) coefficient b = $b, expected 0.005"; fi
-  if awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: fit reaches chi2 = 0 at the truth (chi2 $t)"; else bad "$1: fit chi2 $t, expected ~0"; fi
+  if awk -v t="$t" 'BEGIN { exit !(t ~ /^ *[-+]?\.?[0-9]/ && t + 0 < 1e-3) }'; then ok "$1: fit reaches chi2 = 0 at the truth (chi2 $t)"; else bad "$1: fit chi2 $t, expected ~0"; fi
 }
 fit_variant numerical ""
 fit_variant analytic "--use-gradient"
