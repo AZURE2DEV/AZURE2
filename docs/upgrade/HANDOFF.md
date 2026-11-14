@@ -2,6 +2,103 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits
+of mine). The agents' entries follow.
+
+- **The ENDF tab** (`feature/upgrade-9-webui-endf`; `pyazr/ui/evaluations.py`, `tabs/endf.js`): an ENDF-6 file
+  of the project folder over the data (what it holds, its curve per data set with the ratios to the data and
+  the model, the refusal's three parts where the file has nothing); "Check" as a job (the module's own
+  findings apart from each code's, the meaning of the known false alarms beside the finding); "Correct" as a
+  job (the candidate's difference per section, "Keep as a new file" or "Replace" after a second question).
+- **An evaluation as a start model, and the writer** (`feature/upgrade-8-endf-model-writer`; `pyazr/endf/`
+  `resonances.py`, `model.py`, `writer.py`; the engine's two level doors in the new file
+  `api/src/pybind_level_doors.cpp`): `Material.resonances()`, `pyazr.endf.to_project` (a new project in the
+  Brune basis, every level fixed), `pyazr.endf.write` (MF=1, MF=2 LRF=7 of the particle channels in the formal
+  basis, MF=3 of the exits and of capture, LRP=2, MF=2 checked against MF=3 before writing); commands
+  `pyazr endf to-project` and `pyazr endf write`. **Not written yet: MF=6** (the angular distributions).
+- **The experts' examples** (`feature/upgrade-7-examples`): every script of `pyazr/examples/` runs from the
+  root on a repository project, one test table (`tests/pyazr/examples_test.py`), consistency check 58 keeps
+  the files, the table's rows and the page `pyazr_examples.rst` together: 31 scripts now. Four scripts were
+  folded into others (`edit_scheme`, `deactivate_level`, `save_fit_to_azr`, `fit_zeus`); **the `zeus` extra
+  of `pyproject.toml` is removed** and `multiprocess` left `examples`/`all` (for the PI to confirm).
+- **The page's lists and controls** (`feature/upgrade-9-webui-lists`): the lists in words (data sets first,
+  one list per record kind, the pairs in the old program's columns, "Used by"), `GET /api/files` and a
+  field's preview, a reference's "new …", lists of numbers as boxes, MINOS's parameters as check boxes, the
+  pair form from the engine's table, Reaction Rate in the first view, the Fit tab's two depths.
+- **The prior builder** (`feature/upgrade-9-prior-builder`; `pyazr/priors.py`, `pyazr/ui/prior.py`,
+  `tabs/prior.js`): a prior's central values and covariance from named parts (an earlier fit's covariance, a
+  chain, widths typed per parameter), written as the project's prior file; three routes `/api/prior/...`.
+- **The owners of the levels** (`feature/upgrade-5-cnuc-owners`): `CNuc` keeps the set-up only (copy
+  constructor deleted; `State`, `Inputs`, `MutableState`, `Clone` and the one-argument fills deleted); the
+  run, the sampler, the session, the calculation, the rate, the limits and the sub-point grids hold a
+  `const CNuc *` and their own `LevelState`/`LevelInputs`; the pools are pools of states
+  (`include/StatePool.h`); `LevelState::InputEnergy` deleted (the THM ground-state test reads the file's
+  value); `tests/consistency/allowed_state.tsv` lost three rows.
+
+**Conflicts and their resolutions.** The lists branch against the ENDF tab: `app.js`, the route table, the
+smoke test's views (both kept). The prior builder against both: nine files, each resolved by keeping both
+sides (`work/director/try77/resolve_ea.py`); its section of `web_ui.md` is 11.15 (the lists are 11.14). The
+owners against the writer: only the front ends' class figure (tables merged, figures regenerated: 20, 30 and
+29 boxes); the writer's door file does not use the deleted doors (read).
+
+**The director's commits on the rehearsal.**
+1. A candidate replaces an ENDF-6 file only: `accept(to=..., overwrite=True)` naming the project file was
+   stopped by nothing; an existing target must now read as ENDF-6 (a test row). STANEF's misreading has its
+   cause in the module's text and in `endf.md` 13.2 (the codes read with `E11.4` where the manual says `F11.0`).
+2. The start-model example has its row in the test table and on the page.
+3. The page's integration: ENDF is in the first view (after Plot, before Reaction Rate: one row of
+   `layout.js FIRST_VIEW` to reverse); the ENDF tab's files come from the one listing (`GET /api/files`); a
+   job row names its tab (`JobRow.tab`), so the Fit tab's form offers the fit's jobs only.
+4. At the prior builder's merge: its file list is the server's (`Server.files(outputs=True)`: the general
+   listing hides `output/`, where a fit's covariance and a chain live); its example writes beside `--out`
+   only (it wrote `prior_parameters.txt` into the project's directory); its row in the test table and the
+   page.
+5. A fit's "rate …" button opens the Rate tab with the fit's best point as its parameters
+   (`#/rate?start=<job>`): after commit 3 it filled a form that no longer had that kind (my regression).
+
+**Verified on the merged tree** (build `work/b-trial77`, head `6423ec5c`): 0 warnings; all projects in the
+three bases against `tab-t74-1` (tag `tab-t77-1`): Brune 887, formal 851, Park 887 files, all identical; the
+eight fits by command identical to `b-trial76`; the quick tests 289 of 289 (283 before); the consistency
+test passes.
+
+**The director's own runs**, `b-trial77` against `b-trial76`, by command, every output file compared: the
+natural-target fit in two fitters, the T2 sampler in the physical and in the RWA mode (32 walkers), MINOS, a
+fit with band, the rate for one exit pair and for all, three `gamma_decay` fits, a T1 extrapolation with
+band: all identical. On the page (trial server, real checking codes): the ENDF tab's summary, curves, check
+and correct on the two test files; the prior builder's screen; the first view's tabs; screenshots read.
+The writer on a dense grid (20001 points per section, `work/director/try77/dense.py`): the file's linear
+interpolation is within 1.0e-3 of the engine on T1 MT=102, T2 MT=800/801 and 13N MT=102, no point over 2e-3.
+
+**Memory of the sampler** (the owners' agent left it as a question: a pool of states instead of a pool of
+compounds). T2, 32 walkers, 100 steps, 4 sampler threads, the two builds alternately, peak resident size:
+base 296236, 287972, 301332 kB (mean 295180); new 298028, 288376, 294812 kB (mean 293739). The difference of
+the means (-0.5 %) is far inside the base build's own scatter (4.5 %): not measurable, as the agent found (a
+state is 0.8 kB against 7.8 kB for a copy of the compound). Accepted. (The chains of the two builds are
+identical: the own runs above.)
+
+**Seen, not repaired** (the next branches): the Fit tab's Jobs list shows the ENDF check jobs; the first
+view's fit result offers the sampler's and MINOS's buttons; `pyazr endf write` and the rate print the
+engine's progress on standard output; the writer's loss text does not say that MF=6/MT=102 is not written;
+whole-file notes show "MF 0 MT 0"; `accept`'s refusal speaks Python on the page; the model is drawn through
+the data points only (Plot and ENDF tabs: it needs `Session.model_curve` and a route, not built); the
+channel functions exist twice (`api/src/pybind_level_doors.cpp`, `src/CNucLevelParameters.cpp`); the
+writer's start grid is not seeded with the level energies; the examples agent's list of pyazr defects (its
+entry); the repository's skills name removed scripts.
+
+**Left by the owners' branch**: the session's `const` evaluations write its levels through pointers (to
+stop being `const`, or the state moves into an evaluation); the two old defects are unchanged (the sub-point
+grids' stale N_f^1/2; the RWA chain's snapshot `parameters.out`); the set-up out of `CNuc` and the renames
+are the last step; `pyazr_evaluation` has a timing assertion that can fail under load (it passed here).
+
+**Open, for the PI**: the tab's name ("ENDF" or "Evaluations"); the `zeus` extra's removal; whether the
+sampler job records its parametrization in the chain's JSON (the prior builder would read it instead of
+asking); the model-curve call; which columns may leave the data-set list (wider than the window on T2).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial77`; the quick test set has 289 tests.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-owners`) — the owners hold their own levels; the doors and `Clone` gone
 
 **Done** (four commits; the end of step 4 of `cnuc_split.md` §12.3, "as built, fourth part"): `CNuc` holds the set-up
