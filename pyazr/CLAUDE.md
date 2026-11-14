@@ -35,10 +35,11 @@ public names are a contract.
   `e.allowed`, `e.fix` (a `FormatError` takes them from its first diagnostic).
   The argument checks of the session's calls live in `session_checks.py`, not in `session.py`.
 - An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
-  `Config::outStream` passes through that buffer); every other line goes to standard output, which the calls that
-  make the engine print (a session's set-up, a rate) hold off it: `engine_text.held()` points descriptor 1 at a
-  temporary file and hands the lines to the logger `pyazr.engine` (a library call prints nothing on standard output;
-  `tests/pyazr/library_calls_test.py`).  A new call that makes the engine print runs inside `held()`.
+  `Config::outStream` passes through that buffer); every other line goes to standard output, which every session
+  call (`locking.engine_call`), the session's set-up and a rate hold off it: `engine_text.held()` points descriptor 1
+  at a temporary file and hands the lines to the logger `pyazr.engine`, Python's `print` still shown (a library call
+  prints nothing on standard output; `tests/pyazr/library_calls_test.py`).  A new call that enters the engine outside
+  `engine_call` runs inside `held()`.
 - A library call writes only where its caller says (a path, an output directory, `cwd`), or into a temporary
   directory it makes and removes (or returns to the caller, who removes it): never beside the project unasked.
   A session writes into the project's own output directory (the second line of `<config>`), which the project names.

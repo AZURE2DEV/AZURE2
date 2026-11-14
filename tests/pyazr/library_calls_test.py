@@ -17,7 +17,6 @@
 
 Run from anywhere:  python3 tests/pyazr/library_calls_test.py
 """
-import glob
 import logging
 import os
 import shutil
@@ -49,7 +48,7 @@ except Exception as err:
 
 def child(code):
     """Run ``code`` in a child Python with this pyazr; returns (exit code, stdout, stderr)."""
-    env = dict(os.environ, PYTHONPATH=ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    env = dict(os.environ, PYTHONPATH=ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""), TMPDIR=CHILD_TMP)
     run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=900, env=env)
     return run.returncode, run.stdout, run.stderr
 
@@ -65,6 +64,12 @@ def parts_in_message(e):
 
 warnings.simplefilter("ignore", pyazr.EngineWarning)
 tmp = tempfile.mkdtemp(prefix="library_calls_")
+# the temporary directories of the calls (children and this process) in directories of this test, so that what is
+# left there is theirs (other processes of the machine make their own in the system's)
+CHILD_TMP = os.path.join(tmp, "child_tmp")
+os.makedirs(CHILD_TMP)
+tempfile.tempdir = os.path.join(tmp, "own_tmp")
+os.makedirs(tempfile.tempdir)
 try:
     for name in ("T1", "T3"):
         shutil.copytree(os.path.join(ROOT, "tests", "upgrade", name), os.path.join(tmp, name),
@@ -90,13 +95,28 @@ try:
     check("its lines reach the logger pyazr.engine, the WARNING at level WARNING",
           "LOGGED pyazr.engine WARNING WARNING: 'output/intEC.dat' holds" in err, err[-800:])
 
+    # a session's call that makes the engine print (the parameter records of a project whose limit the engine's
+    # transformation cannot reach: its "**WARNING: Denominator less than zero"), and a fit whose progress callback
+    # prints: the call is quiet, the callback's text is shown
+    limited = pyazr.Project.open(T1)
+    limited.set_parameter_setting("1/2+ 2.365", (1, 0, 0.5), limits=(16500.0, 66000.0))
+    limited.save(os.path.join(tmp, "T1", "limited.azr"))
+    code = ("import warnings, pyazr\n"
+            "warnings.simplefilter('ignore')\n"
+            f"s = pyazr.Session({os.path.join(tmp, 'T1', 'limited.azr')!r})\n"
+            "s.parameters\n"
+            "s.fit_with_engine(max_calls=3, progress=lambda r: print('PROGRESS', r['calls'], flush=True))\n")
+    rc, out, err = child(code)
+    check("Session.parameters and fit_with_engine of a project the engine warns about: not on standard output",
+          rc == 0 and "Denominator" not in out and "Denominator less than zero" in err, (rc, out[-400:], err[-400:]))
+    check("fit_with_engine: the progress callback's prints are shown", "PROGRESS 1" in out, out[-400:])
+
     code = ("import logging, warnings, pyazr\n"
             "warnings.simplefilter('ignore')\n"
             "logging.basicConfig(level=logging.INFO, format='LOGGED %(name)s %(levelname)s %(message)s')\n"
             f"r = pyazr.rate.reaction_rate({T1!r}, 1, 2, temperatures=[0.1, 1.0])\n"
             "import sys; print('RATE', *[repr(float(v)) for v in r.rate], file=sys.stderr)\n")
     before = files(os.path.dirname(T1))
-    scratch_before = set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_rate_*")))
     rc, out, err = child(code)
     check("reaction_rate: exit 0, nothing on standard output", rc == 0 and out == "", (rc, out[-500:], err[-500:]))
     check("reaction_rate: the progress bar's last frame reaches the logger at INFO",
@@ -111,7 +131,7 @@ try:
     check("reaction_rate: nothing new beside the project", files(os.path.dirname(T1)) == before,
           sorted(files(os.path.dirname(T1)) - before))
     check("reaction_rate: no temporary directory left",
-          set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_rate_*"))) <= scratch_before, "")
+          not os.listdir(CHILD_TMP), os.listdir(CHILD_TMP))
     with pyazr.rate.RateSession(T1, 1, 2) as rs:
         scratch = rs._scratch
         check("RateSession: its engine writes into its temporary directory", os.path.isdir(scratch), scratch)
@@ -188,8 +208,7 @@ try:
             thread.join()
         return result, sorted(seen | (files(os.path.dirname(T1)) - before))
 
-    left_before = set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_bands_*"))
-                      + glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_tabulate_*")))
+    left_before = set(os.listdir(tempfile.gettempdir()))
     (path, work), seen = watched(lambda: pyazr.trimmed_model(T1, keys=[1]))
     check("trimmed_model: nothing beside the project; its project in the work directory it returns",
           not seen and os.path.dirname(path) == work and not work.startswith(os.path.dirname(T1)), (seen, path, work))
@@ -202,10 +221,10 @@ try:
     check("extrapolation_bands: a band, nothing beside the project", list(bands) == [1] and not seen, seen)
     tables, seen = watched(lambda: pyazr.tabulate(T1, [(1, 2)], 0.5, 1.0, rel_tol=0.05, min_points=5, max_rounds=1))
     check("tabulate: a table, nothing beside the project", len(tables[(1, 2)].sigma) > 5 and not seen, seen)
-    left = set(glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_bands_*"))
-               + glob.glob(os.path.join(tempfile.gettempdir(), "pyazr_tabulate_*"))) - left_before
+    left = set(os.listdir(tempfile.gettempdir())) - left_before
     check("no temporary directory of theirs left", not left, left)
 finally:
+    tempfile.tempdir = None
     shutil.rmtree(tmp, ignore_errors=True)
 
 print(f"{'FAILED: ' + str(len(failures)) if failures else 'all ok'}")
