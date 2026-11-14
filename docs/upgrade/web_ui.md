@@ -1792,7 +1792,10 @@ pyazr's arithmetic with a screen that calls it (user guide `prior_builder.rst`).
   kinds, units, fixed marks, limits, the priors of their own, the basis come from `Session.parameters`; nothing is
   listed twice); parts `PART_KINDS`: `fit` (an earlier fit's `param.sav` and `covariance.dat`, the numbers of
   `prior_from_fit`, the tag checked against the run's basis), `width`, `correlation`, `chain` (a sampler job's
-  `chain_<id>.npy` with its JSON: what pyazr reads of a chain today, `read_chain`).  The `Prior` record prints
+  `chain_<id>.npy` with its JSON: `read_chain`; the JSON's `parametrization`, written by the sampler job since the
+  PI's decision of 2026-11-14 with the values of `BASES`, is read by `chain_basis` and checked as a fit's tag is:
+  another parametrization refused, none recorded taken as the run's with a note; the page asked nothing before
+  and showed the assumption as a note, it now shows the recorded parametrization in the same place).  The `Prior` record prints
   itself; its checks are the engine's (symmetric, the engine's Cholesky rule) with the eigenvalues and the condition
   number; its notes say what the engine does: a fixed parameter marginalized, a prior of its own replaced (measured:
   `ReplaceDiagonalPriors`), a centre outside the limits.  `read_prior` reads the grammar as `PriorCovariance::Read`

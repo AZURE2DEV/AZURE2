@@ -91,6 +91,12 @@ def test_chain_sd_against_laplace_and_what_the_page_receives(t3, fit_and_chain):
     with open(r["summary"]) as f:
         summary = json.load(f)
     assert summary["names"] == list(fit["result"]["errors"]) and summary["discard"] == 1250
+    # the parametrization of the sampled session, as a prior file's #parametrization tag (pyazr.priors.BASES)
+    import pyazr
+    from pyazr.priors import BASES, chain_basis
+    with pyazr.Session(t3.path) as s:
+        assert summary["parametrization"] == s.basis and summary["parametrization"] in BASES
+    assert chain_basis(r["chain"]) == summary["parametrization"]
     flat = chain[1250:].reshape(-1, 2)
     assert np.allclose([r["mean"][n] for n in summary["names"]], flat.mean(axis=0), rtol=0, atol=0)
     assert all(not isinstance(v, list) or len(v) < 10 for v in r.values()), "the page receives no draws"

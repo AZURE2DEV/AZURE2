@@ -49,7 +49,8 @@ import numpy as np
 
 from .errors import FormatError, ParameterError, ParameterKeyError, close_names, listed
 
-__all__ = ["prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "read_chain", "build", "Prior",
+__all__ = ["prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "read_chain", "chain_basis", "build",
+           "Prior",
            "PART_KINDS", "kinds_table", "read_parts", "MARKER", "BASES"]
 
 #: The comment line that carries the parts in a file :meth:`Prior.write` wrote.
@@ -395,6 +396,23 @@ def read_chain(path, discard=None):
     return names, chain[discard:].reshape(-1, chain.shape[2]), discard
 
 
+def chain_basis(path):
+    """The parametrization a sampler job recorded for its chain (``chain_<id>.json``'s ``parametrization``: the
+    values of a prior file's ``#parametrization`` tag, :data:`BASES`), or None for a chain whose summary does not
+    record it (an older one).  Beside :func:`read_chain`, whose return value is unchanged."""
+    try:
+        with open(os.path.splitext(path)[0] + ".json") as fh:
+            tag = json.load(fh).get("parametrization")
+    except (OSError, ValueError):
+        return None
+    if tag is None:
+        return None
+    if tag not in BASES:
+        raise _refuse(f"{path}: the summary records parametrization {tag!r}", "0, 1 or 2 (" + ", ".join(
+            BASES.values()) + ")", "the chain and the summary of one sampler job")
+    return int(tag)
+
+
 # -- the builder ----------------------------------------------------------------------------------------------------
 
 #: The kinds of part: their fields (name, type, default, unit, doc) and what they are.  A field with default None is
@@ -544,7 +562,14 @@ def _width_part(part, index, table, directory, basis):
 
 
 def _chain_part(part, index, table, directory, basis):
-    names, draws, discard = read_chain(_path(directory, part["file"]), part["discard"])
+    path = _path(directory, part["file"])
+    names, draws, discard = read_chain(path, part["discard"])
+    tag = chain_basis(path)
+    if tag is not None and basis is not None and tag != basis:
+        raise _refuse(f"part {index + 1} (chain): {part['file']} holds draws of parametrization "
+                      f"{BASES.get(tag, tag)} and this run uses parametrization {BASES.get(basis, basis)}",
+                      "a chain of the run's parametrization (the engine converts nothing)",
+                      "sample in this run's parametrization, or run this one in the chain's")
     chosen = part["names"] or names
     pos = {n: i for i, n in enumerate(names)}
     bad = [n for n in chosen if n not in pos]
@@ -557,8 +582,10 @@ def _chain_part(part, index, table, directory, basis):
                       f"{len(idx)} parameters", "more draws than parameters", "a longer chain or a shorter burn-in")
     sub = draws[:, idx]
     notes = [f"part {index + 1} (chain): the mean and covariance of {sub.shape[0]} draws after a burn-in of "
-             f"{discard} stored steps; a chain does not record its basis: it is taken as this run's, "
-             f"{BASES.get(basis, basis)}."]
+             f"{discard} stored steps; " + (f"its sampler recorded parametrization {BASES.get(tag, tag)}."
+                                            if tag is not None else
+                                            "its parametrization is not recorded (a chain of an older sampler job): "
+                                            f"it is taken as this run's, {BASES.get(basis, basis)}.")]
     return _Block(list(chosen), sub.mean(axis=0), np.atleast_2d(np.cov(sub, rowvar=False)), notes)
 
 

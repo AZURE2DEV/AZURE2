@@ -22,6 +22,11 @@ Update this file at the end of every work session: what changed, what is next, w
   `GET /api/describe`); "whole
   file"; a list of numbers that grows as it is typed (the "two boxes per Apply" item: a list took at most two new
   numbers per Apply); keys `0`, `[`, `]`; the smoke test's header within 120 columns.
+- **A chain records its parametrization** (the PI, 2026-11-14): the sampler job writes `parametrization` (the
+  session's basis, the values of `priors.BASES`) into `chain_<id>.json` (`jobs.py`, one statement);
+  `priors.chain_basis(path)` reads it (`read_chain` unchanged); the prior builder's part `chain` refuses another
+  parametrization and notes a chain that does not record it.  The page asked nothing; it showed the assumption as a
+  note, now the recorded parametrization (the build's notes).
 - **Lines in shared files**: `app.js` (the import of `tabByKey`, the key rows and the key handler), `layout.js`
   (`tabByKey`), `fitting.js` (`followersShown`, `tabOfJob`, `jobsOfTab`), `forms.js` (`number_list`), `formview.js`
   (`grows`), `tabs/fit.js`, `tabs/fitjob.js`, `tabs/data.js`, `tabs/nucleus.js`, `lists.js` (`onlyColumns`),

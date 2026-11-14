@@ -333,6 +333,24 @@ try:
                           "not in the chain"))
             check("refused: fewer draws than parameters",
                   refused(bld([{"kind": "chain", "file": "chain_7.npy", "discard": 39}]), "more draws than"))
+            check("note: a chain whose summary does not record its parametrization is taken in the run's",
+                  any("parametrization is not recorded" in n for n in ch.notes), ch.notes)
+            check("chain_basis: None without the record", priors.chain_basis(os.path.join(work, "chain_7.npy"))
+                  is None)
+            # the summary as the sampler job writes it now: the session's parametrization (priors.BASES)
+            for tag in (P.basis, 0):
+                with open(os.path.join(work, "chain_7.json"), "w") as fh:
+                    json.dump({"names": names, "discard": 10, "parametrization": tag}, fh)
+                if tag == P.basis:
+                    t = priors.build(P, [{"kind": "chain", "file": "chain_7.npy", "names": [N1]}], directory=work)
+                    check("a chain of the run's parametrization: taken, its record in the notes",
+                          any(f"recorded parametrization {priors.BASES[tag]}" in n for n in t.notes), t.notes)
+                else:
+                    check("refused: a chain of another parametrization",
+                          refused(bld([{"kind": "chain", "file": "chain_7.npy"}]),
+                                  "holds draws of parametrization 0 (standard) and this run uses parametrization 1"))
+            with open(os.path.join(work, "chain_7.json"), "w") as fh:
+                json.dump({"names": names, "discard": 10}, fh)
 
         # the built prior through a session: its term = d^T C^-1 d, the prior of its own replaced
         proj = Project.open(azr)
