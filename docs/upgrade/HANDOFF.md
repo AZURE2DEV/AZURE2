@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 16:45) — merged: the menu and readline removed; a run is a command
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 74 (a true merge of the rehearsal branch; its tree
+plus this entry): `feature/upgrade-6-program-commands-2`. The agent's entry follows. Conflicts: this file, one
+ROADMAP row and one sentence of `cnuc_split.md` (both sides kept).
+
+- **The program reads nothing from standard input.** `AZURE2 calculate|fit|extrapolate|minos|rate|mcmc
+  [options] FILE`; a run without a command is refused (exit 2) with the list of commands; `--no-readline` is
+  refused (the PI: "It could be refused"). `src/RunMenu.cpp`, readline and its build options are gone.
+- **Every piped menu answer in the repository is a command**: the tests' check scripts, `tests/pyazr`, the
+  tools, the scripts, the examples, the skills of the repository, the pages. `tools/menu_to_command.py` turns
+  an old script's answers into the command (for the users' own scripts).
+- **The help's defects repaired**: the rate's temperatures are a file or the three range options
+  (`RequiredOr`), ranges printed once from the table, `--delta-chi2` above 0, `--rate-entrance` at least 1.
+- The two commits marked WIP are kept as they are (history; the tree at the branch's end is what was checked).
+
+**Verified on the merged tree** (build `work/b-trial74`, eight threads): 0 warnings; all projects in the three
+bases against `tab-t73-1`: every output file identical (Brune 679, formal 643, Park 679); the 208 run logs per
+base differ, as they must: they no longer hold the menu. Compared without the menu's lines, the prompts, blank
+lines and the timed progress bars (`work/commands2/logcmp.sh`): 624 of 624 logs equal. The eight fits by
+command on both builds (`work/director/fits_vs_base3.sh`, which replaces the menu-piped script): identical to
+`b-trial73`. The quick tests 277 of 277. The consistency test passes.
+
+**The director's own runs**, `b-trial74` against `b-trial73`, one thread, by command, every output file
+compared (`work/director/spot72/own.sh`, `work/director/spot74/extra.sh`, the menu-piped script ported): MINOS,
+a fit with band and scaled covariance, the rate for one exit pair and for all, three `gamma_decay` fits, a T1
+extrapolation with band, the natural-target fits in two fitters, the sampler's chains of T2 in both bases (8
+walkers, 100 steps): all identical. By hand on T1: the program alone, the old piped answers, `--no-readline`
+and `--max-calls 50` (a value after a space) are each refused with exit 2, the three parts, and nothing
+written.
+
+**New reference**: result tag `tab-t74-1` (its run logs are the first without the menu: the counts are again
+887, 851, 887 from here on), base build `work/b-trial74`. The director's merge check runs the fits by command.
+
+**Left, not the agent's to decide**:
+- `.github/workflows/build.yml` still passes `-DUSE_READLINE` and installs the readline packages, and
+  `packaging/docker/Dockerfile.windows` installs `mingw64-readline` and passes `-DUSE_READLINE=OFF`. The option
+  no longer exists (CMake warns about an unused variable; nothing breaks). CI is the owner's: listed in
+  `FOR_THE_OWNER.md`'s sense, to be asked.
+- `--covariance-band` and `--scale-covariance` in an options file apply to every command (today's behaviour,
+  now said in `--help`); the agent proposes to refuse them there. The PI decides.
+- `tests/level_at_threshold` reads the exit status of `head`, not of the program (older than this branch).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-6-program-commands-2`) — the commands, second part: the menu removed
 
 **Done**:
