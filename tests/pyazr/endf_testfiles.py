@@ -51,7 +51,7 @@ class Writer:
         return self
 
 
-def material(path, sections, mat=9999, za=6012.0, awr=11.896910, awi=0.999167, nsub=10010, lrp=-1, nmod=1,
+def material(path, sections, mat=9999, za=6012.0, awr=11.896910, awi=0.998623, nsub=10010, lrp=-1, nmod=1,
              text=("  6-C - 12 TEST       EVAL-NOV26 pyazr tests", " hand-written           DIST-NOV26",
                    "---- TEST                MATERIAL 9999", "----- INCIDENT PROTON DATA", "------ ENDF-6"),
              form="classic", sequence=True, tpid=" a file of the pyazr tests", emax=2.0e7):

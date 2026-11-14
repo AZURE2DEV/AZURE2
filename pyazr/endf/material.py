@@ -134,11 +134,6 @@ class Material:
         from .curves import curves
         return curves(self, request, session=session)
 
-    def resonances(self, isotope=0, energy_range=0):
-        """MF=2/MT=151 LRF=7 as a record (:func:`pyazr.endf.resonances.read_resonances`)."""
-        from .resonances import read_resonances
-        return read_resonances(self, isotope=isotope, energy_range=energy_range)
-
 
 def read_header(path, section):
     """MF=1/MT=451 (p. 42): HEAD, three CONT, NWD TEXT lines, NXC directory CONT lines."""

@@ -214,7 +214,8 @@ class Cursor:
     def __init__(self, path, lines):
         self.path, self.lines, self.i = path, list(lines), 0
         #: (line number, first column) of the last line of a LIST, TAB1 or TAB2 whose fields after the record's
-        #: last value are neither blank nor zero: a count smaller than what was written, which the reader cannot see otherwise
+        #: last value are neither blank nor zero: a count smaller than what was written, which the reader cannot see
+        #: otherwise
         self.trailing = []
 
     @property

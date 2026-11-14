@@ -10,6 +10,8 @@ sections, the S-factor conversion) is a row of :mod:`pyazr.physics`, the engine'
     xs = m.cross_section(600)                     # MF=3/MT=600; xs(energies_eV) -> b
     c = m.curves(s.evaluate(x).data[i], session=s)  # the evaluation at the data set's points, its quantity and unit
     findings = pyazr.endf.check_format(path)      # the module's own check of the format, each finding with its page
+    result = pyazr.endf.check(path)               # the own check, then CHECKR, FIZCON, PSYCHE when they are found
+    candidate = pyazr.endf.standardize(path)      # STANEF on a copy: candidate.diff(), candidate.accept(to=...)
 
 Errors: a malformed file is a :class:`pyazr.FormatError` (file:line:columns, what was found, what is allowed, the
 manual's page); a valid file, or a part of it, that is not read or cannot give what was asked is a
@@ -24,8 +26,11 @@ from .distributions import CrossSection, Distribution, Product
 from .summary import Summary
 from .curves import CurveRequest, Curve, PairSpec, CoulombTerms, request_of, curves
 from .format_check import Finding, FormatReport, check_format
+from .checkers import (PROGRAMS, Checker, CheckReport, CheckResult, Candidate, SectionChange, checkers, check,
+                       standardize, compare)
 
 __all__ = ["read", "Material", "Header", "Section", "Summary", "CrossSection", "Distribution", "Product",
            "CurveRequest", "Curve", "PairSpec", "CoulombTerms", "request_of", "curves", "interpolate",
            "NUMBER_FORMS", "form_classic", "form_e", "form_widest", "read_float", "read_int", "FormatError",
-           "FormatRefused", "Finding", "FormatReport", "check_format"]
+           "FormatRefused", "Finding", "FormatReport", "check_format", "PROGRAMS", "Checker", "CheckReport",
+           "CheckResult", "Candidate", "SectionChange", "checkers", "check", "standardize", "compare"]

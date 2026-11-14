@@ -372,7 +372,7 @@ def case_endf_curves():
     if not os.path.isdir(folder):
         shutil.copytree(os.path.dirname(T1), folder, ignore=shutil.ignore_patterns("output*"))
         os.makedirs(os.path.join(folder, "output"), exist_ok=True)
-    w = Writer().cont(6012.0, 11.89691, 0, 2, 1, 0).tab1(1001, 0.999167, 0, 5, (2,), (2,), [1e6, 3e6], [1.0, 1.0])
+    w = Writer().cont(6012.0, 11.89691, 0, 2, 1, 0).tab1(1001, 0.998623, 0, 5, (2,), (2,), [1e6, 3e6], [1.0, 1.0])
     w.tab2(0.0, 0.0, 0, 0, (2,), (2,), 2).list(0.0, 1e6, 2, 0, 1, [0.1, 0.05]).list(0.0, 3e6, 2, 0, 1, [0.2, 0.0])
     path = material(os.path.join(TMP, "p12C.endf"), {(6, 2): w})
     code, doc, _ = run("endf", "curves", path, os.path.join(folder, "T1.azr"), "--record", "el_lab090", "--json")
@@ -384,6 +384,36 @@ def case_endf_curves():
     check("endf curves --record: Material.curves of the data set, values beside the model",
           len(result) == 1 and row.get("source") == "MF=6/MT=2 LAW=5" and row.get("covered") == int(c.coverage.sum())
           and row.get("values") == cli.plain(c.values) and len(row.get("model", [])) == d.n, row)
+
+
+def _standin_bin():
+    folder = os.path.join(TMP, "endf_bin")
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+        for name in ("checkr", "fizcon", "psyche", "stanef"):
+            os.symlink(os.path.join(HERE, "endf_standin", "standin.py"), os.path.join(folder, name))
+    return folder
+
+
+def case_endf_check():
+    code, doc, _ = run("endf", "check", EXTRACT, "--program", "checkr", "--json",
+                       AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="findings")
+    result = ok_doc("endf check", code, doc, "endf check") or {}
+    own = [f["code"] for f in result.get("own", {}).get("findings", [])]
+    reports = result.get("reports", [])
+    check("endf check: the own check and CHECKR's findings (the stand-in)", own.count("DIRECTORY") == 3 and
+          len(reports) == 1 and reports[0]["program"] == "checkr" and
+          sum(f["severity"] == "error" for f in reports[0]["findings"]) == 3, result)
+
+
+def case_endf_standardize():
+    out = os.path.join(TMP, "extract.stanef.endf")
+    code, doc, _ = run("endf", "standardize", EXTRACT, "--write", out, "--json",
+                       AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="lossy")
+    result = ok_doc("endf standardize", code, doc, "endf standardize") or {}
+    changed = {(c["mf"], c["mt"]): c for c in result.get("changes", [])}
+    check("endf standardize --write: the candidate's changes and the file written", result.get("written") == out and
+          os.path.isfile(out) and changed.get((3, 600), {}).get("kind") == "numbers", result)
 
 
 JSON_CASES = {
@@ -403,6 +433,8 @@ JSON_CASES = {
     "import ensdf": case_import_ensdf,
     "endf summary": case_endf_summary,
     "endf curves": case_endf_curves,
+    "endf check": case_endf_check,
+    "endf standardize": case_endf_standardize,
 }
 
 # (arguments, exit code, error class): wrong calls; each is run with --json and without

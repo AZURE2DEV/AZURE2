@@ -263,3 +263,39 @@ Calls ``pyazr.endf.Material.curves``.
 - ``--mat``: the material (MAT) of a file that holds several (a whole number).
 - ``--json``: one JSON document on standard output.
 
+``endf check``
+--------------
+
+The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their reports read into findings.
+
+.. code-block:: text
+
+   python -m pyazr endf check FILE [--program CHOICE] [--timeout X] [--json]
+
+Calls ``pyazr.endf.check``.
+
+- ``FILE``: an ENDF-6 file (an existing file).
+- ``--program``: the one checking code to run (default: CHECKR, FIZCON and PSYCHE, those found) (one of checkr,
+  fizcon, psyche, inter).
+- ``--timeout``: seconds each code may take (a number; default 300.0).
+- ``--json``: one JSON document on standard output.
+
+``endf standardize``
+--------------------
+
+Run a code that rewrites a copy of the file and show what changed per section (numbers, digits lost); nothing is written without --write.
+
+.. code-block:: text
+
+   python -m pyazr endf standardize FILE [--program CHOICE] [--mf2] [--write FILE] [--overwrite] [--timeout X] [--json]
+
+Calls ``pyazr.endf.standardize``.
+
+- ``FILE``: an ENDF-6 file (never changed) (an existing file).
+- ``--program``: the code that rewrites a copy (one of stanef, fixup, dictin, endf2c; default stanef).
+- ``--mf2``: STANEF: rewrite the numbers of MF=2/MT=151 too (an option without a value).
+- ``--write``: keep the candidate as this file (a file to write, in an existing folder).
+- ``--overwrite``: with --write: replace an existing file (an option without a value).
+- ``--timeout``: seconds the code may take (a number; default 300.0).
+- ``--json``: one JSON document on standard output.
+

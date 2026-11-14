@@ -16,3 +16,6 @@ MAT 228; I.J. Thompson (LLNL) and the INDEN light-element collaboration, EVAL-OC
 - **Citation** asked by the archive's LICENSE: D.A. Brown, M.B. Chadwick, R. Capote, et al., "ENDF/B-VIII.0: The 8th
   Major Release of the Nuclear Reaction Data Library with CIELO-project Cross Sections, New Standards and Thermal
   Scattering Data", Nuclear Data Sheets 148, 1-142 (2018).
+
+`p-C012_hand.endf` is not from a library: a hand-written p + 12C file (MF=1, MF=3/MT=2, MF=6/MT=2 LAW=5 LTP=2 with
+made-up coefficients) that `pyazr/examples/endf_evaluation.py` reads; written with `tests/pyazr/endf_testfiles.py`.

@@ -404,6 +404,23 @@ def _text_endf_curves(result, v):
     return _table(["data set", "quantity", "from", "covered", "notes"], rows)
 
 
+def _run_endf_check(v, ctx):
+    from . import endf
+    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout)
+    return result.to_dict() if ctx.json else str(result)
+
+
+def _run_endf_standardize(v, ctx):
+    from . import endf
+    candidate = endf.standardize(v.file, program=v.program, timeout=v.timeout, mf2=v.mf2)
+    written = candidate.accept(to=v.write, overwrite=v.overwrite) if v.write else None
+    if ctx.json:
+        return {"original": v.file, "candidate": candidate.path, "program": candidate.program, "written": written,
+                "changes": [c for c in candidate.diff() if c.kind != "unchanged"]}
+    return candidate.summary() + (f"\nwritten: {written}" if written else
+                                  "\nnothing written (--write NEW keeps the candidate)")
+
+
 _COULOMB_FILE = Arg("FILE", "text", "the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin)",
                     optional=True)
 
@@ -502,7 +519,25 @@ COMMANDS = (
             "The evaluation at each data set's points in its quantity and unit (--json: the values beside the "
             "model at the project's start values).",
             run=_run_endf_curves, text=_text_endf_curves, fix="python -m pyazr endf summary FILE lists what it holds"),
-
+    Command("endf check", (Arg("FILE", "file", "an ENDF-6 file"),
+                           Arg("--program", "choice", "the one checking code to run (default: CHECKR, FIZCON and "
+                               "PSYCHE, those found)", choices=("checkr", "fizcon", "psyche", "inter")),
+                           Arg("--timeout", "number", "seconds each code may take", default=300.0)),
+            "pyazr.endf.check",
+            "The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their "
+            "reports read into findings.", run=_run_endf_check,
+            fix="python -m pyazr endf check --help; pyazr.endf.checkers() lists the codes found"),
+    Command("endf standardize", (Arg("FILE", "file", "an ENDF-6 file (never changed)"),
+                                 Arg("--program", "choice", "the code that rewrites a copy", default="stanef",
+                                     choices=("stanef", "fixup", "dictin", "endf2c")),
+                                 Arg("--mf2", "flag", "STANEF: rewrite the numbers of MF=2/MT=151 too"),
+                                 Arg("--write", "output", "keep the candidate as this file"),
+                                 Arg("--overwrite", "flag", "with --write: replace an existing file"),
+                                 Arg("--timeout", "number", "seconds the code may take", default=300.0)),
+            "pyazr.endf.standardize",
+            "Run a code that rewrites a copy of the file and show what changed per section (numbers, digits lost); "
+            "nothing is written without --write.", run=_run_endf_standardize,
+            fix="python -m pyazr endf standardize --help; pyazr.endf.checkers() lists the codes found"),
 )
 
 

@@ -90,6 +90,14 @@ add_test(NAME pyazr_endf_read
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_read_test.py)
 set_tests_properties(pyazr_endf_read PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
+# into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when
+# AZURE2_ENDF_UTILITIES and AZURE2_PREPRO are set in the environment of ctest (skipped otherwise).
+add_test(NAME pyazr_endf_check
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_check_test.py)
+set_tests_properties(pyazr_endf_check PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # Inactive <levels> and <segmentsData> lines must not shift pyazr's level
 # numbering or its per-segment penalties off the engine's.
 add_test(NAME pyazr_inactive_lines

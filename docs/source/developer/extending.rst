@@ -370,6 +370,21 @@ the printed page of ENDF-102 (2023) in a comment. A section that can be read and
 5. A hand-written file of the section (``tests/pyazr/endf_testfiles.py`` writes it) and checks against hand values
    from the manual's equations in ``tests/pyazr/endf_read_test.py``.
 
+A checking code of ``pyazr.endf``
+---------------------------------
+
+The codes are found, never installed (``pyazr/endf/checkers.py``):
+
+1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does).
+2. Its deck: for a checking code the one of ``_run_check``, for a rewriting code the branch of ``standardize`` (a
+   PREPRO code: ``_prepro_deck``); take the deck from the program's source, cite the lines.
+3. Its report: a branch of ``parse_report`` that gives findings (severity, MAT, MF, MT, record, text) and the
+   totals the report states; known messages with their meaning are rows of ``MEANINGS``.
+4. The stand-in ``tests/pyazr/endf_standin/standin.py`` writes its report in the program's layout (lines copied from
+   a real report, cited); cases in ``tests/pyazr/endf_check_test.py``, and a case with the real program in its last
+   part (run when ``AZURE2_ENDF_UTILITIES`` / ``AZURE2_PREPRO`` are set).
+5. The command's choices in ``pyazr/cli.py`` (``endf check --program``, ``endf standardize --program``).
+
 A run-time data file of pyazr
 -----------------------------
 

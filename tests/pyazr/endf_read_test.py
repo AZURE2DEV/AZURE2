@@ -63,7 +63,7 @@ def raises(call, cls, *parts):
 
 
 TMP = tempfile.mkdtemp(prefix="endf_read_")
-AWR, AWI = 11.896910, 0.999167      # 12C and p in neutron masses (the file's own numbers)
+AWR, AWI = 11.896910, 0.998623      # 12C (atomic) and p (nuclear, p. 24) in neutron masses
 M1, M2 = AWI * MN, AWR * MN
 
 # ------------------------------------------------------------------------------------------------- 1. numbers
@@ -345,7 +345,8 @@ check("a number with D: refused, with file, line, columns and p. 31", ok and f":
 p = variant("short.endf", lambda v: v.__setitem__(k800 + 2, v[k800 + 2][:60]))
 ok, text = raises(lambda: E.read(p), pyazr.FormatError, "MAT, MF, MT")
 check("a line without its control numbers: refused by read()", ok, text)
-check("... and an error of the check", ("error", "SHORT_LINE") in codes(p) or ("error", "CONTROL") in codes(p), codes(p))
+check("... and an error of the check", ("error", "SHORT_LINE") in codes(p) or ("error", "CONTROL") in codes(p),
+      codes(p))
 k_dir = next(i for i, ln in enumerate(lines) if ln[22:44] == f"{3:11d}{800:11d}")
 p = variant("dir.endf", lambda v: v.__setitem__(k_dir, v[k_dir][:44] + f"{99:11d}" + v[k_dir][55:]))
 check("a directory NC that is not the section's lines: an error of the check (p. 41)",
@@ -374,6 +375,9 @@ found = {(f.severity, f.code, f.mf, f.mt) for f in check_format(EXTRACT).finding
 check("the own check of the extract: the directory names the sections left out, LRP=2 is a warning", found == {
     ("note", "UNSEQUENCED", 0, 0), ("warning", "LRP", 1, 451), ("error", "DIRECTORY", 1, 451)}, found)
 
-shutil.rmtree(TMP, ignore_errors=True)
+if os.environ.get("ENDF_TEST_KEEP"):  # keep the files written, for a run of the real codes on them
+    print(f"files kept in {TMP}")
+else:
+    shutil.rmtree(TMP, ignore_errors=True)
 print(f"{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)

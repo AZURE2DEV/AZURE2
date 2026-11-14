@@ -7,6 +7,9 @@ for evaluators: the words are those of the formats manual, ENDF-102 (2023 editio
 applies is cited by the manual's printed page in its source and in its messages. Each call has a command of
 ``python -m pyazr`` beside it (:doc:`pyazr_command_line`); ``--json`` gives the same answer as data.
 
+``pyazr/examples/endf_evaluation.py`` does the four things below on a hand-written p + 12C file and the project T1
+of the tests, or on a file and a project you name.
+
 Read a file and see what it holds
 ---------------------------------
 
@@ -64,7 +67,8 @@ Which section gives which quantity:
    * - elastic ``ratio_to_rutherford``, ``ratio_to_mott``
      - the same, divided by the engine's Rutherford or Mott cross section
    * - ``sigma``, ``sfactor`` of a particle exit
-     - MF=3/MT of the exit particle's family (600+k protons, 800+k alphas, ...), k from the file's QM - QI = the residual's excitation
+     - MF=3/MT of the exit particle's family (600+k protons, 800+k alphas, ...), k from the file's
+       QM - QI = the residual's excitation
    * - ``dsigma_domega`` of a particle exit
      - MF=3 x MF=6 LAW=2 (Legendre or tabulated): sigma y p / 2 pi
    * - ``sigma`` of capture to every final state
@@ -90,7 +94,7 @@ Check a file's format
    * - Python
      - command line
    * - ``print(pyazr.endf.check_format(path))``
-     - ``python -m pyazr endf summary FILE`` reads the file; the format check is a call
+     - ``python -m pyazr endf check FILE`` (its first part)
 
 The module's own check needs no outside program. It reads every line and the records of MF=1/MT=451, MF=2/MT=151
 (LRF=7), MF=3 and MF=6, and reports each finding with its line, its section and the manual's page:
@@ -105,6 +109,75 @@ The module's own check needs no outside program. It reads every line and the rec
   written: the reader cannot see it otherwise); the HEAD's ZA, AWR different from MF=1; LRP=2 (for derived files
   only, p. 42); counts above the limits of Appendix G (p. 391, strict for primary evaluations).
 - **notes**: a file without sequence numbers (optional, declared obsolete in 2013).
+
+Run the ENDF checking codes
+---------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Python
+     - command line
+   * - ``pyazr.endf.checkers()``
+     - (listed in the answer of ``endf check``)
+   * - ``r = pyazr.endf.check(path)``; ``print(r)``
+     - ``python -m pyazr endf check FILE [--program checkr]``
+   * - ``c = pyazr.endf.standardize(path)``; ``print(c.summary())``
+     - ``python -m pyazr endf standardize FILE``
+   * - ``c.accept(to="new.endf")``
+     - ``python -m pyazr endf standardize FILE --write new.endf``
+
+pyazr installs none of the checking codes; it finds them. ``checkers()`` looks in the directories of
+``$AZURE2_ENDF_UTILITIES`` (CHECKR, FIZCON, PSYCHE, INTER, STANEF of the ENDF utility codes, NNDC and IAEA) and
+``$AZURE2_PREPRO`` (PREPRO's FIXUP, DICTIN, ENDF2C, LINEAR, RECENT, D.E. Cullen), then on ``PATH``. Do not put
+PREPRO's directory on ``PATH``: it holds a program named ``activate``.
+
+``check(path)`` runs the module's own format check first (``r.own``, named as its own), then CHECKR, FIZCON and
+PSYCHE, each in a fresh directory of its own, on a copy of the file, with its input deck (the input file, the message
+file, ``Y`` for the whole file, ``DONE``) and a time limit. Each report is read into findings: MAT, MF, MT, the
+code's record or sequence number, the code's own text, and for messages pyazr knows what they mean for an evaluator
+(``finding.meaning``). The raw report and the terminal text are kept (``r.reports[i].report``). A crash, a time-out
+or a report that ends early is a finding of the run. The exit status of the codes says nothing about findings: they
+exit 0 with errors in the report.
+
+What the codes say about charged-particle files, and what it means:
+
+- *LRP=2 ONLY ALLOWED IN DERIVED FILES* (CHECKR): the rule of p. 42 of the manual. The ENDF/B-VIII.1
+  charged-particle files with R-matrix parameters use LRP=2 for a full MF=3 beside MF=2.
+- *NE = 400 OUT OF RANGE 1 - 200* followed by *SECTION CANNOT BE CHECKED* (CHECKR): CHECKR's own limit of 200
+  incident energies; the manual allows 2000 in MF=6 (Appendix G). The section is not checked, not wrong.
+- *AP NOT IN RANGE* in MF=2 (PSYCHE): PSYCHE reads the record after the energy range as the spin and radius of the
+  older formats; in R-Matrix Limited that record holds IFG, KRM, NJS, KRL. Not a finding about the file.
+- *INVALID ANGULAR REPRESENTATION LTP=15* (CHECKR 8.24): the 2023 manual defines LTP=15 (p. 147); CHECKR does not
+  know it yet.
+- *AWI SHOULD BE SET TO ...* (FIZCON): AWI is the projectile's nuclear mass in neutron masses (p. 24), not its atomic
+  mass.
+- *CHECK NORMALIZATION* (FIZCON): a tabulated distribution whose integral over the cosine is not 1.
+
+What "correct" does and does not do
+-----------------------------------
+
+``standardize(path)`` runs a code that rewrites a file -- STANEF (tape label, directory, sequence numbers, numbers
+in the classic form), or PREPRO's FIXUP, DICTIN, ENDF2C -- on a copy, and returns a candidate. Nothing replaces the
+original: ``c.diff()`` lists per section what changed (bookkeeping, numbers written another way with every value
+equal, numbers changed: how many, the largest relative change and how many digits a number lost), and
+``c.accept(to=...)`` writes the candidate where you say (by default beside the original as
+``<name>.<program>.endf``; over an existing file only with ``overwrite=True``).
+
+Read the difference before keeping a candidate. STANEF writes every number in the classic form of 7 significant
+digits, MF=2 included: on a file written with 9-10 digits (as FUDGE writes them) it rounds the resonance
+parameters, which moves an R-matrix fit's chi-squared (about one unit in 10 000 on the projects measured in the
+design note). The built STANEF 8.10 also rewrote a number written without a decimal point (``35070343``, an
+energy in eV of the ENDF/B-VIII.1 3He + 4He file) as ``3.507034+3``, 10 000 times smaller: the difference shows it
+as a relative change of 1. No program changes a parameter to make a check pass, and pyazr runs no program you did not
+ask for.
+
+Trying the codes on your machine::
+
+   export AZURE2_ENDF_UTILITIES=/path/to/endf-utility-codes/bin AZURE2_PREPRO=/path/to/prepro/bin
+   python -m pyazr endf check h-002_He_004.endf
+   python -m pyazr endf standardize h-002_He_004.endf
 
 What reading refuses and what it reports
 ----------------------------------------

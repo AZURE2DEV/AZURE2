@@ -238,7 +238,8 @@ def _check_records(material, add):
             continue
         for number, column in c.trailing:
             add("warning", "COUNT", number, material.mat, mf, mt, f"fields from column {column} on are not blank after "
-                "the last value of a record and not zero: a count (NPL, NR, NP) smaller than the values written?", "34-35")
+                "the last value of a record and not zero: a count (NPL, NR, NP) smaller than the values written?",
+                "34-35")
         if not c.done:
             add("error", "COUNT", s.lines[c.i].number, material.mat, mf, mt, f"{len(s.lines) - c.i} lines after the "
                 "last record of the section (a count of a record is smaller than its lines)", "34")

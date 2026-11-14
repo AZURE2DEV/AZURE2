@@ -655,3 +655,85 @@ line without MAT, MF, MT (refused), a wrong directory NC and a missing SEND (err
 The own check on the library file `h-002_He_004.endf` (not in the repository) finds no error: one warning (LRP=2 in
 a primary evaluation, p. 42) and one note (no sequence numbers). On the committed extract it finds in addition the
 three sections the directory lists and the extract left out (the test expects exactly these).
+
+### 13.2 Stage 4: the checking codes
+
+`pyazr/endf/checkers.py`: `PROGRAMS` (one row per code: family, kind check / rewrite / derive, what it does),
+`checkers(search=None)`, `check(path, codes=None, timeout=300)` (the own format check first, then CHECKR, FIZCON,
+PSYCHE), `standardize(path, program="stanef", mf2=False)` returning a `Candidate` (`diff()`, `summary()`,
+`accept(to=None, overwrite=False)`), `compare(a, b)`. Commands `pyazr endf check FILE [--program]` and
+`pyazr endf standardize FILE [--program] [--mf2] [--write NEW [--overwrite]]`. The stand-in of the tests:
+`tests/pyazr/endf_standin/standin.py`; the real codes run in `tests/pyazr/endf_check_test.py` when
+`AZURE2_ENDF_UTILITIES` and `AZURE2_PREPRO` are set.
+
+The codes were built by the director under `opt/` with the PI's yes (`opt/README-endf-codes.md`: utility codes at
+ea2638b2, PREPRO 2023 at cc5fd087) and run here. Where the manuals, the sources and the built programs differ, the
+programs' behaviour was taken:
+- **The deck ends with DONE** (checkr.f lines 255-270, 806-861). Without it the program reaches the end of its input
+  after a complete report and stops with a Fortran runtime error, exit status 2. With it the codes exit 0 whatever
+  they found: the exit status says nothing about findings (the director's first runs had read status 2 as
+  "findings"; it was the end of input).
+- **CHECKR counts "SECTION CANNOT BE CHECKED" as an error**; FIZCON wraps one message over two lines (seen twice);
+  PSYCHE prints tables and comments under "FILE n / SECTION mt" and has no count. The parser reads them so and
+  compares its count with the report's "Encountered N errors, M warnings" (a finding when they differ).
+- **STANEF's standard options rewrite MF=2 too** (the manual's pp. 4-5 say MF=2 on request; the built 8.10 rounds
+  the 67 changed numbers of the 3He + 4He MF=2 with blank options as with `0,Y,Y,Y`).
+- **STANEF corrupts a float written without a decimal point**: `35070343` and `12377043` (ER of background poles,
+  eV) became `3.507034+3` and `1.237704+3`. The manual allows such a field (p. 31: "digits optionally containing a
+  decimal symbol").
+- **FIXUP 2023-1 refuses to run without option 5** ("Cross Section Reconstruction is MANDATORY"): the deck sets
+  column 1 (ZA, AWR) and column 5 = 2 (built-in summation rules), every other test off.
+- **CHECKR 8.24 does not know LTP=15** (p. 147 of the 2023 manual defines it).
+
+Measured on the ENDF/B-VIII.1 3He + 4He file (`standardize` on a copy; digits lost = significant digits written
+before minus after, the largest in the section):
+
+- STANEF (standard options, and with MF=2): MF=1 bookkeeping; MF=2/151 67 numbers, 2 digits lost, two values 1e4
+  too small; MF=3/2 1 number, 2 digits; MF=3/600 30 numbers, 2 digits (4.9e-7); MF=6/2 349, 2 digits (4.7e-7);
+  MF=6/600 2, 2 digits.
+- FIXUP (columns 1 and 5): MF=1 bookkeeping (51 -> 66 lines); MF=2, MF=6 numbers written another way, values equal;
+  MF=3/2 other fields; MF=3/600 4 numbers, 1 digit (2.5e-6).
+- DICTIN: MF=1 bookkeeping (51 -> 52 lines); every other section unchanged.
+- ENDF2C: MF=1 bookkeeping; MF=2, MF=3 form only; MF=6/2 1441 numbers, 1 digit (3.6e-5); MF=6/600 540, 1 digit
+  (2.2e-5).
+
+So the design's reading of the sources holds for STANEF's 7 digits and DICTIN's bookkeeping; ENDF2C loses one digit
+in exponent fields (`-1.38025-12` -> `-1.3803E-12`), FIXUP one in a few MF=3 fields; STANEF's handling of MF=2 and of
+integer-looking floats is worse than the sources suggested.
+
+The real codes on the files of the repository (exit status 0 everywhere; every finding the reports count was read):
+
+- The 3He + 4He extract: own check 3 errors, 1 warning, 1 note; CHECKR 4 errors (LRP=2, three sections missing);
+  FIZCON 1 (MF=3/600 needs MF=6); PSYCHE 1 warning (AP: LRF=7 misread).
+- The library file itself (not committed): own 0/1/1; CHECKR 5 errors (LRP=2, NE > 200 twice and "cannot be checked"
+  twice); FIZCON 1 (MF=6/600: energy range of the LIST records against the TAB1); PSYCHE 1 warning (AP), 8 notes.
+- `p-C012_hand.endf` (the example): own 0/0/0; CHECKR, FIZCON none; PSYCHE 3 notes.
+- The read test's hand files (MT=800/801; three number forms): own none (a note when unsequenced); CHECKR none;
+  FIZCON 4 (EMAX not reached twice, LIST against TAB1 energy range twice); PSYCHE 2 warnings (a negative LAW=2
+  distribution).
+- The LAW=5 files (LTP 1, 2, 12, 14, 15): own none; CHECKR none, but 3 for LTP=15 (not known to it); FIZCON EMAX and,
+  for LTP 12-15, the normalisation of P_NI; PSYCHE notes. Identical-particle files: CHECKR 1 warning (ZSYMAM
+  text), FIZCON AWI atomic and EMAX.
+
+The findings on the hand-written files are true of them (made-up coefficients, a 6 MeV table under EMAX = 20 MeV);
+the own check does not test physics or procedures (FIZCON's and PSYCHE's domain): it found none of them, and no code
+found a format error the own check missed on these files.
+
+### 13.3 What the page needs (routes and screens, a later branch)
+
+- Results tab, "Evaluations", add a file: `pyazr.endf.read(path).summary().to_dict()` on a path in the project's
+  root; answer: MAT, target, projectile, library, lab, date, authors, LRP, EMAX, the sections (MF, MT, reaction,
+  lines, what) and the text.
+- The curve of a data set: `Material.curves(data, session=s)` (or `pyazr endf curves FILE PROJECT --record NAME
+  --json`) for the file and a data set of the open session; answer: energies, angles, values (NaN where none),
+  coverage, quantity, unit, source, notes; or a refusal's what, allowed, fix.
+- "Check ENDF", the codes found: `pyazr.endf.checkers()`; answer: name, path, family, kind, what it does.
+- Run a check (a job, one thread): `pyazr.endf.check(path, codes=[...]).to_dict()`; answer: the own findings (line,
+  MF, MT, message, page) and per code its version, exit status, findings (MF, MT, record, text, meaning) and report.
+- "Standardize" (a job): `pyazr.endf.standardize(path, program=, mf2=)`; answer: the candidate's path and its
+  `diff()` rows; "Keep as new file" is `accept(to=)`, "Replace" `accept(to=path, overwrite=True)` after a second
+  question.
+- "New project from ENDF": not built (the start model, the next stage).
+
+Routes, one per call: `POST /api/endf/summary`, `POST /api/endf/curves`, `GET /api/endf/checkers`; jobs
+`endf_check` and `endf_standardize` (with `accept`).
