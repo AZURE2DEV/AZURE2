@@ -2,7 +2,7 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — the `<thm>` keys as a table, the session's diagnostics as rows, error parts, lists, small defects
+## 2026-11-14 (agent, branch `feature/upgrade-8-pyazr3-project-edits`) — the `<thm>` keys as a table, error parts
 
 **Done** (`docs/upgrade/pyazr3.md` section 9, `web_ui.md` section 12 findings 9, 24, 27, 28):
 
