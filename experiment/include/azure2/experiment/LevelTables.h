@@ -33,6 +33,9 @@ struct PairInfo {
   double radius = 0.0;            ///< fm, the channel radius of its first row
   int twoJLight = 0, twoJHeavy = 0;  ///< 2j of the two particles
   int heavyParity = 1;               ///< parity of the heavy particle (photon pair: of the final level)
+  int lightParity = 1;               ///< parity of the light particle
+  /// MeV, the THM binding energy B of the pair's composite projectile (column 32 of its first row; 0 = none)
+  double bindingEnergy = 0.0;
   /// The external-capture multipole mask of the pair (column 31 of its first active row that has one; 0 = none)
   unsigned int externalCapture = 0;
   bool identical = false;            ///< the two particles are identical (PPair::IsIdentical)

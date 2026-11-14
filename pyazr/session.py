@@ -211,7 +211,9 @@ class Session(
     def describe(self):
         """What this session holds, as plain data: project, options and option_sources (where each came from),
         Coulomb table, pairs, levels, data sets, extrapolations, parameters (their records: name, kind, unit, x,
-        free, bounds, owner fields).
+        free, bounds, owner fields), and ``functions``: the session's diagnostic calls (``channel_functions`` and the
+        THM calls) described as rows -- arguments with unit, kind, bounds and default, returned fields with unit,
+        the axis, and where each array sits in the answer (:mod:`pyazr.session_functions`).
         The keys: :func:`pyazr.described.describe_session`."""
         from .described import describe_session
         return describe_session(self)
@@ -414,7 +416,8 @@ class Session(
     # -- output files and norms -----------------------------------------------
 
     @engine_call
-    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted", close_session=False):
+    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted", close_session=False, *,
+                 relative_to=None):
         """Snapshot the fit vector ``x`` (default ``parameters.x0``) as a project ``path`` that reopens as the fit.
 
         The level parameters are written as the ``<levels>`` rows state them (:meth:`transform`: energies in MeV,
@@ -425,10 +428,14 @@ class Session(
         (default) the file is reopened and must give back the physical values, the particle amplitudes level by level
         and (a session of the data, ``"fitted"``) the data chi-squared and the objective; otherwise both files are
         removed and a ``RuntimeError`` is raised.  ``close_session`` closes this session before the check opens the
-        copy.  The rules in full: :func:`pyazr.snapshot.save_fit`.  Returns ``(azr_path, sav_path_or_None)``.
+        copy.  Relative paths (data files, covariance and THM tables) are written relative to the snapshot's directory,
+        so it reopens there; ``relative_to=<dir>`` writes them relative to that directory instead (a text to be opened
+        with that working directory).  The rules in full: :func:`pyazr.snapshot.save_fit`.  Returns ``(azr_path,
+        sav_path_or_None)``.
         """
         from .snapshot import save_fit
-        return save_fit(self, path, x, param_sav=param_sav, verify=verify, norms=norms, close_session=close_session)
+        return save_fit(self, path, x, param_sav=param_sav, verify=verify, norms=norms, close_session=close_session,
+                        relative_to=relative_to)
 
     @engine_call
     def write_outputs(self, x=None):

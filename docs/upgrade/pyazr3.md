@@ -1105,3 +1105,70 @@ as the writer forms them (`SigmaAndS`), read-only views.
   is numpy, scipy is in the extras `web` and `examples`.  `pyazr.__all__` and the user guide's list "The names of the
   package" are compared by the consistency test.  Not done: `tabulate` / `angular_distribution` on given energies,
   `modelavg` / `priors` into `pyazr.bands`.
+
+## 9. The project edits and descriptions the web page lacks: as built
+
+The findings 9-11, 24, 27 and 28 of `web_ui.md` section 12, each as a call of pyazr; the page is ported to them later.
+
+- **THM binding energy and amplitude flag** (finding 11): `Project.set_pair(key, binding_energy=B)` writes column 32
+  on every row of the pair (`experiment::SetPair`, `PairChange::bindingEnergy`; a particle pair, finite B >= 0; a row
+  without the THM columns gets them only for B != 0); `Project.set_channel(level, pair, l, s, width_is_amplitude=)`
+  writes column 33 of the channel's row (`ChannelChange::widthIsAmplitude`; a particle channel; the width is not
+  converted).  `ProjectPair.binding_energy` and `ProjectChannel.amplitude` read them without a session.  Test:
+  `tests/pyazr/thm_pair_edits_test.py` (T2 and o18_lacognata2008: the engine's chi-squared of the edited file equals
+  that of the same edit made by hand in the text, and differs from the unedited one).
+- **Pairs added and removed** (finding 10): `Project.add_pair` (`experiment::AddPair`) writes a *pair row* (inactive,
+  level ID 0) at the end of `<levels>`, since the file holds a pair in its rows only; `ReadLevelRowTable` lists its
+  pair and no level, `AddLevel` removes it once a new level names the pair.  `Project.remove_pair(key,
+  remove_channels=False)` (`experiment::RemovePair`) refuses while a level has a channel of the pair (the levels and
+  channels named); with `remove_channels=True` the channel rows go too, never the last channel of a level; a data set
+  that names the pair is refused by the validator (`E_UNKNOWN_PAIR`).  The default refuses because removing channels
+  removes fit parameters of other levels: asking for it is explicit.  `Project.allowed_channels(J, parity, l_max=2,
+  multipolarity_max=2, multipolarities_max=2, pairs=None)` is the rule of the Qt `LevelsTab::calculateChannels`
+  (`experiment::AllowedChannels`, the rule in its comment); `add_level(..., "allowed")` takes it for a new J^π and
+  the group's channels for an existing one (the levels of a J^π share one set).  Test: `tests/pyazr/pair_edits_test.py`
+  (T1's nuclear part built from an empty `<levels>` gives T1's chi-squared and parameter count; add then remove gives
+  the text back).
+- **A schema of `<thm>`** (finding 27): the keys of the global options and of an experiment line are two tables,
+  `ThmOptionKeys()` and `ThmExperimentKeys()` (`src/ThmKeys.cpp`, `include/ThmKeys.h`): one row per key with its
+  description (the schema's value type, values of an enum, title, unit, default, grammar, the key it needs) and its
+  reader; `ParseThmOptionLine` and `ParseThmExperimentLine` look a key up there (the if-chains are gone, the refusals'
+  texts are the same, the experiment keys listed in the table's order).  `pyazr.kinds()["thm"]` serves the rows in
+  the shape of `pyazr/ui/thm.py`'s `KEYS`, equal to it (`tests/pyazr/thm_keys_test.py`); the reference page
+  `docs/source/reference/thm_keys.rst` is generated from them (`tools/gen_thm_keys_docs.py`, checked by the same
+  test).  The THM projects of `tests/` and `examples/` give identical outputs.
+- **The session's diagnostics described** (findings 24 and 28): `Session.describe()["functions"]`, the rows of
+  `pyazr/session_functions.py` for `channel_functions` and the five THM calls: arguments with unit, kind, bounds and
+  default; returned fields with unit, `path` in the answer, `shape` (`axis`, `axis x nodes`, `scalar`, ...) and
+  `lines` for a field under a list.  The answers are unchanged; `tests/pyazr/session_functions_test.py` checks both
+  directions on T1 and three THM set-ups.
+- **The three parts of an error as attributes** (finding 9): `pyazr.Error(message, what=, allowed=, fix=)`; each
+  part is a substring of the message where pyazr builds it (13 of the wrong calls of `tests/pyazr/errors_test.py`
+  carry them; the test checks they are parts of the text), a `FormatError` takes them from its first diagnostic of
+  severity error; `None` elsewhere (the engine's own messages, which the binding passes as text).
+- **Lists**: `pyazr.kinds()["nuclides"]` (the built-in nuclei a THM experiment names) and
+  `kinds()["optical_potentials"]` (the global optical potentials), from the engine's tables (`_azure2.thm_nuclides`,
+  `thm_global_opticals`); the THM keys' reference page lists both.
+- **Small defects**: `Session.save_fit` to another directory rewrites the snapshot's relative paths (record fields of
+  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`;
+  `relative_to=` names them from another directory: the web page's server passes its working directory);
+  `python -m pyazr --help` runs without the engine (the package's engine imports are skipped only for the command
+  line; `import pyazr` still raises); `pyazr ui FILE --json` serves (the captured standard output answers
+  `isatty()`; an interrupt ends it with status 0); `Project.set_pair`'s refusals name the value and what to give;
+  `ChannelWidth.jpi` is the engine's J^pi text ("1/2+"); `is_entrance` of a pair record documented as what it is
+  (an entrance of an active data set, set when the session is built: its value was right).
+- **The three parts of an error as attributes** (finding 9): `pyazr.Error(message, what=, allowed=, fix=)`; each
+  part is a substring of the message where pyazr builds it (13 of the wrong calls of `tests/pyazr/errors_test.py`
+  carry them; the test checks they are parts of the text), a `FormatError` takes them from its first diagnostic of
+  severity error; `None` elsewhere (the engine's own messages, which the binding passes as text).
+- **Lists**: `pyazr.kinds()["nuclides"]` (the built-in nuclei a THM experiment names) and
+  `kinds()["optical_potentials"]` (the global optical potentials), from the engine's tables (`_azure2.thm_nuclides`,
+  `thm_global_opticals`); the THM keys' reference page lists both.
+- **Small defects**: `Session.save_fit` to another directory rewrites the snapshot's relative paths (record fields of
+  type path, `<config>` path keys, `table:` values of `<thm>`) and verifies it there (`snapshot.rebase_paths`;
+  `relative_to=` names them from another directory: the web page's server passes its working directory);
+  `python -m pyazr --help` runs without the engine (the package's engine imports are skipped only for the command
+  line; `import pyazr` still raises); `pyazr ui FILE --json` serves (the captured standard output answers
+  `isatty()`; an interrupt ends it with status 0); `Project.set_pair`'s refusals name the value and what to give;
+  `ChannelWidth.jpi` is the engine's J^pi text ("1/2+"); `is_entrance` of a pair record documented as what it is
+  (an entrance of an active data set, set when the session is built: its value was right).

@@ -114,23 +114,59 @@ level)``; a channel by its pair key and (l, s).
 
         p.set_level("3/2- 3.5032", energy=3.51, fixed=False)
 
-``p.set_channel(level, pair, l, s, width=, fixed=)``
+``p.set_channel(level, pair, l, s, width=, fixed=, width_is_amplitude=)``
     The width column of one channel, in the row's convention (a partial width
-    in eV for an open channel or a photon, an ANC in fm^-1/2 for a closed one)::
+    in eV for an open channel or a photon, an ANC in fm^-1/2 for a closed one,
+    a reduced-width amplitude in MeV^1/2 when the row's amplitude flag is set);
+    ``width_is_amplitude`` sets that flag (column 33, a particle channel only;
+    the value is not converted, so give the width in the new convention in the
+    same call)::
 
         p.set_channel("3/2- 3.51", 1, 1, 0.5, width=6.0e4)
+        p.set_channel("3/2- 3.51", 1, 1, 0.5, width=0.4, width_is_amplitude=True)
 
-``p.set_pair(pair, radius=, light_mass=, heavy_mass=, separation_energy=)``
-    A pair's columns on every row of the pair (refit after a new radius)::
+``p.set_pair(pair, radius=, light_mass=, heavy_mass=, separation_energy=, light_excitation=, heavy_excitation=, binding_energy=)``
+    A pair's columns on every row of the pair (refit after a new radius);
+    ``binding_energy`` is the THM binding energy B of the Trojan horse whose
+    transferred particle is the pair's light partner (MeV, column 32, a particle
+    pair only, >= 0)::
 
         p.set_pair(1, radius=4.0)
+        p.set_pair(1, binding_energy=2.224566)
+
+``p.add_pair(kind=, light=, heavy=, separation_energy=, radius=, ...)`` and ``p.remove_pair(pair, remove_channels=False)``
+    A pair by its partners (dicts ``J, parity, Z, mass`` in u, ``g``); a photon
+    pair names the nucleus in its final level as ``heavy`` and its E_x as
+    ``heavy_excitation``.  ``add_pair`` returns the key.  ``<levels>`` holds a
+    pair in its rows only, so a pair no level names yet is kept by a row of its
+    own (inactive, level ID 0), which ``levels()`` does not list and
+    ``add_level`` removes once a level names the pair.  ``remove_pair`` refuses
+    while a level has a channel of the pair, naming them, unless
+    ``remove_channels=True`` (the channel rows go with it; a level is never
+    left without a channel); a data set that names the pair is refused by the
+    validator::
+
+        k = p.add_pair(light=dict(J=0, parity=1, Z=2, mass=4.0026), heavy=dict(J=1.5, parity=-1, Z=4, mass=9.0122),
+                       separation_energy=10.6, radius=5.0)
+        p.remove_pair(k)
+
+``p.allowed_channels(J, parity, l_max=2, multipolarity_max=2, multipolarities_max=2, pairs=None)``
+    The channels a level of J^pi has with the pairs (dicts ``pair, l, s``), by
+    the rule of the Qt GUI's Levels tab: a particle pair every channel spin and
+    every l <= l_max of the right parity; a photon pair the lowest
+    ``multipolarities_max`` multipolarities L <= ``multipolarity_max`` the
+    triangle rule allows; a beta pair Gamow-Teller and Fermi by the parent's
+    spin.
 
 ``p.add_level(J, parity, energy, channels, fixed=True)`` and ``p.remove_level(level)``
     A level of an existing J^pi gets the rows of its group (the channels not
     given with width 0, fixed); a new J^pi one row per channel given.  It takes
-    the next free level ID and goes at the end of ``<levels>``::
+    the next free level ID and goes at the end of ``<levels>``.
+    ``channels="allowed"`` gives the group's channels, or for a new J^pi those
+    of ``allowed_channels`` with its default limits (width 0, fixed)::
 
         p.add_level(1.5, -1, 7.0, [dict(pair=1, l=1, s=0.5, width=100.0)])
+        p.add_level(0.5, +1, 9.0, "allowed")
         p.remove_level("3/2- 7")
 
 ``p.config()`` and ``p.set_config(**entries)``

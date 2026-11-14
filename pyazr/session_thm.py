@@ -74,8 +74,11 @@ class SessionTHM:
         """
         reports = self.thm_experiments(params)
         if experiment not in reports:
-            raise ParameterKeyError(f"no THM experiment {experiment!r} (have: {', '.join(reports) or 'none'})"
-                                    f"{close_names(experiment, reports)}; Session.thm_experiments() lists them.")
+            have = ", ".join(reports) or "none"
+            raise ParameterKeyError(f"no THM experiment {experiment!r} (have: {have})"
+                                    f"{close_names(experiment, reports)}; Session.thm_experiments() lists them.",
+                                    what=f"no THM experiment {experiment!r}", allowed=f"have: {have}",
+                                    fix="Session.thm_experiments() lists them")
         return reports[experiment]
 
     @engine_call

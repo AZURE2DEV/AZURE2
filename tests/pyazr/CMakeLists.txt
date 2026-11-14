@@ -888,6 +888,41 @@ add_test(NAME pyazr_project_nuclear_part
                  ${CMAKE_CURRENT_SOURCE_DIR}/project_nuclear_part_test.py)
 set_tests_properties(pyazr_project_nuclear_part PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The THM columns of <levels> as Project edits: set_pair(binding_energy=) and set_channel(width_is_amplitude=) give
+# the chi-squared of the same edit made by hand on two THM projects; the refusals.
+add_test(NAME pyazr_thm_pair_edits
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_pair_edits_test.py)
+set_tests_properties(pyazr_thm_pair_edits PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Pairs added and removed (Project.add_pair, remove_pair) and the channels a J^pi allows (allowed_channels, the Qt
+# rule): T1's nuclear part built from nothing gives T1's chi-squared; add then remove gives the text back; refusals.
+add_test(NAME pyazr_pair_edits
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/pair_edits_test.py)
+set_tests_properties(pyazr_pair_edits PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The keys of <thm> as the engine's table (src/ThmKeys.cpp, pyazr.kinds()["thm"]): the refusals name the table's
+# keys, the web page's table agrees, every key reads what the table offers, the reference page is the table's.
+add_test(NAME pyazr_thm_keys
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_keys_test.py)
+set_tests_properties(pyazr_thm_keys PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The session's diagnostic calls described as rows (pyazr.session_functions): every key of the answers of
+# channel_functions and the THM calls on four projects is a path of its row, and every path is in an answer.
+add_test(NAME pyazr_session_functions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/session_functions_test.py)
+set_tests_properties(pyazr_session_functions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Small defects, each with the check that failed before: save_fit to another directory reopens, `python -m pyazr
+# --help` without the engine, `pyazr ui FILE --json` keeps serving, ChannelWidth.jpi, a pair record's is_entrance.
+add_test(NAME pyazr_small_defects
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/small_defects_test.py)
+set_tests_properties(pyazr_small_defects PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # pyazr.stopping: the binding of stopping/ (SRIM-2013 through LunaSRIM) against LunaSRIM's reference values
 # (stopping/tests/data/srim_reference.csv), the same tolerances as the C++ tests.
 add_test(NAME pyazr_stopping

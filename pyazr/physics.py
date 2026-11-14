@@ -73,12 +73,16 @@ def _raise_for(row, status, columns, shape):
         if arg["kind"] == "choice":
             value = arg["choices"][int(value)] if value == int(value) and 0 <= value < len(arg["choices"]) else value
         raise DomainError(f"{name}: {arg['name']} = {_value_text(value, arg['unit'])} at {where} is outside the "
-                          f"domain; allowed: {arg['name']} {arg['domain']} ({arg['doc']}); {count}.  {fix}.")
+                          f"domain; allowed: {arg['name']} {arg['domain']} ({arg['doc']}); {count}.  {fix}.",
+                          what=f"{arg['name']} = {_value_text(value, arg['unit'])} at {where} is outside the domain",
+                          allowed=f"{arg['name']} {arg['domain']} ({arg['doc']})", fix=fix)
     given = ", ".join(f"{a['name']} = {_value_text(float(columns[k][i]), a['unit'])}"
                       for k, a in enumerate(row["arguments"]))
     if code == -2:
         raise DomainError(f"{name}: the arguments at {where} ({given}) are outside the domain together, though each "
-                          f"is in its own: {row['doc']}  {count}.  {fix}.")
+                          f"is in its own: {row['doc']}  {count}.  {fix}.",
+                          what=f"the arguments at {where} ({given}) are outside the domain together",
+                          allowed=row["doc"], fix=fix)
     raise EngineError(f"{name}: the computation did not converge at {where} ({given}); {count}.  Please report it "
                       f"with these arguments; errors='mask' gives the other elements.")
 
@@ -89,7 +93,9 @@ def _argument_column(row, k, value):
     if arg["kind"] == "choice" and isinstance(value, str):
         if value not in arg["choices"]:
             raise DomainError(f"{row['name']}: {arg['name']} = {value!r} is not known; allowed: {arg['name']} "
-                              f"{arg['domain']}.  help(pyazr.physics.{row['name']}).")
+                              f"{arg['domain']}.  help(pyazr.physics.{row['name']}).",
+                              what=f"{arg['name']} = {value!r} is not known", allowed=f"{arg['name']} {arg['domain']}",
+                              fix=f"help(pyazr.physics.{row['name']})")
         return np.asarray(float(arg["choices"].index(value)))
     try:
         return np.asarray(value, dtype=float)

@@ -29,6 +29,12 @@ w.width_is_amplitude       # Parameter: the same, from the live API
 p.binding_energy           # pair: THM binding energy B_xs (MeV), 0 if not THM
 ```
 
+Set both as Project edits, not by editing the row text: `Project.set_pair(key, binding_energy=B)` writes B on every
+row of the pair (a particle pair, B >= 0); `Project.set_channel(level, pair, l, s, width=g, width_is_amplitude=True)`
+sets the flag of one channel row with its amplitude g in MeV^½ (a particle channel; the value is not converted, so
+give it in the new convention in the same call). `Project.pairs()[k].binding_energy` and
+`Project.level(label).channel(pair, l, s).amplitude` read them back without a session.
+
 - **Never convert an rwa-declared width by hand.** `Session.save_fit` respects the flag; hand-written
   amplitude-to-width arithmetic corrupts the file by orders of magnitude.
 - **`Parameter.wigner_limit` is γ²_W in MeV**, the limit on the reduced width squared. It matches neither convention

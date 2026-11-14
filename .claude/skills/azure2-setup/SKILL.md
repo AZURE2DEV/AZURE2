@@ -40,7 +40,8 @@ of a correct model.
    (references/nds-exfor.md).
 2. **Pairs: masses and S from one table.** Atomic masses (u, electrons included) from AME2020 and S = m₁ + m₂ −
    M(compound) from the same table: `pyazr.sources.masses.fill_masses(project)`, then the audit (§ "Masses").
-3. **Channels and radii.** The allowed (l, s) for each J^π (references/azr-levels.md §5). Start a_c at
+3. **Channels and radii.** The allowed (l, s) for each J^π (references/azr-levels.md §5;
+   `Project.allowed_channels(J, parity, l_max=)` lists them by the Qt rule, `Project.add_pair(...)` adds a pair). Start a_c at
    1.4 (A₁^⅓ + A₂^⅓) fm; it is a model choice to scan with refits (azure2-check, `radius_scan.py`).
 4. **Levels.** Known resonances in and near the data range, sub-threshold states whose tails reach it, background
    poles above (references/rmatrix-picture.md §3–4). `Project.add_level(J, parity, E_x, [dict(pair=, l=, s=,
