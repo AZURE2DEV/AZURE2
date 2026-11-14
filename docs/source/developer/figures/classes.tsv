@@ -36,8 +36,8 @@ PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	im
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	immutable
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
 ALevel	include/ALevel.h	a level: its <levels> values, flags, final-state data	setup	class	immutable
-LevelInputs	include/LevelInputs.h	the levels' input values in the engine's basis: E, gamma, zero flags	setup	class	run
-LevelState	include/LevelState.h	the levels at the vector: E, gamma, shift functions, J, N_f, fills, projectors	setup	class	evaluation
+LevelInputs	include/LevelInputs.h	the levels' input values in the engine's basis: E, gamma, records' numbers	setup	class	run
+LevelState	include/LevelState.h	the levels at the vector: E, gamma, shift functions, J, N_f, fills, projectors, zero flags	setup	class	evaluation
 LevelParameterLayout	include/LevelParameterLayout.h	where each level's energy and amplitudes sit in the vector	setup	class	immutable
 ObservedLevelTable	include/ObservedLevelTable.h	the observed values of the levels at one vector, for the reports	setup	class	run
 CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	setup	class	immutable

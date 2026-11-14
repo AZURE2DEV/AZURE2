@@ -1914,6 +1914,37 @@ the snapshot (776: as the pool); `ParameterLimitsManager.cpp` 402 (fill, shift f
   `levelInputs_`), the owners holding their own state and inputs, the pools of `LevelState`, `Clone` deleted, the
   memory measurement.
 
+*Step 4 as built, third part: the readers take the state* (branch `feature/upgrade-5-cnuc-readers-owners`, start
+395350e1). Measured first: `CNuc::State()` had 88 calls outside `CNuc*.cpp` (`AMatrixFunc` 29, `THMMatrixFunc` 17,
+`GammaDecayMap` 14, `AZUREGrad` 8, `Objective` 5, `RMatrixFunc` 3, `ThmReports`, `ThmLineshape`, `AZURECalcMCMC` 2
+each, `TargetSetup`, `ModelData`, `CNucTransformMessages`, `CNucExternalCapture`, `AdaptiveExtrapolation`, `AZUREAPI`
+1 each) and `CNuc::Inputs()` 32 uses in `CNuc.cpp` and 30 outside (`CNucExternalCapture` 6, `AMatrixFunc` 5,
+`CNucTransformMessages` 4, `CNucSystem` 3, `TargetSetup`, `ParameterLabel`, `CNucReport` 2 each, `ThmLineshape`,
+`CNucChecks`, `AdaptiveIntegrationGrid`, `AZURECalcMCMC`, `pybind_records` 1 each).
+
+- Every reader of an evaluation's values takes the `LevelState` it reads, in the order compound, state, inputs: the
+  matrix functions hold the state they are solved at (`AMatrixFunc`, `RMatrixFunc`, `THMMatrixFunc`, through
+  `GenMatrixFunc::state()`; `TaskScratch`'s solvers are re-pointed at it), the energy and point passes, the model pass,
+  the gradient passes, the objective (`ObjectiveContext` carries the state and the inputs), the model data, the
+  scattering lengths, the `gamma_decay` readers, the THM line shape and reports, the energy-shift hand-over with the
+  sub-point grids, the adaptive extrapolation, `WriteParametersOut`. The readers of the input values take the
+  `LevelInputs`: the labels, the transformation's messages, the checks, the resonance grids and mesh anchors, the
+  `System` with parameters.
+- `CNuc`'s fills and transformations are `const` and write the state and inputs they are given (`FillCompoundFromParams`,
+  `CalcShiftFunctions` with `ShiftOrders` instead of a positional boolean, `TransformIn`, `FillCompoundFromParamsPhysical`,
+  `TransformOut`, `ObservedWidthsAt`, `ObservedOfFitValues`, `SetFitLevelParameter`, the formal final states and
+  masks). The parameter-vector walks moved to `CNucParameterVector.cpp` (`CNuc.cpp` 996 lines).
+- What differed from the design (code taken): an evaluation read two things of the inputs, the `--ignore-externals`
+  zero-width flags (`AMatrixFunc`, the formal masks, the adjoint's test) and the input energy by which the THM line
+  shape tells a ground-state moment (`ThmLevelWidth`). Passing the inputs down the evaluation would have doubled every
+  signature of the chain, so both are the state's: the flags moved from `LevelInputs` to `LevelState::ZeroInputWidth`,
+  the energy is mirrored as `LevelState::InputEnergy`; both are written where the input is read (`Fill`,
+  `TransformIn`, the physical fill), so an owner's state and inputs agree whenever both are its own.
+- Still the default owner's: `CNuc` holds one state and one inputs and hands them out (`State`, `Inputs`,
+  `MutableState`, and one-argument forms of the fills); the owners (the fitter's pool, the sampler, the rate, the
+  limits, the sub-point grids, the bands, the binding, the program's run, the tests) still copy the compound (`Clone`)
+  and pass their copy's state. Not done here: the owners' own states, the pools of `LevelState`, `Clone`'s deletion.
+
 **Step 5. The set-up out and the name gone.** (≈ 900 lines touched, mostly signatures in ≈ 110 files; `CNuc.cpp`
 → `CompoundSystemBuild.cpp` and `ExternalCaptureFinalStates.cpp`; the `CNuc*` files renamed: `CNucReport` →
 `LevelReport`, `CNucChecks` → `CompoundSystemChecks`, `CNucSystem` → `SystemOfCompound`, `CNucLevelParameters` →

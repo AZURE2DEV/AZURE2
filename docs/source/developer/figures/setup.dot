@@ -13,8 +13,8 @@ digraph setup {
   n_JGroup [label=<<b>JGroup</b><br/><font point-size="12">one J^pi group: its<br/>channels and levels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_AChannel [label=<<b>AChannel</b><br/><font point-size="12">a channel (pair, l, s)<br/>with its boundary<br/>value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_ALevel [label=<<b>ALevel</b><br/><font point-size="12">a level: its &lt;levels&gt;<br/>values, flags, final-<br/>state data</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_LevelInputs [label=<<b>LevelInputs</b><br/><font point-size="12">the levels&#x27; input<br/>values in the engine&#x27;s<br/>basis: E, gamma, zero<br/>flags</font>>, shape=box, style="filled", fillcolor="white"];
-  n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the levels at the<br/>vector: E, gamma,<br/>shift functions, J,<br/>N_f, fills, projectors</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_LevelInputs [label=<<b>LevelInputs</b><br/><font point-size="12">the levels&#x27; input<br/>values in the engine&#x27;s<br/>basis: E, gamma,<br/>records&#x27; numbers</font>>, shape=box, style="filled", fillcolor="white"];
+  n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the levels at the<br/>vector: E, gamma,<br/>shift functions, J,<br/>N_f, fills,<br/>projectors, zero flags</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_LevelParameterLayout [label=<<b>LevelParameterLayout</b><br/><font point-size="12">where each level&#x27;s<br/>energy and amplitudes<br/>sit in the vector</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_ObservedLevelTable [label=<<b>ObservedLevelTable</b><br/><font point-size="12">the observed values of<br/>the levels at one<br/>vector, for the<br/>reports</font>>, shape=box, style="filled", fillcolor="white"];
   n_CNucSystem [label=<<b>CNucSystem</b><br/><font point-size="12">the physics System of<br/>a CNuc and its index<br/>map</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];

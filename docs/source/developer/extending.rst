@@ -117,14 +117,21 @@ energy and the amplitudes:
    counts positions of its own.
 2. The value at the vector: a member of ``LevelState``
    (``include/LevelState.h``) and its branch in the fills that switch on the
-   slot's kind (``FillCompoundFromParams``, ``SetFitLevelParameter``). What a
-   fill computes from it beside the level (as a ``gamma_decay`` record's
-   ``GammaDecayFill``) is a member of ``LevelState`` too.
+   slot's kind (``FillCompoundFromParams``, ``SetFitLevelParameter``), which
+   write the ``LevelState`` they are given. What a fill computes from it
+   beside the level (as a ``gamma_decay`` record's ``GammaDecayFill``) is a
+   member of ``LevelState`` too. Its readers take the state as an argument
+   (the compound first, then the state, then the inputs), as every reader of
+   an evaluation's values does.
 3. The input value: a member of ``LevelInputs`` (``include/LevelInputs.h``),
    made by ``CNuc::Fill`` from the ``<levels>`` rows, written by
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
    vector), read by ``CNuc::FillMnParams`` as the start value; its observed
-   value in ``GetTransformParams``. ``ALevel`` holds only what the
+   value in ``GetTransformParams``. What an evaluation reads of the input
+   (the zero-width flags, the input energy the THM line shape reads) is
+   written into the ``LevelState`` where the input is read (``Fill``,
+   ``TransformIn``, the fill from an observed vector), so that the
+   evaluation reads the state alone. ``ALevel`` holds only what the
    ``<levels>`` rows say (``FileE``, ``FileGamma``, ``FileZeroWidth``).
 4. A parameter kind (below) for its record, its pull-back in
    ``GradAccum`` (``src/AZUREGrad.cpp``) if the gradient is analytic, and its

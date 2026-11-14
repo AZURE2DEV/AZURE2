@@ -45,8 +45,8 @@ CNuc	PPair	owns	setup		CNuc::pairs_ (std::vector<PPair>)
 CNuc	JGroup	owns	setup		CNuc::jgroups_ (std::vector<JGroup>)
 JGroup	AChannel	owns	setup		JGroup::channels_ (std::vector<AChannel>)
 JGroup	ALevel	owns	setup		JGroup::levels_ (std::vector<ALevel>)
-CNuc	LevelState	owns	setup		CNuc::levelState_ (LevelState), written by CNuc's fills, read through CNuc::State() const
-CNuc	LevelInputs	owns	setup		CNuc::levelInputs_ (LevelInputs), made by CNuc::Fill, written by TransformIn and FillCompoundFromParamsPhysical, read through CNuc::Inputs() const
+CNuc	LevelState	owns	setup		CNuc::levelState_ (LevelState), the default owner's: CNuc::State() hands it to the readers, which take it as an argument
+CNuc	LevelInputs	owns	setup		CNuc::levelInputs_ (LevelInputs), made by CNuc::Fill, the default owner's: CNuc::Inputs() hands it to TransformIn, FillMnParams and the readers
 CNuc	LevelParameterLayout	reads	setup	const	CNuc::parameterLayout_ (shared_ptr<const LevelParameterLayout>), made once in CNuc::Fill; read by every walk of the level block through CNuc::ParameterLayout()
 CNuc	ObservedLevelTable	makes	setup		CNuc::TransformOut(const Config &) returns it; WriteParametersOut, LevelValue, WarnLargeRadiativeWidths read it
 CNuc	CNucSystem	reads	setup	const	CNuc::systemStructure_, systemAllGroups_ (shared_ptr<const CNucSystem>), made once by BuildSystemFromCNuc(const CNuc &, ...) in CNuc::Fill

@@ -295,11 +295,11 @@ is said at each step. The objects named are drawn in :doc:`classes`.
 .. note:: **Planned.**
    ``CNuc`` will be split into an immutable ``CompoundSystem`` built once at
    set-up and shared by every evaluation, the levels' input values
-   (``LevelInputs``) and a per-evaluation ``LevelState`` (today the ones each
-   copy of ``CNuc`` holds, ``CNuc::Inputs`` and ``CNuc::State``); an
-   evaluation then
-   reads ``(const CompoundSystem &, const LevelState &)`` where it reads
-   ``CNuc *`` today. In ``pyazr`` the ``Objective`` and ``Evaluation``
+   (``LevelInputs``) and a per-evaluation ``LevelState``. The readers already
+   take the ``LevelState`` (and the ``LevelInputs``) they read as arguments;
+   the copies of ``CNuc`` still hold the ones they hand over
+   (``CNuc::Inputs`` and ``CNuc::State``). An evaluation then reads
+   ``(const CompoundSystem &, const LevelState &)``. In ``pyazr`` the ``Objective`` and ``Evaluation``
    objects take the place of the session's ``calculate_*`` methods.
 
 Caches and their signatures
