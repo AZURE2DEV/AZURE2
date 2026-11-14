@@ -25,7 +25,7 @@ import numpy as np
 
 from .errors import Conflict, Missing, NotFound, Refused, UIError, describe_exception
 
-FINAL = ("stopped", "converged", "ended", "failed", "killed", "interrupted")
+FINAL = ("stopped", "converged", "ended", "finished", "failed", "killed", "interrupted")
 TRACE_POINTS = 500  # the most points of a job's trace (objective against call); older points are thinned by two
 LOG_LINES = 8  # the last lines of a job's log served with its record
 WAIT_MAX = 10.0  # s, the longest a GET of a job waits for its state to change
@@ -40,10 +40,13 @@ class Tracker:
     request before each call, counts it, records the best point and reports it with ``report(message)``; ``None`` in
     a direct call), and counts the progress of calls the job makes itself (:meth:`count`: the engine's fitters, the
     sampler).  ``session`` is the job's session adapter (:class:`pyazr.ui.engine.Engine`), for a job that calls the
-    engine other than through the objective."""
+    engine other than through the objective; ``source`` the record of the job whose best point the job starts from
+    (its result: a covariance, a chain), or None; :meth:`product` the path of a file the job writes."""
 
-    def __init__(self, fg, names, *, report=None, stop=None, session=None):
+    def __init__(self, fg, names, *, report=None, stop=None, session=None, source=None, job_id="direct",
+                 products="."):
         self.fg, self.names, self.report, self.session = fg, names, report, session
+        self.source, self.job_id, self.products = source, job_id, products
         self.stop = stop if stop is not None else threading.Event()  # set: the job ends with its best point
         self.calls, self.best, self.best_x, self.t0 = 0, np.inf, None, time.perf_counter()
         self.first = None  # the objective at the start point
@@ -65,16 +68,17 @@ class Tracker:
         return f, self._last[2]
 
     def count(self, calls, objective, x, **more):
-        """Progress: ``calls`` so far (counting up), the objective at the free vector ``x`` of the last of them, and
-        further numbers by name (``more``: a fitter's stage, a sampler's acceptance; None where there is none),
-        reported with the best point when it improved."""
-        objective = float(objective)
+        """Progress: ``calls`` so far (counting up), the objective at the free vector ``x`` of the last of them (None
+        where the call computes none: a model on an extrapolation grid), and further numbers by name (``more``: a
+        fitter's stage, a sampler's acceptance; None where there is none), reported with the best point when it
+        improved."""
+        objective = None if objective is None else float(objective)
         if self.stop.is_set():
             self.after_stop += 1
         self.calls = int(calls)
-        if self.first is None:
+        if self.first is None and objective is not None:
             self.first = objective
-        improved = objective < self.best
+        improved = objective is not None and objective < self.best
         if improved:
             self.best, self.best_x = objective, np.array(x, float)
         if self.report is not None:
@@ -84,6 +88,11 @@ class Tracker:
 
     def stop_requested(self):
         return self.stop.is_set()
+
+    def product(self, name, suffix):
+        """The path of a file the job writes: ``<products>/<name>_<job id><suffix>``."""
+        os.makedirs(self.products, exist_ok=True)
+        return os.path.join(self.products, f"{name}_{self.job_id}{suffix}")
 
     def value(self, x):
         return self(x)[0]
@@ -201,6 +210,211 @@ def fit_engine(tracker, x0, settings, names, *, method, minos=None):
     return ENGINE_STATES.get(r["status"], "ended"), words, extra
 
 
+# -- the sampler and the bands -------------------------------------------------------------------------------------
+
+QUANTILES = (2.5, 16.0, 50.0, 84.0, 97.5)  # %, of each parameter's marginal in a sampler's summary
+TAU_EVERY = 10  # stored steps between two running estimates of the autocorrelation time
+SAVE_EVERY = 50  # stored steps between two writes of the chain while it runs
+
+
+def _start_walkers(log_prob, x0, bounds, names, walkers, spread, rng):
+    """Walkers around x0, each ``x0 + spread * |x0| * N(0, 1)`` (``spread`` itself where x0 is 0), drawn again until
+    it lies inside the fit's limits with a finite log-probability.  A start outside the limits is refused with the
+    parameters named."""
+    from pyazr.errors import ParameterError
+    lower, upper = np.array(bounds, float).T
+    outside = [f"{n} = {v:g} (limits [{lo:g}, {hi:g}])" for n, v, lo, hi in zip(names, x0, lower, upper)
+               if not lo <= v <= hi]
+    if outside:
+        raise ParameterError(f"the sampler's start point is outside the fit's limits: {'; '.join(outside)}; start "
+                             "from a point inside them (a fit's best point, or the working x moved inside)")
+    width = spread * np.where(x0 != 0.0, np.abs(x0), 1.0)
+    p0 = np.empty((walkers, len(x0)))
+    for k in range(walkers):
+        for _ in range(1000):
+            p0[k] = x0 + width * rng.standard_normal(len(x0))
+            if np.all(p0[k] >= lower) and np.all(p0[k] <= upper) and np.isfinite(log_prob(p0[k])):
+                break
+        else:
+            raise ParameterError(f"no start inside the fit's limits near x0 for walker {k} after 1000 draws: make "
+                                 "the spread smaller")
+    return p0
+
+
+def _autocorrelation_time(chain):
+    """emcee's integrated autocorrelation time of each parameter (in stored steps) of ``chain`` (steps, walkers,
+    parameters), without its test of the chain's length (a running estimate: the result says the length)."""
+    import emcee
+    return np.asarray(emcee.autocorr.integrated_time(chain, tol=0, quiet=True), float)
+
+
+def _split_rhat(chain):
+    """The split R-hat of each parameter (Gelman et al., Bayesian Data Analysis, 3rd ed., eq. 11.4): every walker's
+    series cut in two halves taken as chains; sqrt(((m-1)/m W + B/m) / W) with W the mean of the halves' variances and
+    B/m the variance of their means.  The walkers of an ensemble sampler are not independent chains: a value near 1 is
+    necessary, not sufficient."""
+    m = chain.shape[0] // 2
+    halves = np.concatenate([chain[:m], chain[m:2 * m]], axis=1)  # (m, 2 walkers, parameters)
+    within = halves.var(axis=0, ddof=1).mean(axis=0)
+    between = halves.mean(axis=0).var(axis=0, ddof=1)
+    return np.sqrt(((m - 1) / m * within + between) / within)
+
+
+def chain_summary(chain, names, discard):
+    """What the page receives of a chain (steps, walkers, parameters) after ``discard`` stored steps: per parameter
+    the mean, standard deviation, quantiles (:data:`QUANTILES`), autocorrelation time, effective draws and split
+    R-hat; the covariance and correlation of the draws by name.  No draw."""
+    kept = chain[discard:]
+    flat = kept.reshape(-1, kept.shape[-1])
+    tau = _autocorrelation_time(kept)
+    rhat = _split_rhat(kept) if kept.shape[0] >= 4 else np.full(len(names), np.nan)
+    q = np.percentile(flat, QUANTILES, axis=0)
+    out = {"draws_used": int(flat.shape[0]), "discard": int(discard), "steps_stored": int(chain.shape[0]),
+           "walkers": int(chain.shape[1]),
+           "mean": dict(zip(names, flat.mean(axis=0).tolist())),
+           "errors": dict(zip(names, flat.std(axis=0, ddof=1).tolist())),
+           "quantiles": {n: {f"{p:g}": float(q[i, j]) for i, p in enumerate(QUANTILES)} for j, n in enumerate(names)},
+           "tau": dict(zip(names, tau.tolist())),
+           "effective_draws": dict(zip(names, (flat.shape[0] / np.where(tau > 0, tau, np.nan)).tolist())),
+           "rhat": dict(zip(names, rhat.tolist())),
+           "errors_from": "the chain's standard deviations after its burn-in"}
+    out.update(_covariance_by_name(names, np.atleast_2d(np.cov(flat, rowvar=False))))
+    return out
+
+
+def sample_emcee(tracker, x0, settings, names):
+    """emcee's ensemble sampler on the objective's log-probability (``Objective.log_prob``: -0.5 objective, -inf
+    outside the fit's limits), one process, stopping between stored steps.  Walkers start around x0 inside the
+    limits, or, from a sampler job, where its chain ended (the chain continues: the new file holds the old steps and
+    the new).  The chain (stored steps, walkers, parameters) goes to ``chain_<id>.npy`` in the project's output
+    directory every :data:`SAVE_EVERY` stored steps and at the end, the summary (:func:`chain_summary`) beside it as
+    JSON; the page receives the summary.  Progress per stored step: the objective at the best walker, the step, the
+    mean acceptance and a running autocorrelation time."""
+    import emcee
+    from pyazr.errors import ParameterError
+    from .engine import objective_of
+    f = objective_of(tracker.session)
+    ndim = len(names)
+    calls = {"n": 0}
+
+    def log_prob(x):
+        calls["n"] += 1
+        return f.log_prob(x)
+
+    previous = None
+    chain_of_source = ((tracker.source or {}).get("result") or {}).get("chain")
+    if chain_of_source:
+        previous = np.load(chain_of_source)
+        if previous.shape[2] != ndim:
+            raise ParameterError(f"the chain of job {tracker.source['id']} has {previous.shape[2]} parameters, this "
+                                 f"session {ndim}: a chain continues on the text it was sampled on")
+        p0 = previous[-1]
+    else:
+        walkers = settings["walkers"] or 2 * ndim + 2
+        if walkers < 2 * ndim:
+            raise ParameterError(f"walkers {walkers}: emcee needs at least twice the free parameters ({2 * ndim})")
+        p0 = _start_walkers(f.log_prob, np.asarray(x0, float), f.bounds, names, walkers, settings["spread"],
+                            np.random.default_rng(settings["seed"]))
+    sampler = emcee.EnsembleSampler(len(p0), ndim, log_prob)
+    sampler.random_state = np.random.RandomState(settings["seed"]).get_state()
+    chain_path, summary_path = tracker.product("chain", ".npy"), tracker.product("chain", ".json")
+
+    def whole():
+        new = sampler.get_chain()
+        return new if previous is None else np.concatenate([previous, new])
+
+    start_steps = 0 if previous is None else previous.shape[0]
+    tau, stopped = None, False
+    for k, state in enumerate(sampler.sample(p0, iterations=settings["steps"], thin_by=settings["thin"]), 1):
+        if k % TAU_EVERY == 0 or k == settings["steps"]:
+            tau = float(np.max(_autocorrelation_time(whole())))
+        if k % SAVE_EVERY == 0:
+            np.save(chain_path, whole())
+        best = int(np.argmax(state.log_prob))
+        tracker.count(calls["n"], -2.0 * state.log_prob[best], state.coords[best], step=start_steps + k,
+                      steps=start_steps + settings["steps"], acceptance=float(np.mean(sampler.acceptance_fraction)),
+                      tau=tau)
+        if tracker.stop_requested():
+            stopped = True
+            break
+    chain = whole()
+    np.save(chain_path, chain)
+    discard = chain.shape[0] // 2 if settings["discard"] is None else min(settings["discard"], chain.shape[0] - 1)
+    summary = chain_summary(chain, names, discard)
+    summary.update(chain=chain_path, acceptance=float(np.mean(sampler.acceptance_fraction)), thin=settings["thin"],
+                   continues=None if previous is None else tracker.source["id"])
+    write_checkpoint(summary_path, plain_json(dict(summary, names=list(names))))
+    summary["summary"] = summary_path
+    taus = [t for t in summary["tau"].values() if np.isfinite(t) and t > 0]
+    tau_words = f"up to {max(taus):.3g} steps" if taus else "not estimated (too few steps)"
+    words = (f"{chain.shape[0]} stored steps of {chain.shape[1]} walkers ({start_steps} of them continued), "
+             f"acceptance {summary['acceptance']:.2f}, autocorrelation time {tau_words} after a burn-in of {discard}")
+    return ("stopped" if stopped else "finished"), words, summary
+
+
+def _band_entries(points, values, lower, upper, how):
+    """The band of each data set or extrapolation: the points' coordinates, the central value, lower and upper
+    edges in the engine's unit, and the same times the S-factor conversion where it is offered."""
+    out = []
+    for p, v, lo, hi in zip(points, values, lower, upper):
+        entry = {k: p[k] for k in ("name", "e_cm", "e_x", "angle_cm")}
+        entry.update(value=np.asarray(v).tolist(), lower=np.asarray(lo).tolist(), upper=np.asarray(hi).tolist())
+        if p["conv"] is not None:
+            conv = np.asarray(p["conv"])
+            entry["s_factor"] = {"value": (v * conv).tolist(), "lower": (lo * conv).tolist(),
+                                 "upper": (hi * conv).tolist()}
+        out.append(entry)
+    return {"how": how, "sets": out}
+
+
+def bands_covariance(tracker, x0, settings, names):
+    """The 1-sigma band of the model of every data set and extrapolation at a fit's best point from its covariance
+    (linear: model +- sigma, sigma^2 = g^T C g, ``pyazr.bands``)."""
+    from .engine import band_points, linear_sigma
+    cov = tracker.source["result"]["covariance"]
+    points = band_points(tracker.session, x0)
+    sigma_data, sigma_grids = linear_sigma(tracker.session, x0, cov["matrix"], cov["names"])
+    every = points["datasets"] + points["extrapolations"]
+    values = [np.asarray(p["model"]) for p in every]
+    sigma = sigma_data + sigma_grids
+    tracker.count(1, None, x0)
+    how = (f"linear, from the covariance of job {tracker.source['id']} at its best point: the model +- sigma, "
+           "sigma^2 = g^T C g over the level parameters (pyazr.bands)")
+    bands = _band_entries(every, values, [v - s_ for v, s_ in zip(values, sigma)],
+                          [v + s_ for v, s_ in zip(values, sigma)], how)
+    return "finished", how, {"bands": bands, "source": tracker.source["id"]}
+
+
+def bands_draws(tracker, x0, settings, names):
+    """The band of the model of every data set and extrapolation from draws of a sampler's chain (after its burn-in):
+    the 16th, 50th and 84th percentiles of the model over the draws at each point.  Stops between draws."""
+    from pyazr.errors import ParameterError
+    from .engine import band_points, models_at
+    result = tracker.source["result"]
+    chain = np.load(result["chain"])
+    if chain.shape[2] != len(names):
+        raise ParameterError(f"the chain of job {tracker.source['id']} has {chain.shape[2]} parameters, this session "
+                             f"{len(names)}: a band from draws needs the text the chain was sampled on")
+    flat = chain[result["discard"]:].reshape(-1, chain.shape[2])
+    rng = np.random.default_rng(settings["seed"])
+    xs = flat[rng.choice(len(flat), size=min(settings["draws"], len(flat)), replace=False)]
+
+    def progress(k, objective, x):
+        if tracker.stop_requested():
+            raise StopRequested()
+        tracker.count(k, objective, x)
+
+    points = band_points(tracker.session, x0)
+    data, grids = models_at(tracker.session, xs, progress)
+    every = points["datasets"] + points["extrapolations"]
+    models = data + grids
+    lower, middle, upper = zip(*[np.percentile(m, [16.0, 50.0, 84.0], axis=0) for m in models])
+    how = (f"from {len(xs)} draws of the chain of job {tracker.source['id']} after its burn-in of "
+           f"{result['discard']} steps: the 16th, 50th and 84th percentiles of the model at each point")
+    return "finished", how, {"bands": _band_entries(every, middle, lower, upper, how), "source": tracker.source["id"],
+                             "draws": len(xs)}
+
+
 # -- settings: their types and the conversion of a request's value ------------------------------------------------
 
 def _as_integer(value):
@@ -222,6 +436,15 @@ def _as_boolean(value):
     raise ValueError(f"{value!r} is not true or false")
 
 
+def _as_number(value):
+    if value is None or value == "":
+        return None
+    number = float(value)
+    if not np.isfinite(number):
+        raise ValueError(f"{value!r} is not a finite number")
+    return number
+
+
 def _as_names(value):
     if value is None or value == "":
         return []
@@ -235,6 +458,7 @@ SETTING_TYPES = {
     "integer": (_as_integer, "an integer, or empty for the default"),
     "boolean": (_as_boolean, "true or false"),
     "names": (_as_names, "names of free parameters, separated by blanks or commas; empty: every free parameter"),
+    "number": (_as_number, "a finite number, or empty for the default"),
 }
 
 
@@ -252,8 +476,10 @@ class JobRow:
     """One kind of job: ``kind`` and ``method`` name it; ``run`` its function ``(tracker, x0, settings, names) ->
     (state, message, extra)``, or ``missing`` the pyazr call it waits for; ``needs`` the package it imports;
     ``settings`` its :class:`Setting` rows; ``follows`` the (kind, method) of the job whose best point it starts from
-    (the page offers it beside that job's result); ``facts`` what the page shows of it beside its doc (name -> value:
-    the program's switch, whether it gives a covariance, whether MINOS can follow)."""
+    (the page offers it beside that job's result; method None: any job of that kind); ``takes`` the key of that job's
+    result it needs (a covariance, a chain: the job is refused without one, and offered only beside a result that has
+    it); ``facts`` what the page shows of it beside its doc (name -> value: the program's switch, whether it gives a
+    covariance, whether MINOS can follow)."""
     kind: str
     method: str
     doc: str
@@ -262,6 +488,7 @@ class JobRow:
     settings: tuple = ()
     missing: str = None
     follows: tuple = None
+    takes: str = None
     facts: tuple = ()  # (name, value) pairs
 
     def defaults(self):
@@ -289,9 +516,27 @@ JOBS = (
            settings=(Setting("parameters", "names", [], "the parameters MINOS scans (empty: every free one)"),
                      Setting("max_calls", "integer", None, "the most objective calls of each MIGRAD and MINOS scan "
                              "(empty: iminuit's default)"))),
-    JobRow("sample", "emcee", "the emcee sampler on the log-probability", missing="Objective.log_prob (pyazr3.md 2.6)"),
-    JobRow("bands", "covariance", "uncertainty bands of a fit",
-           missing="pyazr.bands on a Session and an Evaluation (pyazr3.md 2.2)"),
+    JobRow("sample", "emcee", "emcee's ensemble sampler on the log-probability (-0.5 objective, zero outside the fit's "
+           "limits): walkers around the start point, or a sampler job's chain continued; one process",
+           run=sample_emcee, needs="emcee", follows=("fit", None),
+           settings=(Setting("walkers", "integer", None, "the walkers (empty: twice the free parameters plus two)"),
+                     Setting("steps", "integer", 1000, "the stored steps of the chain"),
+                     Setting("spread", "number", 1e-3, "the start walkers' spread around the start point, relative to "
+                             "each value (absolute where it is 0)"),
+                     Setting("thin", "integer", 1, "the sampler's steps between two stored steps"),
+                     Setting("seed", "integer", 1, "the seed of the start walkers and of the sampler's draws"),
+                     Setting("discard", "integer", None, "the stored steps left out of the summary as burn-in "
+                             "(empty: the first half)")),
+           facts=(("covariance", True), ("draws", "the chain in output/chain_<id>.npy"))),
+    JobRow("bands", "covariance", "the 1-sigma band of the model of every data set and extrapolation at a fit's best "
+           "point, from its covariance (linear, pyazr.bands)", run=bands_covariance, follows=("fit", None),
+           takes="covariance", facts=(("from", "a fit job with a covariance (its best point as the start)"),)),
+    JobRow("bands", "draws", "the band of the model of every data set and extrapolation from draws of a sampler's "
+           "chain (16th, 50th, 84th percentiles at each point)", run=bands_draws, follows=("sample", "emcee"),
+           takes="chain", settings=(Setting("draws", "integer", 200, "the draws of the chain (after its burn-in) "
+                                            "the model is evaluated at"),
+                                    Setting("seed", "integer", 1, "the seed of the choice of draws")),
+           facts=(("from", "a sampler job (its best point as the start)"),)),
     JobRow("rate", "engine", "the reaction rate", missing="Session.reaction_rate (web_ui.md finding 6)"),
 )
 
@@ -346,7 +591,7 @@ def job_table():
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": list(r.follows) if r.follows else None,
-                    "facts": dict(r.facts)})
+                    "takes": r.takes, "facts": dict(r.facts)})
     return out
 
 
@@ -436,7 +681,8 @@ def run_job(channel):
         record["state"] = "running"
         write_checkpoint(checkpoint, record)
         row = job_row(spec["kind"], spec["method"])
-        tracker = Tracker(objective_of(session).value_and_grad, names, report=report, stop=stop, session=session)
+        tracker = Tracker(objective_of(session).value_and_grad, names, report=report, stop=stop, session=session,
+                          source=spec.get("source"), job_id=spec["id"], products=spec["products"])
         try:
             status, message, extra = row.run(tracker, x0, spec["settings"], names)
         except StopRequested:
@@ -526,9 +772,11 @@ class JobTable:
                     record["state"] = "interrupted"
                 self.jobs[record["id"]] = Job(record, log_path=os.path.join(directory, f"{record['id']}.log"))
 
-    def start(self, kind, method, settings, x0, rev, session_text, cwd, file_of):
+    def start(self, kind, method, settings, x0, rev, session_text, cwd, file_of, source=None, products=None):
         """Start a job of the table's row (kind, method) on ``session_text`` (the session file's text of revision
-        ``rev``, written to ``file_of(job id)``) from ``x0`` ({name: value} or None for the text's x0)."""
+        ``rev``, written to ``file_of(job id)``) from ``x0`` ({name: value} or None for the text's x0); ``source``:
+        the record of the job x0 was taken from (a row that ``takes`` a key of its result needs it); ``products``:
+        the directory of the files the job writes (the project's output directory)."""
         from .workers import WorkerProcess
         row = job_row(kind, method)
         if row.missing:
@@ -536,6 +784,12 @@ class JobTable:
                           missing=row.missing)
         if not _importable(row.needs):
             raise Missing(f"job {kind}/{method} needs the package {row.needs}, not installed", missing=row.needs)
+        if row.takes and not ((source or {}).get("result") or {}).get(row.takes):
+            what = f"job {source['id']} ({source['kind']} {source['method']}) has no {row.takes}" if source \
+                else "no job is its start point"
+            raise Refused(f"job {kind}/{method} starts from a job whose result has a {row.takes}: {what}",
+                          allowed=f"x0: {{\"job\": id}} of a job with a {row.takes}",
+                          fix="start it from such a job (the Fit tab offers it beside the job's result)")
         merged = merged_settings(row, settings)
         job_id = uuid.uuid4().hex[:8]
         threads = self.budget.take_job(job_id)
@@ -544,8 +798,8 @@ class JobTable:
             with open(session_file, "wb") as f:
                 f.write(session_text.encode("utf-8", "surrogateescape"))
             spec = {"id": job_id, "kind": kind, "method": method, "settings": merged, "x0": x0, "rev": rev,
-                    "session_file": session_file, "cwd": cwd, "checkpoint": os.path.join(self.directory,
-                                                                                         f"{job_id}.json")}
+                    "session_file": session_file, "cwd": cwd, "source": source, "products": products or cwd,
+                    "checkpoint": os.path.join(self.directory, f"{job_id}.json")}
             process = WorkerProcess(self.spawner, "job", threads=threads,
                                     log_path=os.path.join(self.directory, f"{job_id}.log"), cwd=cwd)
             process.send(spec)

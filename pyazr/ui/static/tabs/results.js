@@ -15,9 +15,9 @@ import { button, drawPlot, h, section } from "../ui.js";
 
 /** The view's choices (what is shown, not the project): kept while the page lives, overridden by hash parameters. */
 const view = { x: "e_cm", y: "measured", logx: false, logy: false, model: true, residuals: true, levels: false,
-  together: false, shown: null, project: null, energy: null };
+  together: false, band: true, shown: null, project: null, energy: null };
 
-const FLAGS = ["logx", "logy", "model", "residuals", "levels", "together"];
+const FLAGS = ["logx", "logy", "model", "residuals", "levels", "together", "band"];
 
 /** The hash parameters of the route over the view (x, y, the flags as 0/1, show=a,b, energy). */
 export function applyParams(v, params) {
@@ -41,6 +41,25 @@ export function seriesOf(evaluation, records, schema) {
     ...(evaluation.extrapolations || []).map((d) => ({ d, extrapolation: true }))];
   return list.map((s, i) => ({ ...s, ...seriesStyle(i), section: sectionOf(s.d.name),
     title: schema.quantities?.[s.d.quantity]?.title || s.d.quantity }));
+}
+
+/** The newest band job that finished, among the project's jobs (GET /api/jobs), or null. */
+export function newestBandJob(jobs) {
+  return jobs.filter((j) => j.kind === "bands" && j.state === "finished")
+    .sort((a, b) => (b.started || 0) - (a.started || 0))[0] || null;
+}
+
+/** The series with the band of a band job's result where it has one of the same name and points (`d.band`: lower,
+ * upper and the S factor's, as the server sent them); the names of the series it left without one. */
+export function withBands(series, result) {
+  const byName = Object.fromEntries((result?.bands?.sets || []).map((b) => [b.name, b]));
+  const missing = [];
+  const out = series.map((s) => {
+    const b = byName[s.d.name];
+    if (!b || b.lower.length !== (s.d.e_cm || []).length) { missing.push(s.d.name); return s; }
+    return { ...s, d: { ...s.d, band: b } };
+  });
+  return { series: out, missing };
 }
 
 /** The c.m. energies at which a data set has points at three or more angles: {energy: [{series, index}]}. */
@@ -67,9 +86,12 @@ export async function render(ctx, el) {
     el.appendChild(section("Results", h("p.hint", {}, `No evaluation: ${e.view?.what || e}`)));
     return;
   }
-  const [records, levels] = await Promise.all([ctx.api.get("/api/project/records"),
-    ctx.api.get("/api/project/levels")]);
-  const series = seriesOf(evaluation, records, ctx.schema);
+  const [records, levels, jobs] = await Promise.all([ctx.api.get("/api/project/records"),
+    ctx.api.get("/api/project/levels"), ctx.api.get("/api/jobs")]);
+  const newest = newestBandJob(jobs);
+  const bandJob = newest ? await ctx.api.get(pathOf("/api/jobs", newest.id)) : null;
+  const banded = withBands(seriesOf(evaluation, records, ctx.schema), bandJob?.result);
+  const series = banded.series;
   if (view.project !== ctx.project.path || !view.shown) {
     view.project = ctx.project.path;
     view.shown = new Set(series.map((s) => s.d.name));
@@ -78,7 +100,7 @@ export async function render(ctx, el) {
   const recordOf = Object.fromEntries(records.map((r) => [r.name, r]));
   const marks = levels.filter((l) => l.active !== false).map((l) => ({ label: l.label, energy: l.energy }));
 
-  el.appendChild(headPanel(evaluation));
+  el.appendChild(headPanel(evaluation, bandJob, banded.missing, ctx));
   const plots = h("div.results-plots");
   const angular = h("div.results-angular");
   const redraw = () => {
@@ -91,10 +113,18 @@ export async function render(ctx, el) {
     laterPanel());
 }
 
-/** Where the numbers come from: the working x; the χ² totals as the program writes them. */
-function headPanel(e) {
+/** Where the numbers come from: the working x; the χ² totals as the program writes them; the band drawn. */
+function headPanel(e, bandJob, missing, ctx) {
   const totals = Object.entries(e.totals || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
-  return h("section.panel.results-head", {},
+  const band = bandJob ? h("div.hint.band-source", { data: { job: bandJob.id } }, `Band: job ${bandJob.id}, `
+    + `${bandJob.result.message}; on the text of rev ${bandJob.text_rev}${bandJob.text_rev === ctx.project.rev ? ""
+      : ` (the project is at rev ${ctx.project.rev}: the band belongs to the fit of that text)`}; the band is the `
+    + "model's around the band job's start point (a fit's or a sampler's best point), the line the model at the "
+    + "working x: accept that point into the project to see them together"
+    + (missing.length ? `; none for ${missing.join(", ")}` : ""))
+    : h("div.hint", {}, "No band yet: a band job of the Fit tab (from a fit's covariance or a sampler's chain) "
+      + "draws its band here.");
+  return h("section.panel.results-head", {}, band,
     h("div", {}, h("strong", {}, "At: the working x"), h("span.hint", {}, " (as the Fit tab's table shows it; a "
       + "job's best point is seen here once accepted into the project; a choice of point here is not built yet)")),
     h("div.mono", { title: "the Total- line of the program's chiSquared.out at this x" }, totals),
@@ -144,7 +174,8 @@ function choicePanel(ctx, series, redraw) {
     flag("model", "model", "the model at the data points, and extrapolations on their grids"),
     flag("residuals", "residuals", "the engine's standardized residuals under the plot, on the same x axis"),
     flag("levels", "levels", "the levels of the project text at their excitation energies (x = E_x)"),
-    flag("together", "together", "the series shown in one plot per y unit, instead of one plot per series")));
+    flag("together", "together", "the series shown in one plot per y unit, instead of one plot per series"),
+    flag("band", "band", "the band of the newest band job (the Fit tab's), shaded around the model")));
   box.appendChild(h("p.hint", {}, "Not offered: the lab energy (the engine's lab energy of each point is not in "
     + "pyazr's arrays) and the cross section of a data set measured as an S factor (the program's conversion is "
     + "not bound): docs/upgrade/web_ui.md section 12. The S factor is offered where the engine unit is a cross "
@@ -280,7 +311,6 @@ function outputsPanel(ctx) {
 
 /** What waits for a later step, said once. */
 function laterPanel() {
-  return section("Reaction rate and bands", h("p.hint", {}, "The reaction rate waits for pyazr's rate call "
-    + "(Session.reaction_rate, docs/upgrade/web_ui.md finding 6) and a job kind of the Fit step; uncertainty bands "
-    + "wait for the Fit step's band job (pyazr.bands)."));
+  return section("Reaction rate", h("p.hint", {}, "The reaction rate waits for pyazr's rate call "
+    + "(Session.reaction_rate, docs/upgrade/web_ui.md finding 6) and a job kind of the Fit tab."));
 }

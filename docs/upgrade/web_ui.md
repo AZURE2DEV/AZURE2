@@ -85,11 +85,11 @@ The groups and the calls that serve them (group, its parity sections → tab: ca
 - Fitting settings table (9) → Fit: `Parameters` (`of_kind`, `names`, `units`, `bounds`) and a fit's errors. D.
 - Edits of fitted values back into the records (9) → Fit: `save_fit` writes files only. M.
 - Calculation types, minimisers, MINOS, band (10) → Fit: `Session.evaluate`, `extrapolations`, `fit_with_engine`
-  (pyazr decision 8), `pyazr.bands`. E (the engine's fitters and MINOS as jobs, section 11.6; the band D).
+  (pyazr decision 8), `pyazr.bands`. E (the engine's fitters and MINOS as jobs, section 11.6; the bands, 11.7).
 - Stop and the run log (10) → Fit: `fit_with_engine(progress=, stop=)`, the fitter's lines in the job's log. E
   (section 11.6).
 - Reaction rate (10) → Results: no call. M.
-- MCMC (11) → Fit: the emcee recipe on `Objective.log_prob` (`pyazr3.md` 2.6), as a job. D, P.
+- MCMC (11) → Fit: the emcee recipe on `Objective.log_prob` (`pyazr3.md` 2.6), as a job. E (section 11.7).
 - Plots (12) → Results: `Evaluation.data[i]`; `physics.sfactor_conversion`; `pyazr.plot` for PDF. E, D, P.
 - THM workspace (13) → THM: `Project.thm`, `set_thm`, `set_thm_experiment`; `thm_vertex`, `thm_lineshape`,
   `thm_distortion`. E.
@@ -888,7 +888,8 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
 4. **Fit.** `tabs/fit.js`, job kinds: recipe fits and MINOS (iminuit), the emcee sampler, bands; then the engine's
    fitters once pyazr has `fit_with_engine` with progress and stop (decision 8 and finding 2). About 1000 lines.
    Recipes need `Objective` (pyazr step 3; today `objective_and_grad` serves); engine fits need pyazr's call. **First
-   part done 2026-11-13** (section 11.3); **the engine's fitters and MINOS done 2026-11-14** (section 11.6).
+   part done 2026-11-13** (section 11.3); **the engine's fitters and MINOS done 2026-11-14** (section 11.6); **the
+   sampler and the bands done 2026-11-14** (section 11.7).
 5. **Physics and THM.** `tabs/physics.js` generated from the physics table (pyazr step 4; before it, stopping only),
    `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines. **Physics tab done 2026-11-13**
    (section 11.5, stopping included); THM to come.
@@ -1298,6 +1299,90 @@ function `(tracker, x0, settings, names)` and a `JobRow` of `JOBS`; a job that c
 `tracker.session` (the adapter) and reports with `tracker.count(calls, objective, x, **numbers)`. A new setting type:
 a row of `SETTING_TYPES` (`jobs.py`) and of `SETTING_WIDGETS` (`tabs/fitjob.js`).
 
+### 11.7 Step 4, second part, as built (2026-11-14): the sampler and the bands
+
+`jobs.py` (the job functions `sample_emcee`, `bands_covariance`, `bands_draws`; the chain's summary
+`chain_summary` with the split R-hat; the start walkers inside the fit's limits; the setting type `number`; a row's
+`takes`, and `follows` with any method of a kind; the state `finished`; the tracker's `source`, `product` and
+progress without an objective), `engine.py` (`band_points`, `models_at`, `linear_sigma`: the model of every data set
+and extrapolation, at one point and at many, and the band's sigma through `pyazr.bands.uncertainty_bands`),
+`server.py` (a job started from a job gets that job's record as its source; the project's output directory for the
+files a job writes; the list of jobs leaves a band's arrays out), `fitting.js` (`follows`, `chainRows`, the state),
+`tabs/fit.js` (the chain's summary, a band job's result), `tabs/fitjob.js` (the widget of a number), `plots.js` (a
+trace of role `band`: a shaded region in plotly, two columns in the CSV), `tabs/results.js` (the newest band job's
+band on the series of the same name and points, a flag "band", the band's source in the head). Tests:
+`tests/pyazr/ui/sampler_bands_test.py` (4), `js/fitting.test.mjs` (1 new), `js/results.test.mjs` (1 new).
+
+**What a user can do.** After any fit, **sample (emcee)…** fills the job form for the sampler from the fit's best
+point: walkers (empty: twice the free parameters plus two), steps (stored), spread (relative, around the start
+point), thin, seed, discard (the burn-in left out of the summary; empty: the first half). The job follows as a fit
+does: the objective at the best walker, the best so far, the step, the mean acceptance and a running autocorrelation
+time τ; **Stop** ends it between stored steps with the chain so far. The result: the chain in
+`output/chain_<id>.npy` of the project (stored steps × walkers × parameters) and its summary beside it as JSON; on the
+page the mean, standard deviation, the 2.5, 16, 50, 84 and 97.5 % quantiles, τ, the effective draws and the split
+R-hat of each parameter, the draws' covariance and correlation (the parameter table's error column is the chain's
+sd). A sampler started from a sampler job (its best point as the start) continues that chain: the new file holds the
+old steps, unchanged, and the new ones. After a fit with a covariance, **bands (covariance)…** runs the linear band
+at the fit's best point (σ² = gᵀCg, `pyazr.bands`, over the level parameters); after a sampler, **bands (draws)…**
+evaluates the model at draws of its chain after the burn-in and takes the 16th, 50th and 84th percentiles at each
+point. Every data set and extrapolation gets its band, on its own points, in the engine's unit and as an S factor
+where the Results tab offers it. The Results tab draws the band of the newest band job that finished as a shaded
+region under each series (flag **band**), says which job and text it belongs to, and exports its edges in the
+CSV.
+
+**Measured** (`work/uifit2/walk_sampler.py`: a server process over HTTP at one thread on a copy of T3 with two free
+parameters, energy_5 and width_5_1 of the level 2⁻ 19.0 MeV; every other level and width fixed):
+
+- The engine's MIGRAD from the text: objective 516.240237935057; HESSE errors (Laplace) energy_5 4.36245e-4 MeV,
+  width_5_1 1.05673e-3 MeV^1/2. The posterior's standard deviations on a 61 × 61 grid of ±5 σ (exp(−objective/2)
+  summed, outside the server): 4.36251e-4 and 1.05676e-3, the Laplace values to 3 × 10⁻⁵ (the posterior is Gaussian
+  here; on the level 2⁺ 3.03 MeV instead, a Park wall 1 σ below width_1_1 makes it one-sided: chain and grid agree
+  there to 3 %, and the grid's lie 7 % and 17 % under the Laplace values).
+- emcee from the fit's best point, 8 walkers, 6000 stored steps, spread 10⁻⁴: 56.1 s (48008 log-probability calls),
+  acceptance 0.713, τ 31.8 and 30.3 steps, split R̂ 1.012 and 1.021, about 760 and 790 effective draws after the
+  burn-in of 3000 steps. Chain sd over Laplace sd: **0.9989** (energy_5) and **1.0011** (width_5_1).
+- The band from 1000 draws (3.3 s) against the linear band from the fit's covariance, the ratio of their half widths
+  at all 333 points of the 9 data sets and 9 extrapolations with a band: median **0.994**, 5-95 % 0.965-1.014, every
+  point within 10 %.
+- `sampler_bands_test.py` (8 walkers, 2500 steps, 400 draws; 31 s): ratios 1.0002 and 1.038; bands median 0.999,
+  96 % of the points within 10 %; a stop answered 0.06 s after the request with one step after it; the chain
+  continued with its 20 new steps after the old ones, unchanged.
+- Screenshots: `work/uifit2/tmp189154ig/fit_sample.png` (the sampler's panel and result), `results_band.png` (the
+  band of the draws around the model after Accept).
+
+**Where it departs from this note:**
+
+1. *A band job takes its source from its start point*: `x0: {"job": id}` names the fit (with a covariance) or the
+   sampler (with a chain), and the server hands that job's record to the new job (`takes`: the key its result must
+   have; refused with 422 otherwise). No new setting type names a job, and the page offers the band beside the
+   result that has what it takes.
+2. *The linear band spans the level parameters only*: `pyazr.bands.uncertainty_bands` propagates the covariance's
+   block over the columns a band spans (`rmatrix_columns`: energies, widths, the THM coherent background); the band
+   from draws moves every free parameter of the chain, nuisances included. The two agree where no nuisance is free
+   (the evidence above); on a project with free shifts or densities they differ by the nuisances' share.
+3. *The band's centre*: the linear band is the model at the fit's best point ± σ; the band from draws is the median
+   of the draws. The Results tab draws the band around the model of the band job's start point and the model line at
+   the working x: they coincide once that point is accepted into the project.
+4. *A sampler that ends* (all its steps) is in the state `finished`, not `converged`: a chain does not converge by
+   a criterion of the job. Its burn-in is a setting; the summary does not test the chain's length against τ (the
+   page states τ and the effective draws; the user guide's rule of 50 τ applies).
+5. *One process*: the sampler runs without a pool (the budget gives a job one thread). The split R-hat treats each
+   half of a walker's series as a chain; walkers of an ensemble sampler are not independent, so a value near 1 is
+   necessary, not sufficient.
+6. *A killed sampler* keeps the chain written at its last save (every 50 stored steps), but its record has no result,
+   so it cannot be continued from the page; a stopped one can.
+7. *A start outside the fit's limits* is refused by the job (state `failed`, `ParameterError` naming each parameter,
+   its value and its limits), not by the request: the limits are the session's (`Objective.bounds`), which only the
+   job's worker has.
+
+**Extensibility as built.** A new sampler: a function `(tracker, x0, settings, names)` that calls the objective it
+needs through `tracker.session` (`objective_of`), reports each step with `tracker.count(calls, objective, x,
+**numbers)` (the numbers appear on the page by name), stops when `tracker.stop_requested()`, writes its files at
+`tracker.product(name, suffix)` and returns the summary keys the page knows (`quantiles`, `errors`, `covariance`,
+`chain`); one `JobRow` with `follows` and `takes`. A new band: the same, returning `bands` in the shape of
+`_band_entries`; the Results tab draws it with no change. A new setting type: a row of `SETTING_TYPES` and of
+`SETTING_WIDGETS` (`number` was added so).
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1385,6 +1470,8 @@ Found while building the Fit tab:
     to the bands; `AZURE2_NOT_SERVED` loses `fit_with_engine` then.
     **Closed** (section 11.6): the rows are made from `kinds()["fitters"]`, the job runs `fit_with_engine` with the
     job's progress and stop, Accept writes its end point; `SESSION_NOT_SERVED` no longer lists `fit_with_engine`.
+    The sampler (emcee on `Objective.log_prob`) and the bands (`pyazr.bands`, and percentiles of draws) are jobs too
+    (section 11.7).
 
 Found while building the Results tab (step 3):
 
@@ -1412,7 +1499,8 @@ The calls the server should make instead of today's (`pyazr/ui/engine.py`, not c
   a data covariance joins sets), `extra`; the S factor from `extra["sfactor_conversion"]` as today;
 - `model_data(self.s, x)` → `ev.model_data`;
 - `open_objective` (`objective_and_grad`, `params_rwa`, `_free_names`) → `f = s.fit_objective()`:
-  `f.value_and_grad`, `f.x0`, `f.names`, `f.bounds`; a sampler job on `f.log_prob`;
+  `f.value_and_grad`, `f.x0`, `f.names`, `f.bounds`; a sampler job on `f.log_prob` (done: `open_objective` is
+  now `open_for_job` and `objective_of`, the sampler a job, section 11.7);
 - `AZURE2_NOT_SERVED` (or a call): `fit_objective` is a public name of the session now, so
   `tests/pyazr/ui/routes_consistency_test.py` fails until the server calls it or lists it (one entry).
 

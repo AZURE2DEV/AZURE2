@@ -23,7 +23,8 @@ from pyazr.locking import session_lock
 # The methods of pyazr.Session the UI does not call, by reason (the route-table consistency test,
 # tests/pyazr/ui/routes_consistency_test.py, requires every public method to be called here or listed here).
 SESSION_NOT_SERVED = {
-    "the sensitivities of the model values (uncertainty bands, not a route of this step)": "model_gradients",
+    "the sensitivities of the model values: the band jobs use them through pyazr.bands.uncertainty_bands":
+        "model_gradients",
     "physical values only through transform (pyazr3.md decision 10)":
         "transform_physical transform_rwa physical_levels wigner_widths dimensionless_widths park_norms "
         "scattering_lengths",
@@ -313,6 +314,87 @@ def fit_with_engine(e, method, minos, x0, max_calls, progress, stop):
             "minos": {n: [float(lo), float(hi)] for n, (lo, hi) in r.minos.items()},
             "covariance_from_hesse": bool(r.covariance_from_hesse),
             "fell_back_to_migrad": bool(r.fell_back_to_migrad), "log": r.log}
+
+
+def band_points(e, x):
+    """Where a band is drawn: every active data set, then every active extrapolation, each with its name, c.m.
+    energy (MeV), excitation energy (MeV), c.m. angle (deg), the model at x (the engine's unit), and the S-factor
+    conversion of each point where the S factor is offered (None otherwise), in the order of the Results payload."""
+    x = np.asarray(x, float)
+    ev = e.s.evaluate(x)
+    out = {"datasets": [_band_entry(e, info, d) for info, d in zip(e.info, ev.data)], "extrapolations": []}
+    infos = [e._extrapolation_info(x_) for x_ in e.s.extrapolations if x_.active]
+    if infos:
+        e.s.extrap_mode()
+        try:
+            out["extrapolations"] = [_band_entry(e, info, d) for info, d in zip(infos, e.s.evaluate(x).data)]
+        finally:
+            e.s.data_mode()
+    return out
+
+
+def _band_entry(e, info, d):
+    conv = d.extra["sfactor_conversion"] if e._has_s_factor(info) else None
+    return {"name": info["name"], "e_cm": _plain(d.energies), "e_x": _plain(d.excitation_energies),
+            "angle_cm": _plain(d.angles), "model": _plain(d.model), "conv": None if conv is None else _plain(conv)}
+
+
+def models_at(e, xs, progress):
+    """The model of every active data set and extrapolation at each free vector of ``xs`` (rows): ``(data sets,
+    extrapolations)``, each a list of arrays of shape (len(xs), points); ``progress(k, objective or None, x)`` after
+    each evaluation (the objective in data mode; extrapolations have none)."""
+    xs = np.asarray(xs, float)
+    data = []
+    for k, x in enumerate(xs):
+        ev = e.s.evaluate(x)
+        if not data:
+            data = [np.empty((len(xs), len(d.model))) for d in ev.data]
+        for i, d in enumerate(ev.data):
+            data[i][k] = d.model
+        progress(k + 1, ev.objective, x)
+    grids = []
+    if any(x_.active for x_ in e.s.extrapolations):
+        e.s.extrap_mode()
+        try:
+            for k, x in enumerate(xs):
+                ev = e.s.evaluate(x)
+                if not grids:
+                    grids = [np.empty((len(xs), len(d.model))) for d in ev.data]
+                for i, d in enumerate(ev.data):
+                    grids[i][k] = d.model
+                progress(len(xs) + k + 1, None, x)
+        finally:
+            e.s.data_mode()
+    return data, grids
+
+
+def linear_sigma(e, x, covariance, names):
+    """The 1-sigma of the model of every active data set and extrapolation at x from a fit's covariance over the free
+    vector ``names`` (``pyazr.bands.uncertainty_bands``: sigma^2 = g^T C g with the engine's sensitivities g, over
+    the columns a band spans, ``pyazr.bands.rmatrix_columns``: the nuisances do not enter).  ``(data sets,
+    extrapolations)``: lists of arrays in the order of :func:`band_points`."""
+    from pyazr import bands
+    free = e._free_names()
+    if list(names) != free:
+        raise errors.ParameterError(f"the covariance is over {len(names)} parameters ({errors.listed(names)}), the "
+                                    f"session's free vector over {len(free)} ({errors.listed(free)}): a band needs "
+                                    "the fit of the same project text")
+    x = np.asarray(x, float)
+    cols = bands.rmatrix_columns(e.s)
+    block = np.asarray(covariance, float)[np.ix_(cols, cols)]
+    n_data = sum(1 for d in e.s.datasets if d.active)
+    data = bands.uncertainty_bands(e.s, segments=list(range(n_data)), params=x, covariance=block)
+    out_data = [data[key].sigma for key in sorted(data, key=lambda k: data[k].segment)]
+    out_grids = []
+    if any(x_.active for x_ in e.s.extrapolations):
+        e.s.extrap_mode()
+        try:
+            n_grids = sum(1 for x_ in e.s.extrapolations if x_.active)
+            grids = bands.uncertainty_bands(e.s, segments=list(range(n_grids)), params=x[cols], covariance=block)
+            out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
+        finally:
+            e.s.data_mode()
+    return out_data, out_grids
 
 
 def _read_chi_squared(path):

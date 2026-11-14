@@ -308,7 +308,12 @@ and one row of ``JOBS`` in ``pyazr/ui/jobs.py``
 the web UI: its job rows (a fit, and a MINOS job after it where the fitter's
 row allows MINOS) are made from the engine's fitter table by
 ``engine_rows`` (``tests/pyazr/ui/routes_consistency_test.py``,
-``engine_jobs_test.py``). A new type of a job's setting is a row of
+``engine_jobs_test.py``). A job that starts from another job's result (a
+band from a fit's covariance or a sampler's chain, a chain continued) names
+that job's kind in ``follows`` and the key of its result in ``takes``; the
+server hands it that job's record (``tracker.source``), and the page offers
+it beside such a result (``tests/pyazr/ui/sampler_bands_test.py``). A new
+type of a job's setting is a row of
 ``SETTING_TYPES`` (``jobs.py``) and of ``SETTING_WIDGETS``
 (``pyazr/ui/static/tabs/fitjob.js``).
 

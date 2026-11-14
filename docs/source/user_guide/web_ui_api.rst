@@ -39,7 +39,10 @@ What the server keeps
   a rebuild.  The χ² per data set is the program's (the rows of its ``chiSquared.out``, six significant digits).
 - **Jobs** (``POST /api/jobs``; the table at ``GET /api/jobs/kinds``): the engine's fitters (``"method":
   "engine_migrad"``, one per row of ``pyazr.kinds()["fitters"]``, through ``Session.fit_with_engine``) and their
-  MINOS, recipe fits (scipy L-BFGS-B, iminuit MIGRAD + HESSE) and iminuit's MINOS, each in a process of their own,
+  MINOS, recipe fits (scipy L-BFGS-B, iminuit MIGRAD + HESSE) and iminuit's MINOS, the emcee sampler
+  (``"kind": "sample"``; its chain in ``output/chain_<id>.npy``) and bands (``"kind": "bands"``, ``"method":
+  "covariance"`` or ``"draws"``, started with ``"x0": {"job": <a fit's or a sampler's id>}``, whose record the job
+  takes as its source), each in a process of their own,
   with progress (``GET /api/jobs/<id>``), a cooperative stop (``/stop``), a kill (``/kill``), a checkpoint of the
   best point, and ``/accept`` to write the best point into the project text.  With a budget of one thread, an
   evaluation asked while a job runs answers 409 with the job's id.

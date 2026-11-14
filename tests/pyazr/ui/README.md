@@ -30,6 +30,11 @@ program whose `chiSquared.out` the API's numbers are compared with.
   the objective, end point, covariance and errors of `Session.fit_with_engine` called directly from the same start,
   bit for bit; the engine's MINOS as a job after an engine fit and as the fit's setting; a call limit said in the
   engine's words; Accept and Undo; on T2 a stop of MIGRAD and of LM answered within one progress record.
+- `sampler_bands_test.py`: emcee and the bands as jobs on a copy of T3 with two free parameters: the chain's
+  standard deviations against the fit's (Laplace) within 10 %, the chain's file and summary, no draws sent; a stop
+  between steps and a chain continued; the linear band against the band from draws (median half-width ratio within
+  10 %), a band for every data set and extrapolation on the Results payload's points; refusals of a band without
+  its source; the start walkers inside the fit's limits.
 - `physics_routes_test.py`: the physics routes: the rows are `pyazr.kinds()["physics"]`, the values a direct call's,
   NaN with the status outside the domain, the refusals, the bound, the session's channel functions.
 - `physics_tab_test.py`: what the Physics tab asks of the server: every row plots with its examples and its axis's
@@ -188,3 +193,14 @@ Added with the engine's fitters as jobs (each shown failing on 2026-11-14, the f
   `engine_jobs_test.py::test_stop_ends_a_running_engine_fit_within_one_call` (the fit runs to its end).
 - a row's facts are said as words, and progress numbers beyond the common four are shown by name: `factsText` says
   "yes" for false; `progressView` drops the further numbers; each fails `node_test.py` (`js/fitting.test.mjs`).
+
+Added with the sampler and the bands (each shown failing on 2026-11-14, the file restored after each):
+
+- a start outside the fit's limits is refused: the check removed; fails `sampler_bands_test.py::
+  test_start_walkers_inside_the_limits_and_a_start_outside_refused`.
+- a sampler from a sampler job continues its chain: the previous chain dropped after taking its last walkers; fails
+  `sampler_bands_test.py::test_stop_between_steps_and_resume`.
+- the linear band is the model ± sigma of `pyazr.bands`: sigma doubled; fails `sampler_bands_test.py::
+  test_linear_band_and_band_from_draws_agree`.
+- the band is a closed region (the lower edge drawn back); a band of other points is not drawn: each broken in
+  turn; each fails `node_test.py` (`js/results.test.mjs`).

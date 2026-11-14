@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page's sampler and bands
+
+**Done** (`web_ui.md` section 11.7).
+- The sampler as a job (`sample/emcee`, `pyazr/ui/jobs.py`): emcee on `Objective.log_prob` in one process, walkers
+  around the start point inside the fit's limits (a start outside refused naming the parameter), settings walkers,
+  steps, spread (the new setting type `number`), thin, seed, discard; progress per stored step (step, acceptance,
+  running τ); Stop between steps; the chain to `output/chain_<id>.npy` of the project with a JSON summary; the page
+  gets mean, sd, quantiles, τ, effective draws, split R-hat and the draws' covariance; a sampler started from a
+  sampler job continues its chain. State `finished` for a job that ran all its steps.
+- The bands as jobs: `bands/covariance` (linear at a fit's best point, `pyazr.bands.uncertainty_bands` through the
+  adapter's `linear_sigma`) and `bands/draws` (16/50/84 % of the model over draws of a chain, `models_at`); every
+  data set and extrapolation, in the engine's unit and as an S factor where offered. A job started from a job gets
+  that job's record as its source (`takes`: the result key it needs, 422 without); `follows` may name any method
+  of a kind. The Results tab draws the newest band job's band (flag "band", the source in the head, edges in the
+  CSV); the Fit tab shows the chain's summary and a band job's pointer.
+- Tests: `tests/pyazr/ui/sampler_bands_test.py` (new, ctest `pyazr_ui_sampler_bands`, 31 s), two node tests; each
+  rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread on T3 with two free parameters (`work/uifit2/walk_sampler.py`): chain sd over
+Laplace sd 0.9989 and 1.0011 (a grid of the posterior gives the Laplace values to 3e-5); band from 1000 draws over
+the linear band, median 0.994 over 333 points, all within 10 %. Bands and a short chain also run on T2 (THM,
+nuisances). All UI tests (routes, static, node, api, server, jobs, engine_jobs, sampler_bands, results) and the
+browser smoke test pass; the consistency test passes. Not run: sphinx (not installed in the environment).
+
+**Open.** The linear band spans the level parameters only (`pyazr.bands`), the band from draws every free
+parameter: they differ where nuisances are free. A killed sampler's chain is on disk but cannot be continued from
+the page (no result). The Results tab draws the band around the band job's start point, the model at the working x.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page runs the engine's fitters and MINOS
 
 **Done** (`web_ui.md` section 11.6).

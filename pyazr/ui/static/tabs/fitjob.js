@@ -5,7 +5,7 @@
 // list of the project's jobs.  A row of the job table that waits for pyazr is shown with what it waits for.
 
 import { pathOf } from "../api.js";
-import { defaultMethod, factsText, isFinal, jobChoices, progressView, resultView, settingsOf,
+import { defaultMethod, factsText, follows, isFinal, jobChoices, progressView, resultView, settingsOf,
   startPoints } from "../fitting.js";
 import { plotOf, plotlyFigure } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
@@ -22,6 +22,11 @@ export const SETTING_WIDGETS = {
     const input = h("input", { type: "checkbox", "aria-label": s.name });
     input.checked = typed === undefined ? Boolean(s.default) : typed === "true";
     return { el: input, read: () => String(input.checked) };
+  },
+  number: (s, typed) => {
+    const input = h("input.num", { type: "text", inputmode: "decimal", size: 10, value: typed ?? (s.default ?? ""),
+      placeholder: s.default === null ? "default" : String(s.default), "aria-label": s.name });
+    return { el: input, read: () => input.value.trim() };
   },
   names: (s, typed) => {
     const input = h("input.mono", { type: "text", size: 36, value: typed ?? "", placeholder: "every free parameter",
@@ -57,11 +62,11 @@ export function jobForm(ctx, table, job, view) {
     return [s, w];
   });
   const points = startPoints(job);
-  const follows = method.follows && job && job.kind === method.follows[0] && job.method === method.follows[1];
+  const startsFromShown = follows(method, job);
   const startSelect = h("select", { "aria-label": "start point" }, points.map((p) => h("option", { value: p.id },
     p.title)));
   startSelect.value = form.start && points.some((p) => p.id === form.start) ? form.start
-    : (follows && job.best?.x ? `job:${job.id}` : "x");
+    : (startsFromShown && job.best?.x ? `job:${job.id}` : "x");
   startSelect.addEventListener("change", () => { form.start = startSelect.value; });
   const budget = ctx.describe?.budget || {};
   const run = button("Run", "Start the job (POST /api/jobs)", async () => {

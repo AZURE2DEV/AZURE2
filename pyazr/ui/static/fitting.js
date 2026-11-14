@@ -12,6 +12,7 @@ export const STATES = {
   stopped: { words: "stopped on request: the best point so far is kept", final: true },
   converged: { words: "converged", final: true },
   ended: { words: "ended without convergence", final: true },
+  finished: { words: "finished: it ran all its steps", final: true },
   failed: { words: "failed", final: true },
   killed: { words: "killed: the best point reported before the kill is kept", final: true },
   interrupted: { words: "interrupted: the server ended while it ran; its checkpoint is kept", final: true },
@@ -110,7 +111,8 @@ export function jobChoices(table) {
     const reason = row.available ? "" : (row.missing ? `waits for pyazr: ${row.missing}`
       : `needs the package ${row.needs}, not installed`);
     k.methods.push({ method: row.method, doc: row.doc, available: row.available, reason,
-      settings: row.settings || [], follows: row.follows || null, facts: row.facts || {} });
+      settings: row.settings || [], follows: row.follows || null, takes: row.takes || null,
+      facts: row.facts || {} });
   }
   kinds.forEach((k) => { k.available = k.methods.some((m) => m.available); });
   return kinds;
@@ -167,11 +169,25 @@ export function progressView(rec) {
   };
 }
 
+/** Whether a row of the job table follows the job `rec`: its `follows` names the job's kind and its method (or any
+ * method of that kind, null). */
+export function follows(row, rec) {
+  return Array.isArray(row.follows) && Boolean(rec) && row.follows[0] === rec.kind
+    && (row.follows[1] === null || row.follows[1] === rec.method);
+}
+
+/** The rows of a sampler's summary (its result: mean, errors, quantiles, tau, effective_draws, rhat by name). */
+export function chainRows(result) {
+  return Object.keys(result.quantiles || {}).map((name) => ({ name, mean: result.mean?.[name] ?? null,
+    sd: result.errors?.[name] ?? null, ...Object.fromEntries(Object.entries(result.quantiles[name])
+      .map(([q, v]) => [`q${q}`, v])), tau: result.tau?.[name] ?? null,
+    n_eff: result.effective_draws?.[name] ?? null, rhat: result.rhat?.[name] ?? null }));
+}
+
 /** The view of a finished job: the recipe's own words, its numbers, and what can be done with it. */
 export function resultView(rec, table = []) {
   const r = rec.result || {};
-  const followers = table.filter((row) => row.available && Array.isArray(row.follows)
-    && row.follows[0] === rec.kind && row.follows[1] === rec.method);
+  const followers = table.filter((row) => row.available && follows(row, rec) && (!row.takes || r[row.takes]));
   return {
     status: r.status || rec.state, words: STATES[rec.state]?.words || rec.state, message: r.message || r.error || "",
     calls: r.calls ?? null, elapsed: r.elapsed ?? null, startObjective: r.start_objective ?? null,

@@ -121,3 +121,32 @@ test("the plot table has the Results rows, each with its doc", () => {
   const sets = r.seriesOf(payload, records, schema);
   assert.equal(p.plotOf({ sets, view: all }, { schema }).row, "results_against_x");
 });
+
+test("bands: the newest finished band job's band on the series of the same name and points, sorted by x", () => {
+  const jobs = [{ id: "old", kind: "bands", state: "finished", started: 1 },
+    { id: "run", kind: "bands", state: "running", started: 3 }, { id: "new", kind: "bands", state: "finished",
+      started: 2 }, { id: "fit", kind: "fit", state: "converged", started: 4 }];
+  assert.equal(r.newestBandJob(jobs).id, "new");
+  assert.equal(r.newestBandJob([]), null);
+  const result = { bands: { how: "linear", sets: [
+    { name: "a", lower: [2.8, 0.9, 1.9], upper: [3.0, 1.3, 2.3],
+      s_factor: { lower: [28, 9, 19], upper: [30, 13, 23] } },
+    { name: "b", lower: [1], upper: [2] }, { name: "g", lower: [0.4, 3.5], upper: [0.6, 4.5] }] } };
+  const { series, missing } = r.withBands(r.seriesOf(payload, records, schema), result);
+  assert.deepEqual(missing, ["b"], "a band of other points is not drawn");
+  const [plot] = p.resultsPlots(series, all, { schema });
+  const bands = plot.traces.filter((t) => t.role === "band");
+  assert.deepEqual(bands.map((t) => t.group), ["a", "g"]);
+  assert.deepEqual(bands[0].x, [0.1, 0.2, 0.3]);
+  assert.deepEqual(bands[0].lower, [0.9, 1.9, 2.8]);
+  assert.deepEqual(bands[0].y, [1.3, 2.3, 3.0]);
+  assert.ok(!p.resultsPlots(series, { ...all, band: false }, { schema })[0].traces.some((t) => t.role === "band"));
+  const [sf] = p.resultsPlots(series, { ...all, y: "s_factor" }, { schema });
+  assert.deepEqual(sf.traces.find((t) => t.role === "band").y, [13, 23, 30]);
+  const fig = p.plotlyFigure(plot);
+  const region = fig.data.find((t) => t.fill === "toself");
+  assert.deepEqual(region.x, [0.1, 0.2, 0.3, 0.3, 0.2, 0.1]);
+  assert.deepEqual(region.y, [1.3, 2.3, 3.0, 2.8, 1.9, 0.9]);
+  const csv = p.csvOf(plot).split("\n");
+  assert.ok(csv[0].includes("a: band lower (b)") && csv[0].includes("a: band upper (b)"), csv[0]);
+});
