@@ -81,9 +81,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     import pyazr
     try:
-        s = pyazr.Session(a.project)
-        if a.sav:
-            s.load_sav(a.sav)
+        s = pyazr.Session(a.project, parameter_file=a.sav)
         f = s.objective()
         if a.parameter not in f.names:
             print(f"profile_scan: {a.parameter!r} is not free; the free parameters: {f.names}", file=sys.stderr)

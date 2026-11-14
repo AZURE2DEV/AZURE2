@@ -67,8 +67,8 @@ azr, sav = s.save_fit("7Be_fit.azr", x_best)  # or an explicit free vector
 compares the physical values transformed back, and the reduced-width amplitudes the file reads for the particle and
 β channels of each level, against the fit's (up to a common sign of a level, which the standard parametrization may
 flip). If either disagrees it removes both files and raises. `path` is explicit; nothing is written in place. It
-writes every level parameter at its current observed value (`transform_all_rwa(full, free_only=False)`,
-`place_level_values`, fixed parameters included), so the re-read is exact; `load_sav` of the companion `.sav` gives the
+writes every level parameter at its current observed value (`s.transform(x)`, `place_level_values`, fixed parameters
+included), so the re-read is exact; `pyazr.Session(path, parameter_file=sav)` with the companion `.sav` gives the
 same.
 
 - **Fixed parameters are fixed in reduced-width space, not in what the file shows.** A fixed channel's observed width

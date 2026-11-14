@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, rehearsal 63) — the skills ported to the one parameter vector
+
+**Done.** Every skill file under `.claude/skills/` uses the names of pyazr's one fit vector and one parameter table
+(the migration table at the end of `docs/source/user_guide/pyazr.rst`). Scripts: the nine `--sav` paths open the
+session with `Session(file, parameter_file=path)` (every value of the file, fixed ones included, as `load_sav` did,
+so the numbers stay); the eight `--params` options keep their flag and store it as `parameter_file` (the checker read
+`a.params` as the removed `s.params`; these already used `s.parameters.read`). Prose: `transform_rwa` and
+`transform_all_rwa` became `s.transform(x)`, `load_sav` and `full_rwa_from_sav` the `parameter_file=` session or
+`s.parameters.read`, the frozen probes `P.put(...)` on `of_level(...).of_kind("width").free`, `physical_levels()` the
+energy rows, `input_is_rwa` `width_is_amplitude`, `LevelKey` `level_label` or `(jgroup, level)`, the example
+`coulomb_functions.py` `channel_functions.py`; the old-format note says that `parameter_file=` now warns
+(`W_PARAMETER_FILE_NAMES`) and `parameters.read` stays silent.
+
+**Verified.** `tools/check_skills.py` 0 errors; the ten skill self-tests, `check_skills`, `check_skills_unit` and
+`repo_consistency` pass on the build of rehearsal 63; every changed prose call was run once on a copy of
+`tests/upgrade/T2`; no self-test passes `--sav` or `--params`, so four of those paths were run by hand on T2
+(`chi2_report`, `dump_residuals`, `fisher`, `thm_inspect`), the others not.
+
+**Lost.** Nothing a skill needed: no script wrote a parameter file. `Parameters.write` writes every row (a fixed one
+at its start), so a file can no longer be updated in place keeping its other columns.
+
+**Left for the later port** (untouched): `data_mode` / `extrap_mode`, `pyazr.nds`, `pyazr.masses`,
+`write_output_files`, `set_channel_radius`, `set_nuclear_potential`, `dimensionless_widths`, `wigner_widths`, the
+`Pair` / `LevelScheme` imports. The note in `azure2-fit/references/parameters-and-sav.md` that
+`bands.best_fit_params` raises on an old-format file in data mode was not re-checked (it reads by name now).
+
 ## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
 
 **Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the

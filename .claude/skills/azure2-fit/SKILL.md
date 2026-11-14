@@ -18,7 +18,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 - Use this skill to set up, run, restart or extend a fit, to edit the level scheme or the data-set selection of a
   fitted model, and to carry parameter files across such edits.
 - A new project, new particle pairs, the first level scheme, EXFOR data: `azure2-setup`.
-- Observables, extrapolation, S(0), rates, decomposition, CLI menus and the `*_rwa` conventions: `azure2-calculate`.
+- Observables, extrapolation, S(0), rates, decomposition, CLI menus, fit vector and physical values: `azure2-calculate`.
 - Whether a fit can be trusted (pulls, residual structure, χ²/ν, Wigner limits, radius and background-pole
   sensitivity, saturated poles): `azure2-check`.
 - Parameter uncertainties, bands, MINOS, MCMC, data covariance: `azure2-uncertainty`.
@@ -32,8 +32,9 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 1. **Know which files make the model.** The `.azr` holds the nominal norms and shifts; the parameter file holds the
    fitted values (`references/normalizations-and-shifts.md`). Old-format parameter files (`j=<J>_la=<L>_energy`
    names) load nothing but their `segment_*` lines; convert them first (`references/legacy-params.md`).
-2. **Load parameters by name.** In pyazr, `s.load_sav(path)`; never index a parameter file by row
-   (`references/parameters-and-sav.md`).
+2. **Load parameters by name.** In pyazr, `pyazr.Session(file, parameter_file=path)` (every value of the file,
+   fixed ones included, as the CLI); `s.parameters.read(path)` gives the file's free values alone. Never index a
+   parameter file by row (`references/parameters-and-sav.md`).
 3. **Audit the priors.** A norm prior's centre should be the data's own scale (1.0, or the published factor), not a
    previous fit's value; a stale shift value becomes the start of a freed shift.
 4. **Check the start.** A mode-1 calculation from the exact files and flags the fit will use must reproduce the
@@ -161,8 +162,10 @@ within the slots requested.
   (`references/parameters-and-sav.md`).
 - **Restrict a background pole to the channels that need it**: widths only in the data set's channels, every other
   channel at exactly zero (`references/background-poles.md`).
-- **Frozen probes** (`s.without_level(x, ...)`, `s.only_level(x, ...)`: copies of x with widths zeroed) change
-  no parameter vector; a persisted "level off" is `Project.set_level(label, active=False)` and a new session.
+- **Frozen probes** (`P.put(x, P.of_level(label).of_kind("width").free, 0.0)` without the level,
+  `P.put(x, [w for w in P.of_kind("width").free if w.level_label != label], 0.0)` with it alone, `P = s.parameters`:
+  copies of x with widths zeroed) change no parameter vector; a persisted "level off" is
+  `Project.set_level(label, active=False)` and a new session.
 - **Same-J^π levels closer than 1 keV** stay two levels only with different level IDs
   (`references/parameters-and-sav.md`).
 

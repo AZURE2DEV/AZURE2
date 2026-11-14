@@ -54,7 +54,8 @@ def arrays(d, sfactor):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr")
-    ap.add_argument("--params", help="parameter file (param.sav), by name; default: the project's values")
+    ap.add_argument("--params", dest="parameter_file",
+                    help="parameter file (param.sav), by name; default: the project's values")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--outdir", default="figures")
     ap.add_argument("--format", default="png", choices=["png", "pdf"])
@@ -70,7 +71,7 @@ def main(argv=None):
     opts = {k: option_value(v) for k, v in (o.split("=", 1) for o in a.option)}
     status = 0
     with pyazr.Session(a.azr, **opts) as s:
-        x = s.parameters.read(a.params) if a.params else s.parameters.x0
+        x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
         ev = s.evaluate(x)
         for d in ev.data:
             if a.dataset and d.name not in a.dataset:
@@ -95,7 +96,7 @@ def main(argv=None):
             fig.tight_layout()
             fig.savefig(out / f"{d.name}.{a.format}", dpi=150)
             plt.close(fig)
-        (out / "figures.txt").write_text(f"project {a.azr}\nparameters {a.params or 'the project values'}\n"
+        (out / "figures.txt").write_text(f"project {a.azr}\nparameters {a.parameter_file or 'the project values'}\n"
                                          f"data chi2 {ev.chi2:.10g}\n")
     return status
 
