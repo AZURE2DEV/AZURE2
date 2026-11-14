@@ -2,6 +2,63 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 09:07) — merged: session edits and libraries, the observed level table, shell tests, THM tab
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 66 (a true merge of the rehearsal branch; its tree
+plus the entry below this one): `feature/upgrade-8-pyazr3-libraries`, `feature/upgrade-5-cnuc-level-state`,
+`feature/upgrade-7-tests-no-quiet-pipe`, `feature/upgrade-9-webui-thm`. The four agents' entries follow.
+
+- pyazr: a session is no longer edited. A radius is `Project.set_pair(pair, radius=)` and a new session, a
+  potential is the pair's `potential` record; `bands.best_fit_params(model, path)` leaves the session as it
+  was; `Session(file, extrapolations=True)` on a project without an active extrapolation record is refused by
+  pyazr with the three parts. The libraries are under `pyazr.sources` (`nds`, `masses`, `exfor_coulomb`,
+  `exfor_sfactor`); `write_outputs` replaces `write_output_files`; nineteen bindings without a caller are
+  removed; numpy is the only dependency of `import pyazr` (scipy in the extras, mpmath dropped).
+- Engine: `TransformOut` returns an `ObservedLevelTable` and `ALevel` has no report member any more. The fit
+  values of a level (13 members, about 180 reader calls in 20 files) are still in `ALevel`: in work.
+- Shell tests: no pipe into a reader that leaves early (186 places in 73 scripts); consistency check 50 holds
+  the rule.
+- Web page: a THM tab (options and experiments as generated forms, the five session diagnostics drawn by the
+  Physics tab's code); on the Fit tab a killed sampler job continues from its chain file, a band names its job,
+  its centre and the parameters it varied, and a fitter that fell back is shown with the one that ran.
+
+**Reconciled at the merge** (director): `pyazr/ui/engine.py`, `linear_sigma` — the THM branch's third return
+value (`varied`) on top of the libraries branch's session of the extrapolations (no mode switch).
+
+**Verified on the merged tree** (build `work/b-trial66`, eight threads): 0 warnings; all projects in the three
+bases identical to the reference (887 / 851 / 887 files); the eight fits identical to the base build; 266 of 266
+quick tests pass. The director's own run over HTTP at one thread (`work/director/walk66/walk.py`, the PI's four
+play projects): the header's chi-squared of T1, T2, T3, 13N equal to the values before the merge to the last
+digit; a gradient MIGRAD job and a covariance band job on each end without an error, all bands finite,
+chi-squared unchanged after the jobs; a radius edit through `PATCH /api/project/pairs/{key}` moves chi-squared
+and Undo restores it to the last digit; on T2 the THM routes answer (`thm_experiments`, `thm_background`,
+`thm_vertex`; `thm_lineshape` and `thm_distortion` refuse with the engine's reason, the experiment has
+neither); on the projects without `<thm>` the routes refuse with 404 / 422, never a 500.
+Not run here: `pyazr_wheel` (the libraries agent ran it on its branch: pass) and the long suite (once for this
+batch).
+
+**New reference**: tag `tab-t66-1`, base build `work/b-trial66`.
+
+**Open, for a later branch or a decision**:
+
+- In work on branches that start here: the fit values out of `ALevel`; the engine's fit path (a fit that stops
+  at its call limit reports the start objective, not the best point; the fitter table's missing columns; MINOS
+  flags; one writer of `fitStatus.out`); pyazr's project edits the page lacks (THM binding energy and
+  amplitude flag, pairs added and removed, a schema of `<thm>`, the THM calls described as rows); four shell
+  comparisons that cannot fail on a moved grid (`tests/thm_park`, `tests/extrap_sav_segments`,
+  `tests/sum_lab_frame`, `tests/upos_pair_index`) and stale names in messages and pages.
+- `Session.wigner_widths` / `dimensionless_widths` against 2 P gamma_W^2 (the table is in the libraries
+  agent's entry): for the PI and the owner. Left as it is.
+- The sub-point-grid copy's stale N_f^(1/2) exists (0.832687 against 0.885416 in a trace) and cannot move a
+  grid (the mesh reads energy and particle width only): no code change; the design note says so.
+- Engine functions left without a caller by the binding removal (listed in the libraries agent's entry;
+  `AZUREAPI::Rebuild`, `SetRadius`, `SetData`, `SetExtrap` among them): the fit-values branch deletes those
+  that touch the fit set; the rest wait for a sweep.
+- A 3He Trojan-horse experiment: `thm_vertex` reports B = 2.2246 MeV while the line shape and the distortion
+  use 5.4934 MeV (the engine warns). For the PI.
+- `pyazr/sources/nds.py` (1450 lines) and `pyazr/project.py` (833 lines) are over what a file should be; `CNuc.cpp`
+  is exactly at its size row.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-webui-thm`) — the Fit tab's loose ends
 
 **Done** (`docs/upgrade/web_ui.md` sections 11.6 and 11.7, the departures updated):
