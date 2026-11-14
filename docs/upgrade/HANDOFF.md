@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-read-check`) — ENDF: the checking codes
+
+**Done**: `pyazr/endf/checkers.py` (`checkers()`, `check()` with the own format check first, `standardize()` and its
+`Candidate`: `diff()` per section with the digits lost, `accept(to=)`), commands `pyazr endf check` and `pyazr endf
+standardize`, the stand-in `tests/pyazr/endf_standin/standin.py`, `tests/pyazr/endf_check_test.py` (the real codes in
+its last part when `AZURE2_ENDF_UTILITIES` and `AZURE2_PREPRO` are set), the example `pyazr/examples/
+endf_evaluation.py` on a hand-written p + 12C file, `endf.md` 13.2 and 13.3 (the page's calls), the user page's
+sections on the codes and on what "correct" does, the Developer Guide recipe "A checking code".
+**Verified how**: the stand-in test and the same test with the real codes built under `opt/` (CHECKR 8.24, FIZCON
+8.19, PSYCHE 8.11, STANEF, PREPRO 2023): every finding the reports count was read on the extract and every
+hand-written file; `cli_test.py`; two injected errors (MF and MT swapped in the parser; accept writing over the
+original) failed their checks. **Found**: the codes exit 0 with findings once the deck ends with DONE (exit 2 was the
+end of input); STANEF rewrites MF=2 with its standard options and turned two integer-looking floats of the library's
+MF=2 10 000 times smaller; FIXUP needs option 5; CHECKR does not know LTP=15. **Open**: the start model from LRF=7
+(stage 2 and the engine's door 2) is the next agent's.
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-read-check`) — ENDF: read, summarise, curves, own format check
+
+**Done**: `pyazr/endf/` (records and the three number forms, INT 1-6, `Material` with `summary()`, MF=3 and MF=6
+LAW=2 and LAW=5 with every LTP at given energies and angles, `Material.curves(data, session=s)` in the data set's
+quantity and unit with the engine's rows for lab energies and Coulomb terms, `check_format(path)`);
+`pyazr.FormatRefused`; commands `pyazr endf summary`, `pyazr endf curves`; the ENDF/B-VIII.1 3He + 4He extract as
+test data with its README; user page `user_guide/endf.rst`; `endf.md` section 13.1 ("as built") and the decisions'
+status in section 11; Developer Guide recipe "A section (MF/MT) of pyazr.endf"; two boxes of the class scheme.
+**Verified how**: `tests/pyazr/endf_read_test.py` (82 checks against hand values from the manual's equations; two
+injected errors failed nine checks), `tests/pyazr/cli_test.py`, `tests/pyazr/errors_test.py`, the consistency test,
+`docs_build`. No C++ changed. **Open**: the checking codes (next commit), the start model from LRF=7.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-readers-owners`) — the readers take the level state
 
 **A mergeable half** of the end of `CNuc`'s copies: the readers take the state; the owners do not hold their own yet

@@ -367,6 +367,60 @@ def _text_ensdf(result, v):
                       _table(columns, [[_cell(level[c]) for c in columns] for level in result])])
 
 
+def _run_endf_summary(v, ctx):
+    from . import endf
+    summary = endf.read(v.file, mat=v.mat).summary()
+    return summary.to_dict() if ctx.json else str(summary)
+
+
+def _run_endf_curves(v, ctx):
+    from . import Session, endf
+    from .errors import FormatRefused
+    material = endf.read(v.file, mat=v.mat)
+    out = []
+    with Session(v.project) as s:
+        for d in s.evaluate(s.parameters.x0).data:
+            if v.record and d.name != v.record:
+                continue
+            try:
+                c = material.curves(d, session=s)
+                row = {"data set": d.name, "quantity": c.quantity, "unit": c.unit, "source": c.source,
+                       "covered": int(c.coverage.sum()), "points": len(c.values), "notes": c.notes}
+                if ctx.json:
+                    row.update(energies=c.energies, angles=c.angles, values=c.values, model=d.model)
+            except FormatRefused as e:
+                row = {"data set": d.name, "quantity": d.quantity, "unit": "", "source": "", "covered": 0,
+                       "points": d.n, "notes": [f"refused: {e.what}; allowed: {e.allowed}"]}
+            out.append(row)
+    if v.record and not out:
+        raise CallError(2, f"--record {v.record}: no data set of that name in {v.project}",
+                        "--record: the name of a data set of the project", f"{PROG} describe {v.project}")
+    return out
+
+
+def _text_endf_curves(result, v):
+    rows = [[r["data set"], r["quantity"], r["source"], f"{r['covered']}/{r['points']}", "; ".join(r["notes"])]
+            for r in result]
+    return _table(["data set", "quantity", "from", "covered", "notes"], rows)
+
+
+def _run_endf_check(v, ctx):
+    from . import endf
+    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout)
+    return result.to_dict() if ctx.json else str(result)
+
+
+def _run_endf_standardize(v, ctx):
+    from . import endf
+    candidate = endf.standardize(v.file, program=v.program, timeout=v.timeout, mf2=v.mf2)
+    written = candidate.accept(to=v.write, overwrite=v.overwrite) if v.write else None
+    if ctx.json:
+        return {"original": v.file, "candidate": candidate.path, "program": candidate.program, "written": written,
+                "changes": [c for c in candidate.diff() if c.kind != "unchanged"]}
+    return candidate.summary() + (f"\nwritten: {written}" if written else
+                                  "\nnothing written (--write NEW keeps the candidate)")
+
+
 _COULOMB_FILE = Arg("FILE", "text", "the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin)",
                     optional=True)
 
@@ -452,6 +506,38 @@ COMMANDS = (
                                  choices=("auto", "livechart", "nndc"), default="auto")),
             "pyazr.fetch_levels", "The ENSDF adopted levels of a nuclide (energies in keV, J^pi, half-lives).",
             run=_run_import_ensdf, text=_text_ensdf),
+    Command("endf summary", (Arg("FILE", "file", "an ENDF-6 file"),
+                             Arg("--mat", "int", "the material (MAT) of a file that holds several")),
+            "pyazr.endf.read",
+            "What an ENDF-6 file holds: material, projectile, library, sections in words, the header text.",
+            run=_run_endf_summary, fix="python -m pyazr endf summary --help"),
+    Command("endf curves", (Arg("FILE", "file", "an ENDF-6 file (the evaluation)"),
+                            Arg("PROJECT", "project", "the project whose data sets are compared"),
+                            Arg("--record", "text", "only the data set of this name"),
+                            Arg("--mat", "int", "the material (MAT) of a file that holds several")),
+            "pyazr.endf.Material.curves",
+            "The evaluation at each data set's points in its quantity and unit (--json: the values beside the "
+            "model at the project's start values).",
+            run=_run_endf_curves, text=_text_endf_curves, fix="python -m pyazr endf summary FILE lists what it holds"),
+    Command("endf check", (Arg("FILE", "file", "an ENDF-6 file"),
+                           Arg("--program", "choice", "the one checking code to run (default: CHECKR, FIZCON and "
+                               "PSYCHE, those found)", choices=("checkr", "fizcon", "psyche", "inter")),
+                           Arg("--timeout", "number", "seconds each code may take", default=300.0)),
+            "pyazr.endf.check",
+            "The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their "
+            "reports read into findings.", run=_run_endf_check,
+            fix="python -m pyazr endf check --help; pyazr.endf.checkers() lists the codes found"),
+    Command("endf standardize", (Arg("FILE", "file", "an ENDF-6 file (never changed)"),
+                                 Arg("--program", "choice", "the code that rewrites a copy", default="stanef",
+                                     choices=("stanef", "fixup", "dictin", "endf2c")),
+                                 Arg("--mf2", "flag", "STANEF: rewrite the numbers of MF=2/MT=151 too"),
+                                 Arg("--write", "output", "keep the candidate as this file"),
+                                 Arg("--overwrite", "flag", "with --write: replace an existing file"),
+                                 Arg("--timeout", "number", "seconds the code may take", default=300.0)),
+            "pyazr.endf.standardize",
+            "Run a code that rewrites a copy of the file and show what changed per section (numbers, digits lost); "
+            "nothing is written without --write.", run=_run_endf_standardize,
+            fix="python -m pyazr endf standardize --help; pyazr.endf.checkers() lists the codes found"),
 )
 
 
@@ -620,6 +706,8 @@ def _failure(e, c):
     if isinstance(e, CallError):
         return e
     name = type(e).__name__
+    if getattr(e, "what", None) and getattr(e, "allowed", None) and getattr(e, "fix", None):  # a pyazr.Error's parts
+        return CallError(c.refused_exit if isinstance(e, ValueError) else 1, str(e), e.allowed, e.fix, name)
     allowed = "; ".join(f"{a.name}: {a.type_text}" for a in c.args) or "the command without arguments"
     fix = c.fix or f"{PROG} {c.name} --help"
     if isinstance(e, FileExistsError):

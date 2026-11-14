@@ -25,6 +25,7 @@ digraph frontends {
   n_SessionWorker [label=<<b>SessionWorker</b><br/><font point-size="12">the process that holds<br/>the session</font>>, shape=box, style="filled", fillcolor="white"];
   n_Engine [label=<<b>Engine</b><br/><font point-size="12">session operations for<br/>the routes (in the<br/>worker)</font>>, shape=box, style="filled", fillcolor="white"];
   n_JobTable [label=<<b>JobTable</b><br/><font point-size="12">fits and samplers run<br/>as jobs</font>>, shape=box, style="filled", fillcolor="white"];
+  n_pyazr__endf__Material [label=<<b>pyazr::endf::Material</b><br/><font point-size="12">one material of an<br/>ENDF-6 file: sections,<br/>header, curves</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
   n_AZUREMain -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
@@ -49,5 +50,6 @@ digraph frontends {
   n_Server -> n_SessionWorker [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_Server -> n_JobTable [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_Engine -> n_pyazr__Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_pyazr__endf__Material -> n_pyazr__Session [style=dashed, arrowhead=vee];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

@@ -83,6 +83,21 @@ add_test(NAME pyazr_weisskopf
                  ${CMAKE_CURRENT_SOURCE_DIR}/weisskopf_test.py)
 set_tests_properties(pyazr_weisskopf PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# pyazr.endf reading: numbers, records, interpolation laws, MF=3, MF=6 LAW=2 and LAW=5 against hand values, curves at
+# a data set's points, the column rules, the module's own format check, the ENDF/B-VIII.1 extract.
+add_test(NAME pyazr_endf_read
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_read_test.py)
+set_tests_properties(pyazr_endf_read PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
+# into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when
+# AZURE2_ENDF_UTILITIES and AZURE2_PREPRO are set in the environment of ctest (skipped otherwise).
+add_test(NAME pyazr_endf_check
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_check_test.py)
+set_tests_properties(pyazr_endf_check PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # Inactive <levels> and <segmentsData> lines must not shift pyazr's level
 # numbering or its per-segment penalties off the engine's.
 add_test(NAME pyazr_inactive_lines

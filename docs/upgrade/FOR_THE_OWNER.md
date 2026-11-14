@@ -544,6 +544,25 @@ fails when its switch or its line in the manual is missing. One thing to know: f
 program silently takes the analytic-gradient MIGRAD; `fit_with_engine` does what it is told, so the program's plain
 run on such a project corresponds to `method="migrad-gradient"`.
 
+## ENDF files for evaluators (2026-11-14)
+
+`pyazr.endf` reads any ENDF-6 file with no outside program: `pyazr endf summary FILE` says what it holds in the
+manual's words (material, projectile, sections and reactions, Q values, energy ranges, the laws of MF=6, the
+R-matrix flags of MF=2, the header text), `pyazr endf curves FILE PROJECT` gives the evaluation at every data set's
+points in its own quantity and unit (MF=3, MF=6 LAW=2 and the charged-particle elastic LAW=5), and
+`pyazr.endf.check_format(path)` checks the file's format, each finding with the manual's page. Every format rule is
+cited by the printed page of ENDF-102 (2023); the physics conversions are the engine's rows. An extract (182 lines) of the ENDF/B-VIII.1 3He + 4He evaluation is test data (your yes of 2026-11-14), with its source and
+citation beside it.
+
+The checking codes (CHECKR, FIZCON, PSYCHE, STANEF, PREPRO's FIXUP, DICTIN, ENDF2C), built under `opt/` with your
+yes, are found through `$AZURE2_ENDF_UTILITIES` and `$AZURE2_PREPRO`: `pyazr endf check FILE` runs the module's own
+check and then the codes, and reads their reports into findings with a line on what each known message means for a
+charged-particle file (the library's own 3He + 4He file gets five CHECKR errors, none of them a defect of the
+evaluation). `pyazr endf standardize FILE` runs STANEF or a PREPRO code on a copy and shows per section what would
+change and how many digits a number loses; nothing is replaced unless asked. Measured: STANEF rounds every number to
+7 digits, MF=2 included, and wrote two resonance energies of the library file 10 000 times too small (numbers
+written without a decimal point).
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the
