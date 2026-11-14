@@ -12,7 +12,7 @@ horse is the target):
      round trip and canonical line; the combinations AZURE2 refuses are
      refused the same way (by the edit, or when a session is made).
   2. The engine against the CLI, R(E) and the DW vertex with a window:
-     evaluate().chi2 (rel 1e-9) and the output files of write_output_files.
+     evaluate().chi2 (rel 1e-9) and the output files of write_outputs.
   3. thm_distortion with a window: R == (M2/M2_PW)(E) / (M2/M2_PW)(E_ref) and
      R_model == R (1e-6, the grid); theta_cm is the mean of the window.
   4. thm_vertex with a DW window: the directions (angle_theta_cm, angle_q,
@@ -159,11 +159,11 @@ with tempfile.TemporaryDirectory() as tmp:
             chi2 = s.evaluate(x).chi2
             check(f"{tag}: evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
                   f"{chi2} vs {cli_chi2}")
-            s.write_output_files(x)
+            s.write_outputs(x)
         from_py = output_files(py_dir)
         for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                            ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-            check(f"{tag}: write_output_files: {name} identical to the CLI's",
+            check(f"{tag}: write_outputs: {name} identical to the CLI's",
                   from_py.get(name) == from_cli[name])
 
     print("3. thm_distortion with a window")

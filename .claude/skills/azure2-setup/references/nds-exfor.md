@@ -1,12 +1,12 @@
-# EXFOR and NDS through `pyazr.nds`
+# EXFOR and NDS through `pyazr.sources.nds`
 
 This reference covers the two IAEA services that supply experimental data and level schemes for an evaluation, and
-the conversion of their records into AZURE2 data files and segments. Everything is wrapped in `pyazr.nds`
-(`from pyazr import nds as N`), which calls the web APIs directly: no local database, a network connection, no
+the conversion of their records into AZURE2 data files and segments. Everything is wrapped in `pyazr.sources.nds`
+(`from pyazr.sources import nds as N`), which calls the web APIs directly: no local database, a network connection, no
 dependency beyond NumPy. The Qt GUI of released builds has an independent client of the same Web API
 (`gui/src/ExforData.cpp` on `dev`). Worked example: `pyazr/examples/exfor_fetch.py`. Command line:
-`python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG`, `... download <DatasetID> -o file.dat`,
-`... reference <DatasetID>`. API manual: `https://nds.iaea.org/exfor/x4guide/API/`.
+`python -m pyazr.sources.nds search --target C-13 --reaction p,g --quantity SIG`, `... download <DatasetID> -o
+file.dat`, `... reference <DatasetID>`. API manual: `https://nds.iaea.org/exfor/x4guide/API/`.
 
 ## 1. Services
 
@@ -102,10 +102,10 @@ p.save()
 - **The light/heavy assignment.** AZURE2 converts lab to c.m. with E_c.m. = E_lab·m₂/(m₁ + m₂), m₁ the light member
   (`src/Unit.cpp`), and its angle transform asin(m₁/m₂ sin θ) needs m₁ < m₂. EXFOR names target and projectile as
   the experiment ran: ³He(α,γ)⁷Be is `2-HE-3(A,G)4-BE-7`, target ³He. Letting `to_azr` infer the masses there writes
-  E_lab too large by 4/3. State the assignment on every fetch, with atomic masses from `pyazr.masses`:
+  E_lab too large by 4/3. State the assignment on every fetch, with atomic masses from `pyazr.sources.masses`:
 
   ```python
-  from pyazr.masses import atomic_mass
+  from pyazr.sources.masses import atomic_mass
   d.to_azr(data_dir, entrance=1, exit=-1, observable="total-capture",
            projectile_mass=atomic_mass("3He"),   # AZURE2's m1
            target_mass=atomic_mass("4He"))       # AZURE2's m2
@@ -133,7 +133,7 @@ for lv in N.fetch_levels("14n"):
 gs = N.fetch_ground_state("14n")   # S_n = 10553 keV, S_p = 7550 keV, J^pi = 1+
 ```
 
-Masses and separation energies for the `.azr` come from the shipped AME2020 table (`pyazr.masses`), not from
+Masses and separation energies for the `.azr` come from the shipped AME2020 table (`pyazr.sources.masses`), not from
 LiveChart (SKILL.md §2).
 
 ## 6. The paper behind a data set

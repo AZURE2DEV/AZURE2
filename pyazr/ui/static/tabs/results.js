@@ -9,6 +9,7 @@
 // linked: #/results?x=e_x&y=s_factor&logy=1&levels=1&show=cap_g0,cap_g1&energy=1.2
 
 import { pathOf } from "../api.js";
+import { resultView, variedText } from "../fitting.js";
 import { X_CHOICES, Y_CHOICES, resultsPlots, seriesStyle } from "../plots.js";
 import { formatNumber, renderTable } from "../tables.js";
 import { button, drawPlot, h, section } from "../ui.js";
@@ -50,16 +51,30 @@ export function newestBandJob(jobs) {
 }
 
 /** The series with the band of a band job's result where it has one of the same name and points (`d.band`: lower,
- * upper and the S factor's, as the server sent them); the names of the series it left without one. */
-export function withBands(series, result) {
+ * upper and the S factor's, as the server sent them, and `label`, its name in the legend); the names of the series it
+ * left without one. */
+export function withBands(series, result, label = "band") {
   const byName = Object.fromEntries((result?.bands?.sets || []).map((b) => [b.name, b]));
   const missing = [];
   const out = series.map((s) => {
     const b = byName[s.d.name];
     if (!b || b.lower.length !== (s.d.e_cm || []).length) { missing.push(s.d.name); return s; }
-    return { ...s, d: { ...s.d, band: b } };
+    return { ...s, d: { ...s.d, band: { ...b, label } } };
   });
   return { series: out, missing };
+}
+
+/** The legend's name of a band: the band job and the point it is drawn around (its source job's best point). */
+export function bandLabel(bandJob) {
+  if (!bandJob) return "band";
+  const source = bandJob.result?.source;
+  return `band of job ${bandJob.id}${source ? `, around the best point of job ${source}` : ""}`;
+}
+
+/** The job whose best point the project's text is (accepted into it, and no edit since): null where there is none. */
+export function acceptedJob(jobs, rev) {
+  return jobs.filter((j) => j.accepted && j.accepted.rev === rev)
+    .sort((a, b) => (b.accepted.time || 0) - (a.accepted.time || 0))[0] || null;
 }
 
 /** The c.m. energies at which a data set has points at three or more angles: {energy: [{series, index}]}. */
@@ -90,7 +105,7 @@ export async function render(ctx, el) {
     ctx.api.get("/api/project/levels"), ctx.api.get("/api/jobs")]);
   const newest = newestBandJob(jobs);
   const bandJob = newest ? await ctx.api.get(pathOf("/api/jobs", newest.id)) : null;
-  const banded = withBands(seriesOf(evaluation, records, ctx.schema), bandJob?.result);
+  const banded = withBands(seriesOf(evaluation, records, ctx.schema), bandJob?.result, bandLabel(bandJob));
   const series = banded.series;
   if (view.project !== ctx.project.path || !view.shown) {
     view.project = ctx.project.path;
@@ -101,6 +116,8 @@ export async function render(ctx, el) {
   const marks = levels.filter((l) => l.active !== false).map((l) => ({ label: l.label, energy: l.energy }));
 
   el.appendChild(headPanel(evaluation, bandJob, banded.missing, ctx));
+  const offer = await acceptedBandOffer(ctx, jobs, bandJob);
+  if (offer) el.appendChild(offer);
   const plots = h("div.results-plots");
   const angular = h("div.results-angular");
   const redraw = () => {
@@ -113,6 +130,27 @@ export async function render(ctx, el) {
     laterPanel());
 }
 
+/** Where the text's point came from a job (accepted) and the band drawn is not around it: the band jobs that can start
+ * from that job's best point (the job table's followers that take what its result has), one button each. */
+async function acceptedBandOffer(ctx, jobs, bandJob) {
+  const accepted = acceptedJob(jobs, ctx.project.rev);
+  if (!accepted || bandJob?.result?.source === accepted.id) return null;
+  const table = await ctx.api.get("/api/jobs/kinds");
+  const offered = resultView(accepted, table).followers.filter((row) => row.kind === "bands");
+  if (!offered.length) return null;
+  return h("div.hint.band-offer", {}, `The project's text is the best point of job ${accepted.id} (accepted)`
+    + `${bandJob ? `; the band drawn is around another point (${bandLabel(bandJob)})` : ""}: `,
+  ...offered.map((row) => button(`band (${row.method}) at the accepted point`, `${row.doc}: a band job from the best `
+      + `point of job ${accepted.id}, the point the text holds`, async () => {
+    try {
+      const started = await ctx.api.post("/api/jobs", { kind: row.kind, method: row.method,
+        x0: { job: accepted.id } });
+      ctx.status(`job ${started.id} started: ${row.kind} ${row.method} at the accepted point`, "ok");
+      ctx.navigate(`#/fit/job/${started.id}`);
+    } catch (e) { ctx.showError(e); }
+  })));
+}
+
 /** Where the numbers come from: the working x; the χ² totals as the program writes them; the band drawn. */
 function headPanel(e, bandJob, missing, ctx) {
   const totals = Object.entries(e.totals || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
@@ -120,7 +158,8 @@ function headPanel(e, bandJob, missing, ctx) {
     + `${bandJob.result.message}; on the text of rev ${bandJob.text_rev}${bandJob.text_rev === ctx.project.rev ? ""
       : ` (the project is at rev ${ctx.project.rev}: the band belongs to the fit of that text)`}; the band is the `
     + "model's around the band job's start point (a fit's or a sampler's best point), the line the model at the "
-    + "working x: accept that point into the project to see them together"
+    + "working x: accept that point into the project to see them together. Varied: "
+    + `${variedText(bandJob.result) || "(not said by this job)"}`
     + (missing.length ? `; none for ${missing.join(", ")}` : ""))
     : h("div.hint", {}, "No band yet: a band job of the Fit tab (from a fit's covariance or a sampler's chain) "
       + "draws its band here.");
@@ -306,7 +345,7 @@ function outputsPanel(ctx) {
   show().catch((e) => ctx.showError(e, list));
   return section("Output files", h("p", {}, button("Write the program's output files", "AZUREOut_*, "
     + "chiSquared.out, parameters.out, ... at the working x into the project's output directory", write),
-  h("span.hint", {}, " as the program writes them at the end of a run (pyazr's write_output_files)")), list, head);
+  h("span.hint", {}, " as the program writes them at the end of a run (pyazr's write_outputs)")), list, head);
 }
 
 /** What waits for a later step, said once. */

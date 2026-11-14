@@ -144,7 +144,7 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
             np.savetxt(fn, np.c_[e * lab[ent], np.zeros(e.size),
                                  np.ones(e.size), np.ones(e.size)],
                        fmt="%.10g")
-            # sigma at the lab energies of the file (data mode; one data set per pair combination)
+            # sigma at the lab energies of the file (a session of the data; one data set per pair combination)
             m.add_dataset(f"tab_{ent}_{ex}", reaction=m.reaction(ent, ex), quantity="sigma", unit="b",
                           file=os.path.basename(fn), columns="E_lab[MeV] _ value error", norm="1 fixed")
         m.save(run)

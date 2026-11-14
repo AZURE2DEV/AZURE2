@@ -66,17 +66,17 @@ std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTa
          std::to_string(d.group) + ", level " + std::to_string(d.level) + " (internal error: report it)";
 }
 
-/// The value of one level quantity from the observed slots (CNuc::ObservedOfFitValues), in the engine unit.
-double LevelValue(CNuc *compound, const Config &configure, const ex::ModelDatum &d) {
+/// The value of one level quantity from the observed values (CNuc::ObservedOfFitValues), in the engine unit.
+double LevelValue(CNuc *compound, const ObservedLevelTable &table, const Config &configure, const ex::ModelDatum &d) {
   const JGroup *group = compound->GetJGroup(d.group);
-  const ALevel *level = group->GetLevel(d.level);
+  const ObservedLevel &level = table.Level(d.group, d.level);
   const unsigned char width = (unsigned char)phys::ObservedKind::Width;
   auto keyOf = [&](int ch) { return compound->GetPair(group->GetChannel(ch)->GetPairNum())->GetPairKey(); };
   // Gamma (MeV) to one pair (pairKey > 0) or in all, from the observed W of the channels that are widths.
   auto gamma = [&](int pairKey) {
     std::vector<double> w;
     for (int ch = 1; ch <= group->NumChannels(); ch++)
-      if (level->GetObservedKind(ch) == width && (pairKey == 0 || keyOf(ch) == pairKey)) w.push_back(level->GetBigGamma(ch));
+      if (level.kind[ch - 1] == width && (pairKey == 0 || keyOf(ch) == pairKey)) w.push_back(level.W[ch - 1]);
     return phys::total_width(w);
   };
   switch (d.quantity) {
@@ -93,7 +93,7 @@ double LevelValue(CNuc *compound, const Config &configure, const ex::ModelDatum 
     case ex::ModelQuantity::PartialWidth:
       return gamma(d.pair);
     case ex::ModelQuantity::ResonanceEnergy: {
-      const double E = level->GetTransformE();  // the observed (Brune) energy, E_x
+      const double E = level.E;  // the observed (Brune) energy, E_x
       if (d.frame == "E_x") return E;
       const PPair *p = compound->GetPairFromKey(d.pair);
       const double eCM = E - (p->GetSepE() + p->GetExE());
@@ -106,7 +106,7 @@ double LevelValue(CNuc *compound, const Config &configure, const ex::ModelDatum 
         const AChannel *c = group->GetChannel(ch);
         if (keyOf(ch) != d.pair || c->GetL() != d.l || (int)std::lround(2.0 * c->GetS()) != d.twoS) continue;
         // C of a closed channel; 0 once the level has moved above the threshold (no ANC there).
-        if (level->GetObservedKind(ch) == (unsigned char)phys::ObservedKind::ANC) return std::fabs(level->GetObservedValue(ch));
+        if (level.kind[ch - 1] == (unsigned char)phys::ObservedKind::ANC) return std::fabs(level.value[ch - 1]);
       }
       return 0.0;
     case ex::ModelQuantity::ScatteringLength:
@@ -125,9 +125,11 @@ bool HasLevelRows(const ModelDataSet &set) {
 /// current fit values; NaN where the transformation fails.
 void LevelValues(CNuc *compound, const Config &configure, const ModelDataSet &set, std::vector<double> &q) {
   q.assign(set.rows.size(), std::numeric_limits<double>::quiet_NaN());
-  if (!HasLevelRows(set) || !compound->ObservedOfFitValues(configure)) return;
+  if (!HasLevelRows(set)) return;
+  const std::optional<ObservedLevelTable> table = compound->ObservedOfFitValues(configure);
+  if (!table) return;
   for (std::size_t k = 0; k < set.rows.size(); k++)
-    if (!set.rows[k].isScatteringLength) q[k] = LevelValue(compound, configure, set.rows[k].datum);
+    if (!set.rows[k].isScatteringLength) q[k] = LevelValue(compound, *table, configure, set.rows[k].datum);
 }
 
 /// The residual rows of row k, appended to r (q: LevelValues).

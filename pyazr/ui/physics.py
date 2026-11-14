@@ -23,13 +23,18 @@ import numpy as np
 from .errors import NotFound, Refused
 
 MAX_ELEMENTS = 20000
+# Kinds of argument that take one text per call (not broadcast): a material's formula, a THM experiment's name.
+TEXT_KINDS = ("text", "experiment")
 SPACINGS = {"linear": "np.linspace", "log": "np.geomspace", "integer": "np.arange"}
 
 # The session's functions as rows of the shape of the physics table (pyazr.kinds()["physics"]): the session's methods
-# have no table in the binding (web_ui.md section 12), so the row of each is written here from its docstring.  `op` is
-# the adapter's operation (pyazr.ui.engine.Engine) that answers it; `broadcast` False: one value per argument, the
-# axis an array.  A pair argument takes a key of the project's pairs (GET /api/project/pairs).
-_ARG = {"unit": "", "lower": None, "upper": None, "lower_open": False, "upper_open": False, "choices": [],
+# have no table in the binding (web_ui.md section 12), so the row of each is written here from its docstring (the THM
+# diagnostics in pyazr/ui/thm.py, THM_ROWS).  `op` is the adapter's operation (pyazr.ui.engine.Engine) that answers
+# it; `broadcast` False: one value per argument, the axis an array; `tab` (where given) the tab that draws the row
+# instead of the Physics tab; `status_words` the words of each status code.  A pair argument takes a key of the
+# project's pairs (GET /api/project/pairs), an experiment argument the name of a THM experiment (GET
+# /api/project/thm).
+ARG = {"unit": "", "lower": None, "upper": None, "lower_open": False, "upper_open": False, "choices": [],
         "default": None, "example": None, "sweep": None}
 SESSION_ROWS = {
     "channel_functions": {
@@ -42,13 +47,13 @@ SESSION_ROWS = {
                "closed-channel shift function at the channel radius.",
         "library": "pyazr: Session.channel_functions (the session's)", "axis": "e_cm",
         "arguments": [
-            dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels>", domain="a pair of the project"),
-            dict(_ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,
+            dict(ARG, name="pair", kind="pair", doc="particle pair key of <levels>", domain="a pair of the project"),
+            dict(ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,
                  example=0.0, sweep={"lower": 0.0, "upper": 10.0, "spacing": "linear"}),
-            dict(_ARG, name="radius", kind="real", unit="fm", doc="evaluation radius; 0: the pair's channel radius",
+            dict(ARG, name="radius", kind="real", unit="fm", doc="evaluation radius; 0: the pair's channel radius",
                  domain="finite >= 0", lower=0.0, default=0.0, sweep={"lower": 1.0, "upper": 10.0,
                                                                       "spacing": "linear"}),
-            dict(_ARG, name="e_cm", kind="real", unit="MeV", doc="c.m. energy of the pair", domain="finite",
+            dict(ARG, name="e_cm", kind="real", unit="MeV", doc="c.m. energy of the pair", domain="finite",
                  example=1.0, sweep={"lower": 0.01, "upper": 10.0, "spacing": "log"}),
         ],
         "returns": [{"name": n, "unit": u, "doc": d} for n, u, d in (
@@ -60,14 +65,13 @@ SESSION_ROWS = {
 SESSION_STATUS = {0: "computed", -2: "closed channel (E <= 0 or the functions undefined there)"}
 
 
-def check_size(shape, what, fix):
-    """Refuse a request whose broadcast ``shape`` has more than :data:`MAX_ELEMENTS` elements."""
+def check_size(shape, what, fix, bound=MAX_ELEMENTS):
+    """Refuse a request whose broadcast ``shape`` has more than ``bound`` elements (:data:`MAX_ELEMENTS`, or a row's
+    own ``max_elements`` where one element costs more)."""
     n = int(np.prod(shape, dtype=np.int64))
-    if n > MAX_ELEMENTS:
-        raise Refused(f"{what}: {n} elements (shape {list(shape)}) is above the bound of {MAX_ELEMENTS} per request; "
-                      f"{fix}",
-                      what=f"{n} elements in one request", allowed=f"at most {MAX_ELEMENTS} elements per request",
-                      fix=fix)
+    if n > bound:
+        raise Refused(f"{what}: {n} elements (shape {list(shape)}) is above the bound of {bound} per request; {fix}",
+                      what=f"{n} elements in one request", allowed=f"at most {bound} elements per request", fix=fix)
     return n
 
 
@@ -138,7 +142,7 @@ def prepare(fn, row, arguments):
             used[name] = a["default"]
             continue
         value = arguments[name]
-        if a["kind"] == "text":
+        if a["kind"] in TEXT_KINDS:
             if not isinstance(value, str):
                 raise Refused(f"{fn}: {name} must be a text ({type(value).__name__} given)", what=f"{name} = {value!r}",
                               allowed=f"{name}: one text ({a['doc']})", fix=fix)
@@ -191,7 +195,7 @@ def prepare(fn, row, arguments):
         raise Refused(f"{fn}: the argument shapes {shapes} do not broadcast against each other",
                       what=f"argument shapes {shapes}", allowed="shapes that broadcast (numpy rules)",
                       fix="give lists of one length, or scalars") from None
-    check_size(shape, fn, "split the request")
+    check_size(shape, fn, "split the request", row.get("max_elements", MAX_ELEMENTS))
     return kwargs, used, lines, texts, shape
 
 
@@ -202,7 +206,7 @@ def _plain(v):
 def _status_words(row, code):
     """Words of a status code of a row (pyazr.physics.status_text's rule, for any table's rows)."""
     if code > 0:
-        numeric = [a for a in row["arguments"] if a["kind"] != "text"]
+        numeric = [a for a in row["arguments"] if a["kind"] not in TEXT_KINDS]
         arg = numeric[code - 1]
         return f"{arg['name']} outside its domain ({arg['domain']})"
     import pyazr
@@ -259,19 +263,28 @@ def call(fn, arguments, table="physics"):
     return answer
 
 
+def _session_tables():
+    """The tables of the session's functions: (rows, the function that makes a row's answer from the adapter's)."""
+    from . import thm
+    return ((SESSION_ROWS, _channel_answer), (thm.THM_ROWS, thm.answer))
+
+
 def session_rows():
-    """The rows of the session's functions (:data:`SESSION_ROWS`), a fresh copy."""
-    return copy.deepcopy(SESSION_ROWS)
+    """The rows of the session's functions (:data:`SESSION_ROWS` and the THM diagnostics), a fresh copy."""
+    rows = {}
+    for table, _ in _session_tables():
+        rows.update(copy.deepcopy(table))
+    return rows
 
 
 def session_request(fn, arguments):
     """Check a request of a session function: (row, keyword arguments for the adapter's operation, the arguments as
     used, the Python lines, the call's keyword texts)."""
-    if fn not in SESSION_ROWS:
+    rows = session_rows()
+    if fn not in rows:
         raise NotFound(f"no session function {fn!r}", what=f"the session function {fn!r}",
-                       allowed=", ".join(SESSION_ROWS), fix="GET /api/session/functions lists them",
-                       known=list(SESSION_ROWS))
-    row = SESSION_ROWS[fn]
+                       allowed=", ".join(rows), fix="GET /api/session/functions lists them", known=list(rows))
+    row = rows[fn]
     kwargs, used, lines, texts, _ = prepare(fn, row, arguments)
     several = [a["name"] for a in row["arguments"] if a["name"] != row["axis"] and np.ndim(kwargs.get(a["name"], 0))]
     if several:
@@ -285,13 +298,30 @@ def session_request(fn, arguments):
     return row, kwargs, used, lines, texts
 
 
+def _channel_answer(fn, row, out):
+    """The parts of the answer of ``channel_functions`` from the adapter's (dict of lists with ``open``)."""
+    return {"returns": {r["name"]: out[r["name"]] for r in row["returns"]},
+            "status": [0 if o else -2 for o in np.ravel(out["open"])]}
+
+
 def session_answer(fn, row, out, used, lines, texts, opening):
-    """The answer of a session function from the adapter's ``out`` (dict of lists with ``open``), in the shape of
-    :func:`call`'s, with the Python text: ``opening`` (the line that opens a session, ``engine.session_text``)."""
-    status = [0 if o else -2 for o in np.ravel(out["open"])]
-    python = "\n".join(["import numpy as np", "import pyazr", "", opening, *lines, f"result = session.{fn}({', '.join(texts)})", ""])
-    return {"function": fn, "shape": [len(status)], "axis": row["axis"],
-            "returns": {r["name"]: out[r["name"]] for r in row["returns"]},
-            "units": {r["name"]: r["unit"] for r in row["returns"]}, "status": status,
-            "status_words": {str(c): SESSION_STATUS[c] for c in sorted(set(status))}, "arguments": used,
-            "python": python}
+    """The answer of a session function from the adapter's ``out``, in the shape of :func:`call`'s: the returned
+    fields (a field over several channels or levels with its ``lines``), units, the status per element and its
+    words, the arguments as used, and the Python text (``opening``: the line that opens a session,
+    ``engine.session_text``); a THM call's answer adds its ``facts`` and ``tables``."""
+    make = next(m for table, m in _session_tables() if fn in table)
+    parts = make(fn, row, out)
+    status = parts["status"]
+    words = {**SESSION_STATUS, **{int(k): v for k, v in row.get("status_words", {}).items()}}
+    note = ["# the page evaluates at its working x: params=x (the free vector) gives another point"] \
+        if row.get("at_x") else []
+    python = "\n".join(["import numpy as np", "import pyazr", "", opening, *lines, *note,
+                        f"result = session.{fn}({', '.join(texts)})", ""])
+    answer = {"function": fn, "shape": [len(status)], "axis": row["axis"], "returns": parts["returns"],
+              "units": {r["name"]: r["unit"] for r in row["returns"]}, "status": status,
+              "status_words": {str(c): words.get(c, f"status {c}") for c in sorted(set(status))}, "arguments": used,
+              "python": python}
+    for key in ("lines", "facts", "tables"):
+        if key in parts:
+            answer[key] = parts[key]
+    return answer

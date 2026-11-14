@@ -49,6 +49,11 @@ case.
 - `check.sh` works in `mktemp -d` with `trap 'rm -rf "$WORK"' EXIT`, sets
   `LC_ALL=C` (awk number parsing) and `OMP_NUM_THREADS=2`, and never writes
   into the source tree.
+- Under `set -o pipefail` never pipe into a reader that leaves early
+  (`grep -q`/`-m`, `head -n`, `sed …q`, `awk` with `exit` outside `END`):
+  the writer's SIGPIPE makes the pipeline fail at random on a loaded machine
+  (a match read as "not found"); use `grep -q PATTERN <<< "$text"` or capture
+  the command's output first [`repo_consistency_test.py` check 50].
 - Keep fixtures small: trim data files to the points the test needs. Keep
   every file under 1 MB.
 - pyazr tests print `skip:` and exit 77 when `pyazr`/`_azure2` cannot be

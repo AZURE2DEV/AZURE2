@@ -103,7 +103,7 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   functions the rows of `pyazr.physics` or `Session.channel_functions`.  The one formula of pyazr's own is the
   Weisskopf estimate (`widths.weisskopf_width`, tested against its closed form by `tests/pyazr/weisskopf_test.py`:
   the engine has none).  Never add another: a missing function is a row of the physics table.
-- `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
+- `sources/nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
 ## The wheel (`pyproject.toml`)
@@ -140,9 +140,9 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 - Errors: raise a specific exception with a message that names the file, line
   or parameter. Never return `None` or `nan` to signal failure, and never
   `print` a warning where `warnings.warn` belongs.
-- Python ≥ 3.8 (`pyproject.toml`). Core dependencies are numpy, scipy and
-  mpmath only. Anything else is an optional extra and is imported inside the
-  function that needs it.
+- Python ≥ 3.10 (`pyproject.toml`). The core dependency is numpy only (`import pyazr` imports neither scipy nor
+  mpmath). Anything else is an optional extra (scipy: `web`, `examples`) and is imported inside the function that
+  needs it.
 - Engine semantics (χ², penalties, normalizations, shifts, parameter order) are
   defined by the C++ code. pyazr must reproduce them exactly. Tests compare
   against the engine's `chiSquared.out` and parameter files, not against
@@ -193,6 +193,12 @@ does not need the user's live state uses pyazr directly.
 
 - `engine.py` is the only file that names the class `Session`. Every public method of `Session` is either called
   there or listed in `SESSION_NOT_SERVED` with a reason.
+- **A diagnostic of the session on a tab** (as the THM tab's): an operation `Engine.<call>` returning plain data
+  (`engine.py`), a session route row (`routes.py`), a row of the physics table's shape with `tab` naming the tab
+  (`THM_ROWS` in `thm.py`; arguments of a kind `ARGUMENT_KINDS` of `static/physicsform.js` knows, returns with
+  units and `lines`, `facts`), and its function in `ANSWERS` that turns the adapter's answer into fields, lines,
+  status, facts and tables; the tab draws it with `static/functionview.js`.  Test it against the direct call in
+  `tests/pyazr/ui/thm_routes_test.py`.  A key of `<thm>` is an entry of `KEYS` (`thm.py`).
 - A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`.
 - **A job kind or a recipe** (a new fitter, MINOS of another library, a sampler): a function `(tracker, x0, settings,
   names) -> (status, message, extra)` in `jobs.py` that calls `tracker.value` / `tracker.grad` (or `tracker(x)` for

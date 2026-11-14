@@ -55,10 +55,10 @@ run extrap 3 "--use-brune"
 run data 1 "--use-brune"
 if [ -s "$WORK/data/output/chiSquared.out" ]; then
   chi="$(grep "Total-Chi" "$WORK/data/output/chiSquared.out" | awk '{print $2}')"
-  if awk -v c="$chi" 'BEGIN { exit !(c + 0 <= 1e-8) }'; then ok "(c) both coefficient data segments: total chi2 $chi"; else bad "(c) total chi2 $chi (expected ~0)"; grep -i "error" "$WORK/data/run.log" | head -3; fi
+  if awk -v c="$chi" 'BEGIN { exit !(c + 0 <= 1e-8) }'; then ok "(c) both coefficient data segments: total chi2 $chi"; else bad "(c) total chi2 $chi (expected ~0)"; grep -i "error" "$WORK/data/run.log" | sed -n '1,3p'; fi
   "$PYTHON" "$HERE/verify.py" data "$WORK/data" "$WORK/datafiles" || failures=$((failures + 1))
 else
-  bad "(c) the data run wrote no chiSquared.out"; grep -i "error" "$WORK/data/run.log" | head -5
+  bad "(c) the data run wrote no chiSquared.out"; grep -i "error" "$WORK/data/run.log" | sed -n '1,5p'
 fi
 
 # ---- (d) energy shift -----------------------------------------------------------------------------------------------
@@ -79,9 +79,9 @@ awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
        print idx, a, f, j }' "$WORK/fit/run.log" | sort -n > "$WORK/grad.rows"
 nrows="$(wc -l < "$WORK/grad.rows" | tr -d ' ')"
 if grep -q "adjoint bailed" "$WORK/fit/run.log"; then
-  bad "(f) the adjoint bailed on a coefficient segment"; grep "adjoint bailed" "$WORK/fit/run.log" | head -2
+  bad "(f) the adjoint bailed on a coefficient segment"; grep "adjoint bailed" "$WORK/fit/run.log" | sed -n '1,2p'
 elif [ "$nrows" -lt 5 ]; then
-  bad "(f) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/fit/run.log" | head -5
+  bad "(f) gradient check listed $nrows parameters"; grep -i "grad\|error" "$WORK/fit/run.log" | sed -n '1,5p'
 else
   worst="$(awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a; g[NR] = $2; f[NR] = $3; j[NR] = $4 }
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e

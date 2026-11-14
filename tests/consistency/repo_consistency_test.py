@@ -270,6 +270,18 @@ if all_match:
     duplicates = sorted({n for n in exported if exported.count(n) > 1})
     if duplicates:
         problems.append(f"pyazr.__all__: listed twice: {', '.join(duplicates)}")
+    # ... and the user guide lists exactly these names (its section "The names of the package").
+    guide = read("docs/source/user_guide/pyazr.rst")
+    block = re.search(r"\nThe names of the package\n-+\n.*?\.\. code-block:: text\n\n((?:   [^\n]*\n)+)", guide, re.S)
+    if not block:
+        problems.append("docs/source/user_guide/pyazr.rst: no section 'The names of the package' with a text block")
+    else:
+        listed_names = block.group(1).split()
+        for name, where in ((n, "the user guide") for n in sorted(set(exported) - set(listed_names))):
+            problems.append(f"pyazr.__all__: '{name}' is exported but not listed in {where} (The names of the package)")
+        for name in sorted(set(listed_names) - set(exported)):
+            problems.append(f"docs/source/user_guide/pyazr.rst: '{name}' is listed (The names of the package) but "
+                            "not in pyazr.__all__")
 
 
 # 7. The repository carries its licence.
@@ -1239,6 +1251,154 @@ try:
 except (OSError, AttributeError, ImportError) as e:
     problems.append(f"check 48: {e}")
 
+# 50. No pipe into a reader that leaves early, in a shell script of tests/ or tools/ that sets pipefail
+#     (tests/CLAUDE.md, "Writing one"): `printf '%s\n' "$list" | grep -q X` or `cmd | head -1` passes or fails at
+#     random on a loaded machine.  The reader (grep -q, -m, -l, -L; head; sed with a q command; awk with an exit
+#     outside END) leaves at its first match, the writer's next write gets SIGPIPE, and under pipefail the pipeline's
+#     status is then 141: a match reads as "not found", and under `!` a miss as a pass.  A variable is searched with
+#     a here-string (`grep -q X <<< "$list"`), a command's output is captured first or read to its end (`sed -n 1p`,
+#     a flag in awk).  head -c is a cap, not a race: it reads its whole input up to the cap.  tests/lib/ is sourced
+#     by scripts that set pipefail and counts as setting it.
+SHELL_TOKEN = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*"|[;|&)]|[^\s;|&)]+""")  # a word, or what ends a command
+
+
+def shell_logical_lines(text):
+    """(first line number, the line with its continuations and open quotes) of a shell script, comments dropped."""
+    lines, start, buf, quote = [], None, "", None
+    for number, raw in enumerate(text.split("\n"), 1):
+        cut, escaped = len(raw), False
+        for i, c in enumerate(raw):
+            if escaped:
+                escaped = False
+            elif c == "\\" and quote != "'":
+                escaped = True
+            elif quote:
+                quote = None if c == quote else quote
+            elif c in "'\"":
+                quote = c
+            elif c == "#" and (i == 0 or raw[i - 1] in " \t;("):
+                cut = i
+                break
+        line = raw[:cut].rstrip()
+        start = number if start is None else start
+        if quote:  # a quoted text (an awk program) goes on on the next line
+            buf += raw[:cut] + "\n"
+            continue
+        if line.endswith("\\") or re.search(r"(?:\|\||&&|\|)$", line):
+            buf += line.rstrip("\\") + " "
+            continue
+        lines.append((start, buf + line))
+        start, buf = None, ""
+    return lines
+
+
+def shell_pipes(line):
+    """The text after each pipe '|' of a line (not '||', not '>|'), also inside $( ) within double quotes."""
+    stack, i, after = [["", 0]], 0, []  # frames: quote ("", "'", '"') and open parentheses
+    while i < len(line):
+        c, frame = line[i], stack[-1]
+        if frame[0] == "'":
+            if c == "'":
+                stack.pop()
+        elif frame[0] == '"':
+            if c == "\\":
+                i += 1
+            elif c == '"':
+                stack.pop()
+            elif line.startswith("$(", i):
+                stack.append(["", 0])
+                i += 1
+        elif c == "\\":
+            i += 1
+        elif c in "'\"":
+            stack.append([c, 0])
+        elif c == "(":
+            frame[1] += 1
+        elif c == ")":
+            if frame[1]:
+                frame[1] -= 1
+            elif len(stack) > 1:
+                stack.pop()
+        elif c == "|" and line.startswith("||", i):
+            i += 1
+        elif c == "|" and (i == 0 or line[i - 1] != ">"):
+            after.append(line[i + 1:])
+        i += 1
+    return after
+
+
+def early_reader(command):
+    """The name of the reader that leaves before the end of its input, or None."""
+    words = SHELL_TOKEN.findall(command)
+    words = words[:next((k for k, w in enumerate(words) if w in ";|&)"), len(words))]
+    while words and re.match(r"[A-Za-z_]\w*=", words[0]):
+        words = words[1:]
+    if not words:
+        return None
+    name, args = os.path.basename(words[0]), words[1:]
+    if name in ("grep", "egrep", "fgrep"):
+        skip = False
+        for a in args:
+            if skip:
+                skip = False
+                continue
+            if a == "--" or not a.startswith("-"):
+                return None
+            if a in ("--quiet", "--silent", "--files-with-matches", "--files-without-match") or \
+                    a.startswith("--max-count"):
+                return f"{name} {a}"
+            if a.startswith("--"):
+                continue
+            for k, ch in enumerate(a[1:], 1):
+                if ch in "qmlL":
+                    return f"{name} -{ch}"
+                if ch in "ef":  # the rest of the word, or the next word, is a pattern or its file
+                    skip = k == len(a) - 1
+                    break
+        return None
+    if name == "head":
+        return None if any(a.startswith("-c") for a in args) else "head"
+    if name == "sed" and re.search(r"(?:^|['\";{}/0-9$\s])[qQ]\s*\d*\s*(?:['\";}]|$)", " ".join(args)):
+        return "sed q"
+    if name in ("awk", "gawk", "mawk") and re.search(r"\bexit\b", re.sub(r"\bEND\s*\{.*", "", " ".join(args), flags=re.S)):
+        return "awk exit"
+    return None
+
+
+def early_pipes(text):
+    """(line number, reader) of every pipe into an early reader."""
+    return [(number, reader) for number, line in shell_logical_lines(text) for after in shell_pipes(line)
+            for reader in [early_reader(after)] if reader]
+
+
+PIPEFAIL = re.compile(r"^\s*set\s+-\w*o\s+pipefail\b", re.M)
+_pipefail_scripts = 0
+for _top in ("tests", "tools"):
+    for _dirpath, _dirnames, _files in os.walk(os.path.join(ROOT, _top)):
+        _dirnames[:] = sorted(d for d in _dirnames if not d.startswith((".", "build")))
+        for _name in sorted(_files):
+            if not _name.endswith(".sh"):
+                continue
+            _rel = os.path.relpath(os.path.join(_dirpath, _name), ROOT).replace(os.sep, "/")
+            _text = read(_rel)
+            if not (PIPEFAIL.search(_text) or _rel.startswith("tests/lib/")):
+                continue
+            _pipefail_scripts += 1
+            for _number, _reader in early_pipes(_text):
+                problems.append(f"{_rel}:{_number}: a pipe into '{_reader}', which leaves before the end of its input; "
+                                "under pipefail the writer's SIGPIPE (141) decides the test at random: search a "
+                                "variable with a here-string (grep -q X <<< \"$v\"), capture a command's output first "
+                                "(check 50)")
+_EARLY = ["printf '%s\\n' \"$list\" | grep -q x", "cmd | grep -Fqx 2", "ok \"$(echo \"$m\" | grep -m1 E)\"",
+          "! cmd |\n  grep -E -q x", "x=\"$(cmd | head -1)\"", "cmd | head -n 2", "cmd | sed -n '/a/{p;q;}'",
+          "cmd | awk '{ print $2; exit }'", "cmd | grep --quiet x", "cmd | LC_ALL=C grep -qF x"]
+_LATE = ["grep -q x <<< \"$list\"", "cmd 2>&1 | head -c 1000 > log", "cmd | awk '{ n++ } END { exit !n }'",
+         "a || grep -q x f", "cmd | grep -c x", "cmd | sed -n 1p", "awk '{ print \"a|grep -q\" }' f | sort",
+         "cmd | grep -e -q", "# cmd | grep -q x", "cmd | sed 's/q/Q/'"]
+if [len(early_pipes(s)) for s in _EARLY] != [1] * len(_EARLY) or any(early_pipes(s) for s in _LATE):
+    problems.append("check 50: the early-reader scan no longer finds the forms it guards (or finds a safe one): "
+                    f"{[s for s in _EARLY if len(early_pipes(s)) != 1]} {[s for s in _LATE if early_pipes(s)]}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1250,4 +1410,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, "
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
-      f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel")
+      f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
+      f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader")

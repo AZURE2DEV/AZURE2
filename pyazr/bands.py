@@ -149,8 +149,8 @@ def live_parameters(model):
     at the time -- but the parameter vector is **not** the same in the two
     modes.  Extrapolation segments carry no normalizations, and AZURE2 drops
     the fixed R-matrix parameters its grids cannot reach, so a model with 483
-    parameters (197 free) in data mode can report 234 (72 free) in
-    extrapolation mode.  The free R-matrix block survives, in order, and it is
+    parameters (197 free) in a session of the data can report 234 (72 free) in
+    a session of the extrapolations.  The free R-matrix block survives, in order, and it is
     that block the covariance describes.  This reads the engine's *current*
     parameter records (``Session.parameters``), rebuilt on every
     ``initialize()``, so it is right for the mode the session is in now.
@@ -182,51 +182,45 @@ def rmatrix_columns(model):
 
 
 def best_fit_params(model, path=None):
-    """The best-fit fit vector, read from ``output/param.sav`` (or ``path``); the session takes the file's every
-    value, fixed ones included, as ``Session(file, parameter_file=path)`` does when it is made.
+    """The fit vector of the parameter file ``path`` (default ``output/param.sav`` beside the model) for the session
+    ``model``: the file's free values, by name, in the order of ``model.parameters``.
 
     A model's ``.azr`` file need not carry the fitted values -- ``param.sav``
     is what a fit writes -- so a band must be evaluated at the parameters the
     covariance belongs to.  On the 7Be model the difference is not subtle: the
     ``.azr``'s own parameters give chi2 = 173006, ``param.sav`` gives 4130.
 
-    ``param.sav`` is written in the *data*-mode layout (one line per parameter,
-    fixed ones included).  In extrapolation mode the session holds a shorter
-    vector -- see :func:`live_parameters` -- so the leading R-matrix block is
-    taken, after checking that it is what the running session expects.
+    The file holds the fixed level parameters too, and a fit vector cannot carry them: the session must hold the
+    file's fixed values.  A session made with ``Session(file, parameter_file=path)`` does, and its ``parameters.x0``
+    is returned.  Otherwise the file is read by a second session of the same project and options made with
+    ``parameter_file=path`` (``model`` is not changed); its vector is returned when its fixed parameters equal
+    ``model``'s, and :class:`pyazr.ParameterError` is raised when the file sets a fixed parameter to another value
+    (then make the session with ``parameter_file=path``).
     """
+    from .errors import ParameterError
+    from .session import Session
+
     if path is None:
         path = os.path.join(_model_dir(model), "output", "param.sav")
+    path = os.path.abspath(os.fspath(path))
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    # By NAME (pyazr.parameter_file): a parameter the file does not list
-    # keeps the session's value, so a file from an older layout (no
-    # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
-    # and in extrapolation mode the file's segment rows simply find no home.
-    #
-    # The file's FIXED level parameters are part of the fit too (the CLI's
-    # reader applies them), and the fit vector alone cannot carry them, so the
-    # session takes the whole file, as Session(file, parameter_file=path) would
-    # have when it was made -- names matched against the live parameter list.
-    model._take_parameter_file(path)
-    free = model.parameters.x0
-
-    kinds, _ = live_parameters(model)
-    if len(kinds) == free.size:
-        return free
-    # Fewer parameters live than param.sav describes: extrapolation mode.  The
-    # R-matrix block leads the vector in both layouts, so the leading slice is
-    # the same parameters -- but only if nothing but R-matrix parameters is
-    # left, which is exactly the extrapolation-mode case.
-    if len(kinds) < free.size and all(k in _RMATRIX_KINDS for k in kinds):
-        return free[:len(kinds)]
-    raise ValueError(
-        f"{path} gives {free.size} free parameters but the running session "
-        f"expects {len(kinds)}, and they are not the leading R-matrix block.  "
-        f"Pass params= explicitly.")
+    if model.options.get("parameter_file") == path:
+        return model.parameters.x0
+    with Session(model.file, cwd=model.cwd, **dict(model.options, parameter_file=path)) as other:
+        held = {p.name: p.start for p in model.parameters if p.fixed}
+        given = {p.name: p.start for p in other.parameters if p.fixed}
+        moved = sorted(n for n in held if given.get(n) != held[n])
+        if moved:
+            raise ParameterError(
+                f"best_fit_params: {path} sets {len(moved)} fixed parameter(s) to other values than the session "
+                f"holds ({', '.join(moved[:5])}{', ...' if len(moved) > 5 else ''}); a fit vector cannot carry "
+                f"fixed values: make the session with Session(file, parameter_file={path!r}) and use its "
+                f"parameters.x0.")
+        return other.parameters.x0
 
 
 # -- sensitivities ------------------------------------------------------------
@@ -399,10 +393,10 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
         (ignored by ``'analytic'``, which is one call).  The engine is one
         non-reentrant object per process, so each worker builds its own
         session: a fixed cost of one model initialization -- and, in
-        extrapolation mode, one grid rebuild -- before it evaluates anything.
+        a session of the extrapolations, one grid rebuild -- before it evaluates anything.
         The columns have to be worth more than that.  As a rule of thumb it
         needs ``len(cols)`` in the hundreds: on the 14-parameter ``tests/13N``
-        model it is a net loss at any ``nprocs``, in data mode (0.8 s serial)
+        model it is a net loss at any ``nprocs``, in a session of the data (0.8 s serial)
         and on an 1845-point extrapolation grid (53 s serial) alike.  Measure
         on your own model rather than assuming.
 
@@ -538,7 +532,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
     if p0.size != len(kinds):
         raise ValueError(
             f"params has {p0.size} entries but the running instance expects "
-            f"{len(kinds)} free parameters.  In extrapolation mode the vector "
+            f"{len(kinds)} free parameters.  In a session of the extrapolations the vector "
             f"is the R-matrix block alone -- see pyazr.bands.live_parameters.")
 
     catalog = (model.extrapolations if getattr(model, "mode", "data") == "extrap"
@@ -717,10 +711,15 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd)
 
     try:
-        with Session(tmp, cwd=cwd, extrapolations=True) as m:
+        # Without params, the session takes the fit's parameter file, fixed values included (best_fit_params).
+        sav = None if params is not None else os.path.join(cwd, "output", "param.sav")
+        if sav is not None and not os.path.exists(sav):
+            raise FileNotFoundError(
+                f"{sav} not found: the band must be evaluated at the fitted parameters the covariance belongs to.  "
+                f"Pass params= explicitly to override.")
+        with Session(tmp, cwd=cwd, extrapolations=True, parameter_file=sav) as m:
             if params is None:
-                params = best_fit_params(
-                    m, os.path.join(cwd, "output", "param.sav"))
+                params = best_fit_params(m, sav)
             if covariance is None:
                 covariance = os.path.join(cwd, "output", "covariance.dat")
             bands = uncertainty_bands(

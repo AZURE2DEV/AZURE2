@@ -95,10 +95,10 @@ edited "$HERE/models/fit_ratio.azr" "$WORK/grad.azr" sed -e 's|^    norm        
 setup grad "$WORK/grad.azr"
 (cd "$WORK/grad" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $(guard_command 300) "$AZURE2_BIN" --use-gradient --no-gui \
    --no-readline m.azr > run.log 2>&1)
-line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
+line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | sed -n 1p)"
 worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i < NF; i++) if ($i == "rel") { r = $(i + 1); if (r > w) w = r } }
               END { printf "%.2e", w + 0 }' "$WORK/grad/run.log")"
-if echo "$line" | grep -q "energy 0/4 gamma 0/10; Jacobian path: energy 0/4 gamma 0/10" && awk -v w="$worst" 'BEGIN { exit !(w < 1e-5) }'; then
+if grep -q "energy 0/4 gamma 0/10; Jacobian path: energy 0/4 gamma 0/10" <<< "$line" && awk -v w="$worst" 'BEGIN { exit !(w < 1e-5) }'; then
   ok "folded ratio: analytic gradient = finite differences (14 parameters, largest relative $worst)"
 else
   bad "gradient check: ${line:-no [grad-check] line} (largest relative $worst)"
@@ -106,10 +106,10 @@ fi
 
 # ---- 5. --describe, threads
 desc="$(cd "$WORK/fit_ratio" && "$AZURE2_BIN" --describe m.azr 2>&1)"
-if echo "$desc" | grep -q "divided by the reference cross section of data/ref_cm.dat (37 rows"; then
+if grep -q "divided by the reference cross section of data/ref_cm.dat (37 rows" <<< "$desc"; then
   ok "--describe names the table"
 else
-  bad "--describe: $(echo "$desc" | head -4)"
+  bad "--describe: $(echo "$desc" | sed -n '1,4p')"
 fi
 run fold 1 2
 if diff -r "$WORK/fold_1" "$WORK/fold/output" > /dev/null; then ok "folded.azr at 1 and 2 threads: every output identical"
@@ -120,7 +120,7 @@ cd "$WORK/fit_ratio" || exit 1
 refused() {  # refused WHAT FILE CODE TEXT
   local msg
   msg="$("$AZURE2_BIN" --validate "$2" 2>&1)"
-  if echo "$msg" | grep -q "$3" && echo "$msg" | grep -q "$4"; then ok "refused: $1 ($3)"; else bad "$1 not refused: $msg"; fi
+  if grep -q "$3" <<< "$msg" && grep -q "$4" <<< "$msg"; then ok "refused: $1 ($3)"; else bad "$1 not refused: $msg"; fi
 }
 edited m.azr noref.azr sed '/^    reference      data\/ref_cm.dat unit mb$/d' || bad "edit: no reference"
 refused "no reference" noref.azr E_FIELD_REQUIRED "field 'reference' is missing"

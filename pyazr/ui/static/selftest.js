@@ -16,6 +16,16 @@ export const PHYSICS_ROUTES = ["#/physics",
   "#/physics/coulomb_waves?plot=table", "#/physics/channel_functions",
   "#/physics/stopping_power?logy=1"];
 
+/** The THM tab's views, where the project has THM content: the tab as it opens (the experiments' profile), then
+ * each THM diagnostic of the session's rows (a refusal of the engine, a diagnostic the experiment does not have, is
+ * recorded with its step). */
+async function thmRoutes(ctx, tabs) {
+  const tab = tabs.find((t) => t.id === "thm");
+  if (!tab?.shown || !(await tab.shown(ctx))) return ["#/thm"];
+  const rows = await ctx.api.get("/api/session/functions");
+  return ["#/thm", ...Object.values(rows).filter((r) => r.tab === "thm").map((r) => `#/thm?fn=${r.name}`)];
+}
+
 export function selftest(ctx, tabs, draw) {
   const errors = [];
   addEventListener("error", (e) => errors.push(`${e.message} (${e.filename}:${e.lineno})`));
@@ -47,6 +57,7 @@ export function selftest(ctx, tabs, draw) {
     const other = records.find((r) => !nucleusKinds.includes(r.kind) && !LAYOUT[r.kind]);
     if (other) routes.push(`#/data/${encodeURIComponent(other.name)}`);
     routes.push("#/data/+new", "#/fit", ...tabs.filter((t) => t.later).map((t) => `#/${t.id}`));
+    routes.push(...await thmRoutes(ctx, tabs));
     routes.push("#/results", "#/results?plot=table", "#/results?x=e_x&levels=1&logy=1");
     routes.push(...PHYSICS_ROUTES);
     for (const route of routes) {
@@ -62,6 +73,9 @@ export function selftest(ctx, tabs, draw) {
         physics: physics ? { computed: +physics.dataset.computed, elements: +physics.dataset.elements,
           text: physics.textContent, python: document.querySelector("pre.python")?.textContent || "",
           citation: document.querySelector("p.citation")?.dataset.citation || "" } : null,
+        tables: [...document.querySelectorAll(".physics-out table[data-table], .physics-out .table-wrap")].length,
+        facts: document.querySelectorAll("dl.function-facts dd").length,
+        tabListed: !document.querySelector('a.tab[data-tab="thm"]')?.hidden,
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);

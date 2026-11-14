@@ -9,7 +9,7 @@
 - AZUREOut_*: every data set's block (c.m. energy, excitation energy, c.m. angle, model, datum x norm, error x norm;
   the Legendre coefficients of an angular distribution) to the eleven digits printed.
 - T2 at a displaced point (norms and shifts off their centres): the rows and totals of the chiSquared.out the
-  session's writer (write_output_files) gives at that point.
+  session's writer (write_outputs) gives at that point.
 - The objective is Session.objective(x) bit for bit and the sum of the terms; Evaluation.chi2 plus the model terms
   (Park, abundances, model data) is the binding's calculate_chi2_rwa(x); the model data are pyazr.model_data's (T3).
 - The data sets' rows of the objective's rows (data[i].rows): consecutive from row 0, one per point, the squares
@@ -179,7 +179,7 @@ with tempfile.TemporaryDirectory() as tmp:
             # away from the start (norms and shifts off their centres): the writer's chiSquared.out at that x
             xd = np.array([v * (1.0 + 0.02 * (1 if k % 2 else -1)) for k, v in enumerate(x)])
             evd = s.evaluate(xd)
-            out = s.write_output_files(xd)
+            out = s.write_outputs(xd)
             rows_d, totals_d = chi_squared_file(out)
             bad = [d.name for d, r in zip(evd.data, rows_d)
                    if not (printed(d.chi2, r[0]) and printed(d.norm, r[2]) and printed(d.norm_chi2, r[3]))]

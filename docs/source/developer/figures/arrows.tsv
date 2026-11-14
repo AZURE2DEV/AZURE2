@@ -45,6 +45,7 @@ CNuc	PPair	owns	setup		CNuc::pairs_ (std::vector<PPair>)
 CNuc	JGroup	owns	setup		CNuc::jgroups_ (std::vector<JGroup>)
 JGroup	AChannel	owns	setup		JGroup::channels_ (std::vector<AChannel>)
 JGroup	ALevel	owns	setup		JGroup::levels_ (std::vector<ALevel>)
+CNuc	ObservedLevelTable	makes	setup		CNuc::TransformOut(const Config &) returns it; WriteParametersOut, LevelValue, WarnLargeRadiativeWidths read it
 CNuc	CNucSystem	reads	setup	const	CNuc::systemStructure_, systemAllGroups_ (shared_ptr<const CNucSystem>), made once by BuildSystemFromCNuc(const CNuc &, ...) in CNuc::Fill
 CNucSystem	azure2::physics::System	owns	setup		CNucSystem::system
 CNuc	azure2::PathwayTable	reads	setup	const	CNuc::pathways_ (shared_ptr<const PathwayTable>), made by BuildPathwayTable(const CNucSystem &) in CNuc::BuildPathways

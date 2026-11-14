@@ -56,7 +56,7 @@ ten-field rows only.
 
 ## Writing the files from pyazr
 
-`s.write_output_files(x)` writes `AZUREOut_*` and `chiSquared.out` into the existing output directory, after a χ²
+`s.write_outputs(x)` writes `AZUREOut_*` and `chiSquared.out` into the existing output directory, after a χ²
 evaluation at `x` (a bare forward pass would leave zeros in `chiSquared.out`). It also writes the Park, abundance and
 scattering-length penalty totals. It does not write `param.par` (initialisation) or `parameters.out` (end of a CLI
 run); use `s.transform(x)` (one value per row of `s.parameters`) for those numbers.

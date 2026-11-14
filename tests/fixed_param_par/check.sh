@@ -121,7 +121,7 @@ if fit lmband "2\nfix.par\n\n7\n" --use-lm --covariance-band; then
                            END { exit !(r == 2 && !bad && named) }' "$cov"; then
     echo "  ok    LM band covariance is 2x2 (energy_1, width_1_2)"
   else
-    echo "  FAIL  LM band covariance is not 2x2"; cat "$cov" 2>/dev/null | head -4; fail=1
+    echo "  FAIL  LM band covariance is not 2x2"; cat "$cov" 2>/dev/null | sed -n '1,4p'; fail=1
   fi
 fi
 

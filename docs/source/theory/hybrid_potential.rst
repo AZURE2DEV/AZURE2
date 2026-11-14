@@ -7,7 +7,7 @@ A *hybrid* particle pair takes its channel functions not from the Coulomb functi
 solutions of a radial equation with a nuclear potential besides the Coulomb one.  This chapter states the equation,
 the spin–orbit term and its convention, and what depends on the total angular momentum :math:`J` once the term is
 present.  The design note is ``docs/upgrade/spin_orbit_potential.md``; the input is the ``potential`` record of
-format 3 (:doc:`../reference/format3`) or ``set_nuclear_potential`` in pyazr (:doc:`../user_guide/pyazr`).
+format 3 (:doc:`../reference/format3`), edited in pyazr as a record of the ``Project`` (:doc:`../user_guide/pyazr`).
 
 The radial equation
 -------------------

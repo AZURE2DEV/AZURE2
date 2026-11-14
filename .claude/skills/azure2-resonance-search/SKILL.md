@@ -166,7 +166,7 @@ d. **Data first.** Exit-channel sums of totals; points within a few keV of a thr
    resolution under a narrow level; duplicate data. Each of these has looked like a missing level.
 e. **What is already there.** Every level within ±3Γ of the region (J^π, E_x, partial widths, θ², fixed or free);
    every threshold in the window; the Wigner-limit width Γ_W per channel for each candidate J^π (a channel with
-   Γ_W < 1 eV cannot carry a level); the ENSDF list for the window (`pyazr.nds.fetch_levels`, see azure2-setup).
+   Γ_W < 1 eV cannot carry a level); the ENSDF list for the window (`pyazr.sources.nds.fetch_levels`, see azure2-setup).
 f. Write the anatomy of each region into the work log before fitting anything.
 
 ## 3. Hypotheses: list them all, test the cheap ones first

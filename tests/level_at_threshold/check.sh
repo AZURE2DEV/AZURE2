@@ -71,7 +71,7 @@ run() {
   fi
   if [ $((t1 - t0)) -gt 600 ]; then echo "  FAIL  $1: took $((t1 - t0)) s" >&2; return; fi
   if grep -qiE 'nan|inf' "$d/output/chiSquared.out" "$d"/output/AZUREOut_*.out; then
-    echo "  FAIL  $1: non-finite output" >&2; grep -iE 'nan|inf' "$d"/output/*.out | head -3 >&2; return
+    echo "  FAIL  $1: non-finite output" >&2; grep -iE 'nan|inf' "$d"/output/*.out | sed -n '1,3p' >&2; return
   fi
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{ print $2 }'
 }

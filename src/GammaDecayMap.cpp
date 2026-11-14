@@ -714,7 +714,7 @@ void GammaDecaySet::AddPenaltyGradient(const CNuc &compound, std::vector<std::pa
     for (const auto &d : row.d) grad.push_back({d.first, 2.0 * row.r * d.second});
 }
 
-std::string GammaDecaySet::Report(const CNuc &compound) const {
+std::string GammaDecaySet::Report(const CNuc &compound, const ObservedLevelTable &table) const {
   std::ostringstream out;
   if (levels_.empty()) return "";
   out << "RADIATIVE DECAYS (<gammaDecays>: Gamma_gamma, branchings, mixing ratios of Krane and Steffen; Gamma_gamma is "
@@ -752,7 +752,7 @@ std::string GammaDecaySet::Report(const CNuc &compound) const {
           if (L.photonChannels[k] == ch && k < fill.floor.size() && fill.floor[k])
             out << "  note: the width " << Fmt(widths[k]) << " eV to " << final.label << " is below the floor of external "
                 << "capture, 2P (Im gamma^ext)^2 / n; the observed width is "
-                << Fmt(compound.GetJGroup(s.group)->GetLevel(s.level)->GetObservedValue(ch)) << " eV (section 2.7)"
+                << Fmt(table.Level(s.group, s.level).value[ch - 1]) << " eV (section 2.7)"
                 << std::endl;
       // MINUIT reaches a limit through its sine transformation, to about 1e-7 here (gamma_parametrisation.md 2.6).
       if (b < kAtBound && (final.role == ex::GammaFinalState::Role::Listed || (int)f == s.remainder))

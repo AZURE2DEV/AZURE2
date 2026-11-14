@@ -53,5 +53,5 @@ median point 1 % off. A fit with data-proportional errors undershoots the peaks;
 
 - A broad-structure estimator on integrated data: multi-scale curvature, or local Breit–Wigner plus background fits.
 - Lower bounds on J per candidate from the Legendre order of the residual (§2c of the skill).
-- An automatic ENSDF cross-match of candidates (`pyazr.nds.fetch_levels`).
+- An automatic ENSDF cross-match of candidates (`pyazr.sources.nds.fetch_levels`).
 - A test on a sparse spectrum, where precision can be measured.

@@ -56,8 +56,8 @@ refused() {
   cp "$WORK/$4" "$WORK/calc/$4"
   msg="$(cd "$WORK/calc" && "$AZURE2_BIN" --describe "$WORK/$4" 2>&1; printf '1\n\n\n7\n' |
          $(guard_command 120) "$AZURE2_BIN" --no-gui --no-readline "$4" 2>&1)"
-  if echo "$msg" | grep -q "$2" && echo "$msg" | grep -q "$3"; then ok "$1 is refused ($2)"
-  else bad "$1: no $2 ($(echo "$msg" | grep -m2 -E 'ERROR|error'))"; fi
+  if grep -q "$2" <<< "$msg" && grep -q "$3" <<< "$msg"; then ok "$1 is refused ($2)"
+  else bad "$1: no $2 ($(grep -m2 -E 'ERROR|error' <<< "$msg"))"; fi
 }
 
 # ---- 1. --describe

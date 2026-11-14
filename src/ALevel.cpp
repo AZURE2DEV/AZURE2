@@ -102,14 +102,6 @@ int ALevel::NumNFIntegrals() const {
 }
 
 /*!
- * Returns the number of iterations required to transform the level from formal to physical parameters.
- */
-
-int ALevel::GetTransformIterations() const {
-  return transform_iter_;
-}
-
-/*!
  * Returns the position in the pairs vector corresponding the the external capture level.
  */
 
@@ -183,43 +175,11 @@ double ALevel::GetECConversionFactor(int channelNum) const {
 }
 
 /*!
- * Returns the physical internal reduced width amplitude for a given channel number.
- */
-
-double ALevel::GetTransformGamma(int channelNum) const {
-  return transform_gammas_[channelNum - 1];
-}
-
-/*!
- * Returns the physical level energy.
- */
-
-double ALevel::GetTransformE() const {
-  return transform_e_;
-}
-
-/*!
- * Returns the Breit-Wigner partial width for a given channel number.
- */
-
-double ALevel::GetBigGamma(int channelNum) const {
-  return big_gammas_[channelNum - 1];
-}
-
-/*!
  * Returns the Shift function for the specified channel number calculated at the resonance energy.
  */
 
 double ALevel::GetShiftFunction(int channelNum) const {
   return shifts_[channelNum - 1];
-}
-
-/*!
- * Returns the external portion of the reduced width amplitude for a given channel number.
- */
-
-complex ALevel::GetExternalGamma(int channelNum) const {
-  return external_gammas_[channelNum - 1];
 }
 
 void ALevel::PadChannels(int n) {
@@ -228,11 +188,6 @@ void ALevel::PadChannels(int n) {
     gammas_.push_back(0.0);
     fitgammas_.push_back(0.0);
     ec_gammas_.push_back(0.0);
-    transform_gammas_.push_back(0.0);
-    big_gammas_.push_back(0.0);
-    observed_values_.push_back(0.0);
-    observed_kinds_.push_back(0);
-    external_gammas_.push_back(complex(0.0, 0.0));
     channelfixed_.push_back(true);
     gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
     zero_input_.push_back(true);
@@ -312,34 +267,6 @@ void ALevel::AddECConversionFactor(double conversionFactor) {
 }
 
 /*!
- * This function sets the physical reduced width amplitude for a given channel number.
- */
-
-void ALevel::SetTransformGamma(int channelNum, double reducedWidth) {
-  transform_gammas_[channelNum - 1] = reducedWidth;
-}
-
-/*!
- * This function sets the physical level energy.
- */
-
-void ALevel::SetTransformE(double energy) {
-  transform_e_ = energy;
-}
-
-/*!
- * This function sets the Breit-Wigner partial width for a given channel number.
- */
-
-void ALevel::SetBigGamma(int channelNum, double partialWidth) {
-  big_gammas_[channelNum - 1] = partialWidth;
-}
-
-/*!
- * Sets the observed value of a channel as a <levels> line gives it, and its kind (physics/ ObservedKind).
- */
-
-/*!
  * The amplitude with which this level enters external capture as a final state: its Brune (Park) amplitude, the
  * fit amplitude except in the formal basis (CNuc::FillCompoundFromParams; cnuc_split.md section 8).
  */
@@ -363,35 +290,6 @@ double ALevel::GetECEnergy() const {
 
 void ALevel::SetECEnergy(double energy) {
   ec_energy_ = energy;
-}
-
-void ALevel::SetObserved(int channelNum, double value, unsigned char kind) {
-  observed_values_[channelNum - 1] = value;
-  observed_kinds_[channelNum - 1] = kind;
-}
-
-double ALevel::GetObservedValue(int channelNum) const {
-  return observed_values_[channelNum - 1];
-}
-
-unsigned char ALevel::GetObservedKind(int channelNum) const {
-  return observed_kinds_[channelNum - 1];
-}
-
-/*!
- * This function sets the number of iterations that were required for the transformation from formal to physical parameters.
- */
-
-void ALevel::SetTransformIterations(int iterations) {
-  transform_iter_ = iterations;
-}
-
-/*!
- * This function sets the external reduced width amplitude for a given channel number.
- */
-
-void ALevel::SetExternalGamma(int channelNum, complex reducedWidth) {
-  external_gammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!

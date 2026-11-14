@@ -13,7 +13,7 @@ six R-matrix parameters freed:
      leaves the project unchanged; other options live beside an experiment; an
      untouched project with an experiment is written back byte for byte.
   2. The engine, linear background: evaluate().chi2 == the CLI (rel 1e-9),
-     write_output_files reproduces the CLI's files (thm_experiments.out
+     write_outputs reproduces the CLI's files (thm_experiments.out
      included), data[i].norm is the shared n*, thm_background agrees with
      thm_experiments.out, residuals add up to chi2.
   3. Derivatives through the profile of norm and background:
@@ -240,11 +240,11 @@ with tempfile.TemporaryDirectory() as tmp:
         mine = np.where(e != 0, (f - d * n) / np.where(e != 0, e * n, 1), 0.0)
         check("residuals = (m + b(E) - d n)/(e n)", np.max(np.abs(mine - r)) < 1e-9 * max(1, np.max(np.abs(r))),
               f"max diff {np.max(np.abs(mine - r))}")
-        s.write_output_files(x)
+        s.write_outputs(x)
     from_py = output_files(py_dir)
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-        check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
+        check(f"write_outputs: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
 
     print("3. derivatives through the profile (norm + linear background)")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:

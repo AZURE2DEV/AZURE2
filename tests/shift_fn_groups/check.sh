@@ -123,7 +123,7 @@ if run member 1 ""; then
   d23="$(blockdiff "$WORK/member" 2 3)"; d24="$(blockdiff "$WORK/member" 2 4)"
   if awk -v d="$d23" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "member = the function given directly with its own constant ($d23)"; else bad "member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "member does not take the leader's constant ($d24 from it)"; else bad "member uses the leader's constant ($d24)"; fi
-  if grep -q "shift function on segment #1 (shift-function group 'F', segments #1 2; each keeps its own constant shift)" "$WORK/member/run.log"; then ok "group noted in the log"; else bad "no shift-function-group note in the log"; grep -i "shift function" "$WORK/member/run.log" | head -3; fi
+  if grep -q "shift function on segment #1 (shift-function group 'F', segments #1 2; each keeps its own constant shift)" "$WORK/member/run.log"; then ok "group noted in the log"; else bad "no shift-function-group note in the log"; grep -i "shift function" "$WORK/member/run.log" | sed -n '1,3p'; fi
 fi
 
 # ---- 2. fit a shared a0 with two different constants --------------------------------
@@ -154,7 +154,7 @@ mk gradcheck 1 "$(scale F 'a0*(x-1)+a1*(x-1)^2' 'a0 0.001 fit prior 0 1' 'a1 0.0
                   ds xs_90_lin_mislabelled_p3 xs_90_lin_mislabelled_p3.dat 90 'shift          offset -0.002 MeV fit prior 0 1' 'shift          F')"
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > jacobian.log 2>&1)
 if grep -q "Jacobian path: shift 0/2 shift_fn 0/2" "$WORK/gradcheck/jacobian.log"; then ok "Jacobian path: a1, a2, a0, a1' agree with finite differences ($(grep -o 'worst relative difference [-0-9.e+]*' "$WORK/gradcheck/jacobian.log"))"
-else bad "Jacobian-path gradient check: $(grep -E 'Jacobian path|components with relative' "$WORK/gradcheck/jacobian.log" | head -3)"; fi
+else bad "Jacobian-path gradient check: $(grep -E 'Jacobian path|components with relative' "$WORK/gradcheck/jacobian.log" | sed -n '1,3p')"; fi
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_ADJOINT=1 AZURE_SHIFT_GRAD_CHECK=1 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > adjoint.log 2>&1)
 nchk="$(grep -c 'shift-grad-check' "$WORK/gradcheck/adjoint.log")"
 worst="$(grep -o 'reldiff=[-0-9.e+]*' "$WORK/gradcheck/adjoint.log" | cut -d= -f2 | sort -g | tail -1)"

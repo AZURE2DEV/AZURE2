@@ -20,8 +20,8 @@ Jacobian, the model values and the observables of every point, the parameter
 records (``AZUREAPI::GetParameterRecords``) and bounds. It evaluates with the
 same functions as the program: the point pass
 (``WorkingCopy::CalculatePointsInParallel``), the model pass and
-``Objective::Engine()``. A session can rebuild its model with another channel
-radius (``AZUREAPI::SetRadius``) or another nuclear potential.
+``Objective::Engine()``. A session's model is the project's: another channel
+radius or nuclear potential is an edit of the project and a new session.
 ``AZUREAPI::FitWithEngine`` (``api/src/AZUREAPIFit.cpp``) runs a row of the
 fitter table on the session with the program's functions
 (``Session.fit_with_engine``; the binding ``api/src/pybind_fit.cpp`` releases
@@ -83,8 +83,8 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
      - The row types the two tables share (``ArgSpec``, ``OutSpec``,
        ``ArgKind``).
    * - ``pybind_potentials.cpp``, ``pybind_model_data.cpp``, ``pybind_thm.cpp``
-     - The hybrid potentials of a session, the model data, the THM tables
-       and grammars.
+     - The view of a session's hybrid potentials, the model data, the THM
+       tables and grammars.
    * - ``pybind_notices.cpp``
      - The engine's standard output of a session as notices, which
        ``pyazr`` turns into warnings (``pyazr/session_checks.py``).
@@ -123,6 +123,8 @@ The web UI (``pyazr/ui``) is a server (``Server``, ``server.py``) that owns
 the open project and its edit history (``State``), the jobs (``JobTable``)
 and a session worker (``SessionWorker``): the session lives in a separate
 process, where ``Engine`` (``engine.py``) owns a ``pyazr.Session``. Every route
-of its API is one row of ``ROUTES`` (``routes.py``). The page
+of its API is one row of ``ROUTES`` (``routes.py``); the functions of the
+session are rows of the physics table's shape (``physics.py``, and the THM
+diagnostics and the keys of ``<thm>`` in ``thm.py``). The page
 (``pyazr/ui/static``) holds no state of the project and computes no physical
 number.

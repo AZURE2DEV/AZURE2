@@ -7,11 +7,13 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <optional>
 #include "JGroup.h"
 #include "PPair.h"
 #include "PathwayTable.h"
 #include "ModelData.h"
 #include "GammaDecayMap.h"
+#include "ObservedLevelTable.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {
@@ -163,20 +165,20 @@ class CNuc {
   /// with the fit parameters.  True when the adjoint does not differentiate that dependence: a slot has a projector,
   /// or a masked level has a free particle amplitude (freeGamma(group, level, channel), 1-based).
   bool FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma);
-  /// Formal parameters back to observed energies and partial widths, for
-  /// reporting. Under Brune the two are the same and this is a near no-op.
-  void TransformOut(const Config &);
-  /// The transformed physical parameters as a flat vector.
-  vector_r GetTransformParams(const Config &configure);
-  /// The observed widths of a parameter vector in the levels' observed slots, as TransformOut computes them but
-  /// without its messages (for WarnLargeRadiativeWidths, CNucChecks.h); the fit state is set back to the vector.
-  /// False, with nothing set, if the transformation fails.
-  bool ObservedWidthsAt(const Config &, const vector_r &);
-  /// The observed quantities of the current fit values (TransformOut without its messages) in the levels' observed and
-  /// transform slots, as the model data read them (ModelData.cpp) inside an evaluation: nothing a calculation reads
-  /// is changed (the bound-state normalizations TransformToBrune sets are put back).  False if the transformation
-  /// fails (the slots are then not meaningful).  CNucObserved.cpp.
-  bool ObservedOfFitValues(const Config &);
+  /// The Brune (Park) and observed values of the levels at the current fit values, for the reports; prints the
+  /// warnings of levels that do not convert.  Changes no level but for Park's shift functions (TransformToBrune).
+  ObservedLevelTable TransformOut(const Config &);
+  /// The observed parameters of `table` as a flat vector, as a <levels> line holds them (a gamma_decay record's
+  /// numbers at its slots); the level block only.
+  vector_r GetTransformParams(const ObservedLevelTable &table) const;
+  /// The observed values of a parameter vector, as TransformOut computes them but without its messages (for
+  /// WarnLargeRadiativeWidths, CNucChecks.h); the fit state is left at the vector.  Empty if the transformation
+  /// fails.
+  std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &, const vector_r &);
+  /// The observed values of the current fit values (TransformOut without its messages), as the model data read them
+  /// (ModelData.cpp) inside an evaluation: nothing a calculation reads is changed.  Empty if the transformation
+  /// fails.  CNucObserved.cpp.
+  std::optional<ObservedLevelTable> ObservedOfFitValues(const Config &);
   /// Set one fit value, as FillCompoundFromParams sets it with everything derived from it: the energy of level la of
   /// J-group j (channel 0) or its amplitude in channel ch (1-based).  For the numerical derivatives of the model data;
   /// setting the value back restores the state bit for bit.  CNucObserved.cpp.
@@ -237,11 +239,16 @@ class CNuc {
   bool MaskedLevelCoupled(const JGroup *, int) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
   std::vector<CaptureMask> captureMasks_;
-  /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
-  /// (formal basis: physics/ brune_from_formal); report prints the warnings of levels that do not convert.
-  void TransformToBrune(const Config &, bool report);
-  /// TransformOut, second part: the observed quantities from the transform slots (physics/ observed_levels).
-  void ObservedWidths(const Config &);
+  /// Whether TransformToBrune prints the warnings of levels that do not convert.
+  enum class Messages { kPrint, kQuiet };
+  /// A table with an entry for every level and channel, all values zero.
+  ObservedLevelTable EmptyObservedTable() const;
+  /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters, with N_f^-1/2, in `table` (formal
+  /// basis: physics/ brune_from_formal).
+  void TransformToBrune(const Config &, Messages, ObservedLevelTable &table);
+  /// TransformOut, second part: the observed quantities from the Brune (Park) values of `table` (physics/
+  /// observed_levels).
+  void ObservedWidths(const Config &, ObservedLevelTable &table);
   std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);

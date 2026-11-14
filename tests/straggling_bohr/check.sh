@@ -83,11 +83,11 @@ n="$(wc -l < "$WORK/bohr.yields" | tr -d ' ')"
 if [ "$n" -eq 16 ]; then ok "the three runs wrote 16 yields each (two segments of eight points)"; else bad "bohr run wrote $n yields, expected 16"; tail -3 "$WORK/bohr/run.log"; fi
 
 r="$(maxrel "$WORK/bohr.yields" "$WORK/coef.yields")"
-if awk -v r="$r" 'BEGIN { exit !(r <= 1e-6) }'; then ok "(b) == (c): coefficient 0 gives Bohr's width, equal to the explicit c_B = $CB to $r"; else bad "(b) coefficient 0 differs from the explicit Bohr coefficient c_B = $CB by $r (expected <= 1e-6)"; paste "$WORK/bohr.yields" "$WORK/coef.yields" | head -8; fi
+if awk -v r="$r" 'BEGIN { exit !(r <= 1e-6) }'; then ok "(b) == (c): coefficient 0 gives Bohr's width, equal to the explicit c_B = $CB to $r"; else bad "(b) coefficient 0 differs from the explicit Bohr coefficient c_B = $CB by $r (expected <= 1e-6)"; paste "$WORK/bohr.yields" "$WORK/coef.yields" | sed -n '1,8p'; fi
 r="$(maxrel "$WORK/bohr.yields" "$WORK/off.yields")"
 if awk -v r="$r" 'BEGIN { exit !(r > 1e-3) }'; then ok "(b) != (a): Bohr straggling moves the yield on the edge by up to $r"; else bad "(b) coefficient 0 is within $r of straggling off: no straggling applied"; fi
 echo "  E_cm [MeV], yield off / Bohr / c_B on the rising edge (segment 1):"
-paste "$WORK/off.yields" "$WORK/bohr.yields" "$WORK/coef.yields" | head -8 | awk '{ printf "    %s  %s  %s  %s\n", $1, $2, $4, $6 }'
+paste "$WORK/off.yields" "$WORK/bohr.yields" "$WORK/coef.yields" | sed -n '1,8p' | awk '{ printf "    %s  %s  %s  %s\n", $1, $2, $4, $6 }'
 
 # ---- (d) the 13N thick target with Bohr straggling --------------------------------------------------------------------
 # the thick target of 13N's data sets 1 and 2: target tgt_targetInt2, straggling none -> bohr

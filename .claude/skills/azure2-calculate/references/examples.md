@@ -23,7 +23,7 @@ this list to stay complete. Owner skill of each task in the last column.
 | | `ec_integrals.py` | external-capture radial integrals and their cache | this skill |
 | | `channel_radius_scan.py` | χ² against the channel radius | azure2-check |
 | | `nuclear_potential.py` | the hybrid Coulomb + Woods–Saxon model per pair | this skill |
-| data | `exfor_fetch.py` | `pyazr.nds` end to end | azure2-setup |
+| data | `exfor_fetch.py` | `pyazr.sources.nds` end to end | azure2-setup |
 
 Notes for running them:
 

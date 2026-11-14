@@ -85,9 +85,10 @@ An engine fit ends where the same fit of ``Session.fit_with_engine`` and of the 
 engine's status in its own words (``converged``, ``call_limit``, ``stopped``, ...), its errors are those the program
 writes into ``param.sav``, its covariance HESSE's after MIGRAD and (JᵀJ + priors)⁻¹ after LM and GSL-LM.  While it
 runs, the panel shows the stage (fit, then HESSE and MINOS, whose calls are counted on) and, for LM, its damping;
-**Stop** ends it at the best point it has seen.  Below, the table of every parameter: name, kind (its description
-on hover),
-free or fixed, the unit of x, the working x (a free parameter's value is edited here: Enter sets it, the header's χ²
+**Stop** ends it at the best point it has seen.  Where LM or GSL-LM cannot run (a data set without an analytic
+Jacobian) the engine runs MIGRAD in its place: the result shows the engine's notice and the fitter that ran.
+Below, the table of every parameter: name, kind (its description on hover), free or fixed, the unit of x,
+the working x (a free parameter's value is edited here: Enter sets it, the header's χ²
 follows; **Reset x** goes back to the text's values), the physical value, bounds, prior, and for the job shown its
 best point, errors and MINOS intervals; **compare with start** adds the job's start point.  Filter by kind (the
 kinds the engine lists), by "free only" or by text (``/``).  A fixed value is a value of the project text: it is
@@ -101,11 +102,14 @@ the parameter) in one process; the panel shows the step, the acceptance and a ru
 **Stop** ends it between steps.  The chain is written to ``output/chain_<id>.npy`` (stored steps × walkers ×
 parameters) with a JSON summary beside it; the page shows, per parameter, the mean, standard deviation, the 2.5,
 16, 50, 84 and 97.5 % quantiles, τ, the effective draws and the split R̂, and the draws' covariance.  A sampler
-started from a sampler job's best point continues its chain.  A chain shorter than about 50 τ is not quoted
+started from a sampler job's best point continues its chain, also a sampler that was killed or interrupted by a
+restart of the server (from its chain as last saved, every 50 stored steps): **sample (emcee)…** is offered beside
+it.  A chain shorter than about 50 τ is not quoted
 (:doc:`mcmc`).  **bands (covariance)…** after a fit with a covariance computes the 1σ band of the model of every data
 set and extrapolation at the fit's best point (linear propagation over the level parameters, ``pyazr.bands``);
 **bands (draws)…** after a sampler evaluates the model at draws of its chain and takes the 16th, 50th and 84th
-percentiles at each point.
+percentiles at each point.  The result says which parameters the band varied (the level parameters for the linear
+band, every free parameter for the band from draws) and which were held at the start point.
 
 **Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
 server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as on the Data tab, with
@@ -117,8 +121,10 @@ fit.  The model of a data set is drawn at its points (a resonance narrower than 
 extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid over a data set's range shows the
 model between its points.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
 shades the band of the newest band job of the Fit tab around each series; the head says which job and project text
-it belongs to (the band is around the model at that job's start point: accept the point to see the model line
-inside it), and the CSV holds its edges.  Below:
+it belongs to and which parameters it varied, and its legend names the job and the point it is drawn around (the
+model at that job's start point: accept the point to see the model line inside it).  When the project's text is a
+job's accepted best point and the band drawn is around another point, the head offers the band at the accepted
+point.  The CSV holds the band's edges.  Below:
 angular distributions at a chosen energy, the χ² of every data set as the program's ``chiSquared.out`` splits it
 (with the sum of the squares of the residuals drawn), the model data against their values, and **Write the
 program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and the rest into the project's output
@@ -139,11 +145,29 @@ were not (they are gaps in the plot, never zeros); the CSV holds the arrays as r
 as Python** gives the ``pyazr.physics`` call that makes the same arrays.  A view is a link:
 ``#/physics/coulomb_waves?from=-2&to=20&spacing=linear&v.l=0 1 2 3``.
 
+THM
+---
+
+The **THM** tab is listed when the project has THM content (a ``<thm>`` section, or a data set that names a THM
+experiment).  **Model options**: a form of the global keys of ``<thm>`` (vertex, kinematics, entranceL,
+coulombIntegral, spectatorEnergy), each with its choices and the engine's default; a key the form does not list
+(``spectatorEnergy[2]``, one pair's spectator energy) is set under "other key".  **Experiments**: the table of the
+experiments with the data sets that name them and their keys as written; a row opens the form of its keys (beam,
+target, spectator, Ebeam, background, ps window, distortion, optical potentials, vertexModel, coherent background,
+...) with "data sets that join", and **Remove**; **+ experiment** adds one.  Every change is one edit of the project:
+**Undo** takes it back, and what the engine refuses is shown in its words.  **Channels**: the THM pairs with their
+binding energy B and their channels, with whether a width is an amplitude; these are read from the session and
+cannot be edited here yet.  **Diagnostics**: the session's THM calls at the working parameters: the experiments'
+profiled norms and backgrounds (with their σ and covariance, and the coherent background's parameters), the entrance
+vertex per channel and level, the Coulomb line shape per level, and the distortion factor R(E), each with its form,
+its numbers, its plots (an energy outside the reach of the spectator window is a gap), CSV and Copy as Python, as in
+the Physics tab.  A view is a link: ``#/thm/LC09?fn=thm_vertex``.
+
 Not there yet
 -------------
 
-The tab **THM** says which step brings it; the ``<thm>`` section is edited through the API. In the
-Fit tab a fixed parameter is not edited from the table.
+In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are not
+edited from the THM tab.
 Adding or removing a particle pair, generating channels from a J^π,
 the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical
 widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction

@@ -110,7 +110,7 @@ d.energies, d.excitation_energies        # E_c.m. and E_x (MeV)
 d.angles                                 # θ_c.m. (deg)
 d.extra["legendre"]                      # Legendre coefficients of an angular distribution, per point
 d.extra                                  # every per-point number: pyazr.kinds()["data_outputs"]
-s.write_output_files(x)                  # AZUREOut_*, chiSquared.out into the output directory
+s.write_outputs(x)                  # AZUREOut_*, chiSquared.out into the output directory
 ```
 
 E_x is the only axis common to all entrance pairs. A capture data set of `multipole E1` gives the E1 part as `model`.

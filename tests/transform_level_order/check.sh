@@ -75,7 +75,7 @@ prep truth desc.azr
 awk '$1 ~ /^energy_/ && $2 + 0 > 3.48 && $2 + 0 < 3.50 { $2 = "3.4710000e+00"; print; next } { print }' "$WORK/desc/output/param.par" > "$WORK/truth/truth.sav"
 grep -q "3.4710000e+00" "$WORK/truth/truth.sav" || { bad "(d) no formal energy near 3.491 in desc's param.par"; cat "$WORK/desc/output/param.par"; exit 1; }
 (cd "$WORK/truth" && printf '3\nn\ntruth.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-brune --no-gui --no-readline t.azr > run.log 2>&1)
-te="$(energies truth | tr ' ' '\n' | sort -g | head -1)"       # the moved level's physical energy
+te="$(energies truth | tr ' ' '\n' | sort -g | sed -n 1p)"       # the moved level's physical energy
 prep fit desc_fit.azr; mkdir -p "$WORK/fit/data"
 awk 'NF >= 4 && $4 > 0 { printf "%.6f  0  %.8e  %.8e\n", $1 * 16.00876 / 15.0001, $4, 0.01 * $4 }' "$WORK/truth/output/AZUREOut_aa=1_TOTAL_CAPTURE.extrap" > "$WORK/fit/data/cap.dat"
 n="$(grep -c . "$WORK/fit/data/cap.dat")"

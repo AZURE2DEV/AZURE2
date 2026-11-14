@@ -113,8 +113,7 @@ RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
         for (int ch = 1; ch <= compound->GetJGroup(j)->NumChannels(); ch++)
           to->SetFitGamma(ch, from->GetFitGamma(ch));
       }
-    g->TransformOut(configure);
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
     gc.inputWidthsArePhysical = true;
     return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, g.get());
   } catch (const std::exception &e) {

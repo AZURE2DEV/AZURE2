@@ -202,7 +202,7 @@ for start in 0 0.3; do
   edited "$WORK/sad.azr" "$WORK/sad$start.azr" sed "s/^\(    mixing       g+15O\[5.183\]\) 0.5 fixed$/\1 $start fit/" || bad "mixing start $start"
   project "sad$start" "$WORK/sad$start.azr"
   (cd "$WORK/sad$start" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)
-  line="$(grep '\[grad-check\] idx' "$WORK/sad$start/grad.log" | head -1)"
+  line="$(grep '\[grad-check\] idx' "$WORK/sad$start/grad.log" | sed -n 1p)"
   rel="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "rel" || $k == "relJ") if ($(k + 1) > m) m = $(k + 1) } END { print m + 0 }')"
   an="$(echo "$line" | awk '{ for (k = 1; k <= NF; k++) if ($k == "analytic") print $(k + 1) }')"
   if [ -n "$line" ] && awk -v r="$rel" -v a="$an" 'BEGIN { exit !(r < 1e-6 && a != 0) }'; then
@@ -281,7 +281,7 @@ for b in "" --use-park; do
 done
 # capture is on and large: g_ext of level 5 into the ground state and 6.1763 MeV
 gext="$(awk '$1 == "J" && $6 == "7.5567" { on = 1; next } on && NF == 0 { on = 0 } on && $4 == "L" && ($3 == 2 || $3 == 6) && $6 == "E1" { print $NF == "MeV^(1/2)" ? $(NF - 1) : $NF }' "$WORK/rec/output/parameters.out" | tr '\n' ' ')"
-if echo "$gext" | awk '{ exit !(NF == 2 && $1 !~ /^\(0.000000,0.000000\)$/ && $2 !~ /^\(0.000000,0.000000\)$/) }'; then
+if awk '{ exit !(NF == 2 && $1 !~ /^\(0.000000,0.000000\)$/ && $2 !~ /^\(0.000000,0.000000\)$/) }' <<< "$gext"; then
   ok "level 5's external amplitudes into the ground state and 6.1763 MeV: $gext"
 else bad "level 5 has no external amplitude into the ground state or 6.1763 MeV: '$gext'"; fi
 for fr in "g+15O 2" "g+15O[6.1763] 6"; do
@@ -308,7 +308,7 @@ edited "$WORK/record_ec_free2.azr" "$WORK/record_ec_free2.azr" sed -e 's/^\(    
 "$PY" "$M/make_record.py" "$WORK/record_ec_free.azr" "$WORK/record_ec_free3.azr" 6 5.183 fit
 edited "$WORK/record_ec_free3.azr" "$WORK/record_ec_free3.azr" sed -e '/^<\/gammaDecays>$/{N;s/^<\/gammaDecays>\n<gammaDecays>$//;}' \
   -e 's/^\(    branching    g+15O\[6.7931\] 0.0\) fit$/\1 fixed/' || bad "the second record"
-grep -c '^gamma_decay level[56]$' "$WORK/record_ec_free3.azr" | grep -qx 2 || bad "the second record: not two records in one section"
+grep -qx 2 <<< "$(grep -c '^gamma_decay level[56]$' "$WORK/record_ec_free3.azr")" || bad "the second record: not two records in one section"
 for pt in "" 2 3; do
   project "gec$pt" "$WORK/record_ec_free$pt.azr"
   (cd "$WORK/gec$pt" && printf '2\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 900 "$AZURE2_BIN" --no-gui --no-readline --use-gradient p.azr > grad.log 2>&1)

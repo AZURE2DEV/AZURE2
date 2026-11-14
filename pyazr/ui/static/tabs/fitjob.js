@@ -179,6 +179,12 @@ function resultBlock(ctx, rec, table, view) {
   const box = h("div.job-result", { data: { status: v.status } });
   box.append(h("h3", {}, "Result"), h("p.recipe-words", {}, h("strong", {}, v.words),
     v.message ? ` · in its own words: “${v.message}”` : ""));
+  // the engine's notices of the run (a least-squares fitter that ran MIGRAD in its place), with the fitter that ran
+  for (const notice of v.notices) {
+    box.appendChild(h("div.warn-box.engine-notice", { role: "note" }, h("strong", {}, "The engine: "), notice,
+      v.fitter && v.fitter.ran !== v.fitter.asked ? ` — the fitter that ran: ${v.fitter.ran} (asked: `
+        + `${v.fitter.asked})` : ""));
+  }
   const facts = h("dl.facts", {}, h("dt", {}, "objective"), h("dd", {}, `${n(v.startObjective)} at the start → `
     + `${n(v.bestObjective)} at the best point`),
   h("dt", {}, "calls, time"), h("dd", {}, `${v.calls ?? "—"} calls, ${v.elapsed === null ? "—"

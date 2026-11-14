@@ -44,7 +44,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     import pyazr
     from pyazr import stopping
-    from pyazr.masses import parse_nuclide
+    from pyazr.sources.masses import parse_nuclide
     azr = a.azr.resolve()
     p = pyazr.Project.open(azr)
     ds = p[a.dataset]

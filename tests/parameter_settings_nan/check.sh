@@ -48,7 +48,7 @@ run plain; run withnan; run withinf
 t="$(total plain)"
 if near "$t" "$want"; then ok "(a) the plain 13N reproduces its expected total ($t)"; else bad "(a) plain 13N: '$t' vs $want"; fi
 t="$(total withnan)"
-if near "$t" "$want"; then ok "(b) fit_error = nan in <parameterSettings>: the run completes with the same total ($t)"; else bad "(b) fit_error = nan: total '$t' (expected $want); log: $(grep -i 'invalid_argument\|terminate\|custom_stod' "$WORK/withnan/run.log" | head -1)"; fi
+if near "$t" "$want"; then ok "(b) fit_error = nan in <parameterSettings>: the run completes with the same total ($t)"; else bad "(b) fit_error = nan: total '$t' (expected $want); log: $(grep -i 'invalid_argument\|terminate\|custom_stod' "$WORK/withnan/run.log" | sed -n 1p)"; fi
 t="$(total withinf)"
 if near "$t" "$want"; then ok "(c) fit_error = inf: the run completes with the same total ($t)"; else bad "(c) fit_error = inf: total '$t' (expected $want)"; fi
 

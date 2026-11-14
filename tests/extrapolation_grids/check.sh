@@ -153,7 +153,7 @@ for g in list file; do
     bad "$g grid in c.m.: E_cm = $got"
 done
 desc=$(cd "$WORK/file" && "$AZURE2_BIN" --describe m.azr 2>&1)
-echo "$desc" | grep -q 'grid file: grid.txt (3 energies)' && ok "--describe: the grid file and its 3 energies" ||
+grep -q 'grid file: grid.txt (3 energies)' <<< "$desc" && ok "--describe: the grid file and its 3 energies" ||
   bad "--describe: $(echo "$desc" | grep -i grid)"
 
 # ---- 5. an angle grid: the union of the angles' needs
@@ -178,7 +178,7 @@ chk=$(awk '/^\*  *Data  *\*/ {d = 1; next} d && $1 == 1 && NF >= 7 {print $4}' "
 nchk=$(echo "$chk" | grep -c .)
 nout=$(awk 'NF && $1 !~ /^#/' "$WORK/datachk/$OUT" 2>/dev/null | wc -l)
 if grep -q '^file *#Data Check' "$WORK/datachk/m.azr" && [ "$nout" -gt 21 ] && [ "$nchk" = "$nout" ] &&
-   [ "$(echo "$chk" | head -1)" = 0.2 ] && [ "$(echo "$chk" | tail -1)" = 0.4 ]; then
+   [ "$(echo "$chk" | sed -n 1p)" = 0.2 ] && [ "$(echo "$chk" | tail -1)" = 0.4 ]; then
   ok "data check file: the $nchk points of the refined grid (the start grid has 21)"
 else
   bad "data check file: $nchk points listed, $nout calculated"

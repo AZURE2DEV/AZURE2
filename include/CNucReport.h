@@ -2,6 +2,7 @@
 #define CNUC_REPORT_H
 
 class CNuc;
+class ObservedLevelTable;
 class Config;
 
 /*!
@@ -21,9 +22,9 @@ void WriteBoundaryConditionsCheck(const CNuc &compound, const Config &configure)
 void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configure);
 
 /// parameters.out: every level's Brune (Park) energy and, per channel, the observed width, ANC, moment or B with the
-/// internal and external amplitudes (TransformOut's values); relativistic.out too with relativistic=1.
-void WriteParametersOut(const CNuc &compound, const Config &configure);
+/// internal and external amplitudes (the table CNuc::TransformOut returns); relativistic.out too with relativistic=1.
+void WriteParametersOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure);
 /// relativistic.out: the parameters.out levels in the E(s) convention of the LANL code EDA (ENDF KRL=1).
-void WriteRelativisticOut(const CNuc &compound, const Config &configure);
+void WriteRelativisticOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure);
 
 #endif

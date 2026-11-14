@@ -3,6 +3,7 @@
 
 #include "numcmc/mcmc.h"
 #include "Constants.h"
+#include "ObservedLevelTable.h"
 #include "ParameterKind.h"
 #include "PosteriorSupport.h"
 #include "WorkingData.h"
@@ -248,6 +249,9 @@ class AZURECalcMCMC {
   void RecordStep(Run &run, int step, const std::vector<std::vector<double>> &positions,
                   const std::vector<double> &logps) const;
   void AfterStep(const Run &run, int step, int totalSteps) const;
+  /// The observed levels at the start vector (all_rwa_), which a snapshot of a chain sampled in the RWA basis
+  /// reports in its parameters.out (the levels of the snapshot's own vector are not transformed there).
+  ObservedLevelTable StartObservedLevels() const;
 
   const Config &configure_;
   WorkingCopy *data_;

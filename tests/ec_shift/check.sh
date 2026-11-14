@@ -98,7 +98,7 @@ done
 # The table against tightly converged direct integrals at every amplitude.
 model 0 0 "$WORK/plain.azr"
 if AZURE2_EC_TABLE_CHECK=1 run "check" "$WORK/plain.azr" "" "0.030"; then
-  d="$(sed -n 's/.*largest relative difference from the direct integrals \([^ ]*\).*/\1/p' "$WORK/check/run.log" | head -1)"
+  d="$(sed -n 's/.*largest relative difference from the direct integrals \([^ ]*\).*/\1/p' "$WORK/check/run.log" | sed -n 1p)"
   if within "${d:-nan}" 1e-7; then ok "table vs converged integrals: largest relative difference $d"
   else bad "table vs converged integrals: largest relative difference ${d:-missing} (limit 1e-7)"; fi
 fi

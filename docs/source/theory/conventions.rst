@@ -238,7 +238,7 @@ with its sign.
   (\mathrm{Im}\,\gamma^{\rm ext})^2]^{1/2} - \mathrm{Re}\,\gamma^{\rm ext}`
   (``subtract_external_capture``, ``LevelParameters.cpp:329-353``), with :math:`\gamma^{\rm ext}` from
   ``external_reduced_width`` (``physics/src/ExternalCapture.cpp``, through
-  ``ExternalReducedWidth`` of ``src/CNucExternalCapture.cpp``).
+  ``ExternalReducedWidthOfInputs`` of ``src/CNucExternalCapture.cpp``).
 - **Static moments.** A photon channel of a level at the energy and
   :math:`J^\pi` of the final state carries a static moment (M1 or E2 only):
   a penetrability factor of its own applies (:math:`3J/[4(J+1)\mu_N^2]` for

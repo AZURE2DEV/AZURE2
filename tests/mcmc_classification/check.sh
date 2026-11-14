@@ -71,16 +71,18 @@ energy_ranges() {
   local d="$WORK/$1"
   local cols
   # \r stripped: a Windows build writes the log with CRLF, which hides "^-+$".
-  cols="$(tr -d '\r' < "$d/log" | awk '/^Free Parameters for MCMC:/ { t = 1; next }
+  cols="$(tr -d '\r' < "$d/log" | awk 't == 3 { next }
+               /^Free Parameters for MCMC:/ { t = 1; next }
                t == 1 && /^-+$/ { t = 2; next }
                t == 2 && NF == 0 { next }   # the Windows build puts a blank line after every row
-               t == 2 && !/(Yes|No) \(/ { exit }
+               t == 2 && !/(Yes|No) \(/ { t = 3; next }   # the end of the table: the rest is read, not used
                t == 2 { k++; if (index($0, "Energy (MeV)")) printf "%d ", 5 + k }')"
   [ -n "$cols" ] || return
   tr -d '\r' < "$d/output/samples.mcmc" | awk -F, -v cols="$cols" '
+    done { next }
     NR == 1 { n = split(cols, c, " "); next }
     first == "" { first = $1 }
-    $1 != first { exit }
+    $1 != first { done = 1; next }
     { for (i = 1; i <= n; i++) { v = $(c[i]); if (!(i in lo) || v < lo[i]) lo[i] = v; if (!(i in hi) || v > hi[i]) hi[i] = v } }
     END { for (i = 1; i <= n; i++) printf "%.6g\n", hi[i] - lo[i] }'
 }
@@ -91,10 +93,10 @@ check() {
     bad "$1: the run failed (status $(cat "$d/status"))"; tail -5 "$d/log" | sed 's/^/        /'; return
   fi
   if grep -q "parameter classification produced" "$d/log"; then
-    bad "$1: $(grep "parameter classification produced" "$d/log" | head -1)"
+    bad "$1: $(grep "parameter classification produced" "$d/log" | sed -n 1p)"
   else ok "$1: classification matches the parameter vector"; fi
   local want="Initial spread: $2 level-energy parameter"
-  if grep "$want" "$d/log" | grep -qE "limited to (0\.5|5\.000000e-01) keV"; then
+  if grep -qE "limited to (0\.5|5\.000000e-01) keV" <<< "$(grep "$want" "$d/log")"; then
     ok "$1: $2 level energies limited to 0.5 keV"
   else bad "$1: no '$want... limited to 0.5 keV' line"; fi
   if grep -qF "$3" "$d/log"; then ok "$1: $3"; else bad "$1: no '$3'"; grep "Automatic priors" "$d/log" | sed 's/^/        /'; fi
@@ -166,12 +168,12 @@ check thm_cbkg 1 "2 THM coherent-background parameters: 1 with a user-defined pr
 
 echo "== <mcmc> prior rows"
 if grep -q "Found 1 Gaussian prior(s) in AZURE2 file." "$WORK/pp_short/log" && \
-   grep "Level 1 Energy (MeV)" "$WORK/pp_short/log" | grep -q "Yes (Gaussian)"; then
+   grep -q "Yes (Gaussian)" <<< "$(grep "Level 1 Energy (MeV)" "$WORK/pp_short/log")"; then
   ok "pp_short: the short form E1 sets the first level energy's prior"
 else bad "pp_short: E1 not applied"; grep "Level 1 Energy" "$WORK/pp_short/log" | sed 's/^/        /'; fi
 if [ "$(cat "$WORK/pp_badrow/status")" != 0 ] && grep -q '"width_01_2" names no parameter of this model' "$WORK/pp_badrow/log" && \
    [ ! -s "$WORK/pp_badrow/output/samples.mcmc" ]; then
-  ok "pp_badrow: a row naming no parameter stops the run ($(grep -o 'names no parameter of this model' "$WORK/pp_badrow/log" | head -1))"
+  ok "pp_badrow: a row naming no parameter stops the run ($(grep -o 'names no parameter of this model' "$WORK/pp_badrow/log" | sed -n 1p))"
 else bad "pp_badrow: status $(cat "$WORK/pp_badrow/status"), $(grep -c 'names no parameter' "$WORK/pp_badrow/log") error line(s)"; fi
 
 [ "$fail" -eq 0 ] && echo "  PASS" || echo "  FAIL"

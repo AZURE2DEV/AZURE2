@@ -16,7 +16,7 @@ Sessions, each with its own copy of its project directory:
   R   tests/13N as written: its data, output and checks paths relative to the project's directory;
   S   tests/18O_p_a_thm as written (relative paths), the Coulomb table off.
 The paths of A, B, N, M, T are made absolute; R and S keep the project's relative paths, and their sessions also
-write their output files (write_output_files), whose bytes are part of what is compared: a session resolves its
+write their output files (write_outputs), whose bytes are part of what is compared: a session resolves its
 relative paths against its own directory (Config::baseDirectory), never against the process's working directory,
 which two threads share (pyazr changed it per call before, and a session writing while the other had entered its
 own directory wrote into the other's).  Pairs run at once on two threads, 20 times each (each time both threads build
@@ -125,7 +125,7 @@ def evaluate(azr, opts, write=False):
             for name in os.listdir(out):  # this session's files only: written afresh below
                 if name.startswith("AZUREOut_") or name == "chiSquared.out":
                     os.remove(os.path.join(out, name))
-            s.write_output_files(x)
+            s.write_outputs(x)
             files = sorted(n for n in os.listdir(out) if n.startswith("AZUREOut_") or n == "chiSquared.out")
             if not files:
                 raise RuntimeError(f"no output file written in {out}")

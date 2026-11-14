@@ -139,20 +139,34 @@ complex ExternalReducedWidthAt(CNuc &compound, const JGroup *group, const AChann
   return value;
 }
 
-complex ExternalReducedWidth(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel, bool initial,
-                             const Config &configure) {
+complex ExternalReducedWidthOfInputs(CNuc &compound, const JGroup *group, const ALevel *level, const AChannel *channel,
+                                     const Config &configure) {
   const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
   if (finalState.first == 0) return complex(0.0, 0.0);
   const ALevel *finalLevel = compound.GetJGroup(finalState.first)->GetLevel(finalState.second);
   ExternalCaptureInputs values;
-  values.levelEnergy = initial ? level->GetE() : level->GetTransformE();
-  values.finalEnergy = initial ? finalLevel->GetE() : finalLevel->GetTransformE();
-  for (int ch = 1; ch <= group->NumChannels(); ch++)
-    values.levelGamma.push_back(initial ? level->GetGamma(ch) : level->GetTransformGamma(ch));
+  values.levelEnergy = level->GetE();
+  values.finalEnergy = finalLevel->GetE();
+  for (int ch = 1; ch <= group->NumChannels(); ch++) values.levelGamma.push_back(level->GetGamma(ch));
   for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
-    values.finalGamma.push_back(initial ? finalLevel->GetGamma(ch) : finalLevel->GetTransformGamma(ch));
+    values.finalGamma.push_back(finalLevel->GetGamma(ch));
   values.finalSqrtNF = finalLevel->GetSqrtNFFactor();
   return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
+}
+
+complex ExternalReducedWidthOfTable(CNuc &compound, const ObservedLevelTable &table, int j, int la,
+                                    const AChannel *channel, const Config &configure) {
+  const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
+  if (finalState.first == 0) return complex(0.0, 0.0);
+  const ObservedLevel &level = table.Level(j, la);
+  const ObservedLevel &finalLevel = table.Level(finalState.first, finalState.second);
+  ExternalCaptureInputs values;
+  values.levelEnergy = level.E;
+  values.finalEnergy = finalLevel.E;
+  values.levelGamma = level.gamma;
+  values.finalGamma = finalLevel.gamma;
+  values.finalSqrtNF = finalLevel.sqrtNF;
+  return ExternalReducedWidthAt(compound, compound.GetJGroup(j), channel, finalState, values, configure);
 }
 
 // ------------------------------------------------------------------ formal basis: Brune quantities per evaluation

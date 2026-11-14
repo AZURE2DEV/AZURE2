@@ -150,3 +150,14 @@ test("bands: the newest finished band job's band on the series of the same name 
   const csv = p.csvOf(plot).split("\n");
   assert.ok(csv[0].includes("a: band lower (b)") && csv[0].includes("a: band upper (b)"), csv[0]);
 });
+
+test("a band's legend names its job and the point it is drawn around; the job whose best point the text is", () => {
+  assert.equal(r.bandLabel(null), "band");
+  assert.equal(r.bandLabel({ id: "b", result: { source: "f" } }), "band of job b, around the best point of job f");
+  const jobs = [{ id: "f", accepted: { rev: 4, time: 1 } }, { id: "g", accepted: { rev: 6, time: 2 } }, { id: "h" }];
+  assert.equal(r.acceptedJob(jobs, 6).id, "g");
+  assert.equal(r.acceptedJob(jobs, 7), null);
+  const s = r.withBands([{ d: { name: "a", e_cm: [1, 2] } }], { bands: { sets: [{ name: "a", lower: [0, 0],
+    upper: [1, 1] }] } }, "band of job b");
+  assert.equal(s.series[0].d.band.label, "band of job b");
+});

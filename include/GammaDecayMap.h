@@ -14,6 +14,7 @@
 class AZUREParams;
 class CNuc;
 class Config;
+class ObservedLevelTable;
 class ParamIndexMap;
 struct GradAccum;
 namespace azure2 {
@@ -143,8 +144,8 @@ class GammaDecaySet {
   void AddPenaltyGradient(const CNuc &compound, std::vector<std::pair<int, double>> &grad) const;
 
   /// The block of parameters.out: per record Gamma_gamma, every b_f, delta_f and the partial widths; a note for a
-  /// branching or remainder at 0 and for a sum of branchings above 1.
-  std::string Report(const CNuc &compound) const;
+  /// branching or remainder at 0 and for a sum of branchings above 1; the observed widths are `table`'s.
+  std::string Report(const CNuc &compound, const ObservedLevelTable &table) const;
 
  private:
   struct Point;

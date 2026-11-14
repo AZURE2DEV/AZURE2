@@ -55,7 +55,7 @@ make_project a; calc "$WORK/a/proj" 13N.azr
 ok "(a) the reference run in the project's directory ($(ls "$WORK/a/proj/output" | wc -l) output files)"
 
 make_project b; calc "$WORK/b" proj/13N.azr
-if same_files "$WORK/a/proj" "$WORK/b/proj"; then ok "(b) started from the parent directory: the same files"; else bad "(b) started from the parent directory: the files differ ($(diff -rq "$WORK/a/proj/output" "$WORK/b/proj/output" 2>&1 | head -3 | tr '\n' ' '))"; fi
+if same_files "$WORK/a/proj" "$WORK/b/proj"; then ok "(b) started from the parent directory: the same files"; else bad "(b) started from the parent directory: the files differ ($(diff -rq "$WORK/a/proj/output" "$WORK/b/proj/output" 2>&1 | sed -n '1,3p' | tr '\n' ' '))"; fi
 stray="$(ls "$WORK/b" | grep -v -x -e proj -e run.log)"
 if [ -z "$stray" ]; then ok "(b) nothing written where it was started"; else bad "(b) written where it was started: $stray"; fi
 

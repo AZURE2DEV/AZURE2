@@ -70,7 +70,12 @@ evaluation that runs at the same time; its pairs, groups and channels do not
 change after the set-up, and the compiler holds to it: outside ``CNuc``'s own
 set-up they are reached through ``const`` pointers only (``GetPair``,
 ``GetJGroup``), and the level values that move with the parameters through
-``CNuc::MutableLevel``. The entrance pairs are an input of the set-up
+``CNuc::MutableLevel``. The observed values of the levels at a vector (Brune
+energies and amplitudes, observed widths, ANCs and moments, the external parts)
+are not stored on the levels: ``CNuc::TransformOut`` returns them as an
+``ObservedLevelTable``, which the reports (``WriteParametersOut``), the model
+data and the observed parameter vector (``CNuc::GetTransformParams``) read. The
+entrance pairs are an input of the set-up
 (``CNuc::RequestEntrance``, collected from the specs by
 ``RequestDataEntrances`` or ``RequestExtrapolationEntrances``,
 ``src/ProjectSetup.cpp``). ``CNucSystem`` is the ``azure2::physics::System``

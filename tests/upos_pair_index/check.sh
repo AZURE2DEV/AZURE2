@@ -47,7 +47,7 @@ block() { awk -v blk="$2" 'BEGIN { RS = ""; FS = "\n" } NR == blk { print }' "$1
 # maxrel of the fit column (4) between two blocks
 maxrel() {
   paste <(block "$1" "$3" | awk '{ print $1, $3, $4 }') <(block "$2" "$3" | awk '{ print $1, $3, $4 }') | awk '
-    { if ($1 != $4 || $2 != $5) { print "grid"; exit }
+    { if (e) next; if ($1 != $4 || $2 != $5) { print "grid"; e = 1; next }
       d = $3 - $6; if (d < 0) d = -d; m = $6 < 0 ? -$6 : $6; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
     END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
 }
@@ -61,7 +61,7 @@ if [ -s "$f1" ] && [ -s "$f2" ]; then
   r2="$(maxrel "$f1" "$f2" 2)"; r3="$(maxrel "$f1" "$f2" 3)"
   if le "$r2" 1e-10 && le "$r3" 1e-10; then ok "(b) angle-integrated and particle distributions unchanged ($r2, $r3)"
   else bad "(b) angle-integrated / particle distributions changed ($r2, $r3)"; fi
-  if grep -q "ERROR" "$WORK/extra/run.log"; then bad "(c) the two-nucleus model reported an error"; grep ERROR "$WORK/extra/run.log" | head -2
+  if grep -q "ERROR" "$WORK/extra/run.log"; then bad "(c) the two-nucleus model reported an error"; grep ERROR "$WORK/extra/run.log" | sed -n '1,2p'
   elif grep -q "Z=7 A=13\|13N\|two compound\|compound nuclei" "$WORK/extra/run.log" || [ "$(grep -c "" "$WORK/extra/output/parameters.out")" -gt "$(grep -c "" "$WORK/base/output/parameters.out")" ]; then
     ok "(c) the model has the extra nucleus (parameters.out longer: $(grep -c "" "$WORK/extra/output/parameters.out") vs $(grep -c "" "$WORK/base/output/parameters.out") lines)"
   else bad "(c) the extra nucleus is not in the model"; fi
