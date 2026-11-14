@@ -469,6 +469,21 @@ of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).
 
+A part of a builder (a data covariance, a prior)
+------------------------------------------------
+
+The two builders make a file the engine reads from named parts; the page's forms come from their tables.
+
+- **A data covariance** (``pyazr/covariance.py``): one row of ``PART_KINDS`` (its fields: name, type, default,
+  unit, doc) and a branch of ``_terms`` that returns the part's terms (``diagonal``, ``vector``, ``relvector``,
+  ``block``); a case in ``tests/pyazr/covariance_builder_test.py`` against a matrix worked by hand.
+- **A prior on the parameters** (``pyazr/priors.py``): one row of ``PART_KINDS`` and one function of ``_BLOCKS``
+  that returns the part's ``_Block`` (its parameter names, centres, covariance and notes); a case in
+  ``tests/pyazr/prior_builder_test.py``.
+
+Nothing else: the checks and the notes are made on the whole matrix, and the data covariance's screen
+(``tabs/covariance.js``) reads its table.
+
 Other tables
 ------------
 

@@ -369,11 +369,11 @@ the remaining block.
 **Overlap with the diagonal priors.** A listed parameter can also carry a prior
 of its own -- a normalization with an error on its segment line, a free energy
 shift with an error, a screening, density, Doppler or thickness sigma, an
-abundance sigma, a nuisance flag. A fit applies **both**, and the run prints a
-Note listing such parameters. If the covariance already contains that
-information (a normalization fitted in A with its own penalty, say), it is
-counted twice: set the segment's error to 0 in B, or leave the parameter out of
-the prior file.
+abundance sigma, a nuisance flag. The multivariate Gaussian **replaces** that
+prior, in a fit as in the MCMC: its one-parameter term is not added, and the run
+prints a Note listing such parameters ("its multivariate Gaussian replaces the
+prior of ... of its own"). A parameter's own prior that should stay is left out
+of the file. :doc:`prior_builder` says so in its notes.
 
 **How it is computed.** The matrix is factored once, :math:`C = L L^T`; every
 evaluation forms the whitened residuals :math:`\mathbf{r} = L^{-1}
@@ -399,7 +399,8 @@ prior is on the reduced-width amplitudes.
    2026-11-05 its first line ``#columns <names>`` names the columns. A fit with
    ``--scale-covariance`` multiplied it by the
    reduced χ² when that exceeded 1 (a ``#scaled`` line says by how much).
-2. Write the prior file with pyazr (no engine needed)::
+2. Write the prior file with pyazr (no engine needed; :doc:`prior_builder` makes the same numbers from a part
+   ``fit`` and checks them against the run)::
 
        from pyazr import prior_from_fit
        prior_from_fit("A/output/param.sav", "A/output/covariance.dat",

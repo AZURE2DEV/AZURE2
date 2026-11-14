@@ -832,6 +832,14 @@ add_test(NAME pyazr_prior_covariance
                  ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
 set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The prior builder (pyazr.priors.build): the reader of the prior file against the engine's verdicts on a table of
+# small files, a built prior's term through a session = d^T C^-1 d, the part fit = prior_from_fit, the part chain = the
+# draws' mean and covariance, every refusal and note (tests/norm_groups model).
+add_test(NAME pyazr_prior_builder
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/prior_builder_test.py)
+set_tests_properties(pyazr_prior_builder PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # Upgrade identity checks (docs/upgrade/ARCHITECTURE.md section 10; list and status in tests/upgrade/README.md).
 # They use the test projects tests/upgrade/T1, T3 or small models built by tests/upgrade/lib, on temporary copies.
 #   coulomb_identity: F, G, F', G' of the engine against mpmath, the Wronskian, P, S and the hard-sphere phase.

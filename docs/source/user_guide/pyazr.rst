@@ -380,8 +380,11 @@ out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
 (means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
 widths; ``names`` picks a subset, i.e. the marginal block; ``columns`` names the
 columns of a ``covariance.dat`` from before its ``#columns`` header),
-``write_prior(path, names, mean, cov, basis=None)`` any prior (checked symmetric and
-positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
+``write_prior(path, names, mean, cov, basis=None)`` any prior (refused where the engine's reader would refuse
+the file), ``read_prior`` (the engine's reading: it refuses what the engine refuses) and ``read_covariance_dat``
+read them back.  ``priors.build(s.parameters, parts)`` makes a prior from named parts over the session's
+parameter table (an earlier fit, a width per parameter, correlations, a sampler's chain), checks it and says what
+the engine will do with it (:doc:`prior_builder`).
 
 .. warning::
 
@@ -1260,8 +1263,8 @@ The names of the package
 
 ``from pyazr import *`` gives these names (``pyazr.__all__``; the repository's consistency test compares the two
 lists): the classes and functions above, the libraries' functions of ``pyazr.sources.nds``, the modules
-``system``, ``sources``, ``stopping``, ``physics``, ``endf``, ``covariance`` (:doc:`covariance_builder`),
-``rate`` and ``rate_formats`` (:doc:`reaction_rate`), and the error classes.
+``system``, ``sources``, ``stopping``, ``physics``, ``endf``, ``priors`` (:doc:`prior_builder`), ``covariance``
+(:doc:`covariance_builder`), ``rate`` and ``rate_formats`` (:doc:`reaction_rate`), and the error classes.
 
 .. code-block:: text
 
@@ -1271,8 +1274,8 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    reference resolve_doi aps_doi sfactor_to_cross_section cm_to_lab ChannelWidth WidthTable weisskopf_width Band
    load_covariance rmatrix_columns best_fit_params live_parameters step_sizes sensitivities trimmed_model
    uncertainty_bands extrapolation_bands Variant Averaged ModelAverage model_average parameter_label
-   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat covariance rate
-   rate_formats schema validate
+   azr_parameter_slots write_averaged_azr prior_from_fit read_prior write_prior read_covariance_dat priors covariance
+   rate rate_formats schema validate
    describe predictions ModelDatum model_data extrapolation_grid refine_grid Project Record Nuisance FormatError
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
@@ -1484,6 +1487,9 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``covariance_builder.py``
      - A data set's covariance file from named parts (``pyazr.covariance``,
        :doc:`covariance_builder`).
+   * - ``prior_builder.py``
+     - A prior on the fit parameters from named parts (``pyazr.priors.build``,
+       :doc:`prior_builder`).
 
 Running in parallel
 -------------------

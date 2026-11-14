@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder in pyazr
+
+- **Done**: `pyazr.priors.build(parameters, parts, directory=)` makes the prior on the fit parameters
+  (`priorCovariance`) from named parts over a session's parameter table (`PART_KINDS`: `fit`, an earlier fit's
+  `param.sav` + `covariance.dat`, the numbers `prior_from_fit` writes; `width`, a sigma or a percentage per parameter
+  around its start value or a given centre; `correlation`, pairs or a matrix between parameters of other parts;
+  `chain`, the mean and covariance of a sampler job's `chain_<id>.npy` with its JSON) and returns a `Prior` that
+  prints itself, writes the file (`write`, the parts on its `#pyazr.prior` line, `read_parts`), names it in a
+  project (`use`: `Project.set_config`) and gives `summary()`.  `read_chain`, `kinds_table`, `Parameters.basis`.
+  User guide `prior_builder.rst`; `chi_squared.rst`, `fitting.rst`, `pyazr.rst`, the Developer Guide's "A part of a
+  builder"; example `pyazr/examples/prior_builder.py`.
+- **One reader of the grammar**: `read_prior` now reads as the engine's `PriorCovariance::Read` and refuses what it
+  refuses; before, it accepted a tag 3 or 1.5 or without a value, a name twice, nan, inf, `1_0`, a no-break space,
+  a matrix not symmetric or not positive definite, and refused a hexadecimal number the engine reads.  A table of
+  35 small files with the engine's verdicts is `tests/pyazr/prior_builder_test.py` part 1 (measured through
+  `Session` in its part 2).
+- **Measured**: a parameter with a prior of its own and a line in the prior file: the engine adds the file's term
+  only (`ReplaceDiagonalPriors`, `src/RunSetUp.cpp`); `chi_squared.rst` said a fit applies both (corrected).
+- **Verified**: `tests/pyazr/prior_builder_test.py` (new, 131 checks), `prior_covariance_test.py`, the consistency
+  test, `docs_build`.
+- **Open**: the page's screen (next commit).
+
 ## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
 
 Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page
