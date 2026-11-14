@@ -98,25 +98,6 @@ std::vector<std::pair<int, int>> ProjectReactionPairs(const Config &configure, b
 }
 
 namespace {
-// Every entrance pair key of the active items of `items` that names a pair of `compound`, requested as an entrance.
-template <class Items> void RequestEntrancesOf(CompoundSystem &compound, const Items &items) {
-  auto add = [&compound](int entranceKey, int) {
-    if (compound.IsPairKey(entranceKey)) compound.RequestEntrance(compound.GetPairNumFromKey(entranceKey));
-  };
-  for (const auto &item : items)
-    if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
-}
-}  // namespace
-
-void RequestDataEntrances(CompoundSystem &compound, const Config &configure) {
-  RequestEntrancesOf(compound, configure.project->built.data.datasets.items);
-}
-
-void RequestExtrapolationEntrances(CompoundSystem &compound, const Config &configure) {
-  RequestEntrancesOf(compound, configure.project->built.extrapolations.extrapolations.items);
-}
-
-namespace {
 // Every entrance pair key of the active items of `items` that names a pair of `compound`, asked for in `requests`.
 template <class Items>
 void AddEntrancesOf(const CompoundSystem &compound, const Items &items, CompoundSetUpRequests &requests) {

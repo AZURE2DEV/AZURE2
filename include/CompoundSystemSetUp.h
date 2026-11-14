@@ -69,10 +69,12 @@ struct CompoundSetUp {
 CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &dataSetUp,
                                   const std::map<int, double> &radii = std::map<int, double>());
 
-/// The compound's structure only, never finished: `inspect` reads it with the levels' input values as the file gives
-/// them, for a caller that needs the structure and no evaluation (the segments' trees, Predictions.cpp).  false when
-/// the <levels> rows could not be made into a structure (`inspect` is then not called).
-bool InspectCompoundStructure(const Config &configure,
-                              const std::function<void(const CompoundSystem &structure, const LevelInputs &inputs)> &inspect);
+/// The compound's structure only, never finished: `inspect` reads it with the levels as the structure's set-up makes
+/// them (the input values as the file gives them), for a caller that needs the structure and no evaluation (the
+/// segments' trees, Predictions.cpp; tests of the input values).  false when the <levels> rows could not be made into
+/// a structure (`inspect` is then not called).
+bool InspectCompoundStructure(
+    const Config &configure,
+    const std::function<void(const CompoundSystem &structure, const LevelState &state, const LevelInputs &inputs)> &inspect);
 
 #endif

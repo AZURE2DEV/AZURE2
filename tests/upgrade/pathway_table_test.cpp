@@ -22,6 +22,7 @@
 #include <tuple>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AChannel.h"
 #include "ProjectSetup.h"
 #include "ALevel.h"
@@ -49,7 +50,7 @@ std::string Where(int a, int e, int k, int m) {
          std::to_string(m);
 }
 
-void CheckEntrance(CompoundSystem &c, int a, const std::string &tag) {
+void CheckEntrance(const CompoundSystem &c, int a, const std::string &tag) {
   const azure2::EntrancePathways &P = c.Pathways().Entrance(a);
   const bool beta = c.GetPair(a)->GetPType() == 20;
   for (int e = 1; e <= (int)P.exits.size(); e++) {
@@ -200,9 +201,6 @@ int main(int argc, char **argv) {
     Config cfg(sink);
     cfg.configfile = fs::path(file).filename().string();
     cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-    CompoundSystem compound;
-    LevelState state;  // the levels, as the run holds them
-    LevelInputs inputs;
     if (cfg.ReadConfigFile() < 0) {
       std::printf("  FAIL  %s: config\n", file.c_str());
       failures++;
@@ -212,17 +210,24 @@ int main(int argc, char **argv) {
     cfg.screenCheckMask = 0;
     cfg.ResolveMatrixRoute();
     InitializeECAmplitudeCache(cfg);
-    if (compound.Fill(cfg, state, inputs) == -1) continue;
-    for (int a = 1; a <= compound.NumPairs(); a++)
-      if (compound.GetPair(a)->GetPType() != 10) compound.RequestEntrance(a);
-    for (int a = 1; a <= compound.NumPairs(); a++)
-      for (int p = 1; p <= compound.NumPairs(); p++)
-        if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);
+    // Every particle pair an entrance, every (particle, photon) pair's capture-A_y terms.
+    CompoundSetUp setUp;
     try {
-      compound.Initialize(cfg, state, inputs);
+      setUp = SetUpCompoundSystem(cfg, [](const CompoundSystem &compound,
+                                          const LevelInputs &) -> std::optional<CompoundSetUpRequests> {
+        CompoundSetUpRequests requests;
+        for (int a = 1; a <= compound.NumPairs(); a++)
+          if (compound.GetPair(a)->GetPType() != 10) requests.AddEntrance(a);
+        for (int a = 1; a <= compound.NumPairs(); a++)
+          for (int p = 1; p <= compound.NumPairs(); p++)
+            if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) requests.AddCaptureAy(a, p);
+        return requests;
+      });
     } catch (const std::exception &x) {
       continue;
     }
+    if (setUp.refusal != CompoundSetUp::Refusal::kNone) continue;
+    const CompoundSystem &compound = *setUp.compound;
     projects++;
     for (int a = 1; a <= compound.NumPairs(); a++) CheckEntrance(compound, a, file);
   }

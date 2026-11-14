@@ -36,10 +36,8 @@ CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &
     out.refusal = CompoundSetUp::Refusal::kData;
     return out;
   }
-  for (int pair : requests->entrancePairs) building->RequestEntrance(pair);
-  for (const std::pair<int, int> &r : requests->captureAyPairs) building->RequestCaptureAy(r.first, r.second);
   try {
-    building->Initialize(configure, out.state, out.inputs);
+    building->Initialize(configure, out.state, out.inputs, *requests);
   } catch (const GSLException &e) {
     out.refusal = CompoundSetUp::Refusal::kFinish;
     out.finishError = e.what();
@@ -49,12 +47,13 @@ CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &
   return out;
 }
 
-bool InspectCompoundStructure(const Config &configure,
-                              const std::function<void(const CompoundSystem &structure, const LevelInputs &inputs)> &inspect) {
+bool InspectCompoundStructure(
+    const Config &configure,
+    const std::function<void(const CompoundSystem &structure, const LevelState &state, const LevelInputs &inputs)> &inspect) {
   CompoundSystem structure;
   LevelState state;
   LevelInputs inputs;
-  if (structure.Fill(configure, state, inputs) == -1) return false;
-  inspect(structure, inputs);
+  if (structure.Fill(configure, state, inputs, std::map<int, double>()) == -1) return false;
+  inspect(structure, state, inputs);
   return true;
 }

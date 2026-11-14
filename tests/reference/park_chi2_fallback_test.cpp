@@ -48,6 +48,7 @@
  * Run from the directory CMake prepares (data/ with both projects' data, output/, checks/):
  *   park_chi2_fallback_test <path to identical_pp_res.azr> <path to 13N_capture_ay.azr>   (ctest: park_chi2_fallback)
  */
+#include <memory>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -56,6 +57,7 @@
 #include <string>
 #include <vector>
 
+#include "../upgrade/SetUpForTests.h"
 #include "AZURECalc.h"
 #include "Objective.h"
 #include "ProjectSetup.h"
@@ -174,7 +176,8 @@ bool writeCaptureProject(const std::string &source, const std::string &target) {
 
 struct Model {
   Config cfg;
-  CompoundSystem *compound = nullptr;
+  std::unique_ptr<const CompoundSystem> owner;  // made by the set-up (test_setup::WithData)
+  const CompoundSystem *compound = nullptr;
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
@@ -191,17 +194,19 @@ struct Model {
     if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   }
   ~Model() {
-    delete compound;
     delete data;
   }
   bool Load() {
     if (cfg.ReadConfigFile() < 0) return false;
-    compound = new CompoundSystem();
     data = new WorkingCopy();
-    if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) return false;
-    RequestDataEntrances(*compound, cfg);
-    RequestCaptureAyTerms(*compound, *data);  // as AZUREMain: a capture A_y's terms, built with the pathway table
-    compound->Initialize(cfg, state, inputs);
+    CompoundSetUp setUp = test_setup::WithData(cfg, *data, test_setup::CaptureAy::kRequested);
+    if (setUp.refusal != CompoundSetUp::Refusal::kNone) {
+      return false;
+    }
+    owner = std::move(setUp.compound);
+    compound = owner.get();
+    state = std::move(setUp.state);
+    inputs = std::move(setUp.inputs);
     compound->FillMnParams(params, state, inputs, &cfg);
     data->FillMnParams(params);
     return data->Initialize(compound, cfg) != -1;

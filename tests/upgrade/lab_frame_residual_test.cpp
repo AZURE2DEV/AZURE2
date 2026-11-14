@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "ProjectSetup.h"
 #include "CompoundSystem.h"
@@ -113,17 +114,16 @@ int main(int argc, char **argv) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = argv[1];
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
-  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
+  CompoundSetUp setUp;
+  if (cfg.ReadConfigFile() < 0 || (setUp = test_setup::WithData(cfg, data)).refusal != CompoundSetUp::Refusal::kNone) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
-  RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg, state, inputs);
+  const CompoundSystem &compound = *setUp.compound;
+  LevelState &state = setUp.state;  // the levels, as the run holds them
+  LevelInputs &inputs = setUp.inputs;
   compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {

@@ -101,7 +101,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
   }
   // The trees need the compound's structure only, never the finished compound (CompoundSystemSetUp.h).
   bool levels = true;
-  const bool read = InspectCompoundStructure(configure, [&](const CompoundSystem &structure, const LevelInputs &inputs) {
+  const bool read = InspectCompoundStructure(configure, [&](const CompoundSystem &structure, const LevelState &, const LevelInputs &inputs) {
     if (structure.NumPairs() == 0) {
       levels = false;
       return;

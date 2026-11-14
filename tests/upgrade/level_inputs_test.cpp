@@ -20,6 +20,7 @@
 
 #include <Minuit2/MnUserParameters.h>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "CompoundSystem.h"
 #include "Config.h"
@@ -43,7 +44,7 @@ void Check(bool ok, const std::string &what) {
 struct Loaded {
   std::ostringstream sink;
   Config cfg{sink};
-  CompoundSystem compound;
+  std::unique_ptr<const CompoundSystem> compound;  // made by the set-up (test_setup)
   LevelState state;  // the levels, as the run holds them
   LevelInputs inputs;
 };
@@ -56,8 +57,15 @@ std::unique_ptr<Loaded> Load(const std::string &file, bool brune, bool initializ
   if (!brune) m->cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
   m->cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(m->cfg);
-  if (m->compound.Fill(m->cfg, m->state, m->inputs) == -1) return nullptr;
-  if (initialize) m->compound.Initialize(m->cfg, m->state, m->inputs);
+  CompoundSetUp setUp = test_setup::WithoutData(m->cfg);
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return nullptr;
+  m->compound = std::move(setUp.compound);
+  if (initialize) {
+    m->state = std::move(setUp.state);
+    m->inputs = std::move(setUp.inputs);
+  } else if (!test_setup::LevelsBeforeTheLastPart(m->cfg, m->state, m->inputs)) {
+    return nullptr;
+  }
   return m;
 }
 
@@ -70,7 +78,7 @@ void OnProject(const std::string &file, bool brune) {
     Check(!brune, tag + ": cannot load");
     return;
   }
-  const CompoundSystem &cn = filled->compound;
+  const CompoundSystem &cn = *filled->compound;
   const LevelInputs &in = filled->inputs;
   const GammaDecaySet &records = cn.GetGammaDecays();
   // (a)
@@ -93,7 +101,7 @@ void OnProject(const std::string &file, bool brune) {
       }
     }
   // (b)
-  const CompoundSystem &ci = initialized->compound;
+  const CompoundSystem &ci = *initialized->compound;
   Check(initialized->inputs.TransformedIn() && initialized->inputs.TransformError().empty(), tag + ": transformed, no error");
   bool moved = false;
   for (int j = 1; j <= ci.NumJGroups(); j++)
@@ -110,7 +118,7 @@ void OnProject(const std::string &file, bool brune) {
   // (c)
   vector_r v(ci.ParameterLayout().Size());
   for (std::size_t i = 0; i < v.size(); i++) v[i] = 1.0 + 0.01 * (double)i;
-  initialized->compound.FillCompoundFromParamsPhysical(v, initialized->state, initialized->inputs);
+  initialized->compound->FillCompoundFromParamsPhysical(v, initialized->state, initialized->inputs);
   const vector_r p = records.Empty() ? v : records.WithPartialWidths(v);
   for (const LevelParameterLayout::Level &slots : ci.ParameterLayout().Levels()) {
     Check(initialized->inputs.E(slots.group, slots.level) == p[slots.energy], tag + ": physical energy");
@@ -120,7 +128,7 @@ void OnProject(const std::string &file, bool brune) {
   if (!records.Empty()) Check(initialized->inputs.GammaDecayNumbers() == records.NumbersAt(v), tag + ": physical numbers");
   // (d) on a compound initialized from the file
   std::unique_ptr<Loaded> fresh = Load(file, brune, true);
-  CompoundSystem &cf = fresh->compound;
+  const CompoundSystem &cf = *fresh->compound;
   AZUREParams params;
   cf.FillMnParams(params, fresh->state, fresh->inputs, &fresh->cfg);
   const vector_r start = params.GetMinuitParams().Params();
@@ -150,7 +158,7 @@ void OnProject(const std::string &file, bool brune) {
   for (std::size_t i = 0; i < shiftedE.size(); i++) shiftedE[i] = 1.0;
   for (const LevelParameterLayout::Level &slots : ci.ParameterLayout().Levels())
     shiftedE[slots.energy] = ci.GetJGroup(slots.group)->GetLevel(slots.level)->FileE() + 0.01;
-  initialized->compound.FillCompoundFromParamsPhysical(shiftedE, initialized->state, initialized->inputs);
+  initialized->compound->FillCompoundFromParamsPhysical(shiftedE, initialized->state, initialized->inputs);
   for (int j = 1; j <= ci.NumJGroups(); j++)
     for (int la = 1; la <= ci.GetJGroup(j)->NumLevels(); la++)
       for (int ch = 1; ch <= ci.GetJGroup(j)->NumChannels(); ch++) {
