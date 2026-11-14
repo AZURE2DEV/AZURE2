@@ -89,7 +89,8 @@ with pyazr.Session("project.azr") as s:          # cwd defaults to the project's
   when comparing with an archived CLI run (pyazr's default is `use_long_wavelength=True`).
 - **One vector**: the fit vector `x` (reduced-width amplitudes in the session's basis, energies in MeV, norms, shifts,
   ...); `s.parameters` names its entries (`print(s.parameters.free.table())`). A vector of one basis means nothing in
-  another (`s.basis`: 0 standard, 1 Brune, 2 Park). Physical values (Γ in eV, ANCs): `s.transform_rwa(x)`.
+  another (`s.basis`: 0 standard, 1 Brune, 2 Park). Physical values (Γ in eV, ANCs): `s.transform(x)`, one per row
+  of `s.parameters`.
 - **Data or extrapolations**: a session evaluates either its data sets (default) or its extrapolation records
   (`Session(file, data_mode=False)`); open one session of each kind rather than switching. In extrapolation mode only
   active records are evaluated and every χ² field is `None`; find a record by `d.name`, not by position.

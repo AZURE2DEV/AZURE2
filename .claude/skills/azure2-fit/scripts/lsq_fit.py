@@ -31,9 +31,7 @@ import numpy as np
 def load(project, sav=None, **options):
     """A session of `project` (parameter file `sav` loaded by name first) and its objective."""
     import pyazr
-    s = pyazr.Session(project, **options)
-    if sav:
-        s.load_sav(sav)
+    s = pyazr.Session(project, **options, parameter_file=sav)
     return s, s.objective()
 
 

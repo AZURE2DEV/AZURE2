@@ -38,19 +38,19 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 
 ## Loading a parameter file in pyazr
 
-- **Use `s.load_sav(path)`**, not a slice of `full_rwa_from_sav`. The CLI's parameter-file reader also sets fixed
-  level energies and widths. pyazr's free-vector calls (`evaluate(x)`, `objective()(x)`,
-  `transform_rwa`, `save_fit`, ...) take every fixed value from the session, that is from the `.azr`. So
-  `s.full_rwa_from_sav(sav)[~fixed]` evaluates a different model whenever the `.sav`'s fixed values differ from the
-  `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths were never updated). In one case
-  10 fixed widths off by up to 1.6 % gave χ² = 9925.03 against the CLI's 9868.04; with `load_sav` every `AZUREOut_*`
-  line and `chiSquared.out` matched the CLI exactly.
-- `load_sav` pushes the whole file into the engine (the binding's `set_params_all_rwa`), sets the session's values and
-  returns the free vector; `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the
-  free/fixed split (the CLI frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with
-  another basis.
-- A session of the extrapolations (`pyazr.Session(path, data_mode=False)`) is built from the `.azr`: load the
-  parameter file into it as well.
+- **Use `pyazr.Session(file, parameter_file=path)`** to evaluate "the project and this fit" as the CLI does: the
+  session takes every value of the file when it is made, the fixed level energies and widths included, and
+  `s.parameters.x0` is then the file's free values. `s.parameters.read(path)` gives the file's free values alone; every
+  call on that vector (`evaluate(x)`, `objective()(x)`, `transform(x)`, `save_fit`, ...) takes the fixed values from
+  the session, that is from the `.azr`. So `s.parameters.read(sav)` evaluates a different model whenever the `.sav`'s
+  fixed values differ from the `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths
+  were never updated). In one case 10 fixed widths off by up to 1.6 % gave χ² = 9925.03 against the CLI's 9868.04;
+  with the whole file every `AZUREOut_*` line and `chiSquared.out` matched the CLI exactly.
+- `parameter_file=` matches names as the CLI does and puts the whole file into the engine; `bands.best_fit_params`
+  takes a file the same way. It does not change the free/fixed split (the CLI frees a parameter fixed at 0 that the
+  file sets nonzero) and refuses a file tagged with another basis; `s.parameters.read` refuses one too.
+- A session of the extrapolations (`pyazr.Session(path, data_mode=False)`) is built from the `.azr`: open it with
+  `parameter_file=path` as well.
 
 ## Which physical level is `energy_<N>`?
 
@@ -63,8 +63,9 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   start, free, bounds, what it belongs to). A `**WARNING: Denominator less than zero while transforming` printed
   while it is built concerns the transformation of the start values, not the table: cross-check with a plain
   `evaluate(x).data[i].energies` or the CLI before concluding the parameters are corrupted.
-- A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity (level numbering restarts inside every
-  J-group).
+- A level is named by its `level_label` (as `Project.levels()` gives it) or by `(jgroup, level)`, its identity
+  (level numbering restarts inside every J-group): `s.parameters.of_level(label)`; the energy rows
+  `of_kind("energy")` carry both.
 - **A `Parameter`'s `pair` is the engine's pair number**, which counts particle pairs in the order `<levels>` first
   mentions them, not the file's pair key. In one model engine pair 1 is file key 2 and file key 1 is engine pair 6.
   When calling `pyazr.snapshot.place_level_values` directly, pass `pairs=s.pairs`, or it cannot translate.

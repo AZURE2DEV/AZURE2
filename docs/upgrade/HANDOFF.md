@@ -45,6 +45,85 @@ template.azr`, `transform_level_order/models/desc_fit.azr`).  The failure of the
 `energy_shift_sqrt`, `gamma_decay` ("the working copy has no node table") is not met here: a session made in
 extrapolation mode on those projects fails earlier, because they have no extrapolations.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page's sampler and bands
+
+**Done** (`web_ui.md` section 11.7).
+- The sampler as a job (`sample/emcee`, `pyazr/ui/jobs.py`): emcee on `Objective.log_prob` in one process, walkers
+  around the start point inside the fit's limits (a start outside refused naming the parameter), settings walkers,
+  steps, spread (the new setting type `number`), thin, seed, discard; progress per stored step (step, acceptance,
+  running τ); Stop between steps; the chain to `output/chain_<id>.npy` of the project with a JSON summary; the page
+  gets mean, sd, quantiles, τ, effective draws, split R-hat and the draws' covariance; a sampler started from a
+  sampler job continues its chain. State `finished` for a job that ran all its steps.
+- The bands as jobs: `bands/covariance` (linear at a fit's best point, `pyazr.bands.uncertainty_bands` through the
+  adapter's `linear_sigma`) and `bands/draws` (16/50/84 % of the model over draws of a chain, `models_at`); every
+  data set and extrapolation, in the engine's unit and as an S factor where offered. A job started from a job gets
+  that job's record as its source (`takes`: the result key it needs, 422 without); `follows` may name any method
+  of a kind. The Results tab draws the newest band job's band (flag "band", the source in the head, edges in the
+  CSV); the Fit tab shows the chain's summary and a band job's pointer.
+- Tests: `tests/pyazr/ui/sampler_bands_test.py` (new, ctest `pyazr_ui_sampler_bands`, 31 s), two node tests; each
+  rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread on T3 with two free parameters (`work/uifit2/walk_sampler.py`): chain sd over
+Laplace sd 0.9989 and 1.0011 (a grid of the posterior gives the Laplace values to 3e-5); band from 1000 draws over
+the linear band, median 0.994 over 333 points, all within 10 %. Bands and a short chain also run on T2 (THM,
+nuisances). All UI tests (routes, static, node, api, server, jobs, engine_jobs, sampler_bands, results) and the
+browser smoke test pass; the consistency test passes. Not run: sphinx (not installed in the environment).
+
+**Open.** The linear band spans the level parameters only (`pyazr.bands`), the band from draws every free
+parameter: they differ where nuisances are free. A killed sampler's chain is on disk but cannot be continued from
+the page (no result). The Results tab draws the band around the band job's start point, the model at the working x.
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page runs the engine's fitters and MINOS
+
+**Done** (`web_ui.md` section 11.6).
+- The Fit tab's job table has a fit row per row of the engine's fitter table (`pyazr.kinds()["fitters"]`, made by
+  `engine_rows` in `pyazr/ui/jobs.py`; the program's default MIGRAD first and the form's default), with the
+  fitter's doc and facts (switch, covariance, MINOS can follow), settings `max_calls` and, where allowed, `minos`;
+  a MINOS job after each fitter that allows it. The job runs `Session.fit_with_engine` in its worker (the adapter's
+  `fit_with_engine` in `pyazr/ui/engine.py`) with the job's progress (stage, LM's damping, calls counted on through
+  HESSE and MINOS) and stop request (a thread of the worker reads it, so it reaches a running evaluation). The
+  result: the engine's status in its words, errors as `param.sav` has them, covariance and correlation, MINOS
+  intervals; Accept and Undo as for the recipes. `SESSION_NOT_SERVED` no longer lists `fit_with_engine`.
+- The page: facts under the method and in the job table, further progress numbers by name, where errors come from.
+- Tests: `tests/pyazr/ui/engine_jobs_test.py` (new, ctest `pyazr_ui_engine_jobs`, 14 s), the generated rows in
+  `routes_consistency_test.py`, two node tests; each rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread (`work/uifit2/walk_engine.py`): every engine fitter on T3 and T2 ends at the
+objective of `fit_with_engine` (bit for bit) and of the program (12 digits; T2's plain MIGRAD has no switch);
+a stop on T2 answered in 0.2 s with one record after the request; Accept then the χ² as written within 3e-15
+relative of the job's; Undo restores the start χ² exactly. `routes_consistency`, `jobs`, `engine_jobs`, `node`,
+`static` and the browser smoke test (T1 converged, T2 stopped) pass; the consistency test passes. Not run: ctest
+through a build of this tree, the projects against the reference (no engine file changed).
+
+**Open.** The sampler and the bands (next on this branch). The fitter table has no column saying which fitters honour
+a call limit (`max_calls` is offered on every engine row); the engine gives no validity per MINOS interval.
+
+## 2026-11-14 (agent, rehearsal 63) — the skills ported to the one parameter vector
+
+**Done.** Every skill file under `.claude/skills/` uses the names of pyazr's one fit vector and one parameter table
+(the migration table at the end of `docs/source/user_guide/pyazr.rst`). Scripts: the nine `--sav` paths open the
+session with `Session(file, parameter_file=path)` (every value of the file, fixed ones included, as `load_sav` did,
+so the numbers stay); the eight `--params` options keep their flag and store it as `parameter_file` (the checker read
+`a.params` as the removed `s.params`; these already used `s.parameters.read`). Prose: `transform_rwa` and
+`transform_all_rwa` became `s.transform(x)`, `load_sav` and `full_rwa_from_sav` the `parameter_file=` session or
+`s.parameters.read`, the frozen probes `P.put(...)` on `of_level(...).of_kind("width").free`, `physical_levels()` the
+energy rows, `input_is_rwa` `width_is_amplitude`, `LevelKey` `level_label` or `(jgroup, level)`, the example
+`coulomb_functions.py` `channel_functions.py`; the old-format note says that `parameter_file=` now warns
+(`W_PARAMETER_FILE_NAMES`) and `parameters.read` stays silent.
+
+**Verified.** `tools/check_skills.py` 0 errors; the ten skill self-tests, `check_skills`, `check_skills_unit` and
+`repo_consistency` pass on the build of rehearsal 63; every changed prose call was run once on a copy of
+`tests/upgrade/T2`; no self-test passes `--sav` or `--params`, so four of those paths were run by hand on T2
+(`chi2_report`, `dump_residuals`, `fisher`, `thm_inspect`), the others not.
+
+**Lost.** Nothing a skill needed: no script wrote a parameter file. `Parameters.write` writes every row (a fixed one
+at its start), so a file can no longer be updated in place keeping its other columns.
+
+**Left for the later port** (untouched): `data_mode` / `extrap_mode`, `pyazr.nds`, `pyazr.masses`,
+`write_output_files`, `set_channel_radius`, `set_nuclear_potential`, `dimensionless_widths`, `wigner_widths`, the
+`Pair` / `LevelScheme` imports. The note in `azure2-fit/references/parameters-and-sav.md` that
+`bands.best_fit_params` raises on an old-format file in data mode was not re-checked (it reads by name now).
+
 ## 2026-11-14 (director, 01:03) — merged: the skills for an evaluation, the structure frozen after set-up
 
 **Merged into `feature/upgrade-4-data`** (one merge commit of three branches, with the tree of rehearsal 62): the

@@ -109,9 +109,10 @@ export const X_CHOICES = [
  * factor where the server sends it (the engine's conversion of each point). */
 export const Y_CHOICES = [
   { key: "measured", title: "as measured",
-    of: (d) => ({ value: d.value_norm, error: d.error_norm, model: d.model, unit: d.engine_unit }) },
+    of: (d) => ({ value: d.value_norm, error: d.error_norm, model: d.model, unit: d.engine_unit,
+      band: d.band ? { lower: d.band.lower, upper: d.band.upper } : null }) },
   { key: "s_factor", title: "S factor",
-    of: (d) => (d.s_factor ? { ...d.s_factor, title: "S factor" } : null) },
+    of: (d) => (d.s_factor ? { ...d.s_factor, title: "S factor", band: d.band?.s_factor || null } : null) },
 ];
 
 /** The residual's axis title: the engine's standardized residual, model m minus the datum d times the norm n, over
@@ -163,6 +164,10 @@ export function resultsPlots(sets, view, { schema, levels = [], title = null } =
           schema?.dimensions?.[other.dimension]?.engine_unit ?? ""})`;
         const x = pick(d[xc.key], order);
         const style = { color: s.color, marker: s.marker, group: d.name };
+        if (view.band !== false && s.y.band) {
+          traces.push({ role: "band", name: `${d.name}${suffix}: band`, x, y: pick(s.y.band.upper, order),
+            lower: pick(s.y.band.lower, order), ...style });
+        }
         if (!s.extrapolation && s.y.value) {
           traces.push({ role: "data", name: `${d.name}${suffix}`, x, y: pick(s.y.value, order),
             error: pick(s.y.error, order), ...style });
@@ -252,12 +257,14 @@ export function tableOf(plot) {
   for (const t of plot.traces) {
     const unit = t.role === "residual" ? plot.residual?.unit : plot.y.unit;
     const cols = t.role === "data" ? [head(t.name, unit), head(`${t.name} error`, unit)]
-      : [t.role === "levels" ? t.name : head(t.name, unit)];
+      : t.role === "band" ? [head(`${t.name} lower`, unit), head(`${t.name} upper`, unit)]
+        : [t.role === "levels" ? t.name : head(t.name, unit)];
     const at = columns.length;
     columns.push(...cols);
     t.x.forEach((x, i) => {
       const row = new Array(at).fill("");
       row[0] = x;
+      if (t.role === "band") row.push(t.lower[i]);
       row.push(t.role === "levels" ? t.labels[i] : t.y[i]);
       if (t.role === "data") row.push(t.error[i]);
       rows.push(row);
@@ -294,6 +301,11 @@ export function plotlyFigure(plot, theme = {}) {
     }
     if (t.role === "residual") {
       return { ...common, mode: "markers", yaxis: "y2", marker: { color: t.color || fg, symbol: t.marker, size: 5 } };
+    }
+    if (t.role === "band") {  // a closed region: the upper edge forward, the lower edge back
+      return { type: "scatter", mode: "lines", name: t.name, legendgroup: t.group, hoverinfo: "skip",
+        x: [...t.x, ...[...t.x].reverse()], y: [...t.y, ...[...t.lower].reverse()], fill: "toself",
+        fillcolor: t.color || muted, opacity: 0.25, line: { width: 0, color: t.color || muted } };
     }
     if (t.role === "levels") {
       return { type: "scatter", mode: "lines", name: t.name, yaxis: "y3", hoverinfo: "text",

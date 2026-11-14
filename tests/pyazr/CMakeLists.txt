@@ -926,9 +926,12 @@ set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # listed in tests/pyazr/ui/README.md.
 # static_test: the page's files as served (token cookie, CSP, every loaded file tracked, plotly's hash, a widget per
 # value type); node_test: the page's modules under node's own test runner (skipped where node is absent);
-# results_test: the Results payload against the program's AZUREOut_* and chiSquared.out (T1, T2, T3).
+# results_test: the Results payload against the program's AZUREOut_* and chiSquared.out (T1, T2, T3);
+# engine_jobs_test: the engine's fitters and MINOS as jobs against Session.fit_with_engine (T3), a stop on T2.
+# sampler_bands_test: emcee and the bands as jobs on a two-parameter copy of T3 against the Laplace approximation
+# (about 30 s).
 foreach(_ui_test ui/api_test.py ui/jobs_test.py ui/server_test.py ui/routes_consistency_test.py ui/static_test.py
-        ui/node_test.py ui/results_test.py)
+        ui/node_test.py ui/results_test.py ui/engine_jobs_test.py ui/sampler_bands_test.py)
     string(REGEX REPLACE "ui/(.*)_test.py" "pyazr_ui_\\1" _name ${_ui_test})
     add_test(NAME ${_name} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_test})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

@@ -17,15 +17,17 @@ names, so the mapping is deterministic. `C` is unchanged, and so are the values 
 amplitude). `segment_<k>_norm` lines have the same name in both.
 
 What the failure looks like: the log prints `Reading User Parameter File...`, nothing reports a mismatch, and the
-result is that of the `.azr` levels. pyazr has the same blind spot: `full_rwa_from_sav` (and `load_sav`, which uses
-it) raises only when *no* name matches, and the `segment_*` lines always match.
+result is that of the `.azr` levels. pyazr has nearly the same blind spot: `pyazr.Session(file, parameter_file=path)`
+only warns (`W_PARAMETER_FILE_NAMES`, the names it skipped), `s.parameters.read(path)` says nothing, and both raise
+only when *no* name matches; the `segment_*` lines always match.
 
 Scale of the problem: in one group's archive surveyed in 2026, 6,997 of 11,073 parameter files were old format. One
 fit with archived `chiSquared.out` total 10,422 gave 133,516 with its own unconverted `param.sav`; its α₀ reaction
 rate at T₉ = 1 came out at the `.azr` levels' value (9.41 × 10⁵ cm³ mol⁻¹ s⁻¹) instead of the fit's (9.70 × 10⁵).
 
-Use this page before any mode 1/3/4/5 run, pyazr `load_sav`/`full_rwa_from_sav` call, or refit that starts from an
-archived fit's parameter file, and whenever an archived `chiSquared.out`, rate or extrapolation will not reproduce.
+Use this page before any mode 1/3/4/5 run, pyazr `parameter_file=` or `parameters.read` call, or refit that starts
+from an archived fit's parameter file, and whenever an archived `chiSquared.out`, rate or extrapolation will not
+reproduce.
 
 ## Detect
 

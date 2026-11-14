@@ -38,7 +38,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("azr", type=Path)
     ap.add_argument("--dataset", required=True)
-    ap.add_argument("--params", help="parameter file (param.sav), by name")
+    ap.add_argument("--params", dest="parameter_file", help="parameter file (param.sav), by name")
     ap.add_argument("--points", type=int, default=4001, help="points of the fine bare grid (default 4001)")
     ap.add_argument("--rtol", type=float, default=2e-3)
     a = ap.parse_args(argv)
@@ -66,7 +66,7 @@ def main(argv=None):
     proj = {"p": "p", "d": "d", "t": "t", "a": "a", "3He": "3He"}.get(projectile, projectile)
 
     with pyazr.Session(str(azr)) as s:
-        x = s.parameters.read(a.params) if a.params else s.parameters.x0
+        x = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
         d = next(d for d in s.evaluate(x).data if d.name == a.dataset)
         e_lab = np.asarray(d.extra["energy_lab"], float)
         folded = np.asarray(d.model, float)
@@ -82,7 +82,7 @@ def main(argv=None):
     copy = q.save(azr.with_name(f"{azr.stem}_target_check.azr"))
     try:
         with pyazr.Session(str(copy), data_mode=False) as s:
-            xb = s.parameters.read(a.params) if a.params else s.parameters.x0
+            xb = s.parameters.read(a.parameter_file) if a.parameter_file else s.parameters.x0
             sigma = np.asarray(next(d for d in s.evaluate(xb).data if d.name == "target_check_bare").model, float)
     finally:
         Path(copy).unlink(missing_ok=True)

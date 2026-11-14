@@ -81,9 +81,9 @@ gamma. Prefer `Project.levels()` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair`, `c
 ## 4. The `gamma` field is a physical width, not an amplitude
 
 It holds what `parameters.out` prints: Γ (eV) for an open particle channel, the ANC (fm^-1/2) for a closed
-(sub-threshold) channel, Γ_γ (eV) for a photon channel, i.e. exactly `transform_rwa(x)`. In the ⁷Be model the
-reduced-width amplitude and the physical value differ by factors 10² to 10⁷; a file written with amplitudes loads
-without complaint and is wrong. (THM lines with `gammaIsRWA = 1` are the one exception; azure2-thm.)
+(sub-threshold) channel, Γ_γ (eV) for a photon channel, i.e. exactly `s.transform(x)` at the width rows. In the ⁷Be
+model the reduced-width amplitude and the physical value differ by factors 10² to 10⁷; a file written with amplitudes
+loads without complaint and is wrong. (THM lines with `gammaIsRWA = 1` are the one exception; azure2-thm.)
 
 ## 5. Channel enumeration
 

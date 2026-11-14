@@ -64,7 +64,7 @@ def main(argv=None):
     ap.add_argument("azr", type=Path)
     ap.add_argument("--pair", type=int, required=True, help="pair key of <levels> whose radius is scanned")
     ap.add_argument("--radii", type=float, nargs="+", required=True, help="radii in fm")
-    ap.add_argument("--params", help="start parameter file (param.sav), by name")
+    ap.add_argument("--params", dest="parameter_file", help="start parameter file (param.sav), by name")
     ap.add_argument("--option", action="append", default=[], metavar="KEY=VALUE", help="a session option")
     ap.add_argument("--fitter", default="scipy", choices=["scipy", "engine-lm", "engine-migrad"])
     ap.add_argument("--max-nfev", type=int, default=200, help="scipy: largest number of function evaluations")
@@ -85,7 +85,7 @@ def main(argv=None):
     order = sorted(a.radii, key=lambda r: abs(r - centre))
     start = {}
     with pyazr.Session(str(azr), **opts) as s0:
-        x = s0.parameters.read(a.params) if a.params else s0.parameters.x0
+        x = s0.parameters.read(a.parameter_file) if a.parameter_file else s0.parameters.x0
         start = dict(zip(s0.parameters.free.names, x))
     fitted = {}  # radius -> {name: value}
     rows, failed = [], 0

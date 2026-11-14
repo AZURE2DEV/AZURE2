@@ -300,8 +300,9 @@ def test_error_statuses_and_fields(t1):
     assert r.status_code == 404 and set(r.json()["known"]) == set(x["x"])
     r = t1.post("/api/evaluate/grid", json={})
     assert r.status_code == 501 and r.json()["missing"] == "pyazr.Session.evaluate.energies"
-    r = t1.post("/api/jobs", json={"kind": "fit", "method": "engine_migrad"})
-    assert r.status_code == 501 and "fit_with_engine" in r.json()["missing"]
+    waiting = next(row for row in t1.get("/api/jobs/kinds").json() if row["missing"])
+    r = t1.post("/api/jobs", json={"kind": waiting["kind"], "method": waiting["method"]})
+    assert r.status_code == 501 and r.json()["missing"] == waiting["missing"]
     r = t1.post("/api/evaluate", content=b"[1, 2]", headers={"Content-Type": "application/json"})
     assert r.status_code == 422
 
