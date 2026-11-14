@@ -31,7 +31,7 @@ azure2::experiment::Format3Project	experiment/include/azure2/experiment/ProjectR
 azure2::experiment::BuiltProject	experiment/include/azure2/experiment/Build.h	what Schema::Build makes of the records	setup	class	immutable
 azure2::experiment::DatasetSpec	experiment/include/azure2/experiment/SetupSpecs.h	one data set as built: observable, pairs, nuisances	setup	class	immutable
 Config	include/Config.h	the run: options, paths, the project read, scratch	setup	class	run
-CNuc	include/CNuc.h	compound nuclei: pairs and J groups (read-only after set-up), levels at the vector	setup	class	evaluation
+CNuc	include/CNuc.h	compound nuclei as set up: pairs, J groups, levels (read-only after set-up, not copied)	setup	class	immutable
 PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	immutable
 JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	immutable
 AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
@@ -66,10 +66,15 @@ AMatrixFunc	include/AMatrixFunc.h	level matrix, T-matrix, observables (a GenMatr
 THMMatrixFunc	include/THMMatrixFunc.h	the HOES cross section of THM sites	evaluation	class	evaluation
 RMatrixFunc	include/RMatrixFunc.h	the channel-matrix route (a GenMatrixFunc)	evaluation	class	evaluation
 LevelMatrixSolver	include/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
-CNuc	include/CNuc.h	the level parameters at the vector	evaluation	class	evaluation
+CNuc	include/CNuc.h	the compound nuclei as set up, shared constant by every evaluation	evaluation	class	immutable
+LevelState	include/LevelState.h	the levels at the evaluation's vector, the owner's	evaluation	class	evaluation
 AZURECalc	include/AZURECalc.h	the objective: chi^2, gradient, residual rows	inference	class	run
 WorkingData	include/WorkingData.h	a pooled working copy with its buffer	inference	class	evaluation
-CNuc	include/CNuc.h	the level parameters at the vector	inference	class	evaluation
+CNuc	include/CNuc.h	the compound nuclei as set up, shared constant by the pools	inference	class	immutable
+LevelState	include/LevelState.h	the levels at the vector: one per evaluation running at once	inference	class	evaluation
+StatePool	include/StatePool.h	idle level states of the evaluations that run at once, the caller's	inference	class	evaluation
+FitterStates	include/AZURECalc.h	a fit's pooled level states and its output state, the caller's	inference	class	evaluation
+WalkerLevels	include/AZURECalcMCMC.h	a walker's level state and inputs	inference	class	evaluation
 WorkingCopy	include/WorkingCopy.h	points, norms and shifts of one evaluation	inference	class	evaluation
 azure2::Results	include/Results.h	the evaluation's buffer: records, model, objective	inference	class	evaluation
 ObjectiveContext	include/Objective.h	what a term reads: copies, buffer, vector	inference	class	evaluation
@@ -96,7 +101,9 @@ nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probabili
 RunRequest	include/RunRequest.h	the answers of a program run: its command and options	frontends	class	run
 AZUREMain	include/AZUREMain.h	the program's run: its stages in order	frontends	class	run
 Config	include/Config.h	the run: options, paths, the project read	frontends	class	run
-CNuc	include/CNuc.h	compound nuclei and level parameters	frontends	class	evaluation
+CNuc	include/CNuc.h	compound nuclei as set up by the run or the session	frontends	class	immutable
+LevelState	include/LevelState.h	the run's or the session's levels at the vector	frontends	class	evaluation
+LevelInputs	include/LevelInputs.h	the run's or the session's levels' input values	frontends	class	run
 WorkingCopy	include/WorkingCopy.h	the data of one evaluation	frontends	class	evaluation
 AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient	frontends	class	run
 ProgramRun	include/ProgramRun.h	one program run: what a stage hands to the next	frontends	class	run

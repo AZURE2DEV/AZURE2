@@ -73,7 +73,7 @@ The values at the parameter vector (fit energies and amplitudes, shift
 functions and their derivatives, Park's :math:`J`, the external-capture
 amplitudes and :math:`N_f^{1/2}`, the ``gamma_decay`` records' fills, the
 formal-basis capture-mask projectors, and what an evaluation reads of the
-input: the zero-width flags and the input energies) are a ``LevelState``.
+input: the zero-width flags) are a ``LevelState``.
 ``CNuc``'s fills and transformations are ``const`` and write the state and
 inputs they are given (``FillCompoundFromParams`` with
 ``GammaDecaySet::ToEngine``, ``CalcShiftFunctions``, ``TransformIn``,
@@ -81,16 +81,20 @@ inputs they are given (``FillCompoundFromParams`` with
 ``TransformOut``); every reader of an evaluation's values takes the
 ``LevelState`` it reads as an argument (the matrix functions hold the one
 they are solved at), and every reader of the input values the
-``LevelInputs``. The ``CNuc`` holds one of each for its default owner, the
-run or session that set it up (``CNuc::State()``, ``CNuc::Inputs()``), which
-hands them to the readers. Where each level's energy and amplitudes sit in the
+``LevelInputs``. ``CNuc`` holds neither: each owner holds its own and hands it
+to the readers -- the program's run and the session (made by ``CNuc::Fill``
+and ``Initialize``, which write the state and inputs they are given), a fit's
+evaluations (copies of the caller's state in ``FitterStates``, their pool a
+``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
+and a copy per walker), the reaction rate, a limit's conversion and the
+sub-point grids. Where each level's energy and amplitudes sit in the
 parameter vector is the ``LevelParameterLayout`` (``CNuc::ParameterLayout()``,
-built by ``Fill``, shared by the copies): every walk of the level block reads
-it. ``CNuc`` is copied for every evaluation that runs at the
-same time; its pairs, groups and channels do not change after the set-up, and
-the compiler holds to it: outside ``CNuc``'s own set-up they are reached
-through ``const`` pointers only (``GetPair``, ``GetJGroup``), levels
-included. The observed values of the levels at a vector (Brune
+built by ``Fill``): every walk of the level block reads it. ``CNuc`` is not
+copied (its copy constructor is deleted): one object, set up by the run or
+the session, is shared constant by every owner, thread and walker; its
+pairs, groups and channels do not change after the set-up, and the compiler
+holds to it: outside ``CNuc``'s own set-up it is reached through ``const``
+pointers only (``GetPair``, ``GetJGroup``), levels included. The observed values of the levels at a vector (Brune
 energies and amplitudes, observed widths, ANCs and moments, the external parts)
 are not stored on the levels: ``CNuc::TransformOut`` returns them as an
 ``ObservedLevelTable``, which the reports (``WriteParametersOut``), the model

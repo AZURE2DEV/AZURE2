@@ -2,6 +2,95 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-owners`) — the owners hold their own levels; the doors and `Clone` gone
+
+**Done** (four commits; the end of step 4 of `cnuc_split.md` §12.3, "as built, fourth part"): `CNuc` holds the set-up
+only and cannot be copied; every owner holds its own `LevelState` (and `LevelInputs` where it transforms) and the
+compound as `const CNuc *` of the run or session that set it up and outlives it.
+
+**Measured first** (start 19c55dad). The doors (`State`, `Inputs`, `MutableState`, the one-argument fills and
+transformations, `FillMnParams` without a state) by file, what they did, whose:
+
+| file | calls | what | owner |
+|---|---|---|---|
+| `api/src/AZUREAPI*.cpp`, `pybind_api.cpp`, `pybind_records.cpp` | 66 | fills, shift functions, transformations, the state to the readers, the rate method, a record's level energy | the session |
+| `src/AZURECalc.cpp`, `FitLeastSquares.cpp` | 49 | the pool's fills and readers, the output copy, the fresh copies of two diagnostics, the labels | the fitter |
+| `src/AZURECalcMCMC.cpp`, `SamplerSupport.cpp`, `AZURE2.cpp` (`runMCMC`) | 43 | the walkers' fills and transformations, the start table, the snapshot, the set-up | the sampler |
+| `src/RunSetUp.cpp`, `RunOutputs.cpp`, `ProgramFit.cpp`, `AZUREMain.cpp` | 13 | the set-up's transformation, warnings, labels, reports, the final transformation | the program's run |
+| `src/ReactionRate.cpp` | 9 | the constructor's fill, the resonance grid's copy, one copy per thread | the rate |
+| `src/TargetSetup.cpp` | 7 | the sub-point-grid copy (4), the data set-up's input values (3) | the grids; the run |
+| `src/CovarianceBand.cpp` | 5 | the band's shift functions and readers, on the run's compound | the run |
+| `src/ParameterLimitsManager.cpp` | 4 | a limit's conversion, on a copy | the limits |
+| `src/AdaptiveExtrapolation.cpp` | 1 | the parameter layout of a sweep (its calculation ran on the run's compound) | the run |
+| tests (15 files) | about 100 | | |
+
+Copies (`Clone`): the fitter's pool (`GetPooledCNuc`), output copy and the fresh copies of `AZURE_TRACE_FCN=fresh`
+and `AZURE_POOL_CHECK`; the sampler's pool, start table (`StartObservedLevels`) and snapshot (every 10 steps); the
+rate's resonance grid and one copy per thread; a limit's conversion; the sub-point-grid copy; five tests. Each wrote
+on its copy what its owner now writes on its own state. Pools: the fitter's and the sampler's `cnuc_pool_`
+(`std::stack<std::unique_ptr<CNuc>>`, filled with a `Clone` under `pool_mutex_` when none is idle, taken and given
+back by the evaluations under the same lock). Code against the design (code taken): the band and the adaptive
+extrapolation made no copy (both ran on the run's compound); a calculation of `AZURECalc` and the rate's constructor
+wrote their caller's compound; the session runs an `AZURECalc` too (`AZUREAPIFit.cpp`); the data set-up reads the
+inputs.
+
+**What each owner holds now**: the program's run `ProgramRun::state`, `inputs`, `fitterStates` (`include/ProgramRun.h`);
+the sampler's run `runMCMC`'s `state`, `inputs`, `walkerPool` (`src/AZURE2.cpp`); the session `AZUREAPI::state_`,
+`inputs_` (`std::unique_ptr`, as its compound and data: its `const` evaluations write them); the fitter `AZURECalc::state_`
+(the caller's, by reference: a calculation writes it, the pool copies it), `inputs_`, `states_` (the caller's
+`FitterStates`: a `StatePool<LevelState>` and the output state); the sampler `AZURECalcMCMC::levels_` (`WalkerLevels`)
+and `pool_` (the caller's `StatePool<WalkerLevels>`); the rate `ReactionRate::state_` (copied from the caller's, filled,
+warned on, shift functions; one copy per thread; the run takes it back for parameters.out), `inputs_`; a limit's
+conversion copies of `ParameterLimitsManager::state_`, `inputs_` (the caller's); the sub-point grids
+`WorkingCopy::GridLevels` (state and inputs, copied from the first evaluation's); the band and the sweeps of the
+adaptive extrapolation take the run's state (as before). `CNuc` keeps what its set-up writes (pairs, groups with B_c
+and the final-state energies, nuclei, the two systems, pathways, model data, `gamma_decay` set, layout, the
+external-capture and capture-mask set-ups, the requests); every method but the set-up's is `const`.
+
+**Deleted**: `CNuc::State`, `Inputs`, `MutableState`, the one-argument fills and transformations, `Clone`,
+`levelState_`, `levelInputs_`; the two `cnuc_pool_` and `output_compound_` rows of `allowed_state.tsv` (`pool_mutex_`
+stays for the pooled working copies, its reason corrected); `LevelState::InputEnergy` (decision 2 below).
+
+**The director's decision 2** (the input energy in the state): its reader asks whether the level is its pair's final
+state, a question of structure; it reads `ALevel::FileE` now (one writer path: `CNuc::Fill`, through the level's
+`<levels>` row) and the copy is gone. Where it differed: a physical vector (the sampler's physical basis) or a formal
+transformation that moved the level by more than 1 keV changed the answer; no project of the tree does (identical),
+check (e) of `upgrade_level_inputs` shows the case.
+
+**Verified how**: build `work/b-cnuc8` (5 threads, 0 warnings at each commit; a clean build of the last commit in
+`work/b-cnuc8f`: 0 warnings). The commit whose doors and `Clone` abort: all projects in the three bases against
+`tab-t74-1` (tag `tab-cnuc8-B`) 887 / 851 / 887 identical; `OMP_NUM_THREADS=1 ctest -LE slow -j3` 283 of 283 (the page's
+tests with them); against `work/b-trial76`, one thread each, every output file (`work/cnuc8/extra.sh`): the eight
+fits, the natural-target fits, T2 sampled in the physical and the RWA basis (8 walkers, 100 steps), the `gamma_decay`
+fit, MINOS of T2, a T2 fit with the band, a rate of `p12C.azr`: 16 of 16 identical. The deletion: the quick set
+(12 folders x 3 bases) 36 of 36 identical, the 13 tests that load a compound passed. The input energy: the quick set and
+the two THM projects of the tree 42 of 42 identical, `ctest -R 'level_inputs|thm'` 30 of 30, check (e) fails 16 of 16
+with the moved energy injected (removed). The last code commit: all projects (tag `tab-cnuc8-D`) 887 / 851 / 887
+identical; the 16 own runs again identical; `ctest -LE slow -j3` 282 of 283, `pyazr_evaluation` failed once under the
+load of the own runs beside it (its check "evaluate takes the time of one objective", a timing ratio; 3 of 3 passed
+alone: 19.1 against 18.9 ms); a T2 fit at 1 and at 5 threads: the 14 output files identical; consistency test;
+`docs_build` 58 pages. An evaluation (pyazr `Objective`, 100 calls, 1 thread, best of 3, three alternating rounds
+against `b-trial76`): T1 0.0885-0.0949 s base, 0.0926-0.0944 s branch; T2 3.64-3.76 s base, 3.64-3.74 s branch. Peak
+resident size of a T2 fit (`AZURE2 fit --use-gradient --threads=N`, three runs each, base / branch): 1 thread 175.6 /
+174.2 MB (all three runs alike), 3 threads 194.6-197.7 / 194.9-196.0 MB, 5 threads 231.4-234.3 / 227.0-241.0 MB; a T2
+sampler run (32 walkers, 100 steps, 4 threads, physical basis): base 338.5, 353.3, 354.0 MB, branch 361.5, 358.8, 359.9 MB
+(the branch higher in every run, by 5 to 23 MB; not explained: a copy of the levels is kB, the run's memory is the
+pooled working copies, and their number depends on the threads' timing); the same run at one sampler thread, base and
+branch side by side: 164.3 / 162.1 MB, and its output files identical (a 32-walker chain). By §12.1.4's measure (not run again) a copy of T2's
+fit set is 0.8 kB against 7.8 kB for a copy of the compound, so at 3 and 5 threads the saving is far below the scatter
+of the runs.
+
+**Not done / open**: the set-up out of `CNuc` (`CompoundSystem`) and the renames (step 5). Decisions for the director: the session holds
+its levels behind pointers that its `const` evaluations write (as its compound and data before: no `mutable` member
+added, but the constness of those methods says nothing); either the evaluations lose `const` or the session's state
+becomes an evaluation's (milestone 3). What stops a reader from being handed another owner's state: the compiler
+stops every reader from reaching a state through the compound (it holds none) and from writing the set-up (`const
+CNuc`); nothing stops a caller from passing a `LevelState` of another owner (the type is the same; no check). The two
+defects on the copies are unchanged: the sub-point grids' stale N_f^1/2 (their state is still a copy of the first
+evaluation's into which only E and gamma are copied), and the RWA chain's snapshot `parameters.out` (the start
+vector's observed levels, `StartObservedLevels`, now on a copy of the sampler's levels); repairing either would change
+output files. Outside: the timing check of `pyazr_evaluation` fails under load.
+
 ## 2026-11-14 (utilities agent) — the covariance builder and the reaction rate, in pyazr and on the page
 
 Branch `feature/upgrade-9-webui-utilities`.  Both utilities are arithmetic of pyazr with a screen of the page
