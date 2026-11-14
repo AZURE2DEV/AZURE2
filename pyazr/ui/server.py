@@ -429,12 +429,14 @@ class Server:
     # -- ENDF-6 evaluations: the files, a summary, the curves over the data, the codes (pyazr/ui/evaluations.py) ----
 
     def endf_files(self):
-        """The ENDF-6 files of the project folder (relative paths), the folder, and how a file is recognised."""
-        skip = [self._output_directory()]  # the engine's output; hidden directories (the UI's own) are skipped too
-        return {"directory": self.state.directory, "files": evaluations.endf_files(self.state.directory, skip),
-                "depth": evaluations.SEARCH_DEPTH,
+        """The ENDF-6 files of the project folder (relative paths), the folder, and how a file is recognised: the
+        files of :meth:`files` whose first two lines read as ENDF-6 lines."""
+        listing = self.files()
+        return {"directory": listing["directory"],
+                "files": evaluations.endf_files(listing["directory"], listing["files"]),
+                "depth": FILES_DEPTH, "more": listing["more"],
                 "how": "files whose first two lines read as ENDF-6 lines (80 columns with MAT, MF, MT), in the "
-                       f"project's directory and {evaluations.SEARCH_DEPTH} levels below; a path inside the root "
+                       f"project's directory and {FILES_DEPTH} levels below; a path inside the root "
                        "may also be typed"}
 
     def endf_summary(self, path):

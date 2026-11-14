@@ -122,11 +122,13 @@ export function shownColumns(rows, { compare = false } = {}) {
 
 /**
  * The job form's choices from the server's job table (GET /api/jobs/kinds): the kinds in the table's order, each with
- * its methods; a method that cannot run says why (the pyazr call it waits for, or the package it needs).
+ * its methods; a method that cannot run says why (the pyazr call it waits for, or the package it needs).  Only the
+ * rows of the tab `tab` (a row's `tab`: the tab whose form starts it; the rate and the ENDF jobs have their own).
  */
-export function jobChoices(table) {
+export function jobChoices(table, tab = "fit") {
   const kinds = [];
   for (const row of table) {
+    if ((row.tab || "fit") !== tab) continue;
     let k = kinds.find((x) => x.kind === row.kind);
     if (!k) { k = { kind: row.kind, methods: [], firstView: Boolean(row.first_view) }; kinds.push(k); }
     const reason = row.available ? "" : (row.missing ? `waits for pyazr: ${row.missing}`

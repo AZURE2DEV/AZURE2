@@ -1701,8 +1701,8 @@ ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one 
 - **Jobs without a session**: `JobRow.session = False` (the worker builds no session; x0 and names are empty) and
   `JobRow.files` (settings naming a file: the server refuses a path outside the root, 403, before the job starts).
 - **Files**: `pyazr/ui/evaluations.py` (the listing `endf_files`, the only place that says what an ENDF-6 file is:
-  its first two lines read by `pyazr.endf.records.split_line`; when `GET /api/files` exists the listing becomes a
-  filter over it; its `job_rows()`, the two job rows, joined to the table by `jobs.job_rows`), `tabs/endf.js`,
+  its first two lines read by `pyazr.endf.records.split_line`; the listing is a filter over the page's one file
+  listing, `Server.files` of `GET /api/files`, since the merge; its `job_rows()`, the two job rows, joined to the table by `jobs.job_rows`), `tabs/endf.js`,
   five rows of `routes.py`, `Engine.endf_curves`, server
   methods `endf_*`; lines in shared files: `app.js` (one import, one `TABS` row), `style.css` (a block at the end),
   `selftest.js` (the ENDF views and Check pressed), `smoke_test.py` (two views, the ENDF files and the stand-in codes

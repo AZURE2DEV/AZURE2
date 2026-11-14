@@ -15,10 +15,6 @@ import os
 
 import numpy as np
 
-#: How deep below the project's directory the listing of ENDF files looks (0: the directory itself).
-SEARCH_DEPTH = 2
-#: The most files the listing reads the first lines of (a project folder with a whole library in it is cut there).
-MAX_FILES = 2000
 #: What the page says of how the checking codes are found (the order of ``pyazr.endf.checkers()``).
 HOW_FOUND = ("The checking codes are found in the directories named by the environment variables "
              "AZURE2_ENDF_UTILITIES and AZURE2_PREPRO of the server, then on its PATH (pyazr.endf.checkers()); a "
@@ -43,27 +39,16 @@ def _looks_like_endf(path):
     return parsed[1].mat > 0
 
 
-def endf_files(directory, skip=()):
-    """The ENDF-6 files under the project's ``directory`` (to :data:`SEARCH_DEPTH` levels, hidden directories and
-    the directories ``skip`` left out), each ``{path (relative), size (bytes), mtime (s since the epoch)}``, sorted by
-    path.  The one place the page's list of files is made: when the server has a general file listing, this keeps
-    only the filter."""
-    out, seen = [], 0
-    skip = {os.path.realpath(s) for s in skip}
-    for here, dirs, names in os.walk(directory):
-        depth = os.path.relpath(here, directory).count(os.sep) + (here != directory)
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and depth < SEARCH_DEPTH
-                         and os.path.realpath(os.path.join(here, d)) not in skip)
-        for name in sorted(names):
-            full = os.path.join(here, name)
-            if name.startswith(".") or not os.path.isfile(full) or name.endswith((".azr", ".py")):
-                continue
-            seen += 1
-            if seen > MAX_FILES:
-                return out
-            if _looks_like_endf(full):
-                st = os.stat(full)
-                out.append({"path": os.path.relpath(full, directory), "size": st.st_size, "mtime": st.st_mtime})
+def endf_files(directory, listing):
+    """The ENDF-6 files among ``listing`` (the rows of the server's file listing, ``GET /api/files``: paths relative
+    to ``directory``), each ``{path (relative), size (bytes), mtime (s since the epoch)}``, sorted by path.  The one
+    place that says which files of the folder the ENDF tab offers: a filter over the page's one file listing."""
+    out = []
+    for row in listing:
+        full = os.path.join(directory, row["path"])
+        if row.get("kind") in ("project", "binary") or row["path"].endswith(".py") or not _looks_like_endf(full):
+            continue
+        out.append({"path": row["path"], "size": row["size"], "mtime": os.stat(full).st_mtime})
     return sorted(out, key=lambda f: f["path"])
 
 
@@ -222,7 +207,7 @@ def job_rows():
     return (
         JobRow("endf_check", "codes", "check an ENDF-6 file: pyazr.endf's own format check, then the checking codes "
                "found (pyazr.endf.check), each on a copy in a directory of its own", run=check_job, files=("path",),
-               session=False,
+               session=False, tab="endf",
                settings=(Setting("path", "text", "", "the ENDF-6 file, inside the project's root (relative to the "
                                  "project's directory)"),
                          Setting("codes", "names", [], "the checking codes to run (checkr, fizcon, psyche, inter); "
@@ -231,7 +216,7 @@ def job_rows():
                facts=(("pyazr call", "pyazr.endf.check"), ("writes", "nothing in the project folder"))),
         JobRow("endf_standardize", "program", "rewrite an ENDF-6 file with a code that rewrites (STANEF, FIXUP, "
                "DICTIN, ENDF2C) on a copy: a candidate file and its difference per section, kept only on request "
-               "(pyazr.endf.standardize)", run=standardize_job, files=("path",), session=False,
+               "(pyazr.endf.standardize)", run=standardize_job, files=("path",), session=False, tab="endf",
                settings=(Setting("path", "text", "", "the ENDF-6 file, inside the project's root (relative to the "
                                  "project's directory)"),
                          Setting("program", "text", "stanef", "the code that rewrites: stanef, fixup, dictin or "

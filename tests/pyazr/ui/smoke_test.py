@@ -195,12 +195,12 @@ def test_selftest_and_screenshots(name, tmp_path):
         first = [s for s in result["steps"] if s["depth"] == "first"]
         titles = [s["tab"] for s in first if not s["route"].startswith("#/data/") and s["route"] != "Calculate"]
         assert titles == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
-                          "Plot", "Physics", "THM", "Reaction Rate"], titles
+                          "Plot", "Physics", "THM", "ENDF", "Reaction Rate"], titles
         # Physics and THM are in the first view's tab bar exactly where the project has THM content (T2, not T1)
         shown = first[-1]["tabsShown"]
         with_thm = label != "T1"
         assert shown == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
-                         "Plot", *(["Physics", "THM"] if with_thm else []), "Reaction Rate"] \
+                         "Plot", *(["Physics", "THM"] if with_thm else []), "ENDF", "Reaction Rate"] \
             or label not in ("T1", "T2"), shown
         assert all(s["depth"] == "expert" for s in result["steps"] if s not in first), "a view not in its depth"
         # the Fit tab's two depths (the PI's decision): a fit first, the other kinds one click away; all in the expert's

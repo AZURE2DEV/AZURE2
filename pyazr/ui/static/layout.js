@@ -27,6 +27,9 @@ export const FIRST_VIEW = [
   // shown only when the project has THM content (`when`: app.js shows such a view where the condition's call says so)
   { title: "Physics", tab: "physics", hash: "#/physics", when: "thm" },
   { title: "THM", tab: "thm", hash: "#/thm", when: "thm" },
+  // an evaluated file beside the project: over the data, and its format check (the PI: an easy way of checking the
+  // evaluations); the Reaction Rate stays the last tab (his decision)
+  { title: "ENDF", tab: "endf", hash: "#/endf" },
   { title: "Reaction Rate", tab: "rate", hash: "#/rate" },
 ];
 

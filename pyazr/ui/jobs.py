@@ -517,7 +517,8 @@ class JobRow:
     only beside a result that has it); ``facts`` what the page shows of it beside its doc (name -> value: the program's
     switch, whether it gives a covariance, whether MINOS can follow); ``files`` the names of its settings that name a
     file (the server refuses one outside its root before the job starts); ``session`` False for a job that needs no
-    session of the project (its worker builds none; x0 and the free names are empty).
+    session of the project (its worker builds none; x0 and the free names are empty); ``tab`` the page's tab whose
+    form starts it (the Fit tab's job form offers the rows of "fit" only; every row is in the expert's job table).
     """
     kind: str
     method: str
@@ -531,6 +532,7 @@ class JobRow:
     facts: tuple = ()  # (name, value) pairs
     files: tuple = ()
     session: bool = True
+    tab: str = "fit"
 
     def defaults(self):
         return {s.name: s.default for s in self.settings}
@@ -580,7 +582,8 @@ JOBS = (
            facts=(("from", "a sampler job (its best point as the start)"),)),
     JobRow("rate", "engine", "the reaction rate N_A<sigma v> of a pair of pairs at the start point, computed by the "
            "engine as the program's rate command (pyazr.rate), with the Gamow window, an optional band and an "
-           "optional comparison table", run=rate_engine, follows=(("fit", None), ("sample", "emcee")),
+           "optional comparison table", run=rate_engine, tab="rate",
+           follows=(("fit", None), ("sample", "emcee")),
            settings=(Setting("entrance", "integer", 1, "the entrance pair's key"),
                      Setting("exit", "integer", 2, "the exit pair's key; -1 the total radiative capture"),
                      Setting("grid", "text", "table", "table or log20 (pyazr.rate.TEMPERATURE_GRIDS), or custom: "
@@ -665,7 +668,7 @@ def job_table():
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": _follows(r.follows),
                     "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session,
-                    "first_view": r.kind in FIRST_VIEW_KINDS})
+                    "tab": r.tab, "first_view": r.kind in FIRST_VIEW_KINDS})
     return out
 
 

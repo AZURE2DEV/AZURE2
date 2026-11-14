@@ -245,7 +245,7 @@ The **ENDF** tab (in the expert's view; ``#/endf``) puts an evaluated file besid
 ``pyazr.endf`` (:doc:`endf`). It is named after the format because that is the word an evaluator searches for, and
 both of its screens start from an ENDF-6 file.
 
-- **Over the data** (``#/endf?files=a.endf,lib/b.endf``): the ENDF-6 files of the project folder (and two levels
+- **Over the data** (``#/endf?files=a.endf,lib/b.endf``): the ENDF-6 files of the project folder (and four levels
   below) with a box each; a path inside the project's root can be typed. Each file shown has a colour, and a line
   that opens what it holds (MAT, target and projectile, library, lab, date, authors, LRP, EMAX, the sections in the
   manual's words and the header text). For every data set, the files' values at its points in its quantity and unit
