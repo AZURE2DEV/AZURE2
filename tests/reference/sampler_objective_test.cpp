@@ -46,6 +46,7 @@
 #include <thread>
 #include <vector>
 
+#include "../upgrade/SetUpForTests.h"
 #include "AZURECalc.h"
 #include "ProjectSetup.h"
 #include "AZURECalcMCMC.h"
@@ -95,7 +96,8 @@ bool replaceAll(std::string &text, const std::string &from, const std::string &t
 struct Model {
   std::ostringstream log;  // the engine's messages for this model (not checked), one stream per thread
   Config cfg;
-  CompoundSystem *compound = nullptr;
+  std::unique_ptr<const CompoundSystem> owner;  // made by the set-up (test_setup::WithData)
+  const CompoundSystem *compound = nullptr;
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
@@ -113,15 +115,16 @@ struct Model {
     mkdir(outdir.c_str(), 0755);
     cfg.outputdir = outdir + "/";
     if (!ok) return;
-    compound = new CompoundSystem();
     data = new WorkingCopy();
-    if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) {
+    CompoundSetUp setUp = test_setup::WithData(cfg, *data, test_setup::CaptureAy::kRequested);
+    if (setUp.refusal != CompoundSetUp::Refusal::kNone) {
       ok = false;
       return;
     }
-    RequestCaptureAyTerms(*compound, *data);
-    RequestDataEntrances(*compound, cfg);
-    compound->Initialize(cfg, state, inputs);
+    owner = std::move(setUp.compound);
+    compound = owner.get();
+    state = std::move(setUp.state);
+    inputs = std::move(setUp.inputs);
     ok = data->Initialize(compound, cfg) != -1;
     compound->FillMnParams(params, state, inputs, &cfg);
     data->FillMnParams(params);
@@ -129,7 +132,6 @@ struct Model {
     compound->CalcShiftFunctions(cfg, state);
   }
   ~Model() {
-    delete compound;
     delete data;
   }
   bool ok = true;

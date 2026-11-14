@@ -2,6 +2,109 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 23:45) — the PI's two answers; an `Objective`'s calls are quiet too
+
+**The PI, 2026-11-14 late** ("Yes" to both questions of the entry below): (1) written MF=6 stays within
+CHECKR's limits (200 energies per section, 201 cosines per panel) although the manual allows more: given to
+the ENDF branch (the writer thins to the limits and says the tolerance it reached; the manual's limits are a
+named option for the expert); (2) the logger `pyazr.engine` is the place for the engine's text of a library
+call, and the calls of an `Objective` are held as a session's are.
+
+**Done** (branch `feature/upgrade-7-objective-quiet`, Python only): the six engine calls of
+`pyazr/objective.py` (`__call__`, `value_and_grad`, `residuals`, `residuals_and_jacobian`, `log_prob`,
+`describe`) run inside `engine_text.held()`; the module's text and the user guide (`pyazr.rst`, "A library
+call is quiet") say so. **Test**: `tests/pyazr/library_calls_test.py` part (a): 13N's
+objective with the engine itself (its note is not on standard output and reaches the logger); the engine
+stood in for by an object that writes a line on descriptor 1 before it asks the real engine, for each of
+the calls (nothing on standard output, the numbers the same, each line at the logger at level WARNING);
+without the change the checks fail.
+**Measured**: of the 208 projects under `tests/` (without `tests/convert/`) an objective can be made for
+105; at the start and three points near it the engine prints during an `Objective` call in two (13N and
+`beam_profile_kernel`: "Note: the sub-point grids of segments with external capture are not re-placed").
+The cost per call, alternating the two trees twice: T1 0.91 ms -> 0.94 to 0.97 ms (30 to 60 microseconds,
+3 to 7 %), T2 36 ms, no difference outside the scatter.
+**Verified how**: the tests `objective_object`, `objective`, `objective_terms`, `session_lock`,
+`fit_recipes`, `upgrade_thread_independence`, `fit_with_engine`, `library_calls` run directly on the engine
+of `work/b-trial78`; the consistency test.
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-one-setup`) — the set-up of the compound and the data, once
+
+**Done.** The compound system and the data are set up by one function, `SetUpCompoundSystem`
+(`include/CompoundSystemSetUp.h`, `src/CompoundSystemSetUp.cpp`): `Fill`, the refusal of an empty structure, the
+caller's data set-up (a `DataSetUpStep`: reads `const CompoundSystem &` and the input values, returns
+`std::optional<CompoundSetUpRequests>`, the entrance and capture-A_y pairs), then `Initialize(..., requests)`. It
+returns `CompoundSetUp`: `std::unique_ptr<const CompoundSystem>`, the owner's `LevelState` and `LevelInputs`, or the
+refusing step (kUnreadable, kNoNuclearData, kData, kFinish with its message); each caller prints in its own words.
+The program's run (`ProgramRun::compound`; `AZUREMain` holds no compound now), the sampler and the session (set-up
+and rebuild) call it; the segments' trees take the structure only (`InspectCompoundStructure`, never finished).
+`Fill`, `AddHardSphereGroups`, `ParseExternalCapture`, `Initialize`, `CalcBoundaryConditions`, `BuildPathways` are
+private (the two functions are friends); `RequestEntrance`, `RequestCaptureAy` and their members are gone. What the
+last part writes refuses to be read before it (`std::logic_error` naming the accessor): `HasFormalECFinalBlocks`,
+`FormalCaptureMaskSlot`, `FormalCaptureMaskOf` (flag `CompoundSystem::finished_`), `Pathways` (as before),
+`AChannel::GetBoundaryCondition`, `ALevel::GetECEnergy` (a flag each). The C++ tests set up through it
+(`tests/upgrade/SetUpForTests.h`); `tests/upgrade/compound_setup_test.cpp` is new. Besides: `ThmExperimentReports`,
+`BuildParamIndexMap`, `AppendApparatusParams` take const data, `Segment::GetPoint`/`GetTermPoint` have const forms,
+`AZUREAPI::GetThmExperiments` is const; `AZUREAPI::configure()` returns `const Config &` (its writers, the session's
+own set-up and mode switches, write `configure_`); the conventions page names functions instead of `CNuc.cpp` lines.
+
+**What a new front end writes**: one `SetUpCompoundSystem` call with its data set-up as a lambda
+(`extending.rst`, "An owner of the levels"); a new set-up fact of the compound: its member and accessor, written in
+`Fill` or `Initialize`, with `RefuseUnfinished` when `Initialize` writes it, and a field of `CompoundSetUpRequests`
+if the data must ask for it.
+
+**The check's cost**: one branch per read of the guarded accessors. T2 and 13N calculations and a T2 fit, 1 thread,
+three runs each against `b-trial78`: 0.23/0.23 s, 7.51/7.55 s, 16.72/16.59 s (run-to-run spread 0.3 s); kept on all
+the accessors, none left without it.
+
+**Verified how** (build `work/b-setup1`, 6 jobs, 0 warnings at every commit; scripts in `work/setup1/`). Per
+commit: consistency test; the quick set (`quick.sh`: T1-T3, 13N, two external-capture, `gamma_decay`, THM, sub-point
+grids, layer and natural-target yields, threshold capture; 12 folders x 3 bases) identical to `tab-t74-1`; the tests
+near the change. Refusals (`refusals.sh`, `sessions.sh`): projects refused by the compound's structure, by the data,
+by both, by the last part (7Li_p_ay, formal), by the rate's pairs, and T1 with every check file and check on screen,
+through the program (calculate, extrapolate), the sampler and pyazr sessions (pyazr from this worktree for both
+engines): screen text, exit code, output and check files identical to `b-trial78` (13 + 9 cases). Injected: the
+refusal of `HasFormalECFinalBlocks` and of `GetBoundaryCondition` removed, `upgrade_compound_setup` 2 failures
+(removed). At the end: all projects x 3 bases (`tab-setup1-T`) Brune 887, formal 851, Park 887 files, all identical
+to `tab-t74-1`; own runs by command (`extra.sh`: eight fits, the sampler in both bases, `gamma_decay`, MINOS, band,
+rate) 16 of 16 identical to `b-trial78`; T2 fit at 1 and 4 threads, 14 files identical;
+`OMP_NUM_THREADS=1 ctest -LE slow -j2` 293 of 293; docs_build 60 pages.
+
+**Open / found**: the probably-unmeant differences above (sampler: no check files, no blank line; rebuild: no rate
+branch, model data alone refused) are kept; `tests/upgrade/node_count --plan` crashes (segmentation fault) in
+`b-trial78` as here (without `--plan` identical output).
+
+**The five set-up sequences side by side** (start b2650269; measured by reading, before any change). The places:
+the program's run (`SetUpRun`, `src/RunSetUp.cpp`), the sampler (`runMCMC`, `src/AZURE2.cpp`), the session's first
+set-up (`AZUREAPI::Initialize`) and its rebuild (`AZUREAPI::RebuildImpl`, `api/src/AZUREAPI.cpp`), the trees of the
+segments (`azure2::ProjectPredictions`, `src/Predictions.cpp`). Every one makes the compound by `Fill`, then the
+data's set-up reads the half-built compound, then the entrance and capture-A_y requests, then `Initialize`.
+
+Step by step (run / sampler / session / rebuild / trees):
+- "Filling Compound Nucleus..." before `Fill`: run, sampler. Radius overrides to `Fill`: the session's (rebuild: the
+  candidate set). `Fill` refused: run and sampler "Could not fill compound nucleus from file.", session and rebuild
+  silent, trees a line "project: <levels> cannot be set up". No pairs or no J^π groups: refused by the four ("No
+  nuclear data exists. Calculation not possible." in run and sampler); the trees refuse no pairs only.
+- Compound check file: run, session; **not the sampler**, not the rebuild.
+- Rate: run and session check `RatePairsProblem` and request the rate's entrance; the sampler has no rate; **the
+  rebuild has no rate branch** (a rate session would make points).
+- Data: "Filling Data Structures..." in run (not for a rate) and sampler. `WorkingCopy::Fill` with data, else
+  `MakePoints` (session and rebuild: also the adaptive-grid refusal); the trees make both, each into its own copy, a
+  failure a line. Refused: "Could not fill data object from file." (run, sampler) unless refused with its reason.
+  Empty: "There is no data provided." (no segments and no model data) or "Extrapolation segments produce no data."
+  (run, sampler; the session the same tests, silent); **the rebuild one test, no segments** (model data alone refused).
+- Then the entrance requests of the data sets or extrapolations, the data check file (run: not before an adaptive
+  grid's refinement; session; **not the sampler**, not the rebuild), the capture-A_y requests (all four).
+- Rebuild only: `USE_PREVIOUS_INTEGRALS` cleared before `Initialize`, set again on its failure.
+- `Initialize` refused: run and session the message, a blank line, "Calculation was aborted."; the sampler **without
+  the blank line**; the rebuild the message only; the trees never finish the compound.
+
+Meant: the session's silence (it sets `USE_API`; the program never does); a rebuild writes no check files; the trees
+need the pairs only and never the finished compound. Probably not meant, kept as they are (each would change a
+screen text or a refusal): the sampler writes neither check file and prints no blank line before "Calculation was
+aborted."; the rebuild has no rate branch and refuses a project of model data alone that the session's first set-up
+accepts. None of these is an order that one function cannot keep: each is a step of the caller's own data set-up or
+of its own messages.
+
 ## 2026-11-14 (director, 23:30) — merged: the compound system's name, the model curve, ENDF MF=6, pyazr repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 78 (rehearsal 77 plus four branches and three

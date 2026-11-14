@@ -177,10 +177,11 @@ quotes the engine's ERROR lines and whose message holds every line the engine wr
 
 A library call is quiet: it prints nothing on standard output.  The engine writes what it does (the progress bars of
 a rate, the external-capture integrals it recomputes, a stale cache it does not use) on the process's standard
-output; during every call of a session (its set-up included) and during a rate, pyazr points that output at a
+output; during every call of a session (its set-up included), every call of an ``Objective`` (a fit's or a
+sampler's every step) and during a rate, pyazr points that output at a
 temporary file and hands the lines to Python's logger ``pyazr.engine`` (``pyazr/engine_text.py``): ERROR and WARNING
-lines at level WARNING (shown on standard error by Python's default handler), the others at INFO.  The calls of an
-``Objective`` (a fit's or a sampler's every step) are not held.  To see them all::
+lines at level WARNING (shown on standard error by Python's default handler), the others at INFO.  The cost is
+some tens of microseconds per call.  To see them all::
 
    import logging
    logging.basicConfig(level=logging.INFO)

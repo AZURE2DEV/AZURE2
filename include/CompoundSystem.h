@@ -27,6 +27,9 @@ class MnUserParameters;
 class Config;
 class AZUREParams;
 struct SystemOfCompound;
+struct CompoundSetUpRequests;
+struct CompoundSetUp;
+#include "CompoundSystemSetUp.h"
 namespace azure2 {
 namespace io {
 class LevelRow;
@@ -39,8 +42,10 @@ class LevelRow;
  * table, the external-capture set-up, the model data, the gamma_decay records and the layout of the level block of
  * the parameter vector.
  *
- * It holds the set-up only, written by Fill, AddHardSphereGroups, ParseExternalCapture and Initialize
- * (CompoundSystemBuild.cpp, ExternalCaptureFinalStates.cpp) and read-only after them.  The values of an evaluation
+ * It is made by SetUpCompoundSystem (CompoundSystemSetUp.h), the one place its set-up calls (Fill,
+ * AddHardSphereGroups, ParseExternalCapture, Initialize: CompoundSystemBuild.cpp, ExternalCaptureFinalStates.cpp) are
+ * made, and handed out finished and constant; the caller's data set-up in its middle sees the structure through a
+ * const reference, where what the last part writes cannot be read yet.  The values of an evaluation
  * are the caller's: a LevelState (and the LevelInputs of a transformation) per owner, passed to every fill,
  * transformation and reader.  One object is shared, constant, by every evaluation, thread and walker of a run or a
  * session; it is not copied.
@@ -100,32 +105,7 @@ class CompoundSystem {
   /// (WorkingCopy::ReplaceSubPointGrids' state).
   void CopyFitEnergiesAndAmplitudes(const LevelState &from, LevelState &to) const;
 
-  // -- building -------------------------------------------------------------
-  /// Build the whole object from the nuclear and external-capture input files.
-  /// Returns -1 if a file cannot be read. \p radii overrides channel radii, pair number (1-based) -> fm, as the
-  /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.  `state` and `inputs`
-  /// are the caller's (the run's, the session's): shaped for the levels, the inputs made from the <levels> rows and
-  /// the gamma_decay records, the state given the zero-width flags.  This object keeps neither.
-  int Fill(const Config &, LevelState &state, LevelInputs &inputs,
-           const std::map<int, double> &radii = std::map<int, double>());
-  /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
-  /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
-  int AddHardSphereGroups(const Config &, int maxL);
-  /// Read the external-capture file into the ECLevel vector and check each
-  /// final state against the nuclear file.
-  int ParseExternalCapture(const Config &, std::map<int, int> &, const std::vector<azure2::io::LevelRow> &rows);
-  /// Boundary conditions, the physical-to-formal transformation, the reaction
-  /// pathways and the angular-distribution coefficients -- everything derived
-  /// that a calculation needs. Run after Fill, and again after anything that
-  /// changes the Coulomb functions.  The transformation writes the caller's `state` and `inputs` (those Fill made).
-  void Initialize(const Config &, LevelState &state, LevelInputs &inputs);
-
   // -- derived quantities ---------------------------------------------------
-  /// Boundary condition per channel, evaluated at the energy of the group's
-  /// first level.
-  void CalcBoundaryConditions(const Config &, const LevelInputs &inputs);
-  /// Build the pathway table (Pathways()); CompoundSystemBuild.cpp.
-  void BuildPathways(const Config &);
   /// Which energy derivatives of the shift functions CalcShiftFunctions takes in Park's basis: a chi-squared alone
   /// needs no second derivatives, the gradient does.
   enum class ShiftOrders { kWithSecondDerivatives, kFirstDerivativesOnly };
@@ -148,7 +128,7 @@ class CompoundSystem {
   bool TransformIn(const Config &, LevelState &state, LevelInputs &inputs) const;
   /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
   /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
-  bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
+  bool HasFormalECFinalBlocks() const;
   /// The --ignore-externals mask of a channel capture in the formal basis (external_capture.md section 3): a slot per
   /// (group, photon channel) with the R-matrix levels of the block the projector Pi = T^-1 P T acts on.  The projector
   /// at the current fit parameters is the state's (LevelState::CaptureProjector(slot)); the masked entrance and exit
@@ -211,13 +191,35 @@ class CompoundSystem {
   /// The reaction pathways of the run (PathwayTable.h), built by Initialize.
   /// Throws std::logic_error before Initialize.
   const azure2::PathwayTable &Pathways() const;
-  /// Ask Initialize to build the capture analyzing-power terms of (entrance pair, exit pair), both 1-based, in the
-  /// pathway table.  Set-up state, like RequestEntrance: it must be called before Initialize.
-  void RequestCaptureAy(int entrancePair, int exitPair);
-  /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
-  void RequestEntrance(int pair);
 
  private:
+  // -- set-up: called by SetUpCompoundSystem and InspectCompoundStructure only (CompoundSystemSetUp.h) ----------
+  friend CompoundSetUp SetUpCompoundSystem(const Config &, const DataSetUpStep &, const std::map<int, double> &);
+  friend bool InspectCompoundStructure(
+      const Config &, const std::function<void(const CompoundSystem &, const LevelState &, const LevelInputs &)> &);
+  /// The structure from the <levels> rows.  Returns -1 if a file cannot be read. \p radii overrides channel radii,
+  /// pair number (1-based) -> fm, as the API's SetRadius does; it holds every override of the session, so a rebuild
+  /// keeps them all.  `state` and `inputs` are the caller's: shaped for the levels, the inputs made from the <levels>
+  /// rows and the gamma_decay records, the state given the zero-width flags.  This object keeps neither.
+  int Fill(const Config &, LevelState &state, LevelInputs &inputs, const std::map<int, double> &radii);
+  /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
+  /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
+  int AddHardSphereGroups(const Config &, int maxL);
+  /// Read the external-capture file into the ECLevel vector and check each
+  /// final state against the nuclear file.
+  int ParseExternalCapture(const Config &, std::map<int, int> &, const std::vector<azure2::io::LevelRow> &rows);
+  /// The last part: boundary conditions, the physical-to-formal transformation, the reaction pathways of the
+  /// `requests` (the data's entrances and capture-A_y pairs) and the angular-distribution checks -- everything derived
+  /// that a calculation needs.  The transformation writes the caller's `state` and `inputs` (those Fill made).
+  void Initialize(const Config &, LevelState &state, LevelInputs &inputs, const CompoundSetUpRequests &requests);
+  /// Boundary condition per channel, evaluated at the energy of the group's lowest level.
+  void CalcBoundaryConditions(const Config &, const LevelInputs &inputs);
+  /// Build the pathway table (Pathways()) for the entrances and capture-A_y pairs of `requests`.
+  void BuildPathways(const Config &, const CompoundSetUpRequests &requests);
+  /// Set when the last part has written all it writes (B_c, the final-state energies, the pathway table, the
+  /// external-capture blocks, the capture masks); the accessors of those refuse before (std::logic_error).
+  bool finished_ = false;
+  void RefuseUnfinished(const char *accessor) const;
   /// The set-up's writable views of the structure (Fill, AddHardSphereGroups, ParseExternalCapture, Initialize).
   PPair *Pair(int);
   JGroup *Group(int);
@@ -252,10 +254,8 @@ class CompoundSystem {
   void ObservedWidths(const Config &, const LevelState &state, ObservedLevelTable &table) const;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
-  /// The pathway table (Initialize) and the capture-A_y requests it is built with.
+  /// The pathway table (Initialize).
   std::shared_ptr<const azure2::PathwayTable> pathways_;
-  std::vector<std::pair<int, int> > captureAyRequests_;
-  std::vector<int> entranceRequests_;  ///< RequestEntrance, 1-based pair numbers
   /// Fill's last step: SystemStructure and SystemAllGroups, or the exception their build threw.
   void BuildSystems(const Config &);
   std::shared_ptr<const SystemOfCompound> systemStructure_, systemAllGroups_;

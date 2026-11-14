@@ -4,10 +4,12 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "AdaptiveExtrapolation.h"
 #include "CompoundSystem.h"
+#include "CompoundSystemSetUp.h"
 #include "CompoundSystemChecks.h"
 #include "LevelReport.h"
 #include "CaptureAyRequests.h"
@@ -21,89 +23,92 @@
 #include "WorkingCopy.h"
 
 int SetUpRun(ProgramRun &run) {
-  // Fill compound nucleus from nucfile
-  run.configure.outStream << "Filling Compound Nucleus..." << std::endl;
-  if (run.compound->Fill(run.configure, run.state, run.inputs) == -1) {
-    run.configure.outStream << "Could not fill compound nucleus from file."
-                          << std::endl;
-    return -1;
-  } else if (run.compound->NumPairs() == 0 || run.compound->NumJGroups() == 0) {
-    run.configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
-    return -1;
-  }
-  if ((run.configure.screenCheckMask | run.configure.fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*run.compound, run.inputs, run.configure);
-
   // An extrapolation run whose project has an adaptive grid refines it once the parameters are known (below).
   run.refinesAdaptiveGrids =
       !(run.configure.paramMask & (Config::CALCULATE_WITH_DATA | Config::CALCULATE_REACTION_RATE)) &&
       HasAdaptiveGrids(run.configure);
 
-  if (!(run.configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
-    // Fill the data object from the segments and data file
-    //   Compound object is passed to the function for pair key verification and
-    //   center of mass conversions, s-factor conversions, etc.
-    run.configure.outStream << "Filling Data Structures..." << std::endl;
-    if (run.configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (const int filled = run.data->Fill(run.configure, run.compound, run.inputs); filled != 0) {
-        if (filled != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
-        return -1;
-      } else if (run.data->Data().NumSegments() == 0 && run.compound->GetModelData().NumResiduals() == 0) {  // model data alone run
-        run.configure.outStream << "There is no data provided." << std::endl;
-        return -1;
+  // The compound system from the <levels> rows, the run's data set up in the middle, then its last part
+  // (CompoundSystemSetUp.h).
+  run.configure.outStream << "Filling Compound Nucleus..." << std::endl;
+  const DataSetUpStep dataSetUp = [&run](const CompoundSystem &structure,
+                                         const LevelInputs &inputs) -> std::optional<CompoundSetUpRequests> {
+    if ((run.configure.screenCheckMask | run.configure.fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS)
+      WriteCompoundNucleusCheck(structure, inputs, run.configure);
+    CompoundSetUpRequests requests;
+    if (!(run.configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
+      // Fill the data object from the segments and data file
+      //   Compound object is passed to the function for pair key verification and
+      //   center of mass conversions, s-factor conversions, etc.
+      run.configure.outStream << "Filling Data Structures..." << std::endl;
+      if (run.configure.paramMask & Config::CALCULATE_WITH_DATA) {
+        if (const int filled = run.data->Fill(run.configure, &structure, inputs); filled != 0) {
+          if (filled != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (run.data->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {  // model data alone run
+          run.configure.outStream << "There is no data provided." << std::endl;
+          return std::nullopt;
+        }
+        RequestDataEntrances(structure, run.configure, requests);
+      } else {
+        if (const int made = run.data->MakePoints(run.configure, &structure, inputs); made != 0) {
+          if (made != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (run.data->Data().NumSegments() == 0) {
+          run.configure.outStream << "Extrapolation segments produce no data." << std::endl;
+          return std::nullopt;
+        }
+        RequestExtrapolationEntrances(structure, run.configure, requests);
       }
-      RequestDataEntrances(*run.compound, run.configure);
+      // The capture-A_y terms the data sets need are built with the pathway table (the compound's last part).
+      RequestCaptureAyTerms(structure, *run.data, requests);
+      // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it
+      // after the refinement below, on the refined grid.
+      if (((run.configure.fileCheckMask | run.configure.screenCheckMask) & Config::CHECK_DATA) && !run.refinesAdaptiveGrids)
+        run.data->PrintData(run.configure);
     } else {
-      if (const int made = run.data->MakePoints(run.configure, run.compound, run.inputs); made != 0) {
-        if (made != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
-        return -1;
-      } else if (run.data->Data().NumSegments() == 0) {
-        run.configure.outStream << "Extrapolation segments produce no data." << std::endl;
-        return -1;
+      const std::string rateProblem =
+          structure.RatePairsProblem(run.configure.rateParams.entrancePair, run.configure.rateParams.exitPair);
+      if (!rateProblem.empty()) {
+        run.configure.outStream << rateProblem << std::endl;
+        return std::nullopt;
       }
-      RequestExtrapolationEntrances(*run.compound, run.configure);
+      requests.AddEntrance(structure.GetPairNumFromKey(run.configure.rateParams.entrancePair));
     }
-    // The capture-A_y terms the data sets need are built with the pathway table (CompoundSystem::Initialize below).
-    RequestCaptureAyTerms(*run.compound, *run.data);
-    // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it after
-    // the refinement below, on the refined grid.
-    if (((run.configure.fileCheckMask | run.configure.screenCheckMask) & Config::CHECK_DATA) && !run.refinesAdaptiveGrids)
-      run.data->PrintData(run.configure);
-
-    // Cache will be populated dynamically as integrals are calculated
-  } else {
-    const std::string rateProblem =
-        run.compound->RatePairsProblem(run.configure.rateParams.entrancePair, run.configure.rateParams.exitPair);
-    if (!rateProblem.empty()) {
-      run.configure.outStream << rateProblem << std::endl;
+    return requests;
+  };
+  CompoundSetUp setUp = SetUpCompoundSystem(run.configure, dataSetUp);
+  switch (setUp.refusal) {
+    case CompoundSetUp::Refusal::kNone: break;
+    case CompoundSetUp::Refusal::kUnreadable:
+      run.configure.outStream << "Could not fill compound nucleus from file." << std::endl;
       return -1;
-    } else {
-      run.compound->RequestEntrance(run.compound->GetPairNumFromKey(run.configure.rateParams.entrancePair));
-    }
+    case CompoundSetUp::Refusal::kNoNuclearData:
+      run.configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
+      return -1;
+    case CompoundSetUp::Refusal::kData: return -1;  // the data's set-up said why
+    case CompoundSetUp::Refusal::kFinish:
+      run.configure.outStream << setUp.finishError << std::endl;
+      run.configure.outStream << std::endl
+                              << "Calculation was aborted." << std::endl;
+      return -1;
   }
-
-  // Initialize compound nucleus object
-  try {
-    run.compound->Initialize(run.configure, run.state, run.inputs);
-  } catch (GSLException e) {
-    run.configure.outStream << e.what() << std::endl;
-    run.configure.outStream << std::endl
-                          << "Calculation was aborted." << std::endl;
-    return -1;
-  }
+  run.compound = std::move(setUp.compound);
+  run.state = std::move(setUp.state);
+  run.inputs = std::move(setUp.inputs);
 
   // Create new parameters for minuit, fill them from compound nucleus object and data file.
   run.compound->FillMnParams(run.params, run.state, run.inputs, &run.configure);
   run.data->FillMnParams(run.params);
   if (run.configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     run.configure.outStream << "Reading User Parameter File..." << std::endl;
-    if (!run.params.ReadUserParameters(run.configure) || !run.params.ReconcileBasis(run.compound, run.configure)) return -1;
+    if (!run.params.ReadUserParameters(run.configure) || !run.params.ReconcileBasis(run.compound.get(), run.configure)) return -1;
   }
   // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
   // is computed on them (AdaptiveExtrapolation.h).
   if (run.refinesAdaptiveGrids) {
-    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound, run.state, run.inputs, run.params.GetMinuitParams().Params());
+    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(run.configure, run.compound.get(), run.state, run.inputs, run.params.GetMinuitParams().Params());
     if (!refined) return -1;
     delete run.data;
     run.data = refined.release();
@@ -140,7 +145,7 @@ int SetUpObjective(ProgramRun &run) {
   }
 
   // Initialize data object
-  if (run.data->Initialize(run.compound, run.configure) == -1) {
+  if (run.data->Initialize(run.compound.get(), run.configure) == -1) {
     run.configure.outStream << std::endl
                           << "Calculation was aborted." << std::endl;
     return -1;
@@ -148,7 +153,7 @@ int SetUpObjective(ProgramRun &run) {
 
   // Create ParameterLimitsManager and apply settings
   run.configure.outStream << "Applying parameter settings with Parameter Manager..." << std::endl;
-  run.limits.reset(new ParameterLimitsManager(&run.configure, run.compound, run.state, run.inputs, run.data, &run.params));
+  run.limits.reset(new ParameterLimitsManager(&run.configure, run.compound.get(), run.state, run.inputs, run.data, &run.params));
   run.limits->ReadParameterSettings();
   run.limits->ApplyAllParameterSettings(run.params);
 
@@ -156,16 +161,16 @@ int SetUpObjective(ProgramRun &run) {
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed =
           run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params(), run.state, run.inputs))
-    WarnLargeRadiativeWidths(*run.compound, run.inputs, *observed, run.configure);
+    WarnLargeRadiativeWidths(*run.compound.get(), run.inputs, *observed, run.configure);
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
   // in the first evaluation's report.
   AZUREProfile::Report(run.configure.profile, std::cerr, "set-up");
   // The objective: the chi^2 of the data, the priors and the constraints (Objective.h), on the run's data.
-  run.objective.reset(new AZURECalc(run.data, run.results, run.compound, run.state, run.inputs, run.fitterStates, run.configure, run.limits.get()));
+  run.objective.reset(new AZURECalc(run.data, run.results, run.compound.get(), run.state, run.inputs, run.fitterStates, run.configure, run.limits.get()));
   // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
   if (run.priorCov && run.priorCov->Size() > 0) {
-    const std::vector<std::string> replaced = ReplaceDiagonalPriors(run.compound, run.data, *run.priorCov);
+    const std::vector<std::string> replaced = ReplaceDiagonalPriors(run.compound.get(), run.data, *run.priorCov);
     std::string list;
     for (const std::string &name : replaced) list += (list.empty() ? "" : ", ") + name;
     if (!list.empty())

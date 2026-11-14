@@ -42,10 +42,11 @@ class ProgramProgress {
 };
 
 struct ProgramRun {
-  ProgramRun(const Config &configure, CompoundSystem *compound, WorkingCopy *&data) :
-    configure(configure), compound(compound), data(data) {}
+  ProgramRun(const Config &configure, WorkingCopy *&data) : configure(configure), data(data) {}
   const Config &configure;
-  CompoundSystem *compound;  ///< AZUREMain's: written by the set-up (SetUpRun) only, read as constant after it
+  /// The run's compound system, made finished and constant by the set-up (SetUpRun, SetUpCompoundSystem); every
+  /// evaluation, the band, the rate and the outputs borrow it.  Declared before what borrows it, so it outlives them.
+  std::unique_ptr<const CompoundSystem> compound;
   WorkingCopy *&data;  ///< AZUREMain's: replaced when an adaptive extrapolation grid is refined
   // The run's levels (LevelState.h, LevelInputs.h): made by the compound's set-up, written by the evaluations on the
   // run's data (the calculation, the final evaluation), the band and the rate, and read by the outputs.

@@ -167,7 +167,8 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   place now. The compound nuclei as set up (pairs, J^π groups, channels with B_c, the levels' `<levels>` data, the
   physics `System`, the pathway table, the external-capture set-up, the model data, the `gamma_decay` records, the
   layout of the level block of the parameter vector) are the `CompoundSystem`: built by `Fill`, `AddHardSphereGroups`,
-  `ParseExternalCapture` and `Initialize` (`src/CompoundSystemBuild.cpp`, `src/ExternalCaptureFinalStates.cpp`),
+  `ParseExternalCapture` and `Initialize` (`src/CompoundSystemBuild.cpp`, `src/ExternalCaptureFinalStates.cpp`) inside
+  the one set-up below,
   constant afterwards and shared by every thread, walker and evaluation, never copied (no `Clone`). The values at a
   parameter vector (fit energies and amplitudes, shift functions, Park's J, external-capture parts) are a
   `LevelState`, and the levels' starting values in the fit's basis a `LevelInputs`: each owner (the run, the session,
@@ -176,6 +177,14 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   `src/LevelStateFill.cpp`, the parameter vector `src/LevelParameterVector.cpp`, the reports `src/LevelReport.cpp`,
   the checks `src/CompoundSystemChecks.cpp`; the abundances went to the data. The consistency test refuses the old
   name.
+- **The compound and the data are set up by one function**, `SetUpCompoundSystem` (`include/CompoundSystemSetUp.h`).
+  What `AZUREMain`, the sampler and the session each wrote out (fill the compound, set up the data, ask for the
+  entrance and capture-A_y pathways, initialize) is written once: the function makes the compound's structure, runs
+  the caller's data set-up in the middle (it reads the structure, never what the last part computes, and hands back
+  what the pathway table must hold), finishes the compound and returns it constant with the owner's levels. `Fill`
+  and `Initialize` are private to it; a refusal comes back as the step that refused, and each caller prints it as it
+  always did, so the run's log and every output file are unchanged. Reading B_c, a final state's energy, the pathway
+  table, the external-capture blocks or the capture masks before the compound is finished throws.
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the

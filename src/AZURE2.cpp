@@ -276,6 +276,7 @@ void startMessage(const Config &configure) {
 
 #ifdef USE_MCMC
 #include "CompoundSystem.h"
+#include "CompoundSystemSetUp.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "AZURECalcMCMC.h"
@@ -373,67 +374,55 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 
 int runMCMC(Config &configure, const RunRequest &request) {
   try {
-    CompoundSystem *compound = new CompoundSystem();
     WorkingCopy *data = new WorkingCopy();
-    // The run's levels (made by the set-up below) and the idle levels of the sampler's walkers.
-    LevelState state;
-    LevelInputs inputs;
+    // The idle levels of the sampler's walkers; the run's levels are made by the set-up below.
     StatePool<WalkerLevels> walkerPool;
 
+    // The compound system from the <levels> rows, the data set up in the middle, then its last part
+    // (CompoundSystemSetUp.h).
     configure.outStream << "Filling Compound Nucleus..." << std::endl;
-    if (compound->Fill(configure, state, inputs) == -1) {
-      configure.outStream << "Could not fill compound nucleus from file." << std::endl;
-      delete compound;
-      delete data;
-      return -1;
-    } else if (compound->NumPairs() == 0 || compound->NumJGroups() == 0) {
-      configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
-      delete compound;
-      delete data;
-      return -1;
-    }
-
-    // Fill the data object from segments and data file
-    configure.outStream << "Filling Data Structures..." << std::endl;
-    if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (const int filled = data->Fill(configure, compound, inputs); filled != 0) {
-        if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
-        delete compound;
-        delete data;
-        return -1;
-      } else if (data->Data().NumSegments() == 0 && compound->GetModelData().NumResiduals() == 0) {  // model data alone run
-        configure.outStream << "There is no data provided." << std::endl;
-        delete compound;
-        delete data;
-        return -1;
+    const DataSetUpStep dataSetUp = [&configure, data](const CompoundSystem &structure,
+                                                       const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+      // Fill the data object from segments and data file
+      configure.outStream << "Filling Data Structures..." << std::endl;
+      CompoundSetUpRequests requests;
+      if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
+        if (const int filled = data->Fill(configure, &structure, levelInputs); filled != 0) {
+          if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (data->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {  // model data alone run
+          configure.outStream << "There is no data provided." << std::endl;
+          return std::nullopt;
+        }
+        RequestDataEntrances(structure, configure, requests);
+      } else {
+        if (const int made = data->MakePoints(configure, &structure, levelInputs); made != 0) {
+          if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (data->Data().NumSegments() == 0) {
+          configure.outStream << "Extrapolation segments produce no data." << std::endl;
+          return std::nullopt;
+        }
+        RequestExtrapolationEntrances(structure, configure, requests);
       }
-      RequestDataEntrances(*compound, configure);
-    } else {
-      if (const int made = data->MakePoints(configure, compound, inputs); made != 0) {
-        if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
-        delete compound;
-        delete data;
-        return -1;
-      } else if (data->Data().NumSegments() == 0) {
-        configure.outStream << "Extrapolation segments produce no data." << std::endl;
-        delete compound;
-        delete data;
-        return -1;
-      }
-      RequestExtrapolationEntrances(*compound, configure);
-    }
-
-    // Initialize compound nucleus, with the capture-A_y terms the data sets need
-    RequestCaptureAyTerms(*compound, *data);
-    try {
-      compound->Initialize(configure, state, inputs);
-    } catch (GSLException e) {
-      configure.outStream << e.what() << std::endl;
-      configure.outStream << "Calculation was aborted." << std::endl;
-      delete compound;
+      // The capture-A_y terms the data sets need, built with the pathway table
+      RequestCaptureAyTerms(structure, *data, requests);
+      return requests;
+    };
+    CompoundSetUp setUp = SetUpCompoundSystem(configure, dataSetUp);
+    if (setUp.refusal != CompoundSetUp::Refusal::kNone) {
+      if (setUp.refusal == CompoundSetUp::Refusal::kUnreadable)
+        configure.outStream << "Could not fill compound nucleus from file." << std::endl;
+      else if (setUp.refusal == CompoundSetUp::Refusal::kNoNuclearData)
+        configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
+      else if (setUp.refusal == CompoundSetUp::Refusal::kFinish)
+        configure.outStream << setUp.finishError << std::endl << "Calculation was aborted." << std::endl;
       delete data;
       return -1;
     }
+    const std::unique_ptr<const CompoundSystem> compound = std::move(setUp.compound);
+    LevelState &state = setUp.state;
+    LevelInputs &inputs = setUp.inputs;
 
     // Initialize EC amplitude cache if using external capture
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -441,11 +430,10 @@ int runMCMC(Config &configure, const RunRequest &request) {
       configure.outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
 
-    const int initialized = data->Initialize(compound, configure);  // AZURE_PROFILE: the set-up's stages on their own
+    const int initialized = data->Initialize(compound.get(), configure);  // AZURE_PROFILE: the set-up's stages on their own
     AZUREProfile::Report(configure.profile, std::cerr, "set-up");
     if (initialized == -1) {
       configure.outStream << "Calculation was aborted." << std::endl;
-      delete compound;
       delete data;
       return -1;
     }
@@ -458,7 +446,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
     // Read existing parameters if provided
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
       configure.outStream << "Reading User Parameter File..." << std::endl;
-      if (!params.ReadUserParameters(configure) || !params.ReconcileBasis(compound, configure)) return -1;
+      if (!params.ReadUserParameters(configure) || !params.ReconcileBasis(compound.get(), configure)) return -1;
     } else {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);
@@ -500,7 +488,6 @@ int runMCMC(Config &configure, const RunRequest &request) {
     if (initialParams.empty()) {
       configure.outStream << "Error: No free parameters found for MCMC sampling." << std::endl;
       configure.outStream << "Please ensure at least one parameter is not fixed." << std::endl;
-      delete compound;
       delete data;
       return -1;
     }
@@ -580,7 +567,6 @@ int runMCMC(Config &configure, const RunRequest &request) {
                                     << "name as in param.sav (energy_1, width_1_2, segment_1_norm, ...), optionally "
                                     << "as \"label (name)\", or by the short forms E<n>, G<n><c>, N<k>, S<k>, "
                                     << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
-                delete compound;
                 delete data;
                 return -1;
               }
@@ -588,7 +574,6 @@ int runMCMC(Config &configure, const RunRequest &request) {
             } else {
               configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": expected a parameter name "
                                   << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
-              delete compound;
               delete data;
               return -1;
             }
@@ -699,7 +684,7 @@ int runMCMC(Config &configure, const RunRequest &request) {
     configure.outStream << std::endl;
 
     // Create MCMC calculator
-    AZURECalcMCMC mcmcCalc(data, compound, state, inputs, walkerPool, configure);
+    AZURECalcMCMC mcmcCalc(data, compound.get(), state, inputs, walkerPool, configure);
 
     // Set priors in MCMC calculator (same as GUI does in AZUREMCMCThread.cpp)
     if (priorsFound > 0) {
@@ -728,7 +713,6 @@ int runMCMC(Config &configure, const RunRequest &request) {
 
     if (!sampled) {
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache(configure);
-      delete compound;
       delete data;
       return -1;
     }
@@ -746,7 +730,6 @@ int runMCMC(Config &configure, const RunRequest &request) {
     }
 
     // Cleanup
-    delete compound;
     delete data;
 
     return 0;

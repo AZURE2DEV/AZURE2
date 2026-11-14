@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "SetUpForTests.h"
 #include "AMatrixFunc.h"
 #include "ProjectSetup.h"
 #include "AdaptiveIntegrationGrid.h"
@@ -105,7 +106,7 @@ std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(const CompoundSyste
   return out;
 }
 
-void PlanColumns(CompoundSystem &compound, WorkingCopy &data, const std::map<int, std::vector<azure2::MeshAnchor>> &anchorsByPair,
+void PlanColumns(const CompoundSystem &compound, WorkingCopy &data, const std::map<int, std::vector<azure2::MeshAnchor>> &anchorsByPair,
                  const std::set<std::pair<int, std::uint64_t>> &today,
                  const std::set<std::pair<int, std::uint64_t>> &unfolded) {
   const azure2::CalculationPlan &plan = data.Plan();
@@ -229,25 +230,30 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
-  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
   std::map<int, std::vector<azure2::MeshAnchor>> anchorsByPair;
+  CompoundSetUp setUp;
   try {
-    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) == -1)
-      return (void)std::printf("%s\tdoes not set up\n", path.c_str());
-    if (g_plan) anchorsByPair = AnchorsByPair(compound, inputs, cfg);
-    RequestDataEntrances(compound, cfg);
-    compound.Initialize(cfg, state, inputs);
-    compound.FillMnParams(params, state, inputs, &cfg);
+    if (cfg.ReadConfigFile() < 0) return (void)std::printf("%s\tdoes not set up\n", path.c_str());
+    // The anchors are read from the structure and the input values, before the compound's last part.
+    setUp = SetUpCompoundSystem(cfg, [&](const CompoundSystem &structure,
+                                         const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+      if (data.Fill(cfg, &structure, levelInputs) == -1) return std::nullopt;
+      if (g_plan) anchorsByPair = AnchorsByPair(structure, levelInputs, cfg);
+      CompoundSetUpRequests requests;
+      RequestDataEntrances(structure, cfg, requests);
+      return requests;
+    });
+    if (setUp.refusal != CompoundSetUp::Refusal::kNone) return (void)std::printf("%s\tdoes not set up\n", path.c_str());
+    setUp.compound->FillMnParams(params, setUp.state, setUp.inputs, &cfg);
     data.FillMnParams(params);
-    if (data.Initialize(&compound, cfg) == -1) return (void)std::printf("%s\tdoes not initialize\n", path.c_str());
+    if (data.Initialize(setUp.compound.get(), cfg) == -1) return (void)std::printf("%s\tdoes not initialize\n", path.c_str());
   } catch (const std::exception &e) {
     return (void)std::printf("%s\tset-up stops (%s)\n", path.c_str(), e.what());
   }
   const azure2::CalculationPlan &plan = data.Plan();
+  const CompoundSystem &compound = *setUp.compound;
   auto nucleusOf = [&](const Site &u) { return compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); };
   std::set<std::pair<int, std::uint64_t>> today, unfolded;
   std::map<int, std::vector<std::tuple<double, double, double>>> intervals;  // by nucleus

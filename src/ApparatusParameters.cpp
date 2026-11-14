@@ -168,7 +168,7 @@ std::string ApparatusLabel(const DataSet &data, int k) {
   return std::string(a.Row().label) + " " + a.declaration.Name() + " (" + a.Row().doc + ")";
 }
 
-void AppendApparatusParams(ParamIndexMap &map, WorkingCopy *data, int &i) {
+void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data, int &i) {
   if (!data) return;
   for (int k = 1; k <= data->Data().NumApparatusParams(); k++, i++) {
     map.apparatusIndex_[k] = i;

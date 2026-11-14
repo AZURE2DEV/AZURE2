@@ -162,14 +162,20 @@ is said at each step. The objects named are drawn in :doc:`classes`.
 
 2. **Set-up.** ``SetUpRun`` and ``SetUpObjective`` (``src/RunSetUp.cpp``,
    the first stages ``AZUREMain::operator()`` calls; ``include/ProgramRun.h``)
-   for the program, ``AZUREAPI::Initialize`` (``api/src/AZUREAPI.cpp``) for a
-   session, make the same calls in the same order:
+   for the program, ``runMCMC`` (``src/AZURE2.cpp``) for the sampler,
+   ``AZUREAPI::Initialize`` and ``AZUREAPI::RebuildImpl``
+   (``api/src/AZUREAPI.cpp``) for a session. Each makes its compound system
+   and its data by one call, ``SetUpCompoundSystem``
+   (``include/CompoundSystemSetUp.h``, ``src/CompoundSystemSetUp.cpp``), which
+   runs, in this order:
 
    * ``CompoundSystem::Fill`` (``src/CompoundSystemBuild.cpp``): the pairs (``PPair``) and the
      :math:`J^\pi` groups (``JGroup``) with their channels (``AChannel``) and
      levels (``ALevel``), from the ``<levels>`` rows
      (``ProjectLevelSection``, ``src/ProjectSetup.cpp``).
-   * ``WorkingCopy::Fill`` (data sets) or ``WorkingCopy::MakePoints``
+   * The caller's data set-up (a ``DataSetUpStep``), which reads that
+     structure through a ``const CompoundSystem &``:
+     ``WorkingCopy::Fill`` (data sets) or ``WorkingCopy::MakePoints``
      (extrapolations), ``src/WorkingCopy.cpp``: first the samples of the
      ``<abundances>`` block (``AbundanceSamples``, held by the ``DataSet``;
      ``WorkingCopy::SetAbundanceSamples``, ``src/ProjectSetup.cpp``), then the
@@ -179,15 +185,21 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      ``PlanMesh``, ``include/MeshPlanner.h``, and the slots of the folded
      points), then the calculation plan (``WorkingCopy::BuildPlan``). The
      data set is written through ``WorkingCopy::Draft`` while it is set up.
-   * The entrance pairs of the run, from the specs of its active data sets or
+     It hands back the requests (``CompoundSetUpRequests``): the entrance
+     pairs of the run, from the specs of its active data sets or
      extrapolations (``RequestDataEntrances``,
      ``RequestExtrapolationEntrances``, ``src/ProjectSetup.cpp``) or the
-     rate's entrance pair, requested with ``CompoundSystem::RequestEntrance``, and the
-     capture analyzing-power terms (``RequestCaptureAyTerms``).
-   * ``CompoundSystem::Initialize``: channels, boundary conditions, the
+     rate's entrance pair, and the capture analyzing-power terms
+     (``RequestCaptureAyTerms``). A refusal of the data stops the set-up
+     there.
+   * ``CompoundSystem::Initialize``, the last part: boundary conditions, the
      transformation of the input parameters to the engine's basis
      (``CompoundSystem::TransformIn``) and the pathway table (``CompoundSystem::BuildPathways``,
-     for the requested entrance pairs).
+     for the requested entrance pairs). The finished compound is returned
+     constant (``std::unique_ptr<const CompoundSystem>``) with the owner's
+     ``LevelState`` and ``LevelInputs``; the set-up calls are private to it.
+     The segments' trees (``azure2::ProjectPredictions``) need the structure
+     only: ``InspectCompoundStructure`` makes it and never finishes it.
    * ``CompoundSystem::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
      parameters out in ``AZUREParams``, each with its ``ParameterRecord``: the
      level block (where each level's energy and amplitudes sit is the
@@ -299,10 +311,8 @@ the values at a vector (``LevelState``), which each owner holds and hands to the
 ``(const CompoundSystem &, const LevelState &)``.
 
 .. note:: **Planned.**
-   The compound system is still made by four set-up calls (``Fill``, ``AddHardSphereGroups``,
-   ``ParseExternalCapture``, ``Initialize``) with the data's set-up between ``Fill`` and ``Initialize``; one
-   build that returns the finished object is the next step. In ``pyazr`` the ``Objective`` and ``Evaluation``
-   objects take the place of the session's ``calculate_*`` methods.
+   In ``pyazr`` the ``Objective`` and ``Evaluation`` objects take the place of the session's ``calculate_*``
+   methods.
 
 Caches and their signatures
 ---------------------------

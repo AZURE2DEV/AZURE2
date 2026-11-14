@@ -15,7 +15,7 @@ import numpy as np
 
 from .errors import EngineError
 from .locking import session_lock
-from . import session_checks
+from . import engine_text, session_checks
 
 
 def require_data_mode(session, what):
@@ -55,6 +55,8 @@ class Objective:
     Arrays returned are copies the caller owns.  The object holds its session and these copies, no cache.  Calls from
     several threads on one session are safe: they take the session's lock and run one after the other.  A session
     cannot be pickled: a process pool opens one session per worker (``pyazr/examples/fit_emcee.py``).
+    Every call is quiet, as a session's are: what the engine prints while it runs goes to the logger ``pyazr.engine``
+    (:func:`pyazr.engine_text.held`, some tens of microseconds per call), not to standard output.
     """
 
     errordef = 1.0
@@ -100,12 +102,12 @@ class Objective:
 
     def __call__(self, x):
         """The objective at x (a float): chi-squared of the data plus every prior and constraint."""
-        with self._lock:
+        with self._lock, engine_text.held():
             return float(self._open()._engine.calculate_objective_rwa(self._vector(x, "Objective(x)")))
 
     def value_and_grad(self, x):
         """``(f(x), gradient)`` from one engine call (for ``scipy.optimize.minimize(..., jac=True)``)."""
-        with self._lock:
+        with self._lock, engine_text.held():
             engine = self._open()._engine
             resp = np.asarray(engine.calculate_objective_grad_rwa(self._vector(x, "Objective.value_and_grad")), float)
         return float(resp[0]), resp[1:].copy()
@@ -116,7 +118,7 @@ class Objective:
 
     def residuals(self, x):
         """The objective's least-squares rows at x from a forward pass (``sum(r**2) == f(x)``)."""
-        with self._lock:
+        with self._lock, engine_text.held():
             out = self._open()._engine.objective_rows_rwa(self._vector(x, "Objective.residuals"), False)
         return np.asarray(out["rows"], float)
 
@@ -125,7 +127,7 @@ class Objective:
         free-column indices held fixed; their finite-difference columns are not computed and come back zero in the
         data rows (the rows after them keep their analytic derivatives)."""
         skip = [] if skip is None else [int(c) for c in skip]
-        with self._lock:
+        with self._lock, engine_text.held():
             out = self._open()._engine.objective_rows_rwa(self._vector(x, "Objective.residuals_and_jacobian"), True,
                                                        skip)
         if not out["ok"]:
@@ -140,14 +142,14 @@ class Objective:
 
     def log_prob(self, x):
         """ln P = -0.5 * f(x), or ``-inf`` outside the engine's sampler's support (see the class docstring)."""
-        with self._lock:
+        with self._lock, engine_text.held():
             return float(self._open()._engine.log_prob_rwa(self._vector(x, "Objective.log_prob")))
 
     def describe(self):
         """Plain data: the free parameters (name, bounds, start), errordef, the terms' names."""
         rows = [{"name": n, "bounds": list(b), "start": float(v)}
                 for n, b, v in zip(self.names, self.bounds, self._x0)]
-        with self._lock:
+        with self._lock, engine_text.held():
             terms = list(self._open()._engine.objective_term_names())
         return {"parameters": rows, "errordef": self.errordef, "terms": terms}
 

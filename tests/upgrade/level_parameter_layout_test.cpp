@@ -14,6 +14,7 @@
 
 #include <Minuit2/MnUserParameters.h>
 
+#include "SetUpForTests.h"
 #include "AZUREParams.h"
 #include "CompoundSystem.h"
 #include "Config.h"
@@ -60,13 +61,15 @@ void OnProject(const std::string &file) {
   cfg.fileCheckMask = cfg.screenCheckMask = 0;
   cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(cfg);
-  CompoundSystem compound;
-  LevelState state;  // the levels, as the run holds them
+  // The structure finished, with the levels as its set-up reads them from the file (the values FillMnParams seeds).
+  const CompoundSetUp setUp = test_setup::WithoutData(cfg);
+  LevelState state;
   LevelInputs inputs;
-  if (compound.Fill(cfg, state, inputs) == -1) {
-    Check(false, file + ": Fill failed");
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone || !test_setup::LevelsBeforeTheLastPart(cfg, state, inputs)) {
+    Check(false, file + ": set-up failed");
     return;
   }
+  const CompoundSystem &compound = *setUp.compound;
   const LevelParameterLayout &layout = compound.ParameterLayout();
   AZUREParams params;
   compound.FillMnParams(params, state, inputs, &cfg);

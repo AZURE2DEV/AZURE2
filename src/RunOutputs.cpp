@@ -23,7 +23,7 @@ ParamIndexMap FreeParameterMap(const ProgramRun &run) {
   const int nMn = run.params.GetMinuitParams().Params().size();
   std::vector<bool> fixedMask(nMn);
   for (int fi = 0; fi < nMn; fi++) fixedMask[fi] = run.params.GetMinuitParams().Parameter(fi).IsFixed();
-  return BuildParamIndexMap(run.compound, run.data, fixedMask);
+  return BuildParamIndexMap(run.compound.get(), run.data, fixedMask);
 }
 
 }  // namespace
@@ -143,7 +143,7 @@ void WriteRunOutputs(ProgramRun &run) {
                             << std::endl;
     }
     if (!cov.empty()) {
-      if (BuildBandData(run.compound, run.state, run.inputs, run.data, run.results, run.configure, cov, bandData, &run.fitFixedMask)) {
+      if (BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov, bandData, &run.fitFixedMask)) {
         bandPtr = &bandData;
         run.configure.outStream << "Writing cross-section uncertainty bands..." << std::endl;
       } else {
@@ -164,7 +164,7 @@ void WriteRunOutputs(ProgramRun &run) {
   // s-wave scattering lengths of every particle pair at the parameters just written: the table goes to
   // scatteringLengths.out only, the run log (GUI execution screen) names the file.
   try {
-    std::string report = ScatteringLength::Report(run.compound, run.state, run.configure);
+    std::string report = ScatteringLength::Report(run.compound.get(), run.state, run.configure);
     std::ofstream slOut(run.configure.OpenPath(run.configure.outputdir + "scatteringLengths.out").c_str());
     slOut << report;
     run.configure.outStream << "Scattering lengths written to " << run.configure.outputdir << "scatteringLengths.out"
@@ -173,7 +173,7 @@ void WriteRunOutputs(ProgramRun &run) {
     run.configure.outStream << "Scattering lengths not calculated: " << e.what() << std::endl;
   }
   // The <modelData> data at the same parameters (ModelData.h): modelData.out and the run log, only with the section.
-  const std::string modelData = ModelData::Report(run.compound, run.state, run.inputs, run.configure,
+  const std::string modelData = ModelData::Report(run.compound.get(), run.state, run.inputs, run.configure,
                                                     run.compound->GetModelData());
   if (!modelData.empty()) {
     std::ofstream mdOut(run.configure.OpenPath(run.configure.outputdir + "modelData.out").c_str());

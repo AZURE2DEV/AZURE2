@@ -124,7 +124,7 @@ energy and the amplitudes:
    (the compound first, then the state, then the inputs), as every reader of
    an evaluation's values does.
 3. The input value: a member of ``LevelInputs`` (``include/LevelInputs.h``),
-   made by ``CompoundSystem::Fill`` from the ``<levels>`` rows, written by
+   made by ``CompoundSystem::Fill`` (in ``SetUpCompoundSystem``) from the ``<levels>`` rows, written by
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
    vector), read by ``CompoundSystem::FillMnParams`` as the start value; its observed
    value in ``GetTransformParams``. What an evaluation reads of the input
@@ -157,16 +157,42 @@ the ``Results`` are (``FitterStates`` of ``AZURECalc``,
 ``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
 changes: the owner's own file, and its test.
 
+A new front end that sets up a project itself (as the program's run, the
+sampler and the session do) makes the compound and its data with the one
+call, ``SetUpCompoundSystem`` (``include/CompoundSystemSetUp.h``), and owns
+what it returns:
+
+.. code-block:: cpp
+
+   WorkingCopy data;
+   CompoundSetUp setUp = SetUpCompoundSystem(config, [&](const CompoundSystem &structure,
+                                                         const LevelInputs &inputs)
+                                                         -> std::optional<CompoundSetUpRequests> {
+     if (data.Fill(config, &structure, inputs) != 0) return std::nullopt;  // refused: it said why
+     CompoundSetUpRequests requests;
+     RequestDataEntrances(structure, config, requests);
+     RequestCaptureAyTerms(structure, data, requests);
+     return requests;
+   });
+   if (setUp.refusal != CompoundSetUp::Refusal::kNone) return;  // say why in the front end's words
+   // setUp.compound (std::unique_ptr<const CompoundSystem>), setUp.state, setUp.inputs: the front end's
+
+``tests/upgrade/SetUpForTests.h`` has this form for the tests.
+
 A set-up fact of the compound system
 ------------------------------------
 
 Something the compound system learns once from the project and that no evaluation changes (a property of a
 pair, a group or a level, a table derived from them) is a member of ``CompoundSystem``
-(``include/CompoundSystem.h``) with a ``const`` accessor, written by its set-up only:
-``src/CompoundSystemBuild.cpp`` (``Fill`` or ``Initialize``), or ``src/ExternalCaptureFinalStates.cpp`` for the
-external capture. Its readers take ``const CompoundSystem &``. If the check file of the compound nucleus shows
-it, ``WriteCompoundNucleusCheck`` (``src/LevelReport.cpp``) prints it. A value that moves with the parameter
-vector is not a set-up fact: it belongs in ``LevelState`` (above).
+(``include/CompoundSystem.h``) with a ``const`` accessor, written by its set-up only, which
+``SetUpCompoundSystem`` (``src/CompoundSystemSetUp.cpp``) runs: ``src/CompoundSystemBuild.cpp`` (``Fill`` for
+what the data's set-up may read, ``Initialize`` for what needs the data's requests or the transformed
+inputs), or ``src/ExternalCaptureFinalStates.cpp`` for the external capture. A fact ``Initialize`` writes has
+an accessor that refuses before it (``CompoundSystem::RefuseUnfinished``), since the data's set-up sees the
+structure before the last part. A fact the last part needs from the data is a field of
+``CompoundSetUpRequests``. Its readers take ``const CompoundSystem &``. If the check file of the compound
+nucleus shows it, ``WriteCompoundNucleusCheck`` (``src/LevelReport.cpp``) prints it. A value that moves with
+the parameter vector is not a set-up fact: it belongs in ``LevelState`` (above).
 
 A term of the objective
 -----------------------

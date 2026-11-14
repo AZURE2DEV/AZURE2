@@ -1,4 +1,6 @@
 #include "AChannel.h"
+
+#include <stdexcept>
 #include "azure2/io/LevelRows.h"
 #include "Constants.h"
 #include "azure2/physics/Widths.h"
@@ -71,6 +73,8 @@ double AChannel::GetS() const {
  */
 
 double AChannel::GetBoundaryCondition() const {
+  if (!hasBoundaryCondition_)
+    throw std::logic_error("AChannel::GetBoundaryCondition: read before the compound system's last part set B_c");
   return boundary_condition_;
 }
 
@@ -90,6 +94,7 @@ char AChannel::GetRadType() const {
  */
 void AChannel::SetBoundaryCondition(double boundaryCondition) {
   boundary_condition_ = boundaryCondition;
+  hasBoundaryCondition_ = true;
 }
 
 /*!
