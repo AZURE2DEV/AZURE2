@@ -4,6 +4,50 @@ Update this file at the end of every work session: what changed, what is next, w
 
 ## 2026-11-14 (agent, branch `feature/upgrade-5-one-setup`) — the set-up of the compound and the data, once
 
+**Done.** The compound system and the data are set up by one function, `SetUpCompoundSystem`
+(`include/CompoundSystemSetUp.h`, `src/CompoundSystemSetUp.cpp`): `Fill`, the refusal of an empty structure, the
+caller's data set-up (a `DataSetUpStep`: reads `const CompoundSystem &` and the input values, returns
+`std::optional<CompoundSetUpRequests>`, the entrance and capture-A_y pairs), then `Initialize(..., requests)`. It
+returns `CompoundSetUp`: `std::unique_ptr<const CompoundSystem>`, the owner's `LevelState` and `LevelInputs`, or the
+refusing step (kUnreadable, kNoNuclearData, kData, kFinish with its message); each caller prints in its own words.
+The program's run (`ProgramRun::compound`; `AZUREMain` holds no compound now), the sampler and the session (set-up
+and rebuild) call it; the segments' trees take the structure only (`InspectCompoundStructure`, never finished).
+`Fill`, `AddHardSphereGroups`, `ParseExternalCapture`, `Initialize`, `CalcBoundaryConditions`, `BuildPathways` are
+private (the two functions are friends); `RequestEntrance`, `RequestCaptureAy` and their members are gone. What the
+last part writes refuses to be read before it (`std::logic_error` naming the accessor): `HasFormalECFinalBlocks`,
+`FormalCaptureMaskSlot`, `FormalCaptureMaskOf` (flag `CompoundSystem::finished_`), `Pathways` (as before),
+`AChannel::GetBoundaryCondition`, `ALevel::GetECEnergy` (a flag each). The C++ tests set up through it
+(`tests/upgrade/SetUpForTests.h`); `tests/upgrade/compound_setup_test.cpp` is new. Besides: `ThmExperimentReports`,
+`BuildParamIndexMap`, `AppendApparatusParams` take const data, `Segment::GetPoint`/`GetTermPoint` have const forms,
+`AZUREAPI::GetThmExperiments` is const; `AZUREAPI::configure()` returns `const Config &` (its writers, the session's
+own set-up and mode switches, write `configure_`); the conventions page names functions instead of `CNuc.cpp` lines.
+
+**What a new front end writes**: one `SetUpCompoundSystem` call with its data set-up as a lambda
+(`extending.rst`, "An owner of the levels"); a new set-up fact of the compound: its member and accessor, written in
+`Fill` or `Initialize`, with `RefuseUnfinished` when `Initialize` writes it, and a field of `CompoundSetUpRequests`
+if the data must ask for it.
+
+**The check's cost**: one branch per read of the guarded accessors. T2 and 13N calculations and a T2 fit, 1 thread,
+three runs each against `b-trial78`: 0.23/0.23 s, 7.51/7.55 s, 16.72/16.59 s (run-to-run spread 0.3 s); kept on all
+the accessors, none left without it.
+
+**Verified how** (build `work/b-setup1`, 6 jobs, 0 warnings at every commit; scripts in `work/setup1/`). Per
+commit: consistency test; the quick set (`quick.sh`: T1-T3, 13N, two external-capture, `gamma_decay`, THM, sub-point
+grids, layer and natural-target yields, threshold capture; 12 folders x 3 bases) identical to `tab-t74-1`; the tests
+near the change. Refusals (`refusals.sh`, `sessions.sh`): projects refused by the compound's structure, by the data,
+by both, by the last part (7Li_p_ay, formal), by the rate's pairs, and T1 with every check file and check on screen,
+through the program (calculate, extrapolate), the sampler and pyazr sessions (pyazr from this worktree for both
+engines): screen text, exit code, output and check files identical to `b-trial78` (13 + 9 cases). Injected: the
+refusal of `HasFormalECFinalBlocks` and of `GetBoundaryCondition` removed, `upgrade_compound_setup` 2 failures
+(removed). At the end: all projects x 3 bases (`tab-setup1-T`) Brune 887, formal 851, Park 887 files, all identical
+to `tab-t74-1`; own runs by command (`extra.sh`: eight fits, the sampler in both bases, `gamma_decay`, MINOS, band,
+rate) 16 of 16 identical to `b-trial78`; T2 fit at 1 and 4 threads, 14 files identical; `OMP_NUM_THREADS=1 ctest -LE slow -j2` 293 of 293;
+docs_build 60 pages.
+
+**Open / found**: the probably-unmeant differences above (sampler: no check files, no blank line; rebuild: no rate
+branch, model data alone refused) are kept; `tests/upgrade/node_count --plan` crashes (segmentation fault) in
+`b-trial78` as here (without `--plan` identical output).
+
 **The five set-up sequences side by side** (start b2650269; measured by reading, before any change). The places:
 the program's run (`SetUpRun`, `src/RunSetUp.cpp`), the sampler (`runMCMC`, `src/AZURE2.cpp`), the session's first
 set-up (`AZUREAPI::Initialize`) and its rebuild (`AZUREAPI::RebuildImpl`, `api/src/AZUREAPI.cpp`), the trees of the
