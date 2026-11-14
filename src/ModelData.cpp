@@ -149,8 +149,9 @@ struct Column {
 
 /// The columns of every level parameter the level rows depend on that has a packed column in pmap: the parameters of
 /// the rows' J^pi groups, of all groups with external capture (a photon width's external part depends on the final
-/// state), in the layout's order (CNuc::ParameterLayout).  Each parameter is set back exactly (CNuc::SetFitLevelParameter); Park's shift functions, which the
-/// transformation moved with the energies, are recomputed at the end.
+/// state), in the layout's order (CNuc::ParameterLayout).  Each parameter is set back exactly
+/// (CNuc::SetFitLevelParameter); Park's shift functions, which the transformation moved with the energies, are
+/// recomputed at the end.
 std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const ModelDataSet &set,
                                   const ParamIndexMap &pmap) {
   std::vector<Column> cols;
