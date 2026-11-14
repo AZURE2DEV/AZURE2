@@ -91,15 +91,15 @@ bool g_detail = false;  // --detail: the supports, anchors and short supports on
 /// The planner's columns for one project: supports and anchors as the set-up has them (see the head of the file).
 /// The quantized anchors in E_x per entrance pair key, as the set-up's grids saw the levels: taken after
 /// WorkingCopy::Fill (which places the grids) and before CNuc::Initialize transforms the widths.
-std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(CNuc &compound, const Config &cfg) {
+std::map<int, std::vector<azure2::MeshAnchor>> AnchorsByPair(const CNuc &compound, const LevelInputs &inputs, const Config &cfg) {
   std::map<int, std::vector<azure2::MeshAnchor>> out;
   for (int i = 1; i <= compound.NumPairs(); i++) {
     const PPair *pair = compound.GetPair(i);
     AdaptiveIntegrationGrid::GridConfig gc;
     gc.entranceKey = pair->GetPairKey();
-    gc.inputWidthsArePhysical = (cfg.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.Inputs().TransformedIn();
+    gc.inputWidthsArePhysical = (cfg.paramMask & Config::TRANSFORM_PARAMETERS) && !inputs.TransformedIn();
     std::vector<azure2::MeshAnchor> &anchors = out[pair->GetPairKey()];
-    for (const auto &r : AdaptiveIntegrationGrid(gc).Anchors(&compound, compound.Inputs(), -(pair->GetSepE() + pair->GetExE())))
+    for (const auto &r : AdaptiveIntegrationGrid(gc).Anchors(&compound, inputs, -(pair->GetSepE() + pair->GetExE())))
       anchors.push_back({r.energy, r.totalWidth, r.particleWidth, r.id});
   }
   return out;
@@ -230,16 +230,18 @@ void RunProject(const std::string &path) {
   Config cfg(sink);
   cfg.configfile = file;
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
   std::map<int, std::vector<azure2::MeshAnchor>> anchorsByPair;
   try {
-    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1)
+    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) == -1)
       return (void)std::printf("%s\tdoes not set up\n", path.c_str());
-    if (g_plan) anchorsByPair = AnchorsByPair(compound, cfg);
+    if (g_plan) anchorsByPair = AnchorsByPair(compound, inputs, cfg);
     RequestDataEntrances(compound, cfg);
-    compound.Initialize(cfg);
-    compound.FillMnParams(params, &cfg);
+    compound.Initialize(cfg, state, inputs);
+    compound.FillMnParams(params, state, inputs, &cfg);
     data.FillMnParams(params);
     if (data.Initialize(&compound, cfg) == -1) return (void)std::printf("%s\tdoes not initialize\n", path.c_str());
   } catch (const std::exception &e) {

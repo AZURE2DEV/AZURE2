@@ -41,7 +41,7 @@ class AZUREMain {
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const { return compound_; };
+  const CNuc *compound() const { return compound_; };
   /*!
    * Returns a pointer to the WorkingCopy object.
    */

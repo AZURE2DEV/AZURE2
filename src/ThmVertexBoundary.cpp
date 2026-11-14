@@ -74,7 +74,7 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(const PPair *pair, int l, int two_j
   return s;
 }
 
-bool ThmVertexAllowsPair(CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
+bool ThmVertexAllowsPair(const CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTHM() || !compound->IsPairKey(segment.GetEntranceKey())) return true;
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (!pair->GetHybridPotential()) return true;

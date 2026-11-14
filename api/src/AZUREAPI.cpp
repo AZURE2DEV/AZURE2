@@ -39,7 +39,9 @@
 #include <new>
 #include <cmath>
 
-AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
+AZUREAPI::AZUREAPI(Config &configure) :
+  configure_(configure), data_(nullptr), compound_(nullptr), state_(std::make_unique<LevelState>()),
+  inputs_(std::make_unique<LevelInputs>()) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
   // input file once and print each setup Note once, not on every rebuild (Config::cacheInputFiles, Note).
   configure_.cacheInputFiles = true;
@@ -59,9 +61,9 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(WorkingCopy &data, const std::vector<const Segment *> &segments, CNuc *lc, const Config &cfg,
-                            azure2::Results &results) {
-  return data.CalculatePointsInParallel(segments, lc, lc->State(), cfg, results) == 0;
+static bool PrecalculateAll(WorkingCopy &data, const std::vector<const Segment *> &segments, const CNuc *lc,
+                            const LevelState &state, const Config &cfg, azure2::Results &results) {
+  return data.CalculatePointsInParallel(segments, lc, state, cfg, results) == 0;
 }
 
 // The segments the UpdateSegments* loops report: the first of each run of equal keys.
@@ -116,13 +118,13 @@ int AZUREAPI::Initialize() {
   ReplaceModel();
 
   // With the session's radius overrides: Initialize runs again on every mode switch.
-  if (compound()->Fill(configure(), radiusOverrides_) == -1) {
+  if (compound_->Fill(configure(), *state_, *inputs_, radiusOverrides_) == -1) {
     return -1;
   } else if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) {
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), compound()->Inputs(), configure());
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), inputs(), configure());
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file
@@ -130,22 +132,22 @@ int AZUREAPI::Initialize() {
     //   center of mass conversions, s-factor conversions, etc.
     // configure().outStream << "Filling Data Structures..." << std::endl;
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound()) != 0) {
+      if (data()->Fill(configure(), compound(), inputs()) != 0) {
         // configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
         // configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
-      RequestDataEntrances(*compound(), configure());
+      RequestDataEntrances(*compound_, configure());
     } else {
-      if (data()->MakePoints(configure(), compound()) != 0 || SessionRefusesAdaptiveGrids(configure())) {
+      if (data()->MakePoints(configure(), compound(), inputs()) != 0 || SessionRefusesAdaptiveGrids(configure())) {
         return -1;
       } else if (data()->Data().NumSegments() == 0) {
         // configure().outStream << "Extrapolation segments produce no data." << std::endl;
         return -1;
       }
-      RequestExtrapolationEntrances(*compound(), configure());
+      RequestExtrapolationEntrances(*compound_, configure());
     }
     if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
       data()->PrintData(configure());
@@ -157,14 +159,14 @@ int AZUREAPI::Initialize() {
       configure().outStream << rateProblem << std::endl;
       return -1;
     } else {
-      compound()->RequestEntrance(compound()->GetPairNumFromKey(configure().rateParams.entrancePair));
+      compound_->RequestEntrance(compound_->GetPairNumFromKey(configure().rateParams.entrancePair));
     }
   }
 
   // Initialize compound nucleus object, with the capture-A_y terms the data sets need
-  RequestCaptureAyTerms(*compound(), *data());
+  RequestCaptureAyTerms(*compound_, *data());
   try {
-    compound()->Initialize(configure());
+    compound_->Initialize(configure(), *state_, *inputs_);
   } catch (GSLException e) {
     configure().outStream << e.what() << std::endl;
     configure().outStream << std::endl
@@ -230,13 +232,13 @@ bool AZUREAPI::UpdateParameters() {
   values_rwa_.clear();
 
   AZUREParams params;
-  compound()->FillMnParams(params, &configure());
+  compound()->FillMnParams(params, state(), inputs(), &configure());
   data()->FillMnParams(params);
 
-  compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
+  compound()->FillCompoundFromParams(params.GetMinuitParams().Params(), state());
 
-  compound()->CalcShiftFunctions(configure());
-  const ObservedLevelTable observed = compound()->TransformOut(configure());
+  compound()->CalcShiftFunctions(configure(), state());
+  const ObservedLevelTable observed = compound()->TransformOut(configure(), state(), inputs());
 
   records_ = params.Records();
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
@@ -250,7 +252,7 @@ bool AZUREAPI::UpdateParameters() {
     }
   }
 
-  all_ = compound()->GetTransformParams(compound()->State(), observed);
+  all_ = compound()->GetTransformParams(state(), observed);
   data()->Data().Abundances().AppendTo(all_rwa_, all_);
 
   // Norms and shifts are missing from all_ and need to be added using the all_rwa_ values
@@ -289,10 +291,10 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
 
   // Physical values: the R-matrix block through the same transform as
   // UpdateParameters; norms and shifts are the same in both bases.
-  compound()->FillCompoundFromParams(all_rwa_);
+  compound()->FillCompoundFromParams(all_rwa_, state());
   data()->FillAbundancesFromVector(all_rwa_);
-  compound()->CalcShiftFunctions(configure());
-  all_ = compound()->GetTransformParams(compound()->State(), compound()->TransformOut(configure()));
+  compound()->CalcShiftFunctions(configure(), state());
+  all_ = compound()->GetTransformParams(state(), compound()->TransformOut(configure(), state(), inputs()));
   data()->Data().Abundances().AppendTo(all_rwa_, all_);
   for (size_t i = all_.size(); i < all_rwa_.size(); ++i) all_.push_back(all_rwa_[i]);
 
@@ -313,7 +315,7 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
 // of its base point, its c.m. energy and angle, S-factor conversion and excitation energy.  A point whose
 // calculation fails is NaN (Unit::MarkFailed), and the arrays keep one entry per point.  Without data: the arrays
 // are emptied.
-int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
+int AZUREAPI::ReportSegments(const CNuc *localCompound, WorkingCopy *localData) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();
   calculatedAngles_.clear();
@@ -325,7 +327,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
   if (!localData) return 0;
   AZUREProfile::ScopedReport profileReport(configure().profile, "api segments");
   const std::vector<const Segment *> segments = ReportedSegments(localData->Data().GetSegments());
-  const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
+  const bool pre = PrecalculateAll(*localData, segments, localCompound, state(), configure(), results());
   for (const Segment *segment : segments) {
     const UnitRange<Unit> data = segment->GetPoints(*localData);
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
@@ -333,7 +335,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
     // coefficients (a zero for a point outside an angular-distribution segment).
     std::vector<double> angularDists;
     for (int k = 0; k < (int)data.size(); ++k) {
-      cross.push_back(azure2::EvaluateModelPoint(*localData, *segment, k, localCompound, localCompound->State(), configure(), results(),
+      cross.push_back(azure2::EvaluateModelPoint(*localData, *segment, k, localCompound, state(), configure(), results(),
                                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
       crossE1.push_back(data[k].GetFitE1CrossSection(results()));
       crossE2.push_back(data[k].GetFitE2CrossSection(results()));
@@ -367,30 +369,30 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     }
   }
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
   AZUREParams params;
-  localCompound->FillCompoundFromParamsPhysical(params_);
+  localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
-  bool isValid = localCompound->TransformIn(configure());
+  bool isValid = localCompound->TransformIn(configure(), state(), inputs());
 
   if (!isValid) {
     ReportSegments(nullptr, nullptr);  // nothing reported for an invalid vector (the arrays of the last call go)
     return 0;
   }
 
-  localCompound->FillMnParams(params);
+  localCompound->FillMnParams(params, state(), inputs());
   localData->FillMnParams(params);
-  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params(), state());
   // Norms are the same in both bases (model curves do not use them, but the
   // segments then hold the vector's values, as after CalculateChi2Physical).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &localCompound->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &state(), &inputs(), &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
 
   return ReportSegments(localCompound, localData);
 }
@@ -405,15 +407,15 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     }
   }
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
   AZUREParams params;
-  localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &localCompound->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  localCompound->FillCompoundFromParams(params_, state());
+  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &state(), &inputs(), &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
 
   return ReportSegments(localCompound, localData);
 }
@@ -429,15 +431,15 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
   }
   vector_r params_ = all_rwa_;
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
   AZUREParams params;
-  localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &localCompound->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  localCompound->FillCompoundFromParams(params_, state());
+  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &state(), &inputs(), &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
 
   return ReportSegments(localCompound, localData);
 }
@@ -450,15 +452,15 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
     params[i] = p[i];
   }
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
-  localCompound->FillCompoundFromParams(params);
+  localCompound->FillCompoundFromParams(params, state());
   localData->FillAbundancesFromVector(params);
 
-  vector_r transformedParams = localCompound->GetTransformParams(localCompound->State(), localCompound->TransformOut(configure()));
+  vector_r transformedParams = localCompound->GetTransformParams(state(), localCompound->TransformOut(configure(), state(), inputs()));
   data()->Data().Abundances().AppendTo(params, transformedParams);
 
   if (includeFixed) return transformedParams;
@@ -489,7 +491,7 @@ int AZUREAPI::UpdateData() {
   dataConv_.clear();
   dataExcitationEnergies_.clear();
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -532,7 +534,7 @@ void AZUREAPI::UpdateNorms() {
   norms_.clear();
   normsErrors_.clear();
 
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
@@ -591,10 +593,10 @@ bool AZUREAPI::WriteOutputFiles() {
   // chi2 path stores them there, the API's CalculateChi2RWA does not (pyazr adds those terms in Python), so
   // through pyazr the file carried 0 or stale values (audit 2026-10-25, item 30).  Evaluate them at the current
   // parameters before writing.
-  CNuc *localCompound = compound();
+  const CNuc *localCompound = compound();
   if (localCompound) {
     const vector_r none;
-    ObjectiveContext context{localCompound, localCompound->MutableState(), localCompound->Inputs(), data(), results(), none, configure()};
+    ObjectiveContext context{localCompound, state(), inputs(), data(), results(), none, configure()};
     Objective::Engine().ModelChi2(context);
   }
   data()->WriteOutputFiles(configure(), results(), false, nullptr);
@@ -612,7 +614,7 @@ bool AZUREAPI::GetThmLineshape(const std::string &name, const vector_r &energies
     why = "no data loaded";
     return false;
   }
-  return data()->ThmLineshapeTable(name, energies, compound(), compound()->State(), configure(), out, why);
+  return data()->ThmLineshapeTable(name, energies, compound(), state(), configure(), out, why);
 }
 
 bool AZUREAPI::GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out,
@@ -621,7 +623,7 @@ bool AZUREAPI::GetThmVertex(const std::string &name, const vector_r &energies, T
     why = "no data loaded";
     return false;
   }
-  return data()->ThmVertexTable(name, energies, compound(), compound()->State(), configure(), out, why);
+  return data()->ThmVertexTable(name, energies, compound(), state(), configure(), out, why);
 }
 
 bool AZUREAPI::GetThmDistortion(const std::string &name, const vector_r &energies, ThmDistortionReport &out,
@@ -647,6 +649,8 @@ void AZUREAPI::ReplaceModel() {
   delete data_;
   data_ = new WorkingCopy();
   compound_ = new CNuc();
+  *state_ = LevelState();  // in place: a manager made later refers to the session's levels
+  *inputs_ = LevelInputs();
   nuisance_.reset();
   nuisanceParams_.reset();
   nuisanceRead_ = false;
@@ -655,24 +659,24 @@ void AZUREAPI::ReplaceModel() {
 bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   ReplaceModel();
 
-  if (compound()->Fill(configure(), radii) == -1) return false;
+  if (compound_->Fill(configure(), *state_, *inputs_, radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
 
   // Mirror the branch taken at startup: data mode reads the data segments,
   // extrapolation mode builds its points from <segmentsTest>.
   if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    if (data()->Fill(configure(), compound()) != 0) return false;
-    RequestDataEntrances(*compound(), configure());
+    if (data()->Fill(configure(), compound(), inputs()) != 0) return false;
+    RequestDataEntrances(*compound_, configure());
   } else {
-    if (data()->MakePoints(configure(), compound()) != 0 || SessionRefusesAdaptiveGrids(configure())) return false;
-    RequestExtrapolationEntrances(*compound(), configure());
+    if (data()->MakePoints(configure(), compound(), inputs()) != 0 || SessionRefusesAdaptiveGrids(configure())) return false;
+    RequestExtrapolationEntrances(*compound_, configure());
   }
   if (data()->Data().NumSegments() == 0) return false;
 
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
-  RequestCaptureAyTerms(*compound(), *data());
+  RequestCaptureAyTerms(*compound_, *data());
   try {
-    compound()->Initialize(configure());
+    compound_->Initialize(configure(), *state_, *inputs_);
   } catch (GSLException e) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     configure().outStream << e.what() << std::endl;
@@ -699,15 +703,15 @@ vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) cons
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i]) params_[i] = rwaParams[k++];
-  CNuc *localCompound = compound();
-  localCompound->FillCompoundFromParams(params_);
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  const CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params_, state());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
   vector_r out;
   for (int aa = 1; aa <= localCompound->NumPairs(); aa++) {
     const PPair *pair = localCompound->GetPair(aa);
     if (pair->GetPType() != 0) continue;
     for (const ScatteringLength::Channel &ch : ScatteringLength::Channels(localCompound, pair->GetPairKey())) {
-      ScatteringLength::Value v = ScatteringLength::Evaluate(localCompound, localCompound->State(), configure(), ch);
+      ScatteringLength::Value v = ScatteringLength::Evaluate(localCompound, state(), configure(), ch);
       out.insert(out.end(), {(double)ch.pairKey, ch.s, (double)ch.parity, std::real(v.a0), std::imag(v.a0),
                              ch.hasLevels ? 1.0 : 0.0});
     }
@@ -726,17 +730,17 @@ static vector_r MapPackedToFull(const vector_r &packed, const vector_r &all_rwa,
 }
 
 void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
-  CNuc *lc = compound();
+  const CNuc *lc = compound();
   WorkingCopy *ld = data();
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results(), lc, &lc->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  ld->FillEnergyShiftsFromParams(full, results(), lc, &state(), &inputs(), &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), state());
 }
 
 // The data term of AZURECalc::operator(), on the filled canonical objects.
 double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
-  CNuc *lc = compound();
+  const CNuc *lc = compound();
   WorkingCopy *ld = data();
   if (res) res->clear();
   double chiSquared = 0.0;
@@ -744,11 +748,11 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->Data().NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
-  const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, configure(), results());
+  const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, state(), configure(), results());
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
     const Segment *segment = ld->Data().GetSegment(i);
     if (!segment) continue;
-    azure2::EvaluateModelSegment(*ld, *segment, lc, lc->State(), configure(), results(),
+    azure2::EvaluateModelSegment(*ld, *segment, lc, state(), configure(), results(),
                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
 
     // A THM experiment: one profile (shared norm, background) over its
@@ -799,7 +803,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 double AZUREAPI::FilledModelPenalties() const {
   // Park's J > 0 wall, the abundance priors and sum-to-one, measured scattering lengths (Objective T6, T7, T9).
   const vector_r none;
-  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), compound()->MutableState(), compound()->Inputs(), data(), results(), none, configure()});
+  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), state(), inputs(), data(), results(), none, configure()});
 }
 
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
@@ -848,15 +852,15 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
   vector_r params_ = all_rwa_;
   for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i] && k < (int)rwaParams.size()) params_[i] = rwaParams[k++];
-  CNuc *localCompound = compound();
-  localCompound->FillCompoundFromParams(params_);
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  const CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params_, state());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
   vector_r out;
   for (int j = 1; j <= localCompound->NumJGroups(); j++) {
     const JGroup *jg = localCompound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++)
-      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(localCompound->State().ParkNorm(j, la));
+      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(state().ParkNorm(j, la));
   }
   return out;
 }
@@ -873,22 +877,22 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled below from these parameters) instead of cloning.
-  CNuc *localCompound = compound();
+  const CNuc *localCompound = compound();
   WorkingCopy *localData = data();
 
   AZUREParams params;
-  localCompound->FillCompoundFromParamsPhysical(params_);
+  localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
-  bool isValid = localCompound->TransformIn(configure());
+  bool isValid = localCompound->TransformIn(configure(), state(), inputs());
 
   // A physical vector the transform rejects (a width beyond what the level
   // matrix can hold) is not a model: it used to come back as chi2 = 0, the
   // global minimum of any minimiser driving this function.
   if (!isValid) return std::numeric_limits<double>::infinity();
 
-  localCompound->FillMnParams(params);
+  localCompound->FillMnParams(params, state(), inputs());
   localData->FillMnParams(params);
-  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params(), state());
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases (all_ is the transformed R-matrix block plus
   // all_rwa_'s tail); the norms were never copied out of it, so the segments
@@ -896,8 +900,8 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // its norm entries, 2026-10-26; thm 783fef9, dev 7284d09).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &localCompound->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &state(), &inputs(), &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
 
   if (const PriorCovariance *pc = localData->Data().GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(params_);
   // The same terms CalculateChi2RWA adds: the two bases must give one objective (dev 7284d09).
@@ -906,7 +910,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
 std::vector<AZUREAPI::THMRows> AZUREAPI::ComputeTHMRows(const vector_r &full,
                                                         const ParamIndexMap &pmap) const {
-  return ::ComputeTHMRows(compound(), compound()->MutableState(), data(), results(), configure(), full, pmap);
+  return ::ComputeTHMRows(compound(), state(), inputs(), data(), results(), configure(), full, pmap);
 }
 
 bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
@@ -915,23 +919,23 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // Only one API request runs at a time, so operate on the canonical
   // compound/data in place (like UpdateSegments) rather than cloning; every
   // entry point re-fills from its own parameters before use.
-  CNuc *lc = compound();
+  const CNuc *lc = compound();
   WorkingCopy *ld = data();
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results(), lc, &lc->State(), &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), lc, &state(), &inputs(), &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (brune) {
-    lc->CalcShiftFunctions(configure());
-    shiftDeriv = BuildShiftDerivTable(lc, lc->State(), configure());
+    lc->CalcShiftFunctions(configure(), state());
+    shiftDeriv = BuildShiftDerivTable(lc, state(), configure());
     sdp = &shiftDeriv;
   }
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
   GradAccum accum;
-  accum.Init(lc, lc->State());
+  accum.Init(lc, state());
 
   // chi2 = sum (fit/J - data*n)^2/(err*n)^2 (ModelPass.h DataResidual).  d(chi2)/d(model) = 2 r / err^2 / J;
   // the same model gives the data-term norm gradient, accumulated per segment.
@@ -941,7 +945,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // every residual of the group first (one forward pass of those points), and the
   // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
   if (ld->Data().HasCovariance()) {
-    ld->PrepareCovarianceSeeds(lc, lc->State(), configure(), results());
+    ld->PrepareCovarianceSeeds(lc, state(), configure(), results());
     chi2 += ld->CovarianceChi2Correction(results());
   }
   FitBarFn fb = [&](const Segment *seg, int i, int pid, double model) -> double {
@@ -981,14 +985,14 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     return 2.0 * r / (err * err) / res.jacobian;
   };
 
-  bool ok = AccumulateEGammaGradient(lc, lc->State(), ld, results(), configure(), pmap, sdp, fb, accum);
+  bool ok = AccumulateEGammaGradient(lc, state(), ld, results(), configure(), pmap, sdp, fb, accum);
   // The model data (T9; false -> finite differences).
-  if (ok) ok = Objective::Engine().ModelDataGradient(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results(), full, configure()}, pmap, sdp, accum);
+  if (ok) ok = Objective::Engine().ModelDataGradient(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()}, pmap, sdp, accum);
   if (ok) {
-    if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, lc->State(), configure(), accum);
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, state(), configure(), accum);
     AddAbundancePenaltyGradient(*ld, configure(), accum);
     // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
-    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results(), full, configure()});
+    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()});
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->Data().NumSegments(); s++) {
       const Segment *seg = ld->Data().GetSegment(s);
@@ -1077,9 +1081,9 @@ void AZUREAPI::ReadFitSettings() const {
   nuisanceRead_ = true;
   // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
   nuisanceParams_.reset(new AZUREParams);
-  compound()->FillMnParams(*nuisanceParams_, &configure());
+  compound()->FillMnParams(*nuisanceParams_, state(), inputs(), &configure());
   data()->FillMnParams(*nuisanceParams_);
-  nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
+  nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), state(), inputs(), data(), nuisanceParams_.get()));
   if (nuisance_->ReadParameterSettings()) nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
 }
 
@@ -1131,7 +1135,7 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
-  ObjectiveContext context{compound(), compound()->MutableState(), compound()->Inputs(), data(), results(), full, configure()};
+  ObjectiveContext context{compound(), state(), inputs(), data(), results(), full, configure()};
   context.termsOut = terms;
   context.segmentPriorsOut = segments;
   context.nuisance = [this](const vector_r &q) { return NuisanceChi2(q); };
@@ -1163,17 +1167,17 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
 
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
-  CNuc *lc = compound();
+  const CNuc *lc = compound();
   WorkingCopy *ld = data();
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results(), lc, &lc->State(), &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), lc, &state(), &inputs(), &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
-    lc->CalcShiftFunctions(configure());
-    shiftDeriv = BuildShiftDerivTable(lc, lc->State(), configure());
+    lc->CalcShiftFunctions(configure(), state());
+    shiftDeriv = BuildShiftDerivTable(lc, state(), configure());
     sdp = &shiftDeriv;
   }
 
@@ -1183,7 +1187,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   // THM rows are left zero by the adjoint and filled here: residuals with the
   // profiled norm, Jacobian from the HOES adjoint plus the
   // analytic dependence of the profiled scale (see ComputeTHMRows).
-  bool ok = ComputeResidualJacobian(lc, lc->State(), ld, results(), configure(), pmap, sdp, residuals, jacobian, nCols,
+  bool ok = ComputeResidualJacobian(lc, state(), ld, results(), configure(), pmap, sdp, residuals, jacobian, nCols,
                                     /*skipTHM=*/true);
 
   if (!ok) return vector_r{-1.0};
@@ -1231,7 +1235,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
     bool anyTHM = false;
     for (int i = 1; i <= ld->Data().NumSegments(); i++) anyTHM = anyTHM || (ld->Data().GetSegment(i) && ld->Data().GetSegment(i)->IsTHM());
     if (!anyTHM) {
-      FillShiftColumns(lc, lc->State(), ld, results(), configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
+      FillShiftColumns(lc, state(), inputs(), ld, results(), configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
     } else {
       const size_t nRes = residuals.size();
       vector_r rPlus, rMinus;
@@ -1278,7 +1282,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   if (ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, &jacobian, nCols);
 
   // The model data (T9): rows after the data rows, as AZURECalc::ResidualJacobian.
-  if (!Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results(), full, configure()}, pmap, sdp, nCols,
+  if (!Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()}, pmap, sdp, nCols,
                                                residuals, jacobian))
     return vector_r{-1.0};
 
@@ -1301,17 +1305,17 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
 
   // Same preparation as CalculateResidualJacobianRWA: one request at a time, so
   // the canonical compound/data are re-filled in place from these parameters.
-  CNuc *lc = compound();
+  const CNuc *lc = compound();
   WorkingCopy *ld = data();
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, state());
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results(), lc, &lc->State(), &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), lc, &state(), &inputs(), &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
-    lc->CalcShiftFunctions(configure());
-    shiftDeriv = BuildShiftDerivTable(lc, lc->State(), configure());
+    lc->CalcShiftFunctions(configure(), state());
+    shiftDeriv = BuildShiftDerivTable(lc, state(), configure());
     sdp = &shiftDeriv;
   }
 
@@ -1327,7 +1331,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   // THM (HOES) rows come from the HOES adjoint (the T-matrix adjoint does not
   // cover them); see ComputeTHMRows.
   std::map<Unit *, vector_r> grad;
-  if (!ComputeModelGradients(lc, lc->State(), ld, results(), configure(), pmap, sdp, grad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(lc, state(), ld, results(), configure(), pmap, sdp, grad, /*skipTHM=*/true))
     return vector_r{-1.0};
   {
     std::vector<THMRows> thm = ComputeTHMRows(full, pmap);

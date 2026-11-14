@@ -69,7 +69,7 @@
  * Coulomb amplitude out), total capture, composites, samples, "total", UPOS, and a free
  * normalization on normalised coefficients (a_k / a_0 has no scale; use "absolute 1" for A_k).
  */
-static bool CoefficientsAllowed(CNuc *theCNuc, const Segment &segment, int number, const Config &configure) {
+static bool CoefficientsAllowed(const CNuc *theCNuc, const Segment &segment, int number, const Config &configure) {
   if (!segment.IsCoefficients()) return true;
   std::string why;
   if (segment.GetExitKey() == -1)
@@ -91,7 +91,7 @@ static bool CoefficientsAllowed(CNuc *theCNuc, const Segment &segment, int numbe
   return false;
 }
 
-static bool AnalyzingPowerAllowed(CNuc *theCNuc, const Segment &segment, int number, bool isTest,
+static bool AnalyzingPowerAllowed(const CNuc *theCNuc, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
   const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
@@ -153,7 +153,7 @@ static bool TotalCaptureCodeOk(const Segment &segment, int key, bool isTest, con
  * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
  * describe -- refuse instead of computing the heavy partner's correlation silently.
  */
-static bool UPOSAllowed(CNuc *theCNuc, const Segment &segment, int key, bool isTest, const Config &configure) {
+static bool UPOSAllowed(const CNuc *theCNuc, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
   const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
   if (exitPair->GetLightExE() == 0.) return true;
@@ -164,7 +164,7 @@ static bool UPOSAllowed(CNuc *theCNuc, const Segment &segment, int key, bool isT
   return false;
 }
 
-static bool TotalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
+static bool TotalAllowed(const CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
   auto refuse = [&](const std::string &why) {
@@ -189,7 +189,7 @@ static bool TotalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, 
 
 // A beta-delayed spectrum (entrance pair of type 20) is the energy distribution of one decay pair: its energies are
 // converted with that pair's masses (Segment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
-static bool BetaDelayedAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
+static bool BetaDelayedAllowed(const CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
   if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment" : "segment") << " #" << key << ": a beta-delayed "
@@ -294,7 +294,7 @@ WorkingCopy::WorkingCopy() : draft_(std::make_shared<DataSet>()) {
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment::DataSpecs &specs) {
+int WorkingCopy::Fill(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs, const azure2::experiment::DataSpecs &specs) {
   const int numTotalSegments_ = (int)specs.datasets.items.size();
   for (const auto &item : specs.datasets.items) {
     {
@@ -427,7 +427,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
   if (BuildThmGroups(configure, theCNuc) != 0) return -1;
 
   if (Draft().NumSegments() > 0) {
-    if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
+    if (this->SetUpTargetEffects(configure, theCNuc, inputs, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
     this->BuildPlan();
   }
@@ -441,7 +441,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::experiment::ExtrapolationSpecs &specs) {
+int WorkingCopy::MakePoints(const Config &configure, const CNuc *theCNuc, const LevelInputs &inputs, const azure2::experiment::ExtrapolationSpecs &specs) {
   const int numTotalSegments_ = (int)specs.extrapolations.items.size();
   for (const auto &item : specs.extrapolations.items) {
     {
@@ -572,7 +572,7 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
     return -1;
 
   if (Draft().NumSegments() > 0) {
-    if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
+    if (this->SetUpTargetEffects(configure, theCNuc, inputs, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
     this->BuildPlan();
   }
@@ -635,7 +635,7 @@ int WorkingCopy::Iterate() {
  * and entire WorkingCopy object instead of a single Unit object.
  */
 
-int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
+int WorkingCopy::Initialize(const CNuc *compound, const Config &configure) {
   // The last step of the set-up: the data set is written once more (the nuclei, the leaves' frames at load) and then
   // frozen.  A second Initialize (a session set up again) works on a new data set.
   if (!draft_) {
@@ -825,7 +825,7 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       capacity_(other.capacity_),
       rowSets_(other.rowSets_),
       contractedSize_(other.contractedSize_),
-      gridNuc_(other.gridNuc_),
+      gridLevels_(other.gridLevels_),
       meshAnchors_(other.meshAnchors_),
       meshSupports_(other.meshSupports_),
       meshCentres_(other.meshCentres_),
@@ -844,7 +844,7 @@ void WorkingCopy::SetPriorCovariance(std::shared_ptr<const PriorCovariance> prio
  * Calls Unit::CalcLegendreP for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::CalcLegendreP(int maxL, CNuc *theCNuc) {
+void WorkingCopy::CalcLegendreP(int maxL, const CNuc *theCNuc) {
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     const TargetEffect *effect = (segment->IsTargetEffect() &&
                             Data().GetTargetEffect(segment->GetTargetEffectNum())->IsQCoefficients())
@@ -866,7 +866,7 @@ void WorkingCopy::CalcLegendreP(int maxL, CNuc *theCNuc) {
  * The channel table of the given points and their sub-points, built before the threads that fill them start
  * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
  */
-std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(CNuc *theCNuc, const Config &configure,
+std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CNuc *theCNuc, const Config &configure,
                                                              const std::vector<Unit *> &points) {
   // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
   // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
@@ -887,7 +887,7 @@ std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(CNuc *theCNuc
   return table;
 }
 
-int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalcEDependentValues(const CNuc *theCNuc, const Config &configure) {
   {
     std::vector<Unit *> points;
     for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
@@ -929,7 +929,7 @@ int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
  * Calls Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void WorkingCopy::CalcCoulombAmplitude(CNuc *theCNuc) {
+void WorkingCopy::CalcCoulombAmplitude(const CNuc *theCNuc) {
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
@@ -946,7 +946,7 @@ void WorkingCopy::CalcCoulombAmplitude(CNuc *theCNuc) {
  * intEC file after those of the segments).  The run log still calls them component segments.
  */
 
-int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::InitializeLeaves(const CNuc *theCNuc, const Config &configure) {
   // The leaves go through the steps of the segments' own points
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments (" << Draft().leafRefs_.size() << " components)..." << std::endl;
@@ -1146,7 +1146,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
  * CNuc::Initialize builds its pathways.
  * Returns false, with the error printed, when the component cannot be made.
  */
-bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment, int entranceKey, int exitKey,
+bool WorkingCopy::CheckComponentPairs(const CNuc *theCNuc, const Segment &baseSegment, int entranceKey, int exitKey,
                                 const Config &configure) {
   if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
@@ -1170,7 +1170,7 @@ bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment,
  * cannot mean, make every component a plain cross section, and give a yield its hidden total-cross-section term
  * (entrance pair to itself, "total 1", by the optical theorem), the s_t of Y0 = (s / s_t)(1 - exp(-n s_t)).
  */
-bool WorkingCopy::FinishTransformedSegment(CNuc *theCNuc, Segment *seg, int key, bool isTest, const Config &configure) {
+bool WorkingCopy::FinishTransformedSegment(const CNuc *theCNuc, Segment *seg, int key, bool isTest, const Config &configure) {
   if (!seg || !seg->IsTransformed()) return true;
   const std::string what = std::string(isTest ? "test segment #" : "segment #") + std::to_string(key) + " (" +
                            (seg->IsTransmission() ? "transmission" : "yield") + "): ";
@@ -1350,7 +1350,7 @@ WorkingCopy *WorkingCopy::Clone() const {
   // A plain copy: the units, the plan and the points' task indices are values and positions, valid in the copy as
   // they are (no unit points to another or to its data set); the measurements, the term settings, the covariance
   // groups, the node tables and the prior covariance are shared and immutable (or, the two caches, shared on
-  // purpose).  A copy has no grid nucleus of its own (GridNucleus).
+  // purpose).  A copy has no grid levels of its own (GridLevels).
   WorkingCopy *dataCopy = new WorkingCopy(*this);
   // The copy's points (not their sub-points) start without the external-capture amplitudes of the set-up: a working
   // copy evaluates them at its points' energies (Unit::GetECAmplitudeWithShift).

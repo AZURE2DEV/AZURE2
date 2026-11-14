@@ -75,16 +75,16 @@ void SetShiftLayout(Unit::SubGridSpec &spec, const std::vector<Segment> &segment
 }
 }  // namespace
 
-WorkingCopy::GridNucleus::GridNucleus() {}
-WorkingCopy::GridNucleus::GridNucleus(const GridNucleus &) {}
-WorkingCopy::GridNucleus &WorkingCopy::GridNucleus::operator=(const GridNucleus &) { return *this; }
-WorkingCopy::GridNucleus::~GridNucleus() {}
+WorkingCopy::GridLevels::GridLevels() {}
+WorkingCopy::GridLevels::GridLevels(const GridLevels &) {}
+WorkingCopy::GridLevels &WorkingCopy::GridLevels::operator=(const GridLevels &) { return *this; }
+WorkingCopy::GridLevels::~GridLevels() {}
 
 namespace {
 // Does this segment need external-capture amplitudes at its sub-points?  They are
 // integrals computed once at initialization (CalculateECAmplitudes), so its grid
 // cannot be re-placed.
-bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configure) {
+bool SegmentNeedsEC(const TermRef &segment, const CNuc *theCNuc, const Config &configure) {
   if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return false;
   const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
   for (int j = 1; j <= theCNuc->NumJGroups(); j++)
@@ -120,7 +120,8 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  * otherwise the point gets the new grid, so the grid depends on the current
  * parameters alone (docs/upgrade/fit_threads.md).
  */
-int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, const Config &configure, const std::vector<TermRef> &shiftActive,
+int WorkingCopy::ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &state, const LevelInputs &inputs,
+                                      const Config &configure, const std::vector<TermRef> &shiftActive,
                                       std::vector<int> &replacedTasks) {
   if (!theCNuc) return 0;
   // Without grid replacement (--no-grid-replacement) the anchors stay; the supports of shifted points still follow
@@ -187,13 +188,17 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, co
   for (const LeafRef &leaf : set_->leafRefs_) collect({&set_->segments_[leaf.first], leaf.second});
   if (work.empty()) return 0;
 
-  // The observed parameters of the current fit values, on the private copy.
-  CNuc *g = nullptr;
+  // The observed parameters of the current fit values, on the private state and inputs.
   if (replaceGrids) {
-    if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
-    g = gridNuc_.nuc.get();
-    g->CopyFitEnergiesAndAmplitudes(state, g->MutableState());
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->State(), g->TransformOut(configure)));
+    if (!gridLevels_.state) {
+      gridLevels_.state = std::make_unique<LevelState>(state);
+      gridLevels_.inputs = std::make_unique<LevelInputs>(inputs);
+    }
+    LevelState &g = *gridLevels_.state;
+    theCNuc->CopyFitEnergiesAndAmplitudes(state, g);
+    theCNuc->FillCompoundFromParamsPhysical(
+        theCNuc->GetTransformParams(g, theCNuc->TransformOut(configure, g, *gridLevels_.inputs)), g,
+        *gridLevels_.inputs);
   }
   const auto t1 = std::chrono::steady_clock::now();
 
@@ -207,7 +212,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, co
   std::vector<char> meshMoved(meshes.size(), 0);
   std::size_t supportsMoved = 0;
   for (size_t m = 0; m < meshes.size(); m++) {
-    newAnchors[m] = replaceGrids ? MeshAnchorsOf(g, g->Inputs(), meshes[m], true) : meshAnchors_[m];
+    newAnchors[m] = replaceGrids ? MeshAnchorsOf(theCNuc, *gridLevels_.inputs, meshes[m], true) : meshAnchors_[m];
     const bool anchorsMoved = !SameAnchors(newAnchors[m], meshAnchors_[m]);
     if (!anchorsMoved && movedSupports[m].empty()) continue;
     meshMoved[m] = 1;
@@ -394,7 +399,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, co
   return changed.load();
 }
 
-int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
+int WorkingCopy::SetUpTargetEffects(const Config &configure, const CNuc *compound, const LevelInputs &inputs,
                               const azure2::experiment::SpecList<azure2::experiment::TargetEffectSpec> &specs) {
   int activeLines = 0;
   for (const auto &item : specs.items) {
@@ -553,7 +558,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
       gridConfig.maxPoints = numPoints;
       // The term's own entrance pair: its resonances, on its energy axis, are what the mesh must resolve.
       gridConfig.entranceKey = term.GetEntranceKey();
-      gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->Inputs().TransformedIn();
+      gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !inputs.TransformedIn();
       gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
       gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
       gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
@@ -621,8 +626,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   meshCentres_.assign(Draft().meshes_.size(), {});
   for (size_t m = 0; m < Draft().meshes_.size(); m++) {
     DataSet::NucleusMesh &mesh = Draft().meshes_[m];
-    mesh.anchors = MeshAnchorsOf(compound, compound->Inputs(), mesh,
-                                 (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->Inputs().TransformedIn());
+    mesh.anchors = MeshAnchorsOf(compound, inputs, mesh,
+                                 (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !inputs.TransformedIn());
     meshAnchors_[m] = mesh.anchors;
     meshSupports_[m] = mesh.supports;
     meshCentres_[m].assign(mesh.supports.size(), 0.0);

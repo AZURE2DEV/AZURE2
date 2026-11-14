@@ -42,7 +42,7 @@ ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, dou
 namespace {
 
 // Everything a row depends on besides (l, 2J, E_c), per pair: a previous table is reused only when these agree.
-std::vector<std::vector<double>> PairSignatures(CNuc *cnuc, const Config &configure) {
+std::vector<std::vector<double>> PairSignatures(const CNuc *cnuc, const Config &configure) {
   std::vector<std::vector<double>> s;
   for (int p = 1; p <= cnuc->NumPairs(); p++) {
     const PPair *pair = cnuc->GetPair(p);
@@ -60,7 +60,7 @@ std::vector<std::vector<double>> PairSignatures(CNuc *cnuc, const Config &config
 
 }  // namespace
 
-std::shared_ptr<const ChannelTable> ChannelTable::Build(CNuc *cnuc, const Config &configure, std::vector<Key> keys,
+std::shared_ptr<const ChannelTable> ChannelTable::Build(const CNuc *cnuc, const Config &configure, std::vector<Key> keys,
                                                         const ChannelTable *previous) {
   auto table = std::make_shared<ChannelTable>();
   std::sort(keys.begin(), keys.end());
@@ -103,7 +103,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(CNuc *cnuc, const Config
   return table;
 }
 
-std::shared_ptr<const ChannelTable> ChannelTable::FromRows(CNuc *cnuc, const Config &configure,
+std::shared_ptr<const ChannelTable> ChannelTable::FromRows(const CNuc *cnuc, const Config &configure,
                                                            std::vector<std::pair<Key, Row>> rows) {
   auto table = std::make_shared<ChannelTable>();
   std::sort(rows.begin(), rows.end(), [](const std::pair<Key, Row> &a, const std::pair<Key, Row> &b) { return a.first < b.first; });
@@ -119,7 +119,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::FromRows(CNuc *cnuc, const Con
   return table;
 }
 
-bool ChannelTable::SameSystem(CNuc *cnuc, const Config &configure) const {
+bool ChannelTable::SameSystem(const CNuc *cnuc, const Config &configure) const {
   return pairSignatures_ == PairSignatures(cnuc, configure);
 }
 

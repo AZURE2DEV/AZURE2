@@ -96,7 +96,7 @@ struct NodeState {
 
 /// The node state of `data` as its units are now (one pass over the plan tasks' units; see NodeTable): the stage table
 /// with its slots, an empty overflow table.
-NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &configure);
+NodeState BuildNodeTable(WorkingCopy &data, const CNuc *cnuc, const Config &configure);
 
 /// AZURE_NODE_CHECK=1 or AZURE_PLAN_CHECK=1: the node tables and slots of `data` against its units, bit for bit
 /// (WorkingCopy::CheckNodeTable: every slot names a node of a table, the stage nodes are in key order, a slot's node

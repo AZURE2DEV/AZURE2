@@ -186,14 +186,14 @@ struct CNuc::ECFinalBlocks {
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
-void CNuc::SetUpECFinalBlocks(const Config &configure) {
+void CNuc::SetUpECFinalBlocks(const Config &configure, const LevelInputs &inputs) {
   ecFinalBlocks_.reset();
   // The final state's energy in external capture (the photon energy, the bound-state wave): its Brune energy, the
   // level energy now except in the formal basis (below).
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
       if (this->Group(j)->GetLevel(la)->IsECLevel())
-        this->Group(j)->GetLevel(la)->SetECEnergy(levelInputs_.E(j, la));
+        this->Group(j)->GetLevel(la)->SetECEnergy(inputs.E(j, la));
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE))
     return;
   auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
@@ -209,7 +209,7 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     const JGroup *group = this->Group(j);
     std::size_t lowest = 0;
     for (std::size_t lb = 1; lb < levels.size(); lb++)
-      if (levelInputs_.E(j, levels[lb]) < levelInputs_.E(j, levels[lowest])) lowest = lb;
+      if (inputs.E(j, levels[lb]) < inputs.E(j, levels[lowest])) lowest = lb;
     // A lowest-level final state whose energy a fit may move leaves the energy where B_c was taken, and its formal
     // amplitude then differs from its Brune one at second order: it is recomputed too (external_capture.md section 4).
     for (std::size_t lb = 0; lb < levels.size(); lb++)
@@ -230,8 +230,8 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     const std::size_t nc = group->NumChannels();
     std::vector<double> E, gamma, B(nc);
     for (int la : levels) {
-      E.push_back(levelInputs_.E(j, la));
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(levelInputs_.Gamma(j, la, (int)k + 1));
+      E.push_back(inputs.E(j, la));
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(inputs.Gamma(j, la, (int)k + 1));
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(record->structure->system, b, E, gamma, B, cf, options);
@@ -286,9 +286,9 @@ struct CNuc::CaptureMaskSetup {
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
-void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
+void CNuc::SetUpFormalCaptureMasks(const Config &configure, LevelState &state) {
   captureMaskSetup_.reset();
-  levelState_.ShapeCaptureProjectors(0);
+  state.ShapeCaptureProjectors(0);
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::IGNORE_ZERO_WIDTHS) ||
       !(configure.paramMask & Config::TRANSFORM_PARAMETERS))
     return;
@@ -312,7 +312,7 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
   }
   if (setup->slots.empty()) return;
   captureMaskSetup_ = setup;
-  levelState_.ShapeCaptureProjectors(setup->slots.size());
+  state.ShapeCaptureProjectors(setup->slots.size());
 }
 
 /*!
@@ -393,7 +393,7 @@ const CNuc::CaptureMaskSlot &CNuc::FormalCaptureMaskOf(int slot) const {
   return captureMaskSetup_->slots[slot];
 }
 
-void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum) {
+void FinalStateOfAnotherPair(const CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum) {
   const PPair *pair = compound.GetPair(pairNum);
   configure.outStream << "ERROR: external capture into pairs " << otherPairKey
                       << " and " << pair->GetPairKey() << ": both have the final state J^pi = " << pair->GetJ(2)

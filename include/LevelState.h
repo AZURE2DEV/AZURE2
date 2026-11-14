@@ -17,9 +17,10 @@
  * Indexed like the compound's levels: J-group j and level la, both 1-based, and the group's channels ch, 1-based.  The
  * per-channel values of a group lie level after level, (la - 1) n_c + (ch - 1), as in physics/ JpiBlock.
  *
- * Owned by the compound nucleus (CNuc::State); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
- * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write it, readers get it const.  A copy of the compound copies
- * it.  Its shape (levels, channels, capture masks) is set by the compound's set-up.
+ * Owned by whoever evaluates (the program's run, the session, a fit's pooled evaluation, a walker, the rate, ...: a
+ * value, copied from its caller's); CNuc's fills (FillCompoundFromParams with GammaDecaySet::ToEngine,
+ * CalcShiftFunctions, TransformIn, SetFitLevelParameter) write the one they are given, readers get it const.  Its
+ * shape (levels, channels, capture masks) is set by the compound's set-up (CNuc::Fill, Initialize).
  */
 class LevelState {
  public:

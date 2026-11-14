@@ -22,7 +22,7 @@ std::string LevelLabel(const CNuc &compound, const LevelInputs &inputs, int j, i
   return AZURELabel::Level(group, inputs.E(j, la), j, la);
 }
 std::string ChannelLabel(const CNuc &compound, int j, int ch) {
-  CNuc &c = const_cast<CNuc &>(compound);
+  const CNuc &c = const_cast<CNuc &>(compound);
   return AZURELabel::Channel(&c, c.GetJGroup(j), ch);
 }
 }  // namespace

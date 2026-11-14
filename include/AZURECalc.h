@@ -7,6 +7,9 @@
 #include "AZUREParams.h"
 #include "WorkingData.h"
 #include "FitControl.h"
+#include "LevelInputs.h"
+#include "LevelState.h"
+#include "StatePool.h"
 #include <vector>
 #include <memory>
 #include <atomic>
@@ -17,6 +20,15 @@ class Config;
 class WorkingCopy;
 class CNuc;
 class ParameterLimitsManager;
+
+/// The level states of a fitter's evaluations, owned by whoever runs the fitter (the program's run, a sweep of an
+/// adaptive grid, a test) and lent to it as its azure2::Results are: the idle states of the evaluations that run at
+/// the same time, and the state the intermediate output files are written from (WriteIterationOutput, under its
+/// lock).  Each is a copy of the caller's state, made when no idle one is left.
+struct FitterStates {
+  StatePool<LevelState> idle;
+  std::unique_ptr<LevelState> output;
+};
 
 /// A function class to perform the calculation of the chi-squared value
 
@@ -35,13 +47,19 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   /*!
    * `results` is the buffer of the evaluations on `data` itself (a calculation, the final evaluation after a fit),
-   * owned by the caller, which then reads it (the output files).  A fit's evaluations run on pooled working copies,
-   * each with a buffer of its own (WorkingData).
+   * owned by the caller, which then reads it (the output files); `state` is the caller's level state, which those
+   * evaluations write as they write `results`, and `inputs` the caller's level inputs (read only).  A fit's
+   * evaluations run on pooled working copies, each with a buffer of its own (WorkingData), and on pooled copies of
+   * `state` held in the caller's `states`.  The compound is shared and constant; the caller outlives this object.
    */
-  AZURECalc(WorkingCopy *data, azure2::Results &results, CNuc *compound, const Config &configure,
+  AZURECalc(WorkingCopy *data, azure2::Results &results, const CNuc *compound, LevelState &state,
+            const LevelInputs &inputs, FitterStates &states, const Config &configure,
             ParameterLimitsManager *limitsManager = nullptr) :
     configure_(configure),
-    results_(results) {
+    results_(results),
+    state_(state),
+    inputs_(inputs),
+    states_(states) {
     data_ = data;
     compound_ = compound;
     limitsManager_ = limitsManager;
@@ -112,7 +130,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
-  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const;
+  void DumpNonFinite(const vector_r &p, double chi, const CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -122,13 +140,13 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * already inside a parallel region (Minuit's parallel numerical gradient) or
    * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
    */
-  bool PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
+  bool PrecalculatePoints(const LevelState &state, WorkingCopy *ld, azure2::Results &results, const Config &config,
                           bool thmOnly = false) const;
   /// chi^2 of `p` evaluated on the given working copies, writing `results` (optionally per segment).
-  double Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
+  double Chi2On(LevelState &state, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
                 bool thmOnly = false) const;
   /// The same under another Config than the run's (the pool check's serial reference).
-  double Chi2OnWith(const Config &config, CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p,
+  double Chi2OnWith(const Config &config, LevelState &state, WorkingCopy *ld, azure2::Results &results, const vector_r &p,
                     std::vector<double> *segChis, bool thmOnly) const;
   /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
@@ -203,7 +221,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const { return compound_; };
+  const CNuc *compound() const { return compound_; };
+  /// The caller's level inputs (the labels of the parameters read them).
+  const LevelInputs &inputs() const { return inputs_; }
 
   /*!
    * See Minuit2 documentation for an explanation of this function.
@@ -228,13 +248,14 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   void AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const;
 
   /*!
-   * The copies an evaluation of a fit runs on: an idle one, or a new clone of compound() and data() when every copy
-   * made so far is taken (made when needed, so a fit holds one per evaluation running at the same time: one with the
-   * analytic gradient, one per thread of Minuit2's parallel numerical gradient).  Returned after the evaluation.
+   * The copies an evaluation of a fit runs on: an idle one, or a new copy of the caller's level state and of data()
+   * when every copy made so far is taken (made when needed, so a fit holds one per evaluation running at the same
+   * time: one with the analytic gradient, one per thread of Minuit2's parallel numerical gradient).  Returned after
+   * the evaluation.
    */
-  CNuc *GetPooledCNuc() const;
+  std::unique_ptr<LevelState> GetPooledState() const;
   WorkingData *GetPooledData() const;
-  void ReturnPooledCNuc(CNuc *obj) const;
+  void ReturnPooledState(std::unique_ptr<LevelState> state) const;
   void ReturnPooledData(WorkingData *obj) const;
 
   /*!
@@ -248,14 +269,16 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   const Config &configure_;
   WorkingCopy *data_;
   azure2::Results &results_;  ///< the caller's buffer for the evaluations on data_
-  CNuc *compound_;
+  LevelState &state_;          ///< the caller's level state: those evaluations' state, the seed of the pooled ones
+  const LevelInputs &inputs_;  ///< the caller's level inputs
+  FitterStates &states_;       ///< the caller's: the pooled states and the output state
+  const CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
   mutable std::vector<bool> fixedMask_;  ///< see FixedMask()
 
-  // The idle copies of GetPooledCNuc / GetPooledData (no value of an evaluation survives in them that the next one
-  // does not overwrite: tests/upgrade/history_test.cpp, AZURE_TRACE_FCN=fresh).
-  mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
+  // The idle working copies of GetPooledData (no value of an evaluation survives in them that the next one does not
+  // overwrite: tests/upgrade/history_test.cpp, AZURE_TRACE_FCN=fresh), and their lock.
   mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;
   mutable std::mutex pool_mutex_;
   bool g2Enabled_ = false;
@@ -273,7 +296,6 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   // again fragments the per-thread malloc arenas: the freed copy is not reused
   // by the next snapshot, so resident memory climbed by roughly one data-set
   // copy per snapshot until long fits were OOM-killed.
-  mutable std::unique_ptr<CNuc> output_compound_;
   mutable std::unique_ptr<WorkingCopy> output_data_;
   mutable azure2::Results output_results_;
   mutable std::mutex output_mutex_;

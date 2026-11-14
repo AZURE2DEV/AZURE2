@@ -36,13 +36,13 @@ enum class LeafValues { Ready, Calculate };
 /// angular-distribution coefficients of such a point, and the per-nucleus terms of a sample segment in the base
 /// point's leaf record) and returned.  A point whose calculation throws, or a RATIO whose denominator is 0, is NaN.
 /// `data` is the data set that holds the segment (its plan, its target effects); below too.
-double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const LevelState &state, const Config &config,
+double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, const CNuc *compound, const LevelState &state, const Config &config,
                           Results &results, LeafValues leaves);
 /// Every point of one segment, in order.
-void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, CNuc *compound, const LevelState &state, const Config &config, Results &results,
+void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, const CNuc *compound, const LevelState &state, const Config &config, Results &results,
                           LeafValues leaves);
 /// Every point of every segment of the data set, segment by segment, point by point.
-void EvaluateModel(WorkingCopy &data, CNuc *compound, const LevelState &state, const Config &config, Results &results, LeafValues leaves);
+void EvaluateModel(WorkingCopy &data, const CNuc *compound, const LevelState &state, const Config &config, Results &results, LeafValues leaves);
 
 /// The cotangents of one point's model value m (step S11): g dm/d(leaf) for every leaf of the segment's tree that the
 /// R-matrix computes (a Coulomb reference leaf, which no level parameter moves, is left out), at the
@@ -66,7 +66,7 @@ struct ModelCotangents {
 /// The cotangents of point `pointIndex` of a data or test segment for the cotangent g of its model value, from the
 /// leaf values in `results` (the point pass, or the caller, calculated them).  False where the composition has no
 /// exact adjoint (a missing term point, a kernel that is not linear): the caller falls back to finite differences.
-bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const LevelState &state, const Config &config,
+bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, const CNuc *compound, const LevelState &state, const Config &config,
                         const Results &results, double g, ModelCotangents &out);
 
 /// The residual of one datum in the frame it was given in (docs/upgrade/energy_grid.md section 4): the model f (c.m.

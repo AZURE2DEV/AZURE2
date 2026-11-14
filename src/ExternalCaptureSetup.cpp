@@ -96,7 +96,7 @@ std::vector<LeafView> LeafViews(WorkingCopy &data) {
 }
 
 template <class Segments>
-long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
+long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const CNuc *theCNuc, ECSignatureHash *hash,
                            std::set<int> *pairs) {
   long long count = 0;
   for (auto segment = segments.begin(); segment != segments.end(); segment++) {
@@ -188,7 +188,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
  * different energies.
  */
 
-long long WorkingCopy::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
+long long WorkingCopy::CountECAmplitudes(const CNuc *theCNuc, const Config &configure) {
   std::vector<LeafView> leaves = LeafViews(*this);
   return WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
 }
@@ -217,7 +217,7 @@ long long WorkingCopy::CountECAmplitudes(CNuc *theCNuc, const Config &configure)
  * calculation in both cases.
  */
 
-std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
+std::string WorkingCopy::ECSignature(const CNuc *theCNuc, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
   // under the old definition are recomputed rather than wrongly matched.
@@ -338,7 +338,7 @@ void WorkingCopy::ECProgressRedraw(const Config &configure, const char *segmentK
  * Otherwise, the amplitudes are read from the specified file.
  */
 
-int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalculateECAmplitudes(const CNuc *theCNuc, const Config &configure) {
   std::ifstream in;
   std::ofstream out;
   std::string outputfile;
@@ -557,7 +557,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   return 0;
 }
 
-int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool usePrevious, std::ifstream &in,
+int WorkingCopy::LeafECAmplitudes(const CNuc *theCNuc, const Config &configure, bool usePrevious, std::ifstream &in,
                                   std::ofstream &out) {
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
     int aa = theCNuc->GetPairNumFromKey(Draft().segments_[leaf.first].TermEntranceKey(leaf.second));

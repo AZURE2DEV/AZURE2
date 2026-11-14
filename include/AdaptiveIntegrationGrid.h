@@ -106,7 +106,7 @@ class AdaptiveIntegrationGrid {
    * frameShift, in the frame of its unshifted data (and so of its sub-point
    * grid), quantized there.
    */
-  std::vector<ResonanceInfo> Anchors(CNuc *compound, const LevelInputs &inputs, double frameShift = 0.0);
+  std::vector<ResonanceInfo> Anchors(const CNuc *compound, const LevelInputs &inputs, double frameShift = 0.0);
 
   /*!
    * \brief The anchors that shape the grid of a window (see GenerateGrid).
@@ -129,7 +129,7 @@ class AdaptiveIntegrationGrid {
    * integrators (e.g. the reaction-rate integration) can place integration
    * breakpoints at the resonance energies.  Not quantized.
    */
-  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs) {
+  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, const CNuc *compound, const LevelInputs &inputs) {
     return IdentifyResonances(startEnergy, endEnergy, compound, inputs);
   }
 
@@ -137,10 +137,10 @@ class AdaptiveIntegrationGrid {
   GridConfig config_;  ///< Grid generation configuration
 
   /// Every level with a width, unquantized, sorted by energy.
-  std::vector<ResonanceInfo> LevelResonances(CNuc *compound, const LevelInputs &inputs);
+  std::vector<ResonanceInfo> LevelResonances(const CNuc *compound, const LevelInputs &inputs);
 
   /// The levels within resonanceWidthMultiplier widths of the range.
-  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs);
+  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, const CNuc *compound, const LevelInputs &inputs);
 
   /// Distance out to which a resonance's lattice is finer than the smooth step.
   double Reach(const ResonanceInfo &resonance) const;

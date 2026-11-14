@@ -71,7 +71,7 @@ struct ParamCotangent {
  * `out` with `row`; the parameter parts into `params`.  The records of `results` must hold the forward pass at the
  * parameters filled now.  False where the point is outside the analytic path (finite differences then).
  */
-bool PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, const LevelState &state, const Config &config,
+bool PointCotangents(WorkingCopy &data, const GradPoint &p, const CNuc *compound, const LevelState &state, const Config &config,
                      azure2::Results &results, double fitBar, int row, GradAccum &params,
                      std::vector<UnitCotangent> &out);
 
@@ -84,7 +84,7 @@ bool PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, cons
  * adjoint is taken once in its task.  False, with `accum` untouched and `bailSeg` the segment, where a point is outside
  * the analytic path.
  */
-bool EnergyTaskGradient(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool EnergyTaskGradient(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                         const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
                         const ThmAdjointContext *hoes = nullptr);
 
@@ -95,7 +95,7 @@ bool EnergyTaskGradient(CNuc *compound, const LevelState &state, WorkingCopy *da
  * adjoint is taken by free parameter of `mask` where that is cheaper (AMatrixFunc::LevelBasis).  False, with
  * `bailSeg`, as EnergyTaskGradient; `numTasks` the energy tasks of the pass.
  */
-bool EnergyTaskRows(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool EnergyTaskRows(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                     const vector_matrix_r *shiftDeriv, const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask,
                     const std::function<double(const GradPoint &, double)> &rowFitBar, std::vector<GradPoint> &points,
                     std::vector<double> &models, std::vector<double> &rows, int &bailSeg, int &numTasks);

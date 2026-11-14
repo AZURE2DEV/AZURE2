@@ -175,6 +175,9 @@ bool writeCaptureProject(const std::string &source, const std::string &target) {
 struct Model {
   Config cfg;
   CNuc *compound = nullptr;
+  LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
+  LevelInputs inputs;
+  FitterStates fitterStates;
   WorkingCopy *data = nullptr;
   AZUREParams params;
   // `externalCapture`: the project has external capture (as the CLI's checkExternalCapture sets it); `mask`: the
@@ -195,11 +198,11 @@ struct Model {
     if (cfg.ReadConfigFile() < 0) return false;
     compound = new CNuc();
     data = new WorkingCopy();
-    if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
+    if (compound->Fill(cfg, state, inputs) == -1 || data->Fill(cfg, compound, inputs) != 0) return false;
     RequestDataEntrances(*compound, cfg);
     RequestCaptureAyTerms(*compound, *data);  // as AZUREMain: a capture A_y's terms, built with the pathway table
-    compound->Initialize(cfg);
-    compound->FillMnParams(params, &cfg);
+    compound->Initialize(cfg, state, inputs);
+    compound->FillMnParams(params, state, inputs, &cfg);
     data->FillMnParams(params);
     return data->Initialize(compound, cfg) != -1;
   }
@@ -208,20 +211,20 @@ struct Model {
 // Whether the analytic energy/width adjoint applies at p (AZURECalc::Gradient
 // falls back to finite differences of Chi2Value where it does not).
 bool AdjointApplies(Model &m, const vector_r &p) {
-  CNuc *lc = m.compound->Clone();
+  const CNuc *lc = m.compound;
+  LevelState ls(m.state);  // a copy, as a fit's evaluation takes one
   WorkingCopy *ld = m.data->Clone();
-  lc->FillCompoundFromParams(p);
+  lc->FillCompoundFromParams(p, ls);
   ld->FillNormsFromParams(p);
   azure2::Results results;
-  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &m.cfg);
-  lc->CalcShiftFunctions(m.cfg);
-  vector_matrix_r sd = BuildShiftDerivTable(lc, lc->State(), m.cfg);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &ls, &m.inputs, &m.cfg);
+  lc->CalcShiftFunctions(m.cfg, ls);
+  vector_matrix_r sd = BuildShiftDerivTable(lc, ls, m.cfg);
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
-  accum.Init(lc, lc->State());
+  accum.Init(lc, ls);
   FitBarFn one = [](const Segment *, int, int, double) { return 1.0; };
-  const bool ok = AccumulateEGammaGradient(lc, lc->State(), ld, results, m.cfg, pmap, &sd, one, accum);
-  delete lc;
+  const bool ok = AccumulateEGammaGradient(lc, ls, ld, results, m.cfg, pmap, &sd, one, accum);
   delete ld;
   return ok;
 }
@@ -255,18 +258,18 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
         adjoint == expectAdjoint);
 
   azure2::Results results;
-  AZURECalc calc(m.data, results, m.compound, m.cfg);
+  AZURECalc calc(m.data, results, m.compound, m.state, m.inputs, m.fitterStates, m.cfg);
   calc.SetErrorDef(1.0);
   calc.SetFixedMask(fixed);
   m.data->SetFit(true);
 
   const double full = calc(p);
   const double value = calc.Chi2Value(p);
-  m.compound->FillCompoundFromParams(p);
-  m.compound->CalcShiftFunctions(m.cfg);
+  m.compound->FillCompoundFromParams(p, m.state);
+  m.compound->CalcShiftFunctions(m.cfg, m.state);
   double penalty = 0.0;  // the objective's Park term alone
   for (const auto &term : Objective::Engine().Terms())
-    if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.compound->MutableState(), m.compound->Inputs(), m.data, results, p, m.cfg}, penalty);
+    if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.state, m.inputs, m.data, results, p, m.cfg}, penalty);
   check(label + ": starting point beyond the wall (Park penalty " + num(penalty) + ")", penalty > 1.0e3);
   check(label + ": Chi2Value = operator() (" + num(value) + " vs " + num(full) + ")",
         std::fabs(value - full) <= 1e-10 * std::fabs(full), "difference " + num(full - value));
@@ -311,7 +314,7 @@ void FallbackVariant(const std::string &label, const std::string &azr, unsigned 
   check(label + ": free parameters (" + std::to_string(freeIdx.size()) + ")", !freeIdx.empty());
   check(label + ": analytic adjoint bails (fallback path)", !AdjointApplies(m, p));
   azure2::Results results;
-  AZURECalc calc(m.data, results, m.compound, m.cfg);
+  AZURECalc calc(m.data, results, m.compound, m.state, m.inputs, m.fitterStates, m.cfg);
   calc.SetErrorDef(1.0);
   calc.SetFixedMask(fixed);
   m.data->SetFit(true);

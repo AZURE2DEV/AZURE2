@@ -225,7 +225,7 @@ bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *>
   return true;
 }
 
-double SegmentLocalChi2(const Segment &segment, CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data,
+double SegmentLocalChi2(const Segment &segment, const CNuc *compound, const LevelState &state, const Config &config, WorkingCopy &data,
                         Results &results, double norm) {
   double chi = 0.0;
   const bool refolded = RefoldShiftedSegments(data, {&segment}, config, results);
@@ -238,7 +238,7 @@ double SegmentLocalChi2(const Segment &segment, CNuc *compound, const LevelState
   return chi;
 }
 
-std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const LevelState &state, const Config &config,
+std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, const CNuc *compound, const LevelState &state, const Config &config,
                               Results &results) {
   std::vector<double> norms;
   for (int s : segments) {

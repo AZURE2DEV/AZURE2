@@ -67,7 +67,7 @@ struct ThmAdjointContext {
 
 /// The context for the compound at the levels of `state` (CalcShiftFunctions already run
 /// under Brune); `lineshape` asks for the width derivatives.
-ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const LevelState &state,
+ThmAdjointContext BuildThmAdjointContext(const CNuc *compound, const LevelState &state,
                                          const std::vector<double> &coherentValues,
                                          const Config &configure, const vector_matrix_r *shiftDeriv, bool lineshape);
 
@@ -82,7 +82,7 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double
 
 class THMMatrixFunc : public AMatrixFunc {
  public:
-  THMMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure);
+  THMMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure);
   /// Computes the HOES cross section for the point and stores it as the fit XS.
   void CalculateTHMCrossSection(Site *point, const std::vector<double> &coherentValues, azure2::Results &results);
   /*!

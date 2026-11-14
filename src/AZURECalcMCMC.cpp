@@ -50,13 +50,14 @@ struct AZURECalcMCMC::Run {
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   // Outside the support (the fit's limits of any parameter): zero probability, nothing evaluated.
   if (!InsideFitLimits(p)) return -std::numeric_limits<double>::infinity();
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = compound();
+  WalkerLevels *walker = nullptr;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
 
   try {
     // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
-    localCompound = GetPooledCNuc();
+    walker = GetPooledLevels();
     working = GetPooledData();
     localData = working->data.get();
 
@@ -64,91 +65,93 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
     // Fill Compound Nucleus From Parameters
     AZUREParams params;
-    localCompound->FillCompoundFromParams(p);
+    localCompound->FillCompoundFromParams(p, walker->state);
     localData->FillNormsFromParams(p);
-    localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &localCompound->State(), &configure());
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
+    localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &walker->state, &walker->inputs, &configure());
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CNuc::ShiftOrders::kFirstDerivativesOnly);
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
-    if (localCompound) ReturnPooledCNuc(localCompound);
+    if (walker) ReturnPooledLevels(walker);
     if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
-    if (localCompound) ReturnPooledCNuc(localCompound);
+    if (walker) ReturnPooledLevels(walker);
     if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
 
-  return LogLikelihoodOfFilled(localCompound, working, p);
+  return LogLikelihoodOfFilled(walker, working, p);
 }
 
-double AZURECalcMCMC::LogLikelihoodOfFilled(CNuc *localCompound, WorkingData *working, const vector_r &p) const {
+double AZURECalcMCMC::LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *working, const vector_r &p) const {
+  const CNuc *localCompound = compound();
   azure2::Results &results = working->results;
-  ObjectiveContext context{localCompound, localCompound->MutableState(), localCompound->Inputs(), working->data.get(), results, p, configure()};
+  ObjectiveContext context{localCompound, walker->state, walker->inputs, working->data.get(), results, p, configure()};
   // A support of the posterior (Park's J > 0, docs/upgrade/objective.md D2): -infinity outside.
   if (Objective::Engine().ExcludesForSampler(context)) {
-    ReturnPooledCNuc(localCompound);
+    ReturnPooledLevels(walker);
     ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
   // The model value of every point, then the fit's objective as the sampler takes it (Objective::SamplerChi2,
   // objective.md section 6): every term at its value, the data with THM norms profiled as the fit does (D1), except
   // the priors this sampler normalises (CalculateLogPrior).  A term added to the objective arrives here unedited.
-  azure2::EvaluateModel(*working->data, localCompound, localCompound->State(), configure(), results, azure2::LeafValues::Calculate);
+  azure2::EvaluateModel(*working->data, localCompound, walker->state, configure(), results, azure2::LeafValues::Calculate);
   const double chiSquared = Objective::Engine().SamplerChi2(context);
 
-  ReturnPooledCNuc(localCompound);
+  ReturnPooledLevels(walker);
   ReturnPooledData(working);
   return -0.5 * chiSquared;
 }
 
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) const {
-  CNuc *localCompound = NULL;
+  const CNuc *localCompound = compound();
+  WalkerLevels *walker = nullptr;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
   AZUREParams params;
 
   try {
     // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
-    localCompound = GetPooledCNuc();
+    walker = GetPooledLevels();
     working = GetPooledData();
     localData = working->data.get();
 
     // Objects are already cloned, no need for deep copying
 
-    localCompound->FillCompoundFromParamsPhysical(params_);
+    localCompound->FillCompoundFromParamsPhysical(params_, walker->state, walker->inputs);
     localData->FillAbundancesFromVector(params_);
-    bool isValid = localCompound->TransformIn(configure());
+    bool isValid = localCompound->TransformIn(configure(), walker->state, walker->inputs);
 
     if (!isValid) {
-      ReturnPooledCNuc(localCompound);
+      ReturnPooledLevels(walker);
       ReturnPooledData(working);
       return -std::numeric_limits<double>::infinity();
     }
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
-    if (localCompound) ReturnPooledCNuc(localCompound);
+    if (walker) ReturnPooledLevels(walker);
     if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
-    if (localCompound) ReturnPooledCNuc(localCompound);
+    if (walker) ReturnPooledLevels(walker);
     if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
 
   // The fit's vector at this point (amplitudes, the data parameters from the tail of the observed vector), so that the
   // support and a term reading the vector read the fit's: the limits act on the converted amplitudes and energies.
-  const vector_r fitVector = FitVectorOfObserved(localCompound, localData, params_);
+  const vector_r fitVector = FitVectorOfObserved(*walker, localData, params_);
   if (!InsideFitLimits(fitVector)) {
-    ReturnPooledCNuc(localCompound);
+    ReturnPooledLevels(walker);
     ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
-  localCompound->FillMnParams(params, &configure());
+  localCompound->FillMnParams(params, walker->state, walker->inputs, &configure());
   localData->FillMnParams(params);
-  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  localCompound->FillCompoundFromParams(params.GetMinuitParams().Params(), walker->state);
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases.  The norms were never copied out of it, so the
   // pooled WorkingCopy kept its starting norms: the sampler moved the norm
@@ -156,10 +159,10 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &localCompound->State(), &configure());
+  localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &walker->state, &walker->inputs, &configure());
 
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
-  return LogLikelihoodOfFilled(localCompound, working, fitVector);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), walker->state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  return LogLikelihoodOfFilled(walker, working, fitVector);
 }
 
 void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
@@ -175,18 +178,18 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   paramKinds_.clear();
 
   AZUREParams params;
-  compound()->FillMnParams(params, &configure());
+  compound()->FillMnParams(params, levels_.state, levels_.inputs, &configure());
   data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
     params.ReconcileBasis(compound(), configure());
   }
   // The support: the fit's limits, as AZUREMain sets them before a fit (the kinds' own and <parameterSettings>).
-  support_ = PosteriorSupport::OfFit(configure(), compound(), data(), params);
+  support_ = PosteriorSupport::OfFit(configure(), compound(), levels_.state, levels_.inputs, data(), params);
 
-  compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
-  compound()->CalcShiftFunctions(configure());
-  const ObservedLevelTable observed = compound()->TransformOut(configure());
+  compound()->FillCompoundFromParams(params.GetMinuitParams().Params(), levels_.state);
+  compound()->CalcShiftFunctions(configure(), levels_.state);
+  const ObservedLevelTable observed = compound()->TransformOut(configure(), levels_.state, levels_.inputs);
 
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
@@ -198,7 +201,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     if (!par.IsFixed()) rwa_.push_back(par.Value());
   }
 
-  all_physical_ = compound()->GetTransformParams(compound()->State(), observed);
+  all_physical_ = compound()->GetTransformParams(levels_.state, observed);
   data()->Data().Abundances().AppendTo(all_rwa_, all_physical_);
   // Add missing parameters
   for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
@@ -395,7 +398,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         // parameter stays uniform rather than getting an invented width.
         usePriors_[i] = false;
         nNoError++;
-        noErrorLabels.push_back(AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]));
+        noErrorLabels.push_back(AZURELabel::Parameter(compound(), levels_.inputs, data(), freeAllIndex[i]));
       }
     } else if (kind == ParamKind::ThmCoherent) {
       // THM coherent background: nothing in the data quotes an error on it,
@@ -408,7 +411,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
       if (usePriors_[i] && priorStds_[i] > 0.0)
         nUserSet++;
       else
-        noPriorLabels.push_back(AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]));
+        noPriorLabels.push_back(AZURELabel::Parameter(compound(), levels_.inputs, data(), freeAllIndex[i]));
     }
   }
 
@@ -418,9 +421,9 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   // configuration set on the same parameter (noted).
   {
     AZUREParams scratch;
-    compound()->FillMnParams(scratch, &configure());
+    compound()->FillMnParams(scratch, levels_.state, levels_.inputs, &configure());
     data()->FillMnParams(scratch);
-    ParameterLimitsManager limits(&configure(), compound(), data(), &scratch);
+    ParameterLimitsManager limits(&configure(), compound(), levels_.state, levels_.inputs, data(), &scratch);
     int nNuisance = 0;
     std::string overridden;
     if (limits.ReadParameterSettings()) {
@@ -432,7 +435,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         const bool has = useRWA ? limits.NuisancePrior(freeAllIndex[i], nominal, sigma)
                                 : limits.NuisancePriorPhysical(freeAllIndex[i], nominal, sigma);
         if (!has) continue;
-        const std::string label = AZURELabel::Parameter(compound(), compound()->Inputs(), data(), freeAllIndex[i]);
+        const std::string label = AZURELabel::Parameter(compound(), levels_.inputs, data(), freeAllIndex[i]);
         if (usePriors_[i] && priorStds_[i] > 0.0) {
           overridden += (overridden.empty() ? "" : ", ") + label;
         } else if (kind == ParamKind::ThmCoherent) {
@@ -736,10 +739,10 @@ double robust_stod(const std::string &str) {
 ObservedLevelTable AZURECalcMCMC::StartObservedLevels() const {
   // As the set-up of the parameter vectors transforms the start vector (FillCompoundFromParams, CalcShiftFunctions,
   // TransformOut), on a copy.
-  std::unique_ptr<CNuc> start(compound()->Clone());
-  start->FillCompoundFromParams(all_rwa_);
-  start->CalcShiftFunctions(configure());
-  return start->TransformOut(configure());
+  LevelState start(levels_.state);
+  compound()->FillCompoundFromParams(all_rwa_, start);
+  compound()->CalcShiftFunctions(configure(), start);
+  return compound()->TransformOut(configure(), start, levels_.inputs);
 }
 
 void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps) const {
@@ -773,7 +776,9 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
         }
 
         if (!fullParams.empty()) {
-          CNuc *localCompound = compound()->Clone();
+          const CNuc *localCompound = compound();
+          WalkerLevels snapshotLevels(levels_);  // this snapshot's copy of the sampler's levels
+          WalkerLevels *walker = &snapshotLevels;
           WorkingCopy *localData = data()->Clone();
           azure2::Results localResults;  // this snapshot's buffer
 
@@ -782,29 +787,29 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
 
           if (run.useRWA) {
             // For RWA parameters, use the same approach as CalculateLogLikelihood
-            localCompound->FillCompoundFromParams(fullParams);
+            localCompound->FillCompoundFromParams(fullParams, walker->state);
             localData->FillNormsFromParams(fullParams);
-            localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &localCompound->State(),
-                                                  &configure());
+            localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &walker->state,
+                                                  &walker->inputs, &configure());
             if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
-              localCompound->CalcShiftFunctions(configure());
+              localCompound->CalcShiftFunctions(configure(), walker->state);
             }
             rwaFullParams = fullParams;  // already RWA
           } else {
             // For physical parameters, use the same approach as CalculateLogLikelihoodPhysical
-            localCompound->FillCompoundFromParamsPhysical(fullParams);
+            localCompound->FillCompoundFromParamsPhysical(fullParams, walker->state, walker->inputs);
             localData->FillAbundancesFromVector(fullParams);
-            isValid = localCompound->TransformIn(configure());
+            isValid = localCompound->TransformIn(configure(), walker->state, walker->inputs);
 
             if (isValid) {
               AZUREParams params;
-              localCompound->FillMnParams(params, &configure());
+              localCompound->FillMnParams(params, walker->state, walker->inputs, &configure());
               localData->FillMnParams(params);
-              localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              localCompound->FillCompoundFromParams(params.GetMinuitParams().Params(), walker->state);
               localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
-              localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &localCompound->State(),
-                                                  &configure());
+              localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound, &walker->state,
+                                                  &walker->inputs, &configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
               // FillMnParams read the clone's starting norms and shifts; the
               // sample's are in the tail of the physical vector, the same in
@@ -814,7 +819,7 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
                 rwaFullParams[i] = fullParams[i];
 
               if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
-                localCompound->CalcShiftFunctions(configure());
+                localCompound->CalcShiftFunctions(configure(), walker->state);
               }
             }
           }
@@ -824,18 +829,18 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
             for (const Segment &seg : localData->Data().GetSegments())
               if (!seg.HasComponents())
                 for (Unit &point : seg.GetPoints(*localData))
-                  point.Calculate(localData, localCompound, localCompound->State(), configure(), localResults);
+                  point.Calculate(localData, localCompound, walker->state, configure(), localResults);
             // The model values (ModelPass.h): the points above are calculated; the loop skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
             for (int s = 1; s <= localData->Data().NumSegments(); s++) {
               const Segment *seg = localData->Data().GetSegment(s);
-              azure2::EvaluateModelSegment(*localData, *seg, localCompound, localCompound->State(), configure(), localResults,
+              azure2::EvaluateModelSegment(*localData, *seg, localCompound, walker->state, configure(), localResults,
                                            seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }
 
             localData->WriteOutputFiles(configure(), localResults, true);
 
-            WriteParametersOut(*localCompound, localCompound->State(), run.useRWA ? StartObservedLevels() : localCompound->TransformOut(configure()),
+            WriteParametersOut(*localCompound, walker->state, run.useRWA ? StartObservedLevels() : localCompound->TransformOut(configure(), walker->state, walker->inputs),
                                configure());
 
             // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav
@@ -858,7 +863,6 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
             }
           }
 
-          delete localCompound;
           delete localData;
         }
       }
@@ -877,31 +881,32 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
   std::vector<std::string> labels;
   filled = false;
   if (!parametersInitialized_) return labels;
-  CNuc *lc = GetPooledCNuc();
+  const CNuc *lc = compound();
+  WalkerLevels *walker = GetPooledLevels();
   try {
     if (useRWA) {
-      lc->FillCompoundFromParams(ReconstructFullParameters(p));
+      lc->FillCompoundFromParams(ReconstructFullParameters(p), walker->state);
       filled = true;
     } else {
       // As CalculateLogLikelihoodPhysical: observed widths -> Park's amplitudes.
-      lc->FillCompoundFromParamsPhysical(ReconstructFullParametersPhysical(p));
-      if (lc->TransformIn(configure())) {
+      lc->FillCompoundFromParamsPhysical(ReconstructFullParametersPhysical(p), walker->state, walker->inputs);
+      if (lc->TransformIn(configure(), walker->state, walker->inputs)) {
         AZUREParams params;
-        lc->FillMnParams(params, &configure());
-        lc->FillCompoundFromParams(params.GetMinuitParams().Params());
+        lc->FillMnParams(params, walker->state, walker->inputs, &configure());
+        lc->FillCompoundFromParams(params.GetMinuitParams().Params(), walker->state);
         filled = true;
       }
     }
     if (filled) {
-      lc->CalcShiftFunctions(configure());
+      lc->CalcShiftFunctions(configure(), walker->state);
       for (int j = 1; j <= lc->NumJGroups(); j++) {
         const JGroup *jg = lc->GetJGroup(j);
         if (!jg->IsInRMatrix()) continue;
         for (int la = 1; la <= jg->NumLevels(); la++) {
           const ALevel *level = jg->GetLevel(la);
-          if (!level->IsInRMatrix() || lc->State().ParkNorm(j, la) > 0.0) continue;
+          if (!level->IsInRMatrix() || walker->state.ParkNorm(j, la) > 0.0) continue;
           std::ostringstream text;
-          text << AZURELabel::Level(jg, lc->Inputs().E(j, la), j, la) << ": J = " << lc->State().ParkNorm(j, la);
+          text << AZURELabel::Level(jg, walker->inputs.E(j, la), j, la) << ": J = " << walker->state.ParkNorm(j, la);
           labels.push_back(text.str());
         }
       }
@@ -910,7 +915,7 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
     filled = false;
     labels.clear();
   }
-  ReturnPooledCNuc(lc);
+  ReturnPooledLevels(walker);
   return labels;
 }
 
@@ -1267,17 +1272,9 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
 /*!
  * Get a CNuc object from the pool, creating new if pool is empty
  */
-CNuc *AZURECalcMCMC::GetPooledCNuc() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-
-  if (!cnuc_pool_.empty()) {
-    auto obj = std::move(cnuc_pool_.top());
-    cnuc_pool_.pop();
-    return obj.release();
-  }
-
-  // Fallback: create new if pool is empty (shouldn't happen often)
-  return compound_->Clone();
+WalkerLevels *AZURECalcMCMC::GetPooledLevels() const {
+  // None idle: a copy of the sampler's levels as they are now (one per walker evaluated at the same time).
+  return pool_.Take(levels_).release();
 }
 
 /*!
@@ -1299,12 +1296,7 @@ WorkingData *AZURECalcMCMC::GetPooledData() const {
 /*!
  * Return a CNuc object to the pool for reuse
  */
-void AZURECalcMCMC::ReturnPooledCNuc(CNuc *obj) const {
-  if (!obj) return;
-
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  cnuc_pool_.push(std::unique_ptr<CNuc>(obj));
-}
+void AZURECalcMCMC::ReturnPooledLevels(WalkerLevels *walker) const { pool_.Give(std::unique_ptr<WalkerLevels>(walker)); }
 
 /*!
  * Return a working copy and its buffer to the pool for reuse

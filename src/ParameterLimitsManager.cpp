@@ -111,9 +111,12 @@ inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   return sign * value;
 }
 
-ParameterLimitsManager::ParameterLimitsManager(const Config *config, CNuc *compound, WorkingCopy *data, AZUREParams *params) :
+ParameterLimitsManager::ParameterLimitsManager(const Config *config, const CNuc *compound, const LevelState &state,
+                                               const LevelInputs &inputs, WorkingCopy *data, AZUREParams *params) :
   config_(config),
   compound_(compound),
+  state_(state),
+  inputs_(inputs),
   data_(data),
   params_(params) {
 }
@@ -399,34 +402,27 @@ void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int
 }
 
 double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimit, int paramIndex) const {
-  CNuc *clone = compound_->Clone();
-
-  // Fill clone with current parameters
-  clone->FillCompoundFromParams(params_->GetMinuitParams().Params());
-  clone->CalcShiftFunctions(*config_);
-  const ObservedLevelTable observed = clone->TransformOut(*config_);
+  // On copies of the caller's levels, filled with the current parameters.
+  LevelState state(state_);
+  LevelInputs inputs(inputs_);
+  compound_->FillCompoundFromParams(params_->GetMinuitParams().Params(), state);
+  compound_->CalcShiftFunctions(*config_, state);
+  const ObservedLevelTable observed = compound_->TransformOut(*config_, state, inputs);
 
   try {
-    vector_r currentParams = clone->GetTransformParams(clone->State(), observed);
+    vector_r currentParams = compound_->GetTransformParams(state, observed);
     // Only the level parameters (and abundances) are in the physical vector; the callers convert widths only.
-    if (paramIndex < 0 || paramIndex >= (int)currentParams.size()) {
-      delete clone;
-      return physicalLimit;
-    }
+    if (paramIndex < 0 || paramIndex >= (int)currentParams.size()) return physicalLimit;
 
     currentParams[paramIndex] = physicalLimit;
-    clone->FillCompoundFromParamsPhysical(currentParams);
+    compound_->FillCompoundFromParamsPhysical(currentParams, state, inputs);
 
-    if (!clone->TransformIn(*config_)) {
-      delete clone;
-      return physicalLimit;
-    }
+    if (!compound_->TransformIn(*config_, state, inputs)) return physicalLimit;
 
     AZUREParams tempParams;
-    clone->FillMnParams(tempParams, config_);
+    compound_->FillMnParams(tempParams, state, inputs, config_);
 
     vector_r reducedParams = tempParams.GetMinuitParams().Params();
-    delete clone;
 
     if (paramIndex < (int)reducedParams.size()) {
       double convertedLimit = reducedParams[paramIndex];
@@ -435,7 +431,6 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
       return physicalLimit;
     }
   } catch (...) {
-    delete clone;
     return physicalLimit;
   }
 }

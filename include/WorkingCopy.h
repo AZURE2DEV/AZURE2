@@ -37,6 +37,7 @@ class ThmDistortion;
 class ThmDwVertex;
 
 class CNuc;
+class LevelInputs;
 class LevelState;
 class AZUREParams;
 class PriorCovariance;
@@ -106,15 +107,16 @@ class WorkingCopy {
   void FillAbundancesFromVector(const vector_r &p);
   /// Build the segments from the data-set specs (each filled from its data file) and their effects.  Returns -1 on
   /// failure (with the message).
-  int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
+  int Fill(const Config &, const CNuc *, const LevelInputs &, const azure2::experiment::DataSpecs &);
   /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
-  int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
+  int MakePoints(const Config &, const CNuc *, const LevelInputs &, const azure2::experiment::ExtrapolationSpecs &);
   /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).  A format-3 project
   /// that the set-up refuses returns kFillRefused: its data files cannot be read (the files and the refusal line
   /// printed) or a set-up check refused it (its ERROR line printed, the run's last); the caller prints nothing more.
-  int Fill(const Config &, CNuc *);
+  /// `inputs` are the levels' input values of the caller (the run's, the session's), which lay out the sub-point grids.
+  int Fill(const Config &, const CNuc *, const LevelInputs &inputs);
   static constexpr int kFillRefused = -2;
-  int MakePoints(const Config &, CNuc *);
+  int MakePoints(const Config &, const CNuc *, const LevelInputs &inputs);
   /*!
    * The prior centres of the data sets' normalizations and energy shifts (DatasetSpec::normCentre, shiftCentre):
    * the prior of a varied normalization or shift is centred there instead of on the start value (normalization)
@@ -157,7 +159,7 @@ class WorkingCopy {
   /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
   int ResolveThicknessGroups(const Config &);
   /// Build the TargetEffect objects from their specs and give each linked segment its copy.
-  int SetUpTargetEffects(const Config &, CNuc *,
+  int SetUpTargetEffects(const Config &, const CNuc *, const LevelInputs &,
                          const azure2::experiment::SpecList<azure2::experiment::TargetEffectSpec> &);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
   bool IsFit() const;
@@ -169,23 +171,23 @@ class WorkingCopy {
   /// operation, so concurrent callers (Minuit2's OpenMP numerical gradient) each get a distinct number.
   int Iterate();
   /// Initialize every point: Unit::Initialize over the whole data set.
-  int Initialize(CNuc *, const Config &);
+  int Initialize(const CNuc *, const Config &);
   /// Append a segment.
   void AddSegment(Segment);
   /// Print the data as read, or as generated for a run without data.
   void PrintData(const Config &);
   /// Unit::CalcLegendreP for every point.
-  void CalcLegendreP(int, CNuc *);
+  void CalcLegendreP(int, const CNuc *);
   /*!
    * The row sets of the readers of angle-free slots (RowSet.h): readers of one block with the same angular identity
    * (kind, c.m. and lab angle bits, Q-coefficient effect, entrance pair) share one set over the union of their slots,
    * whose contracted values get their place in Results::contracted.  At the set-up and whenever slots are placed
    * again (the hand-over); a point that is not a reader holds none.
    */
-  void BuildRowSets(CNuc *, const Config &);
+  void BuildRowSets(const CNuc *, const Config &);
   /// The conversion of every unit whose term's angle is given in the lab (Segment::TermFrameRule, experiment::
   /// AngleIsLab): rules[ruleOf[u]] for unit u, -1 for a unit of a term without one.
-  std::vector<int> LabFrameRules(CNuc *, std::vector<azure2::experiment::FrameRule> &rules) const;
+  std::vector<int> LabFrameRules(const CNuc *, std::vector<azure2::experiment::FrameRule> &rules) const;
   /// The contracted values of every row set into `results` (Results::contracted): one task per set, after the energy
   /// pass and before the folds (CalculatePointsInParallel).
   void ContractRowSets(azure2::Results &results) const;
@@ -198,11 +200,11 @@ class WorkingCopy {
   const RecordCapacity &Capacity() const { return capacity_; }
   void PrintLegendreP(const Config &);
   /// Unit::CalcEDependentValues for every point -- penetrabilities, shifts and Coulomb phases at each energy.
-  int CalcEDependentValues(CNuc *, const Config &);
-  void PrintEDependentValues(const Config &, CNuc *);
+  int CalcEDependentValues(const CNuc *, const Config &);
+  void PrintEDependentValues(const Config &, const CNuc *);
   /// Unit::CalcCoulombAmplitude for every point.
-  void CalcCoulombAmplitude(CNuc *);
-  void PrintCoulombAmplitude(const Config &, CNuc *);
+  void CalcCoulombAmplitude(const CNuc *);
+  void PrintCoulombAmplitude(const Config &, const CNuc *);
   /// Write AZUREOut_*, chiSquared.out and the rest of the run's output files.  The values written are those of
   /// `results`, the buffer of the last evaluation of this data set: its model values and what its objective stored
   /// (Results::objective).  The THM profiles are taken again from the model values first (a snapshot written during
@@ -219,38 +221,38 @@ class WorkingCopy {
   /// known: a revision of the data set (ReviseDataSet).
   void SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior);
   /// External-capture amplitudes for every point that has an EC component.
-  int CalculateECAmplitudes(CNuc *, const Config &);
+  int CalculateECAmplitudes(const CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
   /// Mirrors CalculateECAmplitudes exactly, so a mismatch means the cached file belongs to a different model.
-  long long CountECAmplitudes(CNuc *, const Config &);
+  long long CountECAmplitudes(const CNuc *, const Config &);
   /// Hash of everything the external-capture integrals depend on: the energies they are evaluated at,
   /// the pairs and final states that enter them, and the Coulomb-function options.  Stored beside an
   /// intEC file (see ECSignaturePath) so that a file built for another grid is not reused.
-  std::string ECSignature(CNuc *, const Config &);
+  std::string ECSignature(const CNuc *, const Config &);
   /// The sidecar that records the signature of an intEC file: the file name with ".sig" appended.
   static std::string ECSignaturePath(const std::string &integralsFile);
   /// The leaves after the segments: their frames with their own pairs, energy-dependent values, Legendre
   /// polynomials, Coulomb amplitudes and external-capture amplitudes (appended to the intEC file).
-  int InitializeLeaves(CNuc *, const Config &);
+  int InitializeLeaves(const CNuc *, const Config &);
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
-  bool CheckComponentPairs(CNuc *, const Segment &baseSegment, int entranceKey, int exitKey, const Config &);
+  bool CheckComponentPairs(const CNuc *, const Segment &baseSegment, int entranceKey, int exitKey, const Config &);
   /// A leaf of `base` (Segment::AddLeaf) with these pairs, a fixed lab angle (deg; a RATIO denominator) or none and a
   /// scale, its key from the data set's counter; returns its term.
   int AddLeaf(Segment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling);
   /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
-  bool FinishTransformedSegment(CNuc *, Segment *, int key, bool isTest, const Config &);
+  bool FinishTransformedSegment(const CNuc *, Segment *, int key, bool isTest, const Config &);
   /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
   bool CheckTransformedSegments(const Config &);
   /// The expression tree of every segment (src/Predictions.cpp), once its components, pairs and sample are resolved;
   /// false, with a message, if one cannot be built.
-  bool BuildPredictions(CNuc *, const Config &);
+  bool BuildPredictions(const CNuc *, const Config &);
   /// The calculation plan of the data set, one task per point, built and checked (CalculationPlan.h).
   void BuildPlan();
   /// The node table of the stage (NodeTable.h), built at the end of Initialize and shared by the copies; null before.
   const azure2::NodeTable *Nodes() const { return nodes_.table.get(); }
   /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
   /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
-  long CheckNodeTable(CNuc *cnuc, const std::vector<int> &work);
+  long CheckNodeTable(const CNuc *cnuc, const std::vector<int> &work);
   /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): the sharing groups of the slots (SlotGroup.h).  Every point's
   /// range lies in one block, every slot's writer reads it, every point that reads a block has its group's key, and a
   /// point on a shared mesh has at its slot k the node the mesh's plan for the present anchors gives it at k.  Prints
@@ -263,7 +265,7 @@ class WorkingCopy {
   /// CoulombAt), bit for bit as LabAngleAt, Site::LegendreRowAt, CoulombAmplitudesAt, Polarization::HarmonicTable give
   /// them there, and its slots lie in the set's range.  Reported on a line of its own; returns the number of slots
   /// that differ.
-  long CheckReaderRows(CNuc *cnuc) const;
+  long CheckReaderRows(const CNuc *cnuc) const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
   /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.
@@ -271,14 +273,14 @@ class WorkingCopy {
   /// The end of the hand-over (src/NodeTable.cpp): the slots of the plan tasks `changedTasks` (their units moved: a
   /// re-placed grid, an energy shift) and of every task already on the overflow table looked up again, the overflow
   /// table placed again from nothing for them.  With nothing changed and the rows not released, nothing is done.
-  void PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased);
+  void PlaceOverflowNodes(const CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased);
   /// Let go of the overflow table's rows before the units are re-energised (they are holders of the units' rows).
   void ReleaseOverflowRows();
   /// The points of `segments` re-energised at the shift their state holds now (Segment::UpdatePointEnergyWithShift),
   /// and their slots looked up again, as the hand-over does for the segments it moves (src/NodeTable.cpp): the point
   /// pass groups units by their slots' nodes, and a slot left on the node its unit moved away from would put the unit
   /// in the energy task of its old energy.  Each segment's points in parallel, none inside a parallel region.
-  void MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc, const Config &configure);
+  void MoveSegmentsToShift(const std::vector<const Segment *> &segments, const CNuc *cnuc, const Config &configure);
   /// The centre c_i (c.m. MeV) of the support of a folded point on the shared mesh, its grid record `spec`, as the
   /// copy's slots are placed now: 0 without an energy shift (ShiftedFold.h, question 2).
   double MeshCentre(const Unit::SubGridSpec &spec) const {
@@ -409,15 +411,17 @@ class WorkingCopy {
   void RefreezeCovariance();
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
-  void PrepareCovarianceSeeds(CNuc *, const LevelState &state, const Config &, azure2::Results &results);
+  void PrepareCovarianceSeeds(const CNuc *, const LevelState &state, const Config &, azure2::Results &results);
   void FillMnParams(AZUREParams &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
   /// evaluation, so it ends with BeginEvaluation(results): `results` is the buffer of the evaluation that follows,
   /// owned by its caller.
-  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, CNuc *theCNuc = nullptr,
-                                  const LevelState *levels = nullptr, const Config *configure = nullptr);
+  /// `levels` and `inputs` are the evaluation's (its LevelState and LevelInputs), read by the sub-point grids.
+  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, const CNuc *theCNuc = nullptr,
+                                  const LevelState *levels = nullptr, const LevelInputs *inputs = nullptr,
+                                  const Config *configure = nullptr);
   /// The start of an evaluation into the caller's buffer `results`, after the hand-over: the records are laid out
   /// again if a point or sub-point is not where the layout puts it (a new point, a re-placed sub-point grid, a copied
   /// segment), each moving its values in `results` to its new record; `results` is sized for the layout (a new buffer
@@ -440,7 +444,8 @@ class WorkingCopy {
   /// supports of the points of the segments in \p shiftActive at their present shifts (ShiftedFold.h), and place again
   /// the slots of every sharing group whose nodes changed.  Returns the number of points whose slots changed, and
   /// appends their plan tasks to \p replacedTasks.  Called by FillEnergyShiftsFromParams.
-  int ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, const Config &configure, const std::vector<TermRef> &shiftActive,
+  int ReplaceSubPointGrids(const CNuc *theCNuc, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+                           const std::vector<TermRef> &shiftActive,
                            std::vector<int> &replacedTasks);
   /// Drop the last segment.
   void DeleteLastSegment();
@@ -475,7 +480,7 @@ class WorkingCopy {
    * exit, the pole and |N_C|^2.  False (and `why`) if there is no such
    * experiment or it has no line shape.
    */
-  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
+  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, const CNuc *compound, const LevelState &state,
                          const Config &configure, ThmLineshapeReport &out, std::string &why);
   /*!
    * The entrance vertex of THM experiment `name` at the c.m. energies
@@ -485,7 +490,7 @@ class WorkingCopy {
    * |M_l|^2 and its quasi-free value (p_s = 0), with the boundary the vertex
    * uses for that level.  False (and `why`) if there is no such experiment.
    */
-  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
+  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, const CNuc *compound, const LevelState &state,
                       const Config &configure, ThmVertexReport &out, std::string &why);
   /*!
    * The distortion factor of THM experiment `name` (distortion=coulomb or
@@ -506,7 +511,7 @@ class WorkingCopy {
    * AZURE_SERIAL_CHI2 set.  After a pass that returns 0 the caller reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
-  int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const LevelState &state,
+  int CalculatePointsInParallel(const std::vector<const Segment *> &segments, const CNuc *theCNuc, const LevelState &state,
                                 const Config &configure, azure2::Results &results);
   /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
   /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
@@ -557,7 +562,7 @@ class WorkingCopy {
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
-  int BuildThmGroups(const Config &, CNuc *);
+  int BuildThmGroups(const Config &, const CNuc *);
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &, const azure2::Results &results);
   /// The parts of WriteOutputFiles (src/DataOutputFiles.cpp), in the order it calls them.  The AZUREOut_* files with
@@ -587,25 +592,27 @@ class WorkingCopy {
   /// Calls f(point, angular slots, natural slots) for every point and slot in layout order, a slot after its writer.
   template <class F>
   void ForEachResultUnit(F f);
-  void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const LevelState *levels, const Config *configure);
+  void FillEnergyShiftsFromParamsImpl(const vector_r &, const CNuc *theCNuc, const LevelState *levels,
+                                      const LevelInputs *inputs, const Config *configure);
   /// The external-capture amplitudes of the leaves (InitializeLeaves): computed and appended to `out`, or read from
   /// `in` where the data segments' amplitudes end (usePrevious); -1 when stopped or a GSL error ends the loop.
-  int LeafECAmplitudes(CNuc *, const Config &, bool usePrevious, std::ifstream &in, std::ofstream &out);
+  int LeafECAmplitudes(const CNuc *, const Config &, bool usePrevious, std::ifstream &in, std::ofstream &out);
   /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeLeaves)
   /// from inside their OpenMP loops, under the named critical section ec_progress.
   static void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
                                int numPoints, time_t &startTime);
-  // A copy of the compound nucleus that holds the observed level parameters the
-  // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
-  // copy or Clone of the WorkingCopy starts without one.
-  struct GridNucleus {
-    std::unique_ptr<CNuc> nuc;
-    GridNucleus();
-    GridNucleus(const GridNucleus &);
-    GridNucleus &operator=(const GridNucleus &);
-    ~GridNucleus();
+  // The level state and inputs that hold the observed level parameters the sub-point grids are laid out from
+  // (ReplaceSubPointGrids): copies of the first evaluation's, kept for the run.  Never shared: a copy or Clone of the
+  // WorkingCopy starts without them.
+  struct GridLevels {
+    std::unique_ptr<LevelState> state;
+    std::unique_ptr<LevelInputs> inputs;
+    GridLevels();
+    GridLevels(const GridLevels &);
+    GridLevels &operator=(const GridLevels &);
+    ~GridLevels();
   };
-  GridNucleus gridNuc_;
+  GridLevels gridLevels_;
   // Per shared mesh of the data set (DataSet::Meshes): the quantized anchors its points' slots are placed for now.  Set
   // by the set-up; the hand-over (ReplaceSubPointGrids) re-places the slots in the changed region when they move.
   std::vector<std::vector<azure2::MeshAnchor>> meshAnchors_;
@@ -618,7 +625,7 @@ class WorkingCopy {
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
   azure2::NodeState nodes_;  // Nodes(), Slots(), Overflow(): built at the end of Initialize, placed by the hand-over
-  std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<Unit *> &points);
+  std::shared_ptr<const ChannelTable> BuildChannelTable(const CNuc *, const Config &, const std::vector<Unit *> &points);
 };
 
 // The slots of a point (Unit.h), here where WorkingCopy is complete.

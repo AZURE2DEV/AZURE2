@@ -114,7 +114,7 @@ vector_r CNuc::GetTransformParams(const LevelState &state, const ObservedLevelTa
  * The positions are the layout's (ParameterLayout).
  */
 
-bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) {
+bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) const {
   if (from == to) return true;
   const bool toPark = (to == 2);
   if (!((from == 1 && to == 2) || (from == 2 && to == 1))) return false;
@@ -125,7 +125,7 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
   for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
     const int j = structure.map.groupOfBlock[b];
     const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
-    const int nc = this->Group(j)->NumChannels();
+    const int nc = this->GetJGroup(j)->NumChannels();
     std::vector<double> E, gamma, J;
     for (int la : levels) {
       const LevelParameterLayout::Level &slots = this->ParameterLayout().Of(j, la);

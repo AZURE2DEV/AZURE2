@@ -51,7 +51,7 @@ constexpr double kAmplitudeFloor = 1e-3;
 
 /// The levels a model datum names are those of the tables made from the <levels> rows (LevelTablesOfRows): their
 /// indices must be the compound's.  "" when they are, else what differs (a defect of one of the two readers).
-std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTables &levels) {
+std::string SameLevel(const CNuc &compound, const ex::ModelDatum &d, const ex::LevelTables &levels) {
   for (const ex::LevelInfo &l : levels.levels) {
     if (l.group != d.group || l.level != d.level) continue;
     if (d.group < 1 || d.group > compound.NumJGroups()) break;
@@ -67,7 +67,7 @@ std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTa
 }
 
 /// The value of one level quantity from the observed values (CNuc::ObservedOfFitValues), in the engine unit.
-double LevelValue(CNuc *compound, const ObservedLevelTable &table, const Config &configure, const ex::ModelDatum &d) {
+double LevelValue(const CNuc *compound, const ObservedLevelTable &table, const Config &configure, const ex::ModelDatum &d) {
   const JGroup *group = compound->GetJGroup(d.group);
   const ObservedLevel &level = table.Level(d.group, d.level);
   const unsigned char width = (unsigned char)phys::ObservedKind::Width;
@@ -123,7 +123,7 @@ bool HasLevelRows(const ModelDataSet &set) {
 
 /// The model values of the level rows (index = row; scattering-length rows NaN), from one transformation of the
 /// current fit values; NaN where the transformation fails.
-void LevelValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, std::vector<double> &q) {
+void LevelValues(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, std::vector<double> &q) {
   q.assign(set.rows.size(), std::numeric_limits<double>::quiet_NaN());
   if (!HasLevelRows(set)) return;
   const std::optional<ObservedLevelTable> table = compound->ObservedOfFitValues(configure, state, inputs);
@@ -133,7 +133,7 @@ void LevelValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, c
 }
 
 /// The residual rows of row k, appended to r (q: LevelValues).
-void RowResiduals(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataRow &row, double q, vector_r &r) {
+void RowResiduals(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataRow &row, double q, vector_r &r) {
   if (row.isScatteringLength)
     ScatteringLength::ConstraintResiduals(compound, state, configure, row.constraint, r);
   else
@@ -152,7 +152,7 @@ struct Column {
 /// state), in the layout's order (CNuc::ParameterLayout).  Each parameter is set back exactly
 /// (CNuc::SetFitLevelParameter); Park's shift functions, which the transformation moved with the energies, are
 /// recomputed at the end.
-std::vector<Column> LevelJacobian(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set,
+std::vector<Column> LevelJacobian(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set,
                                   const ParamIndexMap &pmap) {
   std::vector<Column> cols;
   std::set<int> groups;
@@ -200,7 +200,7 @@ void Print(const Config &configure, const ex::Diagnostic &d) {
 
 }  // namespace
 
-std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure,
+std::shared_ptr<const ModelDataSet> Read(const CNuc &compound, const Config &configure,
                                          const std::vector<azure2::io::LevelRow> &rows) {
   auto set = std::make_shared<ModelDataSet>();
   const ex::LevelTables levels = ex::LevelTablesOfRows(rows);
@@ -263,13 +263,13 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
   return set;
 }
 
-void Residuals(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r) {
+void Residuals(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r) {
   std::vector<double> q;
   LevelValues(compound, state, inputs, configure, set, q);
   for (std::size_t k = 0; k < set.rows.size(); k++) RowResiduals(compound, state, inputs, configure, set.rows[k], q[k], r);
 }
 
-double Chi2(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
+double Chi2(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   std::vector<double> q;
   LevelValues(compound, state, inputs, configure, set, q);
   double chi2 = 0.0;
@@ -282,7 +282,7 @@ double Chi2(CNuc *compound, LevelState &state, const LevelInputs &inputs, const 
   return chi2;
 }
 
-bool Gradient(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool Gradient(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
               const vector_matrix_r *shiftDeriv, GradAccum &accum) {
   for (const ModelDataRow &row : set.rows)
     if (row.isScatteringLength &&
@@ -303,7 +303,7 @@ bool Gradient(CNuc *compound, LevelState &state, const LevelInputs &inputs, cons
   return true;
 }
 
-bool AppendRows(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool AppendRows(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
                 const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals, vector_r &jac) {
   if (set.rows.empty()) return true;
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(configure, state);
@@ -345,7 +345,7 @@ bool AppendRows(CNuc *compound, LevelState &state, const LevelInputs &inputs, co
   return true;
 }
 
-std::vector<Value> SectionValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
+std::vector<Value> SectionValues(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   std::vector<Value> out;
   std::vector<double> q;
   LevelValues(compound, state, inputs, configure, set, q);
@@ -373,7 +373,7 @@ std::vector<Value> SectionValues(CNuc *compound, LevelState &state, const LevelI
   return out;
 }
 
-std::string Report(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
+std::string Report(const CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   if (!set.hasSection) return "";
   std::ostringstream out;
   out << "Model data (<modelData>) at the parameters of this run: observed energies and widths, as parameters.out "

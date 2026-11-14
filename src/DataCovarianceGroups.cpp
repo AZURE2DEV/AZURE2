@@ -250,7 +250,7 @@ void WorkingCopy::RefreezeCovariance() {
   for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) gp->Refreeze();
 }
 
-void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const LevelState &state, const Config &configure, azure2::Results &results) {
+void WorkingCopy::PrepareCovarianceSeeds(const CNuc *theCNuc, const LevelState &state, const Config &configure, azure2::Results &results) {
   if (set_->covGroups_.empty()) return;
   std::vector<std::pair<const Segment *, int>> work;
   for (int s = 1; s <= Data().NumSegments(); s++) {

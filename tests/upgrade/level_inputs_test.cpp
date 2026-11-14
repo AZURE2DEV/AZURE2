@@ -40,6 +40,8 @@ struct Loaded {
   std::ostringstream sink;
   Config cfg{sink};
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
 };
 
 std::unique_ptr<Loaded> Load(const std::string &file, bool brune, bool initialize) {
@@ -50,8 +52,8 @@ std::unique_ptr<Loaded> Load(const std::string &file, bool brune, bool initializ
   if (!brune) m->cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
   m->cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(m->cfg);
-  if (m->compound.Fill(m->cfg) == -1) return nullptr;
-  if (initialize) m->compound.Initialize(m->cfg);
+  if (m->compound.Fill(m->cfg, m->state, m->inputs) == -1) return nullptr;
+  if (initialize) m->compound.Initialize(m->cfg, m->state, m->inputs);
   return m;
 }
 
@@ -65,7 +67,7 @@ void OnProject(const std::string &file, bool brune) {
     return;
   }
   const CNuc &cn = filled->compound;
-  const LevelInputs &in = cn.Inputs();
+  const LevelInputs &in = filled->inputs;
   const GammaDecaySet &records = cn.GetGammaDecays();
   // (a)
   Check(!in.TransformedIn() && in.TransformError().empty(), tag + ": filled, not transformed");
@@ -82,13 +84,13 @@ void OnProject(const std::string &file, bool brune) {
         const int slot = records.SlotOf(r, ch);
         const double expected = slot >= 0 ? widths[slot] : level->FileGamma(ch);
         Check(in.Gamma(j, la, ch) == expected, where + " channel " + std::to_string(ch) + " width");
-        Check(cn.State().ZeroInputWidth(j, la, ch) == level->FileZeroWidth(ch), where + " channel " + std::to_string(ch) +
+        Check(filled->state.ZeroInputWidth(j, la, ch) == level->FileZeroWidth(ch), where + " channel " + std::to_string(ch) +
                                                                             " zero flag");
       }
     }
   // (b)
   const CNuc &ci = initialized->compound;
-  Check(ci.Inputs().TransformedIn() && ci.Inputs().TransformError().empty(), tag + ": transformed, no error");
+  Check(initialized->inputs.TransformedIn() && initialized->inputs.TransformError().empty(), tag + ": transformed, no error");
   bool moved = false;
   for (int j = 1; j <= ci.NumJGroups(); j++)
     for (int la = 1; la <= ci.GetJGroup(j)->NumLevels(); la++) {
@@ -96,7 +98,7 @@ void OnProject(const std::string &file, bool brune) {
       Check(a->FileE() == b->FileE(), tag + ": the level's file energy is not written by the transformation");
       for (int ch = 1; ch <= ci.GetJGroup(j)->NumChannels(); ch++)
         Check(a->FileGamma(ch) == b->FileGamma(ch), tag + ": the level's file width is not written");
-      moved = moved || ci.Inputs().E(j, la) != a->FileE();
+      moved = moved || initialized->inputs.E(j, la) != a->FileE();
     }
   bool several = false;
   for (int j = 1; j <= ci.NumJGroups(); j++) several = several || ci.GetJGroup(j)->NumLevels() > 1;
@@ -104,38 +106,38 @@ void OnProject(const std::string &file, bool brune) {
   // (c)
   vector_r v(ci.ParameterLayout().Size());
   for (std::size_t i = 0; i < v.size(); i++) v[i] = 1.0 + 0.01 * (double)i;
-  initialized->compound.FillCompoundFromParamsPhysical(v);
+  initialized->compound.FillCompoundFromParamsPhysical(v, initialized->state, initialized->inputs);
   const vector_r p = records.Empty() ? v : records.WithPartialWidths(v);
   for (const LevelParameterLayout::Level &slots : ci.ParameterLayout().Levels()) {
-    Check(ci.Inputs().E(slots.group, slots.level) == p[slots.energy], tag + ": physical energy");
+    Check(initialized->inputs.E(slots.group, slots.level) == p[slots.energy], tag + ": physical energy");
     for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++)
-      Check(ci.Inputs().Gamma(slots.group, slots.level, ch) == p[slots.amplitude[ch - 1]], tag + ": physical width");
+      Check(initialized->inputs.Gamma(slots.group, slots.level, ch) == p[slots.amplitude[ch - 1]], tag + ": physical width");
   }
-  if (!records.Empty()) Check(ci.Inputs().GammaDecayNumbers() == records.NumbersAt(v), tag + ": physical numbers");
+  if (!records.Empty()) Check(initialized->inputs.GammaDecayNumbers() == records.NumbersAt(v), tag + ": physical numbers");
   // (d) on a compound initialized from the file
   std::unique_ptr<Loaded> fresh = Load(file, brune, true);
   CNuc &cf = fresh->compound;
   AZUREParams params;
-  cf.FillMnParams(params, &fresh->cfg);
+  cf.FillMnParams(params, fresh->state, fresh->inputs, &fresh->cfg);
   const vector_r start = params.GetMinuitParams().Params();
   vector_r shifted = start;
   for (const GammaDecayLevel &L : records.Levels())
     for (const int ch : L.photonChannels) shifted[L.energyIndex + ch] *= 1.1;
-  cf.FillCompoundFromParams(start);
-  const LevelState atStart = cf.State();
-  cf.FillCompoundFromParams(shifted);
+  cf.FillCompoundFromParams(start, fresh->state);
+  const LevelState atStart = fresh->state;
+  cf.FillCompoundFromParams(shifted, fresh->state);
   for (std::size_t r = 0; r < records.Levels().size(); r++) {
-    Check(atStart.HasGammaDecayFill((int)r) && cf.State().HasGammaDecayFill((int)r), tag + ": record filled");
-    if (!atStart.HasGammaDecayFill((int)r) || !cf.State().HasGammaDecayFill((int)r)) continue;
+    Check(atStart.HasGammaDecayFill((int)r) && fresh->state.HasGammaDecayFill((int)r), tag + ": record filled");
+    if (!atStart.HasGammaDecayFill((int)r) || !fresh->state.HasGammaDecayFill((int)r)) continue;
     Check(atStart.GammaDecayFillOf((int)r).q == records.NumbersAt(start)[r], tag + ": the copy keeps its fill");
-    Check(cf.State().GammaDecayFillOf((int)r).q == records.NumbersAt(shifted)[r], tag + ": the state has the new fill");
+    Check(fresh->state.GammaDecayFillOf((int)r).q == records.NumbersAt(shifted)[r], tag + ": the state has the new fill");
   }
   for (int j = 1; j <= cf.NumJGroups(); j++)
     for (int ch = 1; ch <= cf.GetJGroup(j)->NumChannels(); ch++) {
       const int slot = cf.FormalCaptureMaskSlot(j, ch);
       if (slot < 0) continue;
       const std::size_t n = cf.FormalCaptureMaskOf(slot).levels.size();
-      const std::size_t size = cf.State().CaptureProjector(slot).size();
+      const std::size_t size = fresh->state.CaptureProjector(slot).size();
       Check(size == 0 || size == n * n, tag + ": a projector over the slot's levels");
     }
 }

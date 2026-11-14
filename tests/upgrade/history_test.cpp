@@ -141,26 +141,28 @@ struct Evaluation {
 };
 
 struct Copy {
-  std::unique_ptr<CNuc> compound;
+  const CNuc *compound = nullptr;  // shared, constant
+  LevelState state;                // the copy's own levels
+  LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
   azure2::Results results;
 };
 
 // One evaluation, as AZURECalc::Chi2On: hand-over, point pass, model values, objective.
 Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
-  CNuc *lc = c.compound.get();
+  const CNuc *lc = c.compound;
   WorkingCopy *ld = c.data.get();
-  lc->FillCompoundFromParams(p);
+  lc->FillCompoundFromParams(p, c.state);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, c.results, lc, &lc->State(), &cfg);
-  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  ld->FillEnergyShiftsFromParams(p, c.results, lc, &c.state, &c.inputs, &cfg);
+  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, c.state, CNuc::ShiftOrders::kFirstDerivativesOnly);
   std::vector<const Segment *> segments;
   for (int i = 1; i <= ld->Data().NumSegments(); i++) segments.push_back(ld->Data().GetSegment(i));
-  const bool pre = ld->CalculatePointsInParallel(segments, lc, lc->State(), cfg, c.results) >= 0;
+  const bool pre = ld->CalculatePointsInParallel(segments, lc, c.state, cfg, c.results) >= 0;
   Evaluation e;
-  azure2::EvaluateModel(*ld, lc, lc->State(), cfg, c.results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+  azure2::EvaluateModel(*ld, lc, c.state, cfg, c.results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   e.models = c.results.model;
-  ObjectiveContext context{lc, lc->MutableState(), lc->Inputs(), ld, c.results, p, cfg};
+  ObjectiveContext context{lc, c.state, c.inputs, ld, c.results, p, cfg};
   context.segmentChi2 = &e.segmentChi2;
   const double total = Objective::Engine().Chi2(context);
   e.segmentChi2[0] = total;
@@ -187,15 +189,17 @@ int RunProject(const std::string &path, bool externalCapture) {
   cfg.configfile = file;
   if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
     check("loads", false, sink.str().substr(0, 400));
     return 1;
   }
   RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg);
-  compound.FillMnParams(params, &cfg);
+  compound.Initialize(cfg, state, inputs);
+  compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
     check("initializes", false, sink.str().substr(0, 400));
@@ -209,13 +213,15 @@ int RunProject(const std::string &path, bool externalCapture) {
     cfg2.configfile = file;
     if (externalCapture) cfg2.paramMask |= Config::USE_EXTERNAL_CAPTURE;
     CNuc compound2;
+    LevelState state2;  // the levels, as the run holds them
+    LevelInputs inputs2;
     WorkingCopy data2;
     AZUREParams params2;
-    const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2) != -1 && data2.Fill(cfg2, &compound2) == 0;
+    const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2, state2, inputs2) != -1 && data2.Fill(cfg2, &compound2, inputs2) == 0;
     if (loaded) {
       RequestDataEntrances(compound2, cfg2);
-      compound2.Initialize(cfg2);
-      compound2.FillMnParams(params2, &cfg2);
+      compound2.Initialize(cfg2, state2, inputs2);
+      compound2.FillMnParams(params2, state2, inputs2, &cfg2);
       data2.FillMnParams(params2);
     }
     check("a second load in the same process", loaded && data2.Initialize(&compound2, cfg2) != -1);
@@ -252,7 +258,9 @@ int RunProject(const std::string &path, bool externalCapture) {
 
   auto copy = [&]() {
     Copy c;
-    c.compound.reset(compound.Clone());
+    c.compound = &compound;
+    c.state = state;
+    c.inputs = inputs;
     c.data.reset(data.Clone());
     return c;
   };
@@ -290,7 +298,9 @@ int RunProject(const std::string &path, bool externalCapture) {
     Copy source = copy();
     Evaluate(source, pB, cfg);
     Copy second;
-    second.compound.reset(source.compound->Clone());
+    second.compound = source.compound;
+    second.state = source.state;
+    second.inputs = source.inputs;
     second.data.reset(source.data->Clone());
     Compare("a copy of a copy (evaluated at B) at A = fresh A", Evaluate(second, pA, cfg), eA);
     const std::vector<double> slots = second.results.slot, models = second.results.model;

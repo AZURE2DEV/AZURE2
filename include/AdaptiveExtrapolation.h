@@ -42,6 +42,6 @@ bool SessionRefusesAdaptiveGrids(const Config &configure);
 /// The extrapolation data set on the refined grids, made by WorkingCopy::MakePoints and laid out on the parameter vector as
 /// the run's data set, for the parameters `params` (the run's vector); nullptr after an error message.  The
 /// compound nucleus is initialized and its pairs marked as the run's MakePoints marked them.
-std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params);
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, const CNuc *compound, LevelState &state, const LevelInputs &inputs, const vector_r &params);
 
 #endif
