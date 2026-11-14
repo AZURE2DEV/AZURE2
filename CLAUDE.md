@@ -235,7 +235,7 @@ section (check 34).
    independent value (closed form, mpmath `truth.py`, a published number).
 2. Exposed in the binding with array inputs (`api/src/pybind_physics.cpp`) so pyazr and the web UI call it.
 3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
-   from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
+   from `pyazr/data/mass_1.mas20` (`pyazr.sources.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
 
 **An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).

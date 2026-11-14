@@ -109,7 +109,7 @@ Fill in the per-dataset record of `references/provenance-checklist.md` first.
 5. **Check the scatter.** Fit a smooth model (for example one Gaussian per peak) to the
    THM points with the published bars. If χ²/ν ≫ 1, the bars are smaller than the
    scatter (statistical only). Note the factor; Stage 4 uses it.
-6. **Collect the direct data.** Use EXFOR (`pyazr.nds`, azure2-setup) and the
+6. **Collect the direct data.** Use EXFOR (`pyazr.sources.nds`, azure2-setup) and the
    published tables. Record units, lab or c.m. frame, systematic (norm) errors, and
    whether per-point errors are given or assigned. Put the source in the data file's
    `#` header.
@@ -161,7 +161,7 @@ Then:
      the THM options acts on them.
 3. **Binding energy.** B_xs of the carrier is a column of **every** channel line of the THM entrance pair
    (`Pair.binding_energy` at run time; T2 carries B(d → p + n) = 2.224566 MeV). Check it against the masses of the
-   experiment line (AME2020: `pyazr.masses`).
+   experiment line (AME2020: `pyazr.sources.masses`).
 4. **Experiment lines.** One line per measurement in `<thm>`, `experiment[E1] beam=14N target=12C spectator=d
    Ebeam=30`; its data sets (several exit channels, angular bins, runs) name it with `thm E1`.
    - One shared profiled norm makes the relative channel heights carry exit-width

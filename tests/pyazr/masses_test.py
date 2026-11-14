@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pyazr.masses (the AME2020 table) and masses.mass_check / fill_masses on a pyazr.Project.
+"""pyazr.sources.masses (the AME2020 table) and masses.mass_check / fill_masses on a pyazr.Project.
 
 1. The table reads every nuclide, and the reference rows below, copied from the AME2020 file, come back exactly
    (mass excess in keV, atomic mass in u, the '#' estimated flag).  Mass excess and atomic mass agree to 2e-9 u
@@ -23,7 +23,8 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 try:
     import pyazr  # noqa: E402
-    from pyazr import masses, Project  # noqa: E402
+    from pyazr import Project  # noqa: E402
+    from pyazr.sources import masses  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: a missing package dependency -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(77)

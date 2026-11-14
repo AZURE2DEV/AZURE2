@@ -6,12 +6,12 @@ and 9; the project tests/spin_orbit_potential).
       20 / 3.6 / 0.6 with V_so = 6 MeV on the proton) against the independent DOP853 integration
       physics/tests/data/spin_orbit.csv (make_spin_orbit_reference.py): S, P and delta_hs = -phi for l = 0-2, both j,
       E = 0.5-3 MeV, and S below threshold, to 1e-6 (P relative);
-  (2) the same term set through set_nuclear_potential on tests/hybrid_potential (a project without it) gives the
-      record's values bit for bit, and nuclear_potential() reads it back; the record writer (potential_records)
-      writes the spin_orbit word;
+  (2) the same term added by a Project edit to tests/hybrid_potential (a project without it), in a new session,
+      gives the record's values bit for bit, and nuclear_potential() reads it back; save_fit writes the spin_orbit
+      word into the record;
   (3) the refusals: J missing for the spin-orbit pair (E_SO_NEEDS_J), J given for a pair without the term
-      (E_SO_NO_TERM), a j that l = 1 and spin 1/2 cannot make, the term on the spin-0 particle (E_SO_ZERO_SPIN), the
-      term on the default pair 0;
+      (E_SO_NO_TERM), a j that l = 1 and spin 1/2 cannot make, the term on the spin-0 particle (E_SO_ZERO_SPIN, by
+      the Project edit);
   (4) external capture, entrance wave and bound state per J (models/capture.azr: 12C(p,g)13N into the 1/2- ground
       state): pyazr.ec_integrals with the term divided by the same without it, for the s- and d-wave E1 pathways
       (direct and channel capture), against ec_ratio.csv (ec_reference.py: DOP853 + mpmath, the engine's formula of
@@ -49,7 +49,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import Session
+    from pyazr import Project, Session
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(77)
@@ -94,17 +94,21 @@ try:
     check(f"channel_functions with J = the independent integration (S, P, delta_hs; 60 values; worst {worst:.1e})",
           worst <= 1e-6, f"{worst:.3e} > 1e-6")
 
-    # (2) the API's term = the record's term
-    B = Session(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
-    B.set_nuclear_potential(1, spin_orbit=TERM)
+    # (2) a Project edit's term = the record's term
+    hp = os.path.join(work, "hp")
+    edited = Project.open(os.path.join(hp, "hybrid_potential.azr"))
+    edited.set("p12C", spin_orbit=SO_LINE.split(None, 1)[1].strip())
+    B = Session(edited.save(os.path.join(hp, "with_so.azr")), cwd=hp)
     same = all(np.array_equal(A.channel_functions(1, above, l=1, J=j)[k], B.channel_functions(1, above, l=1, J=j)[k])
                for j in (0.5, 1.5) for k in ("S", "P", "delta_hs"))
-    check("set_nuclear_potential(spin_orbit=...) = the record's term (bits)", same)
+    check("Project.set(p12C, spin_orbit=...), a new session = the record's term (bits)", same)
     check("nuclear_potential() reads the term back", B.nuclear_potential(1).spin_orbit == TERM,
           repr(B.nuclear_potential(1).spin_orbit))
-    lines = A.potential_records()[1]
-    check("potential_records writes the spin_orbit word",
-          any(l.split()[:1] == ["spin_orbit"] and "operator 2l.s" in l and "on light" in l for l in lines), repr(lines))
+    B.save_fit(os.path.join(hp, "written.azr"), verify=False, norms="nominal")
+    lines = [l.strip() for l in open(os.path.join(hp, "written.azr"))]
+    check("save_fit writes the spin_orbit word",
+          any(l.split()[:1] == ["spin_orbit"] and "operator 2l.s" in l and "on light" in l for l in lines),
+          repr([l for l in lines if "spin_orbit" in l]))
 
     # (3) refusals
     check("E_SO_NEEDS_J: no J for the spin-orbit pair", refused("E_SO_NEEDS_J", lambda: A.channel_functions(1, above, l=1)))
@@ -112,10 +116,9 @@ try:
     check("E_SO_NO_TERM: a J for a pair without the term",
           refused("E_SO_NO_TERM", lambda: C.channel_functions(1, above, l=1, J=0.5)))
     check("a j that l = 1 and spin 1/2 cannot make", refused("TwoLDotI", lambda: A.channel_functions(1, above, l=1, J=2.5)))
-    check("E_SO_ZERO_SPIN: the term on 12C",
-          refused("E_SO_ZERO_SPIN", lambda: C.set_nuclear_potential(1, spin_orbit=dict(TERM, on="heavy"))))
-    check("a term on the default pair 0 is refused",
-          refused("name the pair", lambda: C.set_nuclear_potential(0, spin_orbit=TERM)))
+    check("E_SO_ZERO_SPIN: the term on 12C (Project.set)",
+          refused("E_SO_ZERO_SPIN", lambda: Project.open(os.path.join(hp, "hybrid_potential.azr")).set(
+              "p12C", spin_orbit=SO_LINE.split(None, 1)[1].strip().replace("on light", "on heavy"))))
 
     # (4) external capture per J: with / without the term against ec_reference.py
     cap = os.path.join(work, "cap")

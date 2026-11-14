@@ -11,8 +11,10 @@ tests/identical_pp_res:
 
   * an old-layout file (no .shift.sqrt rows, no tag, one width nudged): the nudged
     width is read (Parameters.read, Session(parameter_file=)), every missing row
-    keeps the session's value, and bands.best_fit_params returns a vector of the
-    free-parameter length;
+    keeps the session's value, and bands.best_fit_params returns the file's vector of the free-parameter length
+    and leaves the session as it was (a session made with the file gives its own x0); on tests/upgrade/T2, a file
+    that moves a fixed width is refused by best_fit_params with the call that takes it (Session(file,
+    parameter_file=));
   * Parameters.write writes the tag line first and every parameter by name;
   * a new-layout file (tag first) reads every value; a `parametrization` row
     without the '#' (files of 2026-10-06) is skipped the same way;
@@ -43,6 +45,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
+    import pyazr
     from pyazr import Session
     from pyazr.bands import best_fit_params
     from pyazr.parameters import read_parameter_file
@@ -92,7 +95,11 @@ with tempfile.TemporaryDirectory() as tmp:
         bf = best_fit_params(m, sav)
         check("bands.best_fit_params accepts the old layout",
               bf.size == nfree and np.isclose(bf[target.free_index], nudged))
-
+        check("... and leaves the session as it was", np.array_equal(m.parameters.x0, x0)
+              and np.array_equal(np.asarray(m._engine.params_all_rwa(), float), allrwa))
+        with Session(azr, parameter_file=sav) as f:
+            check("... a session made with the file: its own x0",
+                  np.array_equal(best_fit_params(f, sav), f.parameters.x0) and np.array_equal(f.parameters.x0, bf))
         # --- the file written by name: the tag first, every parameter, the values of x
         best = P.x0
         best[target.free_index] = allrwa[target.index] * 1.10
@@ -129,6 +136,26 @@ with tempfile.TemporaryDirectory() as tmp:
             check("a file with no matching names is refused (parameter_file=)", False, "no error raised")
         except ValueError:
             check("a file with no matching names is refused (parameter_file=)", True)
+
+# --- a file that moves a fixed level parameter (T2 has fixed widths): best_fit_params refuses it
+with tempfile.TemporaryDirectory() as tmp:
+    t2 = os.path.join(tmp, "T2")
+    shutil.copytree(os.path.join(ROOT, "tests", "upgrade", "T2"), t2)
+    os.makedirs(os.path.join(t2, "output"), exist_ok=True)
+    with Session(os.path.join(t2, "T2.azr")) as m:
+        allrwa = np.asarray(m._engine.params_all_rwa(), float)
+        fixed = next(p for p in m.parameters if p.fixed and p.kind == "width" and allrwa[p.index] != 0.0)
+        moved = os.path.join(t2, "output", "moved_fixed.sav")
+        with open(moved, "w") as fh:
+            for p in m.parameters:
+                v = allrwa[p.index] * (1.5 if p.index == fixed.index else 1.0)
+                fh.write(f"{p.name:>28s} {v: .7e} {0.0: .7e}\n")
+        try:
+            best_fit_params(m, moved)
+            check("a file that moves a fixed width is refused (best_fit_params)", False, "no error raised")
+        except pyazr.ParameterError as e:
+            check("a file that moves a fixed width is refused (best_fit_params)",
+                  fixed.name in str(e) and "parameter_file=" in str(e), str(e))
 
 print()
 if failures:

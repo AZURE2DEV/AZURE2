@@ -25,7 +25,7 @@ except ImportError as err:                            # pragma: no cover
         "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
-from .errors import ParameterError, ParameterKeyError, close_names, listed
+from .errors import close_names, listed
 from . import session_checks, session_fit, session_options, session_physics, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
@@ -63,7 +63,7 @@ class Session(
     ``parameters.x0``), :meth:`transform` (the physical values at x), :attr:`pairs`.  Data: :attr:`datasets`,
     :attr:`energies`, :attr:`cross`.  At a fit vector x: :meth:`evaluate` (every number at x: model values,
     chi-squared, the objective's terms) and :meth:`objective` (the fit's objective as one callable: value, gradient,
-    rows, Jacobian, log-probability).  Files: :meth:`write_output_files`, :meth:`save_fit`.
+    rows, Jacobian, log-probability).  Files: :meth:`write_outputs`, :meth:`save_fit`.
     :meth:`describe` (plain data), :meth:`close` (or a ``with`` block).  Errors: :mod:`pyazr.errors`.
     """
 
@@ -94,13 +94,13 @@ class Session(
             ``extrapolations[i]``), every chi-squared field ``None``, and the fit vector holds the extrapolations'
             nuisances; :meth:`objective` and the fits refuse.  ``False`` (the default): the data sets.  Chosen when
             the session is made: a session for the other is a second ``Session`` (``**s.options`` with this keyword
-            changed rebuilds the same model).
+            changed rebuilds the same model).  A project without an active extrapolation record is refused.
         use_brune, ignore_externals, transform, use_long_wavelength :
             R-matrix formalism options, matching the CLI's ``--use-brune``,
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
-            Every option below except ``cwd``, ``extrapolations`` and ``coulomb_table`` is also a ``<config>`` key of the
-            project under its name (``use_brune=0``; ``Project.set_config(use_brune=False)``): a keyword given here
+            Every option below except ``cwd``, ``extrapolations`` and ``coulomb_table`` is also a ``<config>`` key of
+            the project under its name (``use_brune=0``; ``Project.set_config(use_brune=False)``): a keyword given here
             wins over the key, the key over the default shown; a keyword left out is not given.
             :attr:`options` holds the values in effect, :attr:`option_sources` where each came from
             (``"default"``, ``"project"``, ``"keyword"``).
@@ -146,7 +146,8 @@ class Session(
         pyazr.FormatError
             if the file is not a format-3 project (the message names the conversion).
         pyazr.AZURE2Error
-            (``pyazr.EngineError``) if the model will not initialize.
+            (``pyazr.EngineError``) if the model will not initialize, or with ``extrapolations=True`` if the project
+            has no active extrapolation record.
 
         Warns
         -----
@@ -163,6 +164,8 @@ class Session(
             os.path.dirname(self.file) or "."))
         if not os.path.isdir(self.cwd):
             raise session_checks.missing_directory(self.cwd, self.file)
+        if extrapolations:
+            session_checks.require_extrapolations(self.file, self.cwd)
 
         # The keywords this call named win over the project's <config> keys, which win over the defaults (the engine's
         # rule); self.options holds the values in effect, so that a worker process can rebuild this same model
@@ -256,15 +259,6 @@ class Session(
         if self._parameter_file is not None:
             apply_parameter_file(self._engine, self.file, self._parameter_file, self.basis, self.mode == "extrap")
 
-    @engine_call
-    def _take_parameter_file(self, path):
-        """Take the parameter file ``path`` as if the session had been made with ``parameter_file=path``
-        (:func:`pyazr.bands.best_fit_params`); the table of parameters is rebuilt, ``parameters.x0`` is the file's."""
-        self._parameter_file = os.path.abspath(os.fspath(path))
-        self._apply_parameter_file()
-        self._fixed = [bool(f) for f in self._engine.params_fixed()]
-        self._parameters = None
-
     # -- the .azr, parsed once per version of the file ------------------------
 
     def _azr_stamp(self):
@@ -336,61 +330,6 @@ class Session(
             self._pairs = self._build_pairs()
         return self._pairs
 
-    # -- channel radius -------------------------------------------------------
-
-    @engine_call
-    def set_channel_radius(self, pair, radius):
-        """Change one particle pair's channel radius.
-
-        ``pair`` is the 1-based :attr:`Pair.number`, ``radius`` is in fm.  This
-        is not a light edit: the radius sets the matching surface, so AZURE2
-        rebuilds the compound nucleus and the data from the ``.azr``, redoes the
-        penetrabilities, shift functions, boundary conditions and Wigner limits,
-        and **recomputes every external-capture integral** rather than reading
-        back ``output/intEC*`` (which belong to the old radius).  Expect it to
-        cost about as much as starting a fresh instance.
-
-        Everything cached on the Python side is re-read afterwards, so
-:attr:`parameters` (``x0``, ``wigner_limit``),
-        :attr:`pairs` and the data arrays are consistent with the new radius.
-
-        The reduced widths keep their numerical values, but a reduced width
-        means something different at a different radius -- **the model is no
-        longer fitted**.  Refit before reading anything off it.
-
-        Note this changes only the running session; the ``.azr`` on disk is
-        untouched.  To persist a radius (and to scan several radii, which is
-        the safer pattern) use :meth:`pyazr.Project.set_pair` (``radius=``) and
-        write a new file.
-
-        The radius stays set for the life of the session, through later
-        rebuilds: another pair's ``set_channel_radius`` and a nuclear-potential
-        change keep it.  (Before
-        2026-11-02 each rebuild re-read the ``.azr`` with only its own call's
-        radius, so setting pair 2 put pair 1 back to its file value, silently.)
-        The radius read back from the rebuilt model is checked against the
-        request; a mismatch raises ``RuntimeError``.
-        """
-        pair = int(pair)
-        if not any(p.number == pair for p in self.pairs):
-            raise ParameterKeyError(f"set_channel_radius: no pair {pair} in this model (have "
-                                    f"{[p.number for p in self.pairs]}); Session.pairs lists the pairs.")
-        if not radius > 0:
-            raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
-                                 f"in fm, got {radius}; Session.pairs.by_number({pair}).channel_radius is the "
-                                 f"current one.")
-        if not self._engine.set_radius(pair, float(radius)):
-            raise RuntimeError(
-                f"AZURE2 could not rebuild with pair {pair} at "
-                f"{radius} fm; the session is no longer usable.")
-        self.configure()
-        got = self.pairs.by_number(pair).channel_radius
-        if abs(got - float(radius)) > 1e-9 * float(radius):
-            raise RuntimeError(
-                f"pair {pair}: asked for a channel radius of {radius} fm, the "
-                f"rebuilt model has {got} fm.")
-        return got
-
     def _build_pairs(self):
         return PairSet(Pair(r) for r in self._engine.pair_records())
 
@@ -412,8 +351,8 @@ class Session(
     @engine_call
     def datasets(self):
         """Per-segment dataset provenance (a :class:`~pyazr.described.DescribedDatasets`, the engine's
-        description): for each data set, the data file it came from, the reaction channel (entrance/exit pairs), energy /
-        angle range, observable type, and normalization systematic error.
+        description): for each data set, the data file it came from, the reaction channel (entrance/exit pairs), energy
+        / angle range, observable type, and normalization systematic error.
         ``print(azr.datasets.table())`` gives an overview; ``azr.datasets
         .sys_errors()`` returns the per-segment systematics the fits use.
         A copy of the session's parse of the file (see :meth:`_parsed`).
@@ -484,31 +423,25 @@ class Session(
         it comes from, ``"nominal"`` keeps the records' values and leaves the fitted ones to the ``.sav``.  With
         ``param_sav`` (default) ``<name>.sav`` is written beside it (:meth:`Parameters.write`).  With ``verify``
         (default) the file is reopened and must give back the physical values, the particle amplitudes level by level
-        and (data mode, ``"fitted"``) the data chi-squared and the objective; otherwise both files are removed and a
-        ``RuntimeError`` is raised.  ``close_session`` closes this session before the check opens the copy.  The rules
-        in full: :func:`pyazr.snapshot.save_fit`.  Returns ``(azr_path, sav_path_or_None)``.
+        and (a session of the data, ``"fitted"``) the data chi-squared and the objective; otherwise both files are
+        removed and a ``RuntimeError`` is raised.  ``close_session`` closes this session before the check opens the
+        copy.  The rules in full: :func:`pyazr.snapshot.save_fit`.  Returns ``(azr_path, sav_path_or_None)``.
         """
         from .snapshot import save_fit
         return save_fit(self, path, x, param_sav=param_sav, verify=verify, norms=norms, close_session=close_session)
 
     @engine_call
-    def write_output_files(self, params=None):
-        """Write the run's standard output files, as the CLI does at the end.
+    def write_outputs(self, x=None):
+        """Write the files the program writes at the end of a calculation, for the fit vector ``x``.
 
-        ``AZUREOut_*``, ``chiSquared.out`` and the rest land in the ``.azr``'s
-        output directory, created when it does not exist.  Without this a Python
-        session could compute everything and still had to re-run the binary to
-        get the files a colleague or the GUI expects.
+        ``AZUREOut_*``, ``chiSquared.out`` and the rest land in the ``.azr``'s output directory, created when it does
+        not exist.  An evaluation at ``x`` (default ``parameters.x0``) is run first, so the files describe that
+        vector rather than whatever was evaluated last.
 
-        A forward pass is run first at ``params`` (the current parameters by
-        default), so the files describe the parameters you asked about rather
-        than whatever was evaluated last.
-
-        Returns the output directory the engine wrote to (:attr:`output_dir`:
-        the ``<config>`` one, relative to :attr:`cwd`), not a fixed
-        ``cwd/output``.
+        Returns the output directory the engine wrote to (:attr:`output_dir`: the ``<config>`` one, relative to
+        :attr:`cwd`), not a fixed ``cwd/output``.
         """
-        x = np.asarray(self.parameters.x0 if params is None else params, float).ravel()
+        x = np.asarray(self.parameters.x0 if x is None else x, float).ravel()
         os.makedirs(self.output_dir, exist_ok=True)
         if self.mode == "data":
             # chiSquared.out reports the per-segment chi-squared *stored on
@@ -519,7 +452,7 @@ class Session(
             self._engine.calculate_chi2_rwa(x)
         else:
             # No data to compare against; chiSquared.out is meaningless in
-            # extrapolation mode, and the forward pass is all AZUREOut_*
+            # a session of the extrapolations, and the forward pass is all AZUREOut_*
             # needs.
             self._engine.update_segments_rwa(x)
         if not self._engine.write_output_files():
@@ -534,7 +467,7 @@ class Session(
         come back: ``m.energies[i]``, ``m.cross[i]``, ``evaluate(x).data[i]``
         all belong to ``active_datasets[i]``.
 
-        :attr:`datasets` lists every ``<segmentsData>`` line, inactive ones
+        :attr:`datasets` lists every data set record, inactive ones
         included, so ``datasets[i]`` is *not* segment ``i`` of a result on any
         model that has one -- the 13C+alpha archive's model has 25 -- and code
         that indexed it that way dropped the normalization penalty of every
@@ -548,8 +481,8 @@ class Session(
     def prior_covariance_residuals(self, params=None):
         """Whitened residuals r = L^-1 (p - mu) of the prior parameter covariance (``priorCovariance=<file>`` in
         ``<config>``, C = L L^T), one per prior parameter in :attr:`prior_covariance_names` order; empty without
-        the key (or in extrapolation mode).  ``sum(r**2)`` is ``evaluate(x).terms["prior covariance"]``, and
-        ``objective().residuals(x)`` holds these rows (Jacobian L^-1 on the prior's columns)."""
+        the key (or in a session of the extrapolations).  ``sum(r**2)`` is ``evaluate(x).terms["prior covariance"]``,
+        and ``objective().residuals(x)`` holds these rows (Jacobian L^-1 on the prior's columns)."""
         x = np.asarray(self.parameters.x0 if params is None else params, float).ravel()
         if not hasattr(self._engine, "prior_covariance_residuals"):    # an engine older than 2026-11-05
             return np.zeros(0)
@@ -609,8 +542,8 @@ class Session(
     def evaluate(self, x=None):
         """Every number of the session at the fit vector ``x`` (default ``parameters.x0``) from one engine evaluation:
         a :class:`pyazr.evaluate.Evaluation` (the model of every point, ``data[i].model``, ``.energies``, ``.extra``;
-        in data mode also the objective, its terms, the data chi-squared and each data set's).  In extrapolation mode
-        the data sets are the extrapolations and every chi-squared field is ``None``."""
+        in a session of the data also the objective, its terms, the data chi-squared and each data set's).  In a session
+        of the extrapolations the data sets are the extrapolations and every chi-squared field is ``None``."""
         from .evaluate import evaluate
         return evaluate(self, x)
 
@@ -621,8 +554,8 @@ class Session(
         """Force a from-scratch recomputation of every external-capture
         integral.
 
-        AZURE2 caches these in ``output/intEC.dat`` (data mode) /
-        ``output/intEC.extrap`` (extrapolation mode) and reads them back on the
+        AZURE2 caches these in ``output/intEC.dat`` (a session of the data) /
+        ``output/intEC.extrap`` (of the extrapolations) and reads them back on the
         next session start.  The cache is keyed on the *grid*, not on the
         segment selection, so after you add or remove data segments (or change
         the channel radius) the cached integrals belong to other energies and

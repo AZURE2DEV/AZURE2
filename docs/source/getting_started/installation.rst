@@ -115,15 +115,15 @@ with ``-DCMAKE_PREFIX_PATH=/path/to/prefix``.
 The Python package
 ------------------
 
-``pyazr`` needs Python 3.10 or later and NumPy 1.24 or later (SciPy and mpmath
-are installed with it). One command builds and installs it with its engine
-from a checkout:
+``pyazr`` needs Python 3.10 or later and NumPy 1.24 or later; SciPy comes with the
+extras ``web`` (the web page's scipy fit job) and ``examples``. One command
+builds and installs it with its engine from a checkout:
 
 .. code-block:: bash
 
    pip install .             # from the repository root: compiles the engine (a few minutes)
-   pip install ".[all]"      # plus what the examples use (matplotlib, emcee, zeus)
-   pip install ".[web]"      # plus the web page's server (fastapi, uvicorn)
+   pip install ".[all]"      # plus what the examples use (matplotlib, emcee, zeus, scipy)
+   pip install ".[web]"      # plus the web page's server (fastapi, uvicorn, scipy)
 
 ``pyproject.toml`` builds with scikit-build-core, which runs CMake with the
 option set of a wheel (``BUILD_TESTING`` and ``USE_READLINE`` off) and

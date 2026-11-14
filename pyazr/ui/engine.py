@@ -29,9 +29,8 @@ SESSION_NOT_SERVED = {
     "dimensionless widths and level quantities, not a route of this step":
         "wigner_widths dimensionless_widths park_norms scattering_lengths",
     "session edits: edits of the Project and a new session (pyazr3.md decision 11)":
-        "set_channel_radius configure recalculate_external_capture "
-        "refreeze_covariance set_nuclear_potential clear_nuclear_potential nuclear_potential nuclear_potentials "
-        "potential_records",
+        "configure recalculate_external_capture "
+        "refreeze_covariance nuclear_potential nuclear_potentials",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
         "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
@@ -240,10 +239,10 @@ class Engine:
 
     def outputs(self, x):
         """Write the program's output files at x into the session's output directory (pyazr's
-        ``write_output_files``: the chi-squared evaluation first, then the files, as the program writes them at the
+        ``write_outputs``: the chi-squared evaluation first, then the files, as the program writes them at the
         end of a run); the directory and the names of the files this call wrote."""
         start = time.time_ns()
-        directory = self.s.write_output_files(np.asarray(x, float))
+        directory = self.s.write_outputs(np.asarray(x, float))
         names = sorted(n for n in os.listdir(directory) if os.path.isfile(os.path.join(directory, n))
                        and os.stat(os.path.join(directory, n)).st_mtime_ns >= start)
         return {"directory": directory, "files": names}

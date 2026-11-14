@@ -129,7 +129,7 @@ are ``quantity ratio_to_mott`` with ``reaction 4He(a,a)4He``.
 ``ratio_to_rutherford`` is refused there (``E_REACTION_NOT_ALLOWED``, the
 message names ``ratio_to_mott``), and ``ratio_to_mott`` is refused for
 different particles.  An EXFOR ``RTH`` entry of identical particles does not
-say which reference was used; the entry's text decides (``pyazr.nds``
+say which reference was used; the entry's text decides (``pyazr.sources.nds``
 asks, below).
 
 What is refused
@@ -149,7 +149,7 @@ What is refused
 From EXFOR
 ----------
 
-``pyazr.nds.fetch_exfor(id).format3_quantity()`` maps ``,DA,,RTH`` and
+``pyazr.sources.nds.fetch_exfor(id).format3_quantity()`` maps ``,DA,,RTH`` and
 ``PAR,DA,,RTH`` of an elastic reaction to ``ratio_to_rutherford`` and
 ``,DA,,MOT`` of identical particles to ``ratio_to_mott``, and refuses, with
 the reason, ``RTH`` of identical particles (pass

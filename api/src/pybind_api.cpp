@@ -76,11 +76,8 @@ py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos,
                            unsigned int maxCalls, const py::object &progress, const py::object &stop);
 void BindFit(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
-// pybind_potentials.cpp: a session's hybrid potentials
-azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
-                                                                   double coulombRadius_fm, double matchingRadius_fm, double step_fm, const std::vector<double> &spinOrbit, CNuc *compound, int pair);
+// pybind_potentials.cpp: the view of a session's hybrid potentials
 pybind11::tuple SessionPotentialView(const Config &config, int pair);
-pybind11::tuple SessionPotentialRecords(const Config &config);
 
 namespace {
 
@@ -208,24 +205,17 @@ class Session {
     throw AZURE2Error(msg);
   }
 
-  // -- lifecycle -----------------------------------------------------------
-
-  bool rebuild() {
-    return api_->Rebuild();
-  }
+  // -- output files and external capture --------------------------------------
 
   bool write_output_files() {
     return api_->WriteOutputFiles();
   }
 
-  bool initialize() {
-    return api_->Initialize() == 0;
-  }
   bool calculate_external_capture() {
     return api_->CalculateExternalCapture();
   }
 
-  // -- modes / rebuilds ------------------------------------------------------
+  // -- options ---------------------------------------------------------------
 
   // The options of the calculation in effect: {name: (value, source)}, source "default", "project" or "keyword".
   py::dict option_sources() const {
@@ -235,55 +225,18 @@ class Session {
     return out;
   }
 
-  void set_data() { api_->SetData(); }
-  void set_extrap() { api_->SetExtrap(); }
-  bool set_radius(int idx, double radius) {
-    return api_->SetRadius(idx, radius);
-  }
-
   // -- hybrid nuclear potential, per particle pair ---------------------------
   //
-  // A potential belongs to a pair: it bends that channel's radial wave
-  // functions and no other.  The session's Config holds one setting per pair
-  // plus a default for the pairs that name none (HybridPotentialSettings), and
-  // CNuc::Fill gives each pair its potential -- so a change only reaches the
-  // model once it is rebuilt, which pyazr does after every change.
-
-  // pair = 0 addresses the default that every unnamed pair falls back to.
-  void set_potential(int pair, const std::string &type, bool enabled, double V0, double R, double a, double r0,
-                     double coulomb_radius, double matching_radius, double step, const std::vector<double> &spin_orbit) {
-    try {
-      azure2::experiment::HybridPotentialSetting s = SessionPotentialSetting(type, enabled, V0, R, a, r0, coulomb_radius, matching_radius, step, spin_orbit, api_->compound(), pair);
-      (pair ? config_->potentials.pairs[pair] : config_->potentials.defaults) = s;
-    } catch (const std::exception &e) {
-      throw AZURE2Error(std::string(pair ? "Failed to set potential for pair: " : "Failed to set default potential: ") +
-                        e.what());
-    }
-    PotentialsChanged();
-  }
-
-  void clear_potential(int pair) {
-    if (pair)
-      config_->potentials.pairs.erase(pair);
-    else
-      config_->potentials = azure2::experiment::HybridPotentialSettings();
-    PotentialsChanged();
-  }
-
+  // The session's Config holds one setting per pair (the project's potential records) and a default for the pairs
+  // that name none; CNuc::Fill gives each pair its potential when the session is made.
   // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit, matching_radius, step) for the given pair, resolved against the default.
   py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
-  // (changed, record lines, notes): the session's potentials as format-3 records (pybind_potentials.cpp)
-  py::tuple potential_records() { return SessionPotentialRecords(*config_); }
-
-  std::vector<int> configured_potential_pairs() { return config_->potentials.ConfiguredPairs(); }
 
   // -- data bookkeeping ------------------------------------------------------
 
   int update_data() {
     return api_->UpdateData();
   }
-  void update_norms() { api_->UpdateNorms(); }
-  bool update_parameters() { return api_->UpdateParameters(); }
 
   // -- parameter metadata ----------------------------------------------------
 
@@ -291,14 +244,11 @@ class Session {
   py::list parameter_records() const { return ParameterRecordDicts(*api_); }
   /// One dict per particle pair, in pair-number order (pybind_records.cpp).
   py::list pair_records() const { return PairRecordDicts(*api_); }
-  py::array_t<double> normalization_indices() const { return to_array(api_->GetNormalizationIndices()); }
-  py::array_t<double> energy_shift_indices() const { return to_array(api_->GetEnergyShiftIndices()); }
 
   // -- parameter vectors -----------------------------------------------------
 
   py::array_t<double> params_values() const { return to_array(api_->params_values()); }
   py::array_t<double> params_values_rwa() const { return to_array(api_->params_values_rwa()); }
-  py::array_t<double> params_all() const { return to_array(api_->params_all()); }
   py::array_t<double> params_all_rwa() const { return to_array(api_->params_all_rwa()); }
   std::string params_names(int i) const { return api_->params_names(i); }
   std::vector<bool> params_fixed() const { return api_->params_fixed(); }
@@ -314,10 +264,6 @@ class Session {
   py::array_t<double> norms() {
     api_->UpdateNorms();
     return to_array(api_->norms());
-  }
-  py::array_t<double> norms_errors() {
-    api_->UpdateNorms();
-    return to_array(api_->norms_errors());
   }
 
   // -- calculated arrays -----------------------------------------------------
@@ -399,29 +345,12 @@ class Session {
 
   // -- transforms ------------------------------------------------------------
 
-  py::array_t<double> transform_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    vector_r v = to_vector(p), out;
-    {
-      py::gil_scoped_release release;
-      out = api_->TransformRWAParameters(v);
-    }
-    return to_array(out);
-  }
   py::array_t<double> transform_all_rwa(const py::array_t<double, py::array::forcecast> &p, bool include_fixed) {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa");
     {
       py::gil_scoped_release release;
       out = api_->TransformAllRWAParameters(v, include_fixed);
-    }
-    return to_array(out);
-  }
-  py::array_t<double> transform_all_rwa_full(const py::array_t<double, py::array::forcecast> &p) {
-    vector_r v = to_vector(p), out;
-    expect_all(v, "transform_all_rwa_full");
-    {
-      py::gil_scoped_release release;
-      out = api_->TransformAllRWAParametersFull(v);
     }
     return to_array(out);
   }
@@ -555,9 +484,6 @@ class Session {
       out = api_->CalculateResidualsRWA(v);
     }
     return to_array(out);
-  }
-  py::array_t<double> current_norms() {
-    return to_array(api_->GetCurrentNorms());
   }
   // The THM experiments as the last chi-squared evaluation profiled them.
   py::list thm_experiments() {
@@ -786,18 +712,6 @@ class Session {
   }
 
  private:
-  /// After an edit of config_->potentials: the switch follows the pairs (on when any pair has the model), and the
-  /// shift functions cached on the levels, computed with the old potential, are dropped
-  /// (CNuc::CalcShiftFunctions skips a level that has not moved).
-  void PotentialsChanged() {
-    config_->useHybridMethod = config_->potentials.AnyEnabled();
-    if (config_->useHybridMethod)
-      config_->paramMask |= Config::USE_HYBRID_COULOMB;
-    else
-      config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
-    if (api_ && api_->compound()) api_->compound()->InvalidateShiftFunctions(*config_);
-  }
-
   Config *config_;
   AZUREAPI *api_;
   azure2_binding::NoticeBuffer notices_{std::cout};
@@ -931,54 +845,22 @@ PYBIND11_MODULE(_azure2, m) {
            py::call_guard<py::gil_scoped_release>(),
            "Write AZUREOut_*, chiSquared.out and the rest into the output "
            "directory, from the cross sections currently on the points.")
-      .def("rebuild", &Session::rebuild,
-           py::call_guard<py::gil_scoped_release>(),
-           "Rebuild the model from the .azr, recomputing the external-capture "
-           "integrals instead of reading back intEC.dat.  Needed after "
-           "anything that changes the Coulomb functions.")
-      .def("initialize", &Session::initialize,
-           py::call_guard<py::gil_scoped_release>(),
-           "Re-run the (expensive) model initialization; needed after a mode "
-           "switch.")
       .def("calculate_external_capture", &Session::calculate_external_capture,
            py::call_guard<py::gil_scoped_release>(),
            "Recompute every external-capture integral from scratch.")
       .def("option_sources", &Session::option_sources,
            "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
            "<config> key) or 'keyword' (given to the session).")
-      .def("set_data", &Session::set_data, "Switch to the data run (the <data> records).")
-      .def("set_extrap", &Session::set_extrap, "Switch to the extrapolation run (the <extrapolations> records).")
-      .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
-           py::call_guard<py::gil_scoped_release>(),
-           "Rebuild the model with one pair's channel radius changed (fm).")
-      .def("set_potential", &Session::set_potential, py::arg("pair"),
-           py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
-           py::arg("a"), py::arg("r0"), py::arg("coulomb_radius"), py::arg("matching_radius"), py::arg("step"), py::arg("spin_orbit"),
-           "Set the hybrid nuclear potential for one particle pair (lengths fm); pair=0 "
-           "sets the default the unnamed pairs fall back to.  spin_orbit: [] or [V_so MeV, R_so fm, a_so fm, "
-           "on (0 light, 1 heavy)].  Call initialize() afterwards for it to reach the model.")
-      .def("clear_potential", &Session::clear_potential, py::arg("pair"),
-           "Drop a pair's own potential so it follows the default again; "
-           "pair=0 resets the default and every pair.")
       .def("get_potential", &Session::get_potential, py::arg("pair"),
            "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step) for a pair.")
-      .def("potential_records", &Session::potential_records,
-           "(changed, lines, notes): the potentials as format-3 records (a format-3 project only).")
-      .def("configured_potential_pairs", &Session::configured_potential_pairs,
-           "The pair keys carrying a potential of their own.")
       .def("update_data", &Session::update_data, py::call_guard<py::gil_scoped_release>(),
            "Refill the data arrays; returns the number of segments.")
-      .def("update_norms", &Session::update_norms, "Refill the normalization arrays.")
-      .def("update_parameters", &Session::update_parameters, "Refill the parameter bookkeeping.")
       .def("parameter_records", &Session::parameter_records,
            "Every parameter as a dict of named fields (parameter_record_fields()), in params_names() order.")
       .def("pair_records", &Session::pair_records,
            "Every particle pair as a dict of named fields (pair_record_fields()), in pair-number order.")
-      .def("normalization_indices", &Session::normalization_indices)
-      .def("energy_shift_indices", &Session::energy_shift_indices)
       .def("params_values", &Session::params_values)
       .def("params_values_rwa", &Session::params_values_rwa)
-      .def("params_all", &Session::params_all)
       .def("params_all_rwa", &Session::params_all_rwa)
       .def("params_names", &Session::params_names, py::arg("i"))
       .def("params_fixed", &Session::params_fixed)
@@ -989,7 +871,6 @@ PYBIND11_MODULE(_azure2, m) {
       .def("data_excitation_energies", &Session::data_excitation_energies, py::arg("segment"))
       .def("data_conv", &Session::data_conv, py::arg("segment"))
       .def("norms", &Session::norms)
-      .def("norms_errors", &Session::norms_errors)
       .def("calculated_segments", &Session::calculated_segments, py::arg("segment"))
       .def("calculated_segments_e1", &Session::calculated_segments_e1, py::arg("segment"))
       .def("calculated_segments_e2", &Session::calculated_segments_e2, py::arg("segment"))
@@ -1008,11 +889,8 @@ PYBIND11_MODULE(_azure2, m) {
            "without calculating.  Fixed values are what the free-vector calls use.")
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
-      .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
            py::arg("include_fixed") = false)
-      .def("transform_all_rwa_full", &Session::transform_all_rwa_full, py::arg("params"),
-           "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, py::arg("params"),
@@ -1059,8 +937,6 @@ PYBIND11_MODULE(_azure2, m) {
            "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
       .def("calculate_residuals_rwa", &Session::calculate_residuals_rwa, py::arg("params"),
            "Standardized residuals (forward pass; THM norms profiled).")
-      .def("current_norms", &Session::current_norms,
-           "Norm each segment carries now (profiled THM norms at their optimum).")
       .def("thm_experiments", &Session::thm_experiments,
            "THM experiments (<thm> experiment[...]) as the last chi-squared evaluation "
            "profiled them: list of dicts (name, segments, background, points, chi2, status, "

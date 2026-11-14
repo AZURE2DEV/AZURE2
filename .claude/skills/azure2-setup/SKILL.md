@@ -1,6 +1,6 @@
 ---
 name: azure2-setup
-description: Build or audit an AZURE2 project (format 3) before any fit - compound nucleus and thresholds, particle and photon pairs with AME masses and separation energies, levels and channels from ENSDF, channel radii, data sets as records (which quantity, frame, units, totals, ratios, natural targets, model data), EXFOR data (pyazr.nds), conventions and the first checks (validate, describe, audit script). Use for a new reaction, a new data set, or an inherited project. Calculating is azure2-calculate; fitting azure2-fit; target effects azure2-targets; THM azure2-thm.
+description: Build or audit an AZURE2 project (format 3) before any fit - compound nucleus and thresholds, particle and photon pairs with AME masses and separation energies, levels and channels from ENSDF, channel radii, data sets as records (which quantity, frame, units, totals, ratios, natural targets, model data), EXFOR data (pyazr.sources.nds), conventions and the first checks (validate, describe, audit script). Use for a new reaction, a new data set, or an inherited project. Calculating is azure2-calculate; fitting azure2-fit; target effects azure2-targets; THM azure2-thm.
 ---
 
 # Setting up an AZURE2 project
@@ -36,9 +36,10 @@ of a correct model.
 ## Procedure
 
 1. **The compound nucleus and its thresholds.** Every partition open in the energy range of the data, and one photon
-   pair per final state reached by capture. Level schemes and ground states: `pyazr.nds` (references/nds-exfor.md).
+   pair per final state reached by capture. Level schemes and ground states: `pyazr.sources.nds`
+   (references/nds-exfor.md).
 2. **Pairs: masses and S from one table.** Atomic masses (u, electrons included) from AME2020 and S = m₁ + m₂ −
-   M(compound) from the same table: `pyazr.masses.fill_masses(project)`, then the audit (§ "Masses").
+   M(compound) from the same table: `pyazr.sources.masses.fill_masses(project)`, then the audit (§ "Masses").
 3. **Channels and radii.** The allowed (l, s) for each J^π (references/azr-levels.md §5). Start a_c at
    1.4 (A₁^⅓ + A₂^⅓) fm; it is a model choice to scan with refits (azure2-check, `radius_scan.py`).
 4. **Levels.** Known resonances in and near the data range, sub-threshold states whose tails reach it, background
@@ -72,7 +73,7 @@ of a correct model.
   among atomic masses), and prints one note for projects with mass numbers as masses. γ and β pairs are skipped.
   In an archive of 5,705 projects with two or more particle pairs, 1,138 agreed to 0.1 keV; 4-decimal masses give
   tens of keV. Test: `tests/mass_separation_check`.
-- **AME2020 is shipped** (`pyazr/data/mass_1.mas20`): `pyazr.masses.atomic_mass("12C")`,
+- **AME2020 is shipped** (`pyazr/data/mass_1.mas20`): `pyazr.sources.masses.atomic_mass("12C")`,
   `separation_energy("p", "12C")`, `pair_masses("a", "12C")`. `masses.fill_masses(project, pairs=None,
   separation=True)` sets the masses and S of each pair through `Project.set_pair`; particles are identified by Z and
   round(M), so mass numbers and bare protons are recognised; γ pairs get M(compound) and keep S = 0.
@@ -139,7 +140,7 @@ of a correct model.
 - references/azr-levels.md: the `<levels>` columns, rules the engine applies, channel enumeration, `includeAllJPi`,
   capture final states, verifying a new file.
 - references/data-kinds.md: the data set record, which quantity, totals and sums, natural targets, provenance.
-- references/nds-exfor.md: `pyazr.nds` search, fetch, conversion, levels, bibliography, service failures.
+- references/nds-exfor.md: `pyazr.sources.nds` search, fetch, conversion, levels, bibliography, service failures.
 - references/rmatrix-picture.md: what the parameters mean and which levels to include.
 - references/project-from-python.md: a project written from Python (`pyazr.Project`).
 - references/key-papers.md: annotated primary literature.

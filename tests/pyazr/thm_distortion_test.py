@@ -15,7 +15,7 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
      AZURE2 refuses them; global optical potentials (names, :extrapolate;
      the projectile and the mass range refused when a session is made).
   2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
-     files written by write_output_files (thm_experiments.out included).
+     files written by write_outputs (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
      of tests/reference/thm_distortion_reference.py (case he3_qf); R_model (the
      interpolated weight) against R on a grid (1e-6); R(E_ref) = 1.
@@ -231,11 +231,11 @@ with tempfile.TemporaryDirectory() as tmp:
         chi2 = s.evaluate(x).chi2
         check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
-        s.write_output_files(x)
+        s.write_outputs(x)
     from_py = output_files(py_dir)
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
-        check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
+        check(f"write_outputs: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
     check("thm_experiments.out has the distortion rows",
           from_cli["thm_experiments.out"].count("distortion_point") == 3)
 

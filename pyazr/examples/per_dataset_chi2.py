@@ -33,16 +33,8 @@ def main() -> int:
                     help="a param.sav to load instead of the .azr values")
     args = ap.parse_args()
 
-    with Session(str(args.azr)) as azr:
+    with Session(str(args.azr), parameter_file=args.params) as azr:
         x = np.asarray(azr.parameters.x0, float)
-        if args.params:
-            # param.sav has one line per parameter, fixed ones included, while
-            # the fit vector holds only the free ones -- so a length comparison
-            # never matches and would silently leave x at the .azr's values.
-            # best_fit_params does the mapping (and the extrapolation-mode
-            # case) properly.
-            from pyazr.bands import best_fit_params
-            x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         ev = azr.evaluate(x)
         rows = azr.objective().residuals(x)

@@ -101,6 +101,11 @@ try:
     expect("Project[name] of a record it does not have", lambda: project["skowronski_luna_hpgX"],
            pyazr.ParameterKeyError, KeyError,
            ["'skowronski_luna_hpgX'", "did you mean", "Project.records()"])
+    # A channel radius is an edit of the Project (the engine's refusal: the pair, the pairs it has / the rule).
+    expect("Project.set_pair of an unknown pair", lambda: project.set_pair(9, radius=4.0), pyazr.FormatError,
+           ValueError, ["pair 9", "no pair has the key 9", "the pairs: 1 ("])
+    expect("Project.set_pair with a negative radius", lambda: project.set_pair(1, radius=-1.0), pyazr.FormatError,
+           ValueError, ["pair 1", "a channel radius and a mass are positive numbers"])
     expect("whittaker_wave with rho <= 0", lambda: pyazr.whittaker_wave(0, 1.0, [1.0, -1.0]),
            pyazr.DomainError, ValueError, ["rho = -1.0", "rho finite > 0", "help(pyazr.physics.whittaker_wave)"])
     expect("penetrability below threshold", lambda: pyazr.physics.penetrability(0, 1, 6, 1.00728, 12.0, 5.0, -0.1),
@@ -128,6 +133,11 @@ try:
     check("the notices are no longer printed on standard output",
           "EC Amplitude File." not in printed, printed[-400:])
 
+    expect("a session for the extrapolations of a project without one",
+           lambda: pyazr.Session(azr, extrapolations=True), pyazr.AZURE2Error, RuntimeError,
+           ["has nothing to extrapolate (it has no extrapolation record)",
+            "needs at least one active extrapolation record", "add_extrapolation", "pyazr.Session("])
+
     # -- wrong calls on a session ---------------------------------------------------------------------------------
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pyazr.EngineWarning)
@@ -144,10 +154,6 @@ try:
            pyazr.ParameterKeyError, KeyError, ["'9/2+ 1.0'", "the levels:", "Parameter.level_label"])
     expect("datasets.by_name of an unknown data set", lambda: s.datasets.by_name("nope"),
            pyazr.ParameterKeyError, KeyError, ["'nope'", "the names:", "Session.datasets"])
-    expect("set_channel_radius of an unknown pair", lambda: s.set_channel_radius(9, 4.0),
-           pyazr.ParameterKeyError, KeyError, ["no pair 9", "have [", "Session.pairs"])
-    expect("set_channel_radius with a negative radius", lambda: s.set_channel_radius(1, -1.0),
-           pyazr.ParameterError, ValueError, ["got -1.0", "positive length in fm", "channel_radius"])
     expect("objective with one parameter too few", lambda: s.objective()(x[:-1]), pyazr.ParameterVectorError,
            pyazr.AZURE2Error, [f"got {n - 1}", f"expected the free parameter vector ({n} values", "parameters.x0"])
     expect("evaluate with one parameter too many", lambda: s.evaluate(np.append(x, 1.0)),

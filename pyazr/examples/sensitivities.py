@@ -43,7 +43,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 import numpy as np
 
 from pyazr import Session
-from pyazr.bands import best_fit_params, rmatrix_columns, sensitivities
+from pyazr.bands import rmatrix_columns, sensitivities
 
 
 def label(param):
@@ -75,10 +75,8 @@ def main() -> int:
                     help="also finite-difference, and compare with the analytic matrix")
     args = ap.parse_args()
 
-    with Session(str(args.azr)) as azr:
+    with Session(str(args.azr), parameter_file=args.params) as azr:
         x = np.asarray(azr.parameters.x0, float)
-        if args.params:
-            x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         seg = args.segment - 1
         if not 0 <= seg < azr.nsegments:

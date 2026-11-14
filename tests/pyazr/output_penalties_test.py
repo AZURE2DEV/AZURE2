@@ -3,7 +3,7 @@
 
 `WorkingCopy::WriteOutputFiles` prints the Park, abundance and scattering-length totals from fields on the WorkingCopy object.
 The CLI's chi-squared path stores them there; the API's `CalculateChi2RWA` never did (pyazr adds those terms on the
-Python side), so a `write_output_files()` from a session wrote 0 for all three -- "Total-Scattering-Length-Chi-Squared"
+Python side), so a `write_outputs()` from a session wrote 0 for all three -- "Total-Scattering-Length-Chi-Squared"
 was missing from the file -- or, after a session had been through the CLI path, a stale value.  `AZUREAPI::WriteOutputFiles`
 now evaluates them at the current parameters before writing.
 
@@ -50,7 +50,7 @@ try:
     shutil.copy(SRC, os.path.join(work, "m.azr"))
     s = Session(os.path.join(work, "m.azr"), cwd=work)
     want = float(s.evaluate().terms["model data"])
-    out = s.write_output_files()
+    out = s.write_outputs()
     text = open(os.path.join(out, "chiSquared.out")).read()
     m = re.search(r"Total-Model-Data-Chi-Squared:\s*(\S+)", text)
     got = float(m.group(1)) if m else None
