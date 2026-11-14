@@ -39,10 +39,17 @@ std::pair<int, int> CompoundOf(const io::LevelRow &r) {
   return {r.z1() + r.z2(), (int)std::floor(r.m1() + r.m2() + 0.5)};
 }
 
-LevelEdit Refused(const std::string &why) {
+LevelEdit Refused(const EditRefusal &why) {
   LevelEdit e;
-  e.error = why;
+  e.refusal = why;
+  e.error = why.Text();
   return e;
+}
+
+// The section does not read (ReadRows's `why`).
+EditRefusal Unreadable(const std::string &why) {
+  return {why, "a closed <levels> section whose lines are rows of the <levels> columns or blank",
+          "correct the section in the project's text before editing it"};
 }
 
 // One replacement per edited row, descending lines.
@@ -196,11 +203,23 @@ bool ReadLevelRowTable(const io::Document &doc, LevelRowTable &out, std::string 
   return ok;
 }
 
-int FindLevel(const LevelRowTable &t, const LevelAddress &a, std::string &why) {
+std::string EditRefusal::Text() const {
+  std::string s = what;
+  if (!allowed.empty()) s += (s.empty() ? "" : ": ") + allowed;
+  if (!fix.empty()) s += (s.empty() ? "" : "; ") + fix;
+  return s;
+}
+
+int FindLevel(const LevelRowTable &t, const LevelAddress &a, EditRefusal &why) {
+  std::string labels;
+  for (const LevelEntry &l : t.levels) labels += (labels.empty() ? "" : "; ") + l.label;
+  const std::string listed = "the levels: " + (labels.empty() ? std::string("none") : labels);
   if (a.group > 0) {
     for (std::size_t k = 0; k < t.levels.size(); k++)
       if (t.levels[k].group == a.group && t.levels[k].level == a.level) return (int)k;
-    why = "no level has the engine's indices (group " + std::to_string(a.group) + ", level " + std::to_string(a.level) + ")";
+    why = {"no level has the engine's indices (group " + std::to_string(a.group) + ", level " +
+               std::to_string(a.level) + ")",
+           "the indices of an active level (" + listed + ")", "name the level by its label (Project.levels())"};
     return -1;
   }
   for (std::size_t k = 0; k < t.levels.size(); k++)
@@ -216,10 +235,10 @@ int FindLevel(const LevelRowTable &t, const LevelAddress &a, std::string &why) {
     parity = jpi.back() == '+' ? 1 : -1;
     if (!ParseTwoJ(jpi.substr(0, jpi.size() - 1), twoJ)) twoJ = -1;
   }
-  std::string labels;
-  for (const LevelEntry &l : t.levels) labels += (labels.empty() ? "" : "; ") + l.label;
   if (twoJ < 0 || energyText.empty() || *end || (in >> rest)) {
-    why = "no level is named '" + a.label + "' (a level is named by its label or by J^pi and E_x: '3/2- 3.50'; the levels: " + labels + ")";
+    why = {"no level is named '" + a.label + "'",
+           "a level is named by its label or by J^pi and E_x, '3/2- 3.50' (" + listed + ")",
+           "give one of the labels (Project.levels())"};
     return -1;
   }
   std::vector<int> found;
@@ -228,11 +247,13 @@ int FindLevel(const LevelRowTable &t, const LevelAddress &a, std::string &why) {
       found.push_back((int)k);
   if (found.size() == 1) return found[0];
   if (found.empty()) {
-    why = "no " + JpiText(twoJ, parity) + " level within 1 keV of " + energyText + " MeV (the levels: " + labels + ")";
+    why = {"no " + JpiText(twoJ, parity) + " level within 1 keV of " + energyText + " MeV",
+           "J^pi and E_x of a level within 1 keV (" + listed + ")", "give one of the labels (Project.levels())"};
   } else {
-    why = "'" + a.label + "' names " + std::to_string(found.size()) + " levels:";
-    for (int k : found) why += " '" + t.levels[k].label + "'";
-    why += "; give the label";
+    std::string named;
+    for (int k : found) named += (named.empty() ? "'" : ", '") + t.levels[k].label + "'";
+    why = {"'" + a.label + "' names " + std::to_string(found.size()) + " levels (" + named + ")",
+           "a name of one level", "give the label of the one meant"};
   }
   return -1;
 }
@@ -265,34 +286,56 @@ bool HalfInteger(int twoJ) { return twoJ >= 0; }
 LevelEdit AddPair(const io::Document &doc, const NewPair &n, int &key) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
   if (n.kind != 0 && n.kind != 10 && n.kind != 20)
-    return Refused("a pair's kind is particle (0), photon (10) or beta (20), not " + std::to_string(n.kind));
+    return Refused({"the pair kind " + std::to_string(n.kind), "particle (0), photon (10) or beta (20)",
+                    "give one of them"});
   const bool particle = n.kind == 0, photon = n.kind == 10;
   for (double x : {n.massLight, n.massHeavy, n.gLight, n.gHeavy, n.lightExcitation, n.heavyExcitation,
                    n.separationEnergy, n.radius, n.bindingEnergy})
-    if (!std::isfinite(x)) return Refused("every number of a pair is finite");
+    if (!std::isfinite(x))
+      return Refused({"a number of the pair is not finite", "finite masses, g-factors and energies",
+                      "give a number for each"});
   if (!HalfInteger(n.twoJLight) || !HalfInteger(n.twoJHeavy))
-    return Refused("a spin is a multiple of 1/2, >= 0 (2j given: " + std::to_string(n.twoJLight) + ", " +
-                   std::to_string(n.twoJHeavy) + ")");
-  if (std::abs(n.parityLight) != 1 || std::abs(n.parityHeavy) != 1) return Refused("a parity is +1 or -1");
+    return Refused({"the spins 2j = " + std::to_string(n.twoJLight) + ", " + std::to_string(n.twoJHeavy),
+                    "a spin is a multiple of 1/2, >= 0", "give J as 0, 1/2, 1, ..."});
+  if (std::abs(n.parityLight) != 1 || std::abs(n.parityHeavy) != 1)
+    return Refused({"the parities " + std::to_string(n.parityLight) + ", " + std::to_string(n.parityHeavy),
+                    "a parity is +1 or -1", "give +1 or -1"});
   if (!(n.massHeavy > 0.0) || (!photon && !(n.massLight > 0.0)))
-    return Refused("the masses of a pair's partners are > 0 (u; a photon's is 0, given by the pair kind)");
+    return Refused({"the masses " + ShortestNumberText(n.massLight) + ", " + ShortestNumberText(n.massHeavy) + " u",
+                    "the masses of a pair's partners are > 0 (u; a photon's is 0, given by the pair kind)",
+                    "give the atomic masses in u"});
   if (particle && !(n.radius > 0.0))
-    return Refused("the channel radius of a particle pair is a number > 0 (fm), not " + ShortestNumberText(n.radius));
-  if (!particle && n.radius != 0.0) return Refused("a photon or beta pair has no channel radius: give 0 or none");
-  if (n.lightExcitation < 0.0 || n.heavyExcitation < 0.0) return Refused("an excitation energy is >= 0 (MeV)");
-  if (!particle && n.lightExcitation != 0.0) return Refused("only a particle pair's light partner can be excited");
+    return Refused({"the channel radius " + ShortestNumberText(n.radius) + " fm",
+                    "a particle pair's channel radius is a number > 0 (fm)", "give radius= in fm"});
+  if (!particle && n.radius != 0.0)
+    return Refused({"the channel radius " + ShortestNumberText(n.radius) + " fm of a photon or beta pair",
+                    "a photon or beta pair has no channel radius", "give 0 or none"});
+  if (n.lightExcitation < 0.0 || n.heavyExcitation < 0.0)
+    return Refused({"the excitation energies " + ShortestNumberText(n.lightExcitation) + ", " +
+                        ShortestNumberText(n.heavyExcitation) + " MeV",
+                    "an excitation energy is >= 0 (MeV, 0 for the ground state)", "give it in MeV"});
+  if (!particle && n.lightExcitation != 0.0)
+    return Refused({"a light excitation of a photon or beta pair",
+                    "only a particle pair's light partner can be excited",
+                    "give light_excitation=0"});
   if (n.bindingEnergy < 0.0 || (!particle && n.bindingEnergy != 0.0))
-    return Refused("the THM binding energy is >= 0 (MeV) and belongs to a particle pair");
-  if (n.externalCapture < 0) return Refused("the external-capture mask is a whole number >= 0");
+    return Refused({"the THM binding energy " + ShortestNumberText(n.bindingEnergy) + " MeV",
+                    "a number >= 0 (MeV; 0 = none) on a particle pair", "give binding_energy >= 0 or none"});
+  if (n.externalCapture < 0)
+    return Refused({"the external-capture mask " + std::to_string(n.externalCapture), "a whole number >= 0",
+                    "give 0 for none"});
   int maxKey = 0;
   for (const io::LevelRow &r : t.row) maxKey = std::max(maxKey, r.ir());
   key = n.key > 0 ? n.key : maxKey + 1;
-  if (n.key < 0) return Refused("a pair key is a whole number >= 1 (0 or none: the next free key)");
+  if (n.key < 0)
+    return Refused({"the pair key " + std::to_string(n.key), "a whole number >= 1 (0 or none: the next free key)",
+                    "give another key or none"});
   if (PairRow(t, key) >= 0)
-    return Refused("pair key " + std::to_string(key) + " is taken (the pairs: " + PairsListed(t) +
-                   "); give another key or none for the next free one (" + std::to_string(maxKey + 1) + ")");
+    return Refused({"pair key " + std::to_string(key) + " is taken (the pairs: " + PairsListed(t) + ")",
+                    "a key no pair has", "give another key or none for the next free one (" +
+                    std::to_string(maxKey + 1) + ")"});
   // The unused columns aa and entranceSepE as the first row writes them (the engine reads neither).
   const std::string aa = t.row.empty() ? "1" : t.text[0].Token(Column("aa"));
   const std::string entranceSepE = t.row.empty() ? ShortestNumberText(n.separationEnergy)
@@ -320,9 +363,11 @@ LevelEdit AddPair(const io::Document &doc, const NewPair &n, int &key) {
 LevelEdit RemovePair(const io::Document &doc, int pairKey, bool removeChannels) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
   if (PairRow(t, pairKey) < 0)
-    return Refused("no pair has the key " + std::to_string(pairKey) + " (the pairs: " + PairsListed(t) + ")");
+    return Refused({"no pair has the key " + std::to_string(pairKey),
+                    "the key of a pair (the pairs: " + PairsListed(t) + ")",
+                    "give one of the keys (Project.pairs())"});
   std::vector<int> lines;
   std::string users, bare;
   for (const LevelEntry &l : t.table.levels) {
@@ -344,12 +389,13 @@ LevelEdit RemovePair(const io::Document &doc, int pairKey, bool removeChannels) 
   }
   const std::string label = PairLabel(*PairByKey(pairKey, t.table.tables.pairs));
   if (!users.empty() && !removeChannels)
-    return Refused("pair " + std::to_string(pairKey) + " (" + label + ") is a channel of the levels " + users +
-                   "; a pair is removed when no level names it: remove those levels or channels first, or remove "
-                   "the channels with the pair (remove_channels=True)");
+    return Refused({"the pair (" + label + ") is a channel of the levels " + users,
+                    "a pair is removed when no level names it",
+                    "remove those levels or channels first, or remove the channels with the pair "
+                    "(remove_channels=True)"});
   if (!bare.empty())
-    return Refused("pair " + std::to_string(pairKey) + " (" + label + ") is the only channel of the levels " + bare +
-                   "; a level keeps at least one channel: remove those levels first (remove_level)");
+    return Refused({"the pair (" + label + ") is the only channel of the levels " + bare,
+                    "a level keeps at least one channel", "remove those levels first (remove_level)"});
   for (std::size_t r = 0; r < t.row.size(); r++)
     if (t.table.rows[r].pairRow && t.row[r].ir() == pairKey) lines.push_back(t.table.rows[r].line);
   std::sort(lines.begin(), lines.end());
@@ -370,20 +416,24 @@ AllowedChannelList AllowedChannels(const io::Document &doc, int twoJ, int parity
                                    const std::vector<int> &pairKeys) {
   AllowedChannelList out;
   Rows t;
-  if (!ReadRows(doc, t, out.error)) return out;
-  if (twoJ < 0 || std::abs(parity) != 1) {
-    out.error = "a level has 2J >= 0 and parity +1 or -1";
+  auto refuse = [&out](const EditRefusal &why) {
+    out.refusal = why;
+    out.error = why.Text();
     return out;
-  }
-  if (limits.lMax < 0 || limits.multipolarityMax < 0 || limits.multipolaritiesMax < 0) {
-    out.error = "l_max, multipolarity_max and multipolarities_max are whole numbers >= 0";
-    return out;
-  }
+  };
+  std::string why;
+  if (!ReadRows(doc, t, why)) return refuse(Unreadable(why));
+  if (twoJ < 0 || std::abs(parity) != 1)
+    return refuse({"2J = " + std::to_string(twoJ) + ", parity " + std::to_string(parity),
+                   "a level has 2J >= 0 and parity +1 or -1", "give J as 0, 1/2, 1, ... and parity +1 or -1"});
+  if (limits.lMax < 0 || limits.multipolarityMax < 0 || limits.multipolaritiesMax < 0)
+    return refuse({"a negative limit", "l_max, multipolarity_max and multipolarities_max are whole numbers >= 0",
+                   "give each >= 0 (their defaults are 2)"});
   for (int k : pairKeys)
-    if (!PairByKey(k, t.table.tables.pairs)) {
-      out.error = "no pair has the key " + std::to_string(k) + " (the pairs: " + PairsListed(t) + ")";
-      return out;
-    }
+    if (!PairByKey(k, t.table.tables.pairs))
+      return refuse({"no pair has the key " + std::to_string(k),
+                     "the key of a pair (the pairs: " + PairsListed(t) + ")",
+                     "give keys of the pairs, or none for all"});
   for (const PairInfo &p : t.table.tables.pairs) {
     if (!pairKeys.empty() && std::find(pairKeys.begin(), pairKeys.end(), p.key) == pairKeys.end()) continue;
     if (p.kind == 0) {
@@ -415,10 +465,13 @@ AllowedChannelList AllowedChannels(const io::Document &doc, int twoJ, int parity
 LevelEdit SetLevel(const io::Document &doc, const LevelAddress &address, const LevelChange &change) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
-  const int k = FindLevel(t.table, address, why);
-  if (k < 0) return Refused(why);
-  if (!Finite(change.energy)) return Refused("the energy of a level is a finite number (MeV)");
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
+  EditRefusal unknown;
+  const int k = FindLevel(t.table, address, unknown);
+  if (k < 0) return Refused(unknown);
+  if (!Finite(change.energy))
+    return Refused({"the energy " + ShortestNumberText(*change.energy) + " MeV", "a finite number (MeV)",
+                    "give E_x in MeV"});
   std::map<int, std::map<int, std::string>> byRow;
   for (int r : t.table.levels[k].rows) {
     std::map<int, std::string> &tokens = byRow[r];
@@ -433,10 +486,13 @@ LevelEdit SetChannel(const io::Document &doc, const LevelAddress &address, const
                      const ChannelChange &change) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
-  const int k = FindLevel(t.table, address, why);
-  if (k < 0) return Refused(why);
-  if (!Finite(change.width)) return Refused("a width is a finite number");
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
+  EditRefusal unknown;
+  const int k = FindLevel(t.table, address, unknown);
+  if (k < 0) return Refused(unknown);
+  if (!Finite(change.width))
+    return Refused({"the width " + ShortestNumberText(*change.width), "a finite number in the row's convention",
+                    "give the width in eV, fm^-1/2 (an ANC) or MeV^1/2 (an amplitude row)"});
   const LevelEntry &level = t.table.levels[k];
   std::string listed;
   for (int r : level.rows) {
@@ -444,9 +500,10 @@ LevelEdit SetChannel(const io::Document &doc, const LevelAddress &address, const
     listed += (listed.empty() ? "" : "; ") + ChannelText(c);
     if (c.pairKey != channel.pairKey || c.l != channel.l || c.twoS != channel.twoS) continue;
     if (change.widthIsAmplitude && t.row[r].pType() != 0)
-      return Refused("level '" + level.label + "', " + ChannelText(channel) +
-                     ": a photon or beta channel has no reduced-width amplitude input (the flag is for a particle "
-                     "channel); set width_is_amplitude on a channel of a particle pair");
+      return Refused({"width_is_amplitude on a photon or beta channel",
+                      "the flag is for a particle channel (a photon or beta channel has no reduced-width amplitude "
+                      "input)",
+                      "set width_is_amplitude on a channel of a particle pair"});
     std::map<int, std::map<int, std::string>> byRow;
     if (change.width) byRow[r][Column("gamma")] = ShortestNumberText(*change.width);
     if (change.fixed) byRow[r][Column("channelFix")] = Flag(*change.fixed);
@@ -454,21 +511,20 @@ LevelEdit SetChannel(const io::Document &doc, const LevelAddress &address, const
       byRow[r][Column("gammaIsRWA")] = Flag(*change.widthIsAmplitude);
     return RowEdits(t, byRow);
   }
-  return Refused("level '" + level.label + "' has no row for " + ChannelText(channel) + " (its channels: " + listed + ")");
+  return Refused({"level '" + level.label + "' has no row for " + ChannelText(channel),
+                  "a channel of the level (its channels: " + listed + ")",
+                  "give one of its channels, or add the channel to the levels of its J^pi"});
 }
 
 LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
   const int first = PairRow(t, pairKey);
-  if (first < 0) {
-    std::string keys;
-    for (const PairInfo &p : t.table.tables.pairs)
-      keys += (keys.empty() ? "" : ", ") + std::to_string(p.key) + " (" + PairLabel(p) + ")";
-    return Refused("no pair has the key " + std::to_string(pairKey) + " (the pairs: " + keys + ")");
-  }
-  const std::string pair = "pair " + std::to_string(pairKey) + ": ";
+  if (first < 0)
+    return Refused({"no pair has the key " + std::to_string(pairKey),
+                    "the key of a pair (the pairs: " + PairsListed(t) + ")",
+                    "give one of the keys (Project.pairs())"});
   struct Positive {
     const std::optional<double> &value;
     const char *what, *unit;
@@ -476,24 +532,29 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
   for (const Positive &x : {Positive{change.radius, "channel radius", "fm"}, Positive{change.lightMass, "light mass", "u"},
                             Positive{change.heavyMass, "heavy mass", "u"}})
     if (x.value && !(std::isfinite(*x.value) && *x.value > 0.0))
-      return Refused(pair + "the " + x.what + " " + ShortestNumberText(*x.value) + " " + x.unit +
-                     " is out of range: it is a number > 0 (" + x.unit + "); give a positive " + x.what);
+      return Refused({"the " + std::string(x.what) + " " + ShortestNumberText(*x.value) + " " + x.unit +
+                          " is out of range",
+                      "it is a number > 0 (" + std::string(x.unit) + ")", "give a positive " + std::string(x.what)});
   if (!Finite(change.separationEnergy))
-    return Refused(pair + "the separation energy " + ShortestNumberText(*change.separationEnergy) +
-                   " MeV is out of range: it is a finite number (MeV)");
+    return Refused({"the separation energy " + ShortestNumberText(*change.separationEnergy) + " MeV is out of range",
+                    "it is a finite number (MeV)", "give the separation energy in MeV"});
   for (const Positive &x : {Positive{change.lightExcitation, "light excitation energy", "MeV"},
                             Positive{change.heavyExcitation, "heavy excitation energy", "MeV"}})
     if (x.value && !(std::isfinite(*x.value) && *x.value >= 0.0))
-      return Refused(pair + "the " + x.what + " " + ShortestNumberText(*x.value) +
-                     " MeV is out of range: it is a number >= 0 (MeV, 0 for the ground state); give it in MeV");
+      return Refused({"the " + std::string(x.what) + " " + ShortestNumberText(*x.value) + " MeV is out of range",
+                      "it is a number >= 0 (MeV, 0 for the ground state)", "give it in MeV"});
   if (change.radius && t.row[first].pType() != 0)
-    return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it has no channel radius");
+    return Refused({"a channel radius for a photon or beta pair", "a channel radius belongs to a particle pair",
+                    "set radius on a particle pair"});
   if (change.bindingEnergy && t.row[first].pType() != 0)
-    return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it cannot be the entrance pair of "
-                   "a THM experiment, so it has no THM binding energy; set binding_energy on a particle pair");
+    return Refused({"a THM binding energy for a photon or beta pair",
+                    "a photon or beta pair cannot be the entrance pair of a THM experiment, so it has no THM binding "
+                    "energy",
+                    "set binding_energy on a particle pair"});
   if (change.bindingEnergy && !(std::isfinite(*change.bindingEnergy) && *change.bindingEnergy >= 0.0))
-    return Refused("the THM binding energy " + ShortestNumberText(*change.bindingEnergy) +
-                   " MeV is out of range: it is a number >= 0 (MeV; 0 = none), B of the Trojan horse a = x + s");
+    return Refused({"the THM binding energy " + ShortestNumberText(*change.bindingEnergy) + " MeV is out of range",
+                    "it is a number >= 0 (MeV; 0 = none), B of the Trojan horse a = x + s",
+                    "give B in MeV, or 0 for none"});
   std::map<int, std::map<int, std::string>> byRow;
   for (std::size_t r = 0; r < t.row.size(); r++) {
     const io::LevelRow &row = t.row[r];
@@ -518,27 +579,42 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
 LevelEdit AddLevel(const io::Document &doc, const NewLevel &n) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
   if (n.twoJ < 0 || (n.parity != 1 && n.parity != -1) || !std::isfinite(n.energy))
-    return Refused("a level has 2J >= 0, parity +1 or -1 and a finite energy (MeV)");
+    return Refused({"2J = " + std::to_string(n.twoJ) + ", parity " + std::to_string(n.parity) + ", E_x " +
+                        ShortestNumberText(n.energy) + " MeV",
+                    "a level has 2J >= 0, parity +1 or -1 and a finite energy (MeV)",
+                    "give J as 0, 1/2, 1, ..., parity +1 or -1 and E_x in MeV"});
   // The compound nucleus of the channels' pairs (no channel given: of the J^pi group that exists), and the J^pi group
   // of that nucleus.
   std::set<std::pair<int, int>> nuclei;
   for (const NewChannel &c : n.channels) {
     const int p = PairRow(t, c.pairKey);
-    if (p < 0) return Refused("no pair has the key " + std::to_string(c.pairKey) + " (a new level names existing pairs)");
-    if (!std::isfinite(c.width)) return Refused("a width is a finite number");
+    if (p < 0)
+      return Refused({"no pair has the key " + std::to_string(c.pairKey),
+                      "a new level names existing pairs (the pairs: " + PairsListed(t) + ")",
+                      "give one of the keys, or add the pair first (add_pair)"});
+    if (!std::isfinite(c.width))
+      return Refused({"the width " + ShortestNumberText(c.width) + " of the channel of pair " +
+                          std::to_string(c.pairKey),
+                      "a finite number in the row's convention", "give the width in eV, fm^-1/2 or MeV^1/2"});
     nuclei.insert(CompoundOf(t.row[p]));
   }
   if (n.channels.empty())
     for (const LevelEntry &l : t.table.levels)
       if (l.active && l.twoJ == n.twoJ && l.parity == n.parity) nuclei.insert({l.nucleusZ, l.nucleusA});
   if (nuclei.empty())
-    return Refused("no " + JpiText(n.twoJ, n.parity) + " level exists, so the new level needs its channels");
+    return Refused({"no channels for a " + JpiText(n.twoJ, n.parity) + " level, and no " + JpiText(n.twoJ, n.parity) +
+                        " level exists",
+                    "a level of a new J^pi needs its channels",
+                    "give its channels, or channels=\"allowed\" (Project.allowed_channels)"});
   if (nuclei.size() != 1)
-    return Refused(n.channels.empty() ? "the " + JpiText(n.twoJ, n.parity) + " levels of several compound nuclei exist: "
-                                        "name a channel of the new level"
-                                      : "the channels of a level belong to pairs of one compound nucleus");
+    return Refused(n.channels.empty()
+                       ? EditRefusal{"the " + JpiText(n.twoJ, n.parity) + " levels of several compound nuclei exist",
+                                     "the levels of one compound nucleus", "name a channel of the new level"}
+                       : EditRefusal{"the channels name pairs of several compound nuclei",
+                                     "the channels of a level belong to pairs of one compound nucleus",
+                                     "give channels of one compound nucleus"});
   int maxID = 0;
   for (const io::LevelRow &r : t.row) maxID = std::max(maxID, r.levelID());
   const std::string id = std::to_string(maxID + 1);
@@ -572,9 +648,10 @@ LevelEdit AddLevel(const io::Document &doc, const NewLevel &n) {
     }
     for (std::size_t i = 0; i < n.channels.size(); i++)
       if (!used[i])
-        return Refused("the " + JpiText(n.twoJ, n.parity) + " levels share one channel set (" + listed + "); " +
-                       ChannelText(LevelChannelInfo{n.channels[i].pairKey, n.channels[i].l, n.channels[i].twoS}) +
-                       " is not in it");
+        return Refused({ChannelText(LevelChannelInfo{n.channels[i].pairKey, n.channels[i].l, n.channels[i].twoS}) +
+                            " is not a channel of the " + JpiText(n.twoJ, n.parity) + " levels",
+                        "the " + JpiText(n.twoJ, n.parity) + " levels share one channel set (" + listed + ")",
+                        "give channels of the set; the others are added with width 0, fixed"});
   } else {
     for (const NewChannel &c : n.channels) rows.push_back({PairRow(t, c.pairKey), &c});
   }
@@ -611,9 +688,10 @@ LevelEdit AddLevel(const io::Document &doc, const NewLevel &n) {
 LevelEdit RemoveLevel(const io::Document &doc, const LevelAddress &address) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
-  const int k = FindLevel(t.table, address, why);
-  if (k < 0) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
+  EditRefusal unknown;
+  const int k = FindLevel(t.table, address, unknown);
+  if (k < 0) return Refused(unknown);
   std::vector<int> lines;
   for (int r : t.table.levels[k].rows) lines.push_back(t.table.rows[r].line);
   LevelEdit e;
@@ -624,14 +702,15 @@ LevelEdit RemoveLevel(const io::Document &doc, const LevelAddress &address) {
 LevelEdit LevelValueEdits(const io::Document &doc, const std::vector<LevelValue> &values) {
   Rows t;
   std::string why;
-  if (!ReadRows(doc, t, why)) return Refused(why);
+  if (!ReadRows(doc, t, why)) return Refused(Unreadable(why));
   std::map<int, std::map<int, std::string>> byRow;
   std::vector<std::pair<std::size_t, std::string>> unplaced;
   for (std::size_t i = 0; i < values.size(); i++) {
     const LevelValue &v = values[i];
-    const int k = FindLevel(t.table, LevelAddress{"", v.group, v.level}, why);
+    EditRefusal unknown;
+    const int k = FindLevel(t.table, LevelAddress{"", v.group, v.level}, unknown);
     if (k < 0 || !std::isfinite(v.value)) {
-      unplaced.push_back({i, k < 0 ? why : "a value that is not finite"});
+      unplaced.push_back({i, k < 0 ? unknown.what : "a value that is not finite"});
       continue;
     }
     const std::string text = ShortestNumberText(v.value);

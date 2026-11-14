@@ -90,8 +90,8 @@ Nuisance** check box, shows the first segment's value and reads, e.g.,
 "tied to segment 1 (normgroup D)". To fit or fix the shared normalization,
 change the first segment's row; to give the member its own, clear its group in
 the Segments tab. The engine still carries a varied member's
-``segment_<key>_norm`` parameter, fixed at the shared value, so parameter
-numbering does not depend on the groups.
+parameter, ``<norm record>.value[<data set>]``, fixed at the shared value, so
+parameter numbering does not depend on the groups.
 
 Energy Shift Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -100,7 +100,7 @@ Lists the energy shift parameters for each data segment that has **Vary Energy
 Shift?** enabled, with the same **Prior Centre** column. A segment's
 :math:`\sqrt{E}` shift coefficient (the ``sqrtshift`` block in the input file,
 see :doc:`segments`) is fitted by the engine under the name
-``segment_<key>_energy_shift_sqrt`` but is not listed here.
+``<data set>.shift.sqrt`` but is not listed here.
 
 A member of a shift group (``shiftgroup <label>``) other than the group's
 first active segment is shown tied to that segment in the same way as a
@@ -167,7 +167,7 @@ Sample Thickness Parameters
 
 Shown only when a transmission or self-shielded-yield segment has the fit form
 of its block (``transmission n vary sigma``, see :doc:`segments`). One row per
-such active line, named ``segment_<k>_thickness`` as in ``param.sav``. **Value**
+such active line, named ``<target>.areal_density`` as in ``param.sav``. **Value**
 is :math:`n` in atoms/barn, **Error** the sigma of its prior (0 = none) and **Use
 as Nuisance** whether it is fitted: the **Sample** row of the segment dialog
 (n, Prior sigma, Fit), synced both ways with the Segments tab. A

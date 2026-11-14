@@ -71,8 +71,19 @@ struct LevelAddress {
   std::string label;
   int group = 0, level = 0;
 };
+/*!
+ * A refused edit in the three parts of a refusal (pyazr.Error's `what`, `allowed`, `fix`): what is wrong with the
+ * value or the object named, what is allowed, how to go on.  The caller names the object edited (pyazr's message
+ * starts with it), so the parts do not repeat its address.
+ */
+struct EditRefusal {
+  std::string what, allowed, fix;
+  /// The message: "<what>: <allowed>; <fix>" (an empty part is left out with its separator).
+  std::string Text() const;
+};
+
 /// The index in table.levels of the level `address` names; -1 with `why` when none or more than one is named.
-int FindLevel(const LevelRowTable &table, const LevelAddress &address, std::string &why);
+int FindLevel(const LevelRowTable &table, const LevelAddress &address, EditRefusal &why);
 
 /// Replace the document's lines [first, last) (0-based) by `lines`.
 struct LineReplacement {
@@ -80,11 +91,12 @@ struct LineReplacement {
   std::vector<std::string> lines;
 };
 
-/// The outcome of an edit: the replacements to apply in the order given (descending lines), or `error`.
+/// The outcome of an edit: the replacements to apply in the order given (descending lines), or the refusal.
 struct LevelEdit {
   std::vector<LineReplacement> replacements;
   std::vector<std::pair<std::size_t, std::string>> unplaced;  ///< LevelValueEdits: (index of a value with no row, why)
-  std::string error;
+  std::string error;     ///< refusal.Text(); "" when the edit is made
+  EditRefusal refusal;   ///< its three parts
 };
 
 struct LevelChange {
@@ -178,7 +190,8 @@ struct ChannelLimits {
  */
 struct AllowedChannelList {
   std::vector<LevelChannelInfo> channels;
-  std::string error;
+  std::string error;     ///< refusal.Text(); "" when the list is made
+  EditRefusal refusal;   ///< its three parts
 };
 AllowedChannelList AllowedChannels(const io::Document &doc, int twoJ, int parity, const ChannelLimits &limits,
                                    const std::vector<int> &pairKeys);

@@ -23,10 +23,9 @@ class ScatteringLength(NamedTuple):
 
     @property
     def jpi(self):
-        """J^pi of the channel (J = s for l = 0), e.g. ``"1/2+"``."""
-        j = self.s
-        text = f"{int(round(2 * j))}/2" if abs(j - round(j)) > 1e-6 else f"{int(round(j))}"
-        return text + ("+" if self.parity > 0 else "-")
+        """J^pi of the channel (J = s for l = 0) as the engine writes it, e.g. ``"1/2+"``."""
+        from . import _azure2
+        return _azure2.jpi_text(int(round(2 * self.s)), self.parity)
 
 
 class SessionPhysics:
@@ -185,7 +184,7 @@ class SessionPhysics:
             row = ChannelWidth(
                 name=p.name, index=p.index, free_index=p.free_index,
                 fixed=p.fixed, jgroup=p.jgroup, level=p.level,
-                jpi=p.level_label.split()[0] if p.level_label else p.jpi,  # the engine's J^pi text, "1/2+"
+                jpi=p.jpi,  # the engine's J^pi text, "1/2+"
                 level_energy=ex, pair=p.pair, L=p.L, S=p.S,
                 radiation_type=p.radiation_type or "P",
                 gamma=g, value=value, is_photon=photon,

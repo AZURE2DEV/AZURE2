@@ -2051,7 +2051,7 @@ Diagnostic codes
      - two targets that share a stopping scale (one material and projectile) and write it differently
    * - ``E_STOPPING_DATA``
      - error
-     - a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)
+     - a stopping evaluation in an engine built without SRIM's data files where neither --srim-data-dir=DIR nor the switch AZURE2_SRIM_DATA_DIR names a directory with them, or a stopping table that cannot be read (set-up)
    * - ``E_REFERENCE_TABLE``
      - error
      - the reference table of a ratio_to_reference record: unreadable, not increasing in energy, a value <= 0, or not covering an energy of the data set or grid (build)

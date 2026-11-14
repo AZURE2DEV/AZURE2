@@ -144,12 +144,16 @@ def _replace(doc, replacements):
 
 
 def _engine_call(what, call, *args, **kwargs):
-    """The engine's replacements, its refusal (ValueError) as FormatError."""
+    """The engine's replacements, its refusal (ValueError) as FormatError headed by ``what`` (the object edited).
+    The engine's refusal of an edit carries its three parts as attributes (``what``, ``allowed``, ``fix``); they
+    become the FormatError's, ``what`` headed by the object as the message is."""
     from .project import FormatError
     try:
         return call(*args, **kwargs)
     except ValueError as e:
-        raise FormatError(f"{what}: {e}") from None
+        part = getattr(e, "what", None)
+        raise FormatError(f"{what}: {e}", what=f"{what}: {part}" if part else None,
+                          allowed=getattr(e, "allowed", None), fix=getattr(e, "fix", None)) from None
 
 
 class NuclearPart:

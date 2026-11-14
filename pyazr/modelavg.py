@@ -62,9 +62,9 @@ WEIGHT_METHODS = ("aic", "bic", "chi2", "flat")
 # ---------------------------------------------------------------------------
 
 def _jpi(J, parity):
-    J = float(J)
-    j = str(int(J)) if J.is_integer() else f"{int(round(2 * J))}/2"
-    return f"{j}{'+' if int(parity) > 0 else '-'}"
+    """J^pi as the engine writes it ("1/2+", "2-")."""
+    from . import _azure2
+    return _azure2.jpi_text(int(round(2 * float(J))), 1 if int(parity) > 0 else -1)
 
 
 def _num(v):

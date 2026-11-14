@@ -27,7 +27,7 @@ documentation and the pyazr call behind it; ``GET /openapi.json`` is the machine
 What the server keeps
 ---------------------
 
-- **The project text is the state.**  Every edit goes through :class:`pyazr.Project` and is validated by the engine
+- **The project text is the state.**  Every edit goes through ``pyazr.Project`` and is validated by the engine
   before it is accepted; a refused edit answers 422 with the engine's diagnostics and changes nothing.  Every
   accepted edit gives a new revision number, and every edit names the revision it was made on (``"rev"`` in the
   body, or an ``If-Match`` header): an edit on an old revision answers 412, so two clients cannot overwrite each

@@ -3389,7 +3389,7 @@ flat-weight range next to the weighted one, and treat a variant that takes
 all the weight with suspicion rather than as a selection.
 
 *Names and the averaged model.* Quantities are matched across variants by
-name: :func:`pyazr.modelavg.parameter_label` names a level energy
+name: ``pyazr.modelavg.parameter_label()`` names a level energy
 ``E[<Jπ>#<n>]`` and a width ``G[<Jπ>#<n>;p<pair key>;L<l>;S<s>]`` (``n`` the
 engine's level number in the :math:`J^\pi` group, the pair key as the file
 writes it), which depends on the level scheme only. ``write_averaged_azr``
