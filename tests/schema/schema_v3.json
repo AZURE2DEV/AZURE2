@@ -119,6 +119,7 @@
       "text": "the reaction is one reaction (no sum, no ratio)"
      },
      "required": false,
+     "rare": true,
      "min": 1,
      "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
     },
@@ -131,6 +132,7 @@
       "text": "the reaction is one reaction (no sum, no ratio)"
      },
      "required": false,
+     "rare": true,
      "min": 1,
      "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
     },
@@ -260,7 +262,7 @@
      "type": "path",
      "grammar": "<path>",
      "required": false,
-     "doc": "data_formats.rst, covariance files"
+     "doc": "the covariance of the points (and of the other data sets the file names), a text file of blocks, diagonals and vectors relative to the project (data_formats.rst, Data Covariance Files)"
     },
     "active": {
      "title": "Active",
@@ -378,6 +380,7 @@
      "type": "enum",
      "grammar": "E1|E2",
      "by_quantity": true,
+     "rare": true,
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
     },
@@ -386,6 +389,7 @@
      "type": "number_with_unit",
      "grammar": "<number> <inverse_energy unit>",
      "by_quantity": true,
+     "rare": true,
      "dimension": "inverse_energy",
      "units": ["1/MeV", "1/keV"],
      "doc": "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"
@@ -395,6 +399,7 @@
      "type": "structured",
      "grammar": "L <integer >= 1> Ic <J> delta <number>",
      "by_quantity": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -450,6 +455,7 @@
      "type": "name",
      "grammar": "<name>",
      "by_quantity": true,
+     "rare": true,
      "doc": "the experiment[<name>] of <thm>, or global"
     },
     "reference": {
@@ -457,6 +463,7 @@
      "type": "structured",
      "grammar": "<path> [unit <cross_section unit>]",
      "by_quantity": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -496,6 +503,7 @@
       "text": "thm is given"
      },
      "required": false,
+     "rare": true,
      "doc": "the weight table of <thm> weight[k]"
     },
     "source": {
@@ -503,6 +511,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "where the numbers come from; never read by the physics"
     },
     "exfor": {
@@ -510,6 +519,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the EXFOR entry and subentry"
     },
     "doi": {
@@ -517,6 +527,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the DOI of the publication"
     }
    },
@@ -653,6 +664,7 @@
       "text": "the reaction is one reaction (no sum, no ratio)"
      },
      "required": false,
+     "rare": true,
      "min": 1,
      "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
     },
@@ -665,6 +677,7 @@
       "text": "the reaction is one reaction (no sum, no ratio)"
      },
      "required": false,
+     "rare": true,
      "min": 1,
      "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
     },
@@ -855,6 +868,7 @@
      "type": "enum",
      "grammar": "E1|E2",
      "by_quantity": true,
+     "rare": true,
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
     },
@@ -863,6 +877,7 @@
      "type": "number_with_unit",
      "grammar": "<number> <inverse_energy unit>",
      "by_quantity": true,
+     "rare": true,
      "dimension": "inverse_energy",
      "units": ["1/MeV", "1/keV"],
      "doc": "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"
@@ -872,6 +887,7 @@
      "type": "structured",
      "grammar": "L <integer >= 1> Ic <J> delta <number>",
      "by_quantity": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -927,6 +943,7 @@
      "type": "name",
      "grammar": "<name>",
      "by_quantity": true,
+     "rare": true,
      "doc": "the experiment[<name>] of <thm>, or global"
     },
     "reference": {
@@ -934,6 +951,7 @@
      "type": "structured",
      "grammar": "<path> [unit <cross_section unit>]",
      "by_quantity": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -973,6 +991,7 @@
       "text": "thm is given"
      },
      "required": false,
+     "rare": true,
      "doc": "the weight table of <thm> weight[k]"
     }
    },
@@ -1245,6 +1264,7 @@
       "text": "stopping is evaluation"
      },
      "required": false,
+     "rare": true,
      "values": ["solid", "gas"],
      "doc": "solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a gaseous compound must say gas)"
     },
@@ -1259,6 +1279,7 @@
       "text": "stopping is evaluation"
      },
      "required": false,
+     "rare": true,
      "positive": true,
      "doc": "SRIM's compound factor C of Bragg's rule (left out: 1)"
     },
@@ -1302,6 +1323,7 @@
       "text": "isotope is given"
      },
      "required": false,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "none",
@@ -1337,6 +1359,7 @@
      "type": "structured",
      "grammar": "free_gas <value> <temperature unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
      "required": false,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "free_gas",
@@ -1361,6 +1384,7 @@
      "type": "nuisance",
      "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
      "required": false,
+     "rare": true,
      "dimension": "energy",
      "units": ["MeV", "keV", "eV", "meV", "ueV"],
      "doc": "the screening potential U_e"
@@ -1778,6 +1802,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "where the numbers come from; never read by the physics"
     },
     "exfor": {
@@ -1785,6 +1810,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the EXFOR entry and subentry"
     },
     "doi": {
@@ -1792,6 +1818,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the DOI of the publication"
     }
    }
@@ -1813,6 +1840,7 @@
      "type": "integer",
      "grammar": "<integer >= 1>",
      "required": false,
+     "rare": true,
      "min": 1,
      "doc": "the <levels> pair key, only where the label names two pairs"
     },
@@ -1973,6 +2001,7 @@
      "type": "number_with_unit",
      "grammar": "<number> <length unit>",
      "required": false,
+     "rare": true,
      "default": "15 fm",
      "dimension": "length",
      "units": ["fm", "m"],
@@ -1984,6 +2013,7 @@
      "type": "number_with_unit",
      "grammar": "<number> <length unit>",
      "required": false,
+     "rare": true,
      "default": "0.0275 fm",
      "dimension": "length",
      "units": ["fm", "m"],
@@ -2090,6 +2120,7 @@
      "grammar": "<particle>+<nucleus>[<E_x>] <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
      "required": false,
      "repeatable": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -2122,6 +2153,7 @@
      "grammar": "<particle>+<nucleus>[<E_x>] +|-",
      "required": false,
      "repeatable": true,
+     "rare": true,
      "alternatives": [
       {
        "keyword": "",
@@ -2153,6 +2185,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "where the numbers come from; never read by the physics"
     },
     "exfor": {
@@ -2160,6 +2193,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the EXFOR entry and subentry"
     },
     "doi": {
@@ -2167,6 +2201,7 @@
      "type": "text",
      "grammar": "<text>",
      "required": false,
+     "rare": true,
      "doc": "the DOI of the publication"
     }
    }

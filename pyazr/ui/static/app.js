@@ -7,6 +7,8 @@
 
 import { createApi, watchRevision } from "./api.js";
 import { button, errorBox, h } from "./ui.js";
+import { baselineOf, changeText, remember, snapshotOf } from "./calculate.js";
+import { shownTabs as tabsOfDepth, tabOfRoute } from "./layout.js";
 import { formatNumber } from "./tables.js";
 import * as projectTab from "./tabs/project.js";
 import * as nucleusTab from "./tabs/nucleus.js";
@@ -32,6 +34,8 @@ export const TABS = [
 /** The keys of the page, shown by "?" (the overlay lists exactly this table). */
 export const KEYS = [
   ["1 … 7", "switch to the tab of that number"],
+  ["c", "Calculate: every data set with the model, the residuals and χ², and what changed since the last time"],
+  ["e", "switch between the first view and the expert's (every tab, every field)"],
   ["Ctrl+Z", "undo the last edit (outside a text box)"],
   ["Ctrl+Shift+Z, Ctrl+Y", "redo"],
   ["Ctrl+S", "save the project to its file"],
@@ -43,6 +47,17 @@ export const KEYS = [
   ["?", "this list"],
 ];
 
+/** The About box: the program, the reference every publication that uses its results cites (as the documentation's
+ * front page gives it, docs/source/index.rst: tests/pyazr/ui/static_test.py compares the two) and the documentation. */
+export const ABOUT = {
+  citation: "R.E. Azuma, E. Uberseder, E.C. Simpson, C.R. Brune, H. Costantini, R.J. deBoer, J. Gorres, M. Heil, "
+    + "P.J. Leblanc, C. Ugalde, and M. Wiescher, Physical Review C 81, 045805 (2010)",
+  documentation: "https://azure2dev.github.io/AZURE2/",
+};
+
+/** The tabs of the depth in use (layout.js shownTabs over TABS). */
+export const shownTabs = (expert) => tabsOfDepth(expert, TABS);
+
 /** A hash route: "#/data/s02_diff090?theme=dark" -> {tab, args: ["s02_diff090"], params: {theme: "dark"}}. */
 export function parseRoute(hash) {
   const [path, query = ""] = String(hash || "").replace(/^#\/?/, "").split("?");
@@ -53,7 +68,7 @@ export function parseRoute(hash) {
 
 const ctx = {
   api: null, schema: null, kinds: null, describe: null, project: null, evaluation: null, evalError: null,
-  route: parseRoute(""), statusLine: null,
+  route: parseRoute(""), statusLine: null, expert: false, calculations: [],
 };
 
 /** Show a message of the engine or the page in the status line. */
@@ -82,7 +97,7 @@ ctx.edit = async (what, run, where) => {
     const warnings = answer?.warnings || [];
     await ctx.refresh();
     if (warnings.length) ctx.status(`${what}: done; ${warnings.join("; ")}`, "warn");
-    else ctx.status(`${what}: done${chi2Text()}`, "ok");
+    else ctx.status(`${what}: done${chi2Text()}${changeSinceText()}`, "ok");
     return answer;
   } catch (e) {
     ctx.editing = false;
@@ -109,8 +124,7 @@ async function showTabs() {
   await Promise.all(TABS.filter((t) => t.shown).map(async (t) => {
     let on = true;
     try { on = await t.shown(ctx); } catch { /* a failed read shows the tab */ }
-    const link = ctx.tabBar.querySelector(`a.tab[data-tab="${t.id}"]`);
-    if (link) link.hidden = !on;
+    ctx.tabBar.querySelectorAll(`a.tab[data-tab="${t.id}"]`).forEach((link) => { link.hidden = !on; });
   }));
 }
 
@@ -129,6 +143,22 @@ async function evaluate() {
     ctx.status(`no evaluation: ${ctx.evalError.what}`, "warn");
   }
   drawChi2();
+}
+
+/** "Calculate": the engine's evaluation of the current text, remembered for the next comparison, then the Results
+ * tab with every data set, its model and residuals, and the changes since the calculation before (calculate.js). */
+ctx.calculate = async () => {
+  ctx.status("calculating…");
+  await evaluate();
+  if (ctx.evaluation) ctx.calculations = remember(ctx.calculations, snapshotOf(ctx.evaluation, ctx.project.rev));
+  ctx.navigate("#/results?calculated=1");
+};
+
+/** The change of the data χ² since the last calculation, for the status line ("" before the first one). */
+function changeSinceText() {
+  if (!ctx.evaluation || !ctx.calculations.length) return "";
+  const before = baselineOf(ctx.calculations, snapshotOf(ctx.evaluation, ctx.project.rev));
+  return before ? ` · Δχ² ${changeText(ctx.evaluation.chi2 - before.chi2)} since the last Calculate` : "";
 }
 
 /** The full χ² of the last evaluation for the status line (the header shows it to 8 digits). */
@@ -180,6 +210,43 @@ function cycleTheme() {
   draw();
 }
 
+// -- depth: the first view or the expert's ---------------------------------------------------------------------------
+
+function storedDepth() { try { return localStorage.getItem("azure2-depth") || "first"; } catch { return "first"; } }
+/** The depth of this view: a hash parameter (?depth=expert | first) for one view, else the browser's choice. */
+function applyDepth(depth) {
+  const expert = depth === "expert";
+  document.documentElement.dataset.depth = expert ? "expert" : "first";
+  if (ctx.depthBox) ctx.depthBox.checked = expert;
+  if (expert !== ctx.expert || !ctx.tabBar.childElementCount) {
+    ctx.expert = expert;
+    drawTabBar();
+    showTabs();
+  }
+}
+function toggleDepth() {
+  const next = ctx.expert ? "first" : "expert";
+  try { localStorage.setItem("azure2-depth", next); } catch { /* the depth lasts for this load only */ }
+  const r = parseRoute(location.hash);
+  if (r.params.depth) {  // a view linked with its depth: the switch wins
+    delete r.params.depth;
+    const q = new URLSearchParams(r.params).toString();
+    location.hash = `#/${[r.tab, ...r.args].map(encodeURIComponent).join("/")}${q ? `?${q}` : ""}`;
+  }
+  applyDepth(next);
+  draw();
+}
+
+/** The tab bar of the depth in use. */
+function drawTabBar() {
+  ctx.tabBar.textContent = "";
+  shownTabs(ctx.expert).forEach((t, i) => {
+    const a = h("a.tab", { href: t.hash, role: "tab", title: `${t.row?.title === t.title ? t.title
+      : `${t.title} (the ${t.row?.title} tab)`} (${i + 1})`, data: { tab: t.tab, view: t.hash } }, t.title);
+    ctx.tabBar.appendChild(a);
+  });
+}
+
 // -- layout -----------------------------------------------------------------------------------------------------------
 
 function build() {
@@ -193,15 +260,21 @@ function build() {
   ctx.chi2Box = h("span.chi2", { "aria-live": "polite" }, "χ² …");
   ctx.busy = h("span.busy", { "aria-hidden": "true" });
   ctx.themeButton = button("theme", "Switch the theme: system, light, dark (t)", cycleTheme, "quiet");
-  const header = h("header.top", {}, h("span.brand", {}, "AZURE2"), ctx.nameBox, ctx.unsavedBox, ctx.revBox,
-    ctx.undoButton, ctx.redoButton, button("Save", "Write the project to its file (Ctrl+S)", save), ctx.chi2Box,
-    ctx.busy, h("span.spacer"), ctx.themeButton, button("?", "The keys of the page (?)", toggleKeys, "quiet"));
+  ctx.depthBox = h("input", { type: "checkbox", "aria-label": "expert view" });
+  ctx.depthBox.addEventListener("change", toggleDepth);
+  const depth = h("label.depth", { title: "The expert's view: every tab (Physics, THM) and every field; off: the "
+    + "first view, the old program's path with the rarely set fields one click away (kept in this browser; e)" },
+  ctx.depthBox, "expert");
+  const calculate = button("Calculate", "Every data set with the model, the residuals and χ², and what changed since "
+    + "the last calculation (c)", () => ctx.calculate().catch((e) => ctx.showError(e)), "primary calculate");
+  const brand = h("span.brand", { title: "AZURE2: about the program" },
+    h("img", { src: "static/azure2_icon.png", alt: "", width: 22, height: 22 }), "AZURE2");
+  const header = h("header.top", {}, brand, ctx.nameBox, ctx.unsavedBox, ctx.revBox,
+    ctx.undoButton, ctx.redoButton, button("Save", "Write the project to its file (Ctrl+S)", save), calculate,
+    ctx.chi2Box, ctx.busy, h("span.spacer"), depth, ctx.themeButton,
+    button("About", "The program, its version and its reference", toggleAbout, "quiet"),
+    button("?", "The keys of the page (?)", toggleKeys, "quiet"));
   ctx.tabBar = h("nav.tabs", { role: "tablist", "aria-label": "tabs" });
-  TABS.forEach((t, i) => {
-    const a = h("a.tab", { href: `#/${t.id}`, role: "tab", title: `${t.title} (${i + 1})`, data: { tab: t.id } },
-      t.title, t.later ? h("span.later-mark", { title: "comes with a later step" }, " ·") : null);
-    ctx.tabBar.appendChild(a);
-  });
   ctx.main = h("main.content", { id: "main", tabindex: "-1" });
   ctx.statusLine = h("div.status", { role: "status", "aria-live": "polite" }, "");
   root.append(header, ctx.tabBar, ctx.main, h("footer.statusbar", {}, ctx.statusLine));
@@ -213,12 +286,20 @@ async function draw() {
   drawing = drawing.then(async () => {
     ctx.route = parseRoute(location.hash);
     if (ctx.route.params.theme) applyTheme(ctx.route.params.theme);
+    applyDepth(ctx.route.params.depth || storedDepth());
     const tab = TABS.find((t) => t.id === ctx.route.tab) || TABS[0];
-    ctx.tabBar.querySelectorAll("a.tab").forEach((a) => {
-      const on = a.dataset.tab === tab.id;
-      a.classList.toggle("active", on);
-      a.setAttribute("aria-selected", on ? "true" : "false");
-    });
+    if (!TABS.some((t) => t.id === ctx.route.tab)) ctx.route.tab = tab.id;
+    ctx.section = null;  // the Data tab says which of its groups it drew (the first view's tab is marked by it)
+    const mark = () => {
+      const on = tabOfRoute(shownTabs(ctx.expert), ctx.route, ctx.section);
+      ctx.tabBar.querySelectorAll("a.tab").forEach((a) => {
+        const active = Boolean(on) && a.dataset.view === on.hash;
+        a.classList.toggle("active", active);
+        a.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      return on;
+    };
+    ctx.view = mark();
     const panel = h("div.tab-panel", { role: "tabpanel", "aria-label": tab.title });
     ctx.main.textContent = "";
     ctx.main.appendChild(panel);
@@ -233,6 +314,7 @@ async function draw() {
       ctx.showError(e, panel);
       if (!e.view) throw e;
     }
+    mark();
   });
   return drawing;
 }
@@ -251,6 +333,28 @@ function toggleKeys() {
   box.focus();
 }
 
+/** The About box: name and version of the program and of pyazr, the reference to cite, the documentation. */
+function toggleAbout() {
+  const old = document.getElementById("about-overlay");
+  if (old) { old.remove(); return; }
+  const pkg = ctx.describe?.package || {};
+  const engine = pkg.engine || {};
+  const box = h("div.overlay", { id: "about-overlay", role: "dialog", "aria-label": "about", tabindex: "-1" },
+    h("div.overlay-box", {}, h("h2.brand", {}, h("img", { src: "static/azure2_icon.png", alt: "", width: 32,
+      height: 32 }), "AZURE2"),
+    h("p", {}, "A multi-level, multi-channel R-matrix code for nuclear reactions and scattering."),
+    h("dl.about", {},
+      h("dt", {}, "Version"), h("dd.mono", {}, `AZURE2 ${engine.version ?? ""} (${engine.git ?? ""}), pyazr `
+        + `${pkg.pyazr ?? ""}`),
+      h("dt", {}, "Cite"), h("dd", {}, ABOUT.citation),
+      h("dt", {}, "Documentation"), h("dd", {}, h("a", { href: ABOUT.documentation, target: "_blank",
+        rel: "noopener" }, ABOUT.documentation))),
+    button("Close", "Close (Esc)", toggleAbout)));
+  box.addEventListener("click", (e) => { if (e.target === box) toggleAbout(); });
+  document.body.appendChild(box);
+  box.focus();
+}
+
 function inTextBox(e) {
   const t = e.target;
   return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -260,12 +364,17 @@ function onKey(e) {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
   if (e.key === "Escape" && document.getElementById("keys-overlay")) { toggleKeys(); return; }
+  if (e.key === "Escape" && document.getElementById("about-overlay")) { toggleAbout(); return; }
   if (inTextBox(e)) return;
   const key = e.key.toLowerCase();
   if (mod && (key === "y" || (key === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
   else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
   else if (mod || e.altKey) return;
-  else if (/^[1-7]$/.test(e.key)) ctx.navigate(`#/${TABS[+e.key - 1].id}`);
+  else if (/^[1-9]$/.test(e.key)) {
+    const t = shownTabs(ctx.expert)[+e.key - 1];
+    if (t) ctx.navigate(t.hash);
+  } else if (e.key === "c") ctx.calculate().catch((err) => ctx.showError(err));
+  else if (e.key === "e") toggleDepth();
   else if (e.key === "?") toggleKeys();
   else if (e.key === "t") cycleTheme();
   else if (e.key === "/") {
@@ -279,6 +388,7 @@ function onKey(e) {
 async function start() {
   build();
   applyTheme(storedTheme());
+  applyDepth(parseRoute(location.hash).params.depth || storedDepth());
   ctx.api = createApi({
     // a newer revision seen outside an edit of this page: another client's edit (or a reload's first answer)
     onRevision: () => { if (!ctx.editing && ctx.project) ctx.refresh().catch((e) => ctx.showError(e)); },

@@ -1426,6 +1426,16 @@ for _rel, _line, _kind, _detail in comparison_scan.scan_tree(ROOT):
                     "(check 56)")
 _comparison_scripts = len(comparison_scan.scanned_files(ROOT))
 
+# 57. The web page's icon is the original program's (docs/upgrade/web_ui.md section 7): pyazr/ui/static/azure2_icon.png,
+#     which the wheel carries, is byte-identical to packaging/icons/azure2_icon.png (no second drawing of it).
+_page_icon, _original_icon = "pyazr/ui/static/azure2_icon.png", "packaging/icons/azure2_icon.png"
+try:
+    with open(os.path.join(ROOT, _page_icon), "rb") as _a, open(os.path.join(ROOT, _original_icon), "rb") as _b:
+        if _a.read() != _b.read():
+            problems.append(f"{_page_icon} differs from {_original_icon}: copy the original's icon (check 57)")
+except OSError as e:
+    problems.append(f"check 57: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1439,4 +1449,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
-      f"{_comparison_scripts} test scripts whose comparisons can fail")
+      f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's")

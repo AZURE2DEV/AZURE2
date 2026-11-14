@@ -448,6 +448,49 @@ void BindNuclearPart(py::module_ &m) {
       },
       "(the positional entries' names, [(key, kind, doc)]) of <config>.");
   m.def(
+      "config_table",
+      []() {
+        static const char *const kinds[] = {"bool", "int", "number", "path", "version"};
+        py::list out;
+        for (const io::ConfigPositional &p : io::ConfigPositionals()) {
+          py::dict d;
+          d["name"] = p.name;
+          d["positional"] = true;
+          d["kind"] = p.token ? "choice" : "line";
+          d["values"] = p.values;
+          d["title"] = p.title;
+          d["group"] = p.group;
+          d["doc"] = p.doc;
+          d["rare"] = p.rare;
+          out.append(d);
+        }
+        for (const io::ConfigKey &k : io::ConfigKeys()) {
+          py::dict d;
+          d["name"] = k.name;
+          d["positional"] = false;
+          d["kind"] = kinds[k.kind];
+          d["minimum"] = k.minimum;
+          d["title"] = k.title;
+          d["group"] = k.group;
+          d["doc"] = k.doc;
+          d["absent"] = k.absent;
+          d["rare"] = k.rare;
+          d["option"] = k.option;
+          if (k.option) {
+            d["default"] = k.defaultOn;
+            d["flag"] = k.flag;
+            d["negation"] = k.negation;
+            d["effect"] = k.effect;
+          }
+          out.append(d);
+        }
+        return out;
+      },
+      "Every entry of <config> as the engine's tables hold it (io::ConfigPositionals(), io::ConfigKeys()), in file "
+      "order: name, positional, kind (choice | line for a positional entry; bool | int | number | path | version for "
+      "a key), values (a choice's, blank-separated), minimum (an int key's), title, group, doc, absent (what a missing "
+      "key means), rare, option (and default, flag, negation, effect of an option).");
+  m.def(
       "config_edits",
       [](const io::Document &doc, const std::string &name, const std::string &value, bool remove) {
         std::size_t open = 0;

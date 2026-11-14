@@ -364,6 +364,38 @@ def test_session_options_are_config_keys(t1):
     assert r.status_code == 200 and t1.get("/api/describe").json()["session_options"]["use_brune"]["source"] == "default"
 
 
+def test_run_settings_are_the_engines_config_table(t1):
+    """The run's settings of the Project tab are the engine's <config> table (GET /api/kinds: config): every positional
+    entry and key the engine reads, in its order, a switch for an option with the option's default; a value the
+    form's control sends through the config route gives the text the direct pyazr call gives, and Undo takes it
+    back."""
+    import pyazr
+    from pyazr.described import _engine
+    fields = t1.get("/api/kinds").json()["config"]["fields"]
+    positional, keys = _engine().config_keys()
+    assert list(fields) == list(positional) + [k for k, _, _ in keys]
+    options = pyazr.kinds()["options"]
+    for name, f in fields.items():
+        assert f["title"] and f["doc"] and f["group"], name
+        if f.get("option"):
+            assert f["values"] == ["0", "1"] and f["default"] == ("1" if options[name]["default"] else "0"), name
+    start = t1.get("/api/project/text").text
+    for name, value in (("use_brune", "0"), ("check_data", "screen"), ("maxOrbitalMomentum", "2"),
+                        ("amatrix", "false"), ("includeAllJPi", "1")):
+        r0 = rev(t1)
+        r = t1.patch("/api/project/config", json={"entries": {name: value}, "rev": r0})
+        assert r.status_code == 200, r.text
+        # the direct call on the same text (a file beside the project: its data paths resolve alike)
+        beside = os.path.join(os.path.dirname(t1.path), "settings_direct.azr")
+        with open(beside, "w") as f:
+            f.write(start)
+        direct = pyazr.Project.open(beside)
+        direct.set_config(**{name: value})
+        assert t1.get("/api/project/text").text == direct.text, name
+        assert t1.post("/api/project/undo", json={"rev": rev(t1)}).status_code == 200
+        assert t1.get("/api/project/text").text == start, name
+
+
 def test_evaluation_carries_the_engines_notices(tmp_path):
     """An engine notice (pyazr.EngineWarning) of the session worker reaches the client in the answer's warnings: the
     UI's output directory made read-only, the session build cannot write its external-capture cache."""

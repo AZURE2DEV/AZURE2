@@ -93,11 +93,25 @@ export function renderForm(doc, form, ctx, { onApply, actions = [], nameInput = 
     line.appendChild(lab);
     root.appendChild(line);
   }
-  for (const line of form.lines) {
-    const row = doc.createElement("div");
-    row.className = "form-line";
-    for (const entry of line) row.appendChild(fieldElement(doc, entry, ctx, state));
-    root.appendChild(row);
+  const addLines = (parent, lines) => {
+    for (const line of lines) {
+      const row = doc.createElement("div");
+      row.className = "form-line";
+      for (const entry of line) row.appendChild(fieldElement(doc, entry, ctx, state));
+      parent.appendChild(row);
+    }
+  };
+  addLines(root, form.lines);
+  if (form.more?.length) {
+    // the fields the engine's table marks as rarely set, unset here: one click away
+    const more = doc.createElement("details");
+    more.className = "form-more";
+    const summary = doc.createElement("summary");
+    const names = form.more.flat().map((e) => e.title);
+    summary.textContent = `More fields (${names.length}): ${names.join(", ")}`;
+    more.appendChild(summary);
+    addLines(more, form.more);
+    root.appendChild(more);
   }
   if (form.hidden.length) {
     const h = doc.createElement("div");
@@ -175,6 +189,13 @@ function fieldElement(doc, entry, ctx, state) {
     title.appendChild(r);
   }
   box.appendChild(title);
+  if (ctx.showMeaning && entry.doc) {
+    // the field's meaning in the engine's words, written out in the first depth (on hover in the expert's)
+    const meaning = doc.createElement("div");
+    meaning.className = "field-doc";
+    meaning.textContent = entry.doc;
+    box.appendChild(meaning);
+  }
   // a repeated field is a small table: one row per entry, its controls in cells, the remove button in the row
   const occurrences = doc.createElement(entry.repeatable ? "table" : "div");
   occurrences.className = entry.repeatable ? "occurrences repeat" : "occurrences";
