@@ -92,7 +92,7 @@ class AdaptiveIntegrationGrid {
 
   /*!
    * \brief Generate the grid for a window from already quantized anchors
-   * (the output of Anchors()).  Only anchors whose lattice reaches the window
+   * (the output of Anchors(, inputs)).  Only anchors whose lattice reaches the window
    * and is finer than the smooth step contribute.
    */
   std::vector<double> GenerateGrid(double startEnergy, double endEnergy,
@@ -106,7 +106,7 @@ class AdaptiveIntegrationGrid {
    * frameShift, in the frame of its unshifted data (and so of its sub-point
    * grid), quantized there.
    */
-  std::vector<ResonanceInfo> Anchors(CNuc *compound, double frameShift = 0.0);
+  std::vector<ResonanceInfo> Anchors(CNuc *compound, const LevelInputs &inputs, double frameShift = 0.0);
 
   /*!
    * \brief The anchors that shape the grid of a window (see GenerateGrid).
@@ -129,18 +129,18 @@ class AdaptiveIntegrationGrid {
    * integrators (e.g. the reaction-rate integration) can place integration
    * breakpoints at the resonance energies.  Not quantized.
    */
-  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound) {
-    return IdentifyResonances(startEnergy, endEnergy, compound);
+  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs) {
+    return IdentifyResonances(startEnergy, endEnergy, compound, inputs);
   }
 
  private:
   GridConfig config_;  ///< Grid generation configuration
 
   /// Every level with a width, unquantized, sorted by energy.
-  std::vector<ResonanceInfo> LevelResonances(CNuc *compound);
+  std::vector<ResonanceInfo> LevelResonances(CNuc *compound, const LevelInputs &inputs);
 
   /// The levels within resonanceWidthMultiplier widths of the range.
-  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound);
+  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs);
 
   /// Distance out to which a resonance's lattice is finer than the smooth step.
   double Reach(const ResonanceInfo &resonance) const;

@@ -62,7 +62,8 @@ struct BilinearTerm {
 
 class AMatrixFunc : public GenMatrixFunc {
  public:
-  AMatrixFunc(CNuc *, const Config &configure);
+  /// The compound (structure) and the levels it is solved at (`state`, held by the caller, which outlives the use).
+  AMatrixFunc(CNuc *, const LevelState &state, const Config &configure);
   /// Keep the channel-space route's values in `memo` (an energy task's scratch, which outlives this object's use)
   /// instead of the object's own; null: the own one again.
   void ShareChannelMemo(ChannelSpace::Memo *memo) { sharedMemo_ = memo; }
@@ -70,6 +71,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * Returns a pointer to the compound nucleus object.
    */
   CNuc *compound() const { return compound_; };
+  const LevelState &state() const override { return *state_; }
   /*!
    * Returns a reference to the Config structure.
    */
@@ -79,8 +81,9 @@ class AMatrixFunc : public GenMatrixFunc {
    * instance can serve many energy points without reallocating its scratch
    * storage.  ClearMatrices() must still be called before each point.
    */
-  void Reset(CNuc *compound, const Config &configure) {
+  void Reset(CNuc *compound, const LevelState &state, const Config &configure) {
     compound_ = compound;
+    state_ = &state;
     configure_ = &configure;
   };
   /*!
@@ -347,6 +350,7 @@ class AMatrixFunc : public GenMatrixFunc {
 
   const Config *configure_;
   CNuc *compound_;
+  const LevelState *state_;
   vector_matrix_c a_inv_matrices_;
   /// Factored level matrix of each J-group.
   std::vector<LevelMatrixSolver> solvers_;

@@ -227,7 +227,7 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   const vector_matrix_r *sdp = nullptr;
   if (config.paramMask & Config::USE_BRUNE_FORMALISM) {
     compound->CalcShiftFunctions(config);
-    shiftDeriv = BuildShiftDerivTable(compound, config);
+    shiftDeriv = BuildShiftDerivTable(compound, compound->State(), config);
     sdp = &shiftDeriv;
   }
 
@@ -236,11 +236,11 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   // ComputeModelGradients yields full packed rows; reduce each to the band
   // columns so the sensitivities line up with the covariance.
   std::map<Unit *, vector_r> fullGrad;
-  if (!ComputeModelGradients(compound, data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(compound, compound->State(), data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;
 
   // THM (HOES) points: their rows come from ComputeTHMRows (the HOES adjoint;
-  // the T-matrix adjoint above does not cover them).  What the output file shows for a THM point is the model m
+  // the T-matrix adjoint above does not cover them, state).  What the output file shows for a THM point is the model m
   // next to the data scaled by the profiled norm, d n*; the parameters move
   // both.  The band is therefore that of the model as it lies against the data,
   // q = s(p) m(p) / s(p0), s = 1/n*, whose gradient at the best fit is
@@ -250,7 +250,7 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   // gets no band: a change of the parameters that only rescales m leaves q put.
   {
     const vector_r full = tp.GetMinuitParams().Params();
-    std::vector<THMRows> thm = ComputeTHMRows(compound, data, results, config, full, pmap);
+    std::vector<THMRows> thm = ComputeTHMRows(compound, compound->MutableState(), data, results, config, full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
       const Segment *seg = data->Data().GetSegment(tr.segment);

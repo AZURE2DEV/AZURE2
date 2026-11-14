@@ -123,19 +123,19 @@ bool HasLevelRows(const ModelDataSet &set) {
 
 /// The model values of the level rows (index = row; scattering-length rows NaN), from one transformation of the
 /// current fit values; NaN where the transformation fails.
-void LevelValues(CNuc *compound, const Config &configure, const ModelDataSet &set, std::vector<double> &q) {
+void LevelValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, std::vector<double> &q) {
   q.assign(set.rows.size(), std::numeric_limits<double>::quiet_NaN());
   if (!HasLevelRows(set)) return;
-  const std::optional<ObservedLevelTable> table = compound->ObservedOfFitValues(configure);
+  const std::optional<ObservedLevelTable> table = compound->ObservedOfFitValues(configure, state, inputs);
   if (!table) return;
   for (std::size_t k = 0; k < set.rows.size(); k++)
     if (!set.rows[k].isScatteringLength) q[k] = LevelValue(compound, *table, configure, set.rows[k].datum);
 }
 
 /// The residual rows of row k, appended to r (q: LevelValues).
-void RowResiduals(CNuc *compound, const Config &configure, const ModelDataRow &row, double q, vector_r &r) {
+void RowResiduals(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataRow &row, double q, vector_r &r) {
   if (row.isScatteringLength)
-    ScatteringLength::ConstraintResiduals(compound, configure, row.constraint, r);
+    ScatteringLength::ConstraintResiduals(compound, state, configure, row.constraint, r);
   else
     r.push_back((q - row.datum.value) / row.datum.error);
 }
@@ -152,7 +152,7 @@ struct Column {
 /// state), in the layout's order (CNuc::ParameterLayout).  Each parameter is set back exactly
 /// (CNuc::SetFitLevelParameter); Park's shift functions, which the transformation moved with the energies, are
 /// recomputed at the end.
-std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const ModelDataSet &set,
+std::vector<Column> LevelJacobian(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set,
                                   const ParamIndexMap &pmap) {
   std::vector<Column> cols;
   std::set<int> groups;
@@ -165,14 +165,14 @@ std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const
     if (!allGroups && !groups.count(j)) continue;
     const int f = ch == 0 ? pmap.EIndexFlat(j, la) : pmap.GammaIndexFlat(j, la, ch);
     if (f < 0 || f >= pmap.NumFull() || pmap.FullToPacked(f) < 0) continue;
-    const double v = ch == 0 ? compound->State().E(j, la) : compound->State().Gamma(j, la, ch);
+    const double v = ch == 0 ? state.E(j, la) : state.Gamma(j, la, ch);
     const double h = ch == 0 ? kEnergyStep * std::max(1.0, std::fabs(v)) : kAmplitudeStep * std::max(std::fabs(v), kAmplitudeFloor);
     const double up = v + h, down = v - h;
-    compound->SetFitLevelParameter(slot, up);
-    LevelValues(compound, configure, set, qp);
-    compound->SetFitLevelParameter(slot, down);
-    LevelValues(compound, configure, set, qm);
-    compound->SetFitLevelParameter(slot, v);
+    compound->SetFitLevelParameter(state, slot, up);
+    LevelValues(compound, state, inputs, configure, set, qp);
+    compound->SetFitLevelParameter(state, slot, down);
+    LevelValues(compound, state, inputs, configure, set, qm);
+    compound->SetFitLevelParameter(state, slot, v);
     Column c;
     c.j = j;
     c.la = la;
@@ -182,7 +182,7 @@ std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const
       if (!set.rows[k].isScatteringLength) c.dq[k] = (qp[k] - qm[k]) / (up - down);
     cols.push_back(c);
   }
-  if (configure.paramMask & Config::USE_PARK_FORMALISM) compound->CalcShiftFunctions(configure);
+  if (configure.paramMask & Config::USE_PARK_FORMALISM) compound->CalcShiftFunctions(configure, state);
   return cols;
 }
 
@@ -263,36 +263,36 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
   return set;
 }
 
-void Residuals(CNuc *compound, const Config &configure, const ModelDataSet &set, vector_r &r) {
+void Residuals(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, vector_r &r) {
   std::vector<double> q;
-  LevelValues(compound, configure, set, q);
-  for (std::size_t k = 0; k < set.rows.size(); k++) RowResiduals(compound, configure, set.rows[k], q[k], r);
+  LevelValues(compound, state, inputs, configure, set, q);
+  for (std::size_t k = 0; k < set.rows.size(); k++) RowResiduals(compound, state, inputs, configure, set.rows[k], q[k], r);
 }
 
-double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set) {
+double Chi2(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   std::vector<double> q;
-  LevelValues(compound, configure, set, q);
+  LevelValues(compound, state, inputs, configure, set, q);
   double chi2 = 0.0;
   vector_r r;
   for (std::size_t k = 0; k < set.rows.size(); k++) {
     r.clear();
-    RowResiduals(compound, configure, set.rows[k], q[k], r);
+    RowResiduals(compound, state, inputs, configure, set.rows[k], q[k], r);
     for (double x : r) chi2 += x * x;
   }
   return chi2;
 }
 
-bool Gradient(CNuc *compound, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool Gradient(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
               const vector_matrix_r *shiftDeriv, GradAccum &accum) {
   for (const ModelDataRow &row : set.rows)
     if (row.isScatteringLength &&
-        !ScatteringLength::ConstraintGradient(compound, configure, row.constraint, accum, shiftDeriv, -1))
+        !ScatteringLength::ConstraintGradient(compound, state, configure, row.constraint, accum, shiftDeriv, -1))
       return false;
   if (!HasLevelRows(set)) return true;
   // d chi2 / d theta = sum_k 2 r_k / e_k d q_k / d theta over the level rows.
   std::vector<double> q;
-  LevelValues(compound, configure, set, q);
-  for (const Column &c : LevelJacobian(compound, configure, set, pmap)) {
+  LevelValues(compound, state, inputs, configure, set, q);
+  for (const Column &c : LevelJacobian(compound, state, inputs, configure, set, pmap)) {
     double g = 0.0;
     for (std::size_t k = 0; k < set.rows.size(); k++) {
       const ModelDataRow &row = set.rows[k];
@@ -303,10 +303,10 @@ bool Gradient(CNuc *compound, const Config &configure, const ModelDataSet &set, 
   return true;
 }
 
-bool AppendRows(CNuc *compound, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
+bool AppendRows(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set, const ParamIndexMap &pmap,
                 const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals, vector_r &jac) {
   if (set.rows.empty()) return true;
-  if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(configure);
+  if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(configure, state);
   // One Jacobian row from an accumulator of d r / d(E, gamma), scattered to the packed columns.
   auto appendRow = [&](double r, const GradAccum &acc) {
     vector_r rowFull(pmap.NumFull(), 0.0);
@@ -320,41 +320,41 @@ bool AppendRows(CNuc *compound, const Config &configure, const ModelDataSet &set
     }
   };
   std::vector<double> q;
-  LevelValues(compound, configure, set, q);
-  const std::vector<Column> cols = HasLevelRows(set) ? LevelJacobian(compound, configure, set, pmap) : std::vector<Column>();
+  LevelValues(compound, state, inputs, configure, set, q);
+  const std::vector<Column> cols = HasLevelRows(set) ? LevelJacobian(compound, state, inputs, configure, set, pmap) : std::vector<Column>();
   for (std::size_t k = 0; k < set.rows.size(); k++) {
     const ModelDataRow &row = set.rows[k];
     if (!row.isScatteringLength) {
       // d r_k / d theta = (d q_k / d theta) / e_k.
       GradAccum acc;
-      acc.Init(compound);
+      acc.Init(compound, state);
       for (const Column &c : cols) AddToAccum(c, c.dq[k] / row.datum.error, acc);
       appendRow((q[k] - row.datum.value) / row.datum.error, acc);
       continue;
     }
     // Exact rows from the level-matrix adjoint at the pair's threshold.
     vector_r rs;
-    ScatteringLength::ConstraintResiduals(compound, configure, row.constraint, rs);
+    ScatteringLength::ConstraintResiduals(compound, state, configure, row.constraint, rs);
     for (size_t r = 0; r < rs.size(); r++) {
       GradAccum acc;
-      acc.Init(compound);
-      if (!ScatteringLength::ConstraintGradient(compound, configure, row.constraint, acc, shiftDeriv, (int)r)) return false;
+      acc.Init(compound, state);
+      if (!ScatteringLength::ConstraintGradient(compound, state, configure, row.constraint, acc, shiftDeriv, (int)r)) return false;
       appendRow(rs[r], acc);
     }
   }
   return true;
 }
 
-std::vector<Value> SectionValues(CNuc *compound, const Config &configure, const ModelDataSet &set) {
+std::vector<Value> SectionValues(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   std::vector<Value> out;
   std::vector<double> q;
-  LevelValues(compound, configure, set, q);
+  LevelValues(compound, state, inputs, configure, set, q);
   for (std::size_t k = 0; k < set.rows.size(); k++) {
     const ModelDataRow &row = set.rows[k];
     Value v;
     v.datum = &row.datum;
     if (row.isScatteringLength) {
-      const complex a = ScatteringLength::ConstraintValue(compound, configure, row.constraint);
+      const complex a = ScatteringLength::ConstraintValue(compound, state, configure, row.constraint);
       v.model = std::real(a);
       v.modelImag = std::imag(a);
       v.residual = (v.model - row.datum.value) / row.datum.error;
@@ -373,7 +373,7 @@ std::vector<Value> SectionValues(CNuc *compound, const Config &configure, const 
   return out;
 }
 
-std::string Report(CNuc *compound, const Config &configure, const ModelDataSet &set) {
+std::string Report(CNuc *compound, LevelState &state, const LevelInputs &inputs, const Config &configure, const ModelDataSet &set) {
   if (!set.hasSection) return "";
   std::ostringstream out;
   out << "Model data (<modelData>) at the parameters of this run: observed energies and widths, as parameters.out "
@@ -383,7 +383,7 @@ std::string Report(CNuc *compound, const Config &configure, const ModelDataSet &
       << std::setw(18) << "value" << std::setw(14) << "error" << "  " << std::left << std::setw(8) << "unit" << std::right
       << std::setw(14) << "residual" << std::setw(14) << "chi2" << std::endl;
   double total = 0.0;
-  for (const Value &v : SectionValues(compound, configure, set)) {
+  for (const Value &v : SectionValues(compound, state, inputs, configure, set)) {
     const ex::ModelDatum &d = *v.datum;
     auto line = [&](const std::string &quantity, double model, double value, double error, double residual, double chi2) {
       out << std::left << std::setw(20) << d.name << std::setw(20) << quantity << std::right << std::scientific

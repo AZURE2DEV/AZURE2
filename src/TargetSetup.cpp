@@ -120,7 +120,7 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  * otherwise the point gets the new grid, so the grid depends on the current
  * parameters alone (docs/upgrade/fit_threads.md).
  */
-int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
+int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const LevelState &state, const Config &configure, const std::vector<TermRef> &shiftActive,
                                       std::vector<int> &replacedTasks) {
   if (!theCNuc) return 0;
   // Without grid replacement (--no-grid-replacement) the anchors stay; the supports of shifted points still follow
@@ -192,8 +192,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   if (replaceGrids) {
     if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
     g = gridNuc_.nuc.get();
-    g->CopyFitEnergiesAndAmplitudes(theCNuc->State());
-    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->TransformOut(configure)));
+    g->CopyFitEnergiesAndAmplitudes(state, g->MutableState());
+    g->FillCompoundFromParamsPhysical(g->GetTransformParams(g->State(), g->TransformOut(configure)));
   }
   const auto t1 = std::chrono::steady_clock::now();
 
@@ -207,7 +207,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   std::vector<char> meshMoved(meshes.size(), 0);
   std::size_t supportsMoved = 0;
   for (size_t m = 0; m < meshes.size(); m++) {
-    newAnchors[m] = replaceGrids ? MeshAnchorsOf(g, meshes[m], true) : meshAnchors_[m];
+    newAnchors[m] = replaceGrids ? MeshAnchorsOf(g, g->Inputs(), meshes[m], true) : meshAnchors_[m];
     const bool anchorsMoved = !SameAnchors(newAnchors[m], meshAnchors_[m]);
     if (!anchorsMoved && movedSupports[m].empty()) continue;
     meshMoved[m] = 1;
@@ -621,7 +621,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   meshCentres_.assign(Draft().meshes_.size(), {});
   for (size_t m = 0; m < Draft().meshes_.size(); m++) {
     DataSet::NucleusMesh &mesh = Draft().meshes_[m];
-    mesh.anchors = MeshAnchorsOf(compound, mesh,
+    mesh.anchors = MeshAnchorsOf(compound, compound->Inputs(), mesh,
                                  (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->Inputs().TransformedIn());
     meshAnchors_[m] = mesh.anchors;
     meshSupports_[m] = mesh.supports;

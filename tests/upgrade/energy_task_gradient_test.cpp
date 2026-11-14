@@ -85,12 +85,12 @@ int main(int argc, char **argv) {
   azure2::Results results;
   compound.FillCompoundFromParams(p);
   data.FillNormsFromParams(p);
-  data.FillEnergyShiftsFromParams(p, results, &compound, &cfg);
+  data.FillEnergyShiftsFromParams(p, results, &compound, &compound.State(), &cfg);
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) {
-    compound.CalcShiftFunctions(cfg, false);
-    shiftDeriv = BuildShiftDerivTable(&compound, cfg);
+    compound.CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    shiftDeriv = BuildShiftDerivTable(&compound, compound.State(), cfg);
     sdp = &shiftDeriv;
   }
   const ParamIndexMap pmap = BuildParamIndexMap(&compound, &data, fixed);
@@ -99,9 +99,9 @@ int main(int argc, char **argv) {
   auto scalar = [&](int threads) {
     SetThreads(threads);
     GradAccum accum;
-    accum.Init(&compound);
+    accum.Init(&compound, compound.State());
     FitBarFn fitBar = [](const Segment *, int, int, double model) { return model; };  // d(sum m^2 / 2)/dm
-    const bool ok = AccumulateEGammaGradient(&compound, &data, results, cfg, pmap, sdp, fitBar, accum);
+    const bool ok = AccumulateEGammaGradient(&compound, compound.State(), &data, results, cfg, pmap, sdp, fitBar, accum);
     vector_r g(pmap.NumFull(), 0.0);
     if (ok) accum.Scatter(pmap, g);
     return std::make_pair(ok, g);
@@ -110,13 +110,13 @@ int main(int argc, char **argv) {
     SetThreads(threads);
     vector_r jac;
     int nCols = 0;
-    const bool ok = ComputeResidualJacobian(&compound, &data, results, cfg, map, sdp, r, jac, nCols, true);
+    const bool ok = ComputeResidualJacobian(&compound, compound.State(), &data, results, cfg, map, sdp, r, jac, nCols, true);
     return std::make_pair(ok, jac);
   };
   auto models = [&](int threads) {
     SetThreads(threads);
     std::map<Unit *, vector_r> rows;
-    const bool ok = ComputeModelGradients(&compound, &data, results, cfg, pmap, sdp, rows, true);
+    const bool ok = ComputeModelGradients(&compound, compound.State(), &data, results, cfg, pmap, sdp, rows, true);
     vector_r flat;
     for (int s = 1; s <= data.Data().NumSegments(); s++)
       for (int i = 1; i <= data.Data().GetSegment(s)->NumPoints(); i++) {

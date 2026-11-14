@@ -20,23 +20,23 @@
  * shift functions (CalcShiftFunctions).
  */
 
-void CNuc::FillCompoundFromParams(const vector_r &params) {
+void CNuc::FillCompoundFromParams(const vector_r &params, LevelState &state) const {
   // GammaDecayMap.h: the records' numbers become amplitudes; what the map computed is the state's.
-  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, levelState_, params);
+  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, state, params);
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
     const int j = slots.group, la = slots.level;
-    levelState_.SetE(j, la, p[slots.energy]);
+    state.SetE(j, la, p[slots.energy]);
     std::vector<double> g;
     for (int ch = 1; ch <= (int)slots.amplitude.size(); ch++) {
       const double gamma = p[slots.amplitude[ch - 1]];
-      levelState_.SetGamma(j, la, ch, gamma);
-      levelState_.SetECGamma(j, la, ch, gamma);
+      state.SetGamma(j, la, ch, gamma);
+      state.SetECGamma(j, la, ch, gamma);
       g.push_back(gamma);
     }
-    levelState_.SetSqrtNF(j, la, SqrtNFFactor(*this, this->Group(j), this->Group(j)->GetLevel(la), 1.0, g));
+    state.SetSqrtNF(j, la, SqrtNFFactor(*this, this->GetJGroup(j), this->GetJGroup(j)->GetLevel(la), 1.0, g));
   }
-  if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
-  if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
+  if (ecFinalBlocks_) this->ECFinalStatesFromFormal(state);
+  if (captureMaskSetup_) this->FormalCaptureMasksFromParams(state);
 }
 
 /*!
@@ -55,11 +55,11 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
  * them through the run's exact-argument memo (RunScratch::shiftDerivatives).
  */
 
-void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
+void CNuc::CalcShiftFunctions(const Config &configure, LevelState &state, ShiftOrders orders) const {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   struct Derivative {
     int j, la;
-    PPair *pair;
+    const PPair *pair;
     int ch, l, two_j;  ///< two_j: the channel's 2J key (PPair::SpinOrbitTwoJ)
     double energy;
     bool first, second;
@@ -68,32 +68,32 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   };
   std::vector<Derivative> derivatives;
   struct Moved {
-    JGroup *group;
+    const JGroup *group;
     int j, la;
     double energy;
     bool recompute, second;
   };
   std::vector<Moved> levels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    if (this->Group(j)->IsInRMatrix()) {
-      JGroup *theJGroup = this->Group(j);
+    if (this->GetJGroup(j)->IsInRMatrix()) {
+      const JGroup *theJGroup = this->GetJGroup(j);
       for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-        ALevel *theLevel = theJGroup->GetLevel(la);
+        const ALevel *theLevel = theJGroup->GetLevel(la);
         if (theLevel->IsInRMatrix()) {
-          const double levelEnergy = levelState_.E(j, la);
+          const double levelEnergy = state.E(j, la);
           // The shift functions depend on the level energy alone, and a
           // minimizer moves one parameter at a time, so most levels have not
           // moved since the last call.  Park's J below depends on the widths
           // too and is always refreshed.
-          const bool recompute = !levelState_.ShiftsValidAt(j, la, levelEnergy);
+          const bool recompute = !state.ShiftsValidAt(j, la, levelEnergy);
           // d^2S/dE^2 (Park) enters only the gradient: the numerical second
           // derivative costs five shift functions per channel, so a chi-squared
           // alone leaves it out, and a later call that asks for it fills it in.
-          const bool second = park && secondDerivatives && !levelState_.SecondDerivativesValidAt(j, la, levelEnergy);
+          const bool second = park && orders == ShiftOrders::kWithSecondDerivatives && !state.SecondDerivativesValidAt(j, la, levelEnergy);
           const int firstOfLevel = (int)derivatives.size();
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            PPair *thePair = this->Pair(theChannel->GetPairNum());
+            const AChannel *theChannel = theJGroup->GetChannel(ch);
+            const PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
               if (!recompute && !second) continue;
               int lValue = theChannel->GetL();
@@ -102,7 +102,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
               if (recompute) {
                 // S as everywhere else (ChannelFunc: continuous through threshold).
                 ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                levelState_.SetShift(j, la, ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
+                state.SetShift(j, la, ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
               }
               if (parkP && (recompute || second)) {
                 // Channels that differ only in the channel spin share the derivative.
@@ -112,7 +112,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
                 derivatives.push_back({j, la, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, recompute, second, 0.0, 0.0, source});
               }
             } else {
-              levelState_.SetShift(j, la, ch, levelState_.Shift(j, 1, 1));
+              state.SetShift(j, la, ch, state.Shift(j, 1, 1));
             }
           }
           levels.push_back({theJGroup, j, la, levelEnergy, recompute, second});
@@ -194,32 +194,32 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       d.d1 = derivatives[d.source].d1;
       d.d2 = derivatives[d.source].d2;
     }
-    if (d.first) levelState_.SetShiftDerivative(d.j, d.la, d.ch, d.d1);
-    if (d.second) levelState_.SetShiftSecondDerivative(d.j, d.la, d.ch, d.d2);
+    if (d.first) state.SetShiftDerivative(d.j, d.la, d.ch, d.d1);
+    if (d.second) state.SetShiftSecondDerivative(d.j, d.la, d.ch, d.d2);
   }
 
   for (const Moved &m : levels) {
-    ALevel *theLevel = m.group->GetLevel(m.la);
-    JGroup *theJGroup = m.group;
-    if (m.recompute) levelState_.SetShiftsEnergy(m.j, m.la, m.energy);
-    if (m.second) levelState_.SetSecondDerivativesEnergy(m.j, m.la, m.energy);
+    const ALevel *theLevel = m.group->GetLevel(m.la);
+    const JGroup *theJGroup = m.group;
+    if (m.recompute) state.SetShiftsEnergy(m.j, m.la, m.energy);
+    if (m.second) state.SetSecondDerivativesEnergy(m.j, m.la, m.energy);
     if (park) {
       // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
       double parkNorm = 1.0;
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        if (theChannel->GetRadType() == 'P' && this->Pair(theChannel->GetPairNum())->GetPType() == 0)
-          parkNorm -= pow(levelState_.Gamma(m.j, m.la, ch), 2.0) * levelState_.ShiftDerivative(m.j, m.la, ch);
+        const AChannel *theChannel = theJGroup->GetChannel(ch);
+        if (theChannel->GetRadType() == 'P' && this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+          parkNorm -= pow(state.Gamma(m.j, m.la, ch), 2.0) * state.ShiftDerivative(m.j, m.la, ch);
       }
-      levelState_.SetParkNorm(m.j, m.la, parkNorm);
+      state.SetParkNorm(m.j, m.la, parkNorm);
       // N_f^{1/2} multiplies the level's reduced width amplitude wherever
       // it serves as an external-capture final state.  It is defined with
       // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
       // in here keeps gamma * N_f^{1/2} the same number in both
       // parametrizations.
       std::vector<double> g;
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) g.push_back(levelState_.Gamma(m.j, m.la, ch));
-      levelState_.SetSqrtNF(m.j, m.la, SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) g.push_back(state.Gamma(m.j, m.la, ch));
+      state.SetSqrtNF(m.j, m.la, SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
     }
   }
 }
@@ -228,10 +228,10 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
  * The fit energies and amplitudes of `from`, nothing derived from them.
  */
 
-void CNuc::CopyFitEnergiesAndAmplitudes(const LevelState &from) {
+void CNuc::CopyFitEnergiesAndAmplitudes(const LevelState &from, LevelState &to) const {
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
-      levelState_.SetE(j, la, from.E(j, la));
-      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) levelState_.SetGamma(j, la, ch, from.Gamma(j, la, ch));
+    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
+      to.SetE(j, la, from.E(j, la));
+      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) to.SetGamma(j, la, ch, from.Gamma(j, la, ch));
     }
 }

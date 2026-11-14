@@ -4,6 +4,8 @@
 #include "Constants.h"
 #include "ThmDistortion.h"
 
+class LevelState;
+
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -110,10 +112,12 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
  * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Level `la` of J group `j` (1-based) at fit energy `energy`
  * (MeV) and amplitudes `gamma` (one per channel, MeV^1/2).
  */
-double ThmLevelWidth(CNuc *compound, int j, int la, double energy, const std::vector<double> &gamma,
+double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, double energy,
+                     const std::vector<double> &gamma,
                      const Config &configure);
-/// The same at the compound's fit values (CNuc::State).
-double ThmLevelWidth(CNuc *compound, int j, int la, const Config &configure);
+/// The same at the fit values of `state` (LevelState.h).
+double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, const Config &configure);
+
 
 struct ThmExperiment;
 

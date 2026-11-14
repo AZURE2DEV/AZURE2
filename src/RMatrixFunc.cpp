@@ -46,8 +46,9 @@ void PoleLevelForm(const matrix_c &M, const std::vector<std::vector<double>> &g,
  * The RMatrixFunc object is created with reference to a CNuc object.
  */
 
-RMatrixFunc::RMatrixFunc(CNuc *compound, const Config &configure) :
+RMatrixFunc::RMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure) :
   compound_(compound),
+  state_(state),
   configure_(configure) {}
 
 /*!
@@ -124,7 +125,7 @@ void RMatrixFunc::FillMatrices(Site *point) {
   // Groups of another compound nucleus are not part of this point's matrices
   // (Unit::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
-  const LevelState &state = compound()->State();
+  const LevelState &state = this->state();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       const JGroup *theJGroup = compound()->GetJGroup(j);
@@ -384,9 +385,9 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
       for (int m = 1; m <= theKGroup.num_external; m++) {
         const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
         const ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
-        double ecNormParam = compound()->State().ECGamma(theECMGroup.final_group, theECMGroup.final_level,
+        double ecNormParam = state().ECGamma(theECMGroup.final_group, theECMGroup.final_level,
                                                          theECMGroup.final_channel) *
-            compound()->State().SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
+            state().SqrtNF(theECMGroup.final_group, theECMGroup.final_level) *
             finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;

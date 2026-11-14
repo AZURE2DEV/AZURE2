@@ -84,8 +84,8 @@ phys::ProjectLevels ProjectLevelsFromCNuc(const CNuc &filled, const LevelInputs 
   return out;
 }
 
-std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const LevelInputs &inputs,
-                                                        const CNucSystemMap &map, std::size_t b,
+std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(const CNuc &compound, const LevelState &state,
+                                                        const LevelInputs &inputs, const CNucSystemMap &map, std::size_t b,
                                                         const Config &configure) {
   const int j = map.groupOfBlock.at(b);
   const JGroup *group = compound.GetJGroup(j);
@@ -100,11 +100,11 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const Le
       // --ignore-externals: a channel whose input width is zero has no external part (external_capture.md
       // section 3); gamma^ext is not evaluated.
       if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) &&
-          inputs.ZeroInputWidth(j, levels[la], channels[k]))
+          state.ZeroInputWidth(j, levels[la], channels[k]))
         continue;
       out[la * channels.size() + k].present = true;
       out[la * channels.size() + k].value =
-          ExternalReducedWidthOfInputs(compound, inputs, j, levels[la], channel, configure);
+          ExternalReducedWidthOfInputs(compound, state, inputs, j, levels[la], channel, configure);
     }
   return out;
 }

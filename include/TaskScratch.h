@@ -9,6 +9,7 @@
 class AMatrixFunc;
 class CNuc;
 class Config;
+class LevelState;
 class Site;
 class THMMatrixFunc;
 
@@ -29,14 +30,14 @@ class TaskScratch {
   ~TaskScratch();
   TaskScratch(const TaskScratch &) = delete;
   TaskScratch &operator=(const TaskScratch &) = delete;
-  /// The point pass's solver (SolveAtOneEnergy), re-pointed at `compound` and `configure`.
-  AMatrixFunc &PointSolver(CNuc *compound, const Config &configure);
+  /// The point pass's solver (SolveAtOneEnergy), re-pointed at `compound`, the levels `state` and `configure`.
+  AMatrixFunc &PointSolver(CNuc *compound, const LevelState &state, const Config &configure);
   /// The point pass's level-space solver of sigma_HOES, re-pointed likewise.
-  THMMatrixFunc &PointThmSolver(CNuc *compound, const Config &configure);
+  THMMatrixFunc &PointThmSolver(CNuc *compound, const LevelState &state, const Config &configure);
   /// The gradient pass's solver (GradEnergyTasks.cpp), re-pointed likewise.
-  AMatrixFunc &GradientSolver(CNuc *compound, const Config &configure);
+  AMatrixFunc &GradientSolver(CNuc *compound, const LevelState &state, const Config &configure);
   /// The gradient pass's THM solver (HoesTask, ThmPointModelGradient).  Not re-pointed: its caller does.
-  THMMatrixFunc &GradientThmSolver(CNuc *compound, const Config &configure);
+  THMMatrixFunc &GradientThmSolver(CNuc *compound, const LevelState &state, const Config &configure);
   /// The units of the task being solved (EnergyPass.cpp).
   std::vector<Site *> units;
 

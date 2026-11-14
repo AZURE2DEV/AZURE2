@@ -34,10 +34,10 @@ const double kNaN = std::numeric_limits<double>::quiet_NaN();
  * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
  * R-matrix route came back 0 at 84 points.
  */
-bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, CNuc *cnuc, const Config &configure,
+bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, CNuc *cnuc, const LevelState &state, const Config &configure,
                     azure2::Results &results) {
   try {
-    point->Calculate(&data, cnuc, configure, results);
+    point->Calculate(&data, cnuc, state, configure, results);
     return true;
   } catch (const std::exception &e) {
     point->MarkFailed(results, role, configure, e.what());
@@ -259,7 +259,7 @@ const Prediction &PredictionOf(const Segment &segment) {
  * (PointInputs).  The per-nucleus terms of a sample segment go into the base point's leaf record (the decomposition
  * output).
  */
-double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
+double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *cnuc, const LevelState &state, const Config &configure,
                          azure2::Results &results, azure2::LeafValues leaves) {
   const Prediction &p = PredictionOf(segment);
   Unit *basePoint = segment.GetPoint(data, pointIndex + 1);
@@ -269,7 +269,7 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
     if (azure2::experiment::IsReferenceLeaf(leaf.part)) continue;  // not the R-matrix's: nothing to calculate
     if (leaves == azure2::LeafValues::Calculate &&
-        !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
+        !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, state, configure, results))
       return FailedSample(segment, basePoint, cnuc, results);
   }
   PointInputs inputs(data, segment, p, pointIndex, cnuc, configure, results);
@@ -300,29 +300,29 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
 
 namespace azure2 {
 
-double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const Config &config,
+double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const LevelState &state, const Config &config,
                           Results &results, LeafValues leaves) {
   Unit *point = (pointIndex >= 0 && pointIndex < segment.NumPoints()) ? segment.GetPoint(data, pointIndex + 1) : nullptr;
   if (!point) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
                                      " has no point " + std::to_string(pointIndex));
-  const double m = ComposeModelValue(data, segment, pointIndex, compound, config, results, leaves);
+  const double m = ComposeModelValue(data, segment, pointIndex, compound, state, config, results, leaves);
   point->SetModelValue(results, m);
   point->CopyAngularDistsToModel(results);
   return m;
 }
 
-void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, CNuc *compound, const Config &config, Results &results,
+void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, CNuc *compound, const LevelState &state, const Config &config, Results &results,
                           LeafValues leaves) {
   for (int pid = 0; pid < segment.NumPoints(); pid++)
-    EvaluateModelPoint(data, segment, pid, compound, config, results, leaves);
+    EvaluateModelPoint(data, segment, pid, compound, state, config, results, leaves);
 }
 
-void EvaluateModel(WorkingCopy &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves) {
+void EvaluateModel(WorkingCopy &data, CNuc *compound, const LevelState &state, const Config &config, Results &results, LeafValues leaves) {
   for (int i = 1; i <= data.Data().NumSegments(); i++)
-    EvaluateModelSegment(data, *data.Data().GetSegment(i), compound, config, results, leaves);
+    EvaluateModelSegment(data, *data.Data().GetSegment(i), compound, state, config, results, leaves);
 }
 
-bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const LevelState &state, const Config &config,
                         const Results &results, double g, ModelCotangents &out) {
   const Prediction &p = PredictionOf(segment);
   for (const experiment::LeafSelector &leaf : p.leaves)

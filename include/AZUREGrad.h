@@ -9,6 +9,8 @@
 #include <functional>
 
 class CNuc;
+class LevelInputs;
+class LevelState;
 class WorkingCopy;
 class Config;
 class Unit;
@@ -222,11 +224,13 @@ struct GradAccum {
   /// The compound whose evaluation fills the accumulator (Init): Scatter pulls the cotangents of its gamma_decay
   /// records' photon amplitudes back to the records' numbers (GammaDecaySet::PullBack).  Not owned.
   CNuc *source = nullptr;
+  /// The levels of that evaluation (the fills of the gamma_decay records PullBack reads).  Not owned.
+  const LevelState *sourceState = nullptr;
   /// Contributions to the full vector by index, added as they are (a term in the parameters alone: T11).
   std::vector<std::pair<int, double>> direct;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
-  void Init(CNuc *compound);
+  void Init(CNuc *compound, const LevelState &state);
   /// Reset all accumulators to zero (without reallocating).
   void Zero();
   /// Add another accumulator (same compound dimensions) into this one.  Used to
@@ -288,14 +292,14 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
  * and channel radii, so they are computed once per gradient evaluation and
  * reused across all data points.  See PLAN.md Phase 6.
  */
-vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
+vector_matrix_r BuildShiftDerivTable(CNuc *compound, const LevelState &state, const Config &configure);
 
 /*!
  * \brief Gradient of Park's J > 0 wall (the objective's term T6) with respect to the level energies and
  * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
  * has J < 0; a no-op outside the Park formalism.
  */
-void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
+void AddParkPenaltyGradient(CNuc *compound, const LevelState &state, const Config &configure, GradAccum &accum);
 /// Gradient of the isotopic-abundance priors and sum-to-one penalty (the objective's term T7), into the accumulator.
 void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
@@ -321,7 +325,7 @@ struct ThmAdjointContext;
 using FitBarFn = std::function<double(const Segment *, int, int, double)>;
 
 /// `hoes`: the THM data are taken in the same pass (azure2::ThmThroughEnergyTasks, ThmCotangents.h); null: left out.
-bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -349,7 +353,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
  * the profiled norm (see ComputeTHMRows).
  */
-bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -384,7 +388,7 @@ struct ShiftColumnCount {
  * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
  * analytic gradient shares.
  */
-ShiftColumnCount FillShiftColumns(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
@@ -399,7 +403,7 @@ ShiftColumnCount FillShiftColumns(CNuc *compound, WorkingCopy *data, azure2::Res
  *        (HOES) points are left zero for the caller to fill (the adjoint
  *        differentiates the T-matrix observable, not the HOES one).
  */
-bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeModelGradients(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<Unit *, vector_r> &gradByPoint,
@@ -466,7 +470,7 @@ struct THMRows {
  * THM-only chi^2; a profiled norm has no column), the energy-shift columns (the fold on fixed nodes is differenced, as
  * for every folded data set, ShiftedFold.h question 5), and AZURE2_THM_FD=1 (the reference path).
  */
-std::vector<THMRows> ComputeTHMRows(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

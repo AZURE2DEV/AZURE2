@@ -7,6 +7,7 @@
 
 class CNuc;
 class Config;
+class LevelInputs;
 
 /*!
  * The physics/ System of a loaded CNuc (docs/upgrade/physics_system.md), and where each of its entries came from.
@@ -66,7 +67,7 @@ enum class CNucSystemContent {
  * still the file's widths), when a spin is not a multiple of 1/2, or for a pair type or radiation type the System has
  * no kind for; std::invalid_argument from the System's own checks.
  */
-CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure,
+CNucSystem BuildSystemFromCNuc(const CNuc &compound, const LevelInputs &inputs, const Config &configure,
                                CNucSystemContent content = CNucSystemContent::Parameters);
 
 #endif

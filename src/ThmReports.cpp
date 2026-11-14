@@ -182,7 +182,7 @@ void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Res
   }
 }
 
-bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
                               const Config &configure, ThmLineshapeReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -241,8 +241,8 @@ bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<d
         lv.level = la;
         lv.J = jg->GetJ();
         lv.pi = jg->GetPi();
-        lv.energy = compound->State().E(j, la) - threshold;
-        lv.width = ThmLevelWidth(compound, j, la, configure);
+        lv.energy = state.E(j, la) - threshold;
+        lv.width = ThmLevelWidth(compound, state, j, la, configure);
         for (size_t k = 0; k < energies.size(); k++)
           lv.nc2.push_back(ThmLineshapeFactorSq(ex.zeta[k], lv.energy - energies[k], lv.width));
         ex.levels.push_back(lv);
@@ -308,7 +308,7 @@ bool WorkingCopy::ThmDistortionTable(const std::string &name, const std::vector<
   return true;
 }
 
-bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound, const LevelState &state,
                            const Config &configure, ThmVertexReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -440,7 +440,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
       cr.l = c->GetL();
       cr.s = c->GetS();
       // The vertex boundary of the model (THMMatrixFunc::CalculateTHMCrossSection).
-      ThmVertexBoundary boundaryOf(configure, pair, jg, compound->State(), j, ch);
+      ThmVertexBoundary boundaryOf(configure, pair, jg, state, j, ch);
       // The pieces on the grid: [E][node] and the quasi-free [E].
       std::vector<std::vector<Pieces>> grid(energies.size());
       std::vector<Pieces> qf(energies.size());

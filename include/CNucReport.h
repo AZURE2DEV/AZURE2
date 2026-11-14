@@ -2,6 +2,8 @@
 #define CNUC_REPORT_H
 
 class CNuc;
+class LevelInputs;
+class LevelState;
 class ObservedLevelTable;
 class Config;
 
@@ -13,7 +15,7 @@ class Config;
  */
 
 /// checks/compoundnucleus.chk: pairs, J-groups, levels and channels as read (before Initialize).
-void WriteCompoundNucleusCheck(const CNuc &compound, const Config &configure);
+void WriteCompoundNucleusCheck(const CNuc &compound, const LevelInputs &inputs, const Config &configure);
 /// checks/pathways.chk: the internal and external reaction pathways of the pathway table.
 void WritePathwaysCheck(const CNuc &compound, const Config &configure);
 /// checks/boundaryconditions.chk: B_c of every channel of the R-matrix groups.
@@ -23,7 +25,8 @@ void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configur
 
 /// parameters.out: every level's Brune (Park) energy and, per channel, the observed width, ANC, moment or B with the
 /// internal and external amplitudes (the table CNuc::TransformOut returns); relativistic.out too with relativistic=1.
-void WriteParametersOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure);
+void WriteParametersOut(const CNuc &compound, const LevelState &state, const ObservedLevelTable &table,
+                        const Config &configure);
 /// relativistic.out: the parameters.out levels in the E(s) convention of the LANL code EDA (ENDF KRL=1).
 void WriteRelativisticOut(const CNuc &compound, const ObservedLevelTable &table, const Config &configure);
 
