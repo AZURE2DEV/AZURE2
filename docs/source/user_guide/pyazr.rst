@@ -150,9 +150,9 @@ class                     also a                                    raised for
 
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
 
-   pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
-   every entry must be a finite number.  Session.parameters.x0 is such a vector (the start values);
-   Session.parameters.free names its entries in order.
+   pyazr.ParameterVectorError: Objective(x): entry 0 of the free parameter vector (width_1_1) is nan; every entry
+   must be a finite number.  Session.parameters.x0 is such a vector (the start values); Session.parameters.free
+   names its entries in order.
 
 Where a message is built from these three parts they are also attributes of the error, ``e.what``, ``e.allowed`` and
 ``e.fix`` (texts, each a part of the message; ``None`` where the message is the engine's own text); a
@@ -170,6 +170,20 @@ A notice of the engine that a session meets -- an external-capture amplitude fil
 output directory does not exist, a normalization or shift file that cannot be written -- is a ``pyazr.EngineWarning``
 naming the file and the consequence (it was a line on standard output before).  Make it an error with
 ``warnings.simplefilter("error", pyazr.EngineWarning)``.
+
+A set-up the engine refuses (``pyazr.Session``, ``pyazr.rate.RateSession``) is an ``AZURE2Error`` whose ``e.what``
+quotes the engine's ERROR lines and whose message holds every line the engine wrote while setting up.
+
+A library call is quiet: it prints nothing on standard output.  The engine writes what it does (the progress bars of
+a rate, the external-capture integrals it recomputes, a stale cache it does not use) on the process's standard
+output; during the set-up of a session and during a rate, pyazr points that output at a temporary file and hands the
+lines to Python's logger ``pyazr.engine`` (``pyazr/engine_text.py``): ERROR and WARNING lines at level WARNING (shown
+on standard error by Python's default handler), the others at INFO.  To see them all::
+
+   import logging
+   logging.basicConfig(level=logging.INFO)
+
+While that redirection is on, whatever any thread of the process writes on descriptor 1 goes the same way.
 
 Documented zeros stay zeros: ``channel_functions`` below threshold (E <= 0) gives the shift function alone, and an
 energy at which the Coulomb routine fails gives zeros; ``whittaker_wave`` gives ``W`` 0 or inf outside the double

@@ -1150,3 +1150,10 @@ add_test(NAME pyazr_library_answers
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/library_answers_test.py)
 set_tests_properties(pyazr_library_answers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr's library calls: nothing on standard output (the engine's lines go to the logger pyazr.engine), the rate's
+# files in a temporary directory of its own, a refused set-up and a wrong fit vector with their three parts.
+add_test(NAME pyazr_library_calls
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/library_calls_test.py)
+set_tests_properties(pyazr_library_calls PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

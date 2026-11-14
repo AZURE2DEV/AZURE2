@@ -23,7 +23,9 @@ a header, :func:`read_rate_table` a table to compare with.  No integral is done 
 import csv
 import io
 import os
+import shutil
 import tempfile
+import weakref
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -118,12 +120,18 @@ class RateSession:
 
     ``rate(values=None, ...)``: the rate at ``values`` ({name: value} over the session's, or a full vector) on the
     temperatures (:func:`temperatures_of`).  Options of the calculation as :class:`pyazr.Session` takes them
-    (``options``: {keyword: bool}); ``coulomb_table`` as there."""
+    (``options``: {keyword: bool}); ``coulomb_table`` as there.
+
+    The session writes nothing beside the project: the engine's rate run writes its files (the cross-section grid
+    ``cross_section_grid.dat``, an external-capture cache) into its output directory, which for this session is a
+    temporary directory removed by :meth:`close` (or when the session is collected); the project's relative paths
+    are read from ``cwd`` (default: the project's directory).  The engine's text (its progress bars) goes to the
+    logger ``pyazr.engine`` (:mod:`pyazr.engine_text`), not to standard output."""
 
     def __init__(self, file, entrance, exit, *, parameter_file=None, cwd=None, options=None, coulomb_table=None):
-        from . import _azure2
-        from .project import require_format3
-        from . import session_options
+        from . import _azure2, engine_text, session_checks, session_options
+        from .errors import AZURE2Error
+        from .project import Project, require_format3
         require_format3(file)
         self.file = os.path.abspath(file)
         self.cwd = os.path.abspath(cwd or os.path.dirname(self.file) or ".")
@@ -132,7 +140,22 @@ class RateSession:
             raise ValueError(f"rate pairs: entrance {self.entrance}, exit {self.exit}: pair keys of <levels> (not 0), "
                              f"exit -1 for the total radiative capture, different from the entrance")
         opts = session_options.runtime_options(_azure2, dict(options or {}), False, coulomb_table, self.cwd)
-        self._binding = _azure2.Session(self.file, opts, rate_entrance=self.entrance, rate_exit=self.exit)
+        # the engine's output directory: a temporary one, the project's copy pointing at it (the relative paths are
+        # read from cwd, opts.base_directory)
+        self._scratch = tempfile.mkdtemp(prefix="pyazr_rate_")
+        self._remove_scratch = weakref.finalize(self, shutil.rmtree, self._scratch, True)
+        copy = Project.open(self.file)
+        copy.set_config(output_dir=self._scratch.rstrip("/") + "/", checks_dir=self._scratch.rstrip("/") + "/")
+        engine_file = copy.save(os.path.join(self._scratch, os.path.basename(self.file)))
+        said = []
+        try:
+            with engine_text.held() as said:
+                self._binding = _azure2.Session(engine_file, opts, rate_entrance=self.entrance, rate_exit=self.exit)
+        except AZURE2Error as err:
+            self.close()
+            refused = session_checks.setup_refused(err, [x.replace(engine_file, self.file) for x in said], self.file)
+            raise type(refused)(str(refused).replace(engine_file, self.file), what=refused.what.replace(
+                engine_file, self.file), allowed=refused.allowed, fix=refused.fix) from None
         self.basis = 2 if self._option("use_park") else (1 if self._option("use_brune") else 0)
         n = len(self._binding.params_fixed())
         self.names = [self._binding.params_names(i) for i in range(n)]
@@ -157,7 +180,9 @@ class RateSession:
         return bool(dict(self._binding.option_sources()).get(name, (False,))[0])
 
     def close(self):
+        """Release the engine and remove the session's temporary output directory."""
         self._binding = None
+        self._remove_scratch()
 
     def __enter__(self):
         return self
@@ -185,17 +210,20 @@ class RateSession:
 
     def rate(self, values=None, *, grid=None, temperatures=None, t_min=None, t_max=None, t_step=None, source=None):
         """The rate (:class:`Rate`) at ``values`` (:meth:`vector`) on the temperatures (:func:`temperatures_of`)."""
+        from . import engine_text
         from .project import Project
         kind, t = temperatures_of(grid, temperatures, t_min, t_max, t_step)
         p = self.vector(values)
         if kind == "grid":
-            pairs = self._binding.reaction_rate(p, t[0], t[1], t[2], "")
+            with engine_text.held():
+                pairs = self._binding.reaction_rate(p, t[0], t[1], t[2], "")
         else:
-            fd, path = tempfile.mkstemp(prefix="pyazr_rate_", suffix=".dat")
+            fd, path = tempfile.mkstemp(prefix="temperatures_", suffix=".dat", dir=self._scratch)
             try:
                 with os.fdopen(fd, "w") as fh:
                     fh.write("".join(f"{float(v)!r}\n" for v in t))
-                pairs = self._binding.reaction_rate(p, 0.0, 0.0, 0.0, path)
+                with engine_text.held():
+                    pairs = self._binding.reaction_rate(p, 0.0, 0.0, 0.0, path)
             finally:
                 os.remove(path)
         reaction = Project.open(self.file).reaction(self.entrance, self.exit)
