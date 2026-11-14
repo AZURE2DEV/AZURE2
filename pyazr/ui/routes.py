@@ -368,6 +368,9 @@ PROJECT_NOT_SERVED = {
     "directory": "a property: the project's directory is in GET /api/project (root)",
     "unsaved": "a property: GET /api/project",
     "add_<kind>": "POST /api/project/records with the kind (Project.add)",
+    "parameter_settings": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level parameter)",
+    "set_parameter_setting": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level "
+                             "parameter)",
 }
 
 
