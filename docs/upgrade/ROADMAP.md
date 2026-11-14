@@ -213,8 +213,15 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       the copies) is read by every walk of the block (the fills, the start vector, the observed vector, the basis
       conversion, the index map, the labels, the `gamma_decay` slots, the model data's columns) (`cnuc_split.md`
       §12.3, step 4 as built, first part).
-- [ ] The copies of the compound replaced by a shared constant compound and a `LevelState` (with the level inputs
-      of a transformation) per owner; `Clone` deleted (`cnuc_split.md` §12.3, step 4, second part: measured, not cut).
+- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, zero-width flags, the `gamma_decay`
+      numbers, the transformation's end), held by `CNuc` (`CNuc::Inputs()`); `ALevel` holds its `<levels>` values
+      only and nothing of it is written after set-up.  The `gamma_decay` fills and the formal-basis capture-mask
+      projectors are the `LevelState`'s: a fill writes the state and nothing else of `CNuc` (`cnuc_split.md` §12.3,
+      step 4 as built, second part).
+- [ ] The readers take the state they read (`const CNuc &` and a `LevelState`); the owners (fitter, sampler, rate,
+      sub-point grids, bands, adaptive extrapolation, limits, binding) hold the compound shared and constant with their
+      own `LevelState` (and `LevelInputs` where they transform); pools of `LevelState`; `Clone` deleted (`cnuc_split.md`
+      §12.3, step 4, what remains).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
