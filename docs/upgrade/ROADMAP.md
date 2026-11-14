@@ -213,19 +213,22 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       the copies) is read by every walk of the block (the fills, the start vector, the observed vector, the basis
       conversion, the index map, the labels, the `gamma_decay` slots, the model data's columns) (`cnuc_split.md`
       §12.3, step 4 as built, first part).
-- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, zero-width flags, the `gamma_decay`
-      numbers, the transformation's end), held by `CNuc` (`CNuc::Inputs()`); `ALevel` holds its `<levels>` values
+- [x] The level inputs out of `ALevel`: `LevelInputs` (input E and widths, the `gamma_decay` numbers, the
+      transformation's end; the zero-width flags moved on to `LevelState` in the next item), held then by `CNuc`
+      (`CNuc::Inputs()`, now each owner's); `ALevel` holds its `<levels>` values
       only and nothing of it is written after set-up.  The `gamma_decay` fills and the formal-basis capture-mask
       projectors are the `LevelState`'s: a fill writes the state and nothing else of `CNuc` (`cnuc_split.md` §12.3,
       step 4 as built, second part).
 - [x] The readers take the state they read: every reader of an evaluation's values takes its `LevelState`, every reader
       of the input values its `LevelInputs`; `CNuc`'s fills and transformations are `const` and write the state they
-      are given; the zero-width flags and the input energies an evaluation reads are the state's (`cnuc_split.md`
-      §12.3, step 4 as built, third part).
-- [ ] The owners (fitter, sampler, rate,
-      sub-point grids, bands, adaptive extrapolation, limits, binding) hold the compound shared and constant with their
-      own `LevelState` (and `LevelInputs` where they transform); pools of `LevelState`; `Clone` deleted (`cnuc_split.md`
-      §12.3, step 4, what remains).
+      are given; the zero-width flags an evaluation reads are the state's (`cnuc_split.md` §12.3, step 4 as built,
+      third part; the THM line shape's ground-state test reads the level's file energy since the fourth part).
+- [x] The owners hold their own levels: the run and the session (`CNuc::Fill` and `Initialize` write the state and
+      inputs they are given), the fitter (the caller's state, copies of it in the caller's `FitterStates`), the sampler
+      (`WalkerLevels`, a `StatePool` of the caller), the rate, the limits, the sub-point grids (`GridLevels`), the band
+      and the adaptive extrapolation (the run's state) hold the compound as `const CNuc *`; `Clone`, `State()`,
+      `Inputs()`, `MutableState()` and the one-argument fills are deleted; `CNuc` holds nothing written after set-up
+      and cannot be copied (`cnuc_split.md` §12.3, step 4 as built, fourth part).
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -324,6 +327,9 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
       check 48 (`pyazr3.md` 2.9). Open: the workflow's first run, Windows, the published Coulomb table.
 - [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
+- [x] The experts' examples: every script of `pyazr/examples/` runs from the root on a project of `tests/` and is run
+      by `tests/pyazr/examples_test.py` (one row each, a pinned number); the page `user_guide/pyazr_examples.rst` lists
+      them by task; check 58 keeps the files, the table and the page one set.
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
@@ -360,16 +366,23 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       tab's "Covariance…", the file and the field as one history entry) and the reaction rate (`pyazr.rate`: the
       engine's rate in-process at any parameters, its band from a covariance or draws, the Gamow window; the Rate
       tab as a job). The rate in the libraries' formats (`pyazr.rate_formats`: STARLIB's table with
-      the band's factor uncertainty, REACLIB sets fitted with a stated tolerance); the prior-covariance builder is
-      open.
+      the band's factor uncertainty, REACLIB sets fitted with a stated tolerance).
+- [x] The prior builder (2026-11-14, user guide `prior_builder.rst`): `pyazr.priors.build` makes the prior on the
+      fit parameters (`priorCovariance`) from named parts over the session's parameter table (an earlier fit, a width
+      per parameter, correlations, a sampler's chain), checked and with notes on what the engine does with it;
+      `read_prior` reads the file as the engine reads it.  The page's screen `tabs/prior.js` (`#/prior`, from the
+      Fit tab; routes `/api/prior`, `/api/prior/build`, `/api/prior/write`; `web_ui.md` section 11.15).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13); the newest band job's band (2026-11-14). Dense
       model grid, lab energy, Legendre orders and the rate wait for pyazr (`web_ui.md` section 12).
 - [ ] The page for the median user (`web_ui.md` section 11.11): the original's icon, colours and About; the first
       view in the old program's path and words with the rare fields (a column of the schema) folded; Calculate with
-      what changed; the run's settings from the engine's `<config>` table (2026-11-14). Still typed: a data file and
-      a covariance (no file list route yet), the columns, a reaction, a grid, the fit job's MINOS parameters; a
-      reference's "new…"; lists as rows.
+      what changed; the run's settings from the engine's `<config>` table (2026-11-14). The lists in words, the
+      Reaction Rate tab (and Physics, THM on a THM project) in the first view, the files offered and previewed with
+      the engine's reading, "new …" of a reference, lists of numbers and MINOS's parameters as boxes, the pair form
+      from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
+      reaction, a grid, a composition, the structured fields. The model as a curve on a fine grid waits for a pyazr
+      call (section 11.14).
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
@@ -404,8 +417,11 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       stages, the first an evaluation's curves over the fit and the data; the PI's ten decisions (section 11).
       Stage 1 built (`pyazr/endf/`: read, summary, MF=3 and MF=6 LAW=2/LAW=5 curves at a data set's points, the
       module's own format check; `pyazr endf summary|curves`); stage 4 built (the checking codes found and run,
-      their reports read, candidates with their difference; `pyazr endf check|standardize`); next: the start model
-      from LRF=7 (stage 2, with the engine's door 2), then the writer.
+      their reports read, candidates with their difference; `pyazr endf check|standardize`); the page's screens
+      built (the ENDF tab: files over the data with ratios, Check and Correct as jobs, `web_ui.md` 11.13); stage 2
+      built (the start model from LRF=7, the engine's two level doors; `pyazr endf to-project`); stage 3 built in
+      part (MF=1, MF=2, MF=3 from the engine, LRP=2; `pyazr endf write`); next: MF=6 of the writer (LAW=2 exits,
+      LAW=5 elastic, MT=102 primaries), then stage 5 (MF=32, LTP=1) and stage 6 (`check_resonances`).
 - [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

@@ -18,10 +18,10 @@ class LevelRow;
  *
  * A level carries its set-up data only: IDs, fix flags, the external-capture final-state data, and the values of its
  * <levels> lines (FileE, FileGamma, FileZeroWidth), which CNuc::Fill reads to group the levels and to make the
- * compound's LevelInputs.  Nothing of a level is written after set-up.  The input values in the engine's basis (what
- * CNuc::TransformIn makes of the file's) are the compound's LevelInputs (CNuc::Inputs); the values a calculation reads
- * at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the external-capture amplitudes
- * and N_f^1/2) are its LevelState (CNuc::State).
+ * owner's LevelInputs.  Nothing of a level is written after set-up.  The input values in the engine's basis (what
+ * CNuc::TransformIn makes of the file's) are a LevelInputs of the owner (the run, the session, ...); the values a
+ * calculation reads at a parameter vector (the fit energy and amplitudes, the shift functions, Park's J, the
+ * external-capture amplitudes and N_f^1/2) are a LevelState of the owner.
  *
  * The observed values of the reports are not the level's: CNuc::TransformOut returns them as an
  * ObservedLevelTable.

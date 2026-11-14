@@ -18,10 +18,40 @@ import sys
 import time
 
 from .errors import Conflict, NotFound, Refused
+
+FILES_MAX = 2000  # the files GET /api/files lists at most
+FILES_DEPTH = 4  # how deep below the project's directory it looks
+GLANCE_BYTES = 4096  # what it reads of a file to say what it holds
+
+
+def _inside(path, root):
+    full = os.path.realpath(path)
+    return os.path.commonpath([full, root]) == root
+
+
+def _glance(full):
+    """What a file holds at a glance (its first bytes): ``{"kind": project | table | text | binary}``, a table with
+    the number of numbers on its first line that is not a comment (``#``, ``!``) or empty."""
+    if full.endswith(".azr"):
+        return {"kind": "project"}
+    with open(full, "rb") as f:
+        head = f.read(GLANCE_BYTES)
+    if b"\0" in head:
+        return {"kind": "binary"}
+    for line in head.decode("utf-8", "replace").splitlines()[:-1] or head.decode("utf-8", "replace").splitlines():
+        words = line.replace(",", " ").split()
+        if not words or words[0][0] in "#!":
+            continue
+        try:
+            [float(w) for w in words]
+        except ValueError:
+            return {"kind": "text"}
+        return {"kind": "table", "columns": len(words)}
+    return {"kind": "text"}
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
 from .state import State, session_options
-from . import utilities
+from . import evaluations, prior, utilities
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -116,6 +146,49 @@ class Server:
                 lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
             more = bool(f.read(1))
         return {"path": path, "lines": lines, "more": more, "cut": cut}
+
+    def files(self, outputs=False):
+        """The files of the project's directory (and of its subdirectories, to :data:`FILES_DEPTH` levels; not the
+        program's ``output`` and ``checks``, nor hidden ones), at most :data:`FILES_MAX`: each with its path relative
+        to the project (as a record's field names it), its size in bytes and what it holds at a glance (``kind``:
+        ``project`` for a ``.azr``, ``table`` with ``columns`` when its first line that is not a comment is numbers,
+        ``text``, ``binary``).  Whether a data set can read it is the engine's answer: :meth:`field_preview`.
+        ``outputs`` lists the program's ``output`` too (a fit's ``param.sav`` and ``covariance.dat``, a sampler's
+        chain: what the parts of the prior builder name)."""
+        with self.state.lock:
+            top = self.state.directory
+            hidden = {"checks"} if outputs else {"output", "checks"}
+            out, more = [], False
+            for here, dirs, names in os.walk(top):
+                depth = os.path.relpath(here, top).count(os.sep) + (here != top)
+                dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (here == top and d in hidden)
+                                 and depth < FILES_DEPTH and _inside(os.path.join(here, d), self.state.root))
+                for name in sorted(names):
+                    full = os.path.join(here, name)
+                    if name.startswith(".") or not os.path.isfile(full) or not _inside(full, self.state.root):
+                        continue
+                    if len(out) == FILES_MAX:
+                        more = True
+                        break
+                    out.append(dict(path=os.path.relpath(full, top).replace(os.sep, "/"),
+                                    size=os.path.getsize(full), **_glance(full)))
+                if more:
+                    break
+            return {"directory": top, "files": out, "more": more}
+
+    def field_preview(self, name, field, value):
+        """What the engine makes of the record ``name`` with its field ``field`` set to ``value`` (a file, say), on a
+        copy of the project (the project is not changed): the record's description (rows read and kept, their energy
+        range, the reader's error) or the engine's refusal with its three parts."""
+        from pyazr import Project
+        with self.state.lock:
+            copy = Project(self.state.project.to_bytes(), self.state.path)
+        self.state.check_paths([value])
+        copy.set(name, **{field: value})
+        try:
+            return {"name": name, "field": field, "value": value, "description": copy.describe(name, as_json=True)}
+        except ValueError as e:  # a record the engine does not describe: the edit is accepted, nothing to read
+            return {"name": name, "field": field, "value": value, "description": None, "note": str(e)}
 
     def outputs(self, rev=None):
         """Write the program's output files at the working x and copy them into the project's output directory
@@ -303,7 +376,7 @@ class Server:
                     "session_options": session_options(session=self.session)}
 
     def parameters(self):
-        rows = self.session_describe()["parameters"]
+        rows = [dict(r) for r in self.session_describe()["parameters"]]  # the session's description stays as built
         for r in rows:
             r["x"] = self.x.get(r["name"]) if r["free"] else None
         return rows
@@ -355,6 +428,57 @@ class Server:
     def rate_grids():
         return utilities.rate_grids()
 
+    # -- ENDF-6 evaluations: the files, a summary, the curves over the data, the codes (pyazr/ui/evaluations.py) ----
+
+    def endf_files(self):
+        """The ENDF-6 files of the project folder (relative paths), the folder, and how a file is recognised: the
+        files of :meth:`files` whose first two lines read as ENDF-6 lines."""
+        listing = self.files()
+        return {"directory": listing["directory"],
+                "files": evaluations.endf_files(listing["directory"], listing["files"]),
+                "depth": FILES_DEPTH, "more": listing["more"],
+                "how": "files whose first two lines read as ENDF-6 lines (80 columns with MAT, MF, MT), in the "
+                       f"project's directory and {FILES_DEPTH} levels below; a path inside the root "
+                       "may also be typed"}
+
+    def endf_summary(self, path):
+        """What an ENDF-6 file inside the root holds (``pyazr.endf.read(path).summary()``), in the server's process."""
+        return evaluations.summary(self.state.inside_root(path), path)
+
+    def endf_curves(self, files):
+        """The files' values at every data set's points of the current text at the working x, with the ratios to the
+        datum times its normalization and to the model (the session worker: ``Material.curves(data, session=s)``)."""
+        names = [files] if isinstance(files, str) else list(files or [])
+        if not names:
+            raise Refused("name at least one ENDF-6 file", allowed="files of GET /api/endf/files, or paths inside "
+                          "the root", fix='POST /api/endf/curves {"files": ["a.endf"]}')
+        resolved = [[n, self.state.inside_root(n)] for n in names]
+        return self.session_request("endf_curves", files=resolved)
+
+    @staticmethod
+    def endf_checkers():
+        return evaluations.checkers()
+
+    def endf_accept(self, job_id, to=None, overwrite=False):
+        """Keep the candidate of a finished rewrite job: at ``to`` (inside the root; none: beside the original), an
+        existing file replaced only with ``overwrite``.  No history entry: an ENDF file is not the project text."""
+        job = self.jobs.get(job_id)
+        answer = evaluations.accept(self.state, job.view(), to, overwrite)
+        with job.lock:
+            job.record.setdefault("kept", []).append(dict(answer, time=time.time()))
+        return answer
+
+    # -- the prior builder (pyazr/ui/prior.py) ----------------------------------------------------------------------
+
+    def prior_open(self):
+        return prior.prior_open(self.state, [f["path"] for f in self.files(outputs=True)["files"]])
+
+    def prior_build(self, parts):
+        return prior.prior_build(self.state, self.session_describe(), parts)
+
+    def prior_write(self, parts, path, rev=None):
+        return prior.prior_write(self.state, self.session_describe(), parts, path, rev)
+
     # -- jobs -------------------------------------------------------------------------------------------------------
 
     @staticmethod
@@ -378,6 +502,10 @@ class Server:
         x.  Files a job writes (a chain) go to the project's output directory."""
         if rev is not None:
             self.state.check_rev(rev)
+        from .jobs import job_row
+        for name in job_row(kind, method).files:  # a file a job reads: inside the root (403 otherwise)
+            if (settings or {}).get(name):
+                self.state.inside_root(settings[name])
         source = None
         with self.worker.lock:
             with self.state.lock:

@@ -185,6 +185,32 @@ class Record:
         return f"<Record {self.record_kind} {self._name}>"
 
 
+# The words of the entries of a data set's description (``describe(name, as_json=True)``; pyazr.kinds()
+# ["description"]): ``title``, ``unit``, ``doc``; ``list``: a column of the page's list of data sets, in this order.
+DESCRIPTION_FIELDS = {
+    "name": {"title": "Name", "unit": "", "doc": "the record's name"},
+    "tree": {"title": "Reaction", "unit": "", "doc": "the reaction expression as the engine reads it",
+             "list": True},
+    "observable": {"title": "Observable", "unit": "", "doc": "the quantity in words", "list": True},
+    "unit": {"title": "Unit", "unit": "", "doc": "the unit of the value and error columns"},
+    "data_file": {"title": "Data file", "unit": "", "doc": "the data file, relative to the project", "list": True},
+    "kept_E_lab_MeV": {"title": "Energy range", "unit": "MeV, lab",
+                       "doc": "the lowest and highest lab energy of the rows the energy window keeps",
+                       "list": True},
+    "angle_window_deg": {"title": "Angle window", "unit": "deg", "doc": "the angles the angle window keeps",
+                         "list": True},
+    "rows_kept": {"title": "Points", "unit": "", "doc": "the rows of the file the windows keep", "list": True},
+    "active": {"title": "Active", "unit": "", "doc": "an inactive data set is not used", "list": True},
+    "rows_read": {"title": "Rows read", "unit": "", "doc": "the rows of the file read"},
+    "E_lab_window_MeV": {"title": "Energy window", "unit": "MeV, lab", "doc": "the energy window, lab"},
+    "effects": {"title": "Experimental effects", "unit": "", "doc": "the target, beam and detector it uses"},
+    "parameters": {"title": "Fit parameters", "unit": "",
+                   "doc": "its parameters: name, kind (norm, energy shift, ...) and status (fit, fixed)"},
+    "quantity": {"title": "Quantity", "unit": "", "doc": "the quantity's key"},
+    "engine_unit": {"title": "Engine unit", "unit": "", "doc": "the unit the engine computes the quantity in"},
+}
+
+
 class Project(NuclearPart):
     """A format-3 project as records (docs/upgrade/project_format3.md section 4.1).
 
@@ -359,7 +385,7 @@ class Project(NuclearPart):
         if as_json:
             description = json.loads(description)
             if name is not None:
-                entries = [e for v in description.values() for e in v]
+                entries = [e for v in description.values() if isinstance(v, list) for e in v]
                 if not entries:
                     raise ValueError(self._not_described(name))
                 return entries[0]
@@ -367,6 +393,14 @@ class Project(NuclearPart):
         if name is not None and not description.strip():
             raise ValueError(self._not_described(name))
         return description
+
+    def references(self):
+        """Every reference of one record to another, as the engine reads them: a list of ``{record, field, name,
+        epoch}`` (the data set ``record`` names ``name`` in its field ``field``, a target with its ``epoch``), in the
+        order of the file.  Which data sets use a target, a beam, a detector, a shared normalization or a shared
+        energy scale."""
+        return [{"record": _text(r["record"]), "field": r["field"], "name": _text(r["name"]),
+                 "epoch": _text(r["epoch"])} for r in self._references()]
 
     def _not_described(self, name):
         users = sorted({f"{_text(r['record'])}.{r['field']}" for r in self._references() if _text(r["name"]) == name})

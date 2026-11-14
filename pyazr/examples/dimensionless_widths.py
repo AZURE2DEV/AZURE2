@@ -3,84 +3,39 @@
 A partial width in eV is hard to judge on its own.  This example turns every
 fitted width of a model into the number you can actually argue about:
 
-  * particle channels -> theta^2 = Gamma_c / Gamma_W, with the Wigner width
+  * particle channels -> theta^2 = Gamma_c / Gamma_W (Gamma in eV), with the Wigner width
     Gamma_W = 2 P_l(E_r) gamma_W^2 that the AZURE2 GUI shows next to the
     channel.  theta^2 <= 1 is the single-particle sum-rule expectation; a fit
     that needs theta^2 = 3 is telling you something is wrong.
   * photon channels -> the strength in Weisskopf units.  A few W.u. is normal
     for E1/E2; hundreds means the level is soaking up strength it should not.
 
-Run it on the model as it stands in the .azr:
+Run it on the project as it stands, or at a fit's parameter file (``param.sav``, matched to the project by the
+parameters' names; the session takes it when it is made and warns about a name it does not have):
 
-    python dimensionless_widths.py 7Be.azr
+Usage (from the repository's root):
 
-or on a saved best fit -- either AZURE2's own ``output/param.sav`` or an
-``.npz``/``.npy`` from a Python fit:
-
-    python dimensionless_widths.py 7Be.azr --params output/param.sav
-
-Note that ``param.sav`` is matched to the model *by parameter name*, so it must
-come from a run of the same .azr; if a normalization was free then and is fixed
-now (or vice versa) the script says so instead of silently misaligning.
+    python3 pyazr/examples/dimensionless_widths.py tests/upgrade/T1/T1.azr [--params output/param.sav] [--all]
 """
 
 import argparse
 import os
-import sys
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
-
-import numpy as np                                            # noqa: E402
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))))
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 from pyazr import Session                                      # noqa: E402
 
 
-def load_params(model, path):
-    """A free-parameter vector from ``param.sav`` or a numpy file."""
-    if path.endswith(".sav") or path.endswith(".par"):
-        sav = {}
-        for line in open(path):
-            f = line.split()
-            if len(f) >= 2:
-                sav[f[0]] = float(f[1])
-        free = sorted((p for p in model.parameters if not p.fixed),
-                      key=lambda p: p.free_index)
-        missing = [p.name for p in free if p.name not in sav]
-        if missing:
-            raise SystemExit(
-                f"{path} has no entry for {len(missing)} free parameter(s): "
-                f"{missing[:5]}{' ...' if len(missing) > 5 else ''}\n"
-                "It was written for a different .azr -- refit or fix the model.")
-        # The reverse mismatch is quieter and nastier: the fit had a parameter
-        # this .azr no longer does (a normalization since fixed, a level since
-        # removed).  The widths still load, but the chi-squared will not
-        # reproduce the fit, so say so rather than let it pass as agreement.
-        extra = sorted(set(sav) - {p.name for p in model.parameters})
-        if extra:
-            print(f"warning: {path} carries {len(extra)} parameter(s) this .azr "
-                  f"does not have ({', '.join(extra[:4])}"
-                  f"{' ...' if len(extra) > 4 else ''}).\n"
-                  f"         They are ignored -- expect the chi-squared below to "
-                  f"differ from the fit's.\n", file=sys.stderr)
-        return np.array([sav[p.name] for p in free], float)
-    src = np.load(path)
-    return np.asarray(src["x"] if hasattr(src, "files") else src, float)
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("azr", help="the .azr model file")
-    ap.add_argument("--params", help="output/param.sav, or an .npz/.npy fit result")
+    ap.add_argument("azr", help="the format-3 project (.azr)")
+    ap.add_argument("--params", help="a parameter file of a fit (param.sav, param.par)")
     ap.add_argument("--all", action="store_true",
                     help="also list the inert (zero-width) channels")
     args = ap.parse_args()
 
-    here = os.path.dirname(os.path.abspath(args.azr)) or "."
-    with Session(os.path.abspath(args.azr), cwd=here) as m:
-        x = load_params(m, args.params) if args.params else np.asarray(m.parameters.x0, float)
+    with Session(args.azr, parameter_file=args.params) as m:
+        x = m.parameters.x0
         print(f"compound A = {m.mass_number}, "
               f"chi2 = {m.evaluate(x).chi2:.2f}\n")
 

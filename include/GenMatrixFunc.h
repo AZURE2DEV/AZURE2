@@ -135,7 +135,7 @@ class GenMatrixFunc {
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual CNuc *compound() const = 0;
+  virtual const CNuc *compound() const = 0;
   /// The levels at the evaluated parameter vector (LevelState.h), held by the evaluation that made this object.
   virtual const LevelState &state() const = 0;
   /*!

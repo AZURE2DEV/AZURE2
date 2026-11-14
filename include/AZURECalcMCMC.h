@@ -3,9 +3,12 @@
 
 #include "numcmc/mcmc.h"
 #include "Constants.h"
+#include "LevelInputs.h"
+#include "LevelState.h"
 #include "ObservedLevelTable.h"
 #include "ParameterKind.h"
 #include "PosteriorSupport.h"
+#include "StatePool.h"
 #include "WorkingData.h"
 #include <atomic>
 #include <functional>
@@ -36,14 +39,26 @@ class PriorCovariance;
  * the stop request belong to this object.  Two samplers in one process share nothing.
  */
 
+/// A walker's levels: the state an evaluation fills, and the inputs a transformation from the observed basis writes
+/// (LevelState.h, LevelInputs.h).  The sampler holds its own; each evaluation and snapshot runs on a copy.
+struct WalkerLevels {
+  LevelState state;
+  LevelInputs inputs;
+};
+
 class AZURECalcMCMC {
  public:
   /*!
-   * The AZURECalcMCMC object is created with reference to an WorkingCopy and CNuc object.
+   * The AZURECalcMCMC object is created with reference to an WorkingCopy and CNuc object (shared and constant; the
+   * caller outlives this object) and the caller's levels, which it copies into its own.  `pool` holds the walkers'
+   * idle levels: the caller's, as the evaluations that take from it are const.
    * The runtime configurations are also passed through a Config structure.
    */
-  AZURECalcMCMC(WorkingCopy *data, CNuc *compound, const Config &configure) :
+  AZURECalcMCMC(WorkingCopy *data, const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+                StatePool<WalkerLevels> &pool, const Config &configure) :
     configure_(configure),
+    levels_{state, inputs},
+    pool_(pool),
     parametersInitialized_(false) {
     data_ = data;
     compound_ = compound;
@@ -177,7 +192,7 @@ class AZURECalcMCMC {
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const { return compound_; };
+  const CNuc *compound() const { return compound_; };
 
   /*!
    * See Minuit2 documentation for an explanation of this function.
@@ -219,16 +234,17 @@ class AZURECalcMCMC {
    */
   vector_r ReconstructFullParameters(const std::vector<double> &varyingParams) const;
 
-  /// The copies an evaluation runs on (AZURECalc::GetPooledCNuc): an idle one or a new clone, returned after use.
-  CNuc *GetPooledCNuc() const;
+  /// The copies an evaluation runs on (AZURECalc::GetPooledState): an idle one or a new copy of the sampler's levels
+  /// (of its working copy), returned after use.
+  WalkerLevels *GetPooledLevels() const;
   WorkingData *GetPooledData() const;
-  void ReturnPooledCNuc(CNuc *obj) const;
+  void ReturnPooledLevels(WalkerLevels *walker) const;
   void ReturnPooledData(WorkingData *obj) const;
 
  private:
   struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMC.cpp)
   /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
-  double LogLikelihoodOfFilled(CNuc *compound, WorkingData *working, const vector_r &p) const;
+  double LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *working, const vector_r &p) const;
   /// The support of the posterior in the parameters (docs/upgrade/objective.md section 6): every varying component of
   /// the fit's vector `fitVector` (all parameters, the fit's order) inside the limits the fit gives it
   /// (PosteriorSupport::Contains, the rule).  Called in both sampling bases.
@@ -236,7 +252,7 @@ class AZURECalcMCMC {
   /// The fit's vector at an observed-basis point: the amplitudes and energies of `transformed` (a compound filled
   /// from the observed vector and transformed in), the data parameters from the tail of `observedFull` (`copy`: the
   /// evaluation's working copy, whose layout gives the tail's start).
-  vector_r FitVectorOfObserved(CNuc *transformed, WorkingCopy *copy, const vector_r &observedFull) const;
+  vector_r FitVectorOfObserved(const WalkerLevels &transformed, WorkingCopy *copy, const vector_r &observedFull) const;
   /// A walker's start, drawn in the sampled basis, inside the fit's limits (InsideFitLimits after the conversion of
   /// an observed-basis point; a point whose conversion fails counts as inside: its posterior is zero as before).
   bool StartInsideFitLimits(const std::vector<double> &sampled, bool useRWA) const;
@@ -254,8 +270,10 @@ class AZURECalcMCMC {
   ObservedLevelTable StartObservedLevels() const;
 
   const Config &configure_;
+  WalkerLevels levels_;  ///< the sampler's own: the start vector's (UpdateParameterVectors), the seed of the copies
+  StatePool<WalkerLevels> &pool_;  ///< the caller's
   WorkingCopy *data_;
-  CNuc *compound_;
+  const CNuc *compound_;
   double theErrorDef;
 
   // Parameter vectors for physical parameter handling (mutable for lazy initialization)
@@ -293,8 +311,7 @@ class AZURECalcMCMC {
   /// physical-parameter run (the prior is in the param.sav space, the RWA one).
   bool SetUpPriorCovariance(bool useRWA) const;
 
-  // The idle copies of GetPooledCNuc / GetPooledData
-  mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
+  // The idle copies of GetPooledData, and their lock
   mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;  // each copy with the buffer it writes
   mutable std::mutex pool_mutex_;
 };

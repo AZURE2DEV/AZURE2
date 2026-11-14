@@ -421,11 +421,8 @@ class Session {
       configure.rateParams.minTemp = minTemp;
       configure.rateParams.maxTemp = maxTemp;
       configure.rateParams.tempStep = tempStep;
-      CNuc *compound = api_->compound();
-      ReactionRate rate(compound, v, configure, configure.rateParams.entrancePair, configure.rateParams.exitPair);
-      if (const std::optional<ObservedLevelTable> observed = compound->ObservedWidthsAt(configure, v))
-        WarnLargeRadiativeWidths(*compound, compound->Inputs(), *observed, configure);
-      if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(configure);
+      ReactionRate rate(api_->compound(), api_->state(), api_->inputs(), v, configure, configure.rateParams.entrancePair,
+                        configure.rateParams.exitPair);
       if (configure.rateParams.useFile)
         rate.CalculateFileRates();
       else

@@ -10,11 +10,11 @@ std::vector<AZUREAPI::ModelDatumValue> AZUREAPI::ModelDataRWA(const vector_r &rw
   int k = 0;
   for (int i = 0; i < (int)all_rwa_.size(); ++i)
     if (!fixed_[i]) full[i] = rwaParams[k++];
-  CNuc *lc = compound();
-  lc->FillCompoundFromParams(full);
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  const CNuc *lc = compound();
+  lc->FillCompoundFromParams(full, state());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), state());
   std::vector<ModelDatumValue> out;
-  for (const ModelData::Value &v : ModelData::SectionValues(lc, lc->MutableState(), lc->Inputs(), configure(), lc->GetModelData())) {
+  for (const ModelData::Value &v : ModelData::SectionValues(lc, state(), inputs(), configure(), lc->GetModelData())) {
     const azure2::experiment::ModelDatum &d = *v.datum;
     ModelDatumValue r;
     r.name = d.name;

@@ -43,7 +43,7 @@
  * derivative on each level, from the same function at the same energy: it is
  * read from there instead of being differentiated again.
  */
-vector_matrix_r BuildShiftDerivTable(CNuc *compound, const LevelState &state, const Config &configure) {
+vector_matrix_r BuildShiftDerivTable(const CNuc *compound, const LevelState &state, const Config &configure) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_matrix_r tab(compound->NumJGroups());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -79,7 +79,7 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const LevelState &state, co
  * d/dx of sum_lambda (J_lambda/s)^2 over J < 0, with J = 1 - sum_d g_d^2 S'_d:
  *   d/d g_d  = 2 J/s^2 (-2 g_d S'_d),    d/d E = 2 J/s^2 (-sum_d g_d^2 S''_d).
  */
-void AddParkPenaltyGradient(CNuc *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
+void AddParkPenaltyGradient(const CNuc *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
   const double s2 = kParkNormScale * kParkNormScale;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -127,7 +127,7 @@ void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configur
 /*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
-void GradAccum::Init(CNuc *compound, const LevelState &state) {
+void GradAccum::Init(const CNuc *compound, const LevelState &state) {
   source = compound;
   sourceState = &state;
   const int nJ = compound->NumJGroups();
@@ -327,7 +327,7 @@ int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
  * gradient vector is a permutation-correct match for the sampler's parameter
  * ordering (see PLAN.md, "Parameter-vector order must exactly match").
  */
-ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
+ParamIndexMap BuildParamIndexMap(const CNuc *compound, WorkingCopy *data,
                                  const std::vector<bool> &fixed) {
   ParamIndexMap map;
   int i = 0;
@@ -515,7 +515,7 @@ namespace {
 // AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights.
 
 bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &results, double fitBar, GradAccum &accum,
-                             int xsComponent, CNuc *compound, const Config &config, int row,
+                             int xsComponent, const CNuc *compound, const Config &config, int row,
                              std::vector<azure2::UnitCotangent> &out) {
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
@@ -653,7 +653,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
 // The parameters' share of a point's model cotangents (ModelPass.h): each weighted term's abundance, a transform's
 // sample thickness (segment_<key>_thickness, its group leader's for a follower) and a fitted Doppler temperature.
 void AddParamCotangents(const azure2::ModelCotangents &c, const Segment *segment, Unit *base, const WorkingCopy &data, int i,
-                        CNuc *compound, GradAccum &accum) {
+                        const CNuc *compound, GradAccum &accum) {
   using azure2::experiment::ParamRef;
   for (std::size_t q = 0; q < c.refs->size(); q++) {
     if (c.params[q] == 0.0) continue;
@@ -673,7 +673,7 @@ void AddParamCotangents(const azure2::ModelCotangents &c, const Segment *segment
 
 }  // namespace
 
-bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, const LevelState &state, const Config &config,
+bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, const CNuc *compound, const LevelState &state, const Config &config,
                              azure2::Results &results, double fitBar, int row, GradAccum &params,
                              std::vector<UnitCotangent> &out) {
   if (fitBar == 0.0) return true;
@@ -710,7 +710,7 @@ namespace {
 // into coherentBar[k].  A folded point is linear in its sub-point cross
 // sections; the weights come from the combiner as in GradTargetEffectAdjoint.
 // A folded analyzing power (a ratio of two folds): not covered (false).
-bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, CNuc *compound, const LevelState &state, const Config &config,
+bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, const CNuc *compound, const LevelState &state, const Config &config,
                            const ThmAdjointContext &ctx, THMMatrixFunc &f,
                            GradAccum &accum, std::vector<double> &coherentBar) {
   f.Reset(compound, state, config);
@@ -756,7 +756,7 @@ void ReportBail(WorkingCopy &data, const char *what, const Segment *segment, int
 // state that shares its block (CNuc::ECFinalStatesFromFormal, an iteration on the block's formal parameters) and the
 // --ignore-externals projector of a channel capture (CNuc::FormalCaptureMasksOutsideAdjoint, external_capture.md
 // section 7).  Every adjoint entry point asks this and falls back to finite differences.
-bool FormalPartsOutsideAdjoint(CNuc *compound, const LevelState &state, const ParamIndexMap &pmap) {
+bool FormalPartsOutsideAdjoint(const CNuc *compound, const LevelState &state, const ParamIndexMap &pmap) {
   if (compound->HasFormalECFinalBlocks()) return true;
   return compound->FormalCaptureMasksOutsideAdjoint(state, [&pmap](int j, int la, int ch) {
     const int full = pmap.GammaIndexFlat(j, la, ch);
@@ -771,7 +771,7 @@ bool FormalPartsOutsideAdjoint(CNuc *compound, const LevelState &state, const Pa
 bool ThmFiniteDifferencesRequested(const Config &config) { return config.environment.thmByDifferences; }
 
 
-bool AccumulateEGammaGradient(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool AccumulateEGammaGradient(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -816,7 +816,7 @@ bool AccumulateEGammaGradient(CNuc *compound, const LevelState &state, WorkingCo
 namespace {
 
 // The free level parameters of the packed vector, per J-group (FormalBasis).
-AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
+AMatrixFunc::FreeMask BuildFreeMask(const CNuc *compound, const ParamIndexMap &pmap) {
   AMatrixFunc::FreeMask mask;
   const int nJ = compound->NumJGroups();
   mask.e.assign(nJ, {});
@@ -847,7 +847,7 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
 
 }  // namespace
 
-bool ComputeResidualJacobian(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeResidualJacobian(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -944,7 +944,7 @@ bool ComputeResidualJacobian(CNuc *compound, const LevelState &state, WorkingCop
   return ok;
 }
 
-bool ComputeModelGradients(CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool ComputeModelGradients(const CNuc *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<Unit *, vector_r> &gradByPoint,
@@ -986,7 +986,7 @@ bool ComputeModelGradients(CNuc *compound, const LevelState &state, WorkingCopy 
 
 // THM (HOES) rows: see the declaration in AZUREGrad.h.  Shared by the API
 // (residual Jacobian, chi2 gradient, model gradients) and the CLI band.
-std::vector<THMRows> ComputeTHMRows(CNuc *lc, LevelState &state, WorkingCopy *ld, azure2::Results &results, const Config &config,
+std::vector<THMRows> ComputeTHMRows(const CNuc *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap) {
   std::vector<THMRows> rows;
   const bool brune = (config.paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1044,7 +1044,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, LevelState &state, WorkingCopy *ld
   // Norms and shifts are the caller's; the THM model depends on the R-matrix
   // parameters (and the shift already applied to the point energies).
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, lc, &state, &config);
+  ld->FillEnergyShiftsFromParams(full, results, lc, &state, &inputs, &config);
   fillCompound(full);
   std::vector<vector_r> m0, mp, mm;
   models(m0);

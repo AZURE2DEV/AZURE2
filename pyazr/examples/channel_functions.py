@@ -1,90 +1,73 @@
 #!/usr/bin/env python3
-"""Plot the Coulomb wave functions, penetrability and hard-sphere phase.
+"""The Coulomb wave functions, penetrability, shift function and hard-sphere phase of a channel, from the engine.
 
-These are the quantities that describe the external region: everything outside
-the channel radius, where the interaction is assumed to be purely Coulomb.  They
-are what the penetrability factors in the level matrix are built from, what sets
-the hard-sphere phase shift, and what the external-capture integrals integrate.
+These describe the external region: everything outside the channel radius, where the interaction is taken to be
+Coulomb only.  The penetrability P_l and shift S_l enter the level matrix, the hard-sphere phase the elastic
+amplitude, F_l and G_l the external-capture integrals.  ``Session.channel_functions(pair, E_cm, l=, radius=)``
+returns them as the session computes them -- the Coulomb table, GSL's routine (``use_gsl_coul=True``) or the
+Numerov solution through a nuclear potential (the hybrid model) -- with c.m. energies in MeV and the phase in rad.
 
-AZURE2 has always computed them; `azr.channel_functions` makes them askable.
-The values follow the run's own configuration, so the same call returns the
-accurate Coulomb routine's answer, GSL's (`--gsl-coul`), or the Numerov solution
-through a nuclear potential (the hybrid model) -- which is the point of being
-able to plot them.
+The script prints a table at a few energies and, with ``--plot FILE``, draws F, G, P and the phase (matplotlib).
 
-Usage:
-    python3 channel_functions.py <file.azr> [--pair 1] [--L 0 1 2] [--radius 0]
+Usage (from the repository's root):
+
+    python3 pyazr/examples/channel_functions.py tests/upgrade/T1/T1.azr [--pair 1] [--L 0 1 2] [--plot cf.png]
 """
-
-from __future__ import annotations
-
 import argparse
 import os
 import sys
-from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
-import numpy as np
+import numpy as np  # noqa: E402
 
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    sys.exit("this example needs matplotlib: pip install 'pyazr[examples]'")
-
-from pyazr import Session
+from pyazr import Session  # noqa: E402
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("azr", type=Path)
-    ap.add_argument("--pair", type=int, default=1, help="particle-pair key")
-    ap.add_argument("--L", type=int, nargs="*", default=[0, 1, 2])
-    ap.add_argument("--radius", type=float, default=0.0,
-                    help="fm; 0 uses the pair's own channel radius")
-    ap.add_argument("--emin", type=float, default=0.01)
-    ap.add_argument("--emax", type=float, default=5.0)
-    ap.add_argument("--npoints", type=int, default=400)
-    ap.add_argument("--out", type=Path, default=Path("channel_functions.png"))
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("project", help="the format-3 project (.azr)")
+    ap.add_argument("--pair", type=int, default=1, help="the particle pair's key")
+    ap.add_argument("--L", type=int, nargs="*", default=[0, 1, 2], help="orbital angular momenta")
+    ap.add_argument("--radius", type=float, default=0.0, help="channel radius in fm; 0: the pair's own")
+    ap.add_argument("--emin", type=float, default=0.05, help="lowest c.m. energy (MeV)")
+    ap.add_argument("--emax", type=float, default=3.0, help="highest c.m. energy (MeV)")
+    ap.add_argument("--npoints", type=int, default=200)
+    ap.add_argument("--plot", default=None, help="draw the four functions into this file (needs matplotlib)")
     args = ap.parse_args()
 
     energies = np.linspace(args.emin, args.emax, args.npoints)
-
-    with Session(str(args.azr)) as azr:
-        pair = azr.pairs[args.pair - 1]
-        radius = args.radius or pair.channel_radius
-        curves = {L: azr.channel_functions(args.pair, energies, l=L,
-                                           radius=args.radius)
-                  for L in args.L}
-        stats = azr.cache_stats()
-
-    fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
-
+    with Session(args.project) as s:
+        pair = next(q for q in s.pairs if q.key == args.pair)
+        curves = {L: s.channel_functions(args.pair, energies, l=L, radius=args.radius) for L in args.L}
+    radius = args.radius or pair.channel_radius
+    print(f"{os.path.basename(args.project)}, pair {args.pair}, a = {radius:g} fm")
+    print(f"{'l':>2} {'E_cm (MeV)':>11} {'F_l':>12} {'G_l':>12} {'P_l':>12} {'S_l':>12} {'phi_hs (deg)':>13}")
     for L, c in curves.items():
-        e = c["e_cm"]
-        axes[0, 0].plot(e, c["F"], label=rf"$\ell={L}$")
-        # G diverges as E -> 0 (it is the irregular solution), so log scale.
-        axes[0, 1].semilogy(e, np.maximum(c["G"], 1e-300), label=rf"$\ell={L}$")
-        axes[1, 0].semilogy(e, np.maximum(c["P"], 1e-300), label=rf"$\ell={L}$")
-        axes[1, 1].plot(e, np.degrees(c["delta_hs"]), label=rf"$\ell={L}$")
+        for k in np.linspace(0, len(energies) - 1, 4).astype(int):
+            print(f"{L:2d} {c['e_cm'][k]:11.4f} {c['F'][k]:12.5g} {c['G'][k]:12.5g} {c['P'][k]:12.5g} "
+                  f"{c['S'][k]:12.5g} {np.degrees(c['delta_hs'][k]):13.5g}")
 
-    axes[0, 0].set_ylabel(r"$F_\ell(\rho)$")
-    axes[0, 1].set_ylabel(r"$G_\ell(\rho)$")
-    axes[0, 1].set_ylim(bottom=1e-1)
-    axes[1, 0].set_ylabel(r"penetrability $P_\ell$")
-    axes[1, 1].set_ylabel(r"hard-sphere phase $\delta_\ell^{\rm hs}$ (deg)")
-    for ax in axes.ravel():
-        ax.set_xlabel(r"$E_{\rm c.m.}$ (MeV)")
-        ax.grid(alpha=0.3)
-        ax.legend(fontsize=8)
-    fig.suptitle(f"{args.azr.name}, pair {args.pair}, a = {radius:g} fm")
-    fig.tight_layout()
-    fig.savefig(args.out, dpi=150)
-    print(f"wrote {args.out}")
-
-    print(f"\nInput files: {stats['input_files_read']} read, {stats['input_files_served']} served from memory "
-          f"(the engine keeps no Coulomb memo: its counters are 0)")
+    if args.plot:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
+        for L, c in curves.items():
+            e = c["e_cm"]
+            axes[0, 0].plot(e, c["F"], label=rf"$\ell={L}$")
+            axes[0, 1].semilogy(e, np.maximum(c["G"], 1e-300), label=rf"$\ell={L}$")  # G diverges as E -> 0
+            axes[1, 0].semilogy(e, np.maximum(c["P"], 1e-300), label=rf"$\ell={L}$")
+            axes[1, 1].plot(e, np.degrees(c["delta_hs"]), label=rf"$\ell={L}$")
+        for ax, name in zip(axes.ravel(), (r"$F_\ell(\rho)$", r"$G_\ell(\rho)$", r"penetrability $P_\ell$",
+                                           r"hard-sphere phase (deg)")):
+            ax.set_ylabel(name)
+            ax.set_xlabel(r"$E_{\rm c.m.}$ (MeV)")
+            ax.legend(fontsize=8)
+        fig.suptitle(f"{os.path.basename(args.project)}, pair {args.pair}, a = {radius:g} fm")
+        fig.tight_layout()
+        fig.savefig(args.plot, dpi=150)
+        print(f"wrote {args.plot}")
     return 0
 
 

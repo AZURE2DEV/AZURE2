@@ -2,12 +2,15 @@
 #define REACTIONRATE_H
 
 #include "Constants.h"
+#include "LevelInputs.h"
+#include "LevelState.h"
 #include <vector>
 
 class CNuc;
 
-extern std::vector<double> gsl_reactionrate_breakpoints(CNuc *, const Config &, int);
-extern double gsl_reactionrate_integration(double, CNuc *, const Config &, int, int,
+extern std::vector<double> gsl_reactionrate_breakpoints(const CNuc *, const LevelState &, const LevelInputs &,
+                                                        const Config &, int);
+extern double gsl_reactionrate_integration(double, const CNuc *, const LevelState &, const Config &, int, int,
                                            const std::vector<double> &);
 
 /// A container structure for a reaction rate.
@@ -42,14 +45,17 @@ class RateData {
 class ReactionRate {
  public:
   /*!
-   * The ReactionRate object is created with reference to a CNuc object, a vector of Minuit parameters,
-   * a Config structure, and a set of entrance and exit pair keys.
+   * The ReactionRate object is created with reference to a CNuc object (shared and constant; the caller outlives
+   * this object), the caller's levels (`state`, copied into the rate's own and filled from `params`; `inputs`, read),
+   * a vector of Minuit parameters, a Config structure, and a set of entrance and exit pair keys.  It warns of large
+   * radiative widths at `params` and, under Brune, computes its state's shift functions.
    */
-  ReactionRate(CNuc *, const vector_r &, const Config &, int, int);
+  ReactionRate(const CNuc *compound, const LevelState &state, const LevelInputs &inputs, const vector_r &params,
+               const Config &, int, int);
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const { return compound_; };
+  const CNuc *compound() const { return compound_; };
   /*!
    * Returns a reference to the Config structure.
    */
@@ -73,12 +79,16 @@ class ReactionRate {
   void WriteRates();
   /// The rates computed (temperature in GK, N_A<sigma v> in cm^3 mol^-1 s^-1), in the order WriteRates writes them.
   const std::vector<RateData> &Rates() const { return rates_; }
+  /// The rate's levels: the caller's state filled at the rate's parameters (each thread evaluates a copy of it).
+  const LevelState &State() const { return state_; }
 
  private:
   int entrance_key_;
   int exit_key_;
-  CNuc *compound_;
+  const CNuc *compound_;
+  const LevelInputs &inputs_;  ///< the caller's
   const Config &configure_;
+  LevelState state_;  ///< the rate's own
   std::vector<RateData> rates_;
 };
 

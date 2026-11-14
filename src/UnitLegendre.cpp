@@ -133,7 +133,7 @@ bool Site::QLabBoostAt(double ti, const PPair *entrancePair, const PPair *exitPa
  * with every Q_K = 1), a non-particle entrance gave every factor 0, and more than maxL coefficients read past the end.
  */
 
-void Site::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
+void Site::CalcLegendreP(WorkingCopy *data, int maxL, const CNuc *theCNuc, const TargetEffect *targetEffect) {
   if (theCNuc) {
     const int entrance = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
     if (entrance > 0)
@@ -148,7 +148,7 @@ void Site::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
   }
 }
 
-bool Site::RowDependsOnEnergy(CNuc *theCNuc, const TargetEffect *targetEffect) const {
+bool Site::RowDependsOnEnergy(const CNuc *theCNuc, const TargetEffect *targetEffect) const {
   if (!targetEffect || targetEffect->NumQCoefficients() <= 0 || !theCNuc) return false;
   const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -158,11 +158,11 @@ bool Site::RowDependsOnEnergy(CNuc *theCNuc, const TargetEffect *targetEffect) c
          !(elastic && charged);
 }
 
-void Site::LegendreRowAt(double cmEnergy, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect, double *p) const {
+void Site::LegendreRowAt(double cmEnergy, int maxL, const CNuc *theCNuc, const TargetEffect *targetEffect, double *p) const {
   this->LegendreRowAt(cmEnergy, this->GetCMAngle(), maxL, theCNuc, targetEffect, p);
 }
 
-void Site::LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
+void Site::LegendreRowAt(double cmEnergy, double cmAngle, int maxL, const CNuc *theCNuc, const TargetEffect *targetEffect,
                          double *p) const {
   const double x = cos(cmAngle * pi / 180.0);
   LegendreSeries(maxL, x, p);

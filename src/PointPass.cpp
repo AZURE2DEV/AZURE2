@@ -41,7 +41,7 @@ bool Site::InjectedFailure() const {
          (testFailExit == 0 || this->GetExitKey() == testFailExit);
 }
 
-void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const LevelState &state, const Config &configure,
+void Unit::Calculate(WorkingCopy *data, const CNuc *theCNuc, const LevelState &state, const Config &configure,
                      azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
   Site *unit = this;
@@ -59,7 +59,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const LevelState &state, 
   this->FoldSubPoints(*data, configure, results);
 }
 
-void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure) {
+void Unit::PrepareSubPoints(WorkingCopy *data, const CNuc *theCNuc, const Config &configure) {
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     if (!data->WritesSlot(*this, i)) continue;  // a slot of the point's group that another point writes
     Site *subPoint = this->GetSubPoint(*data, i);

@@ -88,6 +88,13 @@ ROUTES = (
     Route("GET", "/api/project/describe/{name}", P, "pyazr.Project.describe",
           "What the engine makes of one record.", args=("name",), fixed={"as_json": True}),
     Route("GET", "/api/project/records", P, "pyazr.Project.records", "Every record: kind, name, line, fields."),
+    Route("GET", "/api/project/records/{name}/preview", V, "server.Server.field_preview",
+          "What the engine makes of the record with one field set to a value (a file), on a copy of the project: "
+          "its description (rows read and kept, their range) or the refusal.", args=("name",),
+          kwargs=("field", "value")),
+    Route("GET", "/api/project/references", P, "pyazr.Project.references",
+          "Every reference of a record to another (record, field, name, epoch): which data sets use a target, a "
+          "beam, a detector, a shared normalization or energy scale."),
     Route("POST", "/api/project/records", P, "pyazr.Project.add",
           "Add a record: kind, name, fields ({key: text or number or list}).", args=("kind", "name"),
           spread="fields"),
@@ -237,7 +244,9 @@ ROUTES = (
           serves=("pyazr.stopping.evaluate",)),
     Route("GET", "/api/sources/exfor", L, "step 2 (Data tab); today pyazr.search_exfor", "EXFOR search."),
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),
-    Route("GET", "/api/files", L, "step 2 (the file browser); no pyazr call", "Files inside the root."),
+    Route("GET", "/api/files", V, "server.Server.files",
+          "The files of the project's directory (path relative to the project, size, kind: project, table with its "
+          "columns, text, binary), never outside the root."),
     Route("GET", "/api/files/{path:path}", V, "server.Server.file_head",
           "The first rows (query: rows, 1 to 200, default 20) of a text file inside the root, as written; a line is "
           "read to 4096 bytes (cut lines listed in cut).", args=("path",),
@@ -262,6 +271,41 @@ ROUTES = (
     Route("GET", "/api/rate/grids", V, "server.Server.rate_grids",
           "The named temperature grids of the rate (pyazr.rate.TEMPERATURE_GRIDS, GK) and the rate's units; the rate "
           "is the job rate/engine.", serves=("pyazr.rate.TEMPERATURE_GRIDS",)),
+    # -- ENDF-6 evaluations (pyazr.endf): the files, what one holds, its curves over the data, the checking codes; the
+    # check and the rewrite are the jobs endf_check and endf_standardize
+    Route("GET", "/api/endf/files", V, "server.Server.endf_files",
+          "The ENDF-6 files of the project folder (relative paths; files whose first lines read as ENDF-6 lines), "
+          "size and time written.", serves=("pyazr.endf.records.split_line",)),
+    Route("POST", "/api/endf/summary", V, "server.Server.endf_summary",
+          "What an ENDF-6 file inside the root holds: MAT, target, projectile, library, lab, date, authors, LRP, "
+          "EMAX, the sections in words, the text (pyazr.endf.read(path).summary()).", args=("path",),
+          serves=("pyazr.endf.read", "pyazr.endf.Summary.to_dict")),
+    Route("POST", "/api/endf/curves", V, "server.Server.endf_curves",
+          "The files' values at every data set's points at the working x, in the data set's quantity and unit "
+          "(Material.curves(data, session=s)), beside the datum times its normalization and the model, with the "
+          "ratios file / (n x datum) and file / model; where a file has nothing for a data set, the refusal's "
+          "what, allowed, fix.", args=("files",), serves=("engine.Engine.endf_curves", "pyazr.endf.Material.curves")),
+    Route("GET", "/api/endf/checkers", V, "server.Server.endf_checkers",
+          "The ENDF checking codes found (pyazr.endf.checkers(): name, path, family, kind, what it does, what it "
+          "does to numbers), every program pyazr knows, where they were looked for.",
+          serves=("pyazr.endf.checkers", "pyazr.endf.PROGRAMS")),
+    Route("POST", "/api/endf/accept", V, "server.Server.endf_accept",
+          "Keep the candidate of a finished endf_standardize job: at `to` (inside the root; none: beside the "
+          "original), an existing file replaced only with overwrite (Candidate.accept).", args=("job_id",),
+          kwargs=("to", "overwrite"), serves=("pyazr.endf.Candidate.accept",)),
+    # -- the prior builder (pyazr.priors); removing the prior is PATCH /api/project/config {priorCovariance: null}
+    Route("GET", "/api/prior", V, "server.Server.prior_open",
+          "What the prior builder opens with: the priorCovariance key, the parts of the file it names (from the "
+          "file's #pyazr.prior line; hand_written when it has none), a file name to propose, the kinds of part with "
+          "their fields, the project's files.", serves=("pyazr.priors.read_parts", "pyazr.priors.kinds_table")),
+    Route("POST", "/api/prior/build", V, "server.Server.prior_build",
+          "A prior on the fit parameters from parts over the session's parameter table: names, centres, sigmas, the "
+          "correlation matrix, the checks, the engine's refusal and its parts, notes, the file's text.",
+          args=("parts",), serves=("pyazr.priors.build",)),
+    Route("POST", "/api/prior/write", V, "server.Server.prior_write",
+          "Write the prior file at path (relative to the project's directory) and set priorCovariance to it: one "
+          "history entry, which undo takes back with the file.", args=("parts", "path"), kwargs=("rev",),
+          serves=("pyazr.priors.build", "pyazr.Project.set_config")),
     # -- jobs
     Route("GET", "/api/jobs/kinds", V, "server.Server.job_kinds",
           "The job table: kind, method, settings, the package or pyazr call each needs."),

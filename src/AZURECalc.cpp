@@ -129,7 +129,7 @@ ShiftParamTarget ShiftTargets(WorkingCopy *ld, const ParamDesc &d) {
 
 }  // namespace
 
-ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy *ld, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(const CNuc *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
@@ -167,7 +167,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
     out.clear();
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       if (!seg->GetPoint(*ld, pid + 1)) continue;
-      azure2::EvaluateModelPoint(*ld, *seg, pid, lc, lc->State(), config, results, leaves);
+      azure2::EvaluateModelPoint(*ld, *seg, pid, lc, state, config, results, leaves);
       out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
     }
   };
@@ -178,7 +178,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
     std::vector<const Segment *> group;
     for (int s : segs) group.push_back(ld->Data().GetSegment(s));
     const bool pre = azure2::RefoldShiftedSegments(*ld, group, config, results) ||
-                     (!InParallelRegion() && ld->CalculatePointsInParallel(group, lc, lc->State(), config, results) == 0);
+                     (!InParallelRegion() && ld->CalculatePointsInParallel(group, lc, state, config, results) == 0);
     for (size_t m = 0; m < group.size(); m++)
       segmentResiduals(group[m], out[m], pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   };
@@ -186,14 +186,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
   // chi-squared evaluation), then the residuals in row order.  If a point
   // failed in the pass, the combination recalculates point by point.
   auto allResiduals = [&](vector_r &out) {
-    const bool pre = ld->CalculatePointsInParallel(segments, lc, lc->State(), config, results) == 0;
+    const bool pre = ld->CalculatePointsInParallel(segments, lc, state, config, results) == 0;
     out.clear();
     for (const Segment *seg : segments) {
       const double norm = ld->State(*seg).norm;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
-        azure2::EvaluateModelPoint(*ld, *seg, pid, lc, lc->State(), config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+        azure2::EvaluateModelPoint(*ld, *seg, pid, lc, state, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
         out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
       }
     }
@@ -277,9 +277,9 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
     auto residualsAt = [&](double value, vector_r &out) {
       vector_r fk = full;
       fk[f] = value;
-      lc->FillCompoundFromParams(fk);
+      lc->FillCompoundFromParams(fk, state);
       ld->FillNormsFromParams(fk);
-      ld->FillEnergyShiftsFromParams(fk, results, lc, &lc->State(), &config);
+      ld->FillEnergyShiftsFromParams(fk, results, lc, &state, &inputs, &config);
       allResiduals(out);
     };
     residualsAt(x0 + h, rPlus);
@@ -289,9 +289,9 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
         jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
   }
   // Leave the model at the parameters that were asked for.
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, state);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, lc, &lc->State(), &config);
+  ld->FillEnergyShiftsFromParams(full, results, lc, &state, &inputs, &config);
   return count;
 }
 
@@ -302,14 +302,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, const LevelState &state, WorkingCopy
  * the largest or non-finite contributions, and their offending points (with any non-finite
  * target-effect sub-points).  At most 20 dumps per run.
  */
-void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const {
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, const CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const {
   double threshold = azure2::support::ProcessEnvironment().Number(azure2::support::Switch::kDumpNonFinite, 0.0);
   if (!(threshold > 1.0)) threshold = 1.0e10;
   if (std::isfinite(chi) && chi <= threshold) return;
   const int d = ++configure().diagnostics->nonFiniteDumps;
   if (d > 20) return;
   AZUREParams names;
-  compound()->FillMnParams(names, &configure());
+  compound()->FillMnParams(names, state_, inputs_, &configure());
   data()->FillMnParams(names);
   const auto &mp = names.GetMinuitParams();
   std::ostringstream out;
@@ -401,33 +401,35 @@ double AZURECalc::operator()(const vector_r &p) const {
   // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
   const int thisIteration = data()->Iterate();
 
-  CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
+  std::unique_ptr<LevelState> pooled;
   if (isFit) {
     // An evaluation of its own (made when no idle one is left), so evaluations running at once never share one.
-    localCompound = GetPooledCNuc();
+    pooled = GetPooledState();
     working = GetPooledData();
     localData = working->data.get();
   } else {
-    localCompound = compound();
     localData = data();
   }
+  const CNuc *localCompound = compound();
+  // The level state of this evaluation: the pooled one, or the caller's for an evaluation on the data set itself.
+  LevelState &ls = pooled ? *pooled : state_;
   // The buffer of this evaluation: the working copy's, or the caller's for an evaluation on the data set itself.
   azure2::Results &results = working ? working->results : results_;
 
   // Fill Compound Nucleus From Minuit Parameters
   const auto te0 = std::chrono::steady_clock::now();
-  localCompound->FillCompoundFromParams(p);
+  localCompound->FillCompoundFromParams(p, ls);
   localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p, results, localCompound, &localCompound->State(), &configure());
+  localData->FillEnergyShiftsFromParams(p, results, localCompound, &ls, &inputs_, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
   const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
   // region (MIGRAD with the analytic gradient, line searches, plain calculations).
-  const bool pre = PrecalculatePoints(localCompound, localData, results, configure());
+  const bool pre = PrecalculatePoints(ls, localData, results, configure());
   const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
   if (environment.Set(azure2::support::Switch::kGradTiming)) {
     const int c = ++configure().diagnostics->evaluationTimings;
@@ -439,9 +441,9 @@ double AZURECalc::operator()(const vector_r &p) const {
   }
 
   // The model value of every point, then the objective (Objective.h: data, priors and constraints, in one order).
-  azure2::EvaluateModel(*localData, localCompound, localCompound->State(), configure(), results,
+  azure2::EvaluateModel(*localData, localCompound, ls, configure(), results,
                         pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-  ObjectiveContext context{localCompound, localCompound->MutableState(), localCompound->Inputs(), localData, results, p, configure()};
+  ObjectiveContext context{localCompound, ls, inputs_, localData, results, p, configure()};
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
   double chiSquared = Objective::Engine().Chi2(context);
 
@@ -456,11 +458,11 @@ double AZURECalc::operator()(const vector_r &p) const {
     for (double v : p) os << " " << v;
     if (isFit && trace == "fresh") {
       std::vector<double> segPool, segFresh;
-      Chi2On(localCompound, localData, results, p, &segPool);
-      std::unique_ptr<CNuc> fc(compound()->Clone());
+      Chi2On(ls, localData, results, p, &segPool);
+      LevelState fresh(state_);
       std::unique_ptr<WorkingCopy> fd(data()->Clone());
       azure2::Results freshResults;
-      os << " || fresh " << Chi2On(fc.get(), fd.get(), freshResults, p, &segFresh);
+      os << " || fresh " << Chi2On(fresh, fd.get(), freshResults, p, &segFresh);
       for (size_t s = 1; s < segPool.size() && s < segFresh.size(); s++)
         if (segPool[s] != segFresh[s]) os << " segment " << s << " " << segPool[s] << " " << segFresh[s];
     }
@@ -474,7 +476,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (observer_ && observer_->evaluated) observer_->evaluated(thisIteration, chiSquared, p, localData->IsErrorAnalysis());
   if (isFit) {
     // New multithreading with object pools
-    ReturnPooledCNuc(localCompound);
+    ReturnPooledState(std::move(pooled));
     ReturnPooledData(working);
   }
 
@@ -499,22 +501,23 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   // every snapshot -- see output_data_ in AZURECalc.h.  The lock also keeps two
   // threads from writing the snapshot files at the same time.
   std::lock_guard<std::mutex> outputLock(output_mutex_);
-  if (!output_compound_) output_compound_.reset(compound()->Clone());
+  if (!states_.output) states_.output = std::make_unique<LevelState>(state_);
   if (!output_data_) output_data_.reset(data()->Clone());
-  CNuc *lc = output_compound_.get();
+  const CNuc *lc = compound();
+  LevelState &ls = *states_.output;
   WorkingCopy *ld = output_data_.get();
   azure2::Results &results = output_results_;
 
   try {
-    lc->FillCompoundFromParams(p);
+    lc->FillCompoundFromParams(p, ls);
     ld->FillNormsFromParams(p);
-    ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &configure());
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+    ld->FillEnergyShiftsFromParams(p, results, lc, &ls, &inputs_, &configure());
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), ls);
 
-    azure2::EvaluateModel(*ld, lc, lc->State(), configure(), results, azure2::LeafValues::Calculate);
+    azure2::EvaluateModel(*ld, lc, ls, configure(), results, azure2::LeafValues::Calculate);
 
     AZUREParams params;
-    lc->FillMnParams(params, &configure());
+    lc->FillMnParams(params, ls, inputs_, &configure());
     ld->FillMnParams(params);
     // FillMnParams reads the levels' input values (GetE/GetGamma), not the
     // point being evaluated; copy p in so param.fit matches this snapshot.
@@ -525,18 +528,18 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ld->SyncNormGroupParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), results, true);
-    WriteParametersOut(*lc, lc->State(), lc->TransformOut(configure()), configure());
+    WriteParametersOut(*lc, ls, lc->TransformOut(configure(), ls, inputs_), configure());
   } catch (...) {
     // An intermediate snapshot is a convenience, never a reason to abort a fit.
     // A failure may leave the copies half-filled: drop them so the next
     // snapshot starts from fresh clones.
-    output_compound_.reset();
+    states_.output.reset();
     output_data_.reset();
     output_results_.slot.clear();
   }
 }
 
-bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
+bool AZURECalc::PrecalculatePoints(const LevelState &ls, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                    bool thmOnly) const {
   // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
   std::vector<const Segment *> segments;
@@ -545,7 +548,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &r
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
     segments.push_back(seg);
   }
-  return ld->CalculatePointsInParallel(segments, lc, lc->State(), config, results) >= 0;
+  return ld->CalculatePointsInParallel(segments, compound(), ls, config, results) >= 0;
 }
 
 /*!
@@ -555,28 +558,29 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &r
  * cost that scales with the THM points alone.  The nuisance, Park and abundance
  * penalties are left out there: Gradient() adds them analytically.
  */
-double AZURECalc::Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
+double AZURECalc::Chi2On(LevelState &ls, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
                          bool thmOnly) const {
-  return Chi2OnWith(configure(), lc, ld, results, p, segChis, thmOnly);
+  return Chi2OnWith(configure(), ls, ld, results, p, segChis, thmOnly);
 }
 
-double AZURECalc::Chi2OnWith(const Config &config, CNuc *lc, WorkingCopy *ld, azure2::Results &results,
+double AZURECalc::Chi2OnWith(const Config &config, LevelState &ls, WorkingCopy *ld, azure2::Results &results,
                              const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
-  lc->FillCompoundFromParams(p);
+  const CNuc *lc = compound();
+  lc->FillCompoundFromParams(p, ls);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &config);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &ls, &inputs_, &config);
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
-  if (config.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(config, CNuc::ShiftOrders::kFirstDerivativesOnly);
-  const bool pre = PrecalculatePoints(lc, ld, results, config, thmOnly);
+  if (config.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(config, ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  const bool pre = PrecalculatePoints(ls, ld, results, config, thmOnly);
 
   for (int i = 1; i <= ld->Data().NumSegments(); i++)
     if (!thmOnly || ld->Data().GetSegment(i)->IsTHM())
-      azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, lc->State(), config, results,
+      azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, ls, config, results,
                                    pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
   // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
-  ObjectiveContext context{lc, lc->MutableState(), lc->Inputs(), ld, results, p, config};
+  ObjectiveContext context{lc, ls, inputs_, ld, results, p, config};
   context.segmentChi2 = segChis;
   context.thmOnly = thmOnly;
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
@@ -588,24 +592,25 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // Pooled working copies keep their applied energy shifts and mapping between
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
   // mapping each time.
-  CNuc *lc = GetPooledCNuc();
+  const CNuc *lc = compound();
+  std::unique_ptr<LevelState> pooled = GetPooledState();
+  LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
   std::vector<double> segPooled;
   const bool poolCheck = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kPoolCheck);
-  const double chi = Chi2On(lc, working->data.get(), working->results, p, poolCheck ? &segPooled : nullptr, thmOnly);
-  ReturnPooledCNuc(lc);
+  const double chi = Chi2On(ls, working->data.get(), working->results, p, poolCheck ? &segPooled : nullptr, thmOnly);
+  ReturnPooledState(std::move(pooled));
   ReturnPooledData(working);
   if (poolCheck) {
     if (++configure().diagnostics->poolChecks <= 5) {
-      CNuc *fc = compound()->Clone();
+      LevelState fresh(state_);
       WorkingCopy *fd = data()->Clone();
       std::vector<double> segFresh;
       // The reference: the per-point (serial) path on a fresh copy, as AZURE_SERIAL_CHI2 runs it.
       Config serial(configure());
       serial.environment.serialPointPass = true;
       azure2::Results freshResults;
-      const double chiFresh = Chi2OnWith(serial, fc, fd, freshResults, p, &segFresh, thmOnly);
-      delete fc;
+      const double chiFresh = Chi2OnWith(serial, fresh, fd, freshResults, p, &segFresh, thmOnly);
       delete fd;
       std::cerr << "[pool-check] pooled+parallel " << chi << " fresh+serial " << chiFresh << std::endl;
       std::vector<std::pair<double, int>> d;
@@ -650,7 +655,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       adjoint.jacobianPathGradient = &grad;
       const std::vector<double> ga = GradientBy(p, adjoint);
       AZUREParams fpc;
-      compound()->FillMnParams(fpc, &configure());
+      compound()->FillMnParams(fpc, state_, inputs_, &configure());
       data()->FillMnParams(fpc);
       const int nMnc = fpc.GetMinuitParams().Params().size();
       double worst = 0.0; int worstIdx = -1, nFree = 0;
@@ -677,25 +682,27 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   // --- Analytic energy / reduced-width block via the shared adjoint engine. ---
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  CNuc *lc = GetPooledCNuc();
+  const CNuc *lc = compound();
+  std::unique_ptr<LevelState> pooled = GetPooledState();
+  LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
   WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
-  lc->FillCompoundFromParams(p);
+  lc->FillCompoundFromParams(p, ls);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &configure());
+  ld->FillEnergyShiftsFromParams(p, results, lc, &ls, &inputs_, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (brune) {
-    lc->CalcShiftFunctions(configure());
-    shiftDeriv = BuildShiftDerivTable(lc, lc->State(), configure());
+    lc->CalcShiftFunctions(configure(), ls);
+    shiftDeriv = BuildShiftDerivTable(lc, ls, configure());
     sdp = &shiftDeriv;
   }
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
-  accum.Init(lc, lc->State());
+  accum.Init(lc, ls);
 
   // chi^2 = sum (fit - data*n)^2 / (err*n)^2 + penalties.  The data-term model
   // cotangent is d(chi2)/d(model) = 2 r / err^2.  The same per-point model also
@@ -705,7 +712,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   std::vector<double> normData(ld->Data().NumSegments() + 1, 0.0);
   // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (err n J), which
   // needs every residual of the group first (one forward pass of those points).
-  if (ld->Data().HasCovariance()) ld->PrepareCovarianceSeeds(lc, lc->State(), configure(), results);
+  if (ld->Data().HasCovariance()) ld->PrepareCovarianceSeeds(lc, ls, configure(), results);
   FitBarFn fitBarFn = [&](const Segment *seg, int i, int pid, double model) -> double {
     Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
@@ -741,8 +748,8 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   };
 
   // THM data in the same pass where it can take them (ThmCotangents.h): hoes is their adjoint's context, else null.
-  const std::unique_ptr<ThmAdjointContext> hoes = azure2::ThmGradientContext(lc, lc->State(), *ld, configure(), sdp);
-  bool eg = AccumulateEGammaGradient(lc, lc->State(), ld, results, configure(), pmap, sdp, fitBarFn, accum, hoes.get());
+  const std::unique_ptr<ThmAdjointContext> hoes = azure2::ThmGradientContext(lc, ls, *ld, configure(), sdp);
+  bool eg = AccumulateEGammaGradient(lc, ls, ld, results, configure(), pmap, sdp, fitBarFn, accum, hoes.get());
   const auto tg1 = std::chrono::steady_clock::now();
   if (!eg && azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
@@ -751,10 +758,10 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
               << std::endl;
   }
   // The model data (T9); where their gradient is not available every parameter falls back to finite differences.
-  if (eg && !Objective::Engine().ModelDataGradient(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results, p, configure()}, pmap, sdp, accum))
+  if (eg && !Objective::Engine().ModelDataGradient(ObjectiveContext{lc, ls, inputs_, ld, results, p, configure()}, pmap, sdp, accum))
     eg = false;
   if (eg) {
-    AddParkPenaltyGradient(lc, lc->State(), configure(), accum); // Park J > 0 wall
+    AddParkPenaltyGradient(lc, ls, configure(), accum); // Park J > 0 wall
     AddAbundancePenaltyGradient(*ld, configure(), accum);  // abundance priors, sum-to-one
     accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
@@ -806,7 +813,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   bool thmAnalytic = eg && hoes;
   if (eg && haveTHM && !hoes && !ThmFiniteDifferencesRequested(configure())) {
     ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
-    std::vector<THMRows> thm = ComputeTHMRows(lc, lc->MutableState(), ld, results, configure(), p, tmap);
+    std::vector<THMRows> thm = ComputeTHMRows(lc, ls, inputs_, ld, results, configure(), p, tmap);
     const int nCols = tmap.NumPacked();
     for (const THMRows &tr : thm)
       for (int col = 0; col < nCols; col++) {
@@ -889,12 +896,12 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
                                   ? azure2::InsideShiftStep(*ld, target.segs, x0, h, move) : 0.0;
           step > 0.0) {
         const double d0 = target.Get(ld);
-        const std::vector<double> held = azure2::HeldNorms(*ld, target.segs, lc, lc->State(), configure(), results);
+        const std::vector<double> held = azure2::HeldNorms(*ld, target.segs, lc, ls, configure(), results);
         auto groupChi = [&](double v) {
           move(v);  // every segment the parameter moves is moved before any is calculated
           double c = 0.0;
           for (std::size_t k = 0; k < target.segs.size(); k++)
-            c += azure2::SegmentLocalChi2(*ld->Data().GetSegment(target.segs[k]), lc, lc->State(), configure(), *ld, results, held[k]);
+            c += azure2::SegmentLocalChi2(*ld->Data().GetSegment(target.segs[k]), lc, ls, configure(), *ld, results, held[k]);
           return c;
         };
         double chiP = groupChi(x0 + step);
@@ -1062,7 +1069,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     }
   }
 
-  ReturnPooledCNuc(lc);
+  ReturnPooledState(std::move(pooled));
   ReturnPooledData(working);
 
   return grad;
@@ -1070,7 +1077,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
 
 std::vector<bool> AZURECalc::FixedMask() const {
   AZUREParams tp;
-  compound()->FillMnParams(tp, &configure());
+  compound()->FillMnParams(tp, state_, inputs_, &configure());
   data()->FillMnParams(tp);
   const int nMn = tp.GetMinuitParams().Params().size();
   if ((int)fixedMask_.size() == nMn) return fixedMask_;
@@ -1143,7 +1150,7 @@ bool AZURECalc::HasNuisanceParameters() const {
   // exists" is not the question; whether it declares any nuisance parameter is.
   if (!limitsManager_) return false;
   AZUREParams fp;
-  compound()->FillMnParams(fp, &configure());
+  compound()->FillMnParams(fp, state_, inputs_, &configure());
   data()->FillMnParams(fp);
   // Index the parameters exactly as CalculateNuisanceChiSquared and
   // AddNuisanceGradient do, and ignore the ones they skip: a nuisance flag on a
@@ -1180,19 +1187,21 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                                  vector_r &jac, std::vector<int> &packedToFull) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  CNuc *lc = GetPooledCNuc();
+  const CNuc *lc = compound();
+  std::unique_ptr<LevelState> pooled = GetPooledState();
+  LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
   WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, ls);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, lc, &lc->State(), &configure());
+  ld->FillEnergyShiftsFromParams(full, results, lc, &ls, &inputs_, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
-    lc->CalcShiftFunctions(configure());
-    shiftDeriv = BuildShiftDerivTable(lc, lc->State(), configure());
+    lc->CalcShiftFunctions(configure(), ls);
+    shiftDeriv = BuildShiftDerivTable(lc, ls, configure());
     sdp = &shiftDeriv;
   }
 
@@ -1202,7 +1211,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
   const auto tj0 = std::chrono::steady_clock::now();
-  bool ok = ComputeResidualJacobian(lc, lc->State(), ld, results, configure(), pmap, sdp, residuals, jac, nCols);
+  bool ok = ComputeResidualJacobian(lc, ls, ld, results, configure(), pmap, sdp, residuals, jac, nCols);
   const auto tj1 = std::chrono::steady_clock::now();
   int nShiftLocal = 0, nShiftFull = 0;
 
@@ -1212,7 +1221,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
   // data-insensitive and never move them.
   if (ok) {
-    const ShiftColumnCount cols = FillShiftColumns(lc, lc->State(), ld, results, configure(), pmap, fixed, full, nullptr,
+    const ShiftColumnCount cols = FillShiftColumns(lc, ls, inputs_, ld, results, configure(), pmap, fixed, full, nullptr,
                                                    residuals.size(), nCols, jac);
     nShiftLocal = cols.local;
     nShiftFull = cols.full;
@@ -1232,7 +1241,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   if (ok && ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, &jac, nCols);
 
   // The model data (T9): their rows after the data rows, with their Jacobian rows (no energy-shift column).
-  if (ok) ok = Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results, full, configure()}, pmap, sdp,
+  if (ok) ok = Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, ls, inputs_, ld, results, full, configure()}, pmap, sdp,
                                                        nCols, residuals, jac);
 
   // Prior parameter covariance: its n whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
@@ -1242,12 +1251,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                      &jac);
   // Park's J > 0 wall and the abundance sum-to-one term as rows (Objective.h AppendModelRows; objective.md D2, D7).
-  if (ok) AppendModelRows(lc, lc->State(), *ld, configure(), &pmap, nCols, residuals, &jac);
+  if (ok) AppendModelRows(lc, ls, *ld, configure(), &pmap, nCols, residuals, &jac);
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
-  ReturnPooledCNuc(lc);
+  ReturnPooledState(std::move(pooled));
   ReturnPooledData(working);
   return ok;
 }
@@ -1257,14 +1266,16 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // and residual r = (model/J - data*n)/(err*n) as ComputeResidualJacobian.
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
-  CNuc *lc = GetPooledCNuc();
+  const CNuc *lc = compound();
+  std::unique_ptr<LevelState> pooled = GetPooledState();
+  LevelState &ls = *pooled;
   WorkingData *working = GetPooledData();
   WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
-  lc->FillCompoundFromParams(full);
+  lc->FillCompoundFromParams(full, ls);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, lc, &lc->State(), &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), CNuc::ShiftOrders::kFirstDerivativesOnly);
+  ld->FillEnergyShiftsFromParams(full, results, lc, &ls, &inputs_, &configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), ls, CNuc::ShiftOrders::kFirstDerivativesOnly);
 
   residuals.clear();
   for (int i = 1; i <= ld->Data().NumSegments(); i++) {
@@ -1272,19 +1283,19 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     if (!segment) continue;
     const double norm = ld->State(*segment).norm;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      azure2::EvaluateModelPoint(*ld, *segment, pid, lc, lc->State(), configure(), results, azure2::LeafValues::Calculate);
+      azure2::EvaluateModelPoint(*ld, *segment, pid, lc, ls, configure(), results, azure2::LeafValues::Calculate);
       residuals.push_back(azure2::PointResidual(*ld, *segment, pid, results, norm).Pull());
     }
   }
   if (ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);
   // The model data (T9), as in ResidualJacobian.
-  Objective::Engine().ModelDataResiduals(ObjectiveContext{lc, lc->MutableState(), lc->Inputs(), ld, results, full, configure()}, residuals);
+  Objective::Engine().ModelDataResiduals(ObjectiveContext{lc, ls, inputs_, ld, results, full, configure()}, residuals);
   // Prior parameter covariance, as the last rows of ResidualJacobian.
   if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
     pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   // Park and abundance-sum rows, as the last rows of ResidualJacobian.
-  AppendModelRows(lc, lc->State(), *ld, configure(), nullptr, 0, residuals, nullptr);
-  ReturnPooledCNuc(lc);
+  AppendModelRows(lc, ls, *ld, configure(), nullptr, 0, residuals, nullptr);
+  ReturnPooledState(std::move(pooled));
   ReturnPooledData(working);
   return true;
 }
@@ -1334,20 +1345,10 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
   return nuisanceChiSquared;
 }
 
-/*!
- * Get a CNuc object from the pool, creating new if pool is empty
- */
-CNuc *AZURECalc::GetPooledCNuc() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-
-  if (!cnuc_pool_.empty()) {
-    auto obj = std::move(cnuc_pool_.top());
-    cnuc_pool_.pop();
-    return obj.release();
-  }
-
-  // None idle: one more evaluation runs at the same time as the others (a thread of a parallel gradient).
-  return compound_->Clone();
+std::unique_ptr<LevelState> AZURECalc::GetPooledState() const {
+  // None idle: one more evaluation runs at the same time as the others (a thread of a parallel gradient), on a copy of
+  // the caller's state as it is now.
+  return states_.idle.Take(state_);
 }
 
 /*!
@@ -1362,19 +1363,11 @@ WorkingData *AZURECalc::GetPooledData() const {
     return obj.release();
   }
 
-  // None idle: as GetPooledCNuc.
+  // None idle: as GetPooledState.
   return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
 }
 
-/*!
- * Return a CNuc object to the pool for reuse
- */
-void AZURECalc::ReturnPooledCNuc(CNuc *obj) const {
-  if (!obj) return;
-
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  cnuc_pool_.push(std::unique_ptr<CNuc>(obj));
-}
+void AZURECalc::ReturnPooledState(std::unique_ptr<LevelState> state) const { states_.idle.Give(std::move(state)); }
 
 /*!
  * Return a working copy and its buffer to the pool for reuse

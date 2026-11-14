@@ -63,14 +63,14 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma) {
   return std::exp(2.0 * zeta * angle);
 }
 
-double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, const Config &configure) {
+double ThmLevelWidth(const CNuc *compound, const LevelState &state, int j, int la, const Config &configure) {
   const JGroup *jgroup = compound->GetJGroup(j);
   std::vector<double> gamma(jgroup->NumChannels());
   for (int ch = 1; ch <= jgroup->NumChannels(); ch++) gamma[ch - 1] = state.Gamma(j, la, ch);
-  return ThmLevelWidth(compound, state, j, la, state.E(j, la), gamma, configure);
+  return ThmLevelWidth(compound, j, la, state.E(j, la), gamma, configure);
 }
 
-double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, double energy, const std::vector<double> &gammas,
+double ThmLevelWidth(const CNuc *compound, int j, int la, double energy, const std::vector<double> &gammas,
                      const Config &configure) {
   const JGroup *jgroup = compound->GetJGroup(j);
   const ALevel *level = jgroup->GetLevel(la);
@@ -97,10 +97,12 @@ double ThmLevelWidth(CNuc *compound, const LevelState &state, int j, int la, dou
       if (!channelFunc.IsClosed(localEnergy))
         particle += 2.0 * gamma * gamma * channelFunc.Penetrability(channel->GetL(), twoJ, localEnergy);
     } else if (type == 'M' || type == 'E') {
-      // A ground-state transition parametrizes a moment, not a width.  Told
-      // by the level's energy as read, as CNuc::TransformOut does, so that a
-      // fit moving the level does not change what its gamma means.
-      if (std::fabs(state.InputEnergy(j, la) - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
+      // A ground-state transition parametrizes a moment, not a width.  Whether
+      // the level is the pair's final state is a fact of the set-up: told by
+      // its energy in the file (ALevel::FileE), so that neither a fit, a
+      // transformation nor a sampled observed energy moving the level
+      // changes what its gamma means.
+      if (std::fabs(level->FileE() - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
           jgroup->GetPi() == pair->GetPi(2))
         continue;
       double pene = rmc ? 1.0 : std::pow(std::fabs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);

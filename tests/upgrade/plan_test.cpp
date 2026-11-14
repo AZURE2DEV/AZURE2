@@ -134,17 +134,19 @@ void RunProject(const std::string &path) {
   Config cfg(sink);
   cfg.configfile = file;
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
   try {
-    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
+    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
       notSetUp++;
       std::printf("  --    %s: does not set up\n", path.c_str());
       return;
     }
     RequestDataEntrances(compound, cfg);
-    compound.Initialize(cfg);
-    compound.FillMnParams(params, &cfg);
+    compound.Initialize(cfg, state, inputs);
+    compound.FillMnParams(params, state, inputs, &cfg);
     data.FillMnParams(params);
     if (data.Initialize(&compound, cfg) == -1) {
       notSetUp++;

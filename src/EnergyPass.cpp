@@ -44,7 +44,7 @@ bool StartsTMatrix(Site *const *units, int before, int k, const int *tGroups) {
 
 }  // namespace
 
-void SolveAtOneEnergy(CNuc *cnuc, const LevelState &state, const std::vector<double> &thmCoherentValues, const Config &configure,
+void SolveAtOneEnergy(const CNuc *cnuc, const LevelState &state, const std::vector<double> &thmCoherentValues, const Config &configure,
                       Results &results, Site *const *units, int n, const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
@@ -120,7 +120,7 @@ std::string Describe(const Site &u, const EnergyTask &task) {
 
 }  // namespace
 
-long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const LevelState &state, const Config &configure, const Results &results,
+long CheckEnergyTasks(WorkingCopy &data, const CNuc *cnuc, const LevelState &state, const Config &configure, const Results &results,
                       const EnergyTaskList &tasks) {
   Results scratch = results;  // the check writes here, never into the evaluation's values
   std::unique_ptr<AMatrixFunc> ownA;
@@ -227,7 +227,7 @@ const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const
  * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
  */
 
-int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, const CNuc *theCNuc,
                                            const LevelState &state, const Config &configure,
                                            azure2::Results &results) {
 #ifdef _OPENMP

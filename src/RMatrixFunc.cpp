@@ -46,7 +46,7 @@ void PoleLevelForm(const matrix_c &M, const std::vector<std::vector<double>> &g,
  * The RMatrixFunc object is created with reference to a CNuc object.
  */
 
-RMatrixFunc::RMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure) :
+RMatrixFunc::RMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure) :
   compound_(compound),
   state_(state),
   configure_(configure) {}

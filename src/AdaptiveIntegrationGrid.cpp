@@ -48,7 +48,7 @@ AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const R
 /*!
  * \brief The quantized anchors of every level of the compound.
  */
-std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound, const LevelInputs &inputs,
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(const CNuc *compound, const LevelInputs &inputs,
                                                                                      double frameShift) {
   std::vector<ResonanceInfo> anchors = LevelResonances(compound, inputs);
   for (ResonanceInfo &r : anchors) {
@@ -238,7 +238,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
  * reaction-rate breakpoints).
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound, const LevelInputs &inputs) {
+AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, const CNuc *compound, const LevelInputs &inputs) {
   if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
   std::vector<ResonanceInfo> resonances;
   for (const ResonanceInfo &r : LevelResonances(compound, inputs)) {
@@ -257,7 +257,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
  * the separation energy of the entrance channel.
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::LevelResonances(CNuc *compound, const LevelInputs &inputs) {
+AdaptiveIntegrationGrid::LevelResonances(const CNuc *compound, const LevelInputs &inputs) {
   std::vector<ResonanceInfo> resonances;
 
   if (!compound) return resonances;

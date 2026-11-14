@@ -19,29 +19,23 @@ namespace {
 //  dependent terms calculated) the routine is slow.  This should be a tradeoff
 //  for good accuracy.
 void RunReactionRate(ProgramRun &run) {
-  CNuc *compound = run.compound;
   const Config &configure = run.configure;
   configure.outStream << "Performing reaction rate calculation..." << std::endl;
-  ReactionRate reactionRate(compound, run.params.GetMinuitParams().Params(), configure,
+  ReactionRate reactionRate(run.compound, run.state, run.inputs, run.params.GetMinuitParams().Params(), configure,
                             configure.rateParams.entrancePair, configure.rateParams.exitPair);
-  // Warn once if a level has a radiative width comparable to its particle width,
-  // where the R-Matrix treatment of capture breaks down.
-  if (const std::optional<ObservedLevelTable> observed =
-          compound->ObservedWidthsAt(configure, run.params.GetMinuitParams().Params()))
-    WarnLargeRadiativeWidths(*compound, compound->Inputs(), *observed, configure);
-  if (configure.paramMask & Config::USE_BRUNE_FORMALISM)
-    compound->CalcShiftFunctions(configure);
   if (configure.rateParams.useFile)
     reactionRate.CalculateFileRates();
   else
     reactionRate.CalculateRates();
   reactionRate.WriteRates();
+  // The run's parameters are the rate's: the final transformation (parameters.out) reads them.
+  run.state = reactionRate.State();
 }
 
 }  // namespace
 
 int AZUREMain::operator()() {
-  ProgramRun run(configure(), compound_, data_);
+  ProgramRun run(configure(), compound_, data_);  // the run holds the levels, the compound the set-up
   if (SetUpRun(run) != 0) return -1;
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     if (SetUpObjective(run) != 0) return -1;
@@ -61,14 +55,14 @@ int AZUREMain::operator()() {
   configure().outStream << "Performing final parameter transformation..." << std::endl;
   ObservedLevelTable observed;
   try {
-    observed = compound()->TransformOut(configure());
+    observed = compound()->TransformOut(configure(), run.state, run.inputs);
   } catch (GSLException e) {
     configure().outStream << e.what() << std::endl;
     configure().outStream << "Problem with output transformation.  Aborting."
                           << std::endl;
     return -1;
   }
-  WriteParametersOut(*compound(), compound()->State(), observed, configure());
+  WriteParametersOut(*compound(), run.state, observed, configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

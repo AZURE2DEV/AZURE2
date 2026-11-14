@@ -63,15 +63,17 @@ int main(int argc, char **argv) {
   Config cfg(sink);
   cfg.configfile = argv[1];
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) == -1) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
   RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg);
-  compound.FillMnParams(params, &cfg);
+  compound.Initialize(cfg, state, inputs);
+  compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
     check("T2 initializes", false, sink.str().substr(0, 400));
@@ -83,14 +85,14 @@ int main(int argc, char **argv) {
   for (unsigned int i = 0; i < p.size(); i++) fixed[i] = mp.Parameter(i).IsFixed();
 
   azure2::Results results;
-  compound.FillCompoundFromParams(p);
+  compound.FillCompoundFromParams(p, state);
   data.FillNormsFromParams(p);
-  data.FillEnergyShiftsFromParams(p, results, &compound, &compound.State(), &cfg);
+  data.FillEnergyShiftsFromParams(p, results, &compound, &state, &inputs, &cfg);
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) {
-    compound.CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
-    shiftDeriv = BuildShiftDerivTable(&compound, compound.State(), cfg);
+    compound.CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+    shiftDeriv = BuildShiftDerivTable(&compound, state, cfg);
     sdp = &shiftDeriv;
   }
   const ParamIndexMap pmap = BuildParamIndexMap(&compound, &data, fixed);
@@ -99,9 +101,9 @@ int main(int argc, char **argv) {
   auto scalar = [&](int threads) {
     SetThreads(threads);
     GradAccum accum;
-    accum.Init(&compound, compound.State());
+    accum.Init(&compound, state);
     FitBarFn fitBar = [](const Segment *, int, int, double model) { return model; };  // d(sum m^2 / 2)/dm
-    const bool ok = AccumulateEGammaGradient(&compound, compound.State(), &data, results, cfg, pmap, sdp, fitBar, accum);
+    const bool ok = AccumulateEGammaGradient(&compound, state, &data, results, cfg, pmap, sdp, fitBar, accum);
     vector_r g(pmap.NumFull(), 0.0);
     if (ok) accum.Scatter(pmap, g);
     return std::make_pair(ok, g);
@@ -110,13 +112,13 @@ int main(int argc, char **argv) {
     SetThreads(threads);
     vector_r jac;
     int nCols = 0;
-    const bool ok = ComputeResidualJacobian(&compound, compound.State(), &data, results, cfg, map, sdp, r, jac, nCols, true);
+    const bool ok = ComputeResidualJacobian(&compound, state, &data, results, cfg, map, sdp, r, jac, nCols, true);
     return std::make_pair(ok, jac);
   };
   auto models = [&](int threads) {
     SetThreads(threads);
     std::map<Unit *, vector_r> rows;
-    const bool ok = ComputeModelGradients(&compound, compound.State(), &data, results, cfg, pmap, sdp, rows, true);
+    const bool ok = ComputeModelGradients(&compound, state, &data, results, cfg, pmap, sdp, rows, true);
     vector_r flat;
     for (int s = 1; s <= data.Data().NumSegments(); s++)
       for (int i = 1; i <= data.Data().GetSegment(s)->NumPoints(); i++) {

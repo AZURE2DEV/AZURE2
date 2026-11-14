@@ -43,6 +43,8 @@ struct Loaded {
   std::unique_ptr<std::ostringstream> sink;
   std::unique_ptr<Config> cfg;
   std::unique_ptr<CNuc> compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
   bool ok = false;
 };
@@ -65,9 +67,9 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.cfg->fileCheckMask = l.cfg->screenCheckMask = 0;
   l.cfg->ResolveMatrixRoute();
   InitializeECAmplitudeCache(*l.cfg);
-  if (l.compound->Fill(*l.cfg) == -1) return l;
-  const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get())
-                                                                       : l.data->MakePoints(*l.cfg, l.compound.get());
+  if (l.compound->Fill(*l.cfg, l.state, l.inputs) == -1) return l;
+  const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get(), l.inputs)
+                                                                       : l.data->MakePoints(*l.cfg, l.compound.get(), l.inputs);
   if (filled != 0) return l;
   CNuc &c = *l.compound;
   if (l.cfg->paramMask & Config::CALCULATE_WITH_DATA)
@@ -84,7 +86,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
     for (const auto &r : all) c.RequestCaptureAy(r.first, r.second);
   }
   try {
-    c.Initialize(*l.cfg);
+    c.Initialize(*l.cfg, l.state, l.inputs);
   } catch (const std::exception &) {
     return l;
   }
@@ -135,17 +137,17 @@ std::pair<int, int> CaptureAyTerms(Loaded &l) {
 // Evaluate every point once at the start parameters; the capture-A_y points' values.
 std::vector<double> CaptureAyValues(Loaded &l) {
   AZUREParams params;
-  l.compound->FillMnParams(params, l.cfg.get());
+  l.compound->FillMnParams(params, l.state, l.inputs, l.cfg.get());
   l.data->FillMnParams(params);
   if (l.data->Initialize(l.compound.get(), *l.cfg) == -1) return {};
   azure2::Results results;
   l.data->SizeResults(results);
   const vector_r p = params.GetMinuitParams().Params();
-  l.compound->FillCompoundFromParams(p);
+  l.compound->FillCompoundFromParams(p, l.state);
   l.data->FillNormsFromParams(p);
-  l.data->FillEnergyShiftsFromParams(p, results, l.compound.get(), &l.compound->State(), l.cfg.get());
-  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
-  azure2::EvaluateModel(*l.data, l.compound.get(), l.compound->State(), *l.cfg, results, azure2::LeafValues::Calculate);
+  l.data->FillEnergyShiftsFromParams(p, results, l.compound.get(), &l.state, &l.inputs, l.cfg.get());
+  if (l.cfg->paramMask & Config::USE_BRUNE_FORMALISM) l.compound->CalcShiftFunctions(*l.cfg, l.state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  azure2::EvaluateModel(*l.data, l.compound.get(), l.state, *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
   CNuc &c = *l.compound;
   for (int i = 1; i <= l.data->Data().NumSegments(); i++) {

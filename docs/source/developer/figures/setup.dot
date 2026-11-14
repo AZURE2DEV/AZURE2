@@ -8,7 +8,7 @@ digraph setup {
   n_azure2__experiment__BuiltProject [label=<<b>azure2::experiment::BuiltProject</b><br/><font point-size="12">what Schema::Build<br/>makes of the records</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_azure2__experiment__DatasetSpec [label=<<b>azure2::experiment::DatasetSpec</b><br/><font point-size="12">one data set as built:<br/>observable, pairs,<br/>nuisances</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read, scratch</font>>, shape=box, style="filled", fillcolor="white"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei: pairs<br/>and J groups (read-<br/>only after set-up),<br/>levels at the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei as set<br/>up: pairs, J groups,<br/>levels (read-only<br/>after set-up, not<br/>copied)</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_PPair [label=<<b>PPair</b><br/><font point-size="12">a particle pair:<br/>masses, spins, radius,<br/>key</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_JGroup [label=<<b>JGroup</b><br/><font point-size="12">one J^pi group: its<br/>channels and levels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_AChannel [label=<<b>AChannel</b><br/><font point-size="12">a channel (pair, l, s)<br/>with its boundary<br/>value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
@@ -35,8 +35,8 @@ digraph setup {
   n_CNuc -> n_JGroup [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_JGroup -> n_AChannel [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_JGroup -> n_ALevel [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_CNuc -> n_LevelState [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_CNuc -> n_LevelInputs [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_CNuc -> n_LevelState [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_CNuc -> n_LevelInputs [style=dotted, penwidth=1.6, arrowhead=empty];
   n_CNuc -> n_LevelParameterLayout [style=dashed, arrowhead=vee];
   n_CNuc -> n_ObservedLevelTable [style=dotted, penwidth=1.6, arrowhead=empty];
   n_CNuc -> n_CNucSystem [style=dashed, arrowhead=vee];

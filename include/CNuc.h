@@ -40,6 +40,11 @@ class LevelRow;
  * in AZURE is the top level container object for all structure and reaction objects.  Specifically,
  * the CNuc object is the container object for vectors of PPair and JGroup objects, within which all other
  * nuclear data objects are contained.
+ *
+ * It holds the set-up only: the structure, the pathways and the set-up records, written by Fill, AddHardSphereGroups,
+ * ParseExternalCapture and Initialize and read-only after them.  The values of an evaluation are the caller's: a
+ * LevelState (and the LevelInputs of a transformation) per owner, passed to every fill, transformation and reader.
+ * One object is shared, constant, by every evaluation, thread and walker of a run or a session; it is not copied.
  */
 
 /// One compound nucleus of a project: the (Z, A) its pairs form.
@@ -50,6 +55,9 @@ struct CompoundNucleus {
 
 class CNuc {
  public:
+  CNuc() = default;
+  CNuc(const CNuc &) = delete;
+  CNuc &operator=(const CNuc &) = delete;
   // -- structure ------------------------------------------------------------
   /// Number of compound nuclei the pairs form.  One for every project written
   /// before several nuclei could share a file.
@@ -68,7 +76,7 @@ class CNuc {
   int NumPairs() const;
   int NumJGroups() const;
   /// 1-based position of the \f$J^\pi\f$ group, or 0 if absent.
-  int IsJGroup(JGroup);
+  int IsJGroup(JGroup) const;
   /// Convert an input-file pair key to its 1-based position in the PPair vector.
   int GetPairNumFromKey(int) const;
   /// Pair \p i, 1-based.  The structure (pairs, J^pi groups, channels) is read-only after Fill and Initialize: only
@@ -86,14 +94,8 @@ class CNuc {
   std::string RatePairsProblem(int entranceKey, int exitKey) const;
   /// \f$J^\pi\f$ group \p i, 1-based (read-only, as GetPair).
   const JGroup *GetJGroup(int) const;
-  /// The levels' input values in the engine's basis (LevelInputs.h): made by Fill from the <levels> rows and the
-  /// gamma_decay records, rewritten by TransformIn and FillCompoundFromParamsPhysical.
-  const LevelInputs &Inputs() const { return levelInputs_; }
-  /// The levels at the current parameter vector: fit energies and amplitudes, shift functions, Park's J, the
-  /// external-capture amplitudes and N_f^1/2 (LevelState.h).  Written by this class's fills only.
-  const LevelState &State() const { return levelState_; }
-  /// Where each level's energy and amplitudes sit in the parameter vector (LevelParameterLayout.h); built by Fill,
-  /// shared by the copies.  Every walk of the level block reads it.
+  /// Where each level's energy and amplitudes sit in the parameter vector (LevelParameterLayout.h); built by Fill.
+  /// Every walk of the level block reads it.
   const LevelParameterLayout &ParameterLayout() const { return *parameterLayout_; }
   /// Take the fit energies and amplitudes of `from` into `to` (states of this structure), nothing derived from them
   /// (WorkingCopy::ReplaceSubPointGrids' state).
@@ -102,8 +104,11 @@ class CNuc {
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
   /// Returns -1 if a file cannot be read. \p radii overrides channel radii, pair number (1-based) -> fm, as the
-  /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.
-  int Fill(const Config &, const std::map<int, double> &radii = std::map<int, double>());
+  /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.  `state` and `inputs`
+  /// are the caller's (the run's, the session's): shaped for the levels, the inputs made from the <levels> rows and
+  /// the gamma_decay records, the state given the zero-width flags.  This object keeps neither.
+  int Fill(const Config &, LevelState &state, LevelInputs &inputs,
+           const std::map<int, double> &radii = std::map<int, double>());
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
@@ -113,13 +118,13 @@ class CNuc {
   /// Boundary conditions, the physical-to-formal transformation, the reaction
   /// pathways and the angular-distribution coefficients -- everything derived
   /// that a calculation needs. Run after Fill, and again after anything that
-  /// changes the Coulomb functions.
-  void Initialize(const Config &);
+  /// changes the Coulomb functions.  The transformation writes the caller's `state` and `inputs` (those Fill made).
+  void Initialize(const Config &, LevelState &state, LevelInputs &inputs);
 
   // -- derived quantities ---------------------------------------------------
   /// Boundary condition per channel, evaluated at the energy of the group's
   /// first level.
-  void CalcBoundaryConditions(const Config &);
+  void CalcBoundaryConditions(const Config &, const LevelInputs &inputs);
   /// Build the pathway table (Pathways()); CNucPathways.cpp.
   void BuildPathways(const Config &);
   /// Which energy derivatives of the shift functions CalcShiftFunctions takes in Park's basis: a chi-squared alone
@@ -134,7 +139,7 @@ class CNuc {
   /// and Park's normalizations (gamma_Park = gamma_Brune sqrt J), in place.
   /// `from`/`to` are AZUREParams::Basis values; false if the conversion is
   /// not level-wise (either side standard) or a level has J <= 0.
-  bool ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &, int from, int to, const Config &);
+  bool ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &, int from, int to, const Config &) const;
   /// External reduced width amplitude for one channel.
 
   // -- parameter transformations --------------------------------------------
@@ -197,14 +202,14 @@ class CNuc {
 
   /// The physics/ System of the structure (CNucSystem.h, CNucSystemContent::Structure: R-matrix blocks, B_c = 0, no
   /// level values) and the same with every J-group and level (CNucSystemContent::AllGroups).  Built once, when Fill
-  /// has made the structure, and shared by every copy (Clone); the structure does not change after Fill but for B_c,
+  /// has made the structure; the structure does not change after Fill but for B_c,
   /// which neither holds.  Throws, as BuildSystemFromCNuc did, when the System cannot represent the structure, and
   /// std::logic_error before Fill.
   const CNucSystem &SystemStructure() const;
   const CNucSystem &SystemAllGroups() const;
   /// The handle of SystemStructure(), for a set-up object that keeps it (GammaDecaySet, the external-capture set-up).
   std::shared_ptr<const CNucSystem> SystemStructureHandle() const;
-  /// The reaction pathways of the run (PathwayTable.h), built by Initialize and shared by every copy (Clone).
+  /// The reaction pathways of the run (PathwayTable.h), built by Initialize.
   /// Throws std::logic_error before Initialize.
   const azure2::PathwayTable &Pathways() const;
   /// Ask Initialize to build the capture analyzing-power terms of (entrance pair, exit pair), both 1-based, in the
@@ -212,26 +217,6 @@ class CNuc {
   void RequestCaptureAy(int entrancePair, int exitPair);
   /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
   void RequestEntrance(int pair);
-
-  // -- the compound's own levels (State, Inputs), written by these doors of the default owner --------------------
-  LevelState &MutableState() { return levelState_; }
-  void FillCompoundFromParams(const vector_r &p) { FillCompoundFromParams(p, levelState_); }
-  void CalcShiftFunctions(const Config &configure, ShiftOrders orders = ShiftOrders::kWithSecondDerivatives) {
-    CalcShiftFunctions(configure, levelState_, orders);
-  }
-  bool TransformIn(const Config &configure) { return TransformIn(configure, levelState_, levelInputs_); }
-  void FillCompoundFromParamsPhysical(const vector_r &p) { FillCompoundFromParamsPhysical(p, levelState_, levelInputs_); }
-  ObservedLevelTable TransformOut(const Config &configure) { return TransformOut(configure, levelState_, levelInputs_); }
-  std::optional<ObservedLevelTable> ObservedWidthsAt(const Config &configure, const vector_r &p) {
-    return ObservedWidthsAt(configure, p, levelState_, levelInputs_);
-  }
-  void FillMnParams(AZUREParams &params, const Config *config = nullptr) const {
-    FillMnParams(params, levelState_, levelInputs_, config);
-  }
-
-  /// Deep copy. AZURECalc gives each thread its own, since a calculation
-  /// writes the fitted parameters into the object it runs on.
-  CNuc *Clone() const;
 
  private:
   /// The set-up's writable views of the structure (Fill, AddHardSphereGroups, ParseExternalCapture, Initialize).
@@ -243,14 +228,14 @@ class CNuc {
   void AddJGroup(JGroup);
   struct ECFinalBlocks;
   /// Formal basis with external capture: the blocks whose final states need their Brune amplitude (Initialize).
-  void SetUpECFinalBlocks(const Config &);
+  void SetUpECFinalBlocks(const Config &, const LevelInputs &inputs);
   /// Their final states' external-capture amplitudes and N_f^1/2 from the current fit values (FillCompoundFromParams).
   void ECFinalStatesFromFormal(LevelState &state) const;
   std::shared_ptr<const ECFinalBlocks> ecFinalBlocks_;
   struct CaptureMaskSetup;
   /// Formal basis with --ignore-externals: the (block, photon channel) pairs of channel capture (Initialize, after
   /// the pathways are sorted).
-  void SetUpFormalCaptureMasks(const Config &);
+  void SetUpFormalCaptureMasks(const Config &, LevelState &state);
   /// Their projectors from the current fit values (FillCompoundFromParams).
   void FormalCaptureMasksFromParams(LevelState &state) const;
   bool MaskedLevelCoupled(const LevelState &state, int j, int la) const;
@@ -279,13 +264,9 @@ class CNuc {
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;
-  /// Setup state, shared by the copies (Clone).
+  /// Set-up state.
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
-  /// The levels' input values (Inputs); made by Fill.
-  LevelInputs levelInputs_;
-  /// The levels at the current parameter vector (State); shaped by Fill.
-  LevelState levelState_;
   /// The level block of the parameter vector (ParameterLayout); built by Fill.
   std::shared_ptr<const LevelParameterLayout> parameterLayout_ = std::make_shared<LevelParameterLayout>();
 };

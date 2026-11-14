@@ -321,3 +321,59 @@ def _check_ranges(path, line, nbt, law, n):
                      "ENDF_COUNT")
 
 
+
+
+# ---------------------------------------------------------------------------------------------------- writing
+class RecordWriter:
+    """Writes the records of one section as rows of 66 columns of content (pp. 33-36); MAT, MF, MT and the sequence
+    number are added by the writer of the material.  Floats in the number form named (:data:`NUMBER_FORMS`),
+    integers right-adjusted in 11 columns (p. 31)."""
+
+    def __init__(self, number_form="widest"):
+        if number_form not in NUMBER_FORMS:
+            raise ValueError(f"number_form is one of {', '.join(NUMBER_FORMS)}, not {number_form!r}")
+        self.f = NUMBER_FORMS[number_form]
+        self.rows = []
+
+    @staticmethod
+    def _i(n):
+        return f"{int(n):11d}"
+
+    def cont(self, c1, c2, l1, l2, n1, n2):
+        """A CONT (or HEAD) record (pp. 33-34)."""
+        self.rows.append(self.f(c1) + self.f(c2) + "".join(self._i(v) for v in (l1, l2, n1, n2)))
+        return self
+
+    def text(self, t):
+        """A TEXT record (p. 33): 66 characters, longer text refused (never cut silently)."""
+        if len(t) > 66:
+            raise ValueError(f"a TEXT record holds 66 characters; {t!r} has {len(t)}")
+        self.rows.append(t.ljust(66))
+        return self
+
+    def list(self, c1, c2, l1, l2, n2, values):
+        """A LIST record (p. 34): NPL = len(values), six per line; the last line padded with blanks."""
+        self.cont(c1, c2, l1, l2, len(values), n2)
+        for k in range(0, len(values), 6):
+            self.rows.append("".join(self.f(v) for v in values[k:k + 6]).ljust(66))
+        return self
+
+    def _ranges(self, nbt, laws):
+        pairs = [v for ab in zip(nbt, laws) for v in ab]
+        for k in range(0, len(pairs), 6):
+            self.rows.append("".join(self._i(v) for v in pairs[k:k + 6]).ljust(66))
+
+    def tab1(self, c1, c2, l1, l2, nbt, laws, x, y):
+        """A TAB1 record (p. 35): the interpolation ranges (NBT, INT) and the pairs (x, y), three per line."""
+        self.cont(c1, c2, l1, l2, len(nbt), len(x))
+        self._ranges(nbt, laws)
+        xy = [v for ab in zip(x, y) for v in ab]
+        for k in range(0, len(xy), 6):
+            self.rows.append("".join(self.f(v) for v in xy[k:k + 6]).ljust(66))
+        return self
+
+    def tab2(self, c1, c2, l1, l2, nbt, laws, nz):
+        """A TAB2 record (p. 35): the interpolation ranges between the NZ records that follow."""
+        self.cont(c1, c2, l1, l2, len(nbt), nz)
+        self._ranges(nbt, laws)
+        return self

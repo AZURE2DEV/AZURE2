@@ -73,9 +73,9 @@ int MaxProjection(double j1, double j2, double jp1, double jp2);
 class AmplitudeMatrix {
  public:
   /// The matrix of the reaction from pair `aa` to pair `ir` at the c.m. angle `angle` (deg) of a reader.
-  AmplitudeMatrix(CNuc *compound, double angle, int aa, int ir);
+  AmplitudeMatrix(const CNuc *compound, double angle, int aa, int ir);
   /// The matrix of the reaction from pair `aa` to pair `ir` without an angle: for AddPathwayCoefficients alone.
-  AmplitudeMatrix(CNuc *compound, int aa, int ir);
+  AmplitudeMatrix(const CNuc *compound, int aa, int ir);
   /// An empty matrix of a reaction between pairs of these spins (j1 the projectile's), filled with SetAmplitude.
   AmplitudeMatrix(double j1, double j2, double jp1, double jp2);
 
@@ -157,7 +157,7 @@ class AmplitudeMatrix {
   //! elastic scattering of identical particles, 1 otherwise.
   double IdenticalFactor(int lp, double sp) const;
 
-  CNuc *compound_ = nullptr;
+  const CNuc *compound_ = nullptr;
   //! What At() hands out for a combination the matrix does not hold: written and discarded (zeroed at every such call).
   complex discarded_ = complex(0.0, 0.0);
   int aa_ = 0, ir_ = 0;

@@ -69,17 +69,19 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
 
 // One evaluation, as AZURECalc::Chi2On does it: the hand-over into `results`, then every point's model value
 // (Results::model).
-std::vector<double> Evaluate(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
-  lc->FillCompoundFromParams(p);
+std::vector<double> Evaluate(const CNuc *lc, LevelState &state, const LevelInputs &inputs, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
+  lc->FillCompoundFromParams(p, state);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, lc, &lc->State(), &cfg);
-  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, CNuc::ShiftOrders::kFirstDerivativesOnly);
-  azure2::EvaluateModel(*ld, lc, lc->State(), cfg, results, azure2::LeafValues::Calculate);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &state, &inputs, &cfg);
+  if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, state, CNuc::ShiftOrders::kFirstDerivativesOnly);
+  azure2::EvaluateModel(*ld, lc, state, cfg, results, azure2::LeafValues::Calculate);
   return results.model;
 }
 
 struct Copy {
-  std::unique_ptr<CNuc> compound;
+  const CNuc *compound = nullptr;  // shared, constant
+  LevelState state;                // the copy's own levels
+  LevelInputs inputs;
   std::unique_ptr<WorkingCopy> data;
   azure2::Results results;
   std::vector<double> models;
@@ -98,15 +100,17 @@ int main(int argc, char **argv) {
   Config cfg(sink);
   cfg.configfile = argv[1];
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1 || data.Fill(cfg, &compound, inputs) != 0) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
   RequestDataEntrances(compound, cfg);
-  compound.Initialize(cfg);
-  compound.FillMnParams(params, &cfg);
+  compound.Initialize(cfg, state, inputs);
+  compound.FillMnParams(params, state, inputs, &cfg);
   data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
     check("T2 initializes", false, sink.str().substr(0, 400));
@@ -124,25 +128,27 @@ int main(int argc, char **argv) {
   }
   check("p1 moves " + std::to_string(moved) + " level parameters", moved > 0);
 
-  auto copyOf = [](CNuc *c, WorkingCopy *d) {
+  auto copyOf = [](const CNuc *c, const LevelState &state, const LevelInputs &inputs, WorkingCopy *d) {
     Copy k;
-    k.compound.reset(c->Clone());
+    k.compound = c;
+    k.state = state;
+    k.inputs = inputs;
     k.data.reset(d->Clone());
     return k;
   };
   std::string why;
-  Copy refA = copyOf(&compound, &data), refB = copyOf(&compound, &data);
-  refA.models = Evaluate(refA.compound.get(), refA.data.get(), refA.results, p0, cfg);
-  refB.models = Evaluate(refB.compound.get(), refB.data.get(), refB.results, p1, cfg);
+  Copy refA = copyOf(&compound, state, inputs, &data), refB = copyOf(&compound, state, inputs, &data);
+  refA.models = Evaluate(refA.compound, refA.state, refA.inputs, refA.data.get(), refA.results, p0, cfg);
+  refB.models = Evaluate(refB.compound, refB.state, refB.inputs, refB.data.get(), refB.results, p1, cfg);
   std::printf("reference: %zu model values, buffers of %zu (p0) and %zu (p1) slots\n", refA.models.size(),
               refA.results.slot.size(), refB.results.slot.size());
   check("p0 and p1 give different model values", !SameBits(refA.models, refB.models, why));
 
   // 1. Y copied from X after X's evaluation, then evaluated at other parameters.
-  Copy x = copyOf(&compound, &data);
-  x.models = Evaluate(x.compound.get(), x.data.get(), x.results, p0, cfg);
-  Copy y = copyOf(x.compound.get(), x.data.get());
-  y.models = Evaluate(y.compound.get(), y.data.get(), y.results, p1, cfg);
+  Copy x = copyOf(&compound, state, inputs, &data);
+  x.models = Evaluate(x.compound, x.state, x.inputs, x.data.get(), x.results, p0, cfg);
+  Copy y = copyOf(x.compound, x.state, x.inputs, x.data.get());
+  y.models = Evaluate(y.compound, y.state, y.inputs, y.data.get(), y.results, p1, cfg);
   check("1. X at p0 = reference at p0 (buffer)", SameBits(x.results.slot, refA.results.slot, why), why);
   check("1. Y, copied from X, at p1 = reference at p1 (buffer)", SameBits(y.results.slot, refB.results.slot, why), why);
   check("1. X's buffer untouched by Y's evaluation (= reference at p0)",
@@ -155,9 +161,9 @@ int main(int argc, char **argv) {
 #pragma omp parallel sections
   {
 #pragma omp section
-    x.models = Evaluate(x.compound.get(), x.data.get(), x.results, p1, cfg);
+    x.models = Evaluate(x.compound, x.state, x.inputs, x.data.get(), x.results, p1, cfg);
 #pragma omp section
-    y.models = Evaluate(y.compound.get(), y.data.get(), y.results, p0, cfg);
+    y.models = Evaluate(y.compound, y.state, y.inputs, y.data.get(), y.results, p0, cfg);
   }
   check("2. X at p1, concurrently with Y = reference at p1 (buffer)", SameBits(x.results.slot, refB.results.slot, why),
         why);
@@ -167,7 +173,7 @@ int main(int argc, char **argv) {
         SameBits(x.models, refB.models, why) && SameBits(y.models, refA.models, why), why);
 
   // 3. X back at p0, into the buffer it used at p1.
-  x.models = Evaluate(x.compound.get(), x.data.get(), x.results, p0, cfg);
+  x.models = Evaluate(x.compound, x.state, x.inputs, x.data.get(), x.results, p0, cfg);
   check("3. X at p0 again, in its buffer of p1 = reference at p0 (buffer)",
         SameBits(x.results.slot, refA.results.slot, why), why);
   check("4. model values of X at p0 = reference", SameBits(x.models, refA.models, why), why);

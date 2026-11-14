@@ -87,10 +87,33 @@ What the server keeps
   (``{"keys": {...}, "datasets": [names that join]}``) and ``DELETE`` (refused while a data set names it); ``GET
   /api/thm/keys`` describes the keys as record kinds of a schema (value type, choices, doc): the engine's table of
   the keys its parser reads, ``pyazr.kinds()["thm"]``.
+- **Files and references**: ``GET /api/files`` lists the project directory's files (``path`` relative to the
+  project, as a record's field names it; ``size``; ``kind``: ``project``, ``table`` with ``columns``, ``text``,
+  ``binary``; not ``output/``, ``checks/`` or hidden files, never outside the root); ``GET
+  /api/files/<path>?rows=`` gives a file's first rows.  ``GET /api/project/records/<name>/preview?field=&value=`` is
+  what the engine makes of the record with one field set (a data file, say) on a copy of the project: its
+  description (``rows_read``, ``rows_kept``, ``kept_E_lab_MeV``, ...) or the refusal; the project is not changed.
+  ``GET /api/project/references`` lists every reference of a record to another (``record``, ``field``, ``name``,
+  ``epoch``; ``Project.references``).  ``GET /api/kinds`` carries the words of a pair's fields (``pairs``:
+  ``fields``, ``partner_fields``, ``arguments``, ``kinds``) and of a data set's description (``description``).
 - Routes that need a pyazr call that does not exist yet (the level matrix, ...) answer 501 naming that call.
 - ``GET /api/covariance/{name}``, ``POST /api/covariance/build``, ``POST /api/covariance/write`` serve the covariance
   builder (``pyazr.covariance``; the write is one history entry with its file); ``GET /api/rate/grids`` the rate's
   temperature grids; the rate itself is the job ``rate``/``engine`` (``pyazr.rate``).
+- **ENDF-6 files** (the ENDF tab, ``pyazr.endf``): ``GET /api/endf/files`` lists the project folder's ENDF-6 files;
+  ``POST /api/endf/summary`` (``{"path": ...}``) is ``read(path).summary()``; ``POST /api/endf/curves``
+  (``{"files": [...]}``) gives per data set the files' values at its points at the working x
+  (``Material.curves(data, session=s)``) beside the data times its normalization and the model, with the ratios
+  ``ratio_to_data`` (and its error from the data's) and ``ratio_to_model``, or the refusal's ``what``, ``allowed``,
+  ``fix``; ``GET /api/endf/checkers`` lists the codes found and every code pyazr knows with what it does to
+  numbers. The check is the job ``endf_check``/``codes`` (``pyazr.endf.check``; settings ``path``, ``codes``,
+  ``timeout``), the rewrite the job ``endf_standardize``/``program`` (``pyazr.endf.standardize``; settings ``path``,
+  ``program``, ``mf2``, ``timeout``), whose candidate ``POST /api/endf/accept`` (``{"job_id", "to", "overwrite"}``)
+  keeps; these jobs build no session. A path outside the root is refused (403) before anything reads it.
+- ``GET /api/prior``, ``POST /api/prior/build`` (``{"parts": [...]}``), ``POST /api/prior/write`` (``{"parts":
+  [...], "path": ..., "rev": ...}``) serve the prior builder (``pyazr.priors.build`` on the session's parameter
+  table; the write sets ``priorCovariance`` and writes the file as one history entry); removing the prior is ``PATCH
+  /api/project/config`` with ``{"entries": {"priorCovariance": null}}``.
 
 A session from Python
 ---------------------

@@ -10,12 +10,13 @@
 import { pathOf } from "../api.js";
 import { isFinal, progressView } from "../fitting.js";
 import { renderTable } from "../tables.js";
-import { button, download, drawPlot, h, section } from "../ui.js";
+import { button, download, drawPlot, h, section, withFiles } from "../ui.js";
 
 export async function render(ctx, el, args) {
   const view = ctx.rateView || (ctx.rateView = { entrance: null, exit: null, grid: "table", t_min: "", t_max: "",
     t_step: "", start: "x", band: "none", comparison: "", draws: "100", starlib_label: "azr2", starlib_flag: "",
     reaclib_label: "azr2", reaclib_flag: "n", reaclib_tolerance: "0.05" });
+  if (ctx.route.params.start) view.start = ctx.route.params.start;  // a fit's "rate …" button: its best point
   const [pairs, grids, jobs] = await Promise.all([ctx.api.get("/api/project/pairs"), ctx.api.get("/api/rate/grids"),
     ctx.api.get("/api/jobs")]);
   const particles = pairs.filter((p) => p.kind === 0);
@@ -111,17 +112,22 @@ export async function render(ctx, el, args) {
       ctx.showError(e, el);
     }
   });
+  const options = h("div", {},
+    h("div", {}, h("label", {}, "parameters ", start), " ", h("label", {}, "band ", band), " ",
+      h("label", {}, "draws ", draws)),
+    libraries,
+    h("div", {}, h("label", {}, "compare with ", withFiles(ctx, comparison)), ctx.expert ? [" ", calculate] : null));
   el.appendChild(section("Reaction rate",
     h("p.hint", {}, "N_A<σv> integrated by the engine over the entrance pair's c.m. energy from 10⁻⁷ to 50 MeV "
       + "(σ on a grid with a cluster of points around each level, a spline of ln σ against ln E), as the program's "
       + "rate command; a job in its own process."),
     h("div.rate-form", {},
       h("div", {}, h("label", {}, "entrance ", entrance), " ", h("label", {}, "exit ", exit), " ", reaction),
-      h("div", {}, h("label", {}, "temperatures ", grid), " ", custom),
-      h("div", {}, h("label", {}, "parameters ", start), " ", h("label", {}, "band ", band), " ",
-        h("label", {}, "draws ", draws)),
-      libraries,
-      h("div", {}, h("label", {}, "compare with ", comparison), " ", calculate))));
+      h("div", {}, h("label", {}, "temperatures ", grid), " ", custom, ctx.expert ? null : [" ", calculate]),
+      // the first view: what the task needs above; the parameters, the band, the comparison and the libraries'
+      // labels one click away (the expert's depth shows them as they are)
+      ctx.expert ? options : h("details.more", {}, h("summary", {}, "More: parameters, uncertainty band, "
+        + "comparison, library labels"), options))));
 
   const shownId = args[0] || rateJobs[rateJobs.length - 1]?.id;
   if (!shownId) {

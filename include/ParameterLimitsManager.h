@@ -10,6 +10,8 @@
 // Forward declarations
 class Config;
 class CNuc;
+class LevelInputs;
+class LevelState;
 class WorkingCopy;
 
 // Structure to hold parameter settings
@@ -32,7 +34,10 @@ struct ParameterSetting {
 
 class ParameterLimitsManager {
  public:
-  ParameterLimitsManager(const Config *config, CNuc *compound, WorkingCopy *data, AZUREParams *params);
+  /// `state` and `inputs` are the caller's levels (the run's, the session's), which outlive this object: a conversion
+  /// of a physical limit works on copies of them.
+  ParameterLimitsManager(const Config *config, const CNuc *compound, const LevelState &state, const LevelInputs &inputs,
+                         WorkingCopy *data, AZUREParams *params);
 
   // Read parameter settings from AZURE2 file
   bool ReadParameterSettings();
@@ -64,7 +69,9 @@ class ParameterLimitsManager {
 
  private:
   const Config *config_;
-  CNuc *compound_;
+  const CNuc *compound_;
+  const LevelState &state_;
+  const LevelInputs &inputs_;
   WorkingCopy *data_;
   AZUREParams *params_;
   std::map<std::string, ParameterSetting> parameterSettings_;

@@ -7,7 +7,6 @@ api/include/AZUREAPI.h	nuisanceParams_	mutable	pending (milestone 3, an evaluati
 api/include/AZUREAPI.h	nuisanceRead_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	nuisance_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-include/AZURECalc.h	cnuc_pool_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
 include/AZURECalc.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	fixedMask_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
 include/AZURECalc.h	g2CacheP_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
@@ -15,15 +14,13 @@ include/AZURECalc.h	g2Cache_	mutable	pending (milestone 4, CNuc split; the fitte
 include/AZURECalc.h	lastGradMutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
 include/AZURECalc.h	lastGradP_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
 include/AZURECalc.h	lastGrad_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	output_compound_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	output_data_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	output_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	output_results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
-include/AZURECalc.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
+include/AZURECalc.h	pool_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the lock of the pooled working copies of a fit
 include/AZURECalcMCMC.h	all_indexes	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	cnuc_pool_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies of the sampler
 include/AZURECalcMCMC.h	fixed_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	freeKinds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods

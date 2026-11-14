@@ -102,17 +102,19 @@
 <!-- n_CNuc -->
 <g id="node7" class="node">
 <title>n_CNuc</title>
-<path fill="#d9d9d9" stroke="black" d="M438.5,-575C438.5,-575 326.5,-575 326.5,-575 320.5,-575 314.5,-569 314.5,-563 314.5,-563 314.5,-519 314.5,-519 314.5,-513 320.5,-507 326.5,-507 326.5,-507 438.5,-507 438.5,-507 444.5,-507 450.5,-513 450.5,-519 450.5,-519 450.5,-563 450.5,-563 450.5,-569 444.5,-575 438.5,-575"/>
-<text text-anchor="start" x="364" y="-561.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNuc</text>
-<text text-anchor="start" x="320.5" y="-549.4" font-family="Helvetica" font-size="12.00">compound nuclei: pairs</text>
-<text text-anchor="start" x="330.5" y="-537.4" font-family="Helvetica" font-size="12.00">and J groups (read&#45;</text>
-<text text-anchor="start" x="336.5" y="-525.4" font-family="Helvetica" font-size="12.00">only after set&#45;up),</text>
-<text text-anchor="start" x="332.5" y="-513.4" font-family="Helvetica" font-size="12.00">levels at the vector</text>
+<polygon fill="white" stroke="black" points="452,-581 313,-581 313,-501 452,-501 452,-581"/>
+<polygon fill="none" stroke="black" points="456,-585 309,-585 309,-497 456,-497 456,-585"/>
+<text text-anchor="start" x="364" y="-567.8" font-family="Helvetica" font-weight="bold" font-size="14.00">CNuc</text>
+<text text-anchor="start" x="319" y="-555.4" font-family="Helvetica" font-size="12.00">compound nuclei as set</text>
+<text text-anchor="start" x="332" y="-543.4" font-family="Helvetica" font-size="12.00">up: pairs, J groups,</text>
+<text text-anchor="start" x="338.5" y="-531.4" font-family="Helvetica" font-size="12.00">levels (read&#45;only</text>
+<text text-anchor="start" x="341" y="-519.4" font-family="Helvetica" font-size="12.00">after set&#45;up, not</text>
+<text text-anchor="start" x="362.5" y="-507.4" font-family="Helvetica" font-size="12.00">copied)</text>
 </g>
 <!-- n_CNuc&#45;&gt;n_azure2__io__LevelSection -->
 <g id="edge6" class="edge">
 <title>n_CNuc&#45;&gt;n_azure2__io__LevelSection</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M396.07,-575.28C431.75,-672.55 531.2,-943.34 533,-945 538.05,-949.65 543.72,-953.63 549.76,-957.04"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M399.7,-585.19C438.04,-689.68 531.25,-943.39 533,-945 538.05,-949.65 543.72,-953.63 549.76,-957.04"/>
 <polygon fill="black" stroke="black" points="558.85,-961.64 547.9,-961.14 554.39,-959.38 549.93,-957.13 549.93,-957.13 549.93,-957.13 554.39,-959.38 551.96,-953.11 558.85,-961.64 558.85,-961.64"/>
 </g>
 <!-- n_PPair -->
@@ -128,8 +130,8 @@
 <!-- n_CNuc&#45;&gt;n_PPair -->
 <g id="edge7" class="edge">
 <title>n_CNuc&#45;&gt;n_PPair</title>
-<path fill="none" stroke="black" d="M401.2,-586.48C424,-639.33 468.52,-725.72 533,-776 543.9,-784.5 556.79,-791.14 569.91,-796.32"/>
-<polygon fill="black" stroke="black" points="401.19,-586.47 395.18,-582.49 396.53,-575.41 402.55,-579.38 401.19,-586.47"/>
+<path fill="none" stroke="black" d="M405.58,-596.44C429.47,-649.67 472.43,-728.77 533,-776 543.9,-784.5 556.79,-791.14 569.91,-796.32"/>
+<polygon fill="black" stroke="black" points="405.46,-596.15 399.38,-592.27 400.63,-585.16 406.71,-589.05 405.46,-596.15"/>
 <polygon fill="black" stroke="black" points="568.89,-799.67 579.49,-799.84 571.31,-793.1 568.89,-799.67"/>
 </g>
 <!-- n_JGroup -->
@@ -144,8 +146,8 @@
 <!-- n_CNuc&#45;&gt;n_JGroup -->
 <g id="edge8" class="edge">
 <title>n_CNuc&#45;&gt;n_JGroup</title>
-<path fill="none" stroke="black" d="M411.27,-584.96C437.94,-623.66 481.68,-678.75 533,-711 545.64,-718.94 560.27,-724.95 574.77,-729.48"/>
-<polygon fill="black" stroke="black" points="411.26,-584.94 404.58,-582.21 404.53,-575 411.21,-577.73 411.26,-584.94"/>
+<path fill="none" stroke="black" d="M418.28,-594.95C445.28,-632.69 485.95,-681.44 533,-711 545.64,-718.94 560.27,-724.95 574.77,-729.48"/>
+<polygon fill="black" stroke="black" points="418.28,-594.94 411.55,-592.33 411.38,-585.12 418.1,-587.73 418.28,-594.94"/>
 <polygon fill="black" stroke="black" points="574.17,-732.95 584.75,-732.39 576.13,-726.23 574.17,-732.95"/>
 </g>
 <!-- n_LevelInputs -->
@@ -161,9 +163,8 @@
 <!-- n_CNuc&#45;&gt;n_LevelInputs -->
 <g id="edge12" class="edge">
 <title>n_CNuc&#45;&gt;n_LevelInputs</title>
-<path fill="none" stroke="black" d="M445.24,-581.55C471.62,-597.87 503.16,-616.08 533,-630 546.26,-636.18 560.75,-641.96 574.83,-647.09"/>
-<polygon fill="black" stroke="black" points="445.2,-581.53 437.99,-581.74 435.02,-575.17 442.23,-574.96 445.2,-581.53"/>
-<polygon fill="black" stroke="black" points="573.9,-650.47 584.5,-650.53 576.25,-643.88 573.9,-650.47"/>
+<path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M451.14,-585.19C476.25,-600.53 505.35,-617.1 533,-630 546.26,-636.18 560.75,-641.96 574.83,-647.09"/>
+<polygon fill="none" stroke="black" stroke-width="1.6" points="573.9,-650.47 584.5,-650.53 576.25,-643.88 573.9,-650.47"/>
 </g>
 <!-- n_LevelState -->
 <g id="node13" class="node">
@@ -179,9 +180,8 @@
 <!-- n_CNuc&#45;&gt;n_LevelState -->
 <g id="edge11" class="edge">
 <title>n_CNuc&#45;&gt;n_LevelState</title>
-<path fill="none" stroke="black" d="M462.86,-553.63C498.99,-559.37 541.42,-566.12 576.48,-571.7"/>
-<polygon fill="black" stroke="black" points="462.65,-553.59 456.1,-556.6 450.8,-551.71 457.36,-548.7 462.65,-553.59"/>
-<polygon fill="black" stroke="black" points="576.21,-575.2 586.64,-573.32 577.31,-568.29 576.21,-575.2"/>
+<path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M456.34,-552.59C493.87,-558.56 539.44,-565.81 576.67,-571.73"/>
+<polygon fill="none" stroke="black" stroke-width="1.6" points="576.51,-575.25 586.94,-573.36 577.61,-568.34 576.51,-575.25"/>
 </g>
 <!-- n_LevelParameterLayout -->
 <g id="node14" class="node">
@@ -196,8 +196,8 @@
 <!-- n_CNuc&#45;&gt;n_LevelParameterLayout -->
 <g id="edge13" class="edge">
 <title>n_CNuc&#45;&gt;n_LevelParameterLayout</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M450.8,-530.04C482.36,-524.9 520.48,-518.69 554.73,-513.11"/>
-<polygon fill="black" stroke="black" points="564.75,-511.48 555.6,-517.53 559.81,-512.28 554.88,-513.09 554.88,-513.09 554.88,-513.09 559.81,-512.28 554.15,-508.65 564.75,-511.48 564.75,-511.48"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M456.34,-529.14C486.77,-524.18 522.48,-518.36 554.76,-513.11"/>
+<polygon fill="black" stroke="black" points="564.65,-511.49 555.51,-517.54 559.72,-512.3 554.78,-513.1 554.78,-513.1 554.78,-513.1 559.72,-512.3 554.06,-508.66 564.65,-511.49 564.65,-511.49"/>
 </g>
 <!-- n_ObservedLevelTable -->
 <g id="node15" class="node">
@@ -212,7 +212,7 @@
 <!-- n_CNuc&#45;&gt;n_ObservedLevelTable -->
 <g id="edge14" class="edge">
 <title>n_CNuc&#45;&gt;n_ObservedLevelTable</title>
-<path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M441.39,-506.95C468.69,-491.6 502.01,-473.85 533,-460 543.69,-455.22 555.13,-450.59 566.48,-446.26"/>
+<path fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="1,5" d="M456.14,-498.76C480.21,-485.54 507.4,-471.44 533,-460 543.69,-455.22 555.13,-450.59 566.48,-446.26"/>
 <polygon fill="none" stroke="black" stroke-width="1.6" points="567.84,-449.49 575.98,-442.71 565.39,-442.94 567.84,-449.49"/>
 </g>
 <!-- n_CNucSystem -->
@@ -228,7 +228,7 @@
 <!-- n_CNuc&#45;&gt;n_CNucSystem -->
 <g id="edge15" class="edge">
 <title>n_CNuc&#45;&gt;n_CNucSystem</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M406.92,-506.87C433.55,-470.44 480.23,-413.34 533,-379 544.54,-371.49 557.69,-365.27 570.85,-360.16"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M414.42,-496.78C441.83,-460.55 484.88,-410.31 533,-379 544.54,-371.49 557.69,-365.27 570.85,-360.16"/>
 <polygon fill="black" stroke="black" points="580.42,-356.65 572.59,-364.32 575.73,-358.37 571.04,-360.1 571.04,-360.1 571.04,-360.1 575.73,-358.37 569.48,-355.87 580.42,-356.65 580.42,-356.65"/>
 </g>
 <!-- n_azure2__PathwayTable -->
@@ -243,7 +243,7 @@
 <!-- n_CNuc&#45;&gt;n_azure2__PathwayTable -->
 <g id="edge17" class="edge">
 <title>n_CNuc&#45;&gt;n_azure2__PathwayTable</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M395.5,-506.73C415.61,-454.36 461.11,-354.87 533,-301 540.54,-295.35 549.03,-290.7 557.89,-286.87"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M399.4,-496.79C421.17,-442.57 465.43,-351.63 533,-301 540.54,-295.35 549.03,-290.7 557.89,-286.87"/>
 <polygon fill="black" stroke="black" points="567.24,-283.16 559.6,-291.03 562.59,-285.01 557.94,-286.85 557.94,-286.85 557.94,-286.85 562.59,-285.01 556.29,-282.66 567.24,-283.16 567.24,-283.16"/>
 </g>
 <!-- n_AChannel -->
@@ -370,14 +370,14 @@
 <!-- n_WorkingCopy&#45;&gt;n_azure2__experiment__DatasetSpec -->
 <g id="edge18" class="edge">
 <title>n_WorkingCopy&#45;&gt;n_azure2__experiment__DatasetSpec</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M119.88,-329.33C157.24,-426.38 295.34,-745.35 533,-853 555.05,-862.99 678.41,-871.22 776.92,-876.33"/>
-<polygon fill="black" stroke="black" points="786.97,-876.84 776.75,-880.83 781.98,-876.59 776.98,-876.33 776.98,-876.33 776.98,-876.33 781.98,-876.59 777.22,-871.84 786.97,-876.84 786.97,-876.84"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M119.68,-329.16C156.61,-426.34 294.07,-747.46 533,-853 555.1,-862.76 678.09,-871.02 776.49,-876.2"/>
+<polygon fill="black" stroke="black" points="786.53,-876.72 776.31,-880.69 781.54,-876.46 776.55,-876.2 776.55,-876.2 776.55,-876.2 781.54,-876.46 776.78,-871.71 786.53,-876.72 786.53,-876.72"/>
 </g>
 <!-- n_WorkingCopy&#45;&gt;n_CNuc -->
 <g id="edge19" class="edge">
 <title>n_WorkingCopy&#45;&gt;n_CNuc</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M141.23,-329C189.02,-371.16 279.71,-451.19 334.97,-499.95"/>
-<polygon fill="black" stroke="black" points="342.53,-506.61 332.05,-503.37 338.78,-503.3 335.03,-500 335.03,-500 335.03,-500 338.78,-503.3 338.01,-496.62 342.53,-506.61 342.53,-506.61"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M141.23,-329C185.94,-368.44 268.2,-441.03 323.87,-490.15"/>
+<polygon fill="black" stroke="black" points="331.54,-496.92 321.07,-493.68 327.8,-493.61 324.05,-490.31 324.05,-490.31 324.05,-490.31 327.8,-493.61 327.02,-486.93 331.54,-496.92 331.54,-496.92"/>
 <text text-anchor="middle" x="236" y="-416.4" font-family="Helvetica" font-size="12.00"> nc</text>
 </g>
 <!-- n_WorkingCopy&#45;&gt;n_DataSet -->

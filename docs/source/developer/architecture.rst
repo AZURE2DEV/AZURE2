@@ -240,8 +240,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
 
    *Program*: steps 3 to 6 are ``AZURECalc::operator()``
    (``src/AZURECalc.cpp``), Minuit2's function; during a fit each evaluation
-   takes a pooled copy of ``CNuc`` and of the working copy with its own
-   ``Results`` (``AZURECalc::GetPooledCNuc``, ``GetPooledData``). *pyazr*:
+   takes a pooled copy of the run's ``LevelState`` and of the working copy with its own
+   ``Results`` (``AZURECalc::GetPooledState``, ``GetPooledData``). *pyazr*:
    ``Session.objective()`` is ``AZUREAPI::CalculateObjectiveRWA`` as an object for a fitter or sampler
    (``pyazr.Objective``), which runs the same hand-over, point pass, model pass and ``Objective::Engine()`` on
    the session's own objects, and
@@ -297,9 +297,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``CNuc`` will be split into an immutable ``CompoundSystem`` built once at
    set-up and shared by every evaluation, the levels' input values
    (``LevelInputs``) and a per-evaluation ``LevelState``. The readers already
-   take the ``LevelState`` (and the ``LevelInputs``) they read as arguments;
-   the copies of ``CNuc`` still hold the ones they hand over
-   (``CNuc::Inputs`` and ``CNuc::State``). An evaluation then reads
+   take the ``LevelState`` (and the ``LevelInputs``) they read as arguments,
+   each owner holds its own, and ``CNuc`` holds the set-up only and is not
+   copied. An evaluation then reads
    ``(const CompoundSystem &, const LevelState &)``. In ``pyazr`` the ``Objective`` and ``Evaluation``
    objects take the place of the session's ``calculate_*`` methods.
 

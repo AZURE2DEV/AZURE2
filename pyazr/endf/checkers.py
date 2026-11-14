@@ -36,19 +36,36 @@ from ..errors import FormatRefused
 from .format_check import Finding, check_format
 from .records import read_float, significant_digits
 
-#: The programs known: name -> (family, kind, what it does).  kind: "check" (writes a report), "rewrite" (writes a
-#: new ENDF file: a candidate), "derive" (writes a derived file, not a correction).
+#: The programs known: name -> (family, kind, what it does, what it does to the numbers of a file).  kind: "check"
+#: (writes a report), "rewrite" (writes a new ENDF file: a candidate), "derive" (writes a derived file, not a
+#: correction).  The last column is what an evaluator is told before a run (docs/upgrade/endf.md section 13.2: the
+#: built programs as measured on the ENDF/B-VIII.1 3He + 4He file).
 PROGRAMS = {
-    "checkr": ("utility", "check", "format: every record against the ENDF-6 rules"),
-    "fizcon": ("utility", "check", "procedures and simple physics: energy order, sums, Q values, missing sections"),
-    "psyche": ("utility", "check", "physics: energy conservation, Wick's limit, resonance statistics"),
-    "inter": ("utility", "check", "integral values: thermal, resonance integrals, 14 MeV (linearised MF=3 only)"),
-    "stanef": ("utility", "rewrite", "bookkeeping: tape label, directory, sequence numbers, numbers in standard form"),
-    "fixup": ("prepro", "rewrite", "ZA and AWR made consistent, sums redefined, sequence numbers"),
-    "dictin": ("prepro", "rewrite", "the directory of MF=1/MT=451 made from the sections"),
-    "endf2c": ("prepro", "rewrite", "numbers rewritten in a form C and Fortran read alike"),
-    "linear": ("prepro", "derive", "MF=3 linearised"),
-    "recent": ("prepro", "derive", "MF=3 reconstructed from the resonance parameters of MF=2"),
+    "checkr": ("utility", "check", "format: every record against the ENDF-6 rules",
+               "reads the file and writes a report: no number of the file is changed"),
+    "fizcon": ("utility", "check", "procedures and simple physics: energy order, sums, Q values, missing sections",
+               "reads the file and writes a report: no number of the file is changed"),
+    "psyche": ("utility", "check", "physics: energy conservation, Wick's limit, resonance statistics",
+               "reads the file and writes a report: no number of the file is changed"),
+    "inter": ("utility", "check", "integral values: thermal, resonance integrals, 14 MeV (linearised MF=3 only)",
+              "reads the file and writes a report: no number of the file is changed"),
+    "stanef": ("utility", "rewrite", "bookkeeping: tape label, directory, sequence numbers, numbers in standard form",
+               "rewrites every number in the classic standard form, 7 significant digits (measured: 2 digits lost "
+               "in MF=2, MF=3 and MF=6 of a file written with more), MF=2 included even with the standard options; "
+               "a number written without a decimal point (35070343) is misread and written 1e4 too small "
+               "(3.507034+3): the code reads with E11.4 (stanef.f line 1131) where the manual says F11.0 (p. 31)"),
+    "fixup": ("prepro", "rewrite", "ZA and AWR made consistent, sums redefined, sequence numbers",
+              "rewrites the directory and the summed cross sections; measured: 4 numbers of an MF=3 section lost "
+              "1 digit (2.5e-6 relative), the numbers of MF=2 and MF=6 written another way with equal values"),
+    "dictin": ("prepro", "rewrite", "the directory of MF=1/MT=451 made from the sections",
+               "rewrites the directory of MF=1/MT=451 only: no number of another section is changed"),
+    "endf2c": ("prepro", "rewrite", "numbers rewritten in a form C and Fortran read alike",
+               "rewrites numbers with the letter E; measured: a number with a two-digit exponent loses 1 digit "
+               "(-1.38025-12 to -1.3803E-12; up to 3.6e-5 relative in MF=6)"),
+    "linear": ("prepro", "derive", "MF=3 linearised",
+               "writes a derived file (MF=3 on a linear grid within a tolerance), not a correction of the original"),
+    "recent": ("prepro", "derive", "MF=3 reconstructed from the resonance parameters of MF=2",
+               "writes a derived file (MF=3 from MF=2), not a correction of the original"),
 }
 CHECK_DEFAULT = ("checkr", "fizcon", "psyche")
 
@@ -65,6 +82,10 @@ MEANINGS = (
     (r"AP NOT IN RANGE", "PSYCHE reads the record after the range as SPI, AP of LRF 1-3 (psyche.f lines 1428-1434); "
      "in LRF=7 that record holds 0, 0, IFG, KRM, NJS, KRL (p. 73): the number tested is not a radius"),
     (r"FILE IS UNSEQUENCED", "no sequence numbers; optional since 2013 (p. 30)"),
+    (r"INVALID ANGULAR REPRESENTATION LTP=15", "CHECKR 8.24 does not know LTP=15, which the 2023 manual defines "
+     "(p. 147: the nuclear part P_NI(mu) tabulated, linear in mu): not an error of the file"),
+    (r"NW SHOULD BE SET TO \*+", "CHECKR has no rule for the record's representation and prints its expected "
+     "length as asterisks: read it with the message before it (LTP=15: not an error of the file)"),
 )
 
 
@@ -75,12 +96,14 @@ def _meaning(text):
 @dataclasses.dataclass(frozen=True)
 class Checker:
     """A program found: its name, path, family (utility or prepro), kind (check, rewrite, derive), what it does,
-    and its version (read from its report after a run; None before)."""
+    what it does to the numbers of a file (``numbers``: said before a run), and its version (read from its report
+    after a run; None before)."""
     name: str
     path: str
     family: str
     kind: str
     does: str
+    numbers: str = ""
     version: str = None
 
 
@@ -107,8 +130,8 @@ def checkers(search=None):
             name = os.path.basename(path).lower()
             name = name[:-4] if name.endswith(".exe") else name
             if name in PROGRAMS and name not in found and os.access(path, os.X_OK) and os.path.isfile(path):
-                family, kind, does = PROGRAMS[name]
-                found[name] = Checker(name, os.path.abspath(path), family, kind, does)
+                family, kind, does, numbers = PROGRAMS[name]
+                found[name] = Checker(name, os.path.abspath(path), family, kind, does, numbers)
     return [found[n] for n in PROGRAMS if n in found]
 
 

@@ -50,11 +50,13 @@ void CheckProject(const std::string &azr) {
   Config cfg(sink);
   cfg.configfile = azr;
   CNuc compound;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1) {
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg, state, inputs) == -1) {
     check(azr + ": load", false);
     return;
   }
-  compound.Initialize(cfg);
+  compound.Initialize(cfg, state, inputs);
   std::vector<ChannelTable::Key> keys;
   for (int p = 1; p <= compound.NumPairs(); p++) {
     if (compound.GetPair(p)->GetPType() != 0) continue;
@@ -107,8 +109,10 @@ void CheckProject(const std::string &azr) {
   // The same project with the first key's pair at another channel radius (the structure is fixed after set-up: a
   // radius is changed by filling the compound again with the override, as the API's SetRadius does).
   CNuc moved;
-  moved.Fill(cfg, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
-  moved.Initialize(cfg);
+  LevelState movedState;  // the levels, as the run holds them
+  LevelInputs movedInputs;
+  moved.Fill(cfg, movedState, movedInputs, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
+  moved.Initialize(cfg, movedState, movedInputs);
   auto changed = ChannelTable::Build(&moved, cfg, keys, one.get());
   check("a previous table of another channel radius is not reused", changed->Computed() == changed->Size());
 }

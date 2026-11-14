@@ -31,7 +31,7 @@ AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &para
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point: the one model evaluation
-  ObjectiveContext context{compound(), compound()->MutableState(), compound()->Inputs(), data(), results(), full, configure()};
+  ObjectiveContext context{compound(), state(), inputs(), data(), results(), full, configure()};
   context.nuisance = [this](const vector_r &q) { return NuisanceChi2(q); };
   // The sum as CalculateObjectiveRWA forms it (the same steps, so the same bits), then the breakdown: each term
   // summed on its own, from the model values already in the buffer (no point is evaluated again).
@@ -62,7 +62,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
     FillFromFullRWA(full);
     EvaluateFilledChi2(&residuals);
     if (data()->Data().HasCovariance()) data()->WhitenResidualRows(residuals, nullptr, 0);
-    Objective::Engine().ModelDataResiduals(ObjectiveContext{compound(), compound()->MutableState(), compound()->Inputs(), data(), results(), full, configure()},
+    Objective::Engine().ModelDataResiduals(ObjectiveContext{compound(), state(), inputs(), data(), results(), full, configure()},
                                            residuals);
     if (const PriorCovariance *pc = data()->Data().GetPriorCovariance())
       pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
@@ -70,7 +70,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
   // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): Park's wall,
   // the gamma_decay priors and wall, the abundance sums; then every diagonal prior and every nuisance prior.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
-  AppendModelRows(compound(), compound()->State(), *data(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
+  AppendModelRows(compound(), state(), *data(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
                   jacobianOut ? &jacobian : nullptr);
   auto priorRow = [&](int f, double nominal, double sigma) {
     residuals.push_back((full[f] - nominal) / sigma);
@@ -102,7 +102,7 @@ double AZUREAPI::LogProbabilityRWA(const vector_r &params) const {
   if (OutsideSamplerSupport(params)) return -std::numeric_limits<double>::infinity();
   const double objective = CalculateObjectiveRWA(params);
   const vector_r full = FullOf(params, all_rwa_, fixed_);
-  ObjectiveContext context{compound(), compound()->MutableState(), compound()->Inputs(), data(), results(), full, configure()};
+  ObjectiveContext context{compound(), state(), inputs(), data(), results(), full, configure()};
   if (Objective::Engine().ExcludesForSampler(context)) return -std::numeric_limits<double>::infinity();
   return -0.5 * objective;
 }

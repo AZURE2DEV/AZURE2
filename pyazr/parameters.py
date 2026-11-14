@@ -202,6 +202,12 @@ class Parameters(list):
         return self._x0.copy()
 
     @property
+    def basis(self):
+        """Which amplitudes ``x`` holds (:attr:`pyazr.Session.basis`: 0 standard, 1 Brune, 2 Park), None for rows
+        built without their session."""
+        return self._basis
+
+    @property
     def names(self):
         """The parameters' names, one per row."""
         return [p.name for p in self]

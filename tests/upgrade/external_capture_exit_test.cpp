@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
   cfg.configfile = file.filename().string();
   cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   CNuc compound;
+  LevelState state;  // the levels, as the run holds them
+  LevelInputs inputs;
   if (cfg.ReadConfigFile() < 0) {
     check("reads the configuration", false, sink.str());
     return 1;
@@ -50,7 +52,7 @@ int main(int argc, char **argv) {
   cfg.screenCheckMask = 0;
   cfg.ResolveMatrixRoute();
   InitializeECAmplitudeCache(cfg);
-  if (compound.Fill(cfg) == -1) {
+  if (compound.Fill(cfg, state, inputs) == -1) {
     check("reads the levels", false, sink.str().substr(0, 400));
     return 1;
   }
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
   check("pairs numbered n + 12C 1, p + 12C 2, photon 3", neutron == 1 && proton == 2 && photon == 3,
         std::to_string(neutron) + " " + std::to_string(proton) + " " + std::to_string(photon));
   compound.RequestEntrance(proton);
-  compound.Initialize(cfg);
+  compound.Initialize(cfg, state, inputs);
 
   const azure2::EntrancePathways &P = compound.Pathways().Entrance(proton);
   int position = -1, pair = -1;

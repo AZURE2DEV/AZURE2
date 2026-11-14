@@ -74,7 +74,7 @@ struct ThmReaction {
  * Trojan horse a = x + s, the kinematics, and the startup lines that say so.
  * False (and the ERROR written) if they do not describe the segments.
  */
-bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
                           const WorkingCopy::ThmGroup &group, const std::string &where, ThmReaction &r) {
   ThmDistortion::Kinematics &dk = r.dk;
   int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
@@ -192,7 +192,7 @@ bool ThmBuildWindow(WorkingCopy &data, const Config &configure, const ThmExperim
 
 // Coulomb line shape of the spectator (ThmLineshape.h), lineshape=on.  The
 // level energies and widths it uses are the observed ones of Brune.
-bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
                        WorkingCopy::ThmGroup &group, const std::string &where, const ThmReaction &r) {
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << where << "lineshape=on uses the observed level energies and widths "
@@ -253,7 +253,7 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc
 
 // Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the HOES
 // amplitude of every segment of the experiment; R(E) is not applied.
-bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
                       WorkingCopy::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
   int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
   int pairNum = theCNuc->GetPairNumFromKey(pairKey);
@@ -408,7 +408,7 @@ bool ThmBuildDistortion(WorkingCopy &data, const Config &configure, const ThmExp
 
 // Angular window of the exit pair (ThmAngular.h), theta=: the model of every
 // segment is dsigma/dOmega averaged over theta_cm in the window.
-bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, const CNuc *theCNuc, const ThmExperiment &x,
                          WorkingCopy::ThmGroup &group, const std::string &where) {
   if (configure.thm.coherentL) {
     configure.outStream << where << "theta= computes the interference of the entrance partial waves "
@@ -450,7 +450,7 @@ bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, CNuc *theCN
  * background.  The first refusal ends it (the order of the checks is what a
  * user sees, so it is kept).
  */
-int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
+int WorkingCopy::BuildThmGroups(const Config &configure, const CNuc *theCNuc) {
   Draft().thmGroups_.clear();
   Draft().thmCoherentParams_.clear();
   Draft().thmCoherentParamOffset_ = -1;

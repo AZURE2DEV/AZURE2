@@ -171,7 +171,8 @@ class State:
     def edit_with_files(self, rev, what, change, files):
         """An edit that writes files beside the text (a covariance file the edit names): ``files`` {path inside the
         root: text} are written first (the engine validates the edit with them), then ``change(project)`` is made;
-        a refusal puts the files back as they were and leaves the text.  One history entry: undo restores the files
+        a refusal puts the files back as they were and leaves the text.  One history entry when the text or a file
+        changes (a file rewritten under the name the text already holds is an entry too): undo restores the files
         as they were before (removing those that did not exist) with the text, redo writes them again."""
         with self.lock:
             self.check_rev(rev)
@@ -190,8 +191,7 @@ class State:
             except BaseException:
                 _put_files({p: b for p, (b, _) in written.items()})
                 raise
-            if self.project.text == before_text:
-                _put_files({p: b for p, (b, _) in written.items()})
+            if self.project.text == before_text and all(b == a for b, a in written.values()):
                 return result
             self._push(what, written)
             return result

@@ -181,7 +181,7 @@ double BandData::dXS(const std::vector<double> &g) const {
   return (v > 0.0) ? std::sqrt(v) : 0.0;
 }
 
-bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
+bool BuildBandData(const CNuc *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask) {
   out.compound = compound;
@@ -193,7 +193,7 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   // Minuit order) as the fitter: the caller's (param.par included), else the
   // .azr's -- mirrors AZURECalc::ResidualJacobian.
   AZUREParams tp;
-  compound->FillMnParams(tp, &config);
+  compound->FillMnParams(tp, state, inputs, &config);
   data->FillMnParams(tp);
   const int nMn = tp.GetMinuitParams().Params().size();
   std::vector<bool> fixed(nMn);
@@ -226,8 +226,8 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
   if (config.paramMask & Config::USE_BRUNE_FORMALISM) {
-    compound->CalcShiftFunctions(config);
-    shiftDeriv = BuildShiftDerivTable(compound, compound->State(), config);
+    compound->CalcShiftFunctions(config, state);
+    shiftDeriv = BuildShiftDerivTable(compound, state, config);
     sdp = &shiftDeriv;
   }
 
@@ -236,7 +236,7 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   // ComputeModelGradients yields full packed rows; reduce each to the band
   // columns so the sensitivities line up with the covariance.
   std::map<Unit *, vector_r> fullGrad;
-  if (!ComputeModelGradients(compound, compound->State(), data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(compound, state, data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;
 
   // THM (HOES) points: their rows come from ComputeTHMRows (the HOES adjoint;
@@ -250,7 +250,7 @@ bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, 
   // gets no band: a change of the parameters that only rescales m leaves q put.
   {
     const vector_r full = tp.GetMinuitParams().Params();
-    std::vector<THMRows> thm = ComputeTHMRows(compound, compound->MutableState(), data, results, config, full, pmap);
+    std::vector<THMRows> thm = ComputeTHMRows(compound, state, inputs, data, results, config, full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
       const Segment *seg = data->Data().GetSegment(tr.segment);

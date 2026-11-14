@@ -2,6 +2,428 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (director, 20:00) — merged: ENDF tab, start model and writer, examples, lists, prior builder, level owners
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 77 (rehearsal 76 plus six branches and four commits
+of mine). The agents' entries follow.
+
+- **The ENDF tab** (`feature/upgrade-9-webui-endf`; `pyazr/ui/evaluations.py`, `tabs/endf.js`): an ENDF-6 file
+  of the project folder over the data (what it holds, its curve per data set with the ratios to the data and
+  the model, the refusal's three parts where the file has nothing); "Check" as a job (the module's own
+  findings apart from each code's, the meaning of the known false alarms beside the finding); "Correct" as a
+  job (the candidate's difference per section, "Keep as a new file" or "Replace" after a second question).
+- **An evaluation as a start model, and the writer** (`feature/upgrade-8-endf-model-writer`; `pyazr/endf/`
+  `resonances.py`, `model.py`, `writer.py`; the engine's two level doors in the new file
+  `api/src/pybind_level_doors.cpp`): `Material.resonances()`, `pyazr.endf.to_project` (a new project in the
+  Brune basis, every level fixed), `pyazr.endf.write` (MF=1, MF=2 LRF=7 of the particle channels in the formal
+  basis, MF=3 of the exits and of capture, LRP=2, MF=2 checked against MF=3 before writing); commands
+  `pyazr endf to-project` and `pyazr endf write`. **Not written yet: MF=6** (the angular distributions).
+- **The experts' examples** (`feature/upgrade-7-examples`): every script of `pyazr/examples/` runs from the
+  root on a repository project, one test table (`tests/pyazr/examples_test.py`), consistency check 58 keeps
+  the files, the table's rows and the page `pyazr_examples.rst` together: 31 scripts now. Four scripts were
+  folded into others (`edit_scheme`, `deactivate_level`, `save_fit_to_azr`, `fit_zeus`); **the `zeus` extra
+  of `pyproject.toml` is removed** and `multiprocess` left `examples`/`all` (for the PI to confirm).
+- **The page's lists and controls** (`feature/upgrade-9-webui-lists`): the lists in words (data sets first,
+  one list per record kind, the pairs in the old program's columns, "Used by"), `GET /api/files` and a
+  field's preview, a reference's "new …", lists of numbers as boxes, MINOS's parameters as check boxes, the
+  pair form from the engine's table, Reaction Rate in the first view, the Fit tab's two depths.
+- **The prior builder** (`feature/upgrade-9-prior-builder`; `pyazr/priors.py`, `pyazr/ui/prior.py`,
+  `tabs/prior.js`): a prior's central values and covariance from named parts (an earlier fit's covariance, a
+  chain, widths typed per parameter), written as the project's prior file; three routes `/api/prior/...`.
+- **The owners of the levels** (`feature/upgrade-5-cnuc-owners`): `CNuc` keeps the set-up only (copy
+  constructor deleted; `State`, `Inputs`, `MutableState`, `Clone` and the one-argument fills deleted); the
+  run, the sampler, the session, the calculation, the rate, the limits and the sub-point grids hold a
+  `const CNuc *` and their own `LevelState`/`LevelInputs`; the pools are pools of states
+  (`include/StatePool.h`); `LevelState::InputEnergy` deleted (the THM ground-state test reads the file's
+  value); `tests/consistency/allowed_state.tsv` lost three rows.
+
+**Conflicts and their resolutions.** The lists branch against the ENDF tab: `app.js`, the route table, the
+smoke test's views (both kept). The prior builder against both: nine files, each resolved by keeping both
+sides (`work/director/try77/resolve_ea.py`); its section of `web_ui.md` is 11.15 (the lists are 11.14). The
+owners against the writer: only the front ends' class figure (tables merged, figures regenerated: 20, 30 and
+29 boxes); the writer's door file does not use the deleted doors (read).
+
+**The director's commits on the rehearsal.**
+1. A candidate replaces an ENDF-6 file only: `accept(to=..., overwrite=True)` naming the project file was
+   stopped by nothing; an existing target must now read as ENDF-6 (a test row). STANEF's misreading has its
+   cause in the module's text and in `endf.md` 13.2 (the codes read with `E11.4` where the manual says `F11.0`).
+2. The start-model example has its row in the test table and on the page.
+3. The page's integration: ENDF is in the first view (after Plot, before Reaction Rate: one row of
+   `layout.js FIRST_VIEW` to reverse); the ENDF tab's files come from the one listing (`GET /api/files`); a
+   job row names its tab (`JobRow.tab`), so the Fit tab's form offers the fit's jobs only.
+4. At the prior builder's merge: its file list is the server's (`Server.files(outputs=True)`: the general
+   listing hides `output/`, where a fit's covariance and a chain live); its example writes beside `--out`
+   only (it wrote `prior_parameters.txt` into the project's directory); its row in the test table and the
+   page.
+5. A fit's "rate …" button opens the Rate tab with the fit's best point as its parameters
+   (`#/rate?start=<job>`): after commit 3 it filled a form that no longer had that kind (my regression).
+
+**Verified on the merged tree** (build `work/b-trial77`, head `6423ec5c`): 0 warnings; all projects in the
+three bases against `tab-t74-1` (tag `tab-t77-1`): Brune 887, formal 851, Park 887 files, all identical; the
+eight fits by command identical to `b-trial76`; the quick tests 289 of 289 (283 before); the consistency
+test passes.
+
+**The director's own runs**, `b-trial77` against `b-trial76`, by command, every output file compared: the
+natural-target fit in two fitters, the T2 sampler in the physical and in the RWA mode (32 walkers), MINOS, a
+fit with band, the rate for one exit pair and for all, three `gamma_decay` fits, a T1 extrapolation with
+band: all identical. On the page (trial server, real checking codes): the ENDF tab's summary, curves, check
+and correct on the two test files; the prior builder's screen; the first view's tabs; screenshots read.
+The writer on a dense grid (20001 points per section, `work/director/try77/dense.py`): the file's linear
+interpolation is within 1.0e-3 of the engine on T1 MT=102, T2 MT=800/801 and 13N MT=102, no point over 2e-3.
+
+**Memory of the sampler** (the owners' agent left it as a question: a pool of states instead of a pool of
+compounds). T2, 32 walkers, 100 steps, 4 sampler threads, the two builds alternately, peak resident size:
+base 296236, 287972, 301332 kB (mean 295180); new 298028, 288376, 294812 kB (mean 293739). The difference of
+the means (-0.5 %) is far inside the base build's own scatter (4.5 %): not measurable, as the agent found (a
+state is 0.8 kB against 7.8 kB for a copy of the compound). Accepted. (The chains of the two builds are
+identical: the own runs above.)
+
+**Seen, not repaired** (the next branches): the Fit tab's Jobs list shows the ENDF check jobs; the first
+view's fit result offers the sampler's and MINOS's buttons; `pyazr endf write` and the rate print the
+engine's progress on standard output; the writer's loss text does not say that MF=6/MT=102 is not written;
+whole-file notes show "MF 0 MT 0"; `accept`'s refusal speaks Python on the page; the model is drawn through
+the data points only (Plot and ENDF tabs: it needs `Session.model_curve` and a route, not built); the
+channel functions exist twice (`api/src/pybind_level_doors.cpp`, `src/CNucLevelParameters.cpp`); the
+writer's start grid is not seeded with the level energies; the examples agent's list of pyazr defects (its
+entry); the repository's skills name removed scripts.
+
+**Left by the owners' branch**: the session's `const` evaluations write its levels through pointers (to
+stop being `const`, or the state moves into an evaluation); the two old defects are unchanged (the sub-point
+grids' stale N_f^1/2; the RWA chain's snapshot `parameters.out`); the set-up out of `CNuc` and the renames
+are the last step; `pyazr_evaluation` has a timing assertion that can fail under load (it passed here).
+
+**Open, for the PI**: the tab's name ("ENDF" or "Evaluations"); the `zeus` extra's removal; whether the
+sampler job records its parametrization in the chain's JSON (the prior builder would read it instead of
+asking); the model-curve call; which columns may leave the data-set list (wider than the window on T2).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial77`; the quick test set has 289 tests.
+
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-owners`) — the owners hold their own levels; the doors and `Clone` gone
+
+**Done** (four commits; the end of step 4 of `cnuc_split.md` §12.3, "as built, fourth part"): `CNuc` holds the set-up
+only and cannot be copied; every owner holds its own `LevelState` (and `LevelInputs` where it transforms) and the
+compound as `const CNuc *` of the run or session that set it up and outlives it.
+
+**Measured first** (start 19c55dad). The doors (`State`, `Inputs`, `MutableState`, the one-argument fills and
+transformations, `FillMnParams` without a state) by file, what they did, whose:
+
+| file | calls | what | owner |
+|---|---|---|---|
+| `api/src/AZUREAPI*.cpp`, `pybind_api.cpp`, `pybind_records.cpp` | 66 | fills, shift functions, transformations, the state to the readers, the rate method, a record's level energy | the session |
+| `src/AZURECalc.cpp`, `FitLeastSquares.cpp` | 49 | the pool's fills and readers, the output copy, the fresh copies of two diagnostics, the labels | the fitter |
+| `src/AZURECalcMCMC.cpp`, `SamplerSupport.cpp`, `AZURE2.cpp` (`runMCMC`) | 43 | the walkers' fills and transformations, the start table, the snapshot, the set-up | the sampler |
+| `src/RunSetUp.cpp`, `RunOutputs.cpp`, `ProgramFit.cpp`, `AZUREMain.cpp` | 13 | the set-up's transformation, warnings, labels, reports, the final transformation | the program's run |
+| `src/ReactionRate.cpp` | 9 | the constructor's fill, the resonance grid's copy, one copy per thread | the rate |
+| `src/TargetSetup.cpp` | 7 | the sub-point-grid copy (4), the data set-up's input values (3) | the grids; the run |
+| `src/CovarianceBand.cpp` | 5 | the band's shift functions and readers, on the run's compound | the run |
+| `src/ParameterLimitsManager.cpp` | 4 | a limit's conversion, on a copy | the limits |
+| `src/AdaptiveExtrapolation.cpp` | 1 | the parameter layout of a sweep (its calculation ran on the run's compound) | the run |
+| tests (15 files) | about 100 | | |
+
+Copies (`Clone`): the fitter's pool (`GetPooledCNuc`), output copy and the fresh copies of `AZURE_TRACE_FCN=fresh`
+and `AZURE_POOL_CHECK`; the sampler's pool, start table (`StartObservedLevels`) and snapshot (every 10 steps); the
+rate's resonance grid and one copy per thread; a limit's conversion; the sub-point-grid copy; five tests. Each wrote
+on its copy what its owner now writes on its own state. Pools: the fitter's and the sampler's `cnuc_pool_`
+(`std::stack<std::unique_ptr<CNuc>>`, filled with a `Clone` under `pool_mutex_` when none is idle, taken and given
+back by the evaluations under the same lock). Code against the design (code taken): the band and the adaptive
+extrapolation made no copy (both ran on the run's compound); a calculation of `AZURECalc` and the rate's constructor
+wrote their caller's compound; the session runs an `AZURECalc` too (`AZUREAPIFit.cpp`); the data set-up reads the
+inputs.
+
+**What each owner holds now**: the program's run `ProgramRun::state`, `inputs`, `fitterStates` (`include/ProgramRun.h`);
+the sampler's run `runMCMC`'s `state`, `inputs`, `walkerPool` (`src/AZURE2.cpp`); the session `AZUREAPI::state_`,
+`inputs_` (`std::unique_ptr`, as its compound and data: its `const` evaluations write them); the fitter `AZURECalc::state_`
+(the caller's, by reference: a calculation writes it, the pool copies it), `inputs_`, `states_` (the caller's
+`FitterStates`: a `StatePool<LevelState>` and the output state); the sampler `AZURECalcMCMC::levels_` (`WalkerLevels`)
+and `pool_` (the caller's `StatePool<WalkerLevels>`); the rate `ReactionRate::state_` (copied from the caller's, filled,
+warned on, shift functions; one copy per thread; the run takes it back for parameters.out), `inputs_`; a limit's
+conversion copies of `ParameterLimitsManager::state_`, `inputs_` (the caller's); the sub-point grids
+`WorkingCopy::GridLevels` (state and inputs, copied from the first evaluation's); the band and the sweeps of the
+adaptive extrapolation take the run's state (as before). `CNuc` keeps what its set-up writes (pairs, groups with B_c
+and the final-state energies, nuclei, the two systems, pathways, model data, `gamma_decay` set, layout, the
+external-capture and capture-mask set-ups, the requests); every method but the set-up's is `const`.
+
+**Deleted**: `CNuc::State`, `Inputs`, `MutableState`, the one-argument fills and transformations, `Clone`,
+`levelState_`, `levelInputs_`; the two `cnuc_pool_` and `output_compound_` rows of `allowed_state.tsv` (`pool_mutex_`
+stays for the pooled working copies, its reason corrected); `LevelState::InputEnergy` (decision 2 below).
+
+**The director's decision 2** (the input energy in the state): its reader asks whether the level is its pair's final
+state, a question of structure; it reads `ALevel::FileE` now (one writer path: `CNuc::Fill`, through the level's
+`<levels>` row) and the copy is gone. Where it differed: a physical vector (the sampler's physical basis) or a formal
+transformation that moved the level by more than 1 keV changed the answer; no project of the tree does (identical),
+check (e) of `upgrade_level_inputs` shows the case.
+
+**Verified how**: build `work/b-cnuc8` (5 threads, 0 warnings at each commit; a clean build of the last commit in
+`work/b-cnuc8f`: 0 warnings). The commit whose doors and `Clone` abort: all projects in the three bases against
+`tab-t74-1` (tag `tab-cnuc8-B`) 887 / 851 / 887 identical; `OMP_NUM_THREADS=1 ctest -LE slow -j3` 283 of 283 (the page's
+tests with them); against `work/b-trial76`, one thread each, every output file (`work/cnuc8/extra.sh`): the eight
+fits, the natural-target fits, T2 sampled in the physical and the RWA basis (8 walkers, 100 steps), the `gamma_decay`
+fit, MINOS of T2, a T2 fit with the band, a rate of `p12C.azr`: 16 of 16 identical. The deletion: the quick set
+(12 folders x 3 bases) 36 of 36 identical, the 13 tests that load a compound passed. The input energy: the quick set and
+the two THM projects of the tree 42 of 42 identical, `ctest -R 'level_inputs|thm'` 30 of 30, check (e) fails 16 of 16
+with the moved energy injected (removed). The last code commit: all projects (tag `tab-cnuc8-D`) 887 / 851 / 887
+identical; the 16 own runs again identical; `ctest -LE slow -j3` 282 of 283, `pyazr_evaluation` failed once under the
+load of the own runs beside it (its check "evaluate takes the time of one objective", a timing ratio; 3 of 3 passed
+alone: 19.1 against 18.9 ms); a T2 fit at 1 and at 5 threads: the 14 output files identical; consistency test;
+`docs_build` 58 pages. An evaluation (pyazr `Objective`, 100 calls, 1 thread, best of 3, three alternating rounds
+against `b-trial76`): T1 0.0885-0.0949 s base, 0.0926-0.0944 s branch; T2 3.64-3.76 s base, 3.64-3.74 s branch. Peak
+resident size of a T2 fit (`AZURE2 fit --use-gradient --threads=N`, three runs each, base / branch): 1 thread 175.6 /
+174.2 MB (all three runs alike), 3 threads 194.6-197.7 / 194.9-196.0 MB, 5 threads 231.4-234.3 / 227.0-241.0 MB; a T2
+sampler run (32 walkers, 100 steps, 4 threads, physical basis): base 338.5, 353.3, 354.0 MB, branch 361.5, 358.8, 359.9 MB
+(the branch higher in every run, by 5 to 23 MB; not explained: a copy of the levels is kB, the run's memory is the
+pooled working copies, and their number depends on the threads' timing); the same run at one sampler thread, base and
+branch side by side: 164.3 / 162.1 MB, and its output files identical (a 32-walker chain). By §12.1.4's measure (not run again) a copy of T2's
+fit set is 0.8 kB against 7.8 kB for a copy of the compound, so at 3 and 5 threads the saving is far below the scatter
+of the runs.
+
+**Not done / open**: the set-up out of `CNuc` (`CompoundSystem`) and the renames (step 5). Decisions for the director: the session holds
+its levels behind pointers that its `const` evaluations write (as its compound and data before: no `mutable` member
+added, but the constness of those methods says nothing); either the evaluations lose `const` or the session's state
+becomes an evaluation's (milestone 3). What stops a reader from being handed another owner's state: the compiler
+stops every reader from reaching a state through the compound (it holds none) and from writing the set-up (`const
+CNuc`); nothing stops a caller from passing a `LevelState` of another owner (the type is the same; no check). The two
+defects on the copies are unchanged: the sub-point grids' stale N_f^1/2 (their state is still a copy of the first
+evaluation's into which only E and gamma are copied), and the RWA chain's snapshot `parameters.out` (the start
+vector's observed levels, `StartObservedLevels`, now on a copy of the sampler's levels); repairing either would change
+output files. Outside: the timing check of `pyazr_evaluation` fails under load.
+
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder on the page
+
+- **Done**: the screen `pyazr/ui/static/tabs/prior.js` (`#/prior`, no header link), reached by "Prior on the
+  parameters…" above the Fit tab's parameter table (both depths): the parameter table with check boxes, parts with a
+  control per field type (a select of the project's files, the checked names, number boxes, pairs from two lists),
+  Build (refusal or eigenvalues and condition number, notes, centres and sigmas, the correlation heat map, the
+  file's text), Write and use, Remove the prior (the config route).  Server: `pyazr/ui/prior.py` (`prior_open`,
+  `prior_build`, `prior_write`; its files are the page's one listing with `output`, `Server.files(outputs=True)`),
+  `pyazr.session.basis_of` (`Session.basis` uses it).  `web_ui.md` section 11.15; `prior_builder.rst` "On the page",
+  `web_interface.rst`, `web_ui_api.rst`, `fitting.rst`, the Developer Guide.
+- **Lines in shared files**: `pyazr/ui/static/app.js` (the import of `tabs/prior.js`; the `TABS` row `prior`),
+  `pyazr/ui/static/tabs/fit.js` (the link, one line in the parameters' bar), `pyazr/ui/server.py` (the import of
+  `prior`; three methods under "the prior builder"), `pyazr/ui/routes.py` (three rows after the rate's grids),
+  `tests/pyazr/ui/smoke_test.py` (`VIEWS`: `("prior", "prior")`), `tests/pyazr/CMakeLists.txt` (the UI test list).
+- **Fixed**: `State.edit_with_files` dropped a write whose text was unchanged (a file rewritten under the name the
+  project already holds) and answered as if written; it now keeps it as one entry (the covariance builder's
+  "Write and use" under its own field's name had the same defect).  `Server.parameters` set `x` to null for fixed
+  rows on the cached session description itself, so a later reader of that description (the prior's table) got no
+  start value for a fixed parameter; it now answers copies.
+- **Verified**: `tests/pyazr/ui/prior_builder_test.py` (new; the injected `edit_with_files` error failed it), the
+  UI tests, the smoke test with its screenshots, `ctest -LE slow`, the consistency test, `docs_build` (numbers in
+  the report).
+
+## 2026-11-14 (prior builder agent, branch `feature/upgrade-9-prior-builder`) — the prior builder in pyazr
+
+- **Done**: `pyazr.priors.build(parameters, parts, directory=)` makes the prior on the fit parameters
+  (`priorCovariance`) from named parts over a session's parameter table (`PART_KINDS`: `fit`, an earlier fit's
+  `param.sav` + `covariance.dat`, the numbers `prior_from_fit` writes; `width`, a sigma or a percentage per parameter
+  around its start value or a given centre; `correlation`, pairs or a matrix between parameters of other parts;
+  `chain`, the mean and covariance of a sampler job's `chain_<id>.npy` with its JSON) and returns a `Prior` that
+  prints itself, writes the file (`write`, the parts on its `#pyazr.prior` line, `read_parts`), names it in a
+  project (`use`: `Project.set_config`) and gives `summary()`.  `read_chain`, `kinds_table`, `Parameters.basis`.
+  User guide `prior_builder.rst`; `chi_squared.rst`, `fitting.rst`, `pyazr.rst`, the Developer Guide's "A part of a
+  builder"; example `pyazr/examples/prior_builder.py`.
+- **One reader of the grammar**: `read_prior` now reads as the engine's `PriorCovariance::Read` and refuses what it
+  refuses; before, it accepted a tag 3 or 1.5 or without a value, a name twice, nan, inf, `1_0`, a no-break space,
+  a matrix not symmetric or not positive definite, and refused a hexadecimal number the engine reads.  A table of
+  35 small files with the engine's verdicts is `tests/pyazr/prior_builder_test.py` part 1 (measured through
+  `Session` in its part 2).
+- **Measured**: a parameter with a prior of its own and a line in the prior file: the engine adds the file's term
+  only (`ReplaceDiagonalPriors`, `src/RunSetUp.cpp`); `chi_squared.rst` said a fit applies both (corrected).
+- **Verified**: `tests/pyazr/prior_builder_test.py` (new, 131 checks), `prior_covariance_test.py`, the consistency
+  test, `docs_build`.
+- **Open**: the page's screen (next commit).
+
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-lists`) — the page's lists in words, its controls not typed
+
+`web_ui.md` section 11.14 has the whole; the user guide `web_interface.rst`, `web_ui_api.rst`, the Developer Guide
+`extending.rst` are updated.
+
+- **The PI's decisions of 2026-11-14**: the Reaction Rate tab is in the first view as its last tab; the Fit tab's
+  first view offers fits, MINOS, the sampler and the bands one click away; the first view is the default also for a
+  returning user (the expert's depth is remembered only when the user switched to it; nothing else stores it); on a
+  project with THM content Physics and THM join the first view after Plot.  REACLIB's defaults (5 %, azr2) stay.
+- **Lists in words**: Experimental Effects and Segments show one list per record kind under its title, data sets
+  first (reaction, observable, file, energy range, angle window, points, active, normalization with fitted/fixed and
+  the shared record, χ²), the others by the fields they set with the schema's titles and "Used by" (the engine's
+  references: new `Project.references`, `GET /api/project/references`); the pairs in the old program's columns
+  (`ProjectPair.FIELDS`, new fields `light_name`, `heavy_name`, `light_jpi`, `heavy_jpi`, `kind_name`;
+  `kinds()["pairs"]`); the description's words `pyazr.project.DESCRIPTION_FIELDS` (`kinds()["description"]`); the
+  levels' label once.  `Project.describe(name)` of a target returned a key of the options ("use_brune"): it now
+  refuses as documented.
+- **The model as a curve**: not built.  It needs a pyazr call (a data set's extrapolation record on a fine grid,
+  over `bands.trimmed_model` and a session of the extrapolations; measured on T2: 0.04 s); written in 11.14.
+- **Files**: `GET /api/files` (`Server.files`), a preview `GET /api/project/records/{name}/preview?field=&value=`
+  (`Server.field_preview`: the engine's reading on a copy).  **For the ENDF screens** (`tabs/endf.js`): switch the
+  small file list to `GET /api/files` (answer `{directory, files: [{path, size, kind, columns?}], more}`), and a text
+  box to `withFiles(ctx, input)` of `ui.js` (the files as the box's choices).
+- **Controls**: a reference's "new …"; a list of numbers as boxes; MINOS's parameters as check boxes; the pair form
+  from `kinds()["pairs"]`; the Fit tab's kinds of the first view `jobs.py FIRST_VIEW_KINDS`.  Where a tab is
+  registered is unchanged (`app.js TABS`); the first view's tabs `layout.js FIRST_VIEW` (rows with `when`, app.js
+  `CONDITIONS`); a record's buttons `tabs/records.js recordPanel` (now with `watchFiles`).
+- **Verified**: see the report of the branch (node tests, `tests/pyazr/ui/` whole, the smoke test's screenshots read,
+  the consistency test, the documents built, `ctest -LE slow`).  No C++ changed: no project comparison.
+- **Open**: the columns, a reaction, a grid, a composition and the structured fields are typed; a list of numbers
+  grows by two boxes per Apply; the model curve (above); the pairs' and the data sets' lists are wider than 1400
+  pixels on T2 (the table scrolls).
+
+## 2026-11-14 (agent, branch `feature/upgrade-7-examples`) — the experts' examples: measured, repaired, tested, listed
+
+The 27 scripts of `pyazr/examples/` as they stand on `19c55dad`, each run once from a copy of the repository's
+projects (`work/examples/before/`), one thread (`OMP_NUM_THREADS=1`), the engine of `work/b-trial76`.  "Beside" =
+in the project's directory; "cwd" = the working directory.
+
+- angular_distribution: `tests/upgrade/T1/T1.azr`; runs: yes; 5.0 s; `--plot` writes a PNG into cwd; shows: Legendre
+  coefficients at chosen energies
+- channel_functions: `tests/upgrade/T1/T1.azr`; runs: yes; 4.7 s; needs matplotlib; PNG into cwd; prints no number;
+  shows: F, G, P, hard-sphere phase per l
+- channel_radius_scan: `tests/upgrade/T3/T3.azr --pair 2 --radii 3.5 4 4.5`; runs: yes; 0.7 s; writes `_radius_*.azr`
+  beside; deletes `output/intEC.*` beside; shows: chi2 against a channel radius
+- covariance_builder: `tests/upgrade/T1/T1.azr el_lab090`; runs: yes; 7.2 s; writes `cov_el_lab090.txt` and `T1_cov.azr`
+  beside; shows: a data covariance from parts
+- deactivate_level: none: `13N.azr` of cwd (run in a copy of `tests/13N`); runs: from there; 16.1 s; default in cwd;
+  writes `13N_no_level.azr` beside; takes `1/2- 20`, a pole with no free width, so "off" equals "full"; shows: runtime
+  off/only of a level; `set_level(active=False)` (same as decompose_cross_section + edit_model)
+- decompose_cross_section: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; —; shows: full / off / only / bare per level
+- dimensionless_widths: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; reads `param.sav` by hand (the session takes it);
+  shows: theta^2 and Weisskopf units
+- ec_integrals: `tests/upgrade/T1/T1.azr`; runs: yes; 7.9 s; needs matplotlib; PNG into cwd; shows: external-capture
+  integrals per pathway
+- edit_model: `tests/13N/13N.azr`; runs: yes; 8.1 s; names of 13N only (level `1/2+ 20`, `artemov`, `roughton.dat`);
+  writes beside; deletes `output/intEC.*` beside (the engine checks their signature itself); shows: level and data-set
+  edits
+- edit_scheme: none: `13N.azr` of cwd; runs: from there; 8.2 s; default in cwd; leaves `13N_edited.azr` beside; shows:
+  nothing: the first half of edit_model
+- endf_evaluation: none (repository files); runs: yes; 3.7 s; — (another agent's); shows: an ENDF-6 file beside a
+  project
+- exfor_fetch: not run (network); runs: no; — s; network (director: HTTP 403); writes `pyazr/examples/_exfor_demo/`
+  inside the package; shows: EXFOR search, conversion, DOI
+- fit_emcee: `tests/upgrade/T2/T2.azr 40 20 0`; runs: yes; 96.3 s; default `T2.azr` of cwd; `chain.npy` into cwd; shows:
+  emcee on `Objective.log_prob`
+- fit_iminuit: `tests/upgrade/T2/T2.azr`; runs: **no**; 0.4 s; `s.objective()(x0)` is a float: `AttributeError`; shows:
+  MIGRAD/HESSE of iminuit
+- fit_scipy: `tests/upgrade/T2/T2.azr`; runs: **no**; 0.7 s; the same; shows: L-BFGS-B and least_squares
+- fit_zeus: —; runs: **no**; 0.0 s; zeus absent; names of before 3.0 (`datasets.sys_errors`, `cross_err`, `p.value`);
+  `13N.azr` of cwd; shows: nothing: fit_emcee with its own priors
+- nuclear_potential: none (repository files); runs: yes; 9.5 s; project fixed in the script; shows: the hybrid potential
+  per pair
+- per_dataset_chi2: `tests/upgrade/T2/T2.azr`; runs: yes; 0.5 s; —; shows: chi2 per data set, whitened rows
+- print_scheme: none: `13N.azr` of cwd; runs: from there; 8.1 s; default in cwd; shows: the level scheme and the data
+  sets
+- project_from_python: none (temporary directory); runs: yes; 0.4 s; —; shows: a project from records
+- reaction_rate: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; runs: yes; 19.4 s; the engine's progress bars on
+  stdout (package); shows: N_A<sigma v>, Gamow window, REACLIB
+- save_fit_to_azr: `tests/upgrade/T2/T2.azr --params <golden param.sav> --out ...`; runs: **no**; 0.4 s; no parameter
+  file of the repository has format-3 names; reads `param.sav` by hand; shows: `save_fit` and the read-back
+- sensitivities: `tests/upgrade/T1/T1.azr --check`; runs: yes; 3.7 s; —; shows: d ln sigma / d ln p, analytic against
+  differences
+- sfactor_extrapolation: `tests/upgrade/T1/T1.azr`; runs: yes; 3.0 s; writes `_sfactor.azr` beside; deletes
+  `output/intEC.extrap` beside; shows: S(E) below the data, S(0)
+- tabulate_cross_sections: `tests/upgrade/T1/T1.azr`; runs: yes; 9.5 s; default `tests/13N/13N.azr` of cwd; table into
+  cwd; on no page; shows: an adaptive sigma(E) table
+- transform_widths: `tests/upgrade/T1/T1.azr`; runs: yes; 3.7 s; —; shows: `Session.transform` beside 2 gamma^2 P; a
+  chain mapped
+- uncertainty_band: none: `7Be.azr` of cwd; runs: **no**; 0.2 s; `7Be.azr` is in no directory of the repository (key
+  113); shows: bands from a fit covariance
+
+The same thing twice: edit_scheme is the first half of edit_model; deactivate_level is decompose_cross_section's
+off/only plus one `set_level` of edit_model; fit_zeus is fit_emcee with priors of its own; sfactor_extrapolation's
+grid is the central value of uncertainty_band's second part; dimensionless_widths and transform_widths both print
+the physical widths.
+
+**After** (the same machine, one thread, the seconds of `tests/pyazr/examples_test.py`'s rows; every command from the
+repository's root, `python3 pyazr/examples/<script>`; q = quick row, s = slow row):
+
+- print_scheme: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+- project_from_python: `[WORKDIR]`; 0.4 s; q
+- edit_model (+ edit_scheme, + deactivate_level's file part): `tests/upgrade/T1/T1.azr --out DIR`; 7.7 s; s
+- exfor_fetch: `tests/upgrade/T1/T1.azr --entry T0001003.1 --local tests/pyazr/data/exfor_master`; 3.8 s; q (the network
+  row skipped)
+- covariance_builder: `tests/upgrade/T1/T1.azr el_lab090 --out DIR/T1_cov.azr`; 7.2 s; s
+- nuisances (new): `tests/upgrade/T1/T1.azr el_lab090 el_lab125 el_lab160`; 4.6 s; s
+- natural_target (new): `tests/natural_target/models/M.azr`; 0.3 s; q
+- gamma_decay (new): `tests/gamma_decay/models/record.azr`; 0.4 s; q
+- refusals (new): `tests/upgrade/T3/T3.azr`; 0.4 s; q
+- per_dataset_chi2: `tests/upgrade/T2/T2.azr`; 0.5 s; q
+- decompose_cross_section (+ deactivate_level's runtime part): `tests/upgrade/T1/T1.azr --level "1/2+ 2.365"`; 3.9 s; q
+- angular_distribution: `tests/upgrade/T1/T1.azr -n 3`; 4.5 s; s
+- channel_radius_scan: `tests/upgrade/T3/T3.azr --pair 2 --radii 3.5 4.0 4.5`; 0.7 s; q
+- nuclear_potential: `tests/hybrid_potential/hybrid_potential.azr`; 9.8 s; s
+- thm_dataset (new): `tests/upgrade/T2/T2.azr`; 0.5 s; q
+- tabulate_cross_sections: `tests/upgrade/T1/T1.azr --out sigma.dat`; 9.9 s; s
+- fit_engine (new; + save_fit_to_azr): `tests/upgrade/T1/T1.azr --out DIR`; 14.0 s; s
+- fit_iminuit: `tests/upgrade/T3/T3.azr`; 0.7 s; q
+- fit_scipy: `tests/upgrade/T3/T3.azr`; 1.0 s; q
+- fit_emcee (+ fit_zeus): `tests/upgrade/T3/T3.azr --steps 60 --rate 2 1 --draws 5`; 3.0 s; q
+- sensitivities: `tests/upgrade/T1/T1.azr --check`; 3.8 s; q
+- uncertainty_band: `tests/upgrade/T1/T1.azr`; 7.2 s; s
+- reaction_rate: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; 20.9 s; s
+- sfactor_extrapolation: `tests/upgrade/T1/T1.azr --entrance 1 --exit 2`; 3.1 s; q
+- endf_evaluation (untouched): none; 3.9 s; q
+- channel_functions: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+- ec_integrals: `tests/upgrade/T1/T1.azr`; 5.4 s; s
+- dimensionless_widths: `tests/upgrade/T1/T1.azr`; 3.8 s; q
+- transform_widths: `tests/upgrade/T1/T1.azr`; 3.7 s; q
+
+- **Rule**: a script takes its project as the first argument, required (endf_evaluation, another agent's, keeps its
+  optional pair of arguments); files only where `--out`/`--plot`/`--csv` say or in a printed temporary directory; an
+  edited copy's session reads the data from the project's directory (`Session(..., cwd=)`).
+- **Test**: `tests/pyazr/examples_test.py` (ctest `pyazr_examples`, 41 s, and `pyazr_examples_slow`, label slow,
+  91 s): one row per run with a pinned number; nothing may appear in the root or beside a named project.  Check 58:
+  the files of `pyazr/examples`, the test's rows and the page `user_guide/pyazr_examples.rst` are one set.  Injected
+  once: a script without rows (check 58: two failures), a row of the page without a file (one), a script writing
+  beside its project (the test fails); removed.
+- **Page**: `docs/source/user_guide/pyazr_examples.rst` by task; `pyazr.rst` "Examples" and
+  `getting_started/examples.rst` point to it; Developer Guide `extending.rst` "An example script of pyazr".
+- **Open**: defects of pyazr the scripts show (not repaired): `Session.level_scheme` numbers pairs in the engine's
+  order and calls T3's beta pair a photon; `Session.ec_integrals` gives no final state and no unit; `evaluate(x).data[i]
+  .unit` is None in an extrapolation session; the `ParameterVectorError` of `evaluate` has no what/allowed/fix;
+  a `radiative` parameter's unit is its kind's text; a Project edit that leaves a phase-shift data set without its
+  channel is accepted and the session refuses; `trimmed_model`, `extrapolation_bands` and `tabulate` write beside the
+  project unless given a `cwd`, and `trimmed_model`'s docstring calls a changed-grid `intEC.extrap` silently reused.
+  Gaps: no Project edit of `<parameterSettings>` (a prior or limit on a level parameter); no project without a
+  nuclear-part file.  The repository's skills still name the removed scripts (`.claude/skills/azure2-calculate/
+  references/examples.md`, `azure2-setup/SKILL.md`, `azure2-fit/SKILL.md`, `azure2-uncertainty/SKILL.md`).
+
+## 2026-11-14 (agent, branch `feature/upgrade-8-endf-model-writer`) — ENDF: the start model and the writer
+
+**Done**: the engine's two level doors (`api/src/pybind_level_doors.cpp`, registered in `BindPhysics`:
+`formal_levels_of_block`, `observed_levels_of_block`, free functions of pair records and one block's numbers, the
+engine's `ChannelFunc`/`WhitFunc` and `physics/` level parameters); `pyazr/endf/resonances.py` (`LRF7` and its
+records, `Material.resonances()` with the refusals of `endf.md` 3.2), `pyazr/endf/model.py` (`to_project`,
+`from_session`), `pyazr/endf/writer.py` (`write`: MF=1, MF=2, MF=3 of the exits and capture, LRP=2, MF=2 checked
+against MF=3 before writing), `records.RecordWriter`; commands `pyazr endf to-project`, `pyazr endf write`; tests
+`pyazr_endf_model`, `pyazr_endf_write`, two `cli_test` cases; `endf.md` 13.3-13.6, the user page's three sections, the
+command-line page, the Developer Guide recipe, the class scheme rows, `FOR_THE_OWNER.md`, `ROADMAP.md`, the example
+`pyazr/examples/endf_start_model.py`.
+**Verified how**: build `work/b-endf3` 0 warnings; all projects in the three bases against `tab-t74-1` (tag
+`tab-endf3-1`): 887 / 851 / 887 identical; the doors equal a formal-basis session's levels and transform bit for bit
+(T1, T2, 13N); the library extract reproduces its MF=3/MT=600 to 1.13e-6; write then read T1 / T2: Delta chi^2
+-2.2e-4 / +6.2e-4; MF=3 written equals the engine at the data and between grid points to the grid's 1e-3; CHECKR,
+FIZCON, PSYCHE on the written files (findings in `endf.md` 13.6). **Open**: MF=6 of the writer (LAW=2 exits,
+LAW=5 elastic with MF=3/MT=2, MF=6/MT=102), IFG=0 and KRM=3 on reading; `ChannelFunctionsFromCNuc` could call the
+doors' particle channel functions (a reserved file).
+
+## 2026-11-14 (page ENDF agent) — the ENDF tab: an evaluation over the data, the check of a file
+
+Branch `feature/upgrade-9-webui-endf`.  `web_ui.md` section 11.13, `endf.md` 13.3 (as built); user guide
+`web_interface.rst` (ENDF evaluations), `web_ui_api.rst`, `endf.rst` (On the page).
+
+- **Server**: `pyazr/ui/evaluations.py` (the ENDF-6 files of the folder, summary, curves' answer with the two ratios,
+  the jobs `endf_check`/`codes` and `endf_standardize`/`program`, accept); routes `GET /api/endf/files`,
+  `POST /api/endf/summary`, `POST /api/endf/curves` (session op `Engine.endf_curves`), `GET /api/endf/checkers`,
+  `POST /api/endf/accept`; `JobRow.files` and `JobRow.session` (jobs that build no session); the two job rows are
+  made by `evaluations.job_rows()` and joined in `jobs.job_rows()` (`jobs.py` stays under the 1000-line limit).
+- **pyazr.endf**: `PROGRAMS` rows gain a fourth column, what the program does to numbers (`Checker.numbers`);
+  `MEANINGS` gains CHECKR's two LTP=15 messages.
+- **Page**: `tabs/endf.js` (#/endf, #/endf/check); lines in shared files: `app.js` (the import, the `TABS` row),
+  `style.css` (an ENDF block at the end), `selftest.js`, `smoke_test.py` (VIEWS, the ENDF files and stand-in codes).
+  The first-view row to add at the merge: `{ title: "ENDF", tab: "endf", hash: "#/endf" }`.
+- **Verified**: `tests/pyazr/ui/` whole, the new `endf_test.py` and `js/endf.test.mjs`, the smoke test with
+  screenshots, the docs build, `ctest -LE slow` (numbers in the report).  The real codes (outside the repository)
+  run through the routes on both test files.
+- **Open**: extrapolations get no curve; when `GET /api/files` merges, `evaluations.endf_files` becomes a filter over
+  it; the ENDF jobs appear in the Fit tab's job form and list as the rate job does.
+
 ## 2026-11-14 (director, 17:30) — merged: ENDF read and check; the covariance builder, the rate, the rate libraries
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 76 (rehearsal 75 plus

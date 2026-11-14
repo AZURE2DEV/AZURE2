@@ -128,15 +128,15 @@ int CNuc::IsPair(PPair pair) {
  * is returned.  Otherwise, the function returns 0.
  */
 
-int CNuc::IsJGroup(JGroup jGroup) {
+int CNuc::IsJGroup(JGroup jGroup) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumJGroups()) {
     // A group belongs to one compound nucleus: the same J^pi of another
     // nucleus in the file is a different group, with its own level matrix.
-    if (jGroup.GetJ() == this->Group(c + 1)->GetJ() &&
-        jGroup.GetPi() == this->Group(c + 1)->GetPi() &&
-        jGroup.GetNucleus() == this->Group(c + 1)->GetNucleus()) b = true;
+    if (jGroup.GetJ() == this->GetJGroup(c + 1)->GetJ() &&
+        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi() &&
+        jGroup.GetNucleus() == this->GetJGroup(c + 1)->GetNucleus()) b = true;
     c++;
   }
   if (b)
@@ -198,8 +198,8 @@ int CNuc::GetPairNumFromKey(int key) const {
  * input files.  Returns -1 if the files could not be read, and 0 if the files were read successfully.
  */
 
-int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
-  levelInputs_ = LevelInputs();
+int CNuc::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, const std::map<int, double> &radii) {
+  inputs = LevelInputs();
   if (configure.relativistic && configure.useHybridMethod) {
     // The hybrid potential acts in a Schrodinger equation between a_c and the matching radius: no relativistic form.
     configure.outStream << "ERROR: relativistic=1 cannot be combined with the hybrid nuclear-potential "
@@ -409,25 +409,24 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     numLevels.push_back(this->Group(j)->NumLevels());
     numChannels.push_back(this->Group(j)->NumChannels());
   }
-  levelState_ = LevelState(numLevels, numChannels);
+  state = LevelState(numLevels, numChannels);
   parameterLayout_ = std::make_shared<const LevelParameterLayout>(numLevels, numChannels);
 
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
   // The input values: the <levels> rows', a gamma_decay record's level with the partial widths of the record.
-  levelInputs_ = LevelInputs(numLevels, numChannels);
+  inputs = LevelInputs(numLevels, numChannels);
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
       const ALevel *level = this->Group(j)->GetLevel(la);
-      levelInputs_.SetE(j, la, level->FileE());
-      levelState_.SetInputEnergy(j, la, level->FileE());
+      inputs.SetE(j, la, level->FileE());
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
-        levelInputs_.SetGamma(j, la, ch, level->FileGamma(ch));
-        levelState_.SetZeroInputWidth(j, la, ch, level->FileZeroWidth(ch));
+        inputs.SetGamma(j, la, ch, level->FileGamma(ch));
+        state.SetZeroInputWidth(j, la, ch, level->FileZeroWidth(ch));
       }
     }
-  levelInputs_.SetGammaDecayNumbers(gammaDecays_->FileNumbers());
-  gammaDecays_->WriteInputWidths(levelInputs_);
+  inputs.SetGammaDecayNumbers(gammaDecays_->FileNumbers());
+  gammaDecays_->WriteInputWidths(inputs);
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 
@@ -583,13 +582,13 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
  * contributions and coefficients.  A CNuc object can only be initialized for use AFTER it is filled.
  */
 
-void CNuc::Initialize(const Config &configure) {
+void CNuc::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs) {
   WarnForbiddenSpinlessChannels(*this, configure);
 
   // Calculate Boundary Conditions
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Boundary Conditions..." << std::endl;
-  this->CalcBoundaryConditions(configure);
+  this->CalcBoundaryConditions(configure, inputs);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_BOUNDARY_CONDITIONS)
     WriteBoundaryConditionsCheck(*this, configure);
 
@@ -598,16 +597,16 @@ void CNuc::Initialize(const Config &configure) {
     if (!(configure.paramMask & Config::USE_API))
       configure.outStream << "Performing Input Parameter Transformation..." << std::endl;
     // No standard R-matrix may correspond to the input (TransformIn): stop, as for any other GSL failure here.
-    if (!this->TransformIn(configure)) throw GSLException(levelInputs_.TransformError());
+    if (!this->TransformIn(configure, state, inputs)) throw GSLException(inputs.TransformError());
   }
 
-  this->SetUpECFinalBlocks(configure);
+  this->SetUpECFinalBlocks(configure, inputs);
 
   // Sort reaction pathways
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
   this->BuildPathways(configure);
-  this->SetUpFormalCaptureMasks(configure);
+  this->SetUpFormalCaptureMasks(configure, state);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     WritePathwaysCheck(*this, configure);
 
@@ -753,10 +752,7 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
         }
         E.swap(f.E);
         gamma.swap(f.gamma);
-        for (std::size_t lb = 0; lb < levels.size(); lb++) {
-          inputs.SetE(j, levels[lb], E[lb]);
-          state.SetInputEnergy(j, levels[lb], E[lb]);
-        }
+        for (std::size_t lb = 0; lb < levels.size(); lb++) inputs.SetE(j, levels[lb], E[lb]);
       }
       for (std::size_t lb = 0; lb < levels.size(); lb++)
         for (std::size_t k = 0; k < nc; k++) inputs.SetGamma(j, levels[lb], (int)k + 1, gamma[lb * nc + k]);
@@ -772,7 +768,7 @@ bool CNuc::TransformIn(const Config &configure, LevelState &state, LevelInputs &
  * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
 
-void CNuc::CalcBoundaryConditions(const Config &configure) {
+void CNuc::CalcBoundaryConditions(const Config &configure, const LevelInputs &inputs) {
   // B_c = S_c(E of the group's lowest R-matrix level) for every particle channel; a non-particle channel copies channel
   // 1's value (it never enters the level matrix); a group without R-matrix levels gets 0, where B_c drops out of the
   // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1; HANDOFF decision 10).
@@ -784,7 +780,7 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
       JGroup *theJGroup = this->Group(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
       for (int la : structure.map.levelOfBlockLevel[b])
-        energies.push_back(levelInputs_.E(structure.map.groupOfBlock[b], la));
+        energies.push_back(inputs.E(structure.map.groupOfBlock[b], la));
       const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies, cf);
       const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
       for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
@@ -983,14 +979,4 @@ JGroup *CNuc::Group(int jGroupNum) {
 
 const JGroup *CNuc::GetJGroup(int jGroupNum) const {
   return &jgroups_[jGroupNum - 1];
-}
-
-/*!
- * Creates a new copy of the CNuc object in memory and returns a pointer to the new object.
- * Used in AZURECalc function class for thread safety.
- */
-
-CNuc *CNuc::Clone() const {
-  CNuc *localCompound = new CNuc(*this);
-  return localCompound;
 }

@@ -31,7 +31,7 @@
  * The AMatrixFunc object is created with reference to a CNuc object.
  */
 
-AMatrixFunc::AMatrixFunc(CNuc *compound, const LevelState &state, const Config &configure) :
+AMatrixFunc::AMatrixFunc(const CNuc *compound, const LevelState &state, const Config &configure) :
   configure_(&configure),
   compound_(compound),
   state_(&state),
@@ -1370,7 +1370,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 /*!
  * Beam energy in the compound system, as FillMatrices takes it.
  */
-double AMatrixFunc::InEnergy(CNuc *compound, Site *point) {
+double AMatrixFunc::InEnergy(const CNuc *compound, Site *point) {
   if (compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20) {
     int ep = compound->GetPairNumFromKey(point->GetExitKey());
     return point->GetCMEnergy() + compound->GetPair(ep)->GetSepE() + compound->GetPair(ep)->GetExE();

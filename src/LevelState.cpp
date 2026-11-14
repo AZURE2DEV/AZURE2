@@ -25,7 +25,6 @@ LevelState::LevelState(const std::vector<int> &numLevels, const std::vector<int>
     const std::size_t n = numLevels[j], nc = numChannels[j];
     g.numChannels = (int)nc;
     g.E.assign(n, 0.0);
-    g.inputE.assign(n, 0.0);
     g.sqrtNF.assign(n, 1.0);
     g.parkNorm.assign(n, 1.0);
     g.shiftEnergy.assign(n, never);

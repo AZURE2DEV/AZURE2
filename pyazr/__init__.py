@@ -86,6 +86,7 @@ try:
                            parameter_label, azr_parameter_slots,
                            write_averaged_azr)
     from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
+    from . import priors
     from . import covariance
     from . import rate
     from . import rate_formats
@@ -119,7 +120,7 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "uncertainty_bands", "extrapolation_bands",
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
-           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "covariance", "rate",
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "priors", "covariance", "rate",
            "rate_formats",
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid",

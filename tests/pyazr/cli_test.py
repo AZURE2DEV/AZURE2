@@ -416,6 +416,35 @@ def case_endf_standardize():
           os.path.isfile(out) and changed.get((3, 600), {}).get("kind") == "numbers", result)
 
 
+def case_endf_to_project():
+    new = os.path.join(TMP, "from_endf", "inden.azr")
+    os.makedirs(os.path.dirname(new), exist_ok=True)
+    code, doc, _ = run("endf", "to-project", EXTRACT, new, "--json")
+    result = ok_doc("endf to-project", code, doc, "endf to-project") or {}
+    levels = pyazr.Project.open(new).levels() if os.path.isfile(new) else []
+    check("endf to-project: pyazr.endf.to_project writes the project and reports the levels", result.get("project")
+          == new and len(result.get("levels", [])) == 14 == len(levels) and result.get("separation_source") ==
+          "AME2020", result)
+    code, doc, _ = run("endf", "to-project", EXTRACT, new, "--json")
+    check("endf to-project: an existing NEW is refused (exit 2)", code == 2 and not doc.get("ok"), doc)
+
+
+def case_endf_write():
+    folder = os.path.join(TMP, "endf_write_T1")
+    shutil.copytree(os.path.dirname(T1), folder,
+                    ignore=shutil.ignore_patterns("output*", "checks*"))
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(folder, sub), exist_ok=True)
+    out = os.path.join(folder, "T1.endf")
+    code, doc, _ = run("endf", "write", os.path.join(folder, "T1.azr"), out, "--low", "1.0", "--high", "1.2",
+                       "--json")
+    result = ok_doc("endf write", code, doc, "endf write") or {}
+    sections = [(x["mf"], x["mt"]) for x in result.get("sections", [])]
+    check("endf write: pyazr.endf.write writes MF=1, MF=2 and MF=3/MT=102 of T1, read back by pyazr.endf.read",
+          result.get("file") == out and sections == [(1, 451), (2, 151), (3, 102)] and
+          pyazr.endf.read(out).header.lrp == 2, result)
+
+
 JSON_CASES = {
     "commands": case_commands,
     "describe": case_describe,
@@ -435,6 +464,8 @@ JSON_CASES = {
     "endf curves": case_endf_curves,
     "endf check": case_endf_check,
     "endf standardize": case_endf_standardize,
+    "endf to-project": case_endf_to_project,
+    "endf write": case_endf_write,
 }
 
 # (arguments, exit code, error class): wrong calls; each is run with --json and without

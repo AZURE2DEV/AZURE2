@@ -128,7 +128,7 @@ energy and the amplitudes:
    ``TransformIn`` and ``FillCompoundFromParamsPhysical`` (the observed
    vector), read by ``CNuc::FillMnParams`` as the start value; its observed
    value in ``GetTransformParams``. What an evaluation reads of the input
-   (the zero-width flags, the input energy the THM line shape reads) is
+   (the zero-width flags) is
    written into the ``LevelState`` where the input is read (``Fill``,
    ``TransformIn``, the fill from an observed vector), so that the
    evaluation reads the state alone. ``ALevel`` holds only what the
@@ -141,6 +141,21 @@ energy and the amplitudes:
    ``tests/upgrade/level_inputs_test.cpp`` (the input values and what a fill
    leaves in the state) and the objective's gradient against finite
    differences.
+
+An owner of the levels
+----------------------
+
+Something that evaluates the model on levels of its own (a second sampler, a
+scan, a new front end) holds the compound as ``const CNuc *`` (or ``const
+CNuc &``) of the run or session that set it up and outlives it, and its own
+``LevelState`` (with a ``LevelInputs`` if it transforms from the observed
+basis), copied from its caller's: ``LevelState state(callerState)``. It
+passes the compound, the state and the inputs to the fills and the readers.
+If evaluations of it run at the same time from ``const`` methods, the idle
+copies are a ``StatePool`` (``include/StatePool.h``) of its caller, lent as
+the ``Results`` are (``FitterStates`` of ``AZURECalc``,
+``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
+changes: the owner's own file, and its test.
 
 A term of the objective
 -----------------------
@@ -389,12 +404,31 @@ the printed page of ENDF-102 (2023) in a comment. A section that can be read and
 5. A hand-written file of the section (``tests/pyazr/endf_testfiles.py`` writes it) and checks against hand values
    from the manual's equations in ``tests/pyazr/endf_read_test.py``.
 
+A section (MF/MT) of the ENDF writer
+------------------------------------
+
+``pyazr.endf.write`` (``pyazr/endf/writer.py``) writes what the engine computes; the module writes records only.
+
+1. The numbers: an engine quantity on the writer's grid (``_engine_grid``: one extrapolation per reaction in a
+   project of the session's nuclear part, refined by ``pyazr.refine_grid``), or a door of the binding when the
+   engine has no quantity for it (a new file of ``api/src/``, registered in ``BindPhysics``); never a formula in
+   Python.
+2. The records: a branch of ``write`` that fills ``sections[(MF, MT)]`` with a ``RecordWriter``
+   (``records.py``: CONT, LIST, TAB1, TAB2, TEXT), each record laid out as its page of ENDF-102 says (cite it).
+   The directory of MF=1 and the sequence numbers follow from ``sections``.
+3. Its line in ``NOT_WRITTEN`` goes; what the section still cannot carry is a line of ``Losses`` (``model.py``).
+4. Reading it back: the reader's ``read_*`` of the section (the recipe above); a check in
+   ``tests/pyazr/endf_write_test.py`` that the section read back equals the engine at points between the grid's,
+   and the own format check clean on the written file.
+
 A checking code of ``pyazr.endf``
 ---------------------------------
 
 The codes are found, never installed (``pyazr/endf/checkers.py``):
 
-1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does).
+1. A row of ``PROGRAMS`` (name as the program file is called, family, kind: check, rewrite or derive, what it does,
+   what it does to the numbers of a file: the page says it before a run). The page needs no line: its ENDF tab lists
+   the codes from ``GET /api/endf/checkers`` and runs them through the jobs ``endf_check`` and ``endf_standardize``.
 2. Its deck: for a checking code the one of ``_run_check``, for a rewriting code the branch of ``standardize`` (a
    PREPRO code: ``_prepro_deck``); take the deck from the program's source, cite the lines.
 3. Its report: a branch of ``parse_report`` that gives findings (severity, MAT, MF, MT, record, text) and the
@@ -403,6 +437,24 @@ The codes are found, never installed (``pyazr/endf/checkers.py``):
    a real report, cited); cases in ``tests/pyazr/endf_check_test.py``, and a case with the real program in its last
    part (run when ``AZURE2_ENDF_UTILITIES`` / ``AZURE2_PREPRO`` are set).
 5. The command's choices in ``pyazr/cli.py`` (``endf check --program``, ``endf standardize --program``).
+
+An example script of pyazr
+--------------------------
+
+An example tells one task from start to end on a project of the repository, for an expert (or an agent working for
+one) to copy:
+
+1. The file ``pyazr/examples/<name>.py``: a docstring that says the task, the calls it shows and the command that runs
+   it from the repository's root on a project of ``tests/``; the project as its first argument, required; files
+   written only where ``--out`` (or a printed temporary directory) says; every printed number with its unit; pyazr's
+   own calls for what pyazr computes.
+2. Its row in ``ROWS`` of ``tests/pyazr/examples_test.py``: the arguments, one number or text of its output that is
+   pinned, ``slow=True`` above about 4 s at one thread, ``needs=`` the optional packages, ``skip=`` the reason a run
+   cannot be made here (the network).
+3. Its row on the page of examples (:doc:`../user_guide/pyazr_examples`), under its task: the script, the task in one
+   sentence, the command.
+
+Check 58 fails for a script without both rows, and for a row whose script is not there.
 
 A run-time data file of pyazr
 -----------------------------
@@ -468,6 +520,43 @@ served as ``pyazr.kinds()["thm"]``: nothing in the page. No test fails when a ta
 of ``TABS``; the smoke test (headless Chrome, ``ctest -L browser``) renders
 the views it lists. No module of the page but ``layout.js`` names a record
 kind, quantity or parameter kind (``tests/pyazr/ui/static_test.py``).
+
+A **column of a list** of the page comes from a table, never from the tab:
+the lists of the Data tab (``pyazr/ui/static/lists.js``) show, per record
+kind, the fields its records set with the schema's ``title`` (a new field is a
+column with no line of the page; a field marked rare stays in the form), or,
+for a kind the engine describes, the entries of
+``pyazr.project.DESCRIPTION_FIELDS`` marked ``list`` (``kinds()["description"]``:
+one row there for a new entry of ``describe``); the list of pairs shows
+``ProjectPair.FIELDS`` marked ``list`` (``pyazr/nuclear_part.py``, a new
+field of a pair is one row with its title and unit; the pair form takes
+``PARTNER_FIELDS`` and ``ARGUMENTS`` the same way). A **control** of a form
+is the row of its value type in ``WIDGETS`` (``pyazr/ui/static/forms.js``):
+a ``path`` offers the project folder's files (``GET /api/files``) and is
+previewed under the field (``tabs/records.js`` ``filePreview``, ``GET
+/api/project/records/{name}/preview``), a ``reference`` offers the records and
+"new …", a ``number_list`` a box per number. A **kind of job** the Fit tab's
+first view offers is a kind of ``FIRST_VIEW_KINDS`` (``pyazr/ui/jobs.py``).
+A **view of the first view** is a row of ``FIRST_VIEW`` (``layout.js``); a
+row with ``when`` is shown under the condition of that name (``CONDITIONS``
+in ``app.js``).
+
+A part of a builder (a data covariance, a prior)
+------------------------------------------------
+
+The two builders make a file the engine reads from named parts; the page's forms come from their tables.
+
+- **A data covariance** (``pyazr/covariance.py``): one row of ``PART_KINDS`` (its fields: name, type, default,
+  unit, doc) and a branch of ``_terms`` that returns the part's terms (``diagonal``, ``vector``, ``relvector``,
+  ``block``); a case in ``tests/pyazr/covariance_builder_test.py`` against a matrix worked by hand.
+- **A prior on the parameters** (``pyazr/priors.py``): one row of ``PART_KINDS`` and one function of ``_BLOCKS``
+  that returns the part's ``_Block`` (its parameter names, centres, covariance and notes); a case in
+  ``tests/pyazr/prior_builder_test.py``.  A new type of field also needs its control in ``fieldInput`` of
+  ``pyazr/ui/static/tabs/prior.js`` (the types: ``path:<suffixes>``, ``names``, ``number``, ``integer``, ``pairs``,
+  ``matrix``).
+
+Nothing else: the checks and the notes are made on the whole matrix, and the screens (``tabs/covariance.js``,
+``tabs/prior.js``) read the tables through their routes (``pyazr/ui/utilities.py``, ``pyazr/ui/prior.py``).
 
 Other tables
 ------------

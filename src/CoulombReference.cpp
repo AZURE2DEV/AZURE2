@@ -21,7 +21,7 @@
 
 namespace azure2 {
 
-double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, CNuc *compound,
+double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, const CNuc *compound,
                              const Config &configure) {
   if (!experiment::IsCoulombReference(part))
     throw std::logic_error("CoulombReferenceValue: the leaf is not a Coulomb reference");
@@ -48,7 +48,7 @@ double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &
   return point->LabFoldFactor() * FoldValues(*point, data, configure, sub);
 }
 
-double SFactorConversionValue(const Site *point, CNuc *compound, double shape_perMeV) {
+double SFactorConversionValue(const Site *point, const CNuc *compound, double shape_perMeV) {
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
   return physics::modified_sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy(), shape_perMeV);
 }

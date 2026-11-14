@@ -9,6 +9,10 @@ sections, the S-factor conversion) is a row of :mod:`pyazr.physics`, the engine'
     print(m.summary())                            # MAT, target, projectile, library, sections in words, the text
     xs = m.cross_section(600)                     # MF=3/MT=600; xs(energies_eV) -> b
     c = m.curves(s.evaluate(x).data[i], session=s)  # the evaluation at the data set's points, its quantity and unit
+    r = m.resonances()                            # MF=2/MT=151 LRF=7 as a record (the file's units and frame)
+    project, report = pyazr.endf.to_project(r, "new.azr", material=m)   # a new project, Brune basis, all fixed
+    record, losses = pyazr.endf.from_session(s, x)  # a session's particle channels as LRF=7, formal basis
+    written = pyazr.endf.write(s, "new.endf", x)  # MF=1, MF=2 (LRF=7), MF=3 from the engine; LRP=2
     findings = pyazr.endf.check_format(path)      # the module's own check of the format, each finding with its page
     result = pyazr.endf.check(path)               # the own check, then CHECKR, FIZCON, PSYCHE when they are found
     candidate = pyazr.endf.standardize(path)      # STANEF on a copy: candidate.diff(), candidate.accept(to=...)
@@ -26,6 +30,9 @@ from .distributions import CrossSection, Distribution, Product
 from .summary import Summary
 from .curves import CurveRequest, Curve, PairSpec, CoulombTerms, request_of, curves
 from .format_check import Finding, FormatReport, check_format
+from .resonances import LRF7, ParticlePair, Channel, Level, SpinGroup, read_resonances
+from .model import Conversion, ConvertedLevel, Losses, to_project, from_session
+from .writer import Written, write
 from .checkers import (PROGRAMS, Checker, CheckReport, CheckResult, Candidate, SectionChange, checkers, check,
                        standardize, compare)
 
@@ -33,4 +40,6 @@ __all__ = ["read", "Material", "Header", "Section", "Summary", "CrossSection", "
            "CurveRequest", "Curve", "PairSpec", "CoulombTerms", "request_of", "curves", "interpolate",
            "NUMBER_FORMS", "form_classic", "form_e", "form_widest", "read_float", "read_int", "FormatError",
            "FormatRefused", "Finding", "FormatReport", "check_format", "PROGRAMS", "Checker", "CheckReport",
-           "CheckResult", "Candidate", "SectionChange", "checkers", "check", "standardize", "compare"]
+           "CheckResult", "Candidate", "SectionChange", "checkers", "check", "standardize", "compare", "LRF7",
+           "ParticlePair", "Channel", "Level", "SpinGroup", "read_resonances", "Conversion", "ConvertedLevel", "Losses",
+           "to_project", "from_session", "Written", "write"]
