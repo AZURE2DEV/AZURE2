@@ -82,7 +82,15 @@ switch() {
 }
 
 echo "1-2. variable = option, and the effect"
-[ -n "$TABLE" ] && [ -f "$TABLE" ] || { echo "  FAIL  set AZURE2_COULOMB_TABLE to the Coulomb table file"; exit 1; }
+if [ -z "$TABLE" ] || [ ! -f "$TABLE" ]; then
+  # No table file given (the CI has none): a coarse one is built here with the tool beside the program, about 20 s.
+  # What is asked of the switch, the variable equal to the option, does not depend on the table's size.
+  TOOL="$(dirname "$AZURE2_BIN")/azure2-coulomb-table"
+  [ -x "$TOOL" ] || TOOL="$TOOL.exe"
+  TABLE="$WORK/coarse_coulomb_table.bin"
+  "$TOOL" build "$TABLE" --lmax 4 --per-decade 24 --threads "$OMP_NUM_THREADS" > "$WORK/table.log" 2>&1 ||
+    { echo "  FAIL  no AZURE2_COULOMB_TABLE, and $TOOL built no table"; tail -5 "$WORK/table.log"; exit 1; }
+fi
 switch AZURE2_COULOMB_TABLE "$TABLE" "--coulomb-table=$TABLE" upgrade/T1 T1.azr "$CALC"
 printf -- '--no-brune\n' > "$WORK/options.txt"
 switch AZURE_OPTIONS_FILE "$WORK/options.txt" "--options-file=$WORK/options.txt" upgrade/T1 T1.azr "$CALC"

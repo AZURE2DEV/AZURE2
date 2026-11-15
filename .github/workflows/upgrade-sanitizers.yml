@@ -90,6 +90,10 @@ jobs:
           grep -E '^  FAIL' sanitize.log | head -8 | while read -r l; do echo "::$sev::${{ matrix.sanitizer }}: $l"; done
           grep -m2 -E '^(SUMMARY: (Thread|Address)Sanitizer|==[0-9]+==ERROR)' sanitize.log | while read -r l; do echo "::error::$l"; done
           grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
+          # The first report with its stacks, as one annotation: a summary line does not say whose race it is.
+          first="$(awk '/^---- / { n++ } n == 1' sanitize.log | head -45 | sed "s|$GITHUB_WORKSPACE/||g" \
+                   | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          [ -n "$first" ] && echo "::error::${{ matrix.sanitizer }}: the first report:%0A$first"
           [ "$rc" -eq 2 ] && exit 0
           exit "$rc"
 

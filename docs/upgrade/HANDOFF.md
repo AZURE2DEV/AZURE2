@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 15:05) — the CI's first test run read; tests and workflows repaired (no C++)
+
+**State of the CI before this commit.** Third and fourth pushes (`dbfd6abb`, `3e14a7a4`): Linux and macOS
+configure, build and pass the smoke test; the address-sanitizer job passes (first time); the thread-sanitizer job
+fails; the Linux job ran the tests for the first time and failed 9 of 172 regression checks and at least 9 unit
+tests; Windows failed at the `mkdir` already repaired in `3e14a7a4`; macOS had not finished its tests.
+
+**What each failure was** (read from the annotations; reproduced here where the line says so):
+
+- The runner's `python3` has no numpy or mpmath (five regression checks): `build.yml` puts the pyazr venv first on
+  `PATH` for the regression step.
+- `tests/switch_options` needs a Coulomb table file and the CI has none: the test builds a coarse one (20 s).
+- `tests/prior_covariance` part (f) loaded `pyazr/priors.py` as a lone file; its relative import refuses that.
+  **It failed here too**: my run of `tests/run_tests.sh` on the pushed tree gave 171 of 172. The suite had not
+  been run as a whole since the module was split; the merge checks run ctest and the project comparisons.
+- `tests/pyazr/endf_write_test.py`: an f-string that Python 3.10 refuses (every tracked `.py` was parsed with
+  Python 3.9 to find others: none).
+- The 18 `tests/pyazr/ui/*_test.py` failed at `import pytest`: they now end with exit 77 (skipped) without it; the
+  Linux and macOS jobs install pytest, fastapi, httpx and uvicorn; the Windows job may skip `pyazr_ui_*`.
+- `pyazr_coincident_levels`, `pyazr_ratio_to_rutherford`: bounds measured with a Coulomb table; the CI computes the
+  exact functions. Reproduced here without a table; the bounds widened by a factor 5 to 10, both sets of measured
+  values in the tests (chi-squared step at the gap 2.3e-8 against 7e-9; the ratio's chi-squared differs by 1.5e-9).
+- **Not reproduced, not understood**: `tests/fit_modes` (on the CI, MIGRAD with the analytic gradient ended at
+  chi-squared 8539.2 where the other routes reach 71.67; here every route reaches 71.67, with and without a table,
+  at 2 and 4 threads); one check of `tests/gamma_decay`; one of `pyazr_rate_formats`. The annotations now put the
+  failing lines first, and `fit_modes` prints how each fit ended.
+- **Thread sanitizer**: "data race in pthread_mutex_lock" in every run, stacks not seen. Not suppressed blind: the
+  workflow now prints the first report as an annotation.
+
+The test labelled `browser` is left out of the CI's unit-test step (it takes minutes and never ran there).
+
+**The CI's time** (read from the job's steps): Linux 52 min regression and 63 min unit tests, macOS 92 min and more
+than 60 min, against 40 and 4.5 min, 90 and 10 min on the last run of `dev`. A push is answered after two to
+three hours. Not changed here; it is in `FOR_THE_OWNER.md` for the owner.
+
+**My runs** on this tree against `work/b-trial84` (no C++ changed, so no new build and no project comparison),
+without a Coulomb table and with an empty home directory, 2 threads: the three changed check scripts, the two
+widened tests, `endf_write_test`, `ui/api_test` and `ui/server_test` pass; the consistency test passes; both
+workflow files parse. The two annotation scripts were tried on a local log and on a made-up one, never on GitHub.
+`FOR_THE_OWNER.md` section 10 item 1 says the above.
+
 ## 2026-11-15 (director, 13:00) — the third push builds on Linux and macOS; Windows one step further
 
 **The third push** (`dbfd6abb`): the Linux and macOS jobs configure, build and pass the smoke test, for the first

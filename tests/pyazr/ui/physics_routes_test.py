@@ -13,7 +13,11 @@ Run as a script (python3 tests/pyazr/ui/physics_routes_test.py) or by ctest (pya
 import os
 import sys
 
-import pytest
+try:
+    import pytest
+except ImportError:  # ctest counts exit 77 as skipped
+    print("skip: the package pytest is not installed (pip install pyazr[web])")
+    sys.exit(77)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import uitest  # noqa: E402

@@ -389,11 +389,42 @@ re-read against its design at the hand-over.
    - macOS: `mkdtemp` undeclared in `tests/upgrade/session_rebuild_test.cpp` (now `std::filesystem`).
    - Windows: `tests/upgrade/CMakeLists.txt` split `name:directory` pairs at `:`, which cuts a drive letter.
 
-   **Whether the CI is green after these is not known**: each job stops at its first error, so more may follow,
-   above all on macOS and Windows, where **nothing of this branch was ever built or run**. Every build of the
-   upgrade was made on one machine (GCC 11.5, GNU Make, Python 3.12, numpy 2, pybind11 3.1). Look at the newest
-   run of the branch before trusting it; a library found on that machine and not installed by the CI is the
-   kind of defect to expect.
+   **After the third and fourth pushes** (`dbfd6abb`, `3e14a7a4`) the Linux and macOS jobs configure, build and
+   pass the smoke test, and the address-sanitizer job passes. The Linux job then ran the tests for the first
+   time: 9 of the 172 physics regression checks and at least 9 unit tests failed. What each was, and what the
+   commit after `3e14a7a4` does about it:
+   - *The CI's machine, not the code.* Five regression checks called the runner's own `python3`, which has no
+     numpy or mpmath (the step now puts the pyazr venv first on `PATH`). `tests/switch_options` asked for a
+     Coulomb table file, which the CI does not have (it now builds a coarse one, 20 s). The web page's tests
+     import pytest (now installed with fastapi, httpx and uvicorn on Linux and macOS; skipped with exit 77 where
+     they are missing, which the Windows job allows).
+   - *Defects of tests.* `tests/prior_covariance` loaded `pyazr/priors.py` as a lone file, which its relative
+     import has refused since the module was split (it failed on every machine: **`tests/run_tests.sh` had not
+     been run as a whole by the upgrade since then**). `tests/pyazr/endf_write_test.py` held an f-string that
+     only Python 3.12 reads.
+   - *Bounds measured with a Coulomb table.* Every run of the upgrade had a table file; the CI computes the exact
+     Coulomb functions. `pyazr_coincident_levels` and `pyazr_ratio_to_rutherford` failed by factors of 1.5 to 3 on
+     bounds measured with the table (reproduced here without one). The bounds are widened and both sets of
+     measured values are written in the tests. The step of chi-squared at the coincident-level gap is 2e-8
+     relative without a table (7e-9 with it), which belongs to the question on that gap in section 3.
+   - *Not reproduced here and not understood.* `tests/fit_modes`: MIGRAD with the analytic gradient on
+     `tests/stopping_yield/models/fit.azr` ended at chi-squared 8539.2 on the CI, where Levenberg-Marquardt there
+     and all routes here reach 71.67 (start 1.1e7; here with and without a table, at 2 and 4 threads). One check
+     of `tests/gamma_decay` and one of `pyazr_rate_formats`: their lines were cut from the annotations. The
+     annotations now put the failing lines first, and `fit_modes` prints how each fit ended.
+   - *The thread sanitizer* reports a data race in `pthread_mutex_lock` in every run. The stacks were not seen
+     (the annotation now carries the first report); a suppression for libomp's worker suspend and resume exists
+     by function name, and whether this is that report with unresolved names is a guess.
+
+   - *The time.* On the third push the Linux job took 52 min for the regression checks and 63 min for the unit
+     tests, macOS 92 min and more than 60 min; the last run of `dev` (`09e5c1a8`) took 40 and 4.5 min on Linux,
+     90 and 10 min on macOS. The unit-test step is 309 tests run one after the other, without a
+     Coulomb table. Not measured: which tests take the time, what `ctest -j` or a table built once would save.
+
+   **Whether the CI is green after these is not known.** Windows has not yet compiled every test, and macOS had
+   not finished its tests when this was written. Every build of the upgrade was made on one machine (GCC 11.5,
+   GNU Make, Python 3.12, numpy 2, pybind11 3.1, a Coulomb table file given by the environment). Look at the
+   newest run of the branch before trusting it.
 2. **The web page was not compared with the Qt program item by item.** `qt_parity.md` lists 201 behaviours of the
    Qt program; 20 are dropped by the PI's decision, the other 181 are not ticked. The gate of Phase 9 ("every item
    of the Qt parity checklist") is not met. The page's tests are the `/api` tests and one smoke test in a headless
