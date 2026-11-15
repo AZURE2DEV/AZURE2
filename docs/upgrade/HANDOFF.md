@@ -2,6 +2,60 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 09:25) — merged: the memory of a project with many folded data sets
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 81 (rehearsal 80 plus one branch). The agent's entry
+follows.
+
+- **Channel rows once per compound energy** (`feature/upgrade-6-fold-memory`): the first site at a compound
+  energy computes its channel rows (L_o, the penetrability's root, the two phase factors), every other site at
+  that energy holds the same table (`WorkingCopy::FillChannelRows`, `Site::ChannelRowsKey`; a fit's re-placed
+  sub-point grids through `WorkingCopy::ShareChannelRows`); the THM vertex pieces are kept for the entrance
+  pair's channels only (`ThmVertexRows`); the channel table gives back the capacity of the keys asked for.
+  New quick test `fold_memory` (a project made at run time from `examples/c12c12_tumino2018`).
+
+**Read by the director.** The whole diff of `src/` and `include/`. The point checked hardest: a site that takes
+its rows from another still computes what is its own (the geometric factor, the S-factor conversion, the
+screening term, the THM vertex pieces and the spectator-window table: only the four row entries are skipped,
+`Site::CalcEDependentValues`); the key holds everything the rows read (the nucleus, the bits of E_x as
+`CompoundEnergy` gives it, and the exit pair's charge where a beta-decay channel reads it); an energy shift
+gives the site a table of its own (`ClearEDependentRows` on a shared table). No new `mutable`, `const_cast` or
+static state (one static member function). The new document section names sizes and times of the PI's model
+only.
+
+**Verified on the merged tree** (build `work/b-trial81`, 0 warnings): all projects in the three bases against
+`tab-t74-1` (tag `tab-t81-1`): Brune 887, formal 851, Park 887 files, all identical; the eight fits by command
+identical to `b-trial80`; the consistency test; the quick tests 308 (307 before): 308 of 308 passed.
+
+**The director's own runs** on `b-trial81` against `b-trial80`, by command, every output file compared
+(`work/director/try81/own81.sh`, `mg24.sh`): identical in all of them.
+
+| run | rehearsal 80 | rehearsal 81 |
+|---|---|---|
+| a 12C + 12C model of the PI, not in the repository; extrapolation, 1 thread | 87.1 s, 10.99 GB | 41.5 s, 1.64 GB |
+| the same, 4 threads | not run | 14.3 s, 1.64 GB |
+| 13N, one calculation, 1 thread | 7.9 s, 123 MB | 7.3 s, 122 MB |
+| T2, one calculation, 1 thread | 0.22 s, 124 MB | 0.19 s, 116 MB |
+| `natural_neon`, one calculation, 1 thread | 1.31 s, 351 MB | 1.00 s, 289 MB |
+| `natural_neon`, gradient fit (40 calls), 2 threads | 31.6 s, 645 MB | 31.2 s, 544 MB |
+| 13N, plain MIGRAD (300 calls), 1 thread | 13.9 s | 12.6 s |
+| 13N, plain MIGRAD (300 calls), 4 threads | 7.9 s | 7.4 s |
+| T2 sampler (16 walkers, 100 steps), 4 threads | 32.0 s, 306 MB | 32.0 s, 260 MB |
+
+The model's eleven output files (eight curves) are byte for byte those of rehearsal 80 at one and at four
+threads; the sampler's chain is identical. `fold_memory` fails on `b-trial80` (333.9 MiB above the unfolded
+project against the bound of 125) and passes on `b-trial81` (97.6 MiB).
+
+**Seen, not repaired** (the agent's findings outside its scope, not reproduced by me): the resident memory of a
+long fit of the folded example grows during the fit (0.45 to 0.59 GB; 0.91 to 1.40 GB before the branch); a fit
+of the test's folded project with `--max-calls=30` and the analytic gradient ran past 19 minutes and about
+1200 evaluations. Both go to the next engine branch. Not done, the agent's three further reductions (Legendre
+rows of angle-integrated slots; distinct rows with an index; the channel table per batch): about 0.1 GB of the
+model's 1.64 GB the first, the second changes 54 readers.
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial81`; the quick test set has 308 tests.
+
 ## 2026-11-15 (agent, branch `feature/upgrade-6-fold-memory`) — the memory of a project with many folded data sets
 
 **Done.** The channel rows (L_o, sqrt(P), the two phase factors of every channel) depend on the compound energy alone
