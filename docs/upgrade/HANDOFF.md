@@ -130,7 +130,7 @@ only.
 identical to `b-trial80`; the consistency test; the quick tests 308 (307 before): 308 of 308 passed.
 
 **The director's own runs** on `b-trial81` against `b-trial80`, by command, every output file compared
-(`work/director/try81/own81.sh`, `mg24.sh`): identical in all of them.
+(`work/director/try81/own81.sh` and a script for the PI's model): identical in all of them.
 
 | run | rehearsal 80 | rehearsal 81 |
 |---|---|---|
@@ -416,7 +416,8 @@ particles. (3) `python -m pyazr convert --allow-questions`. (4) The prior_centre
 an AZURE2 without the rows centred the prior on the start value. (5) UDR `flight_path` in metres; a response of more
 than 2^24 table steps refused (it overflowed an int and crashed).
 
-**The PI's 24Mg model** (`work/format1/mg24/`): converts with 0 questions, validates but for the 25 missing data files
+**A 12C + 12C model of the PI, not in the repository**: converts with 0 questions,
+validates but for the 25 missing data files
 (not on this machine), `AZURE2 extrapolate` 87.0 s and 11.0 GB at 1 thread (old engine at the branch point 86.9 s,
 4.47 GB). The eight curves differ from the old engine's, each difference traced: the four THM lines are THM HOES
 cross sections here and plain cross sections in the old engine, which also reads column 32 (the THM binding energy)
@@ -439,7 +440,7 @@ setting (`nwalkers 10`) into `<mcmc>`, now refused (line removed from the fixtur
 registered in ctest after that run (passes). Injected: the reader's section check off (4 failures), composite keys ignored
 (5), the old flight-path conversion (6 failures), the UDR guard off (crash). Docs built.
 
-**Open.** The new engine's 11 GB on the 24Mg folds (2.5 times the old); the old engine's NaN level (not traced);
+**Open.** The new engine's 11 GB on that model's folds (2.5 times the old); the old engine's NaN level (not traced);
 a per-term pair key (not written: no project needs it); a repeated top-level section is still read with a warning
 (only the first); the first token of a positional `<config>` entry ends its reading (the rest of the line unread).
 A test line whose type 10 is followed by a spin operator was, before, read as a THM extrapolation (the operator

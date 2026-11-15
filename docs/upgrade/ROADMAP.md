@@ -11,11 +11,56 @@ replaces is deleted in the same phase. Update `HANDOFF.md` at the end of every w
 
 Tick boxes as work lands; put the commit hash after each tick.
 
+## State at the hand-over, 2026-11-15
+
+The phases below are the plan as it was written and ticked while the work ran; this block is the state. The work
+of the upgrade stopped here by the PI's decision: the owner continues in this branch. `origin/dev` was **not**
+merged into `feature/upgrade` (the first paragraph above was the intention; a plain merge conflicts in 93 files,
+`FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: the first push of the branch failed on
+all three platforms, cause not known (`FOR_THE_OWNER.md` section 10). The gates' other parts (reference outputs,
+the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
+
+Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
+
+| Phase | Box | State | What remains |
+|---|---|---|---|
+| 0 | Freeze announced on `dev` | dropped | `dev` moved on; the join is the owner's and the PI's |
+| 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
+| 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
+| 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up | the collision matrix and the observables are engine classes on `CompoundSystem`, not functions of the arrays |
+| 1 | `channel_functions` replaces the old Coulomb code | done for the channel tables | GSL still called in `src/CoulFunc.cpp` and `src/ECIntegral.cpp`; the Coulomb table is kept by design |
+| 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
+| 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
+| 2 | `inference/` target | the objective is `src/Objective.cpp` | not a library of its own |
+| 2 | Fit, gradient, API, writer call it | fit, gradient, API, sampler do | the output writer from stored totals: not audited |
+| 3 | pyazr `sources/` | masses, levels (NDS), EXFOR | IAEA measured stopping; `pyazr libraries update`; provenance not audited |
+| 4 | The engine reads only format 3 | done, ticked | second round of validation not audited |
+| 4 | Recipe "a new kind of data" | done, ticked | — |
+| 5 | Energy grid | done (`energy_grid.md`) | — |
+| 5 | Observables per mesh energy | five kinds | β-delayed spectra and the optical-theorem total not audited |
+| 5 | Kernel builders | seven kernels | the analytic derivative in a kernel's own parameters not audited |
+| 5 | Lab data in the frame of the data | merged | not audited |
+| 5 | Stopping module | done | SRIM's two data files under their authors' terms: the owner's decision |
+| 5 | THM observable | wired into the engine | not audited against `THM.md` §1–2 |
+| 6 | Parallel without copies | largely done | see the next row |
+| 6 | No hidden state | check 38 refuses new state | 28 pending rows of `tests/consistency/allowed_state.tsv` (`AZURECalc` 11, `AZURECalcMCMC` 16, `Site` 1) |
+| 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
+| 8 | Object binding | built | transfer functions on potentials, the level matrix, the Weisskopf width |
+| 8 | Rename and remove | most | `wigner_widths` probe, `tabulate` / `angular`, `modelavg` / `priors` into `bands` |
+| 8 | Wheels | configuration written | `wheels.yml` never run; no Windows wheel; the Coulomb table's address empty |
+| 9 | `pyazr ui` | done, ticked | — |
+| 9 | The page for the median user | built | what its box lists as open |
+| 9 | Project edits the page lacked | done, ticked | — |
+| 9 | Physics tab plots every function | what the binding has | the level matrix and the transfer functions wait for the binding |
+| 9 | Tests of the page | `/api` tests, one headless-Chrome smoke test | **181 of 201 items of `qt_parity.md` not compared**; Firefox, Safari not run |
+| 9 | ENDF | reading, checking, starting a project, writing | the method of the MF=32 covariance: the owner's decision |
+| 9 | Remove `numcmc/` and the GSL fitter | kept | the owner's decision |
+
 ## Phase 0 — Stabilise, measure, test projects, rules, skills
 
 - [ ] Freeze: no perf work on `EData`/`EPoint`/`ESegment`; no new Qt features (announce in `dev`'s CLAUDE.md).
-      Drafted on branch `docs/upgrade-freeze` (a7345b80, cut from `origin/dev` aab1de0d); not merged: decision 2 in
-      `HANDOFF.md` is open.
+      Drafted on branch `docs/upgrade-freeze` (a7345b80, cut from `origin/dev` aab1de0d); never merged. Dropped at
+      the hand-over (2026-11-15): `dev` moved on.
 - [x] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
       parameters, synthetic data with noise, `.azr`, README stating what each covers and the truth.
       T1 and T3 done: 63c08471 (branch `feature/upgrade-0-testprojects-t1t3`); recovery check `tests/upgrade/recover.py`.
@@ -44,8 +89,9 @@ Tick boxes as work lands; put the commit hash after each tick.
 - [x] Skills on pyazr 3.0 and project format 3, one per aspect of an evaluation plus `azure2-evaluation` (the
       procedure); every recipe longer than five lines a script with a self-test on a project of `tests/`, run by
       ctest (`tests/skills/`); `tools/check_skills.py` refuses removed pyazr names and scripts no self-test runs.
-- [ ] Port the skills to the names that pyazr 3.0's parameter table and extrapolation option give (`Parameters`,
-      `extrapolations=True`): the list of places is kept with the branch's report.
+- [x] Port the skills to the names that pyazr 3.0's parameter table and extrapolation option give (`Parameters`,
+      `extrapolations=True`). Done with the merges of 2026-11-14 (`tools/check_skills.py` passes; the skills' own
+      self-tests were not re-run at the hand-over).
 - [x] Developer Guide of the site for the new structure (`docs/source/developer/`: architecture, scheme of the
       classes from `figures/classes.tsv` and `arrows.tsv`, state and ownership, data model, extending; consistency
       check 44 keeps the scheme's types declared; 2026-11-13).
@@ -85,8 +131,9 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       and thread identity deterministic; free-shift refills from the segment's last three shift tables (interim until
       the analytic shift derivative); T2 fit200 −13 % / −23 % (1 / 8 threads), 13N +1.5 % (within spread),
       fit peak RSS +13 % / +30 % (`channel_table.md` §6).*
-- [ ] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
-      coefficients → functions of the System.
+- [x] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
+      coefficients → functions of the System. Done as the steps below and those under Phase 4: `CNuc` no longer
+      exists (`CompoundSystem`; consistency check "no CNuc in the engine files").
       *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, merged): plan `cnuc_split.md`;
       `CalcBoundaryConditions`, `TransformIn` (all bases) and `TransformOut`'s formal iteration call `level_parameters`;
       1503 output files bit-identical in three bases.*
@@ -176,16 +223,16 @@ State on 2026-11-11:
       one table that feeds the file validation, Python and the documentation. `AZURE2 --convert`, `--validate`,
       `--describe`, `--schema` (for programs and AI agents); `pyazr.Project` edits a project as records. The engine
       runs format 3; every converted test project gives the old outputs (the gate, `tools/format3_gate.sh`).
-- [ ] The engine reads **only** format 3. Done: all of the test tree and of the examples but the THM projects are
-      format 3 (176 of 183 project files, the originals kept as the converter's fixtures; `format3_tree.md`); `--validate` reports the
-      data rows, covariance files and final states the run would refuse; pyazr's session reads a format-3 project
-      from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
-      converter's command, the old reading path and `pyazr/azrfile.py` (3,756 lines) deleted, a second round of
-      validation (the level rows, kinematic limits, combinations of target effects).
+- [x] The engine reads **only** format 3 (state of 2026-11-15): every project file of `tests/` and `examples/`
+      outside the converter's fixtures is format 3 (`format3_tree.md`); an older file is refused with the converter's
+      command; the old reading path and `pyazr/azrfile.py` are deleted; `--validate` reports the data rows, covariance
+      files and final states the run would refuse; pyazr's session reads a format-3 project from the engine
+      (`pyazr_on_records.md`). Not audited: the second round of validation (the level rows, kinematic limits,
+      combinations of target effects).
 - [x] A real project is never misread: a section, a `<config>` key or line, an old block, an old line's type or
       trailing keyword that nothing reads is refused (`E_UNKNOWN_SECTION`, `E_UNREAD_LINE`; the converter names
       dev's `<channelRadii>`, `<isospin>` and spin observables); `entrance_pair` / `exit_pair` on a sum or ratio
-      apply to every term whose label names two pairs (the PI's 24Mg model converts with no question); a UDR flight
+      apply to every term whose label names two pairs (a 12C + 12C model of the PI, not in the repository, converts with no question); a UDR flight
       path in metres.
 - [x] A capture final state above a particle threshold is refused (`E_FINAL_STATE_UNBOUND`, `UnboundFinalStates` in
       `experiment/src/FinalStates.cpp`, reported by `Schema::Build` in every reading): with external capture, at or
@@ -198,7 +245,8 @@ State on 2026-11-11:
       on a list, a file, a logarithmic range or an adaptive grid; the spin–orbit term of the hybrid potential.
       The yield of a layer of finite thickness with the user's stopping formula (Phase 5, branch 4,
       `tests/layer_yield`); with the evaluated stopping when the stopping module is wired (Phase 5, branch 5).
-- [ ] Recipe "a new kind of data" in `CLAUDE.md` with its checks.
+- [x] Recipe "a new kind of data" in `CLAUDE.md` with its checks ("A new kind of data set"; the Developer Guide's
+      "A data quantity").
 Gate: outputs of all test projects × 3 bases bit-identical through the restructuring; for format 3, the outputs of
 the converted projects identical to the originals' but for the classified differences of the gate.
 
@@ -390,7 +438,7 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
 
 Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, decisions for the PI; a measured spike).
 
-- [ ] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
+- [x] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [x] The server (`pyazr/ui`: route table, state and history, workers, jobs; 2026-11-13).
 - [x] The page: header, tabs Project, Nucleus, Data with generated forms, the engine's descriptions and a preview plot;
@@ -442,7 +490,7 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       beside each level parameter, a lost curve said as such (section 11.17).  Still needed by a first-time user:
       the g-factors and ground-state J^π (no table), the windows' and norm's grammar, the empty project's status
       line in words.
-- [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
+- [x] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the
       parser's table (`src/ThmKeys.cpp`, `kinds()["thm"]`); the session's diagnostics described as rows

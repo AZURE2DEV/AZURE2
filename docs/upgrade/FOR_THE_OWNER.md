@@ -292,26 +292,31 @@ of a bound level is not known without trying.
 
 ## 7. What `dev` has that this branch has not, and the way in
 
-From the plan of the join (outside the repository; sections 1, 4–6), against `origin/dev` at `3e502625`: 65 commits
-beyond the branch point, 51 of them not merges.
+Against `origin/dev` at `3e502625` (65 commits beyond the branch point, 51 of them not merges). `dev` has moved
+since (`09e5c1a8` on 2026-11-15, and the branches `feature/rmfit`, `feature/ec-unbound-final`,
+`feature/ec-unbound-broad`, `fix/formal-ec-zero-anc`, `gui/channel-radii-list`): those commits were not read.
 
-- **Done here:** section 3, rows 4 and 5; dev's new blocks (`<channelRadii>`, `<isospin>`, spin-operator data types)
-  refused by the converter and the reader, never read past; the UDR flight path in metres; the scattering length;
-  capture with two compound nuclei (right here by the plan's run of dev's models; the test not yet ported).
-- **In work:** per-channel radii; general spin observables (as one quantity with an operator field); the
-  time-of-flight resolution at low energy, with dev's external-capture tests; the EXFOR user agent.
-- **Not started:** isospin-labelled levels across compound nuclei (the largest: 30–60 h by the plan); dev's
-  gradient-based sampler `pyazr.sampling` (waits for the PI; a NUTS script on `Objective` is in the uncertainty
-  skill); dev's skill notes.
+- **Here already:** section 3, rows 4 and 5; dev's new blocks (`<channelRadii>`, `<isospin>`, spin-operator data
+  types) refused by the converter and the reader, never read past; the UDR flight path in metres; the scattering
+  length; capture with two compound nuclei (right here by a run of dev's models; dev's test not ported); a final
+  state of external capture in the formal parametrization (this branch's own version; dev's test not ported).
+- **Not ported, by the PI's decision of 2026-11-15** (the owner writes his features in this branch): per-channel
+  radii; general spin observables; the time-of-flight resolution at low energy (the defect dev repaired is present
+  here: zeros and a bias at thermal energies); isospin-labelled levels across compound nuclei; dev's
+  external-capture tests; the EXFOR user agent; dev's gradient-based sampler `pyazr.sampling`; dev's skill notes.
+- **Where each lands:** `dev_features.md`, feature by feature, with the files and the recipes and an estimate.
+  Ports of the first three were started and stopped the same morning; they are not in this branch (its section 8).
 
 A plain merge of `3e502625`, measured: 93 conflicted files (45 with 125 hunks, 48 modified on one side and deleted
 on the other), 21 merged silently, at least eight of them wrongly; most of dev's new engine code is in `CNuc`,
-`EData`, `EPoint` and pyazr 2, which this branch replaced. The way in, in three stages: each feature re-written in
-its named places, then a merge commit of a commit of dev's line records dev as merged.
+`EData`, `EPoint` and pyazr 2, which this branch replaced. The way in: each feature re-written in its named places,
+then a merge commit of a commit of dev's line records dev as merged. Until then, work on the upgrade is cut from
+`feature/upgrade`, not from `dev`.
 
 **The one request.** Please write the next features (rmfit's merge, capture into unbound states, secondary γ rays)
 against this branch and its recipes, or at least against pyazr 3.0's names (`Session`, `Objective`, `Project`,
-`Parameters`) and format-3 records. Each week of separation adds 40–80 hours of porting at dev's present pace.
+`Parameters`) and format-3 records. Each week of separation adds 40–80 hours of porting at dev's present pace (an
+estimate from the 65 commits read, not a measurement).
 
 ## 8. What is asked of the owner (each with this branch's proposal)
 
@@ -337,6 +342,7 @@ against this branch and its recipes, or at least against pyazr 3.0's names (`Ses
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
   run of `.github/workflows/wheels.yml` (never run); a Windows wheel (MinGW or MSVC); SRIM's two data files under
   their authors' terms (`stopping/data/srim/README.md`); `.github/workflows/build.yml` still passes `USE_READLINE`.
+  The CI itself is red on this branch (section 10, the first item).
 
 ## 9. Known defects and limits
 
@@ -360,3 +366,84 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
+
+## 10. What is not finished
+
+In the order of what it costs the next person. "Not audited" means: merged with its agent's tests passing, and not
+re-read against its design at the hand-over.
+
+1. **The CI has never been green on this branch.** The first push (2026-11-15, `56f4dac7`) failed in the Build step
+   on Linux (ubuntu-22.04) and macOS (macos-15-intel), in the Configure step on Windows (MSYS2 UCRT64), and in both
+   jobs of `upgrade-sanitizers` ("build failed"); `skills` passed. The cause is **not known**: the logs need a login
+   the upgrade's agent did not have. Every build of the upgrade was made on one machine (GCC 11.5, GNU Make, Python
+   3.12, numpy 2, pybind11 3.1). A local build with the CI's configure flags, CMake 4.4 and `-Wl,--as-needed`
+   passes; not tried: Ninja, GCC 11.4 with Python 3.10, AppleClang with libc++, clang 18, MinGW. `build.yml` and
+   `scripts/sanitize_upgrade.sh` now print the first error lines of a failed configure or build as annotations of
+   the run, so that the next push shows them. **Nothing was ever built or run on macOS or Windows.**
+2. **The web page was not compared with the Qt program item by item.** `qt_parity.md` lists 201 behaviours of the
+   Qt program; 20 are dropped by the PI's decision, the other 181 are not ticked. The gate of Phase 9 ("every item
+   of the Qt parity checklist") is not met. The page's tests are the `/api` tests and one smoke test in a headless
+   Chrome; Firefox and Safari were not run.
+3. **The join with `dev`** (section 7).
+4. **Hidden state.** 28 rows of `tests/consistency/allowed_state.tsv` are marked pending: 11 in `AZURECalc` (the
+   fitter's adapter), 16 in `AZURECalcMCMC` (the sampler's pools and layout), 1 in `Site`. Check 38 of the
+   consistency test refuses a new one; nobody removed these.
+5. **Large classes.** `src/AMatrixFunc.cpp` (2,766 lines), `api/src/AZUREAPI.cpp` (1,533), `src/AZURECalc.cpp`
+   (1,402), `src/AZURECalcMCMC.cpp` (1,316). The collision matrix and the observables are engine classes on
+   `CompoundSystem`, not functions of `physics/` on the arrays of `System`, which is what `ARCHITECTURE.md` drew.
+   There is no `inference/` library: the objective is `src/Objective.cpp`.
+6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
+   `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
+7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is
+   empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
+8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
+   environment switches (section 8).
+9. **pyazr.** Not in the binding: transfer functions on optical potentials, the level matrix, the Weisskopf width.
+   Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
+   `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
+   `pyazr/bands.py`). The Physics tab of the page plots what the binding has: the level matrix and the transfer
+   functions are not there.
+10. **`pyazr.sources`.** No reader of the IAEA's measured stopping data; no `pyazr libraries update` command; the
+    provenance records of imported numbers were not audited.
+11. **Transfer (DWBA) validation.** The ⁶Li bins, and ³He and ¹⁴N break-up to the continuum, were not validated
+    against FRESCO (`transfer.md`).
+12. **Conventions.** No project key states the angular-momentum convention; the invariance test is at the level of
+    parameters only; the relative sign of internal and external capture has no independent check.
+13. **ENDF.** The method of the covariance written to MF=32 is the owner's decision (section 8).
+14. **Not audited at the hand-over:** β-delayed spectra and the optical-theorem total among the observables per
+    mesh energy; the analytic derivative of a kernel in its own parameters; the comparison of lab-frame data in
+    the frame of the data; THM against `THM.md` sections 1–2; the second round of validation of the project format;
+    the output writer taking totals from the stored results; the skills' own self-tests (`tools/check_skills.py`
+    passes).
+
+The boxes of `ROADMAP.md` say the same per phase (its block "State at the hand-over").
+
+## 11. For an AI agent working in this branch
+
+**Read, in this order, and no more before starting:**
+
+1. This page: sections 1, 5, 6 and 10.
+2. `CLAUDE.md` at the root: the rules, "Recipes: where a new feature goes", "Definition of done", "When to stop and
+   ask".
+3. `docs/source/developer/extending.rst`: one section per kind of addition, with the files to touch and the test.
+4. For a feature that exists on `dev`: `dev_features.md`.
+5. The newest entry at the top of `HANDOFF.md`. **Do not read `HANDOFF.md` whole**: it is the log of every session,
+   more than 12,000 lines, newest first; search it by file name or symbol when a decision needs its reason.
+
+**What is plan and history, not the state of the code:** `ARCHITECTURE.md` (the target design; where it and the
+code differ, section 10 says so), the unticked boxes of `ROADMAP.md`, everything under `history/`, and the design
+notes' "to do" lists. The state is this page, the Developer Guide (`docs/source/developer/`) and the tests.
+
+**Verify:** `./scripts/check.sh --quick` while working (it skips the physics suite), `./scripts/check.sh` before a
+merge, `python3 tests/consistency/repo_consistency_test.py` after any change of a table, an option or a
+document, the Sphinx pages with `-W` (`python3 tests/consistency/docs_build_test.py`). A change that must not move a
+number is checked by comparing every output file of every project in the three parametrizations against the commit
+before it (`CLAUDE.md`, "Comparing the outputs of two engines"); the upgrade's merges were all checked that way,
+by scripts that are not in the repository.
+
+**Where things are decided once:** the project format's table (`experiment/src/Schema.cpp`) gives the reader, the
+converter's target, `--validate`, pyazr's `Project` and the page's forms; the parameter kinds
+(`include/ParameterKind.h`) give the vector, the parameter file and pyazr's `Parameters`; the objective's terms
+(`src/Objective.cpp`) reach every fitter, the sampler and pyazr's `Objective`. Add a row there; do not write a
+second copy in Python or in the page. New mutable process-wide state, a `const_cast`, an edit under `external/` and
+a number that moves without a stated reason are the four things to stop and ask about.
