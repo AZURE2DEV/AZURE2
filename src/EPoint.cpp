@@ -28,6 +28,7 @@
 #include <limits>
 #include <atomic>
 #include <stdexcept>
+#include <gsl/gsl_integration.h>
 #include <algorithm>
 
 /*!
@@ -551,7 +552,8 @@ complex EPoint::GetCoulombAmplitude(double s) const {
   return coulombdirect_ + sign * coulombexchange_;
 }
 
-static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double);
+static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double,
+                                  complex *parts = nullptr);
 
 /*!
  * Returns the external capture amplitude for a given external reaction pathway
@@ -1723,9 +1725,13 @@ void EPoint::SetCoulombAmplitude(complex amplitude) {
  * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
  * GetECAmplitudeWithShift at a shifted one.
  */
+// With `parts` (two entries), also the amplitude split by the final-state exterior function of an unbound final
+// state, F_f and G_f unnormalized (ECIntegral::StandingParts, the line-shape integration of a broad final state);
+// they are integrated directly, never from ECTable.
 static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair *entrancePair, int j,
                                   double levelEnergy, KGroup *theKGroup, ECMGroup *theECMGroup,
-                                  double cmEnergy) {
+                                  double cmEnergy, complex *parts) {
+  if (parts) parts[0] = parts[1] = complex(0.0, 0.0);
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
@@ -1758,7 +1764,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   }
 
   complex integrals;
-  if (configure.useECTable) {
+  if (configure.useECTable && !parts) {
     // initial and final channel share the radius (CNuc::CheckChannelRadii refuses otherwise)
     integrals = ECTable::Integral(theFinalPair, theFinalChannel->GetRadius(), configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
@@ -1773,6 +1779,13 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
                               theECMGroup->GetMult(), theECMGroup->GetRadType(),
                               inEnergy, levelEnergy,
                               theECMGroup->IsChannelCapture());
+    if (parts) {
+      complex withF, withG;
+      if (theECIntegral.StandingParts(withF, withG)) {
+        parts[0] = expCP * expHSP * sqrtGammaPene * withF;
+        parts[1] = expCP * expHSP * sqrtGammaPene * withG;
+      }
+    }
   }
 
   // calculate the total radial integral
@@ -1816,6 +1829,192 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure);
   }
+}
+
+/*
+ * Capture into a BROAD unbound final state: the line-shape integration ("linewindow W" on the segment; stage 2,
+ * 2026-11-15, DeBoer: "begin working on the extension to the broad unbound level").  Record and derivation:
+ * R-matrix/AZURE2_code_audit/11-14-26_ec_unbound_broad/readme.
+ *
+ * The final state is the energy-normalized scattering state of its one open particle channel at E_f: interior
+ * c(E_f) X_lambda, exterior sqrt(2 mu/(pi hbar^2 k_f)) [cos d F + sin d G], d = d_R - phi from the one-level
+ * parameters of the final level (observed g~ and E_R, formal gamma^2 = g~^2/(1 - g~^2 S'(E_R)), B = S(E_R)).
+ * Per E_f the cross section is that of stage 1 with
+ *   - the photon energy E - E_x(E_f) in the internal capture elements and the external integral,
+ *   - the internal elements times A(E_f) = c/sqrt(N_f) = sqrt(2 mu/(pi hbar^2 k_f)) (cos d F_a + sin d G_a)/(g~ s),
+ *     s = sqrt(2 mu a)/hbar, A^2 = rho(E_f)/N_f (the line shape, unit area for a narrow state),
+ *   - the external element sqrt(2 mu/(pi hbar^2 k_f)) [cos d I_F + sin d I_G] (= g~ s A x the integral with the
+ *     standing wave normalized at a; written without that division, whose denominator vanishes off resonance),
+ * and sigma = int_{E_R-W}^{E_R+W} dE_f sigma(E_f), clipped to E_f > 1 keV and E_g > 1 keV; capture into
+ * different E_f adds incoherently.  Quadrature: Gauss-Legendre in theta, E_f = E_R + (Gamma/2) tan theta, fixed per
+ * point energy from the line shape at set-up; the weights carry the current parameters.
+ */
+namespace {
+constexpr int kLineNodes = 48;
+
+struct LineFinal {
+  int j = 0, la = 0, ch = 0, irDecay = 0;
+  PPair *fp = nullptr;
+  double thr = 0.0;
+};
+
+std::string FindLineFinal(CNuc *c, const EPoint *pt, LineFinal &lf) {
+  const int aa = c->GetPairNumFromKey(pt->GetEntranceKey());
+  const int ir = c->GetPairNumFromKey(pt->GetExitKey());
+  if (!aa || !ir) return "its entrance or exit pair is not in the project";
+  if (c->GetPair(ir)->GetPType() != 10)
+    return "its exit pair (key " + std::to_string(pt->GetExitKey()) + ") is not a capture pair";
+  lf.irDecay = c->GetPair(aa)->IsDecay(ir);
+  if (!lf.irDecay) return "its exit pair is not a decay of its entrance pair";
+  for (int j = 1; j <= c->NumJGroups() && !lf.j; j++)
+    for (int la = 1; la <= c->GetJGroup(j)->NumLevels(); la++)
+      if (c->GetJGroup(j)->GetLevel(la)->IsECLevel() && c->GetJGroup(j)->GetLevel(la)->GetECPairNum() == ir) {
+        lf.j = j;
+        lf.la = la;
+        break;
+      }
+  if (!lf.j)
+    return "it needs external capture into its final state (switched on for the capture pair, and not off for the run)";
+  JGroup *jg = c->GetJGroup(lf.j);
+  ALevel *lv = jg->GetLevel(lf.la);
+  int open = 0;
+  for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+    PPair *p = c->GetPair(jg->GetChannel(ch)->GetPairNum());
+    if (p->GetPType() != 0) continue;
+    if (lv->GetECEnergy() - p->GetSepE() - p->GetExE() > 0.0) {
+      open++;
+      lf.ch = ch;
+      lf.fp = p;
+      lf.thr = p->GetSepE() + p->GetExE();
+    }
+  }
+  if (open == 0) return "its final state is bound (below every particle threshold): it has no line shape";
+  if (open > 1) return "its final state lies above more than one particle threshold; the line-shape integration handles one";
+  Decay *dec = c->GetPair(aa)->GetDecay(lf.irDecay);
+  for (int k = 1; k <= dec->NumKGroups(); k++)
+    for (int m = 1; m <= dec->GetKGroup(k)->NumECMGroups(); m++)
+      if (dec->GetKGroup(k)->GetECMGroup(m)->GetFinalChannel() != lf.ch)
+        return "its external capture also runs through a closed channel of the final level, which the line-shape integration does not handle";
+  return "";
+}
+}  // namespace
+
+std::string EPoint::LineWindowProblem(CNuc *theCNuc, const Config &configure) const {
+  if (configure.paramMask & Config::USE_RMC_FORMALISM) return "the RMC formalism is not supported";
+  if (configure.paramMask & Config::USE_ANALYTIC_GRADIENT)
+    return "--use-gradient is not supported (its gradient does not run over the line shape); fit without it";
+  if (this->IsAngularDist() || this->IsPhase() || this->IsAnalyzingPower() || this->GetSpinObservable())
+    return "only a capture cross section (angle-integrated or differential) can be integrated over the line shape";
+  LineFinal lf;
+  return FindLineFinal(theCNuc, this, lf);
+}
+
+void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
+  const std::string why = this->LineWindowProblem(theCNuc, configure);
+  if (!why.empty()) throw std::runtime_error("linewindow: " + why + ".");
+  LineFinal lf;
+  FindLineFinal(theCNuc, this, lf);
+  ALevel *lv = theCNuc->GetJGroup(lf.j)->GetLevel(lf.la);
+  AChannel *fc = theCNuc->GetJGroup(lf.j)->GetChannel(lf.ch);
+  const int l = fc->GetL();
+  const double a = fc->GetRadius();
+  CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  const double ER = lv->GetECEnergy() - lf.thr;
+  const double gt = lv->GetECFitGamma(lf.ch) * lv->GetECSqrtNFFactor();
+  const double gam = 2.0 * coul.Penetrability(l, a, ER) * gt * gt;
+  // (checked here, not in LineWindowProblem: at start-up the level parameters are not filled yet)
+  if (!(gam > 0.0)) throw std::runtime_error("linewindow: the final level has no width in its open channel.");
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const double inEnergy = this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
+  const double W = line_window_ * 1e-3;
+  double lo = std::max(ER - W, 1e-3);
+  const double hi = std::min(ER + W, inEnergy - lf.thr - 1e-3);
+  // the outgoing-wave limit of ParseExternalCapture: no node within ~keV of a charged threshold
+  while (lo < hi && Kinematics::Channel(lf.fp).Eta(lo) > 100.0) lo *= 1.05;
+  line_nodes_.clear();
+  line_nodes_cm_ = this->GetCMEnergy();
+  if (!(hi > lo)) return;
+  static thread_local gsl_integration_glfixed_table *gl = gsl_integration_glfixed_table_alloc(kLineNodes);
+  const double t0 = atan(2.0 * (lo - ER) / gam), t1 = atan(2.0 * (hi - ER) / gam);
+  const double twoMuH2 = 2.0 * lf.fp->GetRedMass() * uconv / (hbarc * hbarc);
+  Decay *dec = entrancePair->GetDecay(lf.irDecay);
+  for (size_t i = 0; i < gl->n; i++) {
+    double t, w;
+    gsl_integration_glfixed_point(t0, t1, i, &t, &w, gl);
+    LineNodeData n;
+    n.ef = ER + 0.5 * gam * tan(t);
+    n.weight = w * 0.5 * gam / (cos(t) * cos(t));
+    n.sqrtDens = sqrt(twoMuH2 / (M_PI * sqrt(twoMuH2 * n.ef)));
+    const CoulWaves cw = coul(l, a, n.ef);
+    n.Fa = cw.F;
+    n.Ga = cw.G;
+    n.P = coul.Penetrability(l, a, n.ef);
+    n.S = coul.PEShift(l, a, n.ef);
+    n.parts.resize(dec->NumKGroups());
+    for (int k = 1; k <= dec->NumKGroups(); k++) {
+      KGroup *kg = dec->GetKGroup(k);
+      n.parts[k - 1].resize(kg->NumECMGroups());
+      for (int m = 1; m <= kg->NumECMGroups(); m++) {
+        complex pp[2];
+        ECPathwayAmplitude(theCNuc, configure, entrancePair, lf.j, lf.thr + n.ef, kg, kg->GetECMGroup(m),
+                           this->GetCMEnergy(), pp);
+        n.parts[k - 1][m - 1] = std::make_pair(pp[0], pp[1]);
+      }
+    }
+    line_nodes_.push_back(std::move(n));
+  }
+}
+
+void EPoint::CalculateLineWindow(CNuc *theCNuc, const Config &configure, GenMatrixFunc *matrixFunc) {
+  if (!(line_nodes_cm_ == this->GetCMEnergy())) this->SetupLineNodes(theCNuc, configure);
+  double sum = 0.0, sumE1 = 0.0, sumE2 = 0.0;
+  if (!line_nodes_.empty()) {
+    LineFinal lf;
+    FindLineFinal(theCNuc, this, lf);
+    ALevel *lv = theCNuc->GetJGroup(lf.j)->GetLevel(lf.la);
+    AChannel *fc = theCNuc->GetJGroup(lf.j)->GetChannel(lf.ch);
+    const int l = fc->GetL();
+    const double a = fc->GetRadius();
+    CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    // the current parameters of the final level
+    const double ER = lv->GetECEnergy() - lf.thr;
+    const double gt = lv->GetECFitGamma(lf.ch) * lv->GetECSqrtNFFactor();
+    const double SR = coul.PEShift(l, a, ER), dSR = coul.PEShift_dE(l, a, ER);
+    if (!(1.0 - gt * gt * dSR > 0.0) || gt == 0.0)
+      throw std::runtime_error("linewindow: the final level's reduced width has no formal (one-level) equivalent.");
+    const double g2 = gt * gt / (1.0 - gt * gt * dSR);
+    const double s = sqrt(2.0 * lf.fp->GetRedMass() * uconv * a) / hbarc;
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    const double inEnergy = this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
+    line_active_ = true;
+    try {
+      for (const LineNodeData &n : line_nodes_) {
+        const double dR = atan2(n.P * g2, ER - n.ef - g2 * (n.S - SR));
+        const double d = dR - atan2(n.Fa, n.Ga);
+        const double cd = cos(d), sd = sin(d);
+        line_node_.photonEnergy = inEnergy - (lf.thr + n.ef);
+        line_node_.amp = n.sqrtDens * (cd * n.Fa + sd * n.Ga) / (gt * s);
+        line_node_.ec.resize(n.parts.size());
+        for (size_t k = 0; k < n.parts.size(); k++) {
+          line_node_.ec[k].resize(n.parts[k].size());
+          for (size_t m = 0; m < n.parts[k].size(); m++)
+            line_node_.ec[k][m] = n.sqrtDens * (cd * n.parts[k][m].first + sd * n.parts[k][m].second);
+        }
+        matrixFunc->RecalculateTMatrix(this);
+        matrixFunc->CalculateCrossSection(this);
+        sum += n.weight * this->GetFitCrossSection();
+        sumE1 += n.weight * this->GetFitE1CrossSection();
+        sumE2 += n.weight * this->GetFitE2CrossSection();
+      }
+    } catch (...) {
+      line_active_ = false;
+      throw;
+    }
+    line_active_ = false;
+  }
+  this->SetFitCrossSection(sum);
+  this->SetFitE1CrossSection(sumE1);
+  this->SetFitE2CrossSection(sumE2);
 }
 
 /*!
@@ -1942,11 +2141,20 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     theMatrixFunc->InvertMatrices();
     theMatrixFunc->CalculateTMatrix(this);
     theMatrixFunc->CalculateCrossSection(this);
+    // capture into a broad unbound final state: the line-shape integration over E_f ("linewindow W"); it leaves
+    // the T-matrix of its last node, so a mapped point after it builds its own (tExitKey 0 matches no pair)
+    const bool lineWindow = this->GetLineWindow() > 0.0;
+    if (lineWindow) this->CalculateLineWindow(theCNuc, configure, theMatrixFunc);
     // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, EData::MapData):
     // the solved level matrix is the same, only its T-matrix is built anew.  Mapped points are ordered by exit, so
     // each exit's T-matrix is built once.
-    int tExitKey = this->GetExitKey();
+    int tExitKey = lineWindow ? 0 : this->GetExitKey();
     auto mappedCrossSection = [&](EPoint *mapped) {
+      if (mapped->GetLineWindow() > 0.0) {
+        mapped->CalculateLineWindow(theCNuc, configure, theMatrixFunc);
+        tExitKey = 0;
+        return;
+      }
       if (mapped->GetExitKey() != tExitKey) {
         theMatrixFunc->RecalculateTMatrix(mapped);
         tExitKey = mapped->GetExitKey();
@@ -2289,6 +2497,7 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
   subPoint.spin_observable_ = this->spin_observable_;
   subPoint.is_total_ = this->is_total_;
+  subPoint.line_window_ = this->line_window_;
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;

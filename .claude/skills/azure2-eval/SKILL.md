@@ -408,8 +408,21 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   parts); ECTable is bypassed for these terms. Joins the bound treatment
   continuously at the threshold (`tests/ec_unbound_final` (c)). Valid for
   Gamma_f << E_f and E_gamma >> Gamma_f; near E_gamma -> 0 the integral grows
-  like (k_i - k_f)^-2 (the "infrared" behaviour, Rolfs & Azuma 1974), and a
-  broad final state needs the line-shape integration (not implemented).
+  like (k_i - k_f)^-2 (the "infrared" behaviour, Rolfs & Azuma 1974).
+  A BROAD final state: put `linewindow W` (keV) on its capture segments (branch
+  `feature/ec-unbound-broad`, 2026-11-15): the segment is integrated over the
+  final energy E_f in E_R +- W (48 nodes; E_gamma = E - E_x(E_f); exterior the
+  real scattering wave at E_f; weight the one-level line shape rho/N_f). W is the
+  gamma-line window of the DATA ANALYSIS and changes the answer (off the peak the
+  final state is the non-resonant continuum, which grows with W and rises towards
+  the photon threshold) -- take it from the paper, never tune it; DeBoer
+  2026-11-15: per segment, in keV; no keyword = the narrow result. 12C(p,g1)
+  Rolfs & Azuma (Gamma 39 keV, their window +-Gamma, linewindow 39): median
+  model/data 1.00 at Ep 1.0-1.6 MeV with nothing fitted (narrow: 1.43). Needs
+  external capture on for the pair (internal-only is refused), one open channel
+  of the final level, a cross section (not a_k), no RMC, no --use-gradient.
+  Record `R-matrix/AZURE2_code_audit/11-14-26_ec_unbound_broad/`; test
+  `tests/ec_unbound_broad`.
   OLDER BUILDS treated such a state as BOUND by |E_x - S| without a word:
   4-25x too little for 12C(p,g1) at E_cm 1.6-0.8 MeV; points below E = E_x
   were NaN (now 0, also for the internal photon channel). An intEC cache from

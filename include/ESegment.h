@@ -370,6 +370,8 @@ class ESegment {
   void SetNaturalSample(int sample) { naturalSample_ = sample; }
   /// The token as read ("0", "1" or a sample name), before resolution.
   const std::string &GetNaturalToken() const { return naturalToken_; }
+  /// Half-width W (keV) of the gamma-line window, "linewindow W" (0: none, the narrow stage-1 treatment).
+  double GetLineWindow() const { return lineWindow_; }
   /// Components are never weighted themselves (the base segment does it).
   void SetNatural(bool natural) { if (!natural) naturalSample_ = 0; }
   /// The component segments, by reference.
@@ -488,6 +490,7 @@ class ESegment {
   bool isAdvanced_;
   int operationType_;
   std::string naturalToken_ = "0";
+  double lineWindow_ = 0.0;
   int naturalSample_ = 0;
   bool isTotal_ = false;  // IsTotal
   double transmission_ = 0.0;  // IsTransmission

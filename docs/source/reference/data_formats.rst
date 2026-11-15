@@ -535,9 +535,10 @@ A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
 ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
 ``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n> [<vary> <sigma>]``,
-``yield <n> [<vary> <sigma>]``, ``thicknessgroup <label>`` and ``spin <s>`` (in any order;
-writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
-``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm, thickness-group and shift-function blocks
+``yield <n> [<vary> <sigma>]``, ``thicknessgroup <label>``, ``spin <s>`` and ``linewindow <W>``
+(in any order; writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
+``total``, ``transmission``, ``yield``, ``spin`` and ``linewindow`` (the gamma-line window, keV, of
+capture into a broad unbound final state, :doc:`../user_guide/levels_channels`); the shift, norm, thickness-group and shift-function blocks
 have no meaning without data and are skipped there, as is the fit form of a ``transmission`` / ``yield`` block
 (a test segment uses its :math:`n`) (before October 2026 they stopped
 the keyword reader, so a ``sample`` or ``total`` written after them was lost),

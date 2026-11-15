@@ -133,6 +133,12 @@ int main(int argc, char** argv) {
        withSampleBlock("covariance c.txt sample 1", SampleBlock{"yield", "0.1"}) == "covariance c.txt yield 0.1 sample 1");
     ok("removed", withSampleBlock("total 1 transmission 0.15 1 0 thicknessgroup s", SampleBlock()) == "total 1 thicknessgroup s");
     ok("thicknessgroup is a group keyword", groupKeywords().contains("thicknessgroup") && isKeyword("thicknessgroup"));
+    // "linewindow W" (capture into a broad unbound final state, SegLine.h): a 2-token block the GUI keeps verbatim
+    ok("linewindow is a segment keyword", isKeyword("linewindow") &&
+                                              blockLength(QStringList{"linewindow", "39", "sample", "1"}, 0) == 2);
+    ok("a sample block is added after a linewindow block",
+       withSampleBlock("linewindow 39", SampleBlock{"yield", "0.1"}) == "linewindow 39 yield 0.1",
+       withSampleBlock("linewindow 39", SampleBlock{"yield", "0.1"}));
   }
 
   // ---- 2. the data-segment dialog --------------------------------------------------------------------------------

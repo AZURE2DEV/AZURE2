@@ -34,6 +34,7 @@ class PPair;
 class TargetEffect;
 class DataLine;
 class Config;
+class GenMatrixFunc;
 
 /// An AZURE data point
 
@@ -191,6 +192,9 @@ class EPoint {
   /// The total cross section of the entrance pair (optical theorem), ESegment::IsTotalTerm.
   bool IsTotal() const { return is_total_; };
   void SetIsTotal(bool v) { is_total_ = v; };
+  /// Half-width W (keV) of the gamma-line window for capture into a broad unbound final state (ESegment).
+  double GetLineWindow() const { return line_window_; };
+  void SetLineWindow(double w) { line_window_ = w; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
@@ -486,6 +490,26 @@ class EPoint {
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  /// Capture into a broad unbound final state ("linewindow W", stage 2 of 2026-11-15): one node of the
+  /// final-energy quadrature, read by the T-matrix builders (AMatrixFunc / RMatrixFunc::CalculateTMatrix) while
+  /// CalculateLineWindow runs.  photonEnergy = E - E_x(node); amp = A(E_f), the final-state amplitude
+  /// (A^2 = rho/N_f) that multiplies the internal capture elements; ec[k-1][m-1] = the external-capture T element
+  /// of that node (it replaces ecNormParam x the stored amplitude).
+  struct LineNode {
+    double photonEnergy = 0.0;
+    double amp = 0.0;
+    std::vector<std::vector<complex>> ec;
+  };
+  const LineNode *ActiveLineNode() const { return line_active_ ? &line_node_ : nullptr; }
+  /// Why this point's "linewindow" cannot be computed (empty if it can): the exit must be a capture pair with
+  /// external capture into a final level above exactly one particle threshold, outside the RMC formalism and the
+  /// analytic gradient, for a cross section (not angular coefficients, a phase or a polarization observable).
+  std::string LineWindowProblem(CNuc *, const Config &) const;
+  /// The capture observable of this point integrated over the final state's line shape, E_f in E_R +- W, with
+  /// the level matrix already solved in `matrixFunc` (EPoint::Calculate).  Leaves the T-matrix of the last node.
+  void CalculateLineWindow(CNuc *, const Config &, GenMatrixFunc *matrixFunc);
+  /// Number of quadrature nodes of the line-shape integration (after the last CalculateLineWindow).
+  int NumLineNodes() const { return (int)line_nodes_.size(); }
   /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
   void CalculateThinTarget(CNuc *, const Config &configure, TargetEffect *effect);
   void SetMap(int, int);
@@ -684,6 +708,19 @@ class EPoint {
   bool eDependentValid_ = false;
   bool own_e_dependent_ = false;  // OwnsEDependentValues
   bool is_total_ = false;         // IsTotal
+  double line_window_ = 0.0;      // GetLineWindow (keV)
+  /// One quadrature node of the line-shape integration, fixed per point energy (SetupLineNodes): E_f, its weight
+  /// (dE_f included), sqrt(2 mu / (pi hbar^2 k_f)), F, G, P, S of the final channel at E_f and its radius, and the
+  /// external-capture amplitude split by exterior function (F_f, G_f) for each (k, ecm) of the exit decay.
+  struct LineNodeData {
+    double ef = 0.0, weight = 0.0, sqrtDens = 0.0, Fa = 0.0, Ga = 0.0, P = 0.0, S = 0.0;
+    std::vector<std::vector<std::pair<complex, complex>>> parts;
+  };
+  std::vector<LineNodeData> line_nodes_;
+  double line_nodes_cm_ = std::numeric_limits<double>::quiet_NaN();
+  bool line_active_ = false;
+  LineNode line_node_;
+  void SetupLineNodes(CNuc *, const Config &);
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).

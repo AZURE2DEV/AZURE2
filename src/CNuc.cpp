@@ -1014,8 +1014,9 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
                           << exitPair->GetHeavyExE() << " MeV is UNBOUND, " << finalEnergy * 1e3 << " keV above the threshold of pair "
                           << particlePair->GetPairKey() << ".  It is treated as a narrow resonance: outgoing-wave exterior,"
                           << " strength from the level's observed width in that pair.  Valid while that width is small next to the photon energy and"
-                          << " next to " << finalEnergy * 1e3 << " keV; a broad final state needs the line-shape integration,"
-                          << " which is not implemented." << std::endl;
+                          << " next to " << finalEnergy * 1e3 << " keV.  For a broad final state give its capture segments"
+                          << " \"linewindow W\" (the gamma-line window E_R +- W in keV): they are then integrated over the line shape."
+                          << std::endl;
     return true;
   };
   // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.

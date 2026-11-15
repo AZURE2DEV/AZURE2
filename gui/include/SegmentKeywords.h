@@ -18,7 +18,7 @@ namespace SegmentKeywords {
 
 inline bool isKeyword(const QString &token) {
   // sqrtshift, sample (alias natural), shiftgroup, shiftfngroup, normgroup, covariance, shiftfn, total, transmission,
-  // yield and absolute are
+  // yield, absolute and linewindow are
   // the engine's (SegLine.h);
   // mixture is the retired 2026-10-12 block, still carried through a load/save of an old file.
   return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
@@ -35,6 +35,7 @@ inline bool isKeyword(const QString &token) {
          token.compare("transmission", Qt::CaseInsensitive) == 0 ||
          token.compare("yield", Qt::CaseInsensitive) == 0 ||
          token.compare("thicknessgroup", Qt::CaseInsensitive) == 0 ||
+         token.compare("linewindow", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 

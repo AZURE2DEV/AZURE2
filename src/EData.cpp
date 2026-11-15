@@ -1977,6 +1977,24 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
     if (this->CalculateECAmplitudes(compound, configure) == -1) return -1;
   }
 
+  // "linewindow W": capture into a broad unbound final state, integrated over its line shape (EPoint::
+  // CalculateLineWindow).  Checked here once per segment, so a model it cannot serve stops instead of giving NaN.
+  for (int i = 1; i <= this->NumSegments(); i++) {
+    ESegment *segment = this->GetSegment(i);
+    if (!(segment->GetLineWindow() > 0.0) || segment->NumPoints() == 0) continue;
+    const std::string why = segment->GetPoint(1)->LineWindowProblem(compound, configure);
+    if (!why.empty()) {
+      configure.outStream << "ERROR: segment " << i << " (entrance " << segment->GetEntranceKey() << ", exit "
+                          << segment->GetExitKey() << ") has \"linewindow " << segment->GetLineWindow() << "\", but "
+                          << why << "." << std::endl;
+      return -1;
+    }
+    if (!(configure.paramMask & Config::USE_API))
+      configure.outStream << "NOTE: segment " << i << ": capture into a broad unbound final state, integrated over its "
+                          << "line shape for E_f within E_R +- " << segment->GetLineWindow() << " keV (linewindow)."
+                          << std::endl;
+  }
+
   // Initialize component segments - ensure their entrance/exit pairs are properly set up
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;

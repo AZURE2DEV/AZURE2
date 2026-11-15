@@ -110,6 +110,7 @@ ESegment::ESegment(SegLine segLine) {
   operationType_ = segLine.operationType();
   componentsList_ = segLine.componentsList();
   naturalToken_ = segLine.natural();
+  lineWindow_ = segLine.lineWindow();
   isTotal_ = segLine.total() == 1;
   transmission_ = segLine.transmission();
   yield_ = segLine.yieldThickness();
@@ -209,6 +210,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   operationType_ = extrapLine.operationType();
   componentsList_ = extrapLine.componentsList();
   naturalToken_ = extrapLine.natural();
+  lineWindow_ = extrapLine.lineWindow();
   isTotal_ = extrapLine.total() == 1;
   transmission_ = extrapLine.transmission();
   yield_ = extrapLine.yieldThickness();
@@ -1144,6 +1146,7 @@ void ESegment::AddPoint(EPoint point) {
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
   point.SetSpinObservable(spinObservable_);
   point.SetIsTotal(this->IsTotalTerm());
+  point.SetLineWindow(lineWindow_);
   points_.push_back(point);
 }
 
