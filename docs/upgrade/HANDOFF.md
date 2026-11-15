@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 19:50) — merged: the thread sanitizer's suppression, second try
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 87 (one commit of mine: the suppression file and two
+documents; no C++, no test, no workflow). The base build stays `work/b-trial86`; no build and no test run was
+needed or made, only the consistency test.
+
+**What was read.** The thread-sanitizer job of the seventh push (`b3687d79`) ended after 112 minutes: every step
+failed, with the same report as before (libomp's worker suspend and resume: `pthread_mutex_lock` from libomp on
+the main thread against `pthread_mutex_init` from libomp on a worker). The entry of the seventh push,
+`race:^pthread_mutex_init$`, matched nothing. The address job of the same run passes.
+
+**What was changed.** `scripts/sanitizers/tsan.supp`: the anchored entry is replaced by
+`called_from_lib:libomp.so` (TSan ignores the pthread calls libomp itself makes; AZURE2's accesses and its own
+locks stay instrumented) and `race:pthread_mutex_init` without anchors. `sanitizer_findings.md` section 4.4 and
+`FOR_THE_OWNER.md` section 10 item 1 say what failed and what replaces it.
+
+**Not verified.** No clang on this machine: neither entry was run. Why the anchored entry failed is a guess (the
+name matched with the interceptor's prefix). Whether a report of AZURE2 stands behind libomp's is not known; the
+run of this push is the first that can show it.
+
+**The CI's state at 19:50.** The `build` run of the fifth push is still in its macOS job (not readable). The
+`build` run of the eighth push (rehearsal 86's repairs) had not started; this push replaces it in the queue with a
+run of the same repairs. Still unread: macOS; Linux and Windows after the repairs of rehearsal 86.
+
 ## 2026-11-15 (director, 19:35) — merged: the last pending rows of shared state; the fifth push's CI failures
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 86 (one commit of mine: C++, tests, the workflow,

@@ -466,8 +466,10 @@ re-read against its design at the hand-over.
      CI has none: all pass (the CI's compiler, Python and packages were not reproduced).
    - *macOS:* its regression step failed and its unit tests were still running, more than 100 minutes, when this
      was written; a job's annotations are readable only when it ends. Not read, not repaired.
-   - *The sanitizers* (the seventh push): the address job passes. The thread job, which before failed in every
-     step, was still running after 105 minutes when this was written; its result is not known.
+   - *The sanitizers* (the seventh push): the address job passes. The thread job failed in every step, after 112
+     minutes, with the same report of libomp as before: the entry written for it matched nothing. The ninth push
+     replaces it with two entries (`sanitizer_findings.md` section 4.4), again not tried anywhere but on the CI.
+     Whether a report of AZURE2 stands behind libomp's is still not known.
 
    **The CI is not green.** Linux passes after these repairs only if nothing stood behind what the annotations
    showed: the unit-test step printed nine failed tests, the most it could, so the 38 tests that run after

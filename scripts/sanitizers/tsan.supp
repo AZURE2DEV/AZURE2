@@ -18,8 +18,18 @@ race:__kmp_resume_template
 # frames print "<null>", so the two names above match nothing).  Seen in every step of the CI's thread job,
 # 2026-11-15: pthread_mutex_lock called from libomp on the main thread against pthread_mutex_init called from
 # libomp on a worker, the heap block allocated by libomp; AZURE2 appears only as the frame that opened the
-# parallel region (ChannelRowFill.cpp).  The entry names the interceptor of the initialization itself, anchored:
-# AZURE2 never calls pthread_mutex_init (its locks are std::mutex, which has no run-time initialization), so a
-# report with this frame cannot be a race between accesses of AZURE2.  A module entry (race:libomp.so) would
-# hide every race inside a parallel region, whose stacks all pass through libomp, and is not used.
-race:^pthread_mutex_init$
+# parallel region (ChannelRowFill.cpp).  Two entries, neither tried on a machine of the upgrade (no clang there):
+#
+# 1. called_from_lib: TSan ignores the pthread calls that libomp itself makes (its interceptors, for the time of
+#    the call).  Memory accesses of AZURE2 inside a parallel region stay instrumented, and so do AZURE2's own
+#    locks (std::mutex locks from AZURE2's code, not from libomp); the order of OpenMP constructs comes from
+#    libarcher's annotations, which do not pass through the interceptors.  It names the module, so it holds
+#    whatever the runtime's bookkeeping does next.  A module entry of the other kind (race:libomp.so) would hide
+#    every race inside a parallel region, whose stacks all pass through libomp, and is not used.
+# 2. The interceptor of the initialization itself.  AZURE2 never calls pthread_mutex_init (its locks are
+#    std::mutex, which has no run-time initialization), so a report with this frame cannot be a race between
+#    accesses of AZURE2.  Not anchored: the first form of this entry, race:^pthread_mutex_init$, matched nothing
+#    on the CI (the seventh push: the same report in every step), most likely because the name is matched as the
+#    symbol table has it, with the interceptor's prefix, and the report prints it without.
+called_from_lib:libomp.so
+race:pthread_mutex_init
