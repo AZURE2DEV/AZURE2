@@ -282,6 +282,18 @@ def serve_session(channel):
         channel.send(answer)
 
 
+def engine_lines_to_log():
+    """The engine's lines (pyazr's logger ``pyazr.engine``, :mod:`pyazr.engine_text`: library calls are quiet) as
+    the program prints them, on the worker's standard output, which is its log file (a job's log tail)."""
+    import logging
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("pyazr.engine")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(prog="python -m pyazr.ui.workers", description="a worker of the web UI's server")
@@ -290,6 +302,7 @@ def main(argv=None):
     ap.add_argument("--ppid", type=int, required=True)
     a = ap.parse_args(argv)
     die_with_parent(a.ppid)
+    engine_lines_to_log()
     channel = Channel(a.out_fd)
     if a.role == "session":
         serve_session(channel)

@@ -187,3 +187,14 @@ test("the model curve: one line per branch along its variable, the server's numb
   assert.deepEqual(p.resultsPlots(refused, all, { schema })[0].traces.filter((t) => t.role === "model")
     .map((t) => t.name), ["a: model at the points"]);
 });
+
+test("a curve request without an answer is lost, not refused; a refusal keeps its three parts; neither is drawn",
+  () => {
+  const lost = r.curveFailure({ status: 0, view: { what: "GET /api/evaluation/curve/a: TypeError: Failed to fetch" } });
+  assert.deepEqual(Object.keys(lost), ["lost"]);
+  const refused = r.curveFailure({ status: 422, view: { what: "w", allowed: "a", fix: "f" } });
+  assert.deepEqual(refused, { refused: { what: "w", allowed: "a", fix: "f" } });
+  const yc = { curve: (c) => c.model };
+  assert.equal(p.curveTraces({ curve: lost }, "e_cm", yc, {}), null);
+  assert.equal(p.curveTraces({ curve: refused }, "e_cm", yc, {}), null);
+});

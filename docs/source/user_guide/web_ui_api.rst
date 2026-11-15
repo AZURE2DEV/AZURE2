@@ -45,8 +45,10 @@ What the server keeps
   grid point ``e_cm``, ``e_lab``, ``e_x``, ``angle_cm``, ``model`` (the engine's unit, as ``model`` of
   ``/api/evaluation/data/<name>``) and ``at_data`` (one of the data set's points), the ``branches`` (``start``,
   ``stop``, ``fixed``: ``angle_lab``, ``angle_cm`` or ``energy_lab``, ``value``), ``variable`` (``energy`` or
-  ``angle``) and ``s_factor`` where offered.  The curves of every data set are made in one session of the
-  extrapolations (their folds on one mesh, as the data's), kept until the text or an energy shift changes them.  A
+  ``angle``) and ``s_factor`` where offered.  The curves of every data set are made together on a grid refined where
+  they bend (``pyazr.model_curve.refine_plan``; their folds on one mesh, as the data's), kept until the text or an
+  energy shift changes them or a level moves beyond the grid's spacing, and evaluated at every other x on the kept
+  grid.  A
   data set that is not one function of one variable, or whose columns give each point its own window, answers 422
   with ``what``, ``allowed``, ``fix``.
 - **Jobs** (``POST /api/jobs``; the table at ``GET /api/jobs/kinds``): the engine's fitters (``"method":
@@ -126,14 +128,29 @@ What the server keeps
   (settings ``path``, ``isotope``, ``energy_range``, ``separation_energy``: ``ame2020`` or MeV, ``name``) runs
   ``pyazr.endf.to_project`` in a directory of its own (``result.project``: ``report``, ``report_text``, ``text``,
   ``name``); ``POST /api/endf/keep_project`` (``{"job_id", "to"}``) writes it as a new ``.azr`` of the folder (never
-  over a file; the answer's ``open_path`` is what ``POST /api/project/open`` takes).  ``GET /api/endf/export`` is
+  over a file; the answer's ``open_path`` is what ``POST /api/project/open`` takes: a path relative to the open
+  project's folder, as every path of the API; outside the root it is refused 403 with ``what``, ``allowed``,
+  ``fix``).  ``GET /api/endf/export`` is
   what a file of the current text at the working x would lose (``pyazr.endf.from_session``: ``losses``,
   ``photon_widths``, or ``refused``; ``not_written``: the sections known before the run not to be written,
   ``pyazr.endf.writer.not_written_known``), the data's ``energy_range_MeV`` and a ``name`` not in use;
   the job ``endf_write``/``writer`` (settings ``name``, ``mat``, ``authors``, ``lab``, ``date``, ``reference``,
-  ``library``, ``e_low``, ``e_high`` in MeV lab, ``tolerance``, ``number_form``) runs ``pyazr.endf.write`` into a
-  new file of the folder (``result.written``: ``path``, ``sections``, ``grids``, ``mf2_check``, ``losses``,
-  ``not_written``).
+  ``library``, ``e_low``, ``e_high`` in MeV lab, ``tolerance`` and ``number_form``: settings of the type ``choice``,
+  whose ``choices`` in ``GET /api/jobs/kinds`` are ``[value, words]``) runs ``pyazr.endf.write`` into a new file of
+  the folder (``result.written``: ``path``, ``sections``, ``grids``, ``mf2_check``, ``losses``, ``not_written``);
+  while it runs, ``progress.doing`` says what it is doing (the writer's own words where ``pyazr.endf.write`` takes a
+  ``progress`` callable).
+- **A pair by the nuclides' names**: ``GET /api/masses?light=p&heavy=12C`` is
+  ``pyazr.sources.masses.pair_masses`` (``Z1``, ``M1``, ``Z2``, ``M2`` in u, ``S`` in MeV, ``compound``, ``table``:
+  AME2020); without ``light``, the heavy nucleus alone (``Z2``, ``M2``: a photon pair).
+- **A new project**: ``python -m pyazr.ui new.azr`` on a file that does not exist (its folder does) serves an empty
+  project (``Project.new(path)``), unsaved, with ``output/`` and ``checks/`` made; ``--log-requests`` logs every
+  request on standard error.  ``GET /api/project/records`` answers a list, ``[]`` when there is none.
+- **A prior or limits on a level parameter**: ``GET /api/project/parameter_settings`` is
+  ``Project.parameter_settings()`` (the rows of ``<parameterSettings>`` with the level and channel each names now);
+  ``PUT /api/project/parameter_settings`` (``{"level", "channel": [pair, l, s] or null, "prior": [centre, sigma] or
+  null, "limits": [lower, upper] or null, "rev"}``) is ``Project.set_parameter_setting``, one entry of the history;
+  both null remove the row.  A fixed parameter is refused (422, the three parts).
 - ``GET /api/describe`` carries ``first_view``: the columns of the lists of data sets (``description``) and of
   pairs (``pairs``) the page's first view shows (``pyazr/ui/first_view.py``).
 - ``GET /api/prior``, ``POST /api/prior/build`` (``{"parts": [...]}``), ``POST /api/prior/write`` (``{"parts":

@@ -3,8 +3,9 @@
 
 ``Session.evaluate(x).data[i].model`` is the model at the data set's points; ``pyazr.model_curve.model_curves(s)``
 gives it between them as well (``Session.model_curve(name)`` for one): the engine's evaluation of extrapolation
-records made from each data set's record (reaction, quantity, target, beam, detector, ...) at ``points`` lab energies
-between the first and the last point and at the points themselves, one branch per fixed angle of an excitation
+records made from each data set's record (reaction, quantity, target, beam, detector, ...) on a grid of ``points``
+lab energies between the first and the last point, seeded with the level energies and refined where the curve bends
+(``grid="refined"``, the default), and at the points themselves, one branch per fixed angle of an excitation
 function or per fixed energy of an angular distribution.  The script prints, per data set, the largest model value
 at the points and on the curve (a resonance between two points shows as a larger maximum on the curve), and writes
 each curve as a table with ``--out``.  A data set the curve cannot be made for (a beam-profile window per point,

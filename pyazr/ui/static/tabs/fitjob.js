@@ -29,6 +29,13 @@ export const SETTING_WIDGETS = {
       placeholder: s.default === null ? "default" : String(s.default), "aria-label": s.name });
     return { el: input, read: () => input.value.trim() };
   },
+  // one of the setting's choices (the job table's `choices`: [value, its words]), each said in words
+  choice: (s, typed) => {
+    const select = h("select", { "aria-label": s.name, title: s.doc }, (s.choices || []).map(([value, words]) =>
+      h("option", { value: String(value) }, `${value} — ${words}`)));
+    select.value = String(typed ?? s.default ?? "");
+    return { el: select, read: () => select.value };
+  },
   text: (s, typed) => {
     const input = h("input.mono", { type: "text", size: 24, value: typed ?? (s.default ?? ""), "aria-label": s.name,
       title: s.doc });

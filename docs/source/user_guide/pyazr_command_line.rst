@@ -192,7 +192,8 @@ Serve a project to the web UI on 127.0.0.1 until interrupted (--json: the URL as
 
 Calls ``pyazr.ui.server.main``.
 
-- ``FILE``: the project to serve (an existing format-3 project file (.azr)).
+- ``FILE``: the project to serve; a new .azr starts an empty project (an existing format-3 project file (.azr), or a
+  new one in an existing folder).
 - ``--port``: the TCP port (0: a free one above 20000) (a whole number; default 0).
 - ``--threads``: the compute budget in threads (a whole number; default 1).
 - ``--token``: a fixed access token (default: a random one) (a text).

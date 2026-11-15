@@ -34,8 +34,9 @@ What each step gives:
    ``help(Project.add_dataset)`` prints the same.
 2. **A project.** ``Project.new(path, nuclear_part=file)`` takes another
    format-3 file's sections that hold no records (``<config>``, ``<levels>``,
-   ``<thm>``, ``<parameterSettings>``, ...); ``Project.open(path)`` opens a
-   whole project.  Data files are named relative to the project's directory.
+   ``<thm>``, ``<parameterSettings>``, ...); ``Project.new(path)`` alone is an
+   empty project (the ``<config>`` entries of the engine's table, no pair, no
+   level); ``Project.open(path)`` opens a whole project.  Data files are named relative to the project's directory.
 3. **Records.** One call per record; the keyword arguments are the field keys.
    A value is the text the file holds, a number, a ``(value, "unit")`` tuple, a
    ``pyazr.Nuisance`` (``Nuisance(1, "fit", prior=(1, "3%"))`` is

@@ -2,12 +2,13 @@
 """The model as a curve over a data set on the page (GET /api/evaluation/curve/{name}) and an ENDF-6 file's values
 on its grid (POST /api/endf/curves), against the pyazr calls made directly:
 
-  1. T2 and T1: every data set's curve over HTTP equals ``pyazr.model_curve.model_curves(s)`` at the text's x0 (the
-     curves of all data sets in one session, as the server makes them) bit for bit: grid, c.m. and lab energies,
+  1. T2 and T1: every data set's curve over HTTP equals pyazr's curves made as the server makes them at the text's
+     x0 (``refine_plan`` with the page's session budget, then one ``CurveSession`` of every data set) bit for bit: grid, c.m. and lab energies,
      angles, model, the data set's own points, the branches; the S factor where offered is the model times the
      engine's conversion (T1's capture), none for an analyzing power;
   2. at the data set's own points the curve equals GET /api/evaluation/data/{name}'s model (T1: to rounding);
-  3. the working x moved (PATCH /api/x): the curve follows (equal to the direct call at that x);
+  3. the working x moved (PATCH /api/x): the curve follows (the grid kept, or refined again where a seed moved,
+     evaluated at that x as the direct calls do);
   4. refused with the three parts: T2's beam-profile data set (422), an unknown data set (404 with the names);
   5. the ENDF curves route: a file's values on the grid of a data set's curve (``on_curve``) equal
      ``Material.curves`` of that curve; the values at the points and the ratios are unchanged.
@@ -32,10 +33,22 @@ HAND = "p-C012_hand.endf"
 
 def direct(path, x=None):
     import pyazr
-    from pyazr.model_curve import model_curves
     warnings.simplefilter("ignore", pyazr.EngineWarning)
     s = pyazr.Session(path)
-    return s, model_curves(s, x=x)
+    return s, page_curves(s, x)
+
+
+def page_curves(s, x, refined_at=None):
+    """The curves as the page's server makes them (``pyazr/ui/engine.py _model_curves``), by pyazr's calls: the grid
+    refined at ``refined_at`` (default x) with the page's session budget, refined again at x where a seed moved."""
+    from pyazr.model_curve import CurveSession, grid_seeds, plan_curves, refine_plan, seeds_moved
+    from pyazr.ui.engine import CURVE_SESSIONS
+    first = x if refined_at is None else refined_at
+    plan = refine_plan(s, plan_curves(s, None, first), first, max_sessions=CURVE_SESSIONS)
+    if seeds_moved(plan, grid_seeds(s, plan, first), grid_seeds(s, plan, x)):
+        plan = refine_plan(s, plan_curves(s, None, x), x, max_sessions=CURVE_SESSIONS)
+    with CurveSession(s, plan) as c:
+        return c.evaluate(x)
 
 
 def same_curve(answer, c):
@@ -99,8 +112,7 @@ def test_curve_follows_the_working_x(tmp_path):
         after = client.get("/api/evaluation/curve/cap_g0").json()
         x = np.array(s.parameters.x0, float)
         x[[p.name for p in s.parameters.free].index(first)] = value * 1.01
-        from pyazr.model_curve import model_curves
-        same_curve(after, model_curves(s, ["cap_g0"], x=x)["cap_g0"])
+        same_curve(after, page_curves(s, x, refined_at=np.array(s.parameters.x0, float))["cap_g0"])
         assert after["model"] != before["model"]
     s.close()
 

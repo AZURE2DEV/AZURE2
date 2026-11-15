@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-9-webui-first-project`) — the browser test's lost requests; the curve's loose ends; a first project from nothing
+
+`web_ui.md` sections 11.17 (the curve, priors and limits, export, open, logging, a lost curve) and 11.18 (the walk's
+table); user guide `web_interface.rst` ("Your first project"), `web_ui_api.rst`, `pyazr.rst` (`model_curve`), the
+command-line page (`pyazr ui` on a new file); Developer Guide `api.rst`, `extending.rst` (`job_settings.py`).
+
+- **The browser test's "Failed to fetch"**: not reproduced here (see the report's numbers: every self-test run
+  passed, the server's request log complete in each, at loads 3 to 14 of 24).  What was measured: the self-test
+  leaves the Plot tab with its curve requests in flight (13 on T2), and every drawing of the tab sent them again, all
+  queued behind the session worker; Chrome's own requests to Google services still run during the self-test despite
+  the quiet profile (Autofill queries per form, optimization-guide model downloads, a spelling dictionary: Chrome's
+  net log).  Repaired in the page: a curve request without an answer is said as lost with **Ask again**
+  (`tabs/results.js curveFailure`), not shown as the engine's refusal; a curve request in flight is shared by the
+  drawings that follow (`curveRequest`).  The test keeps what a failure needs: the server's request log
+  (`python -m pyazr.ui --log-requests`, kept beside the screenshots on a failure) and, per failed request, the step
+  of the self-test during which it was sent and failed (`api.js` records `sent` and `at`, the self-test each step's
+  `at`).
+- **The curve**: `Session.model_curve` agrees with the data session by default (`alone=True` the old way); the grid
+  is refined where the curves bend with the ENDF writer's rule (`pyazr.endf.grid`, used, not copied) from seeds at
+  the level energies (`refine_plan`); the page refines once per curve session and when a level moves beyond the
+  grid's spacing, at most three sessions per refinement (`engine.py CURVE_SESSIONS`).  T2's 1.138 MeV peak drawn
+  through (0.085902 against 0.080877 on the even grid; 247 points).
+- **Export**: tolerance and number form are choices with words (`job_settings.py`, the setting type `choice`); the
+  data's range in words; the job says what it is doing (`progress.doing`).
+- **New project from a file**: the report names the project as kept; `POST /api/project/open` resolves a relative
+  path in the project's folder, 403 with three parts outside the root.
+- **Priors and limits** on a level parameter: `GET`/`PUT /api/project/parameter_settings`; the level's screen has
+  "Prior / limits…" beside the energy and a column in the channel table.
+- **The engine's lines in a job's log** again (`workers.py engine_lines_to_log`).
+- **A first project from nothing**: `pyazr ui first.azr` on a new file opens an empty project (`Project.new(path)`
+  without a nuclear part: `pyazr/project.py empty_project_text`, about 15 lines); the empty project's screens no
+  longer break (`GET /api/project/records` answers `[]`, route field `listed`); the new pair form fills Z, the
+  masses and S from AME2020 by the nuclides' names (`GET /api/masses`); `tests/pyazr/ui/first_project_test.py`
+  walks T1 from nothing to its χ² (bit for bit with T1's numbers).
+- **Not repaired, for the next branches**: a ratio data set's unit "b" is the engine's description
+  (`experiment/src/Describe.cpp:339`, C++); `Project.pairs()` does not list the g-factors nor the external capture;
+  `Project.set_channel` writes a width back through a conversion (`1.8500000000000003`); no table of ground-state
+  J^π or g-factors; the windows' and norm's grammar typed; an empty project's status line shows the engine's
+  refusal with the working file's name.
+- **Lines in shared files**: `routes.py` (four rows, the field `listed`), `server.py` (`open`, `masses`,
+  `_first_state`, `main(log_requests=)`), `jobs.py` (the settings moved to `job_settings.py`; `Tracker.say`),
+  `evaluations.py`, `engine.py`, `state.py` (the refusal's fix), `workers.py`, `__main__.py`, `cli.py` (the type
+  `project-or-new`), `project.py` (`new`, `empty_project_text`), `session.py` (`model_curve`), `model_curve.py`;
+  the page: `api.js`, `plots.js`, `selftest.js`, `tabs/results.js`, `tabs/nucleus.js`, `tabs/fitjob.js`,
+  `tabs/endf.js`, `tabs/endfproject.js`; `smoke_test.py` (two views, the request log).
+
 ## 2026-11-14 (director, 23:30) — merged: the compound system's name, the model curve, ENDF MF=6, pyazr repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 78 (rehearsal 77 plus four branches and three

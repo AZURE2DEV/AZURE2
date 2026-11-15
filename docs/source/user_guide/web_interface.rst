@@ -14,6 +14,7 @@ Starting it
 
    pip install pyazr[web]            # fastapi and uvicorn
    python -m pyazr.ui project.azr    # prints http://127.0.0.1:<port>/?token=<token>
+   python -m pyazr.ui new.azr        # a file not there yet: an empty project, written when saved
 
 Open the printed URL in a browser.  The token in it is exchanged for a cookie on the first load, and the address
 bar then shows the page without it; keep the URL to open the page again (it is also written to
@@ -68,6 +69,35 @@ Plot tab with every data set, its model and its residuals, the χ² per data set
 since the last Calculate: Δχ² in total and per data set, the data set that moved most first (choose a row to go
 to its plot), and the plots in that order.  The status line also gives the change of χ² since the last Calculate
 after every edit.  The page computes no χ²: each number is the engine's, and a change is the difference of two.
+
+Your first project
+------------------
+
+A project made from nothing, as T1 (p + 12C: elastic scattering, analyzing powers, a phase shift and capture to
+13N) was made through the page (``tests/pyazr/ui/first_project_test.py`` sends the same requests):
+
+1. **Start on a new file.**  In the folder that holds your data files, ``pyazr ui first.azr`` (a file that does not
+   exist yet): the page opens on an empty project, unsaved, with the folders ``output/`` and ``checks/`` made beside
+   it.  **Save** writes the file.
+2. **Particle Pairs → + pair.**  Type the partners by name under **by name** (light ``p``, heavy ``12C``) and press
+   **Fill from the mass table**: Z, the atomic masses and the separation energy come from AME2020.  Choose J and the
+   parity of each partner, type the channel radius and, for the proton, its g-factor (no table of the page holds
+   them), then **Add pair**.  A photon pair (γ + 13N in its ground state and in its first excited state) takes the
+   heavy nucleus alone, its excitation and the external capture's multipolarities.
+3. **Levels and Channels → + level.**  J, parity and E; the channels the J^π allows with your pairs are offered,
+   each to tick.  Open the level and type each channel's width (Enter sends it; the header shows the new χ² once the
+   project has data) and untick **fixed** where it is fitted.  **Prior / limits…** beside the energy and in each
+   channel's row puts a prior or limits on that parameter.
+4. **Segments → + new.**  Pick the data file from the folder's files (its first rows and what the engine reads
+   from it are shown), then the reaction, the quantity and its unit, the columns, the windows and the
+   normalization.
+5. **Calculate.**  The header shows χ²; the **Plot** tab draws every data set with the model on a fine grid
+   (refined where it bends, so a narrow level is drawn through) and the residuals.
+6. **Fit → Run**, then **Accept into project** and **Save**.
+
+Made this way with T1's own numbers, the project's χ² is T1's to the last digit (482.27523961726735).  With the mass
+table's numbers it is 482.26440, since T1 holds older masses (the proton 1.00782503223 u against AME2020's
+1.007825031898, S_p(13N) 62 meV lower).
 
 Six tasks, step by step
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -222,14 +252,15 @@ server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show
 S factor where the data set is a cross section with a charged entrance; **log y**).  Each series gets a plot of its
 own (**together** draws them in one plot per unit), with the data times the normalization in use and their errors,
 the model, and under it, on the same x axis, the engine's residuals (m − n·d)/(n·σ), whose squares are the χ² of the
-fit.  The model of a data set is drawn on a fine grid over its range (``Session.model_curve``: values evenly
-spaced between its first and last point and at the points themselves; one line per angle of an excitation function
-measured at several angles, or per energy of an angular distribution), the points stay points and the residuals
-are at the points.  The curves come a moment after the points (the first time the engine sets them up; on a capture
-project with external capture, such as 13N, about 15 s); until then, and for a data set that cannot be drawn as a
-curve (its columns give each point its own window, or its points are not one function of one variable), the line
-joins the model at the points, and the reason is written under the plots.  A resonance narrower than the grid's
-spacing is not drawn; an extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid shows it.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
+fit.  The model of a data set is drawn on a fine grid over its range (``Session.model_curve``: a grid seeded with
+the level energies and refined where the curve bends, and the points themselves; one line per angle of an excitation
+function measured at several angles, or per energy of an angular distribution), the points stay points and the
+residuals are at the points.  The curves come a moment after the points: the first time the grid is refined (T2
+about 5 s, T1 about 40 s with its external capture), then again only when a level moves beyond the grid's spacing
+or a data set changes; at any other edit the same grid is evaluated at once.  Until they come, and for a data set
+that cannot be drawn as a curve (its columns give each point its own window, or its points are not one function of
+one variable), the line joins the model at the points, and the reason is written under the plots; a curve whose
+request got no answer is said so in a yellow box with **Ask again**.  An extrapolation is drawn on its grid.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
 shades the band of the newest band job of the Fit tab around each series; the head says which job and project text
 it belongs to and which parameters it varied, and its legend names the job and the point it is drawn around (the
 model at that job's start point: accept the point to see the model line inside it).  When the project's text is a

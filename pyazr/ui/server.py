@@ -73,7 +73,20 @@ class Server:
         self.budget = Budget(threads)
         self.spawner = Spawner()
         self.started = time.time()
-        self._open_state(State(project, root=root))
+        self._open_state(self._first_state(project, root))
+
+    @staticmethod
+    def _first_state(project, root):
+        """The open project: the file at ``project``, or, where it does not exist and its folder does, a new empty
+        project there (``pyazr.Project.new(path)``; written when saved) with the output and checks directories the
+        engine writes into."""
+        path = os.path.abspath(project)
+        if os.path.exists(path) or not path.endswith(".azr") or not os.path.isdir(os.path.dirname(path)):
+            return State(project, root=root)
+        from pyazr import Project
+        for directory in ("output", "checks"):
+            os.makedirs(os.path.join(os.path.dirname(path), directory), exist_ok=True)
+        return State(path, root=root, project=Project.new(path))
 
     def _open_state(self, state):
         self.state = state
@@ -229,8 +242,10 @@ class Server:
         return self.state.inside_root(str(value or "output/").strip().strip('"'))
 
     def open(self, path):
-        """Open another project inside the root (no job may run)."""
-        self._replace_state(lambda root: State(path, root=root))
+        """Open another project inside the root (no job may run); a relative ``path`` is relative to the open
+        project's folder (as every path of the API), not to the server's working directory."""
+        full = self.state.inside_root(path)
+        self._replace_state(lambda root: State(full, root=root))
         return self.state.describe()
 
     def new(self, path, nuclear_part):
@@ -248,6 +263,17 @@ class Server:
         state = make(self.state.root)
         self.close()
         self._open_state(state)
+
+    @staticmethod
+    def masses(heavy, light=None):
+        """A pair's charges, atomic masses (u) and separation energy (MeV) from the AME2020 table
+        (``pyazr.sources.masses.pair_masses``: ``Z1``, ``M1``, ``Z2``, ``M2``, ``S``, ``compound``); without ``light``
+        (a photon pair) the heavy partner's ``Z2`` and ``M2`` alone.  Names as ``"p"``, ``"12C"``, ``"4He"``."""
+        from pyazr.sources import masses
+        if not light:
+            entry = masses.lookup(heavy)
+            return {"Z2": entry.Z, "M2": entry.atomic_mass, "table": masses.AME_VERSION}
+        return dict(masses.pair_masses(light, heavy)._asdict(), table=masses.AME_VERSION)
 
     @staticmethod
     def schema():
@@ -732,10 +758,11 @@ def free_port():
     raise RuntimeError("no free port found above 20000")
 
 
-def main(project, port=0, threads=1, token=None, *, host="127.0.0.1", root=None):
+def main(project, port=0, threads=1, token=None, *, host="127.0.0.1", root=None, log_requests=False):
     """Serve ``project`` on ``host:port`` (loopback only; port 0: a free one above 20000) with the compute budget
     ``threads`` and ``token`` (a random one when None).  Prints the URL with its token on one line and writes it to
-    ``<ui dir>/url`` (mode 0600); runs until interrupted, then stops every worker."""
+    ``<ui dir>/url`` (mode 0600); runs until interrupted, then stops every worker.  ``log_requests``: every request
+    on standard error (uvicorn's access log; the browser test keeps it beside a failure)."""
     if host not in LOOPBACK:
         raise SystemExit(f"pyazr.ui: refusing to bind to {host!r}: the server binds to a loopback address only "
                          f"({', '.join(LOOPBACK)}); use an SSH tunnel for remote use")
@@ -749,4 +776,14 @@ def main(project, port=0, threads=1, token=None, *, host="127.0.0.1", root=None)
     with os.fdopen(fd, "w") as f:
         f.write(url + "\n")
     print(url, flush=True)
-    uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning")).run()
+    config = uvicorn.Config(app, host=host, port=port, log_level="info" if log_requests else "warning",
+                            access_log=log_requests, log_config=None if log_requests else uvicorn.config.LOGGING_CONFIG)
+    if log_requests:  # the access log on standard error with the time of each line (standard output holds the URL)
+        import logging
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(asctime)s.%(msecs)03d %(name)s %(message)s", "%H:%M:%S"))
+        logger = logging.getLogger("uvicorn")  # uvicorn.access and uvicorn.error reach it
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    uvicorn.Server(config).run()

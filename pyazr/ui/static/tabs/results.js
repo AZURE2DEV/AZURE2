@@ -151,11 +151,35 @@ export async function render(ctx, el) {
 export async function fetchCurves(ctx, series) {
   await Promise.all(series.filter((s) => !s.extrapolation).map(async (s) => {
     try {
-      s.d.curve = await ctx.api.get(pathOf("/api/evaluation/curve", s.d.name), { quiet: true, background: true });
+      s.d.curve = await curveRequest(ctx, s.d.name);
     } catch (e) {
-      s.d.curve = { refused: e.view || { what: String(e) } };
+      s.d.curve = curveFailure(e);
     }
   }));
+}
+
+// The curve requests in flight, by data set and revision: a Plot tab drawn again before they are answered (a
+// Calculate, a change of x or y) waits for the same answer instead of sending the request again (the session worker
+// answers one request at a time, so a request sent again only waits behind the first).  Nothing is kept once
+// answered.
+const curvesInFlight = new Map();
+
+function curveRequest(ctx, name) {
+  const key = `${name}@${ctx.project?.rev}`;
+  if (!curvesInFlight.has(key)) {
+    const request = ctx.api.get(pathOf("/api/evaluation/curve", name), { quiet: true, background: true });
+    curvesInFlight.set(key, request);
+    request.then(() => curvesInFlight.delete(key), () => curvesInFlight.delete(key));
+  }
+  return curvesInFlight.get(key);
+}
+
+/** What a curve request that failed leaves in `d.curve`: the server's refusal (`refused`, its three parts), or a
+ * request that got no answer (`lost`: status 0, the browser's words), which the page says as such and offers to ask
+ * again; a lost curve is not the engine's refusal. */
+export function curveFailure(e) {
+  const view = e?.view || { what: String(e) };
+  return e?.status === 0 ? { lost: view } : { refused: view };
 }
 
 /** The changes since the last calculation: the totals, then one row per data set (the largest change first), each
@@ -302,15 +326,26 @@ function drawPlots(ctx, el, series, marks) {
   }
   const orders = chosen.filter((s) => ctx.schema.quantities?.[s.d.quantity]?.columns?.order);
   const refused = chosen.filter((s) => s.d.curve?.refused);
+  const lost = chosen.filter((s) => s.d.curve?.lost);
   const waiting = chosen.some((s) => !s.extrapolation && !s.d.curve);
   panel.appendChild(h("p.hint", {}, "The model of a data set is drawn on a fine grid over its range (pyazr's "
-    + "Session.model_curve: values evenly spaced between its first and last point and at the points, one line per "
-    + "angle of "
-    + "an excitation function or per energy of an angular distribution); a resonance narrower than the grid's "
-    + "spacing is not drawn. The residuals stay at the points. An extrapolation is drawn on its grid."
+    + "Session.model_curve: a grid seeded with the level energies and refined where the curve bends, and the "
+    + "points; one line per angle of an excitation function or per energy of an angular distribution). The "
+    + "residuals stay at the points. An extrapolation is drawn on its grid."
     + (waiting ? " The curves are being computed: the model is drawn through the points until they come." : "")
     + (orders.length ? ` Legendre coefficients (${orders.map((s) => s.d.name).join(", ")}) are drawn as one series: `
       + "the order of each point is not in the data arrays (finding 14)." : "")));
+  if (lost.length) {
+    const again = button("Ask again", "Ask the server for these curves again (GET /api/evaluation/curve/{name})",
+      async () => {
+        lost.forEach((s) => { delete s.d.curve; });
+        await fetchCurves(ctx, lost);
+        if (el.isConnected) drawPlots(ctx, el, series, marks);
+      });
+    panel.appendChild(h("p.warn-box.curve-lost", { role: "alert" }, `No answer for the curve of `
+      + `${lost.map((s) => s.d.name).join(", ")} (${lost[0].d.curve.lost.what}): the model is drawn through the `
+      + "points. ", again));
+  }
   for (const s of refused) {
     const r = s.d.curve.refused;
     panel.appendChild(h("p.hint.curve-refused", { data: { name: s.d.name } }, h("strong", {}, `${s.d.name}: `),

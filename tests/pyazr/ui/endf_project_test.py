@@ -90,6 +90,10 @@ def test_resonances_and_new_project(t1):
         {k: (list(v) if isinstance(v, tuple) else v) for k, v in uitest_plain(expected).items() if k != "path"}
     assert result["text"] == project.text and result["report_text"].splitlines()[1:] == \
         str(conversion).splitlines()[1:]
+    # the report's first line names the project as it will be kept, not the job's temporary file
+    first = result["report_text"].splitlines()[0]
+    assert first.startswith("project he.azr ") and result["candidate"] not in first and result["report"]["path"] \
+        == "he.azr", first
 
     for body, status in (({"job_id": job["id"], "to": "T1.azr"}, 422), ({"job_id": job["id"], "to": "he.txt"}, 422),
                          ({"job_id": job["id"], "to": "../../he.azr"}, 403)):
@@ -105,8 +109,13 @@ def test_resonances_and_new_project(t1):
     other = t1.post("/api/jobs", json={"kind": "endf_check", "method": "codes", "settings": {"path": HAND}}).json()
     wait_job(t1, other["id"])
     assert t1.post("/api/endf/keep_project", json={"job_id": other["id"]}).status_code == 422
+    # a relative path is the project's folder's (the server's working directory is elsewhere); outside the root:
+    # refused with what, allowed and fix
+    assert kept.json()["open_path"] == "he.azr" and os.getcwd() != t1.folder
+    outside = t1.post("/api/project/open", json={"path": "../he.azr"})
+    assert outside.status_code == 403 and all(outside.json()[k] for k in ("what", "allowed", "fix")), outside.text
     opened = t1.post("/api/project/open", json={"path": kept.json()["open_path"]})
-    assert opened.status_code == 200 and opened.json()["path"].endswith("he.azr"), opened.text
+    assert opened.status_code == 200 and opened.json()["path"] == os.path.join(t1.folder, "he.azr"), opened.text
     shutil.rmtree(work, ignore_errors=True)
 
 
@@ -136,11 +145,19 @@ def test_export(t1):
 
     # a short range and a loose tolerance: the job against the direct call, not the writer's accuracy (its own test)
     settings = {"name": "T1.endf", "authors": "pyazr tests", "lab": "TEST", "mat": 625, "e_low": 0.3, "e_high": 0.6,
-                "tolerance": 1e-2}
+                "tolerance": "1e-2", "number_form": "widest"}
+    # the tolerance and the number form are choices, each with its words; a value not among them is refused
+    rows = {(r["kind"], r["method"]): r for r in t1.get("/api/jobs/kinds").json()}
+    choices = {x["name"]: x.get("choices") for x in rows[("endf_write", "writer")]["settings"]}
+    assert [c[0] for c in choices["number_form"]] == sorted(E.NUMBER_FORMS, key=["widest", "classic", "e"].index)
+    assert all(words for _, words in choices["tolerance"] + choices["number_form"])
+    bad = t1.post("/api/jobs", json={"kind": "endf_write", "method": "writer", "settings": {"number_form": "f"}})
+    assert bad.status_code == 422 and "widest" in bad.json()["allowed"], bad.text
     r = t1.post("/api/jobs", json={"kind": "endf_write", "method": "writer", "settings": settings})
     assert r.status_code == 200, r.text
     job = wait_job(t1, r.json()["id"])
     assert job["state"] == "finished", job
+    assert job["progress"]["doing"], job["progress"]  # the job row says what it is doing
     written = job["result"]["written"]
     direct = os.path.join(tempfile.mkdtemp(), "T1.endf")
     w = E.write(s, direct, x0, header={"AUTH": "pyazr tests", "ALAB": "TEST", "MAT": 625},

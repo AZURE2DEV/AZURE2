@@ -63,7 +63,11 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the form of a new pair: the partners' fields and the pair's in pyazr's words, the parity a choice
          ("first-new-pair", "nucleus/pair/+new"),
          # the prior builder (the Fit tab's link "Prior on the parameters…")
-         ("prior", "prior"))
+         ("prior", "prior"),
+         # a level's prior and limits on its energy (the level's "Prior / limits…": set_parameter_setting)
+         ("level-prior-limits", "nucleus/level/{level}?setting=energy"),
+         # the model curve over a narrow level (T2's 16 keV wide level at 1.138 MeV, T1's 1/2+ at 0.42 MeV)
+         ("curve-narrow-level", "results?show={curveset}"))
 # The ENDF-6 files copied into each project's folder (tests/pyazr/data/endf: a hand-written p + 12C file and an
 # extract of the ENDF/B-VIII.1 3He + 4He evaluation, in a subdirectory), and the stand-in of the checking codes the
 # server finds (tests/pyazr/endf_standin, linked under the codes' names; its report has findings).
@@ -109,9 +113,10 @@ class Served:
         from pyazr.ui.server import free_port
         self.port = free_port()
         self.log = open(log, "w")
+        self.log_path = str(log)
         self.proc = subprocess.Popen([sys.executable, "-m", "pyazr.ui", azr, "--port", str(self.port), "--token",
-                                      TOKEN], cwd=uitest.ROOT, stdout=subprocess.PIPE, stderr=self.log, text=True,
-                                     env=dict(env or os.environ, PYTHONPATH=uitest.ROOT))
+                                      TOKEN, "--log-requests"], cwd=uitest.ROOT, stdout=subprocess.PIPE,
+                                     stderr=self.log, text=True, env=dict(env or os.environ, PYTHONPATH=uitest.ROOT))
         self.url = self.proc.stdout.readline().strip()
         assert self.url.startswith("http://127.0.0.1:"), f"the server printed {self.url!r}"
         assert uitest.wait_until(self._answers, 60), "the server does not answer"
@@ -182,7 +187,7 @@ def test_selftest_and_screenshots(name, tmp_path):
               f"{len(result['steps'])} views, chi2 {result['chi2']}, "
               f"evaluation refused: {result['evaluation_refused']}")
         assert result["errors"] == [], result["errors"]
-        assert result["failed"] == [], result["failed"]
+        assert result["failed"] == [], failure_report(result, server, shots, label)
         if label in ("T1", "T2"):
             assert result["chi2"] is not None, result["evaluation_refused"]
         drawn = [s["plot"] for s in result["steps"] if s["plot"]]
@@ -280,6 +285,19 @@ def test_selftest_and_screenshots(name, tmp_path):
         server.stop()
 
 
+def failure_report(result, server, shots, label):
+    """The failed requests, each with the step of the self-test that was running when it was sent and when it failed
+    (the page's clock), and the server's request log kept as ``<label>_server.log`` beside the screenshots."""
+    steps = sorted(result["steps"], key=lambda s: s.get("at", 0))
+
+    def step_at(t):
+        return next((s["route"] for s in reversed(steps) if s.get("at", 0) <= t), "before the first step")
+    kept = os.path.join(shots, f"{label}_server.log")
+    shutil.copyfile(server.log_path, kept)
+    return [dict(f, sent_during=step_at(f.get("sent", 0)), failed_during=step_at(f.get("at", 0)))
+            for f in result["failed"]] + [f"the server's request log: {kept}"]
+
+
 def take_screenshots(server, tmp_path, label, shots, result, azr):
     """One screenshot per view (the routes of VIEWS filled from the self-test's own routes)."""
     routes = [s["route"] for s in result["steps"]]
@@ -291,6 +309,11 @@ def take_screenshots(server, tmp_path, label, shots, result, azr):
             "endf_files": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf?files=")), None),
             "endf": next((unquote(r.split("=", 1)[1]) for r in routes if r.startswith("#/endf/check?file=")
                           and "(checked)" not in r), None)}
+    fill["curveset"] = {"T1": "cap_g0", "T2": "s03_diff150"}.get(label)
+    # a level of the project (the self-test's first level route is the new level's form), its label as the self-test
+    # encoded it ("1%2F2-%200.0": the address keeps the "%" as written)
+    fill["level"] = next((r.split("/", 3)[3] for r in routes if r.startswith("#/nucleus/level/")
+                          and not r.endswith("/+new")), None)
     data = os.path.join(os.path.dirname(azr), "data")  # a data file of the project for the preview's view
     fill["file"] = (sorted(n for n in os.listdir(data) if n.endswith(".dat")) or [None])[-1] \
         if os.path.isdir(data) else None
@@ -306,7 +329,7 @@ def take_screenshots(server, tmp_path, label, shots, result, azr):
             route = view.format(**fill)
             name = name or re.sub(r"[^A-Za-z0-9]+", "-", view.replace("{", "").replace("}", "")).strip("-")
             path = os.path.join(shots, f"{label}_{theme}_{width}x{height}_{name}.png")
-            url = f"{server.url}#/{quote(route, safe='/?=&,.-_')}{'&' if '?' in route else '?'}theme={theme}"
+            url = f"{server.url}#/{quote(route, safe='/?=&,.-_%')}{'&' if '?' in route else '?'}theme={theme}"
             chrome(tmp_path, url, f"--window-size={width},{height}",
                    "--virtual-time-budget=30000", f"--screenshot={path}", mode="old")
             assert os.path.getsize(path) > 10000, f"{path}: no page drawn"

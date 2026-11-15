@@ -118,9 +118,19 @@ def _json_file(text, arg):
     return value
 
 
+def _project_or_new(text, arg):
+    """An existing format-3 project, or a new ``.azr`` in an existing folder: the web UI starts an empty project
+    there (written when saved)."""
+    if not os.path.exists(text) and text.endswith(".azr") and os.path.isdir(os.path.dirname(os.path.abspath(text))):
+        return text
+    return _project(text, arg)
+
+
 #: name -> (description, converter, the value's name in a usage line); a converter of None keeps the text.
 ARG_TYPES = {
     "project": ("an existing format-3 project file (.azr)", _project, "FILE"),
+    "project-or-new": ("an existing format-3 project file (.azr), or a new one in an existing folder",
+                       _project_or_new, "FILE"),
     "file": ("an existing file", _existing_file, "FILE"),
     "output": ("a file to write, in an existing folder", _output, "FILE"),
     "number": ("a number", _number(float, "a number"), "X"),
@@ -516,7 +526,7 @@ COMMANDS = (
             "pyazr.coulomb_table.build",
             "Build the Coulomb table here from the exact routines (about 5 min on 4 threads, 88 MB).",
             run=_run_coulomb_build),
-    Command("ui", (Arg("FILE", "project", "the project to serve"),
+    Command("ui", (Arg("FILE", "project-or-new", "the project to serve; a new .azr starts an empty project"),
                    Arg("--port", "int", "the TCP port (0: a free one above 20000)", default=0),
                    Arg("--threads", "int", "the compute budget in threads", default=1),
                    Arg("--token", "text", "a fixed access token (default: a random one)")),

@@ -252,12 +252,15 @@ class Project(NuclearPart, ParameterSettings):
         return p
 
     @classmethod
-    def new(cls, path, *, nuclear_part):
+    def new(cls, path, *, nuclear_part=None):
         """A project to be saved at ``path``, started from the nuclear part of the format-3 project ``nuclear_part``:
         that file's text with every record removed (the bodies of its record sections emptied: data sets,
         normalizations, energy scales, extrapolations, targets, beams, detectors, model data, potentials), every other
         section kept as it is (``<config>``, ``<levels>``, ``<thm>``, ``<parameterSettings>``, ...).  Nothing is
-        written until :meth:`save`.  A format-1/2 file is refused with the conversion command."""
+        written until :meth:`save`.  A format-1/2 file is refused with the conversion command.  Without
+        ``nuclear_part``: an empty project (:func:`empty_project_text`), the start of a project made from nothing."""
+        if nuclear_part is None:
+            return cls(empty_project_text().encode(), path)
         src = cls.open(nuclear_part)
         doc = src._doc
         for s in sorted(src._sections(), key=lambda s: -s["open"]):
@@ -777,6 +780,19 @@ def records_from_csv(path, kind="dataset", project=None):
     if refusals:
         raise FormatError(f"{path}: {len({d['row'] for d in refusals})} row(s) refused", refusals)
     return records
+
+
+def empty_project_text():
+    """The text of an empty format-3 project: the positional ``<config>`` entries of the engine's table
+    (``kinds()["config"]``) in its order, each choice its first value (the A-matrix, every check ``none``), the
+    output and checks directories ``output/`` and ``checks/``; ``format=3``; empty ``<levels>``, ``<data>``,
+    ``<extrapolations>``.  The engine sets it up once it has a pair and a level."""
+    from . import kinds
+    directories = {"output_dir": "output/", "checks_dir": "checks/"}
+    lines = [directories.get(k) or f["values"][0] for k, f in kinds()["config"]["fields"].items()
+             if f.get("positional")]
+    return "\n".join(["<config>", *lines, "format=3", "</config>", "<levels>", "</levels>", "<data>", "</data>",
+                      "<extrapolations>", "</extrapolations>", ""])
 
 
 def require_format3(path):
