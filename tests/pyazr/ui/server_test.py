@@ -107,8 +107,10 @@ def test_server_process_workers_die_with_it(tmp_path):
         processes = api.get("/api/server").json()
         roles = {p["role"].split()[0]: p for p in processes}
         assert roles["server"]["pid"] == proc.pid and {"session", "job"} <= set(roles)
+        # rss_kb and peak_kb are None where there is no /proc (macOS, Windows)
+        mb = lambda kb: "n/a" if kb is None else f"{kb / 1024:.0f}"
         print("\n  memory (MB, resident / peak): " + ", ".join(
-            f"{p['role'].split()[0]} {p['rss_kb'] / 1024:.0f} / {p['peak_kb'] / 1024:.0f}" for p in processes))
+            f"{p['role'].split()[0]} {mb(p['rss_kb'])} / {mb(p['peak_kb'])}" for p in processes))
         workers = [p["pid"] for p in processes if p["role"] != "server"]
         started += workers
         os.kill(proc.pid, signal.SIGKILL)

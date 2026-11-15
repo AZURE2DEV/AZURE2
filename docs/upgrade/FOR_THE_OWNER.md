@@ -464,8 +464,36 @@ re-read against its design at the hand-over.
      Windows; this branch's tests were written on Linux only.
    - *Run here for the first time:* the 309 tests of the CI's unit-test step without a Coulomb table file, as the
      CI has none: all pass (the CI's compiler, Python and packages were not reproduced).
-   - *macOS:* its regression step failed and its unit tests were still running, more than 100 minutes, when this
-     was written; a job's annotations are readable only when it ends. Not read, not repaired.
+   - *macOS* (the fifth push; the job took four hours: regression 93 minutes, unit tests 140). Read from its
+     annotations, ten per step, so more may have failed unseen:
+     - *GNU tools assumed.* The test scripts the upgrade added were written and run with GNU tools only. With the
+       BSD tools of macOS, `tests/format3_engine`, `fit_modes`, `extrapolation_grids`, `gamma_decay` and
+       `beta_delayed_alpha` fail (`sed -i FILE`, `\n` in a `sed` replacement, the padded output of `wc -l`
+       compared as text, a newline in an `awk -v` value). Without `timeout`, `tools/run_one.sh` (the test
+       `tools_runall`), `tools/convert_tree.sh` and `tests/nuisance_prior` call a program that does not exist, and
+       `tests/modified_sfactor`, `legendre_expansions`, `cli_option_values`, `ratio_to_rutherford`,
+       `ratio_to_reference` and `spin_orbit_potential` write `env VAR=... $(guard_command N) ...`, where the
+       fallback of `tests/lib/guard.sh` is a shell function that `env` cannot run. **Not repaired in the
+       scripts.** The macOS job now installs Homebrew's `coreutils`, `gnu-sed`, `gawk`, `grep` and `findutils`
+       and puts them first on `PATH` in the two test steps (the build keeps Apple's tools). What this costs:
+       the CI no longer shows whether a test script runs with BSD tools, the scripts of `main` included, and a
+       developer on a Mac needs the same five packages on `PATH` (the Developer Guide says so now). A count over
+       `tests/`, `tools/` and `scripts/` on 2026-11-15: `sed -i` 11 uses, `md5sum` 4, `stat -c` 1 (with a BSD
+       fallback), `readlink -f` 1, `nproc` 1, `grep -P` 1; no bash 4 construct was found. Making the scripts
+       portable, and the guard a program instead of a function, is open.
+     - `pyazr_ui_server`: the page's server reports no memory figures without `/proc`, and the test formatted
+       them (now "n/a"). The same test's check that the workers are gone after the server is killed reads
+       `/proc` too (`tests/pyazr/ui/uitest.py`, `gone`) and **cannot fail on macOS or Windows**; not changed.
+     - `pyazr_spin_orbit_potential`: off by 4.1e-2, which is the distance between the direct and the channel
+       ratio of one pathway: the test told the direct pathway by a real part that is exactly zero, and with
+       Apple's clang it evidently is not. It now tells it by size and prints the values on a failure. The
+       values on macOS were not seen.
+     - `tests/model_data`: one of six comparisons of a gradient with finite differences missed 1e-6 by a tenth
+       (1.1e-6; here 4e-8 with a Coulomb table file and 3.7e-7 without). The tolerance is 5e-6, the three
+       measurements are in the script.
+     - Six unit tests failed for the reasons already repaired on Linux (packages, the interpreter, 1e-8).
+     Run here on Linux: the three changed tests with and without a Coulomb table file. **Nothing of this was
+     run on macOS**, and the GNU tools' effect there is expected, not seen.
    - *The sanitizers* (the seventh push): the address job passes. The thread job failed in every step, after 112
      minutes, with the same report of libomp as before: the entry written for it matched nothing. The ninth push
      replaces it with two entries (`sanitizer_findings.md` section 4.4), again not tried anywhere but on the CI.

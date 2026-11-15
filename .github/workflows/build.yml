@@ -110,6 +110,19 @@ jobs:
         if: matrix.name == 'macos'
         run: |
           brew install ninja gsl readline libomp
+          # GNU tools for the two test steps only.  The test scripts added by the upgrade were written and run
+          # against GNU tools and fail with the BSD ones of macOS (sed -i FILE, "\n" in a sed replacement, the
+          # padded output of wc, a newline in an awk -v value) or without timeout (tools/run_one.sh; the shell
+          # watchdog of tests/lib/guard.sh cannot follow "env VAR=..."): read from the first macOS run of these
+          # tests.  The build keeps Apple's tools.
+          brew install coreutils gnu-sed gawk grep findutils ||
+            { echo "::error::macos: brew install coreutils gnu-sed gawk grep findutils failed"; exit 1; }
+          GNUBIN=""
+          for f in coreutils gnu-sed gawk grep findutils; do
+            d="$(brew --prefix "$f")/libexec/gnubin"
+            if [ -d "$d" ]; then GNUBIN="$GNUBIN${GNUBIN:+:}$d"; else echo "::warning::macos: no directory $d"; fi
+          done
+          echo "GNUBIN=$GNUBIN" >> "$GITHUB_ENV"
           # pybind11, numpy and scipy from pip in a venv: one interpreter that
           # _azure2 is built for and the pyazr tests run under, independent of
           # which python@3.x keg Homebrew's own numpy happens to use.
@@ -242,6 +255,8 @@ jobs:
           if [ -n "${PYAZR_PYTHON:-}" ] && [ "${{ matrix.name }}" != "windows" ]; then
             export PATH="$(dirname "$PYAZR_PYTHON"):$PATH"
           fi
+          # macOS: the GNU tools of the install step before Apple's (see there)
+          if [ "${{ matrix.name }}" = "macos" ] && [ -n "${GNUBIN:-}" ]; then export PATH="$GNUBIN:$PATH"; fi
           # Windows: the test scripts make their work directories under TMPDIR and hand the paths to native programs
           # (python, AZURE2) inside files and variables, where MSYS does not translate /tmp: a Windows path instead.
           if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
@@ -290,6 +305,8 @@ jobs:
           set -o pipefail
           rc=0
           if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
+          # macOS: the GNU tools of the install step before Apple's (see there)
+          if [ "${{ matrix.name }}" = "macos" ] && [ -n "${GNUBIN:-}" ]; then export PATH="$GNUBIN:$PATH"; fi
           ctest --test-dir build --output-on-failure -LE "slow|browser" 2>&1 | tee unit-tests.log || rc=$?
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.

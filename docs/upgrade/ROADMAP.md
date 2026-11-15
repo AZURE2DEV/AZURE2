@@ -18,8 +18,9 @@ of the upgrade stopped here by the PI's decision: the owner continues in this br
 merged into `feature/upgrade` (the first paragraph above was the intention; a plain merge conflicts in 93 files,
 `FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: after seven pushes all three platforms
 build, the address-sanitizer job passes, and the tests fail on each platform (Linux 10 known failures, repaired
-in rehearsal 86; Windows many, partly repaired without a Windows machine; macOS not read: `FOR_THE_OWNER.md`
-section 10). The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
+in rehearsal 86; Windows many, partly repaired without a Windows machine; macOS read after its first full run
+and answered in rehearsal 88 with GNU tools for its test steps and three test repairs, none run on macOS:
+`FOR_THE_OWNER.md` section 10). The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
 one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
