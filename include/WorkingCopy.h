@@ -251,21 +251,22 @@ class WorkingCopy {
   /// The node table of the stage (NodeTable.h), built at the end of Initialize and shared by the copies; null before.
   const azure2::NodeTable *Nodes() const { return nodes_.table.get(); }
   /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
-  /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
+  /// tasks `work`, bit for bit; prints the counts to stderr (the lines of one check at once: the pass may run on several
+  /// threads of a caller's region) and returns the number that differ (src/NodeTable.cpp).
   long CheckNodeTable(const CompoundSystem *compound, const std::vector<int> &work);
   /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): the sharing groups of the slots (SlotGroup.h).  Every point's
   /// range lies in one block, every slot's writer reads it, every point that reads a block has its group's key, and a
   /// point on a shared mesh has at its slot k the node the mesh's plan for the present anchors gives it at k.  Prints
-  /// the counts (and up to ten breaches) to stderr; returns the number of breaches.
-  long CheckSlotGroups() const;
+  /// the counts (and up to ten breaches) into `text`; returns the number of breaches.
+  long CheckSlotGroups(std::ostream &text) const;
   /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): every reader of slots without an angle (Site::AngleFree) reads,
   /// at each slot, from its row set (RowSet.h) the angle (its own, or for data given at a lab angle theta_cm(E_n;
   /// theta_lab) and the Jacobian, experiment::LabAngleAt at the slot's lab energy), the angular row, the Coulomb
   /// amplitudes and the A_y factors at that angle and the slot's energy (Site::SlotAngle, SlotJacobian, RowP,
   /// CoulombAt), bit for bit as LabAngleAt, Site::LegendreRowAt, CoulombAmplitudesAt, Polarization::HarmonicTable give
-  /// them there, and its slots lie in the set's range.  Reported on a line of its own; returns the number of slots
-  /// that differ.
-  long CheckReaderRows(const CompoundSystem *compound) const;
+  /// them there, and its slots lie in the set's range.  Reported on a line of its own in `text`; returns the number of
+  /// slots that differ.
+  long CheckReaderRows(const CompoundSystem *compound, std::ostream &text) const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
   /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.
@@ -507,8 +508,8 @@ class WorkingCopy {
    * the energy tasks of their plan tasks (CalculationPlan::EnergyTasks: one level-matrix solve per compound energy,
    * points and sub-points alike) in one OpenMP pass, largest first, then the folds of the points with sub-points in
    * a second.  A plan task whose calculation throws gets NaN on its points (Unit::MarkFailed).  Returns the number of
-   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, or
-   * AZURE_SERIAL_CHI2 set.  After a pass that returns 0 the caller reads the points with
+   * such plan tasks, or -1 when nothing was calculated (AZURE_SERIAL_CHI2 set).  Called inside a parallel region,
+   * or built without OpenMP, the same pass runs on the calling thread alone.  After a pass that returns 0 the caller reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, const CompoundSystem *compound, const LevelState &state,

@@ -51,6 +51,16 @@ What it contains
        the Coulomb functions at :math:`\rho = k a_c`, their energy
        derivatives, :math:`\eta` and :math:`\rho` in non-relativistic or
        relativistic kinematics, the bound-state shift.
+   * - ``LevelPairShift.h``
+     - The shift function of one channel between two levels of one
+       :math:`J^\pi` as the Brune and Park level matrices and the Brune
+       :math:`\to` formal transformation hold it: the chord through
+       :math:`(E_a, S_a)` and :math:`(E_b, S_b)`, its slope, its value at
+       :math:`E = 0` and at the channel energy, and their derivatives by the
+       level energies (``level_pair_shift``; header only, double and long
+       double). Every place that writes these divided differences calls it
+       (the level route, the R-matrix route, the adjoint, the derivative
+       arrays, the transformed route, ``formal_from_brune``).
    * - ``Coulomb.h``, ``Whittaker.h``
      - The Coulomb and Whittaker functions (``physics/coulomb/``, from
        pycoulomb, one directory per algorithm).

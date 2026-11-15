@@ -131,6 +131,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_coulomb COMMAND physics_coulomb_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
+# coulomb_threshold: the Coulomb functions' zero-energy fallback just above a heavy-ion threshold, S against its exact
+# limit S_l(0) within the slope the limit leaves out (physics/coulomb/README.md, local changes).
+add_executable(physics_coulomb_threshold_test tests/coulomb_threshold_test.cpp)
+target_link_libraries(physics_coulomb_threshold_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_threshold_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb_threshold COMMAND physics_coulomb_threshold_test)
+
 # channel_functions: neutral closed forms, P, S, phi against mpmath's Coulomb functions, S' against another
 # algorithm's difference, the kinematics (docs/upgrade/coulomb.md section 5).
 add_executable(physics_channel_functions_test tests/channel_functions_test.cpp)

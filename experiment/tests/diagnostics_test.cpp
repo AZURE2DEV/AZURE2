@@ -149,6 +149,9 @@ int main() {
             .empty());
   check("entrance_pair and exit_pair on one reaction validate",
         Diagnose(Data(kDataset + "    entrance_pair 1\n    exit_pair 2\n")).empty());
+  check("entrance_pair and exit_pair on a sum validate (the build checks them against the terms' labels)",
+        Diagnose(Data(Set(kDataset, "reaction", "    reaction 15N(p,a)12C + 15N(p,a)12C[4.439]") +
+                      "    entrance_pair 1\n    exit_pair 2\n")).empty());
   check("a target state: 16O[2.143](n,n)16O[2.143] is elastic (sigma_total validates)",
         Diagnose(Data(Set(Set(kDataset, "reaction", "    reaction 16O[2.143](n,n)16O[2.143]"), "quantity", "    quantity sigma_total")))
             .empty());
@@ -227,8 +230,6 @@ int main() {
       {"E_ROLE_NOT_ALLOWED", Data(Set(kDataset, "columns", "    columns E_lab[MeV] theta_lab[deg] value error"))},
       // a data set of a quantity that is not measurable
       {"W_NOT_MEASURABLE", Data(Set(Set(kDataset, "reaction", "    reaction 15N(p,p)15N"), "quantity", "    quantity sigma_nuclear"))},
-      // a pair key on a sum (its terms wait for named pairs)
-      {"E_FIELD_NOT_APPLICABLE", Data(Set(kDataset, "reaction", "    reaction 15N(p,a)12C + 15N(p,a)12C[4.439]") + "    entrance_pair 1\n")},
       // a target state that is not a number
       {"E_REACTION_SYNTAX", Data(Set(kDataset, "reaction", "    reaction 16O[total](n,n)16O"))},
       // E_x is no column role (step 3a): no quantity takes an excitation-energy column; 'frame E_x' of a datum is a
@@ -489,6 +490,7 @@ int main() {
                                             "E_THM_EXPERIMENT_UNKNOWN", "E_THM_OLD_LIST", "E_LAB_JACOBIAN_AT_LIMIT",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_CONFIG_KEY_REMOVED", "E_CONFIG_OPTION_VALUE",
+                                            "E_UNKNOWN_SECTION", "E_UNREAD_LINE",
                                             "E_CONFIG_OPTIONS_CONTRADICT", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
                                             "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM",
                                             "E_STOPPING_PROJECTILE", "E_STOPPING_ACTIVE", "E_STOPPING_SCALE_CONFLICT"};

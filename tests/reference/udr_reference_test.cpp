@@ -20,6 +20,7 @@
 
 #include "TargetEffect.h"
 #include "azure2/convert/SpecsFromOldLines.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "Config.h"
 
 static int failures = 0;
@@ -62,6 +63,16 @@ static std::string writeUdr(double s, double mu, double amp, const std::vector<s
   return path;
 }
 
+// The kernel at lab energy e; a refusal there is a failure of the test (and an empty kernel).
+static std::shared_ptr<const azure2::experiment::UdrKernel> Kernel(const TargetEffect &te, double e, double mass) {
+  std::string refusal;
+  std::shared_ptr<const azure2::experiment::UdrKernel> k = te.BuildUdrKernel(e, mass, refusal);
+  if (k) return k;
+  std::printf("refused at %g MeV: %s\n", e, refusal.c_str());
+  failures++;
+  return std::make_shared<azure2::experiment::UdrKernel>();
+}
+
 static TargetEffect makeEffect(const Config &config, const std::string &file, double burst, double channel, int centred) {
   std::ostringstream line;
   line << "1 \"1\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 udr \"" << file << "\" 100 "
@@ -87,7 +98,7 @@ int main() {
     check("parser: centred flag off", te.IsUdrCentred() ? 1 : 0, 0, 0);
     std::ostringstream log;
     check("loader: file read", te.LoadUdrTable(0.5, 2.0, log) ? 1 : 0, 1, 0);
-    std::shared_ptr<const azure2::experiment::UdrKernel> k = te.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = Kernel(te, 1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("kernel integral is one", norm, 1.0, 1e-9);
@@ -105,14 +116,14 @@ int main() {
     TargetEffect c = makeEffect(config, shifted, 0.0, 0.0, 1);
     std::ostringstream log;
     c.LoadUdrTable(0.5, 2.0, log);
-    std::shared_ptr<const azure2::experiment::UdrKernel> k = c.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = Kernel(c, 1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("centred: mean is zero", mean, 0.0, 1e-9);
     check("centred: variance unchanged", var, s * s, 1e-4 * s * s);
     TargetEffect u = makeEffect(config, shifted, 0.0, 0.0, 0);
     u.LoadUdrTable(0.5, 2.0, log);
-    k = u.BuildUdrKernel(1.0, mn);
+    k = Kernel(u, 1.0, mn);
     moments(*k, norm, mean, var);
     check("uncentred: mean is the tabulated shift", mean, 5.0e-3, 1e-9);
   }
@@ -123,18 +134,18 @@ int main() {
     std::ostringstream log;
     b.LoadUdrTable(0.5, 2.0, log);
     double norm, mean, var;
-    moments(*b.BuildUdrKernel(1.0, mn), norm, mean, var);
+    moments(*Kernel(b, 1.0, mn), norm, mean, var);
     double sb = burstNs * 1e-3 / 2.3548200450309493;
     check("burst: integral still one", norm, 1.0, 1e-9);
     check("burst: variance = s^2 + sigma_b^2", var, s * s + sb * sb, 2e-3 * (s * s + sb * sb));
     TargetEffect c = makeEffect(config, file, 0.0, channelNs, 1);
     c.LoadUdrTable(0.5, 2.0, log);
-    moments(*c.BuildUdrKernel(1.0, mn), norm, mean, var);
+    moments(*Kernel(c, 1.0, mn), norm, mean, var);
     double vc = channelNs * 1e-3 * channelNs * 1e-3 / 12.0;
     check("channel: variance = s^2 + c^2/12", var, s * s + vc, 2e-3 * (s * s + vc));
     TargetEffect bc = makeEffect(config, file, burstNs, channelNs, 1);
     bc.LoadUdrTable(0.5, 2.0, log);
-    moments(*bc.BuildUdrKernel(1.0, mn), norm, mean, var);
+    moments(*Kernel(bc, 1.0, mn), norm, mean, var);
     check("burst+channel: variance adds in quadrature", var, s * s + sb * sb + vc, 2e-3 * (s * s + sb * sb + vc));
   }
   // Energy interpolation: widths 1 s at 1 MeV and 3 s at 3 MeV give 2 s at
@@ -149,9 +160,9 @@ int main() {
     std::ostringstream log;
     te.LoadUdrTable(1.0, 3.0, log);
     double norm, mean, var;
-    moments(*te.BuildUdrKernel(2.0, mn), norm, mean, var);
+    moments(*Kernel(te, 2.0, mn), norm, mean, var);
     check("interpolated width at the midpoint energy", std::sqrt(var), 2.0 * s, 1e-4 * s);
-    moments(*te.BuildUdrKernel(10.0, mn), norm, mean, var);
+    moments(*Kernel(te, 10.0, mn), norm, mean, var);
     check("above the table: last tabulation used", std::sqrt(var), 3.0 * s, 1e-4 * s);
   }
   // Delay cap: a tabulation reaching delays close to the flight time (true
@@ -164,7 +175,7 @@ int main() {
     TargetEffect te = makeEffect(config, late, 0.0, 0.0, 0);
     std::ostringstream log;
     te.LoadUdrTable(0.5, 2.0, log);
-    std::shared_ptr<const azure2::experiment::UdrKernel> k = te.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = Kernel(te, 1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("delay cap: support ends at the cap", k->tauMax, cap, 3e-3);
@@ -178,6 +189,53 @@ int main() {
     double t = azure2::experiment::UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
     check("1 MeV neutron, 100 m: 7.2356 us", t, 7.2356, 2e-4);
     check("energy from time inverts", azure2::experiment::UdrKinematics::EnergyFromTime(t, mn, 100.0), 1.0, 1e-12);
+  }
+  // A format-3 detector record: flight_path is read in metres whatever unit it is written in (the kernel's flight
+  // times are L / v in metres; the table's base length unit is fm).  A channel of -10 (10 bins per decade) is a
+  // rectangle of width c = t0 ln(10) / (2 * 10) in time, t0 = 7.2356 us for a 1 MeV neutron over 100 m (above):
+  // c = 0.83302 us by hand, so the kernel's variance is s^2 + c^2 / 12 = (2 ns)^2 + 0.057827 us^2 (sd 0.24048 us).
+  // Read in fm, t0 would be 7e15 us and the convolution's node count overflows (the crash this guards against).
+  {
+    std::string file = writeUdr(s, 0.0, 1.0, one);
+    std::ofstream("udr_reference_test_data.dat") << "1.0 0 1.0 0.1\n";
+    for (const char *path : {"100 m", "1e17 fm"}) {
+      const std::string text =
+          "<config>\ntrue\noutput/\nchecks/\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nformat=3\n</config>\n"
+          "<levels>\n"
+          "0.5 1 7.0 0 1 1 1 0 1 1 0 1.0 0.5 1 0.0 1 0.0 1.008665 19.99244 0 10 6.76 6.76 0 0 0.0 0 5.0 0 0 0\n"
+          "</levels>\n<data>\ndataset d1\n    reaction 20Ne(n,n)20Ne\n    quantity sigma\n    unit b\n"
+          "    file udr_reference_test_data.dat\n    columns E_lab[MeV] _ value error\n    norm 1 fixed\n"
+          "    detector tof\n    quadrature points 20\n</data>\n<targets>\ndetector tof\n    udr file " +
+          file + " flight_path " + path + " burst 0 ns channel -10 ns centred no\n</targets>\n";
+      azure2::experiment::Format3ReadOptions read;
+      const azure2::experiment::Format3Project p = azure2::experiment::ReadFormat3Text(text, read);
+      for (const azure2::experiment::Diagnostic &d : p.diagnostics) std::printf("    %s: %s\n", d.code.c_str(), d.message.c_str());
+      const bool built = p.Ok() && p.built.data.targetEffects.items.size() == 1;
+      check((std::string("format 3: one UDR effect built, flight_path ") + path).c_str(), built ? 1 : 0, 1, 0);
+      if (!built) continue;
+      TargetEffect te(p.built.data.targetEffects.items[0].spec, config);
+      check((std::string("format 3: flight path in metres, ") + path).c_str(), te.GetUdrFlightPath(), 100.0, 0);
+      std::ostringstream log;
+      te.LoadUdrTable(0.5, 2.0, log);
+      double norm, mean, var;
+      moments(*Kernel(te, 1.0, mn), norm, mean, var);
+      check("format 3: kernel sd = sqrt(s^2 + c^2/12), c from t0 = 7.2356 us", std::sqrt(var),
+            std::sqrt(s * s + 0.83302 * 0.83302 / 12.0), 2e-4);
+    }
+    std::remove("udr_reference_test_data.dat");
+  }
+  // A response far wider than the table's step: at 1e-12 MeV a neutron takes 7.2e6 us over 100 m, a channel of 10 bins
+  // per decade is 8.3e5 us wide and spans 1.4e10 steps of 3e-5 us; refused with the reason (the node count once
+  // overflowed an int and the run crashed), and the same table at 1 MeV builds.
+  {
+    TargetEffect te = makeEffect(config, writeUdr(s, 0.0, 1.0, one), 0.0, -10.0, 0);
+    std::ostringstream log;
+    te.LoadUdrTable(0.5, 2.0, log);
+    std::string refusal;
+    const bool refused = !te.BuildUdrKernel(1.0e-12, mn, refusal) && refusal.find("coarser grid") != std::string::npos;
+    check("a response of 1.4e10 table steps: refused with the reason", refused ? 1 : 0, 1, 0);
+    std::string none;
+    check("the same table at 1 MeV: built", te.BuildUdrKernel(1.0, mn, none) && none.empty() ? 1 : 0, 1, 0);
   }
   std::remove("udr_reference_test_tmp.txt");
   std::printf("%s: %d failure(s)\n", failures ? "FAILED" : "OK", failures);

@@ -530,7 +530,13 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSyste
       if (targetEffect->IsUdr()) {
         const double mass = entrance->GetM(1) * uconv;
         DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
-        setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+        std::string refusal;
+        setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass, refusal);
+        if (!setUp.udr) {
+          configure.outStream << "ERROR: the UDR kernel of " << what << " at E_lab = " << point->GetLabEnergy()
+                              << " MeV: " << refusal << "." << std::endl;
+          return -1;
+        }
         setUp.udrMass = mass;
         support.udr = setUp.udr.get();
         support.udrMass = mass;

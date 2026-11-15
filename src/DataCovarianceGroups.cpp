@@ -258,8 +258,8 @@ void WorkingCopy::PrepareCovarianceSeeds(const CompoundSystem *compound, const L
     if (seg->GetCovarianceGroup() < 0) continue;
     for (int pid = 0; pid < seg->NumPoints(); pid++) work.push_back({seg, pid});
   }
-  // The point pass of those segments, then each point from the records it wrote; serially (inside a parallel
-  // region, or a failed point) point by point, where index order puts every host first.
+  // The point pass of those segments, then each point from the records it wrote; after a failed point
+  // point by point, where index order puts every host first.
   std::vector<const Segment *> segments;
   for (const auto &w : work)
     if (segments.empty() || segments.back() != w.first) segments.push_back(w.first);

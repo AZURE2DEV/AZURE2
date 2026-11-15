@@ -129,12 +129,12 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - the reaction expression (section 3.5)
    * - ``entrance_pair``
      - ``<integer >= 1>``
-     - only when the reaction is one reaction (no sum, no ratio); optional
-     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+     - optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``exit_pair``
      - ``<integer >= 1>``
-     - only when the reaction is one reaction (no sum, no ratio); optional
-     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
+     - optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
      - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
@@ -323,12 +323,12 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - the reaction expression (section 3.5)
    * - ``entrance_pair``
      - ``<integer >= 1>``
-     - only when the reaction is one reaction (no sum, no ratio); optional
-     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+     - optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``exit_pair``
      - ``<integer >= 1>``
-     - only when the reaction is one reaction (no sum, no ratio); optional
-     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
+     - optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
      - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
@@ -2079,6 +2079,12 @@ Diagnostic codes
    * - ``E_CONFIG_KEY_REMOVED``
      - error
      - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)
+   * - ``E_UNKNOWN_SECTION``
+     - error
+     - a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it
+   * - ``E_UNREAD_LINE``
+     - error
+     - a <config> key format 3 does not have, a <config> line after the eleven entries that is not key=value, or a line of <mcmc> outside <parameters>: nothing would read it
    * - ``E_CONFIG_OPTION_VALUE``
      - error
      - an option of the calculation in <config> (use_brune, transform, ...) with a value other than 0, 1, true or false

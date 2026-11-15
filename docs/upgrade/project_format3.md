@@ -237,7 +237,13 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
   extrapolation writes `entrance_pair <key>` and/or `exit_pair <key>`, the pair key of `<levels>` (column 6), a
   written label as the level ID of F13 (a). They are accepted only where the label alone is ambiguous and required
   there (the reader checks both against `<levels>`: a redundant key is a second source of truth); they apply to a
-  single reaction only — a sum or a ratio with an ambiguous term waits for named pairs in `<levels>`. The rule "a THM
+  single reaction only — a sum or a ratio with an ambiguous term waits for named pairs in `<levels>`.
+  **[Correction (2026-11-15, the PI's 24Mg model, pairs 1 and 6 both ¹²C + ¹²C, four sums of a pair-6 entrance): on a
+  sum or a ratio `entrance_pair` / `exit_pair` apply to every term whose label names two pairs on that side; a term
+  whose label names one pair keeps it; `E_PAIR_KEY` where no term needs the key or a term's label does not name it.
+  The old line gives every term its own keys (`EData::CreateComponentSegment` copied the base segment with the
+  term's entrance and exit), so a line whose ambiguous terms take two pairs of the same particles has no form here and
+  the converter refuses it; no project known has one, and a per-term form would change the reaction grammar.]** The rule "a THM
   data set takes the pair carrying the THM columns" was not taken: the old engine uses the key written, the two pairs
   of that file carry different channels (pair 1 has eight levels pair 6 lacks), and the THM columns are read only by the
   THM vertex (`EDataThm.cpp`, `EPoint.cpp`); the rule would hold in that file but is no meaning the old engine has.]**
@@ -1093,7 +1099,7 @@ never writes them. It never overwrites its input or a file it did not create; si
 | old | new | note |
 |---|---|---|
 | data line, active flag 0 | `active no` | the record keeps its place in output numbering (§8.5) |
-| entrance, exit keys | `reaction` label | exit −1 → `[total]`; ambiguous label (two pairs with the same partition and state) → ask |
+| entrance, exit keys | `reaction` label | exit −1 → `[total]`; ambiguous label (two pairs with the same partition and state) → `entrance_pair` / `exit_pair` (on a sum: one per side for every ambiguous term; terms taking two such pairs refused) |
 | Emin Emax | `energy_window … MeV`, tokens verbatim | |
 | θmin θmax | `angle_window … deg` for quantities with an angle; dropped for angle-integrated data [settled, step 3a: `ESegment::IsInSegment` tests the angle window of differential data (isDiff 1, 4, 7) only, so the old engine never filtered angle-integrated rows by angle; no question] | |
 | data isDiff 0, 1, 2, 3, 4, 5, 6, 7, 9 | `sigma`; `dsigma_domega` + `theta_lab`; `phase_shift` + J, l (+ s); `sigma` + `[total]`; `dsigma_domega` + `theta_cm`; `sigma` + `multipole E1`; `… E2`; `analyzing_power` + `theta_cm`; `legendre` + `order` + `expansion a_over_a0` (`absolute` with `absolute 1`) | survey: 170, 257, 7, 17, 65, 0, 0, 99, 10 lines |

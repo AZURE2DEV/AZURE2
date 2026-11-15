@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -282,11 +283,18 @@ long WorkingCopy::CheckNodeTable(const CompoundSystem *compound, const std::vect
       }
     }
   }
-  std::cerr << "AZURE_NODE_CHECK: " << stage->Size() << " stage nodes (" << stage->Bytes() << " bytes), "
-            << nodes_.overflow.Size() << " overflow nodes (" << nodes_.overflow.Bytes() << " bytes); " << units
-            << " units of the pass: " << onStage << " on the stage table, " << onOverflow << " on the overflow table, "
-            << offTables << " off the tables, " << wrongNode << " on a wrong node; channel rows " << rowsDiffer
-            << " differ" << std::endl;
-  for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
-  return offTables + wrongNode + rowsDiffer + CheckSlotGroups() + CheckReaderRows(compound);
+  // The lines of one check are written at once: the pass also runs inside a caller's parallel region (a numerical
+  // gradient's evaluations), where two checks print at the same time.
+  std::ostringstream text;
+  text << "AZURE_NODE_CHECK: " << stage->Size() << " stage nodes (" << stage->Bytes() << " bytes), "
+       << nodes_.overflow.Size() << " overflow nodes (" << nodes_.overflow.Bytes() << " bytes); " << units
+       << " units of the pass: " << onStage << " on the stage table, " << onOverflow << " on the overflow table, "
+       << offTables << " off the tables, " << wrongNode << " on a wrong node; channel rows " << rowsDiffer
+       << " differ\n";
+  for (const std::string &r : reports) text << "AZURE_NODE_CHECK:   " << r << '\n';
+  const long groups = CheckSlotGroups(text);
+  const long rows = CheckReaderRows(compound, text);
+#pragma omp critical(azure_node_check_text)
+  std::cerr << text.str() << std::flush;
+  return offTables + wrongNode + rowsDiffer + groups + rows;
 }

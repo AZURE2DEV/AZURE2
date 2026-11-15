@@ -502,7 +502,8 @@ std::string PriorCentresFromOldRows(std::istream *section, SpecList<DatasetSpec>
       return "ERROR: <parameterSettings> row \"" + trimmed + "\" names no parameter a prior_centre row can move: it "
              "takes " + OldSegmentParameterName(1, true) + " ... " + OldSegmentParameterName(numSegmentLines, true) +
              " or " + OldSegmentParameterName(1, false) + " ... " + OldSegmentParameterName(numSegmentLines, false) +
-             " (a <segmentsData> line's key, counting inactive lines).";
+             " (a <segmentsData> line's key, counting inactive lines).  Delete the row, or rename it after the data "
+             "line it means (segment_<N>_norm, N the line's place in <segmentsData>).";
     char *end = NULL;
     const double centre = strtod(tok[2].c_str(), &end);
     if (end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre))

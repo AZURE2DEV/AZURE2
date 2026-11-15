@@ -178,8 +178,12 @@ def test_settings_listed_with_types_and_converted(t1):
     from pyazr.ui.jobs import SETTING_TYPES
     for row in t1.get("/api/jobs/kinds").json():
         for setting in row["settings"]:
-            assert set(setting) == {"name", "type", "default", "doc", "allowed"}, setting
+            # a choice lists its choices, each [value, its words]
+            keys = {"name", "type", "default", "doc", "allowed"}
+            keys |= {"choices"} if setting["type"] == "choice" else set()
+            assert set(setting) == keys, setting
             assert setting["type"] in SETTING_TYPES and setting["doc"], setting
+            assert setting["type"] != "choice" or all(len(c) == 2 and c[1] for c in setting["choices"]), setting
     r = t1.post("/api/jobs", json={"kind": "fit", "method": "scipy_lbfgsb", "settings": {"max_iterations": "1.5"}})
     assert r.status_code == 422 and "integer" in r.json()["allowed"], r.text
     r = t1.post("/api/jobs", json={"kind": "fit", "method": "scipy_lbfgsb", "settings": {"max_calls": 3}})

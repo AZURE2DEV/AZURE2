@@ -66,6 +66,41 @@ export function newLevelRequest({ J, parity, energy, fixed }, allowed, checked) 
       : chosen.map((c) => ({ pair: c.pair, l: c.l, s: c.s, width: 0, fixed: true })) };
 }
 
+/** The body of PUT /api/project/parameter_settings from the four boxes of a parameter's prior and limits (texts as
+ * typed): the prior [centre, sigma] when both are typed, the limits [lower, upper] when both are, null otherwise
+ * (both null remove the row); `refused` names a pair of boxes typed half.  The numbers are the engine's to check. */
+export function settingRequest(level, channel, { centre, sigma, lower, upper }) {
+  const pair = (a, b, what) => {
+    const [x, y] = [String(a ?? "").trim(), String(b ?? "").trim()];
+    if (!x && !y) return { value: null };
+    if (!x || !y) return { refused: `${what}: both boxes or neither` };
+    return { value: [Number(x), Number(y)] };
+  };
+  const prior = pair(centre, sigma, "the prior (centre and σ)");
+  const limits = pair(lower, upper, "the limits (lower and upper)");
+  const refused = prior.refused || limits.refused;
+  if (refused) return { refused };
+  return { level, channel: channel ?? null, prior: prior.value, limits: limits.value };
+}
+
+/** The row of `settings` (GET /api/project/parameter_settings) that names the energy of `level` (channel null) or its
+ * channel [pair, l, s]; undefined when there is none. */
+export function settingOf(settings, level, channel) {
+  return (settings || []).find((r) => r.level === level && (channel ? Array.isArray(r.channel)
+    && r.channel[0] === channel[0] && r.channel[1] === channel[1] && r.channel[2] === channel[2] : !r.channel));
+}
+
+/** A row's prior and limits in words ("prior 1.2 ± 0.1; limits 0 … 2"), or "" without either. */
+export function settingText(row) {
+  if (!row) return "";
+  const parts = [];
+  if (row.nuisance) parts.push(`prior ${formatNumber(row.value, 6)} ± ${formatNumber(row.error, 4)}`);
+  if (!(row.lower === 0 && row.upper === 0)) {
+    parts.push(`limits ${formatNumber(row.lower, 6)} … ${formatNumber(row.upper, 6)}`);
+  }
+  return parts.join("; ");
+}
+
 export async function render(ctx, el, args) {
   const [pairs, levels, records, problems] = await Promise.all([ctx.api.get("/api/project/pairs"),
     ctx.api.get("/api/project/levels"), ctx.api.get("/api/project/records"), ctx.api.get("/api/project/validate")]);
@@ -161,11 +196,39 @@ export async function render(ctx, el, args) {
       "add a pair", () => ctx.api.post("/api/project/pairs", newPairRequest(texts, fields, table)), msg)
       .then((answer) => ctx.navigate(`#/nucleus/pair/${answer?.result ?? ""}`), () => {}), "primary");
     add.dataset.action = "add-pair";
-    return h("div.new-pair", {}, h("h3", {}, "New pair"), h("p.hint", {}, "A pair no level names yet is kept in "
-      + "<levels> by a row of its own (inactive); a level that names it takes its place. A photon pair has no light "
-      + "partner: the heavy one is the compound nucleus in its final level."),
-    h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "kind"), kind)), partner("light"),
-    partner("heavy"), h("div.inline-form", {}, ...others), h("div.form-actions", {}, add));
+    // the partners by name: charges, masses and the separation energy from the mass table (GET /api/masses)
+    const lightName = h("input", { type: "text", size: 6, "aria-label": "light nuclide", placeholder: "p" });
+    const heavyName = h("input", { type: "text", size: 6, "aria-label": "heavy nuclide", placeholder: "12C" });
+    const fill = button("Fill from the mass table", "Z, the atomic masses and the separation energy from AME2020 "
+      + "(pyazr.sources.masses); J and parity are not in it", async () => {
+      try {
+        const q = new URLSearchParams({ heavy: heavyName.value.trim() });
+        if (lightName.value.trim()) q.set("light", lightName.value.trim());
+        const m = await ctx.api.get(`/api/masses?${q}`);
+        const set = (label, value) => {
+          const input = boxOf(label);
+          if (!input || value === undefined) return;
+          input.value = String(value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        set("light Z", m.Z1); set("light mass", m.M1); set("heavy Z", m.Z2); set("heavy mass", m.M2);
+        set("separation energy (MeV)", m.S);
+        ctx.status(`from ${m.table}: Z and masses${m.S !== undefined ? ", S = " + m.S + " MeV" : ""}; J and `
+          + "parity still to choose", "ok");
+      } catch (e) {
+        ctx.showError(e, form);
+      }
+    });
+    fill.dataset.action = "fill-masses";
+    const form = h("div.new-pair", {}, h("h3", {}, "New pair"), h("p.hint", {}, "A pair no level names yet is kept "
+      + "in <levels> by a row of its own (inactive); a level that names it takes its place. A photon pair has no "
+      + "light partner: the heavy one is the compound nucleus in its final level."),
+    h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "kind"), kind)),
+    h("div.inline-form", {}, h("span.k", {}, "by name "), h("label.ctl", {}, h("span.ctl-label", {}, "light"),
+      lightName), h("label.ctl", {}, h("span.ctl-label", {}, "heavy"), heavyName), fill),
+    partner("light"), partner("heavy"), h("div.inline-form", {}, ...others), h("div.form-actions", {}, add));
+    const boxOf = (label) => form.querySelector(`[aria-label="${label}"]`);
+    return form;
   }
 
   // -- levels
@@ -189,7 +252,10 @@ export async function render(ctx, el, args) {
         + "them."),
     button("+ level", "Add a level with the channels its J^π allows (add_level)",
       () => ctx.navigate("#/nucleus/level/+new"), levels.length || !pairs.length ? "" : "primary")));
-  if (selectedLevel) levelsBox.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg));
+  if (selectedLevel) {
+    const settings = await ctx.api.get("/api/project/parameter_settings");
+    levelsBox.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg, settings));
+  }
   if (newLevel) levelsBox.appendChild(newLevelPanel(ctx, pairLabel, msg));
 
   // -- the records of the sections the Nucleus tab claims (γ decays, potentials)
@@ -230,9 +296,10 @@ export async function render(ctx, el, args) {
 }
 
 /** One level: its energy, fixed and active flags, and its channels with width and fixed flag, each editable. */
-function levelPanel(ctx, level, pairLabel, msg) {
+function levelPanel(ctx, level, pairLabel, msg, settings) {
   const path = pathOf("/api/project/levels", level.label);
   const box = h("section.panel.level", { "aria-label": `level ${level.label}` });
+  const settingForm = h("div.setting-form");
   const energy = h("input.num", { type: "text", value: level.energy_text, size: 12, "aria-label": "energy (MeV)" });
   const fixed = h("input", { type: "checkbox", "aria-label": "energy fixed" });
   fixed.checked = level.fixed;
@@ -250,7 +317,8 @@ function levelPanel(ctx, level, pairLabel, msg) {
     h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "E_λ (MeV)"), energy),
       h("label.ctl", {}, fixed, h("span.ctl-label", {}, "energy fixed")),
       h("label.ctl", {}, active, h("span.ctl-label", {}, "active")),
-      button("Apply", "set_level with the changed values (Enter in the energy box)", applyLevel, "primary")));
+      button("Apply", "set_level with the changed values (Enter in the energy box)", applyLevel, "primary")),
+    settingLine(null, level.fixed, "MeV"));
 
   const rows = level.channels.map((c) => ({ ...c, pair_label: pairLabel[c.pair] ?? c.pair,
     key: `${c.pair}/${c.l}/${c.s}` }));
@@ -264,11 +332,21 @@ function levelPanel(ctx, level, pairLabel, msg) {
     { key: "amplitude", title: "amplitude", sortable: false, render: (r) => amplitudeEditor(r),
       doc: "whether the width column is a reduced-width amplitude (MeV^1/2) instead of a partial width or ANC (a "
         + "particle channel only; the value is not converted: type the width in the new convention)" },
+    { key: "setting", title: "prior / limits", sortable: false, render: (r) => settingCell(r),
+      doc: "a prior on the width (a term ((Γ - centre)/σ)² of the objective) or limits in a fit and the sampler; "
+        + "a free channel only" },
     { key: "line", title: "line", numeric: true },
   ];
   const table = renderTable(document, { columns, rows, rowKey: (r) => r.key, withFilter: false, label: "channels",
     caption: "Channels: Enter in a width box sends the width; the header shows the new χ²" });
   box.appendChild(table.element);
+  box.appendChild(settingForm);
+  // "?setting=energy" or "?setting=<pair>,<l>,<s>" opens that parameter's prior and limits (a link, a screenshot)
+  const asked = ctx.route?.params?.setting;
+  if (asked) {
+    const channel = asked === "energy" ? null : asked.split(",").map(Number);
+    openSetting(channel, settingOf(settings, level.label, channel), channel ? "the width's convention" : "MeV");
+  }
   box.appendChild(h("p.hint", {}, "A width is written as the file has it: Γ in eV for a particle channel above "
     + "threshold, an ANC in fm^-1/2 below it, an amplitude in MeV^1/2 where the row says so. The engine's "
     + "physical values and Wigner limits come with the Fit tab."));
@@ -276,6 +354,51 @@ function levelPanel(ctx, level, pairLabel, msg) {
 
   function channelPath(r) {
     return `${path}/channels/${r.pair}/${r.l}/${r.s}`;
+  }
+  // a prior or limits on the energy or a channel's width: <parameterSettings> (set_parameter_setting), one form
+  // below the channels opened by the energy's or a channel's "Prior / limits…"
+  function settingLine(channel, isFixed, unit) {
+    const row = settingOf(settings, level.label, channel);
+    return h("div.inline-form.setting-line", {}, h("span.hint", {}, channel ? "" : `Energy: ${settingText(row)
+      || "no prior, no limits"} `), button("Prior / limits…", isFixed ? "The engine applies a prior or limits to a "
+      + "free parameter only: free it first" : "A prior on this parameter (a term of the objective) or limits in a "
+      + "fit and the sampler (set_parameter_setting)", () => openSetting(channel, row, unit)));
+  }
+  function settingCell(r) {
+    const channel = [r.pair, r.l, r.s];
+    const row = settingOf(settings, level.label, channel);
+    const open = button(row ? "edit" : "set…", r.fixed ? "The engine applies a prior or limits to a free parameter "
+      + "only: free the channel first" : "A prior on this width or limits (set_parameter_setting)",
+    () => openSetting(channel, row, "the width's convention"));
+    return h("span", {}, settingText(row), row ? " " : "", open);
+  }
+  function openSetting(channel, row, unit) {
+    settingForm.textContent = "";
+    const what = channel ? `channel ${pairLabel[channel[0]] ?? channel[0]} l=${channel[1]} s=${channel[2]}`
+      : "the energy";
+    const box = (label, value) => h("input.num", { type: "text", size: 12, "aria-label": label,
+      value: value === undefined || value === null ? "" : String(value) });
+    const centre = box("prior centre", row?.nuisance ? row.value : "");
+    const sigma = box("prior sigma", row?.nuisance ? row.error : "");
+    const limited = row && !(row.lower === 0 && row.upper === 0);
+    const lower = box("lower limit", limited ? row.lower : "");
+    const upper = box("upper limit", limited ? row.upper : "");
+    const send = (values) => {
+      const body = settingRequest(level.label, channel, values);
+      if (body.refused) { ctx.status(body.refused, "error"); return; }
+      chi2Edit(ctx, `prior / limits of ${level.label} ${what}`,
+        () => ctx.api.put("/api/project/parameter_settings", body), msg);
+    };
+    settingForm.append(h("h3", {}, `Prior and limits of ${what} (${unit})`),
+      h("div.inline-form", {}, h("label.ctl", {}, h("span.ctl-label", {}, "prior centre"), centre),
+        h("label.ctl", {}, h("span.ctl-label", {}, "σ"), sigma),
+        h("label.ctl", {}, h("span.ctl-label", {}, "lower limit"), lower),
+        h("label.ctl", {}, h("span.ctl-label", {}, "upper limit"), upper),
+        button("Apply", "Write the prior and the limits (empty boxes: none)", () => send({ centre: centre.value,
+          sigma: sigma.value, lower: lower.value, upper: upper.value }), "primary"),
+        row ? button("Remove", "Remove the prior and the limits", () => send({})) : null),
+      h("p.hint", {}, "A prior adds ((p − centre)/σ)² to the objective; limits bound the parameter in a fit and "
+        + "the sampler. Leave a pair of boxes empty for none. The engine applies them to a free parameter only."));
   }
   function widthEditor(r) {
     const input = h("input.num", { type: "text", value: r.width_text, size: 14,

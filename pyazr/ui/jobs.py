@@ -24,6 +24,7 @@ from functools import lru_cache, partial
 import numpy as np
 
 from .errors import Conflict, Missing, NotFound, Refused, UIError, describe_exception
+from .job_settings import SETTING_TYPES, Setting, merged_settings  # noqa: F401  -- the job table's rows use them
 from .utilities import rate_engine
 
 FINAL = ("stopped", "converged", "ended", "finished", "failed", "killed", "interrupted")
@@ -86,6 +87,11 @@ class Tracker:
             self.report({"event": "call", "calls": self.calls, "objective": objective, "best": self.best,
                          "elapsed": time.perf_counter() - self.t0,
                          "best_x": dict(zip(self.names, self.best_x.tolist())) if improved else None, **more})
+
+    def say(self, doing):
+        """Progress in words: what the job is doing now (``progress["doing"]``; an export's stage), the calls as
+        counted so far."""
+        self.count(max(self.calls, 1), None, None, doing=str(doing))
 
     def stop_requested(self):
         return self.stop.is_set()
@@ -447,67 +453,6 @@ def bands_draws(tracker, x0, settings, names):
                              "draws": len(xs), "varied": list(names), "free": list(names)}
 
 
-# -- settings: their types and the conversion of a request's value ------------------------------------------------
-
-def _as_integer(value):
-    if value is None or value == "":
-        return None
-    number = float(value)
-    if not number.is_integer():
-        raise ValueError(f"{value!r} is not an integer")
-    return int(number)
-
-
-def _as_boolean(value):
-    if isinstance(value, bool):
-        return value
-    if str(value).lower() in ("true", "1", "yes"):
-        return True
-    if str(value).lower() in ("false", "0", "no"):
-        return False
-    raise ValueError(f"{value!r} is not true or false")
-
-
-def _as_number(value):
-    if value is None or value == "":
-        return None
-    number = float(value)
-    if not np.isfinite(number):
-        raise ValueError(f"{value!r} is not a finite number")
-    return number
-
-
-def _as_text(value):
-    return "" if value is None else str(value).strip()
-
-
-def _as_names(value):
-    if value is None or value == "":
-        return []
-    words = value.replace(",", " ").split() if isinstance(value, str) else list(value)
-    return [str(w) for w in words]
-
-
-# The value types of a job's settings: type -> (conversion of a request's value, what the type allows).  The page has
-# one widget per type (tabs/fit.js, SETTING_WIDGETS); a new type is a row here and a widget there.
-SETTING_TYPES = {
-    "integer": (_as_integer, "an integer, or empty for the default"),
-    "boolean": (_as_boolean, "true or false"),
-    "names": (_as_names, "names of free parameters, separated by blanks or commas; empty: every free parameter"),
-    "number": (_as_number, "a finite number, or empty for the default"),
-    "text": (_as_text, "a word or a path, as the setting's doc says"),
-}
-
-
-@dataclass(frozen=True)
-class Setting:
-    """One setting of a job kind: its name, type (a key of :data:`SETTING_TYPES`), default and doc."""
-    name: str
-    type: str
-    default: object
-    doc: str
-
-
 @dataclass(frozen=True)
 class JobRow:
     """One kind of job: ``kind`` and ``method`` name it; ``run`` its function ``(tracker, x0, settings, names) ->
@@ -665,7 +610,8 @@ def job_table():
     for r in job_rows():
         available = r.missing is None and _importable(r.needs)
         settings = [{"name": x.name, "type": x.type, "default": x.default, "doc": x.doc,
-                     "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
+                     "allowed": SETTING_TYPES[x.type][1], **({"choices": [list(c) for c in x.choices]}
+                                                             if x.choices else {})} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
                     "available": available, "missing": r.missing, "follows": _follows(r.follows),
                     "takes": r.takes, "facts": dict(r.facts), "files": list(r.files), "session": r.session,
@@ -678,23 +624,6 @@ def _follows(follows):
     if not follows:
         return None
     return [list(p) for p in follows] if isinstance(follows[0], tuple) else list(follows)
-
-
-def merged_settings(row, given):
-    """The row's defaults with the request's values over them, each converted by its type; Refused on an unknown
-    setting or a value its type does not allow."""
-    by_name = {x.name: x for x in row.settings}
-    unknown = sorted(set(given or {}) - set(by_name))
-    if unknown:
-        raise Refused(f"job {row.kind}/{row.method} has no setting {', '.join(unknown)}", allowed=sorted(by_name))
-    out = row.defaults()
-    for name, value in (given or {}).items():
-        convert, allowed = SETTING_TYPES[by_name[name].type]
-        try:
-            out[name] = convert(value)
-        except (TypeError, ValueError) as e:
-            raise Refused(f"job {row.kind}/{row.method}, setting {name}: {e}", allowed=allowed) from None
-    return out
 
 
 def _importable(name):

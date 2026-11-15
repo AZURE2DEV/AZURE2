@@ -252,6 +252,8 @@ const std::vector<ConfigKey> &ConfigKeys() {
   return keys;
 }
 
+const ConfigKey *ConfigKeyNamed(const std::string &name) { return KeyNamed(name); }
+
 const ConfigKey *ConfigOptionNamed(const std::string &name) {
   const ConfigKey *k = KeyNamed(name);
   return k && k->option ? k : nullptr;

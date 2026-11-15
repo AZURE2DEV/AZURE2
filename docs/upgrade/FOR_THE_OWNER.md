@@ -1,7 +1,7 @@
 # The AZURE2 upgrade: where it stands, and how to add to it
 
-A short account for the owner of AZURE2, 2026-11-11. The details are in `HANDOFF.md` (newest first), `ROADMAP.md`
-and the design notes of `docs/upgrade/`. Nothing of this is on `dev` or `main`; it lives on the local branch
+A short account for the owner of AZURE2, begun 2026-11-11; the speed table is of 2026-11-15. The details are in
+`HANDOFF.md` (newest first), `ROADMAP.md` and the design notes of `docs/upgrade/`. Nothing of this is on `dev` or `main`; it lives on the local branch
 `feature/upgrade` and is merged with `dev` only when the reconstruction is complete.
 
 ## Why
@@ -185,6 +185,13 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   and `Initialize` are private to it; a refusal comes back as the step that refused, and each caller prints it as it
   always did, so the run's log and every output file are unchanged. Reading B_c, a final state's energy, the pathway
   table, the external-capture blocks or the capture masks before the compound is finished throws.
+- **Four set-up behaviours changed on purpose** (your "unify"): the run and the sampler share one data set-up
+  (`SetUpProgramCompound`), the session's first set-up and its rebuild another (`AZUREAPI::SetUpModel`), so:
+  the sampler writes the compound-nucleus and data check files the project asks for, equal to the calculation's;
+  the sampler prints the blank line before "Calculation was aborted." when the compound's last part refuses;
+  a rate session rebuilt at another radius (`SetRadius`, reachable from C++ only now) takes the rate's branch and
+  gives the rate of a session opened at that radius (the rebuild was refused); and a rebuild accepts a project of
+  model data alone, as opening it does (it was refused). Every other output, `run.log` included, is unchanged.
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the
@@ -286,6 +293,39 @@ release removed, so a skill that teaches something that no longer works fails a 
     uniform grid (`shift_sqrt_subpoints/models/dense`, now deleted) by 9.4 × 10⁻⁷.
 
 ## Speed
+
+**Against the code at the branch point with `dev`, 2026-11-15** (the project `tests/13N`, 12C + p: capture, elastic
+scattering, analysing power, external capture, a gas target; the same file for both programs, the old one through its
+menu; elapsed time and peak memory; a machine shared with other work, so read the ratios):
+
+| 13N | branch point with `dev` | now |
+|---|---|---|
+| one calculation, 1 thread | 9.3 s, 216 MB | 7.3 s, 122 MB |
+| one calculation, 4 threads | 7.3 s, 220 MB | 5.5 s, 123 MB |
+| fit with the analytic gradient, 1 thread | 92 s, 604 MB | 17.6 s, 136 MB |
+| fit with the analytic gradient, 4 threads | 30.6 s, 610 MB | 8.3 s, 140 MB |
+| Levenberg-Marquardt fit, 1 thread | 28.6 s, 295 MB | 10.1 s, 136 MB |
+| plain MIGRAD stopped at 300 calls, 1 thread | 135 to 141 s, 597 MB | 13.7 s, 128 MB |
+| plain MIGRAD stopped at 300 calls, 4 threads | 44.9 s, 602 MB | 8.2 s, 137 MB |
+| the sampler, 16 walkers, 100 steps, 4 threads | 323 s, 3.96 GB | 21.8 s, 136 MB |
+
+What the table does and does not show. The chi-squared of the calculation is the same number (336480 printed by the
+old program, 336479.961 now) and the two converged fits end at the same chi-squared (28100.2 and 28100.172); the fit
+stopped at 300 calls ends at 30367.7 in the old program and 30366.10 now (a stopped fit: the two took slightly
+different steps), and the two samplers are not the same chain (the new one stays inside the fit's limits), so those
+two rows compare the cost of the same amount of work, not identical results. It is one project. `natural_neon` (a
+target of three isotopes, folded) went from 41 s and 4.5 GB to 1.3 s and 0.34 GB for one calculation. A project of
+many folded data sets can need more memory than before: the PI's 12C + 12C model (not in the repository) takes about
+as long as in the old program (87 s) and 11 GB against 4.5 GB; not yet repaired. The 45 newest commits of `dev` are not in
+this build, so this is not a comparison with today's `dev`.
+
+Where the gain comes from: one level-matrix solve per distinct compound energy instead of one per data point or
+sub-point; one stored calculation site per mesh node; no copies of the compound system per thread or per walker (the
+sampler's 3.96 GB were those copies). The last step (2026-11-15) was a defect of the new structure itself: the pass
+over the compound energies was skipped whenever an evaluation ran inside a parallel region (the numerical gradient of
+plain MIGRAD, the residual groups of Levenberg-Marquardt) and was never used by the sampler, so plain MIGRAD was
+slower at 4 threads (24.7 s) than at 1 (13.7 s). Repaired, with every output file identical before and after
+(`fit_threads.md` section 7): plain MIGRAD at 4 threads 24.7 s to 8.2 s, the sampler 188 s to 21.8 s.
 
 Measured before Phase 4 (T2, 340 points with every apparatus kernel; `tests/upgrade/bench/`):
 
@@ -823,6 +863,19 @@ them the two on automatic target-effect windows, which the upgrade deletes (the
 assessment is in `HANDOFF.md`). Until the merge, new physics is best written on the upgrade branch, following the
 recipes.
 
+**A project of `dev` in this build.** What `dev` added after the branch point and this build does not compute yet is
+refused, never read past: `AZURE2 --convert` stops at a `<channelRadii>` or `<isospin>` block (it names the block and
+what it states: radii of single channels, isospin ties of levels across compound nuclei), at a data or extrapolation
+line whose type is followed by a spin operator (`b:y`, `t:y`, ...: dev's general spin observables, type 10) and at a
+line that ends in a keyword the old grammar does not know; the engine refuses such a block in a format-3 file
+(`E_UNKNOWN_SECTION`) and a `<config>` key it does not have (`E_UNREAD_LINE`).  Before, the block was copied through,
+`--validate` said "valid" and the run computed as if it were absent (13N with `<channelRadii>` gave the same chi^2
+with and without it).  Such a project keeps running in `dev` until the features are ported (`work/devplan/PLAN.md`).
+Two other differences a `dev` user meets with a 12C + 12C model: a reaction out of an identical entrance pair is
+twice `dev`'s cross section (the factor (1 + delta_12) of every cross section out of an identical pair, the
+conventions page; `dev` applies it to elastic scattering only), and a THM model's binding energy in column 32 of
+`<levels>` is read by `dev` (the branch point and `3e502625` alike) as the light particle's excitation e1.
+
 ## The web interface: the page (2026-11-13)
 
 `python -m pyazr.ui project.azr` prints a URL; the browser shows the project. The page has a header (project, unsaved
@@ -964,6 +1017,31 @@ level parameter as a `Project` edit).  What needs the engine, function by functi
   the rule after each edit (`Project._phase_shift_problems`).  As a build check of the validator it would be one
   implementation.  The validator's `E_FIELD_NOT_APPLICABLE` of a phase shift's J, l or s gives a message but no
   `allowed` and no `fix`.
+
+## Two repairs of `dev`, written the upgrade's way (2026-11-15)
+
+- **Coulomb functions just above a heavy-ion threshold** (your 56512d6a). The same repair, without GSL: where
+  Michel's continued fractions give up (η ≳ 230) the zero-energy fallback in `physics/coulomb/coulsm` takes K_0 and
+  K_1 from the upgrade's own e^z K_n(z) (`azure2::physics::bessel_k_scaled`, the integral representation that the
+  bound-channel S(0) already used, 5e-16 against mpmath) instead of the power series; four lines and a declaration
+  in the third-party copy, listed under "Local changes" in `physics/coulomb/README.md` so that it can go to
+  pycoulomb. Your 15 cases are the physics test `physics_coulomb_threshold`, now against the exact limit within the
+  slope the limit leaves out: 10 of 15 fail before (¹²C+¹²C, l = 0, 1 eV – 2.5 keV: +4.6 to +11.2 instead of
+  −9.594; ¹⁶O+¹⁶O −525 instead of −15.47), all pass after. No project of `tests/` changes (one, `ec_threshold`,
+  reaches the fallback at z = 7.4, where the series was still right to its printed digits).
+- **Two levels of one J^π at one energy** (your 6d3be80a). The divided difference (S_a − S_b)/(E_a − E_b) and its
+  energy derivatives were written out at six places (level route, R-matrix route, adjoint, derivative arrays, the
+  transformed channel-space route, `formal_from_brune`); they are now one header,
+  `physics/include/azure2/physics/LevelPairShift.h`, which gives each quantity as a numerator over one denominator
+  so that every place keeps its digits (all projects and the eight fits identical). The limit is in that one
+  place, with two differences from your commit: the gap is 1e-6 MeV (yours 1e-9) and the limit takes the mean
+  slope (S′_a + S′_b)/2 and mean curvature, which is the chord's slope to second order; just above 1e-9 the divided
+  difference still loses 1e-5 of χ² to round-off, at 1e-6 it loses 4e-10 |S|. The transformed route (not in your
+  commit) gets the limit too: before, its K and N were not finite and the group fell back to the level route
+  (χ² 198,494, gradient NaN); now it agrees with the level route to 4e-15. `formal_from_brune` takes the limit
+  instead of refusing. Tests: `pyazr_coincident_levels` (χ² continuous across 0, 5e-10, 2e-9, 1e-7 MeV to 1e-11
+  in Brune and Park, gradient against central differences at the coincidence) and section 8 of
+  `physics_level_parameters_unit`.
 
 ## For the maintainers to decide
 

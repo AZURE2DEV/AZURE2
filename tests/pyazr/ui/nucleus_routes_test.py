@@ -16,7 +16,10 @@ against the same pyazr call made directly on a copy of the text:
   6. the lists in words on T2: the pairs carry their partners by name, J^pi and kind in words (the engine's label
      split at its "+"), every field of a pair has its words in pyazr.kinds()["pairs"]; the references
      (GET /api/project/references) equal Project.references; a record the engine does not describe (a target) is
-     refused by GET /api/project/describe/{name} with the records that use it, not answered with another entry.
+     refused by GET /api/project/describe/{name} with the records that use it, not answered with another entry;
+  7. a prior and limits on a channel's width (PUT /api/project/parameter_settings): the text equals
+     Project.set_parameter_setting's, the rows Project.parameter_settings', the prior in the objective only, a fixed
+     parameter refused with the three parts, Undo.
 
 Run: python3 tests/pyazr/ui/nucleus_routes_test.py
 """
@@ -170,6 +173,73 @@ def test_allowed_channels_and_a_new_level(t1):
 
 if __name__ == "__main__":
     uitest.run(__file__)
+
+
+def test_parameter_settings_prior_and_limits(t1):
+    """A prior and limits on a level parameter (PUT /api/project/parameter_settings): the text equals
+    Project.set_parameter_setting's, GET lists the rows as Project.parameter_settings, the prior's term is in the
+    objective and not in the data's chi2, a fixed parameter is refused with the three parts, Undo restores the text."""
+    before_text = t1.get("/api/project/text").text
+    before = t1.get("/api/evaluation").json()
+    level, channel = "1/2+ 2.365", [1, 0, 0.5]
+    width = 33000.0
+    r = t1.put("/api/project/parameter_settings", json={"rev": rev(t1), "level": level, "channel": channel,
+                                                         "prior": [width * 1.1, width * 0.05],
+                                                         "limits": [1000.0, 1e5]})
+    assert r.status_code == 200, r.text
+    direct = project_of_text(t1, before_text)
+    direct.set_parameter_setting(level, tuple(channel), prior=(width * 1.1, width * 0.05), limits=(1000.0, 1e5))
+    assert t1.get("/api/project/text").text == direct.text
+    rows = t1.get("/api/project/parameter_settings").json()
+    assert rows == [dataclass_plain(row) for row in direct.parameter_settings()], rows
+    assert rows[0]["level"] == level and rows[0]["channel"] == channel and rows[0]["nuisance"], rows
+    after = t1.get("/api/evaluation").json()
+    assert after["chi2"] == before["chi2"] and after["objective"] > before["objective"], (before, after)
+    fixed = t1.put("/api/project/parameter_settings", json={"rev": rev(t1), "level": "1/2- 0.0",
+                                                             "prior": [0.0, 0.01]})
+    assert fixed.status_code == 422 and all(fixed.json()[k] for k in ("what", "allowed", "fix")), fixed.text
+    assert t1.post("/api/project/undo", json={"rev": rev(t1)}).status_code == 200
+    assert t1.get("/api/project/text").text == before_text
+    assert t1.get("/api/project/parameter_settings").json() == []
+
+
+def test_masses_by_name_and_an_empty_project(tmp_path):
+    """A new .azr in an existing folder: the server starts an empty project there (Project.new(path), unsaved, the
+    output and checks directories made); GET /api/masses gives pyazr.sources.masses.pair_masses by the nuclides'
+    names (p + 12C: S_p(13N)), the heavy nucleus alone without light, an unknown nuclide refused (404)."""
+    from pyazr.sources import masses
+    path = str(tmp_path / "first.azr")
+    with make_client(path) as client:
+        state = client.get("/api/project").json()
+        assert state["unsaved"] and client.get("/api/project/levels").json() == [], state
+        assert client.get("/api/project/pairs").json() == []
+        # no record yet: a list (the page's lists filter it), not the empty mapping Project.records() is
+        assert client.get("/api/project/records").json() == []
+        assert os.path.isdir(tmp_path / "output") and os.path.isdir(tmp_path / "checks")
+        assert not os.path.exists(path)
+        m = client.get("/api/masses", params={"light": "p", "heavy": "12C"}).json()
+        assert {k: m[k] for k in ("Z1", "M1", "Z2", "M2", "S")} == {
+            k: v for k, v in masses.pair_masses("p", "12C")._asdict().items() if k != "compound"}, m
+        assert m["compound"] == [7, 13] and m["table"] == "AME2020"
+        alone = client.get("/api/masses", params={"heavy": "13N"}).json()
+        assert alone["Z2"] == 7 and alone["M2"] == masses.atomic_mass("13N") and "S" not in alone
+        assert client.get("/api/masses", params={"heavy": "300Xx"}).status_code in (404, 422)
+        assert client.post("/api/project/save", json={"rev": client.get("/api/project").json()["rev"]}) \
+            .status_code == 200
+        assert os.path.isfile(path)
+
+
+def project_of_text(client, text):
+    import pyazr
+    path = client.path + ".direct.azr"
+    with open(path, "w") as f:
+        f.write(text)
+    return pyazr.Project.open(path)
+
+
+def dataclass_plain(value):
+    import dataclasses
+    return {k: (list(v) if isinstance(v, tuple) else v) for k, v in dataclasses.asdict(value).items()}
 
 
 def test_lists_in_words_pairs_references_description(t2):

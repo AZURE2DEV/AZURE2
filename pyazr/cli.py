@@ -118,9 +118,19 @@ def _json_file(text, arg):
     return value
 
 
+def _project_or_new(text, arg):
+    """An existing format-3 project, or a new ``.azr`` in an existing folder: the web UI starts an empty project
+    there (written when saved)."""
+    if not os.path.exists(text) and text.endswith(".azr") and os.path.isdir(os.path.dirname(os.path.abspath(text))):
+        return text
+    return _project(text, arg)
+
+
 #: name -> (description, converter, the value's name in a usage line); a converter of None keeps the text.
 ARG_TYPES = {
     "project": ("an existing format-3 project file (.azr)", _project, "FILE"),
+    "project-or-new": ("an existing format-3 project file (.azr), or a new one in an existing folder",
+                       _project_or_new, "FILE"),
     "file": ("an existing file", _existing_file, "FILE"),
     "output": ("a file to write, in an existing folder", _output, "FILE"),
     "number": ("a number", _number(float, "a number"), "X"),
@@ -231,7 +241,7 @@ def _text_validate(result, v):
 def _run_convert(v, ctx):
     from . import convert_azr
     return convert_azr(v.old, v.new, overwrite=v.overwrite, report=v.report, answers=v.answers,
-                       exact_grids=v.exact_grids, strict=v.strict)
+                       exact_grids=v.exact_grids, strict=v.strict, allow_questions=v.allow_questions)
 
 
 def _text_convert(result, v):
@@ -425,7 +435,8 @@ def _run_endf_write(v, ctx):
     rng = (v.low, v.high) if v.low is not None and v.high is not None else None
     with Session(v.project) as s:
         written = endf.write(s, v.new, header=header, energy_range_MeV=rng, tolerance=v.tolerance,
-                             number_form=v.number_form, overwrite=v.overwrite)
+                             number_form=v.number_form, overwrite=v.overwrite, elastic_form=v.elastic_form or endf.writer.ELASTIC_FORM,
+                             covariance="hesse" if v.covariance else None)
     if not ctx.json:
         return str(written)
     return {"file": written.path, "sections": [{"mf": a, "mt": b, "lines": c} for a, b, c in written.sections],
@@ -436,7 +447,8 @@ def _run_endf_write(v, ctx):
 
 def _run_endf_check(v, ctx):
     from . import endf
-    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout)
+    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout,
+                        resonances=v.resonances)
     return result.to_dict() if ctx.json else str(result)
 
 
@@ -475,7 +487,8 @@ COMMANDS = (
                         Arg("--answers", "json-file", "answers to the converter's questions, "
                                                       "{\"<record>.<field>\": value}"),
                         Arg("--exact-grids", "flag", "keep the old energy grids exactly"),
-                        Arg("--strict", "flag", "refuse instead of noting an implicit meaning")),
+                        Arg("--strict", "flag", "refuse instead of noting an implicit meaning"),
+                        Arg("--allow-questions", "flag", "write '?' for an unanswered question instead of refusing")),
             "pyazr.convert_azr",
             "Write an old project (format 1 or 2) in format 3, as AZURE2 --convert; OLD is kept.",
             run=_run_convert, text=_text_convert, refused_exit=1,
@@ -516,7 +529,7 @@ COMMANDS = (
             "pyazr.coulomb_table.build",
             "Build the Coulomb table here from the exact routines (about 5 min on 4 threads, 88 MB).",
             run=_run_coulomb_build),
-    Command("ui", (Arg("FILE", "project", "the project to serve"),
+    Command("ui", (Arg("FILE", "project-or-new", "the project to serve; a new .azr starts an empty project"),
                    Arg("--port", "int", "the TCP port (0: a free one above 20000)", default=0),
                    Arg("--threads", "int", "the compute budget in threads", default=1),
                    Arg("--token", "text", "a fixed access token (default: a random one)")),
@@ -570,6 +583,10 @@ COMMANDS = (
                                default=1e-3),
                            Arg("--number-form", "choice", "how numbers are written", default="widest",
                                choices=("widest", "classic", "e")),
+                           Arg("--elastic-form", "choice", "charged-particle elastic scattering as the nuclear "
+                               "amplitude expansion (LTP=1) or tabulated (LTP=12) (default: pyazr.endf.writer.ELASTIC_FORM)",
+                               choices=("amplitudes", "tabulated")),
+                           Arg("--covariance", "flag", "write MF=32: HESSE in a formal-basis session"),
                            Arg("--overwrite", "flag", "replace NEW if it exists")),
             "pyazr.endf.write",
             "The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 and MF=6 from the engine "
@@ -578,7 +595,9 @@ COMMANDS = (
     Command("endf check", (Arg("FILE", "file", "an ENDF-6 file"),
                            Arg("--program", "choice", "the one checking code to run (default: CHECKR, FIZCON and "
                                "PSYCHE, those found)", choices=("checkr", "fizcon", "psyche", "inter")),
-                           Arg("--timeout", "number", "seconds each code may take", default=300.0)),
+                           Arg("--timeout", "number", "seconds each code may take", default=300.0),
+                           Arg("--resonances", "flag", "also check the resonance parameters: MF=2 against MF=3 by "
+                               "the engine, the masses against AME2020, the text against the records")),
             "pyazr.endf.check",
             "The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their "
             "reports read into findings.", run=_run_endf_check,

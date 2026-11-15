@@ -2118,6 +2118,44 @@ of `Initialize`). The probe of step 5 is permanent: `HasFormalECFinalBlocks`, `F
 their setter ran (one flag each). The five sequences compared side by side and their differences: the HANDOFF entry
 of this branch.
 
+*The four differences unified* (branch `feature/upgrade-5-setup-unify`, start 8a3191a0; the PI: "unify"). The
+program's data set-up is one function, `SetUpProgramCompound(const Config &, WorkingCopy &, DataCheckAt)`
+(`include/ProgramRun.h`, `src/RunSetUp.cpp`), called by `SetUpRun` and by `runMCMC`; the text of a refused set-up is
+one function, `PrintSetUpRefusal` (`include/CompoundSystemSetUp.h`), which it calls and which the session's first set-up
+calls for a refused last part. The session's is one member, `AZUREAPI::SetUpModel(ModelSetUpOccasion, radii)`, called
+by `Initialize` (`kFirst`) and `RebuildImpl` (`kRebuild`); what the occasion changes is named at the top of its body.
+What still differs between the five callers (the run, the sampler, the session's first set-up, its rebuild, the
+segments' trees), each meant:
+- "Filling Compound Nucleus...", "Filling Data Structures...", and the words for unreadable `<levels>` or no pairs: the
+  run and the sampler; the session is silent (`USE_API`, the caller raises); the trees write a line per project.
+- Radius overrides into `Fill`: the session's (first set-up) or the candidate set (rebuild); none in the program.
+- The compound and data check files: the run, the sampler, the session's first set-up; not the rebuild (it makes the
+  same project's model again); not the trees. An extrapolation with an adaptive grid: the run writes the data check
+  after the refinement (`DataCheckAt::kAfterGridRefinement`); a session refuses such a grid; the sampler runs on data.
+- The branches: data, extrapolations and the rate in the run and both session set-ups; data only in the sampler (the
+  mcmc command keeps `CALCULATE_WITH_DATA`; the function is the run's); the trees make data and extrapolations, each
+  into its own copy, and never finish the compound.
+- An empty set-up ("There is no data provided." unless model data, "Extrapolation segments produce no data."): said by
+  the run and the sampler, the same tests silent in the session.
+- `USE_PREVIOUS_INTEGRALS` off for the last part and the data's initialization: the rebuild only (its radii change the
+  integrals; the first set-up reads the file when it exists).
+- A refused last part: its message, a blank line and "Calculation was aborted." in the run, the sampler and the
+  session's first set-up (`PrintSetUpRefusal`); the message alone in the rebuild (its caller, `SetRadius` or `Rebuild`,
+  handles the false); the trees never reach it.
+
+Before: the sampler wrote neither check file and printed no blank line before "Calculation was aborted."; the rebuild
+of a rate session took the extrapolations' branch (`tests/reaction_rate/models/p12C.azr`, which has none, was
+refused: `SetRadius` returned false) and the rebuild refused a project of model data alone. `SetRadius` and `Rebuild`
+have no caller in pyazr (their bindings went with the bindings nothing called); only the C++ test reaches the rebuild.
+Tests: `sampler_setup_as_run`
+(`tests/sampler_setup/check.sh`), `upgrade_session_rebuild` (`tests/upgrade/session_rebuild_test.cpp`); both fail on
+the start commit. Not unified, found on the way (after the one set-up, so outside it; for the PI): the sampler's
+refusal by the data's initialization (`WorkingCopy::Initialize`) prints "Calculation was aborted." without the blank
+line `SetUpObjective` prints; the session's first set-up runs `UpdateParameters`, the prior covariance and then the
+data's initialization, the rebuild the data's initialization first (a project refused by both says the other one
+first); the sampler prints "Initialized and cleared EC amplitude cache..." before "Creating New param.par File...", the
+run after it.
+
 **Side by side.** Steps 1, 2 and 2b together; then 3; then 4; then 5. Step 3 cannot run beside 1 (both edit every
 external-capture function and `CNuc.cpp`'s fills), nor 4 beside 3 (the same owners' lines). Step 5 is the conflict
 magnet (≈ 110 files): it should start when no other branch edits the engine's signatures (the sampler, the records,

@@ -80,7 +80,17 @@ Reference routines
 
 - Open channels: Michel's routine (``Coulomb_wave_functions_accurate``,
   AZURE2's default). On sampled points it agrees with ``mpmath`` at 30 digits
-  to 1e-9 – 1e-12.
+  to 1e-9 – 1e-12. Where its continued fractions give up (:math:`\eta \gtrsim
+  230`: below 3.6 keV for ¹²C+¹²C, 210 eV for α+¹²C, 16 eV for p+¹²C) it falls
+  back to the zero-energy limit, :math:`G \to 2\sqrt{\rho/\pi}\, K_1(z)\,
+  e^{\pi\eta}` with :math:`z = \sqrt{8\eta\rho}`, then the recursion in
+  :math:`l`; :math:`K_0` and :math:`K_1` come from ``bessel_k_scaled``
+  (``physics/coulomb/README.md``, local changes). For :math:`l = 0` the shift
+  there is :math:`S(0)` itself, so at the switch :math:`S` jumps by the slope
+  the limit leaves out, :math:`S'(0)\,E`: 2.3e-3 (2.4e-4 relative) for ¹²C+¹²C,
+  1.4e-4 for α+¹²C, 6.6e-6 for p+¹²C (:math:`l = 0`; less for higher
+  :math:`l`). :math:`P` there is below 1e-250 (the exact value underflows) and
+  enters no observable. Test: ``physics_coulomb_threshold``.
 - Closed channels: :math:`S = -\rho_b + (l+1) - 2 a \rho_b\, U(a+1, b+1, z) /
   U(a, b, z)` with :math:`a = l + 1 + \eta_b`, :math:`b = 2l + 2`, from
   :math:`U' = -a\, U(a+1, b+1, z)` and GSL's scaled ``hyperg_U``. Exact, with

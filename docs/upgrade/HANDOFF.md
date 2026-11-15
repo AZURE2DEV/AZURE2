@@ -2,6 +2,404 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 04:35) — merged: threads, one set-up, format readiness, ENDF amplitudes, two repairs of `dev`
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 80 (rehearsal 79 plus seven branches and four
+commits of mine). The agents' entries follow.
+
+- **ENDF, the elastic section under the manual's reading; MF=6 within CHECKR's limits**
+  (`feature/upgrade-8-endf-covariance`): the reader multiplies sigma_NI of MF=3 and P_NI of MF=6, each
+  interpolated (ENDF-102 p. 146); the other reading is a named option; no written MF=6 section above 200
+  energies or 201 cosines (the PI's decision), the tolerance reached is stated in MF=1.
+- **The page: a first project from nothing** (`feature/upgrade-9-webui-first-project`): `pyazr ui new.azr`
+  opens an empty project; the pair form fills Z, masses and separation energy from AME2020; T1 made from
+  nothing over HTTP to its chi-squared bit for bit; the curve refined where it bends; priors and limits of a
+  level parameter; a lost curve request is said as lost with "Ask again".
+- **The set-ups unified** (`feature/upgrade-5-setup-unify`; the PI: "Yes unify"): `SetUpProgramCompound` for
+  the run and the sampler, `AZUREAPI::SetUpModel` for the session's first set-up and its rebuild. Visible:
+  the sampler writes the two check files; a rate session rebuilt at another radius works; a rebuild accepts
+  a project of model data alone.
+- **The point pass inside a caller's parallel region** (`feature/upgrade-5-pass-under-threads`, mine): plain
+  MIGRAD, LM and the sampler no longer fall back to one level-matrix solve per point when called from a
+  thread. Table: `fit_threads.md` section 7.
+- **A real project is never misread** (`feature/upgrade-6-format-readiness`): what nothing reads is refused
+  (unknown section, unread `<config>` or `<mcmc>` line, dev's newer blocks named); `entrance_pair` and
+  `exit_pair` on a sum or ratio; `pyazr convert --allow-questions`; UDR flight path in metres.
+- **ENDF, elastic scattering as nuclear amplitudes; MF=32; the check of an evaluation**
+  (`feature/upgrade-8-endf-amplitudes`): the engine's door `nuclear_amplitudes`, LAW=5 LTP=1 written from
+  it; MF=32 LCOMP=1 from HESSE in a formal-basis session; `check_resonances` (MF=2 against MF=3, masses and
+  Q values against AME2020, the text against the records).
+- **Two repairs of `dev`, written the upgrade's way** (`feature/upgrade-5-dev-repairs`): the Coulomb
+  functions' fallback just above a heavy-ion threshold (the Bessel K series cancelled: 12C + 12C l = 0 gave
+  S = +4.6 to +11.2 instead of -9.594 below 3.6 keV); two levels of one J^pi at one energy (one function,
+  `physics/include/azure2/physics/LevelPairShift.h`, for the six places that divided by the gap; below
+  1e-6 MeV its Taylor forms).
+
+**The director's decisions.**
+1. The written elastic form is the amplitudes by default (`writer.ELASTIC_FORM`); the tabulated form stays a
+   named option. The PI is told; the constant is one line.
+2. The Coulomb repair lives in `physics/coulomb/coulsm` as a listed local change (two lines calling the
+   upgrade's `bessel_k_scaled`), not in a new dependency; the PI confirms or names pycoulomb as its home.
+3. The coincidence gap is 1e-6 MeV with the mean of the two levels' S', against dev's 1e-9 and one level's
+   S': just above 1e-9 the divided difference is wrong at 1e-5 of chi-squared (the agent's run), and dev's
+   Brune energy gradient inside its window is not the derivative of its own forward formula. For the owner.
+4. The page's Check runs the check of the evaluation with the format check (my commit below).
+
+**Conflicts and their resolutions.** `Project.new` (the page's empty project and the ENDF branch's settings of
+removed records: both kept, the empty text first); the front ends' class figure (regenerated); ROADMAP and
+`routes.py` rows (both kept); HANDOFF by union.
+
+**The director's commits on the rehearsal.**
+1. A HANDOFF entry named a level of a model that is not in the repository: reworded (times and sizes only).
+2. `FOR_THE_OWNER.md`: the speed against the branch point with `dev`, measured on 13N (below).
+3. The check of an evaluation: `Q` and `Q_MASSES` compare with the masses less the residual's excitation
+   (MF=3's QM - QI) for an exit above the ground state (ENDF-102 section 3.4.6, p. 110), a note where the
+   file does not give it (T2's alpha_1 exit had two false warnings); the check removes its working directory;
+   the page's check job calls `check(..., resonances=True)`.
+4. The page's heading, hint and job message say that the own check covers the format and the evaluation; the
+   browser test expects the extract's counts with both (3 errors, 6 warnings, 2 notes).
+
+**Read by the director.** The pass repair is mine. The dev repairs by diff, whole: the header, the six callers,
+the adjoint's coincident branch, `formal_from_brune`, `CalcShiftFunctions`, the two lines of coulsm; no new
+`mutable`, `const_cast` or static state. The unify branch's `RunSetUp.cpp` and `AZUREAPI::SetUpModel`. The
+ENDF branch's `amplitudes.py`, `covariance.py`, `evaluation_check.py` and the door's binding. The format
+branch's reader and converter refusals. The page branch's `project.py`, `server.py` and `model_curve.py` lines.
+
+**Verified on the merged tree** (build `work/b-trial80`, 0 warnings): all projects in the three bases against
+`tab-t74-1` (tag `tab-t80-1`): Brune 887, formal 851, Park 887 files, all identical; the eight fits by command
+identical to `b-trial79`; the consistency test; the quick tests 307 (297 before): 306 passed in my run, the
+one failure the browser test pinning the old heading (commit 4; passes, with the page's ENDF test); in the
+second run beside it `pyazr_evaluation` failed under load and passes alone (18.8 s).
+
+**The director's own runs** on `b-trial80` against `b-trial79`, by command, output files compared:
+- at 4 threads: the 13N gradient fit, plain MIGRAD (300 calls), the T2 LM fit, the T2 sampler (16 walkers,
+  100 steps, physical): every file identical but the snapshot `param.fit` of the two fits without a gradient
+  (it depends on the thread schedule in both builds, `fit_threads.md` section 4); the chain identical;
+- MINOS and a fit with band on T1: files identical at 1 and 2 threads; the screen identical at 1 thread; at
+  2 threads the progress lines show other calls and the Coulomb table counts fewer lookups (10 363 against
+  11 227: the pass now runs on the gradient's threads);
+- the 13 refusal cases through the program and the sampler and the 9 through pyazr sessions
+  (`work/director/try80/refusals80.sh`, `sessions80.sh`): the sessions identical; 2 program cases differ,
+  the two unified ones (the sampler's blank line, the sampler's two checks);
+- the dev repairs: `physics_coulomb_threshold` 15 of 15 cases, `pyazr_coincident_levels` (Brune, Park, the
+  transformed route; the gradient at gap 0 against central differences to 4e-8); alternating timings of
+  `b-trial79` and the branch at one thread (T2 and 13N, calculation and fit): no slowdown;
+- ENDF: T1 written with `--covariance` (35.9 s, 217 MB), MF=32 read back (10 x 10, symmetric, the two fixed
+  level energies with zero rows), the real codes report nothing new; `check --resonances` on the written T2:
+  two notes (the Q values of the alpha exits to 0.013 keV), no warning; the amplitude form under the manual's
+  reading against the engine: T2 at most 1.5e-4, T1 at most 3.5e-3 at CHECKR's 200 energies (59 of 597
+  checked energies above 1e-3, none above 5e-3); FIZCON's normalisation errors of the tabulated form gone.
+
+**Measured.**
+- Against the branch point with `dev` (old engine `b-base`, 13N; chi-squared the same): one calculation at one
+  thread 9.3 s and 216 MB -> 7.3 s and 122 MB; the gradient fit 92 s and 604 MB -> 17.6 s and 136 MB (four
+  threads 30.6 -> 8.3 s); LM 28.6 -> 10.1 s; plain MIGRAD, 300 calls, 135-141 s -> 13.7 s (four threads
+  44.9 -> 8.2 s); the sampler (16 walkers, 100 steps, four threads) 322.6 s and 3.96 GB -> 21.8 s and 136 MB.
+- The threads, rehearsal 79 -> 80 (today's own runs, four threads): 13N plain MIGRAD 24.2 -> 7.5 s; T2 LM
+  47.1 -> 11.7 s; the T2 sampler 96.0 -> 31.8 s.
+- The export: T2 as amplitudes 1.71 s and 150 kB against 42.1 s and 845 kB tabulated; T1 31.6 s and 166 kB
+  against 90.7 s and 1.1 MB.
+- A 12C + 12C model of the PI, not in the repository (eight folded extrapolation lines): converts with no
+  question; 87-109 s and **11.0 GB** at one thread against 4.47 GB in the old engine. An agent is on the
+  memory (`feature/upgrade-6-fold-memory`).
+
+**What the first real model showed** (the format agent's findings, each traced): every reaction cross
+section out of an identical pair is twice `dev`'s here (the factor 1 + delta_12 of September, `dev` applies
+it to elastic scattering only); the old engine reads the THM binding-energy column of `<levels>` as the light
+particle's excitation energy; one level's input transformation gives NaN in the old engine and its J^pi group
+is then left out; 12 prior rows of the model are refused by the new reader with the reason said.
+
+**Seen, not repaired** (the next branches): `formal_covariance` writes a temporary snapshot beside the
+project during the call (removed at its end); the amplitude door against the library 3He + 4He file degrades
+to 25 % at 19.75 MeV (cause not established; the file's own normalisation is in question,
+`work/endf5/library_finding.md`); the page's `_first_state` creates `output/` and `checks/` beside an empty
+project; `model_curve`'s default costs up to three sessions per refinement; `Project.open` opens a file with
+a section the engine's reader refuses (the session then refuses it); a repeated top-level section is read
+with a warning; a project file cannot hold two levels of one
+J^pi at the identical energy (the reader takes them as one; levels within 1e-6 MeV and a parameter vector
+that brings two together work); the Coulomb fallback's penetrability is 1e-260 to 1e-290 where the continued
+fractions give 0 (no observable sees it); S jumps by 2.4e-4 relative at the switch to the fallback for
+12C + 12C l = 0 (3.6 keV); `ec_threshold/models/ng.azr` reaches the fallback (outputs unchanged), against
+the plan's scan; `pyazr_thickness` took 685 s once under load; `runMCMC` leaks its data object on a refused
+set-up (as before the branch); no thread-sanitizer run (no clang on this host); no test fails yet if the
+pass is declined inside a region again; five `/tmp/endf_check_*` directories of earlier runs.
+
+**Open, for the PI.** The push (credential, destination, the rule from now on). The covariance in MF=32
+(HESSE in a formal-basis session, as decided, against the fit's covariance carried through the
+transformation: up to 3.9 sigma_i sigma_j apart on T1). The Coulomb repair's home and the 1e-6 MeV gap
+(decisions 2 and 3). Whether a repeated top-level section is refused; a per-term pair key (no project needs
+it). The page: a table of ground-state J^pi and g-factors for the pair form; `Project.new()` as the
+documented start. The four orderings of screen lines the unify agent left (its entry). Whether the join
+with `dev` may start in stages (`work/devplan/PLAN.md`).
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial80`; the quick test set has 307 tests.
+
+## 2026-11-15 (agent, branch `feature/upgrade-5-dev-repairs`) — two levels of one J^π at one energy
+
+**Done.** (1) A refactor with every output identical: the divided difference of S between two levels of one J^π,
+its value at E = 0 and at the channel energy, and their derivatives by the level energies are one header,
+`physics/include/azure2/physics/LevelPairShift.h` (`level_pair_shift`, `LevelPairShift<Real>`, `level_gap`,
+`inverse_level_gap`; `PairShift` in `include/LevelState.h` reads both levels from the state). Each quantity is a
+numerator over one denominator, so every caller divides (or multiplies by the inverse) in the order it did:
+`FillLevelMatrix` (Park overlap, Brune term), `RMatrixFunc::FillMatrices`, `LevelMatrixAdjoint` (Park energy and
+width parts, Brune energy part, the THM active-level inverses), `CurrentLevelArrays`/`CurrentLevelDerivatives`, the
+transformed route's K and N (long double), `formal_from_brune`. (2) The limit in that one place: below
+`kCoincidentLevelGap_MeV` = 1e-6 MeV the Taylor forms about the pair with the mean slope and curvature (the owner's
+6d3be80a on `dev` uses 1e-9 and one level's S′, S″; see `FOR_THE_OWNER.md`). `CalcShiftFunctions` computes S′ and S″
+for coincident levels in every basis (`LevelState::FirstDerivativesValidAt`, `SetShiftDerivative` now marks the
+level's version). The Brune width gradient (t1/t2) has its coincident branch. `formal_from_brune` takes the limit
+instead of refusing (equal energies ranked in listed order).
+
+**Numbers** (`identical_pp_res` + a second 2− level, gap through the vector; scratch `work/devrep1/coinc/`). Before: gap
+0 χ² 134,108 (Brune) / 134,101 (Park) for 53,300.75 / 53,297.73, no error (the 2− group is probably left out as
+singular: inferred, not traced); 5e-10 and 2e-9 off by 1e-5 (round-off). With three 2− levels (transformed route) the
+route found K, N not finite and fell back to the level route: χ² 198,494, gradient NaN; at 5e-10 dχ²/dE −1.8e10 for
++5.7e6. After: the gaps 0 – 0.99e-6 agree with the trapezoid of the analytic slopes to 3e-12 – 9e-12; across 1e-6 χ²
+steps by 5e-9 – 7e-9 relative (the accuracy of the numerical S′, inferred); transformed and level routes agree at gap 0
+to 4e-15.
+
+**Verified.** Refactor commit: all projects × 3 bases identical to `tab-t74-1` (tag `tab-devrep1-refactor`), the
+eight fits identical to `b-trial79`, 76 gradient/adjoint/Park/transformation/physics/consistency tests, T2 and 13N
+timing unchanged. Limit commit: see the report and the commit message. Test `pyazr_coincident_levels` fails 18 of
+20 checks on `b-trial79`; an injected error (S″ term doubled) fails 10 checks.
+
+**Open.** A project file still cannot hold two levels at the identical energy (the reader takes them as one level);
+levels within 1e-6 MeV and fits that drive energies together now work.
+
+## 2026-11-15 (agent, branch `feature/upgrade-5-dev-repairs`) — Coulomb functions just above a heavy-ion threshold
+
+**Done.** The owner's repair 56512d6a of `dev`, written without GSL: the zero-energy fallback of coulsm
+(`physics/coulomb/coulsm/src/cwfcomp_accurate.cpp`, `compute_asymptotic_bessel_solution`, reached where the continued
+fractions give up, η ≳ 230) takes K_0 and K_1 from `azure2::physics::bessel_k_scaled` times e^−z instead of their
+power series, which cancel to nothing for z ≳ 15. A listed local change (`physics/coulomb/README.md`). Test
+`physics_coulomb_threshold` (`physics/tests/coulomb_threshold_test.cpp`): dev's 15 cases (¹²C+¹²C, ¹⁶O+¹⁶O, α+¹²C,
+l = 0–4, 1 eV – 2.5 keV) against `zero_energy_shift` within 1e-10 |S(0)| + 1.5 s E, s the chord slope to 50 keV
+(the slope the limit leaves out); 10 of 15 fail on the base build (¹²C+¹²C l = 0: +4.6 to +11.2 for −9.594), all
+pass after (worst 0.665 of the bound).
+
+**Between the regions** (scratch table `work/devrep1/coul/switch_table.txt`): the switch is at η ≈ 222–232
+(¹²C+¹²C 3.60–3.62 keV, α+¹²C 207–210 eV, p+¹²C 16.3–16.8 eV for l = 0–4). S jumps there by the slope the limit
+leaves out: ¹²C+¹²C 2.3e-3 (l = 0), 7.1e-4 (l = 2), 4.7e-5 (l = 4); α+¹²C 1.4e-4, 7e-6, 1e-8; p+¹²C 6.6e-6, 5e-9,
+0. P is not continuous: the fallback gives 1e-260 – 1e-292 where the continued fractions give 0 (the exact P
+underflows; the fallback's e^{πη} scaling is capped). Below 1e-250 P enters no observable.
+
+**Verified.** Build 0 warnings; all projects × 3 bases against `tab-t74-1` with a build that printed the first
+fallback and the first pair of levels of one J^π within 1e-6 MeV (tag `tab-devrep1-scan`): Brune 887, formal 851,
+Park 887 files, all identical but the one `run.log` with the printed line; one project reaches the fallback
+(`ec_threshold/models/ng.azr`, η = 1045, ρ = 0.0065, l = 2, z = 7.4, where the series still gave the printed
+digits), none has two levels of one J^π within 1e-6 MeV. The quick set (T1–T3, 13N, `ec_threshold`,
+`identical_pp_res`) with the clean build: identical. Physics tests, consistency test, docs build.
+
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-amplitudes`) — ENDF: elastic scattering as amplitudes, MF=32, the check of an evaluation
+
+**Done** (`endf.md` 13.12-13.15): the engine's door `nuclear_amplitudes` (a point output of an elastic data set,
+`api/src/pybind_elastic_amplitudes.cpp`; the LTP=1 coefficients read from the record `GenMatrixFunc::
+ElasticCoefficientsOf` wrote); `write(..., elastic_form="amplitudes" | "tabulated")`, default the named constant
+`writer.ELASTIC_FORM` = "amplitudes" (the PI decides); MF=32 LCOMP=1 from HESSE in a formal-basis session
+(`covariance="hesse"`, `Material.covariance()`); `check_resonances` and `check(path, resonances=True)` /
+`pyazr endf check --resonances`; `write(..., progress=)`; the cosine sessions of the tabulated form in chunks (T2
+4.85 -> 0.78 GB, files unchanged); `_legendre_rows` by a reshape; `Project.new` without the settings of removed
+records. **Verified how**: the branch report (door to 1e-11 against the engine on T1, T2, 13N, p+p, d+d; the quick
+set in three bases identical to tab-t79-1; the writer, amplitude, covariance, evaluation-check and support tests;
+the real codes on the written files; all projects in three bases identical to tab-t79-1, 887/851/887 files;
+`ctest -LE slow` 295 of 297, the two failures timing and browser tests that pass when run alone; the slow writer
+tests). **Open** (for the PI): the default elastic form; decision 10 (the formal
+session fixes the project's fixed parameters in the formal basis: on T1 its covariance differs from the fit's by
+up to 3.9 sigma_i sigma_j; the fit's covariance through door 1's Jacobian is the alternative); the page's job rows
+for `resonances=True` and `progress` (pyazr/ui, not changed).
+
+## 2026-11-15 (agent, branch `feature/upgrade-6-format-readiness`) — a real project is never misread
+
+**Done.** (1) What nothing reads is refused. The reader of format 3 (`ReadFormat3Project`): a section that is neither a
+record section nor a row of `Schema::GrammarSections()` (config, levels, thm, parameterSettings, mcmc/parameters), or a
+section inside one that does not hold it: `E_UNKNOWN_SECTION`, dev's `<channelRadii>` and `<isospin>` named
+(`Schema::NewerSections`); a `<config>` key not in `io::ConfigKeys()`, a `<config>` line that is not key=value, a line
+of `<mcmc>` outside `<parameters>`: `E_UNREAD_LINE`. The converter: an old section it does not convert
+(`kConvertedSections`), a data or test line whose type is followed by a spin operator (dev's type 10), a line ending in
+a word no keyword block reads (`SegLine`/`ExtrapLine::unreadTail`), a `<targetInt>` line with an unknown keyword.
+(2) `entrance_pair` / `exit_pair` on a sum or ratio apply to every term whose label names two pairs; the converter
+writes them for an old composite line (no question) and refuses one whose terms take two pairs of the same
+particles. (3) `python -m pyazr convert --allow-questions`. (4) The prior_centre refusal says what to do; the note says
+an AZURE2 without the rows centred the prior on the start value. (5) UDR `flight_path` in metres; a response of more
+than 2^24 table steps refused (it overflowed an int and crashed).
+
+**The PI's 24Mg model** (`work/format1/mg24/`): converts with 0 questions, validates but for the 25 missing data files
+(not on this machine), `AZURE2 extrapolate` 87.0 s and 11.0 GB at 1 thread (old engine at the branch point 86.9 s,
+4.47 GB). The eight curves differ from the old engine's, each difference traced: the four THM lines are THM HOES
+cross sections here and plain cross sections in the old engine, which also reads column 32 (the THM binding energy)
+as the light particle's excitation e1 (E_x shifted by that energy); with that removed and the folds off, every curve
+is exactly twice the old one (2 +- 2e-7) once one level (NaN in the old engine's input transformation, its group
+then left out: "singular level matrix"; the model is not in the repository, the level is named in the scratch
+notes) is removed from both — the factor 2 is the upgrade's
+(1 + delta_12) for every cross section out of an identical pair (df8c2c81; dev applies it to elastic scattering only);
+the Coulomb tables contribute 2e-8; the folds: the old uniform 10-point grid (useAdaptiveGrid=0) against the shared
+mesh, up to a factor 4.7 at resonances, 0.4-4 % median; with 80 uniform points the old engine comes to 2-10 % at the
+peaks, 0.006-0.05 % median.
+
+**Verified how** (build `work/b-format1`, 0 warnings): consistency test; the format's, converter's, UDR and pyazr CLI
+tests; `tests/composite_pair_keys/check.sh` (fails 3 of 5 on `b-trial79`); all projects x 3 bases against `tab-t74-1`
+(tag `tab-format1-A`): Brune 887, formal 851, Park 887 files, all identical; the converter over the 186 old projects
+of `tests/` and `examples/` before and after: 181 converted files byte-identical, the same 5 refused, the reports
+differ only in the prior_centre note (6 projects); no format-3 project of the tree gets a new diagnostic;
+`OMP_NUM_THREADS=1 ctest -LE slow -j2`: 296 of 297, the one failure `pyazr_session_records`, whose fixture wrote a run
+setting (`nwalkers 10`) into `<mcmc>`, now refused (line removed from the fixture, passes); `composite_pair_keys`
+registered in ctest after that run (passes). Injected: the reader's section check off (4 failures), composite keys ignored
+(5), the old flight-path conversion (6 failures), the UDR guard off (crash). Docs built.
+
+**Open.** The new engine's 11 GB on the 24Mg folds (2.5 times the old); the old engine's NaN level (not traced);
+a per-term pair key (not written: no project needs it); a repeated top-level section is still read with a warning
+(only the first); the first token of a positional `<config>` entry ends its reading (the rest of the line unread).
+A test line whose type 10 is followed by a spin operator was, before, read as a THM extrapolation (the operator
+dropped) and refused only by chance; now named.
+
+## 2026-11-15 (director, branch `feature/upgrade-5-pass-under-threads`) — the point pass runs inside a parallel region
+
+**Seen.** Plain MIGRAD and the Levenberg-Marquardt fit were slower at 2 and 4 threads than at 1 (13N, 300 calls:
+13.6 s at 1 thread, 42.0 s at 2, 25.7 s at 4).
+
+**Cause.** `WorkingCopy::CalculatePointsInParallel` declined when called from inside a parallel region (Minuit2's
+numerical gradient, the residual groups of LM) and in a build without OpenMP: each point was then calculated alone, one
+level-matrix solve per point instead of one per compound energy. The sampler's likelihood never called the pass.
+
+**Repair** (`src/EnergyPass.cpp`, `src/AZURECalc.cpp`, `src/AZURECalcMCMC.cpp`): the pass always runs, on the calling
+thread alone inside a caller's region; the sampler's likelihood calls it as a fit's evaluation does.
+`AZURE_SERIAL_CHI2` still turns it off.
+
+**Measured** (elapsed, before -> after; `docs/upgrade/fit_threads.md` section 7 has the table): 13N plain MIGRAD at 4
+threads 25.7 -> 8.2 s; T2 LM at 4 threads 48.5 -> 16.2 s; T2 sampler (16 walkers, 100 steps, physical) at 1 thread
+326.5 -> 133.5 s, at 4 threads 166.0 -> 48.4 s; 13N sampler at 4 threads 187.8 -> 30.6 s. At 1 thread the fits are
+unchanged within the scatter.
+
+**The numbers are the same**: every output file of the compared runs identical before and after, the chains
+included, except the snapshot `param.fit`, which depends on the thread schedule in both builds (`fit_threads.md`
+section 4).
+
+**The node check's text** (`AZURE_NODE_CHECK=1`): the check now also runs on the threads of a numerical gradient at
+once, and its lines ran into each other (`upgrade_node_check` failed on a line count; no breach was reported). The
+lines of one check are written at once (`WorkingCopy::CheckNodeTable`).
+
+**Verified**: build 0 warnings; quick set on the branch 295 of 297 before the text repair (the node check, and the
+browser test under a machine load of 24), then `upgrade_node_check`, `fit_threads`, `sampler_objective`,
+`pyazr_ui_sampler_bands` pass; the browser test is run again on the merged rehearsal.
+
+**Not done**: a thread-sanitizer run (no clang on this host; the nightly job covers it once the branch is on the
+server); a test that fails when the pass is declined inside a region again.
+
+## 2026-11-15 (agent, branch `feature/upgrade-5-setup-unify`) — the set-ups' four differences unified
+
+**Done** (the PI: "unify"). The program's data set-up is one function, `SetUpProgramCompound`
+(`include/ProgramRun.h`, `src/RunSetUp.cpp`), which `SetUpRun` and the sampler's `runMCMC` call; the words of a
+refused set-up are one function, `PrintSetUpRefusal` (`include/CompoundSystemSetUp.h`), which it calls and which the
+session's first set-up calls for a refused last part. The session's set-up is one member, `AZUREAPI::SetUpModel`
+(occasion `kFirst` from `Initialize`, `kRebuild` from `RebuildImpl`); what the occasion changes (check files,
+external-capture integrals recomputed, the words on a refused last part) is named at the top of its body. What a user
+sees change:
+- the sampler writes `checks/compoundnucleus.chk` and `checks/data.chk` (or prints them, set to the screen) when the
+  project asks for them, equal to the calculation's, in the project's checks directory (the sampler has no output
+  directory of its own: `samples.mcmc` goes to the project's output directory);
+- the sampler prints the blank line before "Calculation was aborted." when the compound's last part refuses;
+- a rate session rebuilt at another radius (`AZUREAPI::SetRadius`) takes the rate's branch: p12C at 4.0 fm was refused
+  (`SetRadius` false), now its rate equals a fresh session's at 4.0 fm;
+- a rebuild accepts a project of model data alone (T2 without data sets: was refused, now equal to a fresh session).
+`SetRadius` and `Rebuild` have no pyazr caller (their bindings were removed with the bindings nothing called): only
+the C++ test reaches the rebuild. The table of what still differs between the five callers: `cnuc_split.md` §12.3,
+"The four differences unified".
+
+**Tests**: `upgrade_session_rebuild` (`tests/upgrade/session_rebuild_test.cpp`), `sampler_setup_as_run`
+(`tests/sampler_setup/check.sh`); both fail on the start commit (4 and 3 failures, run on the old code with the new
+tests).
+
+**Verified how** (build `work/b-unify`, 3 jobs, 0 warnings; scripts in `work/unify/`): consistency test; the tests
+near the change (17, among them the two new ones, `upgrade_compound_setup`, `check_files_data`, `cli_commands`,
+`sampler_objective`, the pyazr rate, model-data and rebuild tests); the quick set (12 folders x 3 bases) identical to
+`tab-t74-1`; all projects x 3 bases (`tab-unify-T`): Brune 887, formal 851, Park 887 files, all identical to
+`tab-t74-1`; the director's own runs (`own.sh`, `extra.sh`: MINOS, fit with band, two rates, three `gamma_decay`
+fits, T1 extrapolation with band, the natural-target fit in two fitters, the T2 sampler in both bases) against
+`b-trial79`: outputs and `run.log` identical; the T1 sampler with the two checks to file against `b-trial79`: output
+directory and `run.log` identical, the two check files new. The 13 refusal cases and 9 session cases of
+`work/director/try79/` old against new: 2 differ, both unified ones (the sampler's blank line on 7Li_p_ay
+`--no-brune`; the sampler's compound and data checks on the screen in the T1 checks case, 79 + 470 new lines, equal to
+the calculation's); the session cases do not reach the rebuild. Docs build: 60 pages. `OMP_NUM_THREADS=1 ctest -LE slow -j1`: 299 of 299.
+
+**Open, for the PI** (not unified, outside the set-up): the sampler's refusal by the data's initialization prints
+"Calculation was aborted." without the blank line the run prints; the session's first set-up initializes the data
+after `UpdateParameters` and the prior covariance, the rebuild before them; the sampler prints "Initialized and
+cleared EC amplitude cache..." before "Creating New param.par File...", the run after; a refused rebuild says the last
+part's message alone.
+
+## 2026-11-15 (agent, branch `feature/upgrade-9-webui-first-project`) — the browser test's lost requests; the curve's loose ends; a first project from nothing
+
+`web_ui.md` sections 11.17 (the curve, priors and limits, export, open, logging, a lost curve) and 11.18 (the walk's
+table); user guide `web_interface.rst` ("Your first project"), `web_ui_api.rst`, `pyazr.rst` (`model_curve`), the
+command-line page (`pyazr ui` on a new file); Developer Guide `api.rst`, `extending.rst` (`job_settings.py`).
+
+- **The browser test's "Failed to fetch"**: not reproduced here (see the report's numbers: every self-test run
+  passed, the server's request log complete in each, at loads 3 to 14 of 24).  What was measured: the self-test
+  leaves the Plot tab with its curve requests in flight (13 on T2), and every drawing of the tab sent them again, all
+  queued behind the session worker; Chrome's own requests to Google services still run during the self-test despite
+  the quiet profile (Autofill queries per form, optimization-guide model downloads, a spelling dictionary: Chrome's
+  net log).  Repaired in the page: a curve request without an answer is said as lost with **Ask again**
+  (`tabs/results.js curveFailure`), not shown as the engine's refusal; a curve request in flight is shared by the
+  drawings that follow (`curveRequest`).  The test keeps what a failure needs: the server's request log
+  (`python -m pyazr.ui --log-requests`, kept beside the screenshots on a failure) and, per failed request, the step
+  of the self-test during which it was sent and failed (`api.js` records `sent` and `at`, the self-test each step's
+  `at`).
+- **The curve**: `Session.model_curve` agrees with the data session by default (`alone=True` the old way); the grid
+  is refined where the curves bend with the ENDF writer's rule (`pyazr.endf.grid`, used, not copied) from seeds at
+  the level energies (`refine_plan`); the page refines once per curve session and when a level moves beyond the
+  grid's spacing, at most three sessions per refinement (`engine.py CURVE_SESSIONS`).  T2's 1.138 MeV peak drawn
+  through (0.085902 against 0.080877 on the even grid; 247 points).
+- **Export**: tolerance and number form are choices with words (`job_settings.py`, the setting type `choice`); the
+  data's range in words; the job says what it is doing (`progress.doing`).
+- **New project from a file**: the report names the project as kept; `POST /api/project/open` resolves a relative
+  path in the project's folder, 403 with three parts outside the root.
+- **Priors and limits** on a level parameter: `GET`/`PUT /api/project/parameter_settings`; the level's screen has
+  "Prior / limits…" beside the energy and a column in the channel table.
+- **The engine's lines in a job's log** again (`workers.py engine_lines_to_log`).
+- **A first project from nothing**: `pyazr ui first.azr` on a new file opens an empty project (`Project.new(path)`
+  without a nuclear part: `pyazr/project.py empty_project_text`, about 15 lines); the empty project's screens no
+  longer break (`GET /api/project/records` answers `[]`, route field `listed`); the new pair form fills Z, the
+  masses and S from AME2020 by the nuclides' names (`GET /api/masses`); `tests/pyazr/ui/first_project_test.py`
+  walks T1 from nothing to its χ² (bit for bit with T1's numbers).
+- **Not repaired, for the next branches**: a ratio data set's unit "b" is the engine's description
+  (`experiment/src/Describe.cpp:339`, C++); `Project.pairs()` does not list the g-factors nor the external capture;
+  `Project.set_channel` writes a width back through a conversion (`1.8500000000000003`); no table of ground-state
+  J^π or g-factors; the windows' and norm's grammar typed; an empty project's status line shows the engine's
+  refusal with the working file's name.
+- **Lines in shared files**: `routes.py` (four rows, the field `listed`), `server.py` (`open`, `masses`,
+  `_first_state`, `main(log_requests=)`), `jobs.py` (the settings moved to `job_settings.py`; `Tracker.say`),
+  `evaluations.py`, `engine.py`, `state.py` (the refusal's fix), `workers.py`, `__main__.py`, `cli.py` (the type
+  `project-or-new`), `project.py` (`new`, `empty_project_text`), `session.py` (`model_curve`), `model_curve.py`;
+  the page: `api.js`, `plots.js`, `selftest.js`, `tabs/results.js`, `tabs/nucleus.js`, `tabs/fitjob.js`,
+  `tabs/endf.js`, `tabs/endfproject.js`; `smoke_test.py` (two views, the request log).
+
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: written MF=6 within CHECKR's limits
+
+**Done** (`endf.md` 13.11, the PI's decision): no written MF=6 section above 200 energies, no LAW=5 panel above 201
+cosines; a section that needs more is thinned by the grid's rule to the limit and states the tolerance it reaches
+(MF=1 "Accuracy:", `Written.accuracy` and the end of `Written.losses`, `Written.reached`); `write(...,
+mf6_limits="manual")` for Appendix G's limits; `write(..., project_name=)` names the project in MF=1 and the
+tape's first line. T1 100 s, T2 51 s, 13N 133 s (one thread, loaded machine). Under the limits the elastic
+section of T1 and 13N is good to about 1e-1 near the zeros of sigma_NI under the manual's reading (stated).
+**Verified how**: see the branch report (writer tests quick and slow with the real codes, read test).
+**Open**: the covariance (MF=32), the check of an evaluation and the speed-up of the export are not built.
+
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: the elastic section under the manual's reading
+
+**Done** (`endf.md` 13.10): the reader reads LAW=5 LTP=12-15 as the manual says (p. 146: sigma_NI(E) of MF=3
+times P_NI(mu, E) of MF=6, each interpolated), the product reading is a named option
+(`elastic_cross_section(..., reading=)`, `Material.curves(..., elastic_reading=)`), a curve's notes say where
+the two differ by more than 1e-3. The writer gives elastic scattering its own energies (`pyazr/endf/elastic.py`):
+every sign change of sigma_NI bracketed to 1e-5 x E, the energies chosen by the grid's rule under the manual's
+reading (`grid.thin_to`, the reader's reconstruction instead of the chord), quarter points checked; MF=1,
+`Written.elastic` state the brackets and the tolerance reached. Measured on the old files: the manual reading
+was off by up to 0.79 (T1), 2.9e-3 (T2), 0.56 (13N), over 62 / 13 / 42 keV above 1e-3; on the new ones above 5e-3
+only within the brackets and a few eV beside them (T1 22.6 eV, T2 4.3 eV, 13N 14.5 eV).
+**Verified how**: `endf_read_test` (hand values of both readings; the default reading injected wrong fails two
+checks), `endf_write_test T1 narrow`, my measurement script on T1, T2, 13N, the consistency test, the pages built.
+**Open**: T1 and 13N need 3000-3500 elastic energies (20 MB files, 5 min) without limits; the PI's limits follow.
+
 ## 2026-11-15 (director, 00:50) — merged: the one set-up of the compound system and the data; quiet `Objective` calls
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 79 (rehearsal 78 plus two branches). The agent's

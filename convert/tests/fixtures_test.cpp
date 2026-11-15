@@ -5,7 +5,8 @@
 //     validates with zero errors;
 //  3. T2's conversion has the records of the hand-written T2 of section 3.11 (experiment/tests/data/T2_format3.azr),
 //     field by field (comments aside);
-//  4. a project with questions is not converted without answers; with allowQuestions it is, with '?' placeholders.
+//  4. pair keys on a sum; a project with questions is not converted without answers; with allowQuestions it is,
+//     with '?' placeholders.
 // The projects are read as their originals (tests/convert/fixtures/<path> once <path> is converted).
 //   convert_fixtures_test <repository root>
 // With AZURE2_WRITE_CONVERT_FIXTURES=1 the fixtures are written instead of compared (after a deliberate change of
@@ -152,9 +153,10 @@ int main(int argc, char **argv) {
     for (const std::string &x : onlyA) std::printf("        converter only: %s\n", x.c_str());
     for (const std::string &x : onlyB) std::printf("        hand only:      %s\n", x.c_str());
   }
-  // 4. c12c12_tumino2018: two pairs with the same particles (1 and 6, 12C + 12C): converted with pair keys (section 3.5)
-  //    ...and with one more line, a sum whose entrance pair is ambiguous, a question: none answered -> no result;
-  //    allowQuestions -> '?' placeholders
+  // 4. c12c12_tumino2018: two pairs with the same particles (1 and 6, 12C + 12C): converted with pair keys (section 3.5);
+  //    with one more line, a sum whose terms enter by pair 1, converted with one entrance_pair for the sum; a sum whose
+  //    terms enter by pairs 1 and 6 has no format-3 form and is refused.  Questions (--strict): none answered -> no
+  //    result; allowQuestions -> '?' placeholders, the only problems of the file
   {
     std::string old;
     const std::string path = root + "/examples/c12c12_tumino2018/c12c12_tumino2018.azr";
@@ -165,13 +167,26 @@ int main(int argc, char **argv) {
     check("c12c12_tumino2018: converted, the THM data sets on pair 1 by key",
           plain.ok && plain.questions.empty() && plain.text.find("    entrance_pair  1\n") != std::string::npos &&
               plain.text.find("    entrance_pair  6\n") != std::string::npos);
-    const std::string sumLine = "1  1  2  0  7  0  180  0  1  0  0  0  0  0  data/thm_p0.dat  1  0  1  1  3  -999\n";
-    old.insert(old.find("</segmentsData>"), sumLine);
-    const ConvertResult r = ConvertToFormat3(old, o);
+    std::string summed = old;
+    summed.insert(summed.find("</segmentsData>"), "1  1  2  0  7  0  180  0  1  0  0  0  0  0  data/thm_p0.dat  1  0  1  1  3  -999\n");
+    const ConvertResult sum = ConvertToFormat3(summed, o);
+    check("a sum entering by pair 1: converted with no question, entrance_pair 1 on the sum",
+          sum.ok && sum.questions.empty() &&
+              sum.text.find("    reaction       12C(12C,p)23Na + 12C(12C,p)23Na[0.4402]\n    entrance_pair  1\n") !=
+                  std::string::npos);
+    std::string mixed = old;
+    mixed.insert(mixed.find("</segmentsData>"), "1  1  2  0  7  0  180  0  1  0  0  0  0  0  data/thm_p0.dat  1  0  1  6  3  -999\n");
+    const ConvertResult two = ConvertToFormat3(mixed, o);
+    check("a sum entering by pairs 1 and 6: refused, naming both pairs and the split",
+          !two.ok && two.refusal.find("entrance pairs 1 and 6") != std::string::npos &&
+              two.refusal.find("one data set per pair") != std::string::npos);
+    ConvertOptions strict = o;
+    strict.strict = true;
+    const ConvertResult r = ConvertToFormat3(old, strict);
     check("questions: no result without answers", !r.ok && !r.questions.empty() && r.text.empty());
-    o.allowQuestions = true;
-    const ConvertResult q = ConvertToFormat3(old, o);
-    check("questions: allowQuestions writes '?'", q.ok && q.text.find("    reaction       ?\n") != std::string::npos);
+    strict.allowQuestions = true;
+    const ConvertResult q = ConvertToFormat3(old, strict);
+    check("questions: allowQuestions writes '?'", q.ok && q.text.find(" ?\n") != std::string::npos);
     bool onlyPlaceholders = !q.diagnostics.empty();
     for (const auto &d : q.diagnostics) onlyPlaceholders = onlyPlaceholders && d.code == std::string("E_PLACEHOLDER");
     check("questions: the placeholders are the only problems", onlyPlaceholders);

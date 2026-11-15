@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "azure2/physics/LevelPairShift.h"
 #include "azure2/physics/SymmetricEigen.h"
 
 namespace azure2 {
@@ -389,17 +390,16 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
   LevelSet out;
   out.iterations.assign(n, 0);
   if (n == 0) return out;
-  for (std::size_t a = 0; a < n; a++)
-    for (std::size_t c = a + 1; c < n; c++)
-      if (E[a] == E[c])
-        throw std::invalid_argument("formal_from_brune: " + Label(system, b, a) + " and level " + std::to_string(c) +
-                                    " have the same energy; the Brune transformation needs distinct energies");
   std::vector<bool> particle(nc);
   for (std::size_t k = 0; k < nc; k++) particle[k] = system.channel(blk.channel(k)).kind == ChannelKind::Particle;
-  std::vector<double> shifts(n * nc, 0.0);  // S_c(E_lambda)
+  std::vector<double> shifts(n * nc, 0.0), slopes(n * nc, 0.0);  // S_c(E_lambda), dS_c/dE (MeV^-1)
   for (std::size_t la = 0; la < n; la++)
     for (std::size_t k = 0; k < nc; k++)
-      if (particle[k]) shifts[la * nc + k] = cf(b, k, E[la]).S;
+      if (particle[k]) {
+        const ChannelValues v = cf(b, k, E[la]);
+        shifts[la * nc + k] = v.S;
+        slopes[la * nc + k] = v.dS_dE;
+      }
   // CNuc.cpp TransformIn, second loop (lines 1532-1560 at e54e6fcc); the matrices of Brune (2002):
   //   M_{mu la} = delta - (1 - delta) sum_c (S_mu - S_la)/(E_mu - E_la) gamma_la gamma_mu
   //   N_{mu la} = delta (E_la + sum_c (S_la - B) gamma_la^2)
@@ -418,9 +418,10 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
         for (std::size_t k = 0; k < nc; k++) {
           if (!particle[k]) continue;
           const double gl = gamma[la * nc + k], gm = gamma[mu * nc + k];
-          const double Sl = shifts[la * nc + k], Sm = shifts[mu * nc + k];
-          mSum += (Sm - Sl) / (E[mu] - E[la]) * gl * gm;
-          nSum += ((E[mu] * Sl - E[la] * Sm) / (E[mu] - E[la]) - B[k]) * gl * gm;
+          const LevelPairShift<double> chord = level_pair_shift<double>(
+              {E[mu], shifts[mu * nc + k], slopes[mu * nc + k]}, {E[la], shifts[la * nc + k], slopes[la * nc + k]});
+          mSum += chord.slope() / chord.gap * gl * gm;
+          nSum += (chord.intercept() / chord.gap - B[k]) * gl * gm;
         }
         Mm[mu * n + la] = -mSum;
         Nm[mu * n + la] = nSum;

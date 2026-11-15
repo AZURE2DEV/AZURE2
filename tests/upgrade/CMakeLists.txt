@@ -93,6 +93,15 @@ add_executable(compound_setup_test compound_setup_test.cpp)
 target_link_libraries(compound_setup_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_compound_setup COMMAND compound_setup_test ${CMAKE_SOURCE_DIR}/tests)
 set_tests_properties(upgrade_compound_setup PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+# A session rebuilt at another channel radius (AZUREAPI::SetRadius) equals a session opened at that radius: a rate
+# session, and a project of model data alone (tests/upgrade/session_rebuild_test.cpp).
+if(TARGET AZUREAPI)
+  add_executable(session_rebuild_test session_rebuild_test.cpp)
+  target_include_directories(session_rebuild_test PRIVATE ${CMAKE_SOURCE_DIR}/api/include)
+  target_link_libraries(session_rebuild_test PRIVATE AZUREAPI)
+  add_test(NAME upgrade_session_rebuild COMMAND session_rebuild_test ${CMAKE_SOURCE_DIR}/tests)
+  set_tests_properties(upgrade_session_rebuild PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+endif()
 
 # physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
 add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
@@ -222,10 +231,19 @@ set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
 # project sets these checks (src/DataCheckFiles.cpp, docs/upgrade/edata_split.md N2).
 add_test(NAME check_files_data COMMAND bash ${CMAKE_SOURCE_DIR}/tests/check_files_data/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(check_files_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
+# The sampler sets up the compound and the data as the run does: the same check files, the same text on a refused
+# last part (tests/sampler_setup/check.sh, SetUpProgramCompound in src/RunSetUp.cpp).
+add_test(NAME sampler_setup_as_run COMMAND bash ${CMAKE_SOURCE_DIR}/tests/sampler_setup/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(sampler_setup_as_run PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 # The program's commands give the menu's outputs and refuse a wrong command line (tests/cli_commands/check.sh,
 # src/RunRequest.cpp); about 30 s at one thread.
 add_test(NAME cli_commands COMMAND bash ${CMAKE_SOURCE_DIR}/tests/cli_commands/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(cli_commands PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600)
+# A sum in a project with two pairs of the same particles: the record's pair keys reach every term whose label names
+# both, the old composite line converts to the same file, a line whose terms take both pairs is refused
+# (tests/composite_pair_keys/check.sh, project_format3.md section 3.5); about 2 s.
+add_test(NAME composite_pair_keys COMMAND bash ${CMAKE_SOURCE_DIR}/tests/composite_pair_keys/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(composite_pair_keys PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 # Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
 # and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
 find_package(Python3 COMPONENTS Interpreter)

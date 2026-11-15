@@ -115,13 +115,13 @@ AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
 AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
 ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
-ProgramRun	CompoundSystem	owns	frontends		ProgramRun::compound (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in SetUpRun
-ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by SetUpCompoundSystem in SetUpRun
+ProgramRun	CompoundSystem	owns	frontends		ProgramRun::compound (std::unique_ptr<const CompoundSystem>), from SetUpProgramCompound (SetUpCompoundSystem) in SetUpRun
+ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by SetUpCompoundSystem (SetUpProgramCompound) in SetUpRun
 ProgramRun	LevelInputs	owns	frontends		ProgramRun::inputs (LevelInputs): the run's
 ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
 AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
-AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in AZUREAPI::Initialize and RebuildImpl
+AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in AZUREAPI::SetUpModel (Initialize, RebuildImpl)
 AZUREAPI	LevelState	owns	frontends		AZUREAPI::state_ (std::unique_ptr<LevelState>): the session's, made by SetUpCompoundSystem
 AZUREAPI	LevelInputs	owns	frontends		AZUREAPI::inputs_ (std::unique_ptr<LevelInputs>): the session's
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)
@@ -161,3 +161,6 @@ pyazr::endf::Material	pyazr::Session	reads	frontends	const	Material.curves(data,
 pyazr::endf::Material	pyazr::endf::resonances::LRF7	makes	frontends		Material.resonances() (pyazr/endf/resonances.py read_resonances)
 pyazr::endf::resonances::LRF7	pyazr::Session	reads	frontends	const	pyazr.endf.from_session(s, x) reads s.parameters, s.pairs and the door formal_levels_of_block (api/src/pybind_level_doors.cpp)
 pyazr::endf::engine_values::Sweeps	pyazr::Session	makes	frontends		one session per sweep of a project of the session's nuclear part at x (pyazr/endf/engine_values.py Sweeps.evaluate)
+pyazr::endf::engine_values::Sweeps	pyazr::endf::elastic::ElasticSection	makes	frontends		the engine values of the elastic section (pyazr/endf/elastic.py section, Sweeps.elastic_values)
+pyazr::endf::engine_values::Sweeps	pyazr::endf::amplitudes::AmplitudeSection	makes	frontends		the coefficients of the LTP=1 section (pyazr/endf/amplitudes.py section, Sweeps.nuclear_amplitudes: the door nuclear_amplitudes)
+pyazr::Session	pyazr::endf::covariance::FormalCovariance	makes	frontends		formal_covariance: the fit as a snapshot opened in the formal basis, HESSE of its objective

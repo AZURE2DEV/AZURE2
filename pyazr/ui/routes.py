@@ -46,6 +46,7 @@ class Route:
     fixed: dict = field(default_factory=dict)
     serves: tuple = ()  # the pyazr calls a server row makes
     text: bool = False  # the response is plain text
+    listed: bool = False  # the call answers {name: item}: the route answers its items as a list (none: [])
 
 
 P, S, V, M, L = "project", "session", "server", "missing", "later"
@@ -88,7 +89,8 @@ ROUTES = (
           "What the engine makes of every record.", fixed={"as_json": True}),
     Route("GET", "/api/project/describe/{name}", P, "pyazr.Project.describe",
           "What the engine makes of one record.", args=("name",), fixed={"as_json": True}),
-    Route("GET", "/api/project/records", P, "pyazr.Project.records", "Every record: kind, name, line, fields."),
+    Route("GET", "/api/project/records", P, "pyazr.Project.records", "Every record: kind, name, line, fields.",
+          listed=True),
     Route("GET", "/api/project/records/{name}/preview", V, "server.Server.field_preview",
           "What the engine makes of the record with one field set to a value (a file), on a copy of the project: "
           "its description (rows read and kept, their range) or the refusal.", args=("name",),
@@ -120,6 +122,18 @@ ROUTES = (
           "Set a level's energy (MeV), fixed, active.", args=("label",), kwargs=("energy", "fixed", "active")),
     Route("DELETE", "/api/project/levels/{label:path}", P, "pyazr.Project.remove_level", "Remove a level.",
           args=("label",)),
+    Route("GET", "/api/project/parameter_settings", P, "pyazr.Project.parameter_settings",
+          "The rows of <parameterSettings> that name a level parameter: a prior (value, error, nuisance) or limits "
+          "(lower, upper) on a level's energy or a channel's width, each with the level and channel it names now."),
+    Route("PUT", "/api/project/parameter_settings", P, "pyazr.Project.set_parameter_setting",
+          "Put a prior [centre, sigma] and/or limits [lower, upper] on a level's energy (channel null) or on a "
+          "channel's width (channel [pair, l, s]); both null remove the row.  Units: MeV for an energy, the "
+          "channel's convention for a width (eV, fm^-1/2 for an ANC, MeV^1/2 for an amplitude).",
+          args=("level",), kwargs=("channel", "prior", "limits")),
+    Route("GET", "/api/masses", V, "server.Server.masses",
+          "A pair's charges, atomic masses (u) and separation energy (MeV) from the AME2020 table by the nuclides' "
+          "names (light=p&heavy=12C); without light, the heavy nucleus alone (a photon pair).",
+          args=("heavy",), kwargs=("light",), serves=("pyazr.sources.masses.pair_masses",)),
     Route("GET", "/api/project/pairs", P, "pyazr.Project.pairs", "The particle pairs of <levels>."),
     Route("PATCH", "/api/project/pairs/{key}", P, "pyazr.Project.set_pair",
           "Set a pair's radius (fm), masses (u), separation energy, excitations and THM binding energy (MeV).",
@@ -389,9 +403,6 @@ PROJECT_NOT_SERVED = {
     "directory": "a property: the project's directory is in GET /api/project (root)",
     "unsaved": "a property: GET /api/project",
     "add_<kind>": "POST /api/project/records with the kind (Project.add)",
-    "parameter_settings": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level parameter)",
-    "set_parameter_setting": "the page has no editor of <parameterSettings> yet (a prior or a limit on a level "
-                             "parameter)",
 }
 
 
@@ -466,7 +477,8 @@ def run(route, server, params, query, body, headers):
     state = server.state
     if route.method == "GET":
         with state.lock:
-            return method(state.project, *args, **kwargs)
+            answer = method(state.project, *args, **kwargs)
+            return list(answer.values()) if route.listed else answer
     state.check_paths([args, kwargs])
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

@@ -17,8 +17,13 @@
 5. Refused, with the three parts: a data set whose columns give each point a window (T2's beam profile), an unknown
    data set (ParameterKeyError), a session of the extrapolations, points < 2; a record the engine refuses on a grid
    (an analyzing power at a lab angle) refuses its data set with the engine's words and the others are made.
-6. ``Session.model_curve`` (one data set, its own session) equals the curve of ``model_curves`` at unfolded points,
-   and ``pyazr.endf.Material.curves`` takes a curve as it takes a data set (a request at the curve's points).
+6. ``Session.model_curve`` equals the curve of ``model_curves`` at unfolded points and agrees with the data session
+   at a folded data set's points (every curve made, one mesh); ``alone=True`` folds on a mesh of its own (3e-3);
+   ``pyazr.endf.Material.curves`` takes a curve as it takes a data set (a request at the curve's points).
+7. The refined grid: T2's 16 keV wide level at 1.138 MeV drawn through (its peak within 0.5 % of a 4000-point even
+   grid's, the 200-point even grid more than 3 % below), the points as on the even grid; a level moved by 50 keV
+   moves the seeds beyond the grid; an unknown grid refused.
+Sections 1 to 6 use the even grid (``grid="even"``).
 
 Run from anywhere:  python3 tests/pyazr/model_curve_test.py
 """
@@ -90,7 +95,7 @@ print("at the data set's points")
 t1 = copy(os.path.join(ROOT, "tests", "upgrade", "T1"), "T1")
 s1 = pyazr.Session(os.path.join(t1, "T1.azr"))
 ev1 = s1.evaluate()
-c1 = model_curves(s1)
+c1 = model_curves(s1, grid="even")
 for d in ev1.data:
     c = c1[d.name]
     check(f"T1 {d.name}: a curve", not isinstance(c, Exception), str(c))
@@ -101,7 +106,7 @@ for d in ev1.data:
 rr = copy(os.path.join(ROOT, "tests", "ratio_to_rutherford", "models"), "rutherford")
 srr = pyazr.Session(os.path.join(rr, "aC_data.azr"))
 d = srr.evaluate().data[0]
-c = model_curves(srr)[d.name]
+c = model_curves(srr, grid="even")[d.name]
 check("ratio to Rutherford: seven angular distributions", c.variable == "angle" and len(c.branches) == 7,
       f"{c.variable} {len(c.branches)}")
 check("ratio to Rutherford: at its points to rounding", rel(at_points(c, d), d.model) <= 1e-12,
@@ -114,7 +119,7 @@ azr2 = os.path.join(t2, "T2.azr")
 s2 = pyazr.Session(azr2)
 ev2 = s2.evaluate()
 records2 = pyazr.Project.open(azr2).records()
-c2 = model_curves(s2)
+c2 = model_curves(s2, grid="even")
 kinds_seen = set()
 for d in ev2.data:
     c, r = c2[d.name], records2[d.name]
@@ -191,7 +196,7 @@ check("T2: the shared energy scale G is free", len(moved) == 2, [p.name for p in
 for p in moved:
     x[p.free_index] += 0.002
 evs = ss.evaluate(x)
-cs = model_curves(ss, ["s13_thm_oes", "s02_diff090"], x=x)
+cs = model_curves(ss, ["s13_thm_oes", "s02_diff090"], x=x, grid="even")
 d = evs.dataset("s13_thm_oes")
 check("a fixed shift: the points' lab energies moved", abs(d.extra["energy_lab"][0] - ev2.dataset("s13_thm_oes")
                                                             .extra["energy_lab"][0] - 0.004) < 1e-9)
@@ -204,7 +209,7 @@ check("the curve's x is the x given", np.array_equal(cs["s02_diff090"].x, x))
 
 # -- 4. the grid -----------------------------------------------------------------------------------------------------
 print("the grid")
-c = model_curves(s2, ["s09_ratio"], points=50)["s09_ratio"]
+c = model_curves(s2, ["s09_ratio"], points=50, grid="even")["s09_ratio"]
 d = ev2.dataset("s09_ratio")
 own = np.unique(d.extra["energy_lab"])
 check("points=50: 50 evenly spaced values and the data set's own", c.n == len(np.unique(np.concatenate(
@@ -253,17 +258,72 @@ check("... and the others are made", not isinstance(out["el_lab090"], Exception)
 
 # -- 6. the one-name call; ENDF's curves take a curve ----------------------------------------------------------------
 print("the one-name call")
-c = s2.model_curve("s13_thm_oes")
+c = s2.model_curve("s13_thm_oes", grid="even")
 check("Session.model_curve equals model_curves at an unfolded data set",
       np.array_equal(c.model, c2["s13_thm_oes"].model) and np.array_equal(c.energies, c2["s13_thm_oes"].energies))
-c = s2.model_curve("s02_diff090")
 d = ev2.dataset("s02_diff090")
-check("Session.model_curve of a folded data set alone (its own mesh): at its points to 3e-3",
-      rel(at_points(c, d), d.model) <= 3e-3, rel(at_points(c, d), d.model))
+c = s2.model_curve("s02_diff090", grid="even")
+check("Session.model_curve of a folded data set (every curve made, one mesh): at its points to 1e-8",
+      rel(at_points(c, d), d.model) <= 1e-8, rel(at_points(c, d), d.model))
+c = s2.model_curve("s02_diff090", grid="even", alone=True)
+got = rel(at_points(c, d), d.model)
+check("... alone=True (its own mesh): at its points to 3e-3, not to 1e-8", 1e-8 < got <= 3e-3, got)
 from pyazr.endf import CurveRequest, request_of  # noqa: E402
 r = request_of(s2, c2["s13_thm_oes"])
 check("pyazr.endf.request_of takes a curve: its points and lab energies", isinstance(r, CurveRequest)
       and len(r.energies) == c2["s13_thm_oes"].n and np.array_equal(r.energies_lab, c2["s13_thm_oes"].energy_lab))
+
+# -- 7. the refined grid ---------------------------------------------------------------------------------------------
+print("the refined grid")
+# T2's level at E_x 13.2652 MeV (E_cm 1.138 MeV, about 16 keV wide): the even grid of 200 values passes beside its
+# peak; the refined grid (seeded with the level energies, refined where the curve bends) draws it through
+name = "s03_diff150"
+count = []
+from pyazr.model_curve import refine_plan  # noqa: E402
+plan = refine_plan(s2, plan_curves(s2), count=count)
+with CurveSession(s2, plan) as session_refined:
+    refined_all = session_refined.evaluate()
+refined = refined_all[name]
+dense = model_curves(s2, [name], points=4000, grid="even")[name]
+even = c2[name]
+
+
+def peak(c):
+    near = (c.energies > 1.10) & (c.energies < 1.18)
+    return c.model[near].max(), int(near.sum())
+
+
+(p_ref, n_ref), (p_dense, _), (p_even, _) = peak(refined), peak(dense), peak(even)
+print(f"    the peak at 1.138 MeV: refined {p_ref:.6g} ({refined.n} points, {n_ref} near it, {len(count)} sessions), "
+      f"200 even {p_even:.6g}, 4000 even {p_dense:.6g}")
+check("refined: the peak drawn through (within 0.5 % of a 4000-point grid's)", abs(p_ref / p_dense - 1) < 5e-3,
+      (p_ref, p_dense))
+check("the even grid of 200 misses it by more than 3 %", p_even < 0.97 * p_dense, (p_even, p_dense))
+check("refined with fewer points than the dense grid", refined.n < dense.n / 4, (refined.n, dense.n))
+for d in ev2.data:
+    c = refined_all.get(d.name)
+    if c is None or isinstance(c, Exception):
+        continue
+    bound = 1e-12 if not folded(records2[d.name]) else 2e-4
+    check(f"refined {d.name}: at its points as on the even grid ({bound:g})", rel(at_points(c, d), d.model) <= bound,
+          rel(at_points(c, d), d.model))
+check("refined: every branch's grid sorted, from its first to its last point", all(
+    np.all(np.diff(c.energy_lab[b.start:b.stop]) > 0) for c in refined_all.values() if not isinstance(c, Exception)
+    and c.variable == "energy" for b in c.branches))
+from pyazr.model_curve import grid_seeds, seeds_moved  # noqa: E402
+seeds = grid_seeds(s2, plan)
+check("the seeds at the same x have not moved", not seeds_moved(plan, seeds, grid_seeds(s2, plan)))
+x = np.array(s2.parameters.x0, float)
+energy = [p for p in s2.parameters.free if p.kind == "energy" and 12.9 < p.value < 13.5]  # E_cm 0.8 to 1.4 MeV
+check("a free level energy in the data's range", bool(energy), [p.name for p in s2.parameters.free])
+x[energy[0].free_index] += 0.05
+check(f"{energy[0].name} moved by 50 keV: the seeds moved beyond the grid", seeds_moved(plan, seeds,
+                                                                                        grid_seeds(s2, plan, x)))
+try:
+    model_curves(s2, [name], grid="log")
+    check("grid='log': refused", False)
+except ParameterError as err:
+    check("grid='log': refused with three parts", bool(err.what and err.allowed and err.fix), repr(err))
 
 for s in (s1, s2, srr, ss):
     s.close()

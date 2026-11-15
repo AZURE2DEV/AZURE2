@@ -51,6 +51,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Milliseconds since the page opened (when a failed request was sent and when it failed: the self-test's report). */
+const now = () => Math.round(globalThis.performance?.now?.() ?? 0);
+
 /** The methods that change the project and therefore carry the revision. */
 const EDITS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -78,7 +81,7 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
   onActivity } = {}) {
   let rev = null;
   let inFlight = 0;
-  const log = [];  // every failed request (the self-test reports them): {method, path, status, what}
+  const log = [];  // every failed request (the self-test reports them): {method, path, status, what, sent, at}
 
   function seen(r) {
     if (typeof r === "number" && r !== rev) {
@@ -103,10 +106,11 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
     const counted = !background;
     if (counted) { inFlight += 1; if (onActivity) onActivity(inFlight); }
     let response;
+    const sent = now();
     try {
       response = await fetchFn(base + path, init);
     } catch (e) {
-      log.push({ method, path, status: 0, what: String(e) });
+      log.push({ method, path, status: 0, what: String(e), sent, at: now() });
       throw new ApiError(0, { error: "Network error", message: `${method} ${path}: ${e}` }, { method, path });
     } finally {
       if (counted) { inFlight -= 1; if (onActivity) onActivity(inFlight); }
@@ -118,7 +122,7 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
     }
     if (!response.ok) {
       const err = new ApiError(response.status, data, { method, path });
-      if (!quiet) log.push({ method, path, status: response.status, what: err.view.what });
+      if (!quiet) log.push({ method, path, status: response.status, what: err.view.what, sent, at: now() });
       if (response.status === 412) {
         if (typeof err.view.rev === "number") rev = err.view.rev;
         if (onStale) onStale(err.view);

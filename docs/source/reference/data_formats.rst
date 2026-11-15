@@ -696,10 +696,16 @@ by ``AZURE2 --convert T2.azr T2_f3.azr``; the whole file is
 The engine reads such a file in one pass: the records are read and checked
 against the table, the reactions are resolved against the pairs of
 ``<levels>`` (a label names a pair by its particles and states; where it names
-two, ``entrance_pair`` / ``exit_pair`` give the key), the model data against
-its levels, and the data files are opened **relative to the working
-directory** (as for an old project).  Any error refuses the project with the
-same diagnostics ``AZURE2 --validate`` prints.  ``AZURE2 --describe FILE``
+two, ``entrance_pair`` / ``exit_pair`` give the key; on a sum or a ratio they
+apply to every term whose label names two pairs, and a term whose label names
+one keeps it), the model data against its levels, and the data files are
+opened **relative to the working directory** (as for an old project).  Any
+error refuses the project with the same diagnostics ``AZURE2 --validate``
+prints.  A section the engine does not read is refused too
+(``E_UNKNOWN_SECTION``: a newer AZURE2's ``<channelRadii>`` or ``<isospin>``,
+a misspelt name, a section inside one that does not hold it), as are a
+``<config>`` key it does not have and a line no reader reads (``E_UNREAD_LINE``):
+the run would otherwise go on as if they were absent.  ``AZURE2 --describe FILE``
 (``pyazr.describe``) prints what was understood: per data set the observable,
 the pair keys of each reaction term, the data file's resolved path, the
 effects linked to it and its fit parameters.

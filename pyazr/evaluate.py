@@ -186,9 +186,15 @@ class Evaluation:
 
 def _legendre_rows(flat):
     """The engine's frame of Legendre coefficients of a segment (per point: a count, then that many coefficients)
-    as one array per point."""
-    rows, i = [], 0
+    as one array per point.  Where every point has the same count (the frame of an extrapolation: one order list for
+    the grid; zero for a quantity without coefficients) the frame is cut by one reshape instead of a loop over the
+    points (millions for the elastic grids of pyazr.endf); the arrays are the same."""
     flat = np.asarray(flat, float)
+    if flat.size:
+        k = int(round(flat[0]))
+        if k >= 0 and flat.size % (k + 1) == 0 and np.all(flat[::k + 1] == k):
+            return list(flat.reshape(-1, k + 1)[:, 1:].copy())
+    rows, i = [], 0
     while i < flat.size:
         count = int(round(flat[i]))
         rows.append(flat[i + 1:i + 1 + count].copy())

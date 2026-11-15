@@ -634,6 +634,44 @@ int main() {
     report("static M1: mu vs hand value (relative)", std::fabs(m.value[3] - mu) / mu, 1e-15);
   }
 
+  std::printf("8. Brune -> formal with two levels of one J^pi at one energy (LevelPairShift.h)\n");
+  {
+    // The third level (19.07) put on the first (18.15): gaps 0, 5e-10, 2e-9, 1e-7 and both sides of
+    // kCoincidentLevelGap_MeV (1e-6).  The formal levels are smooth in the gap, so each must equal the line from
+    // gap 0 to gap 1e-5.  S is quadratic in E here (third derivative 0), so the Taylor forms are exact; what is left
+    // is the round-off of the divided difference just above the threshold, 2 eps |S| / gap ~ 4e-10, times gamma^2.
+    auto formalAt = [&](double gap) {
+      std::vector<double> Eg = E;
+      Eg[2] = E[0] + gap;
+      LevelSet f = formal_from_brune(sys, 0, Eg, brune.gamma, B, cf);
+      std::vector<double> all = f.E;
+      all.insert(all.end(), f.gamma.begin(), f.gamma.end());
+      return all;
+    };
+    bool threw = false;
+    std::vector<double> f0, f1;
+    try {
+      f0 = formalAt(0.0);
+      f1 = formalAt(1e-5);
+    } catch (const std::exception &) {
+      threw = true;
+    }
+    check("two levels at one energy are transformed, not refused", !threw);
+    if (!threw) {
+      bool finite = true;
+      for (double v : f0) finite = finite && std::isfinite(v);
+      check("formal levels at gap 0 finite", finite);
+      for (double gap : {5e-10, 2e-9, 1e-7, 0.99e-6, 1.01e-6}) {
+        const std::vector<double> fg = formalAt(gap);
+        std::vector<double> line(fg.size());
+        for (std::size_t i = 0; i < fg.size(); i++) line[i] = f0[i] + (f1[i] - f0[i]) * gap / 1e-5;
+        char what[96];
+        std::snprintf(what, sizeof what, "gap %.2e: formal E, gamma on the line from gap 0 to 1e-5", gap);
+        report(what, MaxRel(fg, line), 1e-9);
+      }
+    }
+  }
+
   std::printf("%s: %ld checks, %d failure(s)\n", failures ? "FAIL" : "PASS", checks, failures);
   return failures ? 1 : 0;
 }

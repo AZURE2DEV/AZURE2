@@ -1,6 +1,7 @@
 // The reading path of a format-3 project (ProjectReader.h): records -> Validate -> pairs of <levels> -> Build.
 #include "azure2/experiment/ProjectReader.h"
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <sstream>
@@ -107,6 +108,135 @@ void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &va
   }
 }
 
+// A section the engine reads nothing of would leave the run as if it were absent: every section of the file must be a
+// record section (Schema::Sections) or a section with a grammar of its own (Schema::GrammarSections), and a section
+// inside another one that the outer section lists.  The old <potential> block has its own refusal (below); the
+// sections that format 3 replaced are refused before this reader (io::NotFormat3Message), and here too for a caller
+// that skipped that refusal.
+void CheckSections(const io::Document &doc, std::vector<Diagnostic> &out) {
+  const std::vector<io::Document::Section> &all = doc.Sections();
+  auto known = [](const std::string &name) {
+    if (!Schema::KindsOfSection(name).empty()) return true;
+    for (const GrammarSection &g : Schema::GrammarSections())
+      if (g.name == name) return true;
+    return false;
+  };
+  auto childrenOf = [](const std::string &name) {
+    for (const GrammarSection &g : Schema::GrammarSections())
+      if (g.name == name) return g.children;
+    return std::vector<std::string>();
+  };
+  for (const io::Document::Section &s : all) {
+    if (s.name == "potential" && s.depth == 0) continue;
+    std::string parent;
+    if (s.depth > 0) {
+      const io::Document::Section &p = all[s.parent];
+      if (p.depth > 0 || !known(p.name)) continue;  // inside a section already refused or itself nested: one refusal
+      parent = p.name;
+      const std::vector<std::string> children = childrenOf(parent);
+      if (std::find(children.begin(), children.end(), s.name) != children.end()) continue;
+    } else if (known(s.name)) {
+      continue;
+    }
+    Diagnostic d;
+    d.code = codes::kUnknownSection;
+    d.line = (int)s.open + 1;
+    d.section = parent.empty() ? s.name : parent;
+    d.hasFound = true;
+    d.found = "<" + s.name + ">";
+    std::string newer;
+    for (const auto &n : Schema::NewerSections())
+      if (n.first == s.name) newer = n.second;
+    if (!parent.empty()) {
+      const std::vector<std::string> children = childrenOf(parent);
+      for (const std::string &c : children) d.allowed.push_back("<" + c + ">");
+      d.message = "<" + s.name + "> inside <" + parent + ">: <" + parent + "> holds " +
+                  (children.empty() ? std::string("no section") : "no section but <" + children[0] + ">") +
+                  ", and nothing reads this one; the run would go on as if it were absent.  Remove it, or move its "
+                  "lines where they belong";
+    } else if (!newer.empty()) {
+      d.message = "<" + s.name + "> is a section of a newer AZURE2 (its dev branch: " + newer + ") that this build "
+                  "does not compute yet; the run would go on as if it were absent and give other numbers than the "
+                  "program that wrote it.  Remove the section only if those numbers may change, or run the project "
+                  "with the AZURE2 that wrote it";
+    } else {
+      for (const auto &r : Schema::Sections()) d.allowed.push_back("<" + r.first + ">");
+      for (const GrammarSection &g : Schema::GrammarSections()) d.allowed.push_back("<" + g.name + ">");
+      d.message = "<" + s.name + "> is not a section of format 3: nothing reads it, and the run would go on as if it "
+                  "were absent.  Remove it, or rename it if it is a section of format 3 written another way";
+    }
+    out.push_back(d);
+  }
+}
+
+// A <config> line the engine reads nothing of: a key that is not one of io::ConfigKeys() (a newer program's key, a
+// misspelt one), or a line after the eleven positional entries that is neither blank, a comment nor key=value.  The run
+// would go on without it.  useAdaptiveGrid has its own refusal (E_CONFIG_KEY_REMOVED, below).
+void CheckConfigLines(const io::Document &doc, std::vector<Diagnostic> &out) {
+  std::size_t open = 0;
+  const std::vector<std::string> lines = io::ConfigLinesOf(doc, open);
+  const io::ConfigSection config = io::ReadConfigSection(lines);
+  if (!config.closed) return;  // an unreadable <config> has its own refusal (the engine's)
+  std::set<int> keyLines;
+  int lastPositional = 0;
+  for (const io::ConfigEntry &e : config.entries) {
+    if (e.positional) {
+      lastPositional = e.line;
+      continue;
+    }
+    keyLines.insert(e.line);
+    if (e.name == "useAdaptiveGrid" || io::ConfigKeyNamed(e.name)) continue;
+    Diagnostic d;
+    d.code = codes::kUnreadLine;
+    d.line = (int)(open + e.line) + 1;
+    d.section = "config";
+    d.field = e.name;
+    d.hasFound = true;
+    d.found = e.name;
+    for (const io::ConfigKey &k : io::ConfigKeys()) d.allowed.push_back(k.name);
+    d.message = e.name + " is not a key of <config>: nothing reads it, and the run would go on without it.  Correct "
+                "its spelling (the keys: AZURE2 --describe, or pyazr.kinds()[\"config\"]), or delete the line";
+    out.push_back(d);
+  }
+  for (std::size_t i = (std::size_t)lastPositional + 1; i + 1 < lines.size(); i++) {
+    const std::string &line = lines[i];
+    const std::size_t a = line.find_first_not_of(" \t\r");
+    if (a == std::string::npos || line[a] == '#' || keyLines.count((int)i)) continue;
+    Diagnostic d;
+    d.code = codes::kUnreadLine;
+    d.line = (int)(open + i) + 1;
+    d.section = "config";
+    d.hasFound = true;
+    d.found = line.substr(a);
+    d.message = "'" + line.substr(a) + "' after the eleven entries of <config> is not key=value: nothing reads it, and "
+                "the run would go on without it.  Write it as key=value, make it a comment with '#', or delete it";
+    out.push_back(d);
+  }
+}
+
+// <mcmc> holds its <parameters> block only (the converter removed the old run settings; the sampler's settings are
+// options of the command): any other line of it would be read by nothing.
+void CheckMcmcLines(const io::Document &doc, std::vector<Diagnostic> &out) {
+  const io::Document::Section *m = doc.Find("mcmc");
+  if (!m || m->close == io::Document::Section::npos) return;
+  const io::Document::Section *p = doc.FindChild(*m, "parameters");
+  for (std::size_t i = m->open + 1; i < m->close; i++) {
+    if (p && i >= p->open && (p->close == io::Document::Section::npos || i <= p->close)) continue;
+    const std::string &line = doc.Line(i);
+    const std::size_t a = line.find_first_not_of(" \t\r");
+    if (a == std::string::npos || line[a] == '#' || line[a] == '<') continue;  // a nested section: CheckSections
+    Diagnostic d;
+    d.code = codes::kUnreadLine;
+    d.line = (int)i + 1;
+    d.section = "mcmc";
+    d.hasFound = true;
+    d.found = line.substr(a);
+    d.message = "'" + line.substr(a) + "' in <mcmc> outside its <parameters> block: nothing reads it (the sampler's "
+                "settings are options of the command: AZURE2 mcmc --walkers=N ...).  Delete the line";
+    out.push_back(d);
+  }
+}
+
 // "use_brune=1 (this file)" or "(the default)": an option's value and where it came from, for a message.
 std::string OptionWords(const char *name, bool on, bool written) {
   return std::string(name) + "=" + (on ? "1" : "0") + (written ? " (this file)" : " (the default)");
@@ -188,6 +318,9 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
   }
   p.validated = Schema::Validate(sections);
   p.diagnostics.insert(p.diagnostics.end(), p.validated.diagnostics.begin(), p.validated.diagnostics.end());
+  CheckSections(doc, p.diagnostics);
+  CheckConfigLines(doc, p.diagnostics);
+  CheckMcmcLines(doc, p.diagnostics);
   CheckThmExperimentNames(doc, p.validated, options.allRecordsActive, p.diagnostics);
   CheckThmOldLists(doc, p.diagnostics);
   // The old <potential> block is not read in format 3 (its default section would give a potential to pairs the file

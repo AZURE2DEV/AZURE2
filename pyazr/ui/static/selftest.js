@@ -187,7 +187,8 @@ export function selftest(ctx, tabs, draw) {
     {
       const plot = document.querySelector(".plot[data-drawn]");
       const physics = document.querySelector(".physics-status");
-      steps.push({ route, ms: Math.round(performance.now() - s), plot: plot ? plot.dataset.drawn : null,
+      steps.push({ route, at: Math.round(s), ms: Math.round(performance.now() - s),
+        plot: plot ? plot.dataset.drawn : null,
         forms: document.querySelectorAll("form.record-form").length,
         physics: physics ? { computed: +physics.dataset.computed, elements: +physics.dataset.elements,
           text: physics.textContent, python: document.querySelector("pre.python")?.textContent || "",

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "GammaDecayFill.h"
+#include "azure2/physics/LevelPairShift.h"
 
 /*!
  * The levels at one parameter vector and what follows from it: the values an evaluation writes and every
@@ -51,14 +52,19 @@ class LevelState {
   // -- shift functions at the level energy ------------------------------------------------------------------------
   /// S_c(E_lambda) of a channel.
   double Shift(int j, int la, int ch) const { return groups_[j - 1].shift[At(j, la, ch)]; }
-  /// dS_c/dE and d^2S_c/dE^2 at E_lambda, MeV^-1 and MeV^-2 (Park's basis; 0 otherwise, the second derivative only
-  /// once it was asked for, SecondDerivativesValidAt).
+  /// dS_c/dE and d^2S_c/dE^2 at E_lambda, MeV^-1 and MeV^-2: in Park's basis and for a level coincident with another
+  /// of its J-group (azure2::physics::levels_coincide; the limits of the divided differences need them), 0 otherwise;
+  /// the second derivative once it was asked for (SecondDerivativesValidAt).
   double ShiftDerivative(int j, int la, int ch) const { return groups_[j - 1].d1[At(j, la, ch)]; }
   double ShiftSecondDerivative(int j, int la, int ch) const { return groups_[j - 1].d2[At(j, la, ch)]; }
   /// Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda; 1 outside Park's basis.
   double ParkNorm(int j, int la) const { return groups_[j - 1].parkNorm[la - 1]; }
-  /// Were the shift functions (and first derivatives) computed at exactly this energy?
+  /// Were the shift functions computed at exactly this energy?
   bool ShiftsValidAt(int j, int la, double energy) const { return groups_[j - 1].shiftEnergy[la - 1] == energy; }
+  /// Were the first derivatives computed at exactly this energy?
+  bool FirstDerivativesValidAt(int j, int la, double energy) const {
+    return groups_[j - 1].d1Energy[la - 1] == energy;
+  }
   /// Were the second derivatives computed at exactly this energy?
   bool SecondDerivativesValidAt(int j, int la, double energy) const {
     return groups_[j - 1].d2Energy[la - 1] == energy;
@@ -87,10 +93,11 @@ class LevelState {
   void SetSqrtNF(int j, int la, double value) { groups_[j - 1].sqrtNF[la - 1] = value; }
   void SetZeroInputWidth(int j, int la, int ch, bool zero) { groups_[j - 1].zero[At(j, la, ch)] = zero ? 1 : 0; }
   void SetShift(int j, int la, int ch, double value);
-  void SetShiftDerivative(int j, int la, int ch, double value) { groups_[j - 1].d1[At(j, la, ch)] = value; }
+  void SetShiftDerivative(int j, int la, int ch, double value);
   void SetShiftSecondDerivative(int j, int la, int ch, double value);
   void SetParkNorm(int j, int la, double value);
   void SetShiftsEnergy(int j, int la, double energy) { groups_[j - 1].shiftEnergy[la - 1] = energy; }
+  void SetFirstDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d1Energy[la - 1] = energy; }
   void SetSecondDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d2Energy[la - 1] = energy; }
   void SetGammaDecayFill(int r, GammaDecayFill fill);
   /// `slots` capture-mask slots, every projector empty (CompoundSystem's set-up).
@@ -100,7 +107,7 @@ class LevelState {
  private:
   struct Group {
     int numChannels = 0;
-    std::vector<double> E, sqrtNF, parkNorm, shiftEnergy, d2Energy;  ///< per level
+    std::vector<double> E, sqrtNF, parkNorm, shiftEnergy, d1Energy, d2Energy;  ///< per level
     std::vector<double> gamma, ecGamma, shift, d1, d2;               ///< per level and channel
     std::vector<unsigned char> zero;                                  ///< per level and channel
     std::vector<std::uint64_t> version;                               ///< per level
@@ -113,5 +120,15 @@ class LevelState {
   std::vector<GammaDecayFill> gammaDecayFills_;          ///< per gamma_decay record, once a fill has stored it
   std::vector<std::vector<double>> captureProjectors_;  ///< per capture-mask slot
 };
+
+/// The shift function of channel ch between levels la and lb of J-group j at this state, as the level matrices hold
+/// it (azure2::physics::LevelPairShift: E, S, S', S'' of both levels).
+inline azure2::physics::LevelPairShift<double> PairShift(const LevelState &state, int j, int la, int lb, int ch) {
+  auto at = [&](int l) {
+    return azure2::physics::ShiftAtLevel<double>{state.E(j, l), state.Shift(j, l, ch), state.ShiftDerivative(j, l, ch),
+                                                 state.ShiftSecondDerivative(j, l, ch)};
+  };
+  return azure2::physics::level_pair_shift(at(la), at(lb));
+}
 
 #endif

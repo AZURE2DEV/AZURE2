@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "AZURECalc.h"
+#include "CompoundSystemSetUp.h"
 #include "AZUREParams.h"
 #include "CovarianceBand.h"
 #include "FitControl.h"
@@ -66,6 +67,14 @@ struct ProgramRun {
   bool haveBandCov = false;
 };
 
+/// When the program's data check (Config::CHECK_DATA) is written: at the data's set-up, or after an adaptive
+/// extrapolation grid has been refined (SetUpRun writes it then, on the refined grid).
+enum class DataCheckAt { kDataSetUp, kAfterGridRefinement };
+/// The program's set-up of the compound system and of its data into `data`, the run's (SetUpRun) and the sampler's
+/// (runMCMC) alike: "Filling Compound Nucleus...", then SetUpCompoundSystem with the program's data set-up (the
+/// compound check; "Filling Data Structures..." and the data or the extrapolations, or the rate's pairs; the data
+/// check), and on a refusal the program's words (PrintSetUpRefusal).
+CompoundSetUp SetUpProgramCompound(const Config &configure, WorkingCopy &data, DataCheckAt dataCheck);
 /// Fill the compound nucleus and the data, initialize, make the parameter vector (and read a parameter file), refine
 /// adaptive extrapolation grids, match the prior covariance, write param.par.  0, or -1 with the reason printed.
 int SetUpRun(ProgramRun &run);

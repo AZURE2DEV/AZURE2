@@ -361,8 +361,14 @@ class TargetEffect {
   bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log, bool cached = false);
   /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
   /// energy mass (MeV): the table interpolated in energy, centred if asked,
-  /// convolved with the burst and channel width, normalised.
-  std::shared_ptr<const azure2::experiment::UdrKernel> BuildUdrKernel(double eLab, double mass) const;
+  /// convolved with the burst and channel width, normalised.  Null, with
+  /// `refusal` saying why, when the burst and channel span more steps of the
+  /// table than kMaxUdrHalfNodes on each side.
+  std::shared_ptr<const azure2::experiment::UdrKernel> BuildUdrKernel(double eLab, double mass, std::string &refusal) const;
+  /// The largest number of table steps the burst-and-channel response may span on each side of zero (2^24: the
+  /// convolution then holds three arrays of 2^25 numbers, 0.8 GB).  More means a table far finer than the resolution
+  /// (or a flight time far beyond any measurement); refused rather than allocated.
+  static constexpr double kMaxUdrHalfNodes = 16777216.0;
 
  private:
   void SelectKernels(const azure2::experiment::TargetEffectSpec &, const Config &);

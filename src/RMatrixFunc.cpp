@@ -163,10 +163,10 @@ void RMatrixFunc::FillMatrices(Site *point) {
               sum -= gammaCh * gammaChp * channelShift;
               if (la == lap)
                 sum += gammaCh * gammaChp * state.Shift(j, la, ch);
-              else
-                sum += gammaCh * gammaChp *
-                    (state.Shift(j, la, ch) * (inEnergy - state.E(j, lap)) - state.Shift(j, lap, ch) * (inEnergy - state.E(j, la))) /
-                    (state.E(j, la) - state.E(j, lap));
+              else {
+                const azure2::physics::LevelPairShift<double> chord = PairShift(state, j, la, lap, ch);
+                sum += gammaCh * gammaChp * chord.chord(inEnergy) / chord.gap;
+              }
             }
             // A level without widths (zero row and column) at E = E_lambda: as in
             // AMatrixFunc::FillLevelMatrix, a unit diagonal keeps the matrix regular;
