@@ -309,6 +309,17 @@ Write an evaluation
   energies and angles to 3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section, or to the
   tolerance the file states where CHECKR's limits thinned a section.
 
+- **MF=32** (pp. 253-259), when asked (``write(..., covariance="hesse")``): the covariance of MF=2's parameters
+  (ER and GAM as MF=2 lists them, eV and eV^1/2) in the general form LCOMP=1, one block. It is HESSE (iminuit) of
+  the fit's objective in a session of the formal basis opened at ``x`` (the fit written as a project and opened with
+  ``use_brune=False``); the norms and other parameters of the fit and the photon channels are marginalised. A
+  resonance whose parameters were all fixed is not listed; a fixed parameter of a listed resonance has a zero row.
+  The formal session holds the project's fixed parameters fixed in the formal basis, which is not the fit's
+  constraint where a level energy or width is fixed (on T1 the two covariances differ by up to 3.9 sigma_i sigma_j;
+  ``docs/upgrade/endf.md`` 13.13). ``Material.covariance()`` reads MF=32 back: names ``"<J^pi>#<k>.ER"`` and
+  ``"<J^pi>#<k>.GAM<c>"``, values, matrix, ``sigma``, ``correlation``. The fit's covariance in its own basis
+  (``EngineFitResult.covariance``) is refused as ``covariance=``: MF=32 holds the formal parameters.
+
 Listed in MF=1 and in the answer (``w.losses``, ``w.not_written``), each only when the project has it: every
 section a reaction of the project needs and the file does not hold, with the reason; the photon channels (their
 widths are listed in the text); the data sets with their records; the Trojan-horse experiments; beta-decay pairs;

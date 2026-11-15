@@ -1167,3 +1167,63 @@ cosines the panel keeps; where the true sigma_NI is near zero, its sign is decid
 changes within 22 eV near 385.93 keV). A repair (sigma_NI from the full cosine grid) would break the normalisation
 of the written P_NI (the trapezoid over the kept cosines must be 1, eq. 6.20), so it is not a few lines; not done.
 The amplitude form has no sigma_NI.
+
+### 13.13 Covariances: MF=32 LCOMP=1 for LRF=7
+
+`pyazr/endf/covariance.py`: `formal_covariance(session, x)` -> `FormalCovariance`, `rows(record, covariance)` (the
+records), `read_covariance(material)` -> `ResonanceCovariance` behind `Material.covariance()`; `write(...,
+covariance=None | "hesse" | FormalCovariance)`; the own format check counts the records of MF=32 (`_read_mf32`).
+
+**What is computed** (the PI's decision 10): the session's fit vector written as a project beside it
+(`Session.save_fit`, a hidden file removed afterwards: its data and covariance files are named relative to the
+project) and opened with `use_brune=False`; its objective at its start must equal the fit's at x (T1 at its MIGRAD
+minimum: 462.2735112936359 and ...363933, 7e-15; the fitted T2: 1.9e-7, the snapshot's round trip through the
+observed widths; refused above 1e-5); iminuit's HESSE of that objective (the recipe of `pyazr/objective.py`,
+errordef 1 from the objective), symmetrised; refused when not positive definite (the unfitted T2 start, and T2 after
+an engine MIGRAD whose gradient stays at 38-72: both refused). The rows of MF=2's parameters are taken out (norms,
+shifts and the photon channels are marginalised), scaled to the file's units (ER: lab factor x 1e6; GAM: the
+amplitude scale) and checked against MF=2's values (door 1; 1e-7). T1: 0.7 s.
+
+**The records** (pp. 253-259): HEAD, isotope, range (LRU=1, LRF=7, NRO=0); `0, 0, 0, LCOMP=1, 0, ISR=0`;
+`AWRI, 0, 0, 0, NSRS=1, NLRS=0`; one block: `0, 0, NJSX, 0, 0, 0`, per spin group with a listed resonance a LIST
+`0, 0, NCH, NRB, 6*NX, NX` of ER and GAM per resonance, each resonance starting a new line as in MF=2; then the
+upper triangle, row by row, LIST `0, 0, 0, 0, N, NPARB`. A resonance whose every parameter is fixed in the fit is not
+listed (p. 255: "not all resonances need to be included"); a fixed parameter of a listed resonance has a zero row
+and column, and MF=1 names it ("zero rows").
+
+What the manual leaves open, and the reading taken:
+- L1 of the LCOMP=1 flags record: p. 258 prints `0.0, 0.0, 0, LCOMP, 0, ISR`, p. 255 says "IFG is relevant only for
+  LRF=7 and its meaning is the same as in File 2"; the LCOMP=2 record (p. 268) puts IFG there. Written as p. 258
+  prints it (0); GAM is the amplitude of MF=2's IFG=1.
+- NX of a spin group's LIST: "the number of lines per resonance" and "6 times the number of lines" (p. 258): taken
+  as MF=2's LIST (p. 74), NX the lines of the whole list, each resonance starting a new line.
+- A spin group carries no J in MF=32: the reader identifies it by NCH and by the listed ER and GAM against MF=2
+  (p. 256: the parameters are listed "for positive identification"); names `"<J^pi>#<k>.ER"`, `"...GAM<c>"`.
+- The covariance LIST header is printed `[MAT,2,151]` on p. 259: taken as MF=32 (a misprint).
+
+**Tests** (`tests/pyazr/endf_covariance_test.py`, T1 fitted by MIGRAD, 40 s): the two objectives equal to 1e-9;
+symmetric, positive semi-definite, zero rows for the fixed parameters; written and read back (`Material.covariance`)
+to 1e-6 of each row's largest element (measured 2.9e-9; the number form keeps 7-10 digits), the values exactly
+MF=2's; the own format check without error; the Brune fit's covariance as `covariance=` and a session of the
+extrapolations refused with three parts. The off-diagonal layout injected wrong (1.001 on every off-diagonal
+element) fails the read-back check. The real codes on the written T1 file: CHECKR, FIZCON and PSYCHE report nothing
+on MF=32 (their findings are those of 13.12). No library file of `work/endf/evals` has MF=32 (the only one, 3He +
+4He, holds MF=1, 2, 3, 6): no library file was read.
+
+**A finding for the PI (decision 10).** The formal-basis session fixes the parameters the project marks fixed *in
+the formal basis*: a fixed observed energy (T1's bound states at 0 and 1.0 MeV) or a fixed width (T1's background
+poles, its fixed photon widths) becomes a fixed formal E_lambda or gamma, which is another constraint than the fit's.
+So the covariance written is the formal parameters' covariance with those formal values held, not the fit's
+uncertainty mapped to the formal basis. Measured on T1: the formal covariance taken back to the Brune basis through
+the Jacobian of door 2 (central differences of `observed_levels_of_block`) differs from the Brune fit's own
+covariance by up to 3.9 sigma_i sigma_j (the formal sigma of the free level energies, on the c.m. scale, 1.6 to 8.7
+times the Brune ones). Not separated by a run of mine from any other cause: a T1 with every level parameter free
+did not fit (MIGRAD invalid). The alternative needs no new C++: the fit's covariance (Brune or Park basis, with the
+fit's own fixed parameters) times the Jacobian of door 1 (`formal_levels_of_block`, central differences), C_formal =
+J C_fit J^T, which the test's lines already form for door 2. Not built (the PI's decision stands until he answers).
+
+**For `pyazr.priors`** (not changed): a part kind `"endf"` (fields: the file, the isotope) would read
+`Material.covariance()`; its parameters are formal ER and GAM on the lab scale, while `to_project` makes a Brune
+project, so the part needs the Jacobian of door 2 at the file's levels (as the test computes it) and the units
+(MeV, MeV^1/2 c.m.), and names that map `"<J^pi>#<k>.ER"` to the new project's parameter names (the order of
+`to_project`'s levels is MF=2's). The lines: `PART_KINDS` (one row), a `_endf_part` beside `_fit_part`.

@@ -123,6 +123,13 @@ add_test(NAME pyazr_endf_write_tabulated
 set_tests_properties(pyazr_endf_write_tabulated PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      LABELS slow TIMEOUT 3000)
 
+# MF=32 (LRF=7, LCOMP=1): the covariance of MF=2's formal parameters from HESSE in a formal-basis session at T1's
+# MIGRAD minimum, written and read back, the refusals (about 40 s).
+add_test(NAME pyazr_endf_covariance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_covariance_test.py)
+set_tests_properties(pyazr_endf_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # The engine's door of the nuclear amplitude expansion (LAW=5 LTP=1): the coefficients of T1, p + p and d + d give
 # the engine's elastic cross section back by the manual's eqs. 6.9-6.14 (about 10 s).
 add_test(NAME pyazr_endf_amplitudes

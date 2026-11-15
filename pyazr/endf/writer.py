@@ -34,6 +34,8 @@ import numpy as np
 
 from ..errors import FormatRefused
 from . import amplitudes as amplitude_section
+from . import covariance as covariance_section
+from .covariance import FormalCovariance
 from . import elastic as elastic_section
 from . import engine_values, grid, names
 from . import sections as section_rows
@@ -368,7 +370,7 @@ def _wrap(text, width=66):
 
 def write(session, path, x=None, *, header=None, energy_range_MeV=None, tolerance=1e-3, max_points=4000,
           number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE, mf6_limits="checkr",
-          project_name=None, elastic_form=ELASTIC_FORM):
+          project_name=None, elastic_form=ELASTIC_FORM, covariance=None):
     """Write ``session``'s model at the fit vector ``x`` (default its start) as an ENDF-6 material at ``path``.
 
     ``header``: the evaluator's fields of MF=1 (p. 42), a dict with any of ``MAT`` (default 9999), ``NLIB``
@@ -381,7 +383,11 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     or ``"manual"`` (Appendix G's: 2,000 and 10,000), :data:`MF6_LIMITS`.  ``project_name``: the name of the
     project that MF=1's text and the tape's first line give (default: the session's file name).  ``elastic_form``:
     charged-particle elastic scattering as ``"amplitudes"`` (LAW=5 LTP=1) or ``"tabulated"`` (LTP=12 with sigma_NI
-    in MF=3/MT=2), :data:`ELASTIC_FORMS`; default :data:`ELASTIC_FORM`.
+    in MF=3/MT=2), :data:`ELASTIC_FORMS`; default :data:`ELASTIC_FORM`.  ``covariance``: None (no MF=32),
+    ``"hesse"`` (HESSE in a formal-basis session at ``x``: :func:`pyazr.endf.covariance.formal_covariance`), or a
+    :class:`pyazr.endf.covariance.FormalCovariance` of this session at ``x``; written as MF=32/MT=151 LCOMP=1.  A
+    covariance of the fit's own basis (``EngineFitResult.covariance``, Brune or Park) or a prior's matrix is refused:
+    MF=32 holds the formal parameters of MF=2 (p. 253).
 
     Returns a :class:`Written`.  Refused (:class:`pyazr.FormatRefused`): an existing ``path`` without ``overwrite``,
     what :func:`pyazr.endf.from_session` refuses, a session without exit reactions, MF=2 that does not reproduce
@@ -396,6 +402,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                             fix="leave it at \"checkr\" (files every checking code reads) or ask for \"manual\" "
                             "(the format's own limits)")
     energy_limit, cosine_limit = MF6_LIMITS[mf6_limits]
+    if not (covariance is None or (isinstance(covariance, str) and covariance == "hesse") or
+            isinstance(covariance, FormalCovariance)):
+        raise FormatRefused(what=f"covariance of type {type(covariance).__name__}",
+                            allowed="None, \"hesse\" or a pyazr.endf.covariance.FormalCovariance",
+                            fix="MF=32 holds the covariance of MF=2's formal parameters: ask for \"hesse\" (HESSE in a "
+                            "formal-basis session at the fit vector), not the fit's covariance in its own basis")
     if elastic_form not in ELASTIC_FORMS:
         raise FormatRefused(what=f"elastic_form {elastic_form!r}", allowed=", ".join(repr(k) for k in ELASTIC_FORMS),
                             fix="leave it at the default or name one of the two forms")
@@ -527,6 +539,24 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         reached[2] = max(el.reached, el.cosines_reached, tolerance)
         counts = [len(m) for m, _ in panels]
         cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
+    covariance_text = []
+    if covariance is not None:
+        cov = covariance_section.formal_covariance(session, x, record) if isinstance(covariance, str) else covariance
+        sizes = {(gi, li): len(g.channels) + 1 for gi, g in enumerate(record.groups) for li in range(len(g.levels))}
+        if any((gi, li) not in sizes or col >= sizes[(gi, li)] for gi, li, col in cov.parameters):
+            raise FormatRefused(what="the covariance names parameters MF=2 does not have",
+                                allowed="a FormalCovariance of this session at this fit vector",
+                                fix="ask for covariance=\"hesse\"")
+        written[(32, 151)] = covariance_section.rows(record, cov, number_form)
+        fixed = [p for p, f in zip(cov.parameters, cov.fixed) if f]
+        covariance_text = [
+            f"MF=32 (LCOMP=1, one block): the covariance of {len(cov.parameters)} parameters of MF=2 (ER, GAM of "
+            f"{sum(len(v) for v in cov.levels.values())} resonances in {len(cov.groups)} spin group(s)): {cov.source} "
+            f"(objective {cov.objective_fit:.10g} of the fit, {cov.objective_formal:.10g} of the formal basis); the "
+            "norms and other parameters of the fit and the photon channels are marginalised (their rows dropped)"
+            + (f"; {len(fixed)} parameter(s) of listed resonances were fixed in the fit and have zero rows: "
+               + ", ".join(f"spin group {gi + 1} resonance {li + 1} {'ER' if col == 0 else f'GAM{col}'}"
+                           for gi, li, col in fixed) if fixed else "") + "."]
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
     particle = {r.mt: e_MeV for r in reactions if r.role == "exit"}
     mf2_check = {}
@@ -582,6 +612,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             + ("; for capture (MT=102) the primary photon to each final state (LAW=2, AWP its energy at zero "
                "incident energy, the yield sigma_f/sigma) and its recoil (LAW=4); the cascade below the final "
                "states is not given (AZURE2 does not hold it)" if (6, 102) in sections else "") + ".",
+            *covariance_text,
             "Separation energy of the incident pair: "
             f"{s_ent:.9f} MeV (the project's); masses as the project's atomic masses."]
     text = std

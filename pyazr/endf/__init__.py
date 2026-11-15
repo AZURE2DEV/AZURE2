@@ -12,7 +12,9 @@ sections, the S-factor conversion) is a row of :mod:`pyazr.physics`, the engine'
     r = m.resonances()                            # MF=2/MT=151 LRF=7 as a record (the file's units and frame)
     project, report = pyazr.endf.to_project(r, "new.azr", material=m)   # a new project, Brune basis, all fixed
     record, losses = pyazr.endf.from_session(s, x)  # a session's particle channels as LRF=7, formal basis
-    written = pyazr.endf.write(s, "new.endf", x)  # MF=1, MF=2 (LRF=7), MF=3 from the engine; LRP=2
+    written = pyazr.endf.write(s, "new.endf", x)  # MF=1, MF=2 (LRF=7), MF=3 and MF=6 from the engine; LRP=2
+    written = pyazr.endf.write(s, "new.endf", x, covariance="hesse")  # and MF=32: HESSE in the formal basis
+    cov = m.covariance()                          # MF=32 (LRF=7, LCOMP=1): names, values, matrix
     findings = pyazr.endf.check_format(path)      # the module's own check of the format, each finding with its page
     result = pyazr.endf.check(path)               # the own check, then CHECKR, FIZCON, PSYCHE when they are found
     candidate = pyazr.endf.standardize(path)      # STANEF on a copy: candidate.diff(), candidate.accept(to=...)
@@ -33,6 +35,7 @@ from .format_check import Finding, FormatReport, check_format
 from .resonances import LRF7, ParticlePair, Channel, Level, SpinGroup, read_resonances
 from .model import Conversion, ConvertedLevel, Losses, to_project, from_session
 from .writer import Written, write
+from .covariance import FormalCovariance, ResonanceCovariance, formal_covariance, read_covariance
 from .checkers import (PROGRAMS, Checker, CheckReport, CheckResult, Candidate, SectionChange, checkers, check,
                        standardize, compare)
 
@@ -42,4 +45,5 @@ __all__ = ["read", "Material", "Header", "Section", "Summary", "CrossSection", "
            "FormatRefused", "Finding", "FormatReport", "check_format", "PROGRAMS", "Checker", "CheckReport",
            "CheckResult", "Candidate", "SectionChange", "checkers", "check", "standardize", "compare", "LRF7",
            "ParticlePair", "Channel", "Level", "SpinGroup", "read_resonances", "Conversion", "ConvertedLevel", "Losses",
-           "to_project", "from_session", "Written", "write"]
+           "to_project", "from_session", "Written", "write", "FormalCovariance", "ResonanceCovariance",
+           "formal_covariance", "read_covariance"]
