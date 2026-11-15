@@ -639,6 +639,10 @@ class WorkingCopy {
   /// sites that compute.
   int FillChannelRows(const std::vector<std::vector<Unit *>> &batches, const CompoundSystem *, const Config &,
                       const ChannelRowFailure &failed);
+  /// The channel rows of `sites`, whose rows are computed, one table per Site::ChannelRowsKey: a site whose key an
+  /// earlier one of the list has takes that site's table (Site::TakeChannelRowsOf).  For sites computed apart, as the
+  /// sharing groups of ReplaceSubPointGrids are.
+  static void ShareChannelRows(const std::vector<Site *> &sites, const CompoundSystem *);
 };
 
 // The slots of a point (Unit.h), here where WorkingCopy is complete.

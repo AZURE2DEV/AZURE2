@@ -406,6 +406,9 @@ class Site {
   /// energy E_x (CompoundEnergy), and the exit pair's charge Z_1 + Z_2 where a beta-decay channel of that nucleus
   /// reads it (its Fermi function; -1 elsewhere).  Two sites with one key compute the same rows bit for bit.
   std::tuple<int, std::uint64_t, int> ChannelRowsKey(const CompoundSystem *);
+  /// Hold the channel rows of `other`, a site with the same ChannelRowsKey whose rows are computed, in place of this
+  /// site's own (equal bit for bit, dropped).
+  void TakeChannelRowsOf(const Site &other) { edep_ = other.edep_; }
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this site.
   void ChannelKeys(WorkingCopy *data, const CompoundSystem *, std::vector<ChannelTable::Key> &);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.

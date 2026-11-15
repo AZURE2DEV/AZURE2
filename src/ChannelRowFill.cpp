@@ -120,3 +120,16 @@ int WorkingCopy::CalcEDependentValues(const CompoundSystem *compound, const Conf
     configure.outStream << e.what() << std::endl;
   });
 }
+
+void WorkingCopy::ShareChannelRows(const std::vector<Site *> &sites, const CompoundSystem *compound) {
+  std::vector<std::pair<std::tuple<int, std::uint64_t, int>, int>> keys;
+  keys.reserve(sites.size());
+  for (int k = 0; k < (int)sites.size(); k++) keys.push_back({sites[k]->ChannelRowsKey(compound), k});
+  std::sort(keys.begin(), keys.end());  // by key, then by position: the first of each key holds its table
+  for (std::size_t k = 1, first = 0; k < keys.size(); k++) {
+    if (keys[k].first != keys[first].first)
+      first = k;
+    else
+      sites[keys[k].second]->TakeChannelRowsOf(*sites[keys[first].second]);
+  }
+}

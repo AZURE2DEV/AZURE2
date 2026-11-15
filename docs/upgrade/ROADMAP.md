@@ -284,6 +284,10 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
 - [ ] Parallel over grid-energy blocks with per-task scratch; explicit thread budget; remove pools, `EData::Clone`,
       point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos; EC unit amplitudes per grid energy;
       rates and extrapolation on the grid (+ analytic narrow-resonance term).
+- [x] The memory of folded projects: the channel rows held once per compound energy (the set-up and a fit's re-placed
+      grids), the THM vertex pieces of the entrance channels only (`data_model.md` §9; a 12C + 12C model of the PI,
+      not in the repository: 11.0 GB -> 1.64 GB, the extrapolation 88-115 s -> 47-53 s at one thread; ctest
+      `fold_memory` bounds the memory of eight folded excitation functions made from `examples/c12c12_tumino2018`).
 - [ ] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
       `NuclearPotentialManager` singleton and the `thread_local` caches of `ECIntegral.cpp` become caller-owned tables
       or go; a consistency check refuses new ones.

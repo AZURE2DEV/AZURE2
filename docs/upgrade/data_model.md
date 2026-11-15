@@ -583,8 +583,10 @@ integrated); levels enter only through the channel count.
 **What is stored once now.**
 - One table of channel rows per E_x (`WorkingCopy::FillChannelRows`): the first site at a key computes it, every other
   site at that key holds the same `SharedTable` (a THM site and a direct site at one E_x too), and so does the node
-  table.  The rows are the same bits (the node check already required the rows of every site at a node to be equal);
-  a site re-energised later (an energy shift, a re-placed grid) gets a table of its own by the copy-on-write rule.
+  table.  The rows are the same bits (the node check already required the rows of every site at a node to be equal).
+  A fit's hand-over that lays sub-point grids out again (`ReplaceSubPointGrids`, each sharing group on its own) shares
+  the new sites' rows the same way once they are placed (`WorkingCopy::ShareChannelRows`); a site re-energised by an
+  energy shift gets a table of its own by the copy-on-write rule.
 - The THM vertex pieces of the entrance pair's channels only, held by the site (`ThmVertexRows`, include/UnitTables.h).
 - The channel table is built from the keys of the sites that compute and gives back the capacity of the keys asked
   for (`ChannelTable::Build`).

@@ -366,6 +366,12 @@ int WorkingCopy::ReplaceSubPointGrids(const CompoundSystem *compound, const Leve
       replaceGroup(work[q], (size_t)q);
   }
   if (changed > 0) {
+    // Each sharing group laid its sites out on its own: sites of two groups at one new node computed a table each.
+    std::vector<Site *> fresh;
+    for (auto &item : placed)
+      for (azure2::SlotBlock &block : item)
+        for (Site &site : block.sites) fresh.push_back(&site);
+    ShareChannelRows(fresh, compound);
     for (const auto &item : placed)
       for (const azure2::SlotBlock &block : item)
         for (const azure2::SlotMember &member : block.members) replacedTasks.push_back(this->UnitAt(member.unit).PlanTask());
