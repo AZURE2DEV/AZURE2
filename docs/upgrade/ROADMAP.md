@@ -246,6 +246,11 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       structure only (`InspectCompoundStructure`). `Fill`, `Initialize` and the requests are private to it; what the
       last part writes refuses to be read before it. Every output file, `run.log` included, unchanged
       (`cnuc_split.md` §12.3, the one set-up as built).
+- [x] The set-ups' four differences unified (the PI): the run and the sampler share `SetUpProgramCompound` (the
+      sampler writes the compound and data check files, and the blank line before "Calculation was aborted."); the
+      session's first set-up and its rebuild share `AZUREAPI::SetUpModel` (the rebuild has the rate's branch and
+      accepts a project of model data alone). What still differs, and why: `cnuc_split.md` §12.3, the four
+      differences unified.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

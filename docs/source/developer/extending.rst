@@ -177,7 +177,9 @@ what it returns:
    if (setUp.refusal != CompoundSetUp::Refusal::kNone) return;  // say why in the front end's words
    // setUp.compound (std::unique_ptr<const CompoundSystem>), setUp.state, setUp.inputs: the front end's
 
-``tests/upgrade/SetUpForTests.h`` has this form for the tests.
+``tests/upgrade/SetUpForTests.h`` has this form for the tests. A front end of the program (one more command
+beside the run and the sampler) calls ``SetUpProgramCompound`` (``include/ProgramRun.h``) instead: the
+program's data set-up, its check files and its words on a refusal (``PrintSetUpRefusal``) come with it.
 
 A set-up fact of the compound system
 ------------------------------------

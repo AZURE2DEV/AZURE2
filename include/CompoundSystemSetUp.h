@@ -2,6 +2,7 @@
 #define COMPOUNDSYSTEMSETUP_H
 
 #include <functional>
+#include <iosfwd>
 #include <map>
 #include <memory>
 #include <optional>
@@ -68,6 +69,11 @@ struct CompoundSetUp {
 /// than the last part's GSLException (a refusal, kFinish) pass through.
 CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &dataSetUp,
                                   const std::map<int, double> &radii = std::map<int, double>());
+
+/// The program's words for a refused set-up, on `out` (nothing when `setUp` was not refused): the run and the sampler
+/// say every refusal so; the session says the last part's only.  The data's refusal (kData) has been said by the
+/// data's set-up.  A refused last part is its message, a blank line and "Calculation was aborted.".
+void PrintSetUpRefusal(const CompoundSetUp &setUp, std::ostream &out);
 
 /// The compound's structure only, never finished: `inspect` reads it with the levels as the structure's set-up makes
 /// them (the input values as the file gives them), for a caller that needs the structure and no evaluation (the

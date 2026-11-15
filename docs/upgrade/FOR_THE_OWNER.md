@@ -185,6 +185,13 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   and `Initialize` are private to it; a refusal comes back as the step that refused, and each caller prints it as it
   always did, so the run's log and every output file are unchanged. Reading B_c, a final state's energy, the pathway
   table, the external-capture blocks or the capture masks before the compound is finished throws.
+- **Four set-up behaviours changed on purpose** (your "unify"): the run and the sampler share one data set-up
+  (`SetUpProgramCompound`), the session's first set-up and its rebuild another (`AZUREAPI::SetUpModel`), so:
+  the sampler writes the compound-nucleus and data check files the project asks for, equal to the calculation's;
+  the sampler prints the blank line before "Calculation was aborted." when the compound's last part refuses;
+  a rate session rebuilt at another radius (`SetRadius`, reachable from C++ only now) takes the rate's branch and
+  gives the rate of a session opened at that radius (the rebuild was refused); and a rebuild accepts a project of
+  model data alone, as opening it does (it was refused). Every other output, `run.log` included, is unchanged.
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the

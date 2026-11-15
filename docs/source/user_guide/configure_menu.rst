@@ -47,7 +47,8 @@ can be set independently to one of three modes:
    Writing check files can drastically increase computation time. Keep them
    set to **None** unless debugging.
 
-The check file directory is specified under **Directories** (see below).
+The check file directory is specified under **Directories** (see below). Every
+command writes the checks it reaches, the MCMC sampler as the calculation does.
 
 Directories
 -----------
