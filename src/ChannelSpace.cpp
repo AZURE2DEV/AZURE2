@@ -125,11 +125,16 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, co
     if (park) return state.ShiftDerivative(j, i + 1, c + 1);
     return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0;
   };
-  // The shift function of channel c between levels l and i (0-based), with S' as above.
+  // The shift function of channel c between levels l and i (0-based), with S' as above; coincident levels take S'
+  // from the level state, as the level matrices do (CalcShiftFunctions fills it for them in every basis).
   auto Chord = [&](int l, int i, int c) {
-    return azure2::physics::level_pair_shift<double>(
-        {a.E[l], a.S[(size_t)l * nch + c], Sp(l, c), state.ShiftSecondDerivative(j, l + 1, c + 1)},
-        {a.E[i], a.S[(size_t)i * nch + c], Sp(i, c), state.ShiftSecondDerivative(j, i + 1, c + 1)});
+    const bool coincident = azure2::physics::levels_coincide(a.E[l], a.E[i]);
+    auto at = [&](int k) {
+      return azure2::physics::ShiftAtLevel<double>{a.E[k], a.S[(size_t)k * nch + c],
+                                                   coincident ? state.ShiftDerivative(j, k + 1, c + 1) : Sp(k, c),
+                                                   state.ShiftSecondDerivative(j, k + 1, c + 1)};
+    };
+    return azure2::physics::level_pair_shift(at(l), at(i));
   };
   for (int l = 0; l < n; l++)
     for (int c = -1; c < nch; c++) {

@@ -220,8 +220,9 @@ struct LevelSet {
  * level: of the two signs of the eigenvector, the one whose component on the level's own Brune state is positive.  So
  * the result does not depend on the eigensolver, the formal amplitudes keep the input signs where levels mix weakly,
  * and an external-capture final state keeps the sign the photon amplitudes of other levels refer to
- * (level_parameters.md section 4).  Throws std::domain_error when M is not positive definite (no formal parameters
- * correspond) and std::invalid_argument for two levels at the same energy.
+ * (level_parameters.md section 4).  Two levels closer than kCoincidentLevelGap_MeV take the limits of the divided
+ * differences (LevelPairShift.h, with dS/dE from cf); equal energies are ranked in the listed order.  Throws
+ * std::domain_error when M is not positive definite (no formal parameters correspond).
  */
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf);

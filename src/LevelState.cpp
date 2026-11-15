@@ -28,6 +28,7 @@ LevelState::LevelState(const std::vector<int> &numLevels, const std::vector<int>
     g.sqrtNF.assign(n, 1.0);
     g.parkNorm.assign(n, 1.0);
     g.shiftEnergy.assign(n, never);
+    g.d1Energy.assign(n, never);
     g.d2Energy.assign(n, never);
     g.gamma.assign(n * nc, 0.0);
     g.ecGamma.assign(n * nc, 0.0);
@@ -57,6 +58,11 @@ void LevelState::SetGamma(int j, int la, int ch, double gamma) {
 void LevelState::SetShift(int j, int la, int ch, double value) {
   Touch(j, la);
   groups_[j - 1].shift[At(j, la, ch)] = value;
+}
+
+void LevelState::SetShiftDerivative(int j, int la, int ch, double value) {
+  Touch(j, la);
+  groups_[j - 1].d1[At(j, la, ch)] = value;
 }
 
 void LevelState::SetShiftSecondDerivative(int j, int la, int ch, double value) {

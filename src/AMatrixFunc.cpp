@@ -1552,7 +1552,6 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
   // only couples to E_r and E_c, with S'(E) = shiftDeriv.
   if (brune && shiftDeriv && anyBruneP) {
     const std::vector<std::vector<double>> &sd = (*shiftDeriv)[jNum - 1];
-    auto ShiftSecondDerivativeAt = [&](int r, int ch) { return state().ShiftSecondDerivative(jNum, lev(r + 1), ch + 1); };
     std::vector<double> &dE = lma_de_;
     dE.assign(n, 0.0);
     for (int ch = 0; ch < nch; ch++) {
@@ -1571,7 +1570,8 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
           if (g == 0.0) continue;
           const double iv = inv[(size_t)r * n + c];
           const azure2::physics::LevelPairShift<double> chord = azure2::physics::level_pair_shift<double>(
-              {E[r], Sr, dSr, ShiftSecondDerivativeAt(r, ch)}, {E[c], S[(size_t)c * nch + ch], sd[c][ch], 0.0});
+              {E[r], Sr, dSr, state().ShiftSecondDerivative(jNum, lev(r + 1), ch + 1)},
+              {E[c], S[(size_t)c * nch + ch], sd[c][ch], state().ShiftSecondDerivative(jNum, lev(c + 1), ch + 1)});
           const double Q = chord.chord(inEnergy) * iv;
           const double dQdEr = chord.chord_by_Ea(inEnergy, Q) * iv;
           const double dQdEc = chord.chord_by_Eb(inEnergy, Q) * iv;
@@ -1631,12 +1631,14 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
         sIm[d] += wi * gc[d];
       }
       if (anyBruneP && c != a) {
+        const bool coincident = azure2::physics::levels_coincide(E[a], E[c]);  // iv 1, D = S_a + S'_m (inE - E_a)
         const double iv = inv[(size_t)a * n + c];
-        const double w1 = wr * (inEnergy - E[c]) * iv, w2 = wr * iv;
+        const double w1 = coincident ? wr : wr * (inEnergy - E[c]) * iv, w2 = wr * iv;
         const double *sgc = &SG[(size_t)c * nch];
         for (int d = 0; d < nch; d++) {
           t1[d] += w1 * gc[d];
-          t2[d] += w2 * sgc[d];
+          t2[d] += coincident ? -w2 * PairShift(state(), jNum, lev(a + 1), lev(c + 1), d + 1).slope() * gc[d]
+                              : w2 * sgc[d];
         }
       }
     }

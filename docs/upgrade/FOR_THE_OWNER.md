@@ -976,6 +976,19 @@ level parameter as a `Project` edit).  What needs the engine, function by functi
   slope the limit leaves out: 10 of 15 fail before (¹²C+¹²C, l = 0, 1 eV – 2.5 keV: +4.6 to +11.2 instead of
   −9.594; ¹⁶O+¹⁶O −525 instead of −15.47), all pass after. No project of `tests/` changes (one, `ec_threshold`,
   reaches the fallback at z = 7.4, where the series was still right to its printed digits).
+- **Two levels of one J^π at one energy** (your 6d3be80a). The divided difference (S_a − S_b)/(E_a − E_b) and its
+  energy derivatives were written out at six places (level route, R-matrix route, adjoint, derivative arrays, the
+  transformed channel-space route, `formal_from_brune`); they are now one header,
+  `physics/include/azure2/physics/LevelPairShift.h`, which gives each quantity as a numerator over one denominator
+  so that every place keeps its digits (all projects and the eight fits identical). The limit is in that one
+  place, with two differences from your commit: the gap is 1e-6 MeV (yours 1e-9) and the limit takes the mean
+  slope (S′_a + S′_b)/2 and mean curvature, which is the chord's slope to second order; just above 1e-9 the divided
+  difference still loses 1e-5 of χ² to round-off, at 1e-6 it loses 4e-10 |S|. The transformed route (not in your
+  commit) gets the limit too: before, its K and N were not finite and the group fell back to the level route
+  (χ² 198,494, gradient NaN); now it agrees with the level route to 4e-15. `formal_from_brune` takes the limit
+  instead of refusing. Tests: `pyazr_coincident_levels` (χ² continuous across 0, 5e-10, 2e-9, 1e-7 MeV to 1e-11
+  in Brune and Park, gradient against central differences at the coincidence) and section 8 of
+  `physics_level_parameters_unit`.
 
 ## For the maintainers to decide
 

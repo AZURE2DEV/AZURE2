@@ -105,6 +105,11 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       5–7.*
       *Lectures (PI, 2026-11-08): an R-matrix lecture series in Notion-ready Markdown, later slides, from the code's
       own definitions (`docs/lectures/PLAN.md`); lecture 1 (external region) has its figures, text to write.*
+      *The divided difference of S between two levels of one J^π is one function (`LevelPairShift.h`, called from
+      the six places that wrote it out), with the limit for coincident levels (gap < 1e-6 MeV) in it (the owner's
+      repair 6d3be80a on `dev`, written the upgrade's way and extended to the transformed route; tests
+      `pyazr_coincident_levels`, `physics_level_parameters_unit` section 8; branch `feature/upgrade-5-dev-repairs`,
+      2026-11-15).*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, merged): the page states the
