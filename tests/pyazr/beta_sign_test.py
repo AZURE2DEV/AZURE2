@@ -23,12 +23,21 @@ Checks, in the Brune, Park and standard parametrizations:
 
 Run from anywhere:  python3 tests/pyazr/beta_sign_test.py
 """
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-PROJECT = os.path.join(ROOT, "tests", "beta_delayed_alpha")
+# The snapshots this test writes must sit beside their .azr (it resolves data/ and output/ relative to itself), so
+# it runs on a private copy of the fixture: written into tests/beta_delayed_alpha itself, they raced other tests
+# under ctest -j (pyazr_roundtrip globs tests/*/*.azr and hit a file this test had just removed, 2026-11-14).
+_TMP = tempfile.mkdtemp(prefix="beta_sign_")
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
+PROJECT = os.path.join(_TMP, "beta_delayed_alpha")
+shutil.copytree(os.path.join(ROOT, "tests", "beta_delayed_alpha"), PROJECT, ignore=shutil.ignore_patterns("_*"))
 AZR = os.path.join(PROJECT, "16N.azr")
 
 failures = []
