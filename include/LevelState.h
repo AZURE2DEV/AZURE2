@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "GammaDecayFill.h"
+#include "azure2/physics/LevelPairShift.h"
 
 /*!
  * The levels at one parameter vector and what follows from it: the values an evaluation writes and every
@@ -113,5 +114,15 @@ class LevelState {
   std::vector<GammaDecayFill> gammaDecayFills_;          ///< per gamma_decay record, once a fill has stored it
   std::vector<std::vector<double>> captureProjectors_;  ///< per capture-mask slot
 };
+
+/// The shift function of channel ch between levels la and lb of J-group j at this state, as the level matrices hold
+/// it (azure2::physics::LevelPairShift: E, S, S', S'' of both levels).
+inline azure2::physics::LevelPairShift<double> PairShift(const LevelState &state, int j, int la, int lb, int ch) {
+  auto at = [&](int l) {
+    return azure2::physics::ShiftAtLevel<double>{state.E(j, l), state.Shift(j, l, ch), state.ShiftDerivative(j, l, ch),
+                                                 state.ShiftSecondDerivative(j, l, ch)};
+  };
+  return azure2::physics::level_pair_shift(at(la), at(lb));
+}
 
 #endif

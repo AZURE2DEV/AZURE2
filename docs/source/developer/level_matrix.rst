@@ -114,6 +114,13 @@ where:
      S_c(\lambda, \lambda') = \frac{S_c^\lambda (E_\text{in} - E_{\lambda'})
      - S_c^{\lambda'} (E_\text{in} - E_\lambda)}{E_\lambda - E_{\lambda'}}
 
+This divided difference, its slope :math:`s^1` and its value :math:`s^0` at
+:math:`E_\text{in} = 0` (below), and their derivatives by the level energies
+come from one function, ``azure2::physics::level_pair_shift``
+(``physics/include/azure2/physics/LevelPairShift.h``), as fractions over the
+one denominator :math:`E_\lambda - E_{\lambda'}`; ``PairShift``
+(``include/LevelState.h``) takes the level values from the level state.
+
 **RMC formalism** (``USE_RMC_FORMALISM``):
 
 For radiative channels (``radType == 'M'`` or ``'E'``), an imaginary term is

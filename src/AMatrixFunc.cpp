@@ -294,17 +294,18 @@ void AMatrixFunc::FillLevelMatrix(int j, Site *point, double inEnergy) {
               // the kernel is S_c(E) - S_c(E_lambda) + i P_c, where loElement
               // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
               sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
-              if (la != lap)
-                parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
-                    (levelEnergies_[la] - levelEnergies_[lap]);
+              if (la != lap) {
+                const azure2::physics::LevelPairShift<double> chord = PairShift(state, j, la, lap, ch);
+                parkOverlap -= gammaCh * gammaChp * chord.slope() / chord.gap;
+              }
             } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
               sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
-              if (la == lap)
+              if (la == lap) {
                 sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
-              else
-                sum -= gammaCh * gammaChp *
-                    (shiftFunctions_[la][ch] * (inEnergy - levelEnergies_[lap]) - shiftFunctions_[lap][ch] * (inEnergy - levelEnergies_[la])) /
-                    (levelEnergies_[la] - levelEnergies_[lap]);
+              } else {
+                const azure2::physics::LevelPairShift<double> chord = PairShift(state, j, la, lap, ch);
+                sum -= gammaCh * gammaChp * chord.chord(inEnergy) / chord.gap;
+              }
             }
           }
           complex element;
@@ -1439,20 +1440,17 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
           accum.AddE(jNum, lev(r), reM * ((state.ParkNorm(jNum, lr) - 1.0) + (Er - inEnergy) * dJ + sumS1));
         } else {
           const int lc = lev(c);
-          double Ec = state.E(jNum, lc);
-          double den = Er - Ec;
           double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
           for (int d = 1; d <= numChannels; d++) {
             if (!isParticle(d)) continue;
             double g = state.Gamma(jNum, lr, d) * state.Gamma(jNum, lc, d);
             if (g == 0.0) continue;
-            double Sr = state.Shift(jNum, lr, d), Sc = state.Shift(jNum, lc, d);
-            double dSr = state.ShiftDerivative(jNum, lr, d), dSc = state.ShiftDerivative(jNum, lc, d);
-            double q = (Sr - Sc) / den;
+            const azure2::physics::LevelPairShift<double> chord = PairShift(state, jNum, lr, lc, d);
+            double q = chord.slope() / chord.gap;
             Jrc -= g * q;
-            dJdEr -= g * (dSr - q) / den;
-            dJdEc -= g * (-dSc + q) / den;
-            sumS1 += g * dSr;
+            dJdEr -= g * chord.slope_by_Ea(q) / chord.gap;
+            dJdEc -= g * chord.slope_by_Eb(q) / chord.gap;
+            sumS1 += g * chord.a.dS;
           }
           accum.AddE(jNum, lev(r), reM * (Jrc + (Er - inEnergy) * dJdEr + sumS1));
           accum.AddE(jNum, lev(c), reM * (Er - inEnergy) * dJdEc);
@@ -1491,7 +1489,8 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
             grad += -gc * std::real(conj(Mbar[a - 1][c - 1]) * Kac + conj(Mbar[c - 1][a - 1]) * Kca);
             if (pd) {
               double Ec = state.E(jNum, lc_);
-              double delta = (Sa - Sc) / (Ea - Ec);
+              const azure2::physics::LevelPairShift<double> chord = PairShift(state, jNum, la_, lc_, d);
+              double delta = chord.slope() / chord.gap;
               grad += -gc * delta * (std::real(Mbar[a - 1][c - 1]) * (Ea - inEnergy) +
                                      std::real(Mbar[c - 1][a - 1]) * (Ec - inEnergy));
             }
@@ -1531,7 +1530,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
     la.inv.assign((size_t)n * n, 0.0);
     for (int r = 0; r < n; r++)
       for (int c = 0; c < n; c++)
-        if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
+        if (r != c) la.inv[(size_t)r * n + c] = azure2::physics::inverse_level_gap(la.E[r], la.E[c]);
     levelArraysPtr = &la;
   } else {
     levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), jNum);
@@ -1553,6 +1552,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
   // only couples to E_r and E_c, with S'(E) = shiftDeriv.
   if (brune && shiftDeriv && anyBruneP) {
     const std::vector<std::vector<double>> &sd = (*shiftDeriv)[jNum - 1];
+    auto ShiftSecondDerivativeAt = [&](int r, int ch) { return state().ShiftSecondDerivative(jNum, lev(r + 1), ch + 1); };
     std::vector<double> &dE = lma_de_;
     dE.assign(n, 0.0);
     for (int ch = 0; ch < nch; ch++) {
@@ -1562,7 +1562,6 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
         if (gr == 0.0) continue;
         const double Sr = S[(size_t)r * nch + ch];
         const double dSr = sd[r][ch];
-        const double ar = inEnergy - E[r];
         const complex *mrow = &Mbar[r][0];
         // D = S_r ;  dD/dE_r = S'_r.
         dE[r] += std::real(mrow[r]) * gr * gr * dSr;
@@ -1570,13 +1569,12 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
           if (c == r) continue;
           const double g = gr * G[(size_t)c * nch + ch];
           if (g == 0.0) continue;
-          const double Sc = S[(size_t)c * nch + ch];
-          const double dSc = sd[c][ch];
-          const double ac = inEnergy - E[c];
           const double iv = inv[(size_t)r * n + c];
-          const double Q = (Sr * ac - Sc * ar) * iv;
-          const double dQdEr = (dSr * ac + Sc - Q) * iv;
-          const double dQdEc = (-Sr - dSc * ar + Q) * iv;
+          const azure2::physics::LevelPairShift<double> chord = azure2::physics::level_pair_shift<double>(
+              {E[r], Sr, dSr, ShiftSecondDerivativeAt(r, ch)}, {E[c], S[(size_t)c * nch + ch], sd[c][ch], 0.0});
+          const double Q = chord.chord(inEnergy) * iv;
+          const double dQdEr = chord.chord_by_Ea(inEnergy, Q) * iv;
+          const double dQdEc = chord.chord_by_Eb(inEnergy, Q) * iv;
           const double w = std::real(mrow[c]) * g;
           dE[r] += w * dQdEr;
           dE[c] += w * dQdEc;

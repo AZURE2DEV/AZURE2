@@ -69,7 +69,7 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg, const LevelS
   a.inv.assign((size_t)n * n, 0.0);
   for (int r = 0; r < n; r++)
     for (int c = 0; c < n; c++)
-      if (r != c) a.inv[(size_t)r * n + c] = 1.0 / (a.E[r] - a.E[c]);
+      if (r != c) a.inv[(size_t)r * n + c] = azure2::physics::inverse_level_gap(a.E[r], a.E[c]);
   return a;
 }
 
@@ -125,6 +125,12 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, co
     if (park) return state.ShiftDerivative(j, i + 1, c + 1);
     return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0;
   };
+  // The shift function of channel c between levels l and i (0-based), with S' as above.
+  auto Chord = [&](int l, int i, int c) {
+    return azure2::physics::level_pair_shift<double>(
+        {a.E[l], a.S[(size_t)l * nch + c], Sp(l, c), state.ShiftSecondDerivative(j, l + 1, c + 1)},
+        {a.E[i], a.S[(size_t)i * nch + c], Sp(i, c), state.ShiftSecondDerivative(j, i + 1, c + 1)});
+  };
   for (int l = 0; l < n; l++)
     for (int c = -1; c < nch; c++) {
       const bool free = (c < 0) ? freeE[l] : freeG[l][c];
@@ -162,10 +168,10 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, co
               if (!particle[d]) continue;
               const double gg = a.G[(size_t)l * nch + d] * a.G[(size_t)j * nch + d];
               if (gg == 0.0) continue;
-              const double Sl = a.S[(size_t)l * nch + d], Sj = a.S[(size_t)j * nch + d], Spl = Sp(l, d);
-              const double s0 = (Sj * a.E[l] - Sl * a.E[j]) * iv, s1 = (Sl - Sj) * iv;
-              e.k[j] += gg * (Sj - Spl * a.E[j] - s0) * iv;
-              e.q[j] -= gg * (Spl - s1) * iv;
+              const azure2::physics::LevelPairShift<double> chord = Chord(l, j, d);
+              const double s0 = chord.intercept() * iv, s1 = chord.slope() * iv;
+              e.k[j] += gg * chord.intercept_by_Ea(s0) * iv;
+              e.q[j] -= gg * chord.slope_by_Ea(s1) * iv;
             }
           }
         } else {
@@ -182,9 +188,9 @@ const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, const JGroup *jg, co
             const double gj = a.G[(size_t)j * nch + c];
             if (gj == 0.0) continue;
             const double iv = a.inv[(size_t)l * n + j];
-            const double Sl = Slc, Sj = a.S[(size_t)j * nch + c];
-            e.k[j] = gj * (Sj * a.E[l] - Sl * a.E[j]) * iv;
-            e.q[j] = -gj * (Sl - Sj) * iv;
+            const azure2::physics::LevelPairShift<double> chord = Chord(l, j, c);
+            e.k[j] = gj * chord.intercept() * iv;
+            e.q[j] = -gj * chord.slope() * iv;
           }
         }
       }
@@ -686,6 +692,15 @@ bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<
     if (cnt > 0 && std::isfinite(sum)) sref[c] = sum / cnt;
     f.lamShift[c] = jg->GetChannel(c + 1)->GetBoundaryCondition() - sref[c];
   }
+  // The shift function of channel c between levels i and k, in long double.
+  auto Chord = [&](int i, int k, int c) {
+    auto at = [&](int l) {
+      return azure2::physics::ShiftAtLevel<ldouble>{E[l], S[(size_t)l * nch + c],
+                                                    state.ShiftDerivative(j, levels[l], c + 1),
+                                                    state.ShiftSecondDerivative(j, levels[l], c + 1)};
+    };
+    return azure2::physics::level_pair_shift(at(i), at(k));
+  };
   bool finite = true;
   for (int i = 0; i < n; i++)
     for (int k = 0; k < n; k++) {
@@ -698,7 +713,10 @@ bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<
           const ldouble g = (ldouble)f.gcut[(size_t)i * nch + c] * f.gcut[(size_t)k * nch + c];
           if (g == 0.0) continue;
           shift += g * S[(size_t)i * nch + c];
-          if (i != k) overlap -= g * ((ldouble)S[(size_t)i * nch + c] - S[(size_t)k * nch + c]) / ((ldouble)E[i] - E[k]);
+          if (i != k) {
+            const azure2::physics::LevelPairShift<ldouble> chord = Chord(i, k, c);
+            overlap -= g * chord.slope() / chord.gap;
+          }
         }
         if (i == k) overlap = parkNorm[i];
         nn = overlap;
@@ -713,13 +731,12 @@ bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<
           if (!particle[c]) continue;
           const ldouble g = (ldouble)f.gcut[(size_t)i * nch + c] * f.gcut[(size_t)k * nch + c];
           if (g == 0.0) continue;
-          const ldouble Si = S[(size_t)i * nch + c], Sk = S[(size_t)k * nch + c];
-          if (i == k)
-            kk += g * Si;
-          else {
-            const ldouble den = (ldouble)E[i] - E[k];
-            kk += g * (Sk * E[i] - Si * E[k]) / den;
-            nn -= g * (Si - Sk) / den;
+          if (i == k) {
+            kk += g * (ldouble)S[(size_t)i * nch + c];
+          } else {
+            const azure2::physics::LevelPairShift<ldouble> chord = Chord(i, k, c);
+            kk += g * chord.intercept() / chord.gap;
+            nn -= g * chord.slope() / chord.gap;
           }
         }
       }
