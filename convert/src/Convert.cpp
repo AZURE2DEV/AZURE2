@@ -2,6 +2,7 @@
 // (OldProject.cpp), the records built (Build.cpp), the document assembled here and validated with the table.
 #include "azure2/convert/Convert.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "Build.h"
@@ -20,6 +21,53 @@ namespace {
 
 /// The old sections that format 3 replaces (section 8.4), in the order a refusal names them.
 const std::vector<std::string> kOldSections = {"segmentsData", "segmentsTest", "targetInt", "abundances", "scatteringLengths"};
+
+/// The sections of an old project the converter reads or removes (formats 1 and 2), besides the format-3 sections a
+/// format-2 file may already hold (Schema::Sections, Schema::GrammarSections), and the sections each may hold.
+const std::vector<std::pair<std::string, std::vector<std::string>>> kConvertedSections = {
+    {"segmentsData", {}}, {"segmentsTest", {}}, {"targetInt", {}}, {"abundances", {}}, {"scatteringLengths", {}},
+    {"potential", {}},    {"lastRun", {}},      {"mcmc", {"parameters"}}};
+
+/// The refusal of a section the converter does not convert ("" when there is none): a section of a newer AZURE2 (its
+/// dev branch), or one no AZURE2 the converter knows wrote.  Copying it through would give a project that runs as if
+/// it were absent.
+std::string UnconvertedSection(const io::Document &doc) {
+  auto childrenOf = [](const std::string &name, bool &known) {
+    known = true;
+    for (const auto &c : kConvertedSections)
+      if (c.first == name) return c.second;
+    for (const experiment::GrammarSection &g : experiment::Schema::GrammarSections())
+      if (g.name == name) return g.children;
+    known = !experiment::Schema::KindsOfSection(name).empty();
+    return std::vector<std::string>();
+  };
+  const std::vector<io::Document::Section> &all = doc.Sections();
+  for (const io::Document::Section &s : all) {
+    bool known = false;
+    if (s.depth > 0) {
+      const io::Document::Section &p = all[s.parent];
+      if (p.depth > 0) continue;
+      const std::vector<std::string> children = childrenOf(p.name, known);
+      if (!known || std::find(children.begin(), children.end(), s.name) != children.end()) continue;
+      return "<" + s.name + "> inside <" + p.name + "> (line " + std::to_string(s.open + 1) + ") is not a section the "
+             "converter reads there; written through, nothing would read it and the converted project would compute "
+             "as if it were absent.  Remove it from a copy of the project, or move its lines where they belong, and "
+             "convert the copy";
+    }
+    childrenOf(s.name, known);
+    if (known) continue;
+    for (const auto &n : experiment::Schema::NewerSections())
+      if (n.first == s.name)
+        return "<" + s.name + "> (line " + std::to_string(s.open + 1) + ") is a section of a newer AZURE2 (its dev "
+               "branch: " + n.second + ") that this build does not compute yet; converted without it, the project "
+               "would give other numbers than the program that wrote it.  Keep running it with that program, or "
+               "convert a copy without the section if those numbers may change";
+    return "<" + s.name + "> (line " + std::to_string(s.open + 1) + ") is not a section of any AZURE2 project the "
+           "converter knows; written through, nothing would read it and the converted project would compute as if it "
+           "were absent.  Remove it from a copy of the project (or correct its name) and convert the copy";
+  }
+  return "";
+}
 
 /// Replaces section `name` (tags included) by `newName` holding `body`; nothing when it is absent.
 bool ReplaceSection(io::Document &doc, const std::string &name, const std::string &newName, const std::vector<std::string> &body) {
@@ -168,6 +216,8 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
     res.refusal = "the project's sections cannot be read: " + p;
     return res;
   }
+  res.refusal = UnconvertedSection(doc);
+  if (!res.refusal.empty()) return res;
   res.format2Changes = ConvertToFormat2(doc);
 
   OldProject old;

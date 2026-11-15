@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-6-format-readiness`) — a real project is never misread
+
+**Done.** (1) What nothing reads is refused. The reader of format 3 (`ReadFormat3Project`): a section that is neither a
+record section nor a row of `Schema::GrammarSections()` (config, levels, thm, parameterSettings, mcmc/parameters), or a
+section inside one that does not hold it: `E_UNKNOWN_SECTION`, dev's `<channelRadii>` and `<isospin>` named
+(`Schema::NewerSections`); a `<config>` key not in `io::ConfigKeys()`, a `<config>` line that is not key=value, a line
+of `<mcmc>` outside `<parameters>`: `E_UNREAD_LINE`. The converter: an old section it does not convert
+(`kConvertedSections`), a data or test line whose type is followed by a spin operator (dev's type 10), a line ending in
+a word no keyword block reads (`SegLine`/`ExtrapLine::unreadTail`), a `<targetInt>` line with an unknown keyword.
+(2) `entrance_pair` / `exit_pair` on a sum or ratio apply to every term whose label names two pairs; the converter
+writes them for an old composite line (no question) and refuses one whose terms take two pairs of the same
+particles. (3) `python -m pyazr convert --allow-questions`. (4) The prior_centre refusal says what to do; the note says
+an AZURE2 without the rows centred the prior on the start value. (5) UDR `flight_path` in metres; a response of more
+than 2^24 table steps refused (it overflowed an int and crashed).
+
+**The PI's 24Mg model** (`work/format1/mg24/`): converts with 0 questions, validates but for the 25 missing data files
+(not on this machine), `AZURE2 extrapolate` 87.0 s and 11.0 GB at 1 thread (old engine at the branch point 86.9 s,
+4.47 GB). The eight curves differ from the old engine's, each difference traced: the four THM lines are THM HOES
+cross sections here and plain cross sections in the old engine, which also reads column 32 (the THM binding energy)
+as the light particle's excitation e1 (E_x shifted by 10.27 MeV); with that removed and the folds off, every curve is
+exactly twice the old one (2 +- 2e-7) once the J=4+ level at 15.1065 MeV (NaN in the old engine's input
+transformation, its group then left out: "singular level matrix") is removed from both — the factor 2 is the upgrade's
+(1 + delta_12) for every cross section out of an identical pair (df8c2c81; dev applies it to elastic scattering only);
+the Coulomb tables contribute 2e-8; the folds: the old uniform 10-point grid (useAdaptiveGrid=0) against the shared
+mesh, up to a factor 4.7 at resonances, 0.4-4 % median; with 80 uniform points the old engine comes to 2-10 % at the
+peaks, 0.006-0.05 % median.
+
+**Verified how** (build `work/b-format1`, 0 warnings): consistency test; the format's, converter's, UDR and pyazr CLI
+tests; `tests/composite_pair_keys/check.sh` (fails 3 of 5 on `b-trial79`); all projects x 3 bases against `tab-t74-1`
+(tag `tab-format1-A`): Brune 887, formal 851, Park 887 files, all identical; the converter over the 186 old projects
+of `tests/` and `examples/` before and after: 181 converted files byte-identical, the same 5 refused, the reports
+differ only in the prior_centre note (6 projects); no format-3 project of the tree gets a new diagnostic;
+`OMP_NUM_THREADS=1 ctest -LE slow -j2`: 296 of 297, the one failure `pyazr_session_records`, whose fixture wrote a run
+setting (`nwalkers 10`) into `<mcmc>`, now refused (line removed from the fixture, passes); `composite_pair_keys`
+registered in ctest after that run (passes). Injected: the reader's section check off (4 failures), composite keys ignored
+(5), the old flight-path conversion (6 failures), the UDR guard off (crash). Docs built.
+
+**Open.** The new engine's 11 GB on the 24Mg folds (2.5 times the old); the old engine's NaN level (not traced);
+a per-term pair key (not written: no project needs it); a repeated top-level section is still read with a warning
+(only the first); the first token of a positional `<config>` entry ends its reading (the rest of the line unread).
+A test line whose type 10 is followed by a spin operator was, before, read as a THM extrapolation (the operator
+dropped) and refused only by chance; now named.
+
 ## 2026-11-15 (director, branch `feature/upgrade-5-pass-under-threads`) — the point pass runs inside a parallel region
 
 **Seen.** Plain MIGRAD and the Levenberg-Marquardt fit were slower at 2 and 4 threads than at 1 (13N, 300 calls:

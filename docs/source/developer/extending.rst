@@ -245,6 +245,25 @@ key. A **diagnostic code** is a constant in
 ``experiment/src/Units.cpp`` (``experiment_parsers``,
 ``experiment_quantities``).
 
+A **section** (a block ``<name> ... </name>`` of the project file): a section
+of records is the record kind's row of ``Schema::Sections()``; a section with a
+grammar of its own (as ``<levels>``, ``<thm>``, ``<parameterSettings>``) is a
+row of ``Schema::GrammarSections()`` (``experiment/src/Schema.cpp``: its name,
+the code that reads it, the sections it may hold) and its reader, which opens it
+with ``Config::SectionStream("<name>")``. The reader of the project
+(``ReadFormat3Project``, ``experiment/src/ProjectReader.cpp``) refuses every
+section in neither table, and a section inside one that does not list it
+(``E_UNKNOWN_SECTION``): a block nothing reads would leave the run as if it were
+absent. A ``<config>`` key that is not a row of ``io::ConfigKeys()``, a
+``<config>`` line that is not ``key=value`` and a line of ``<mcmc>`` outside its
+``<parameters>`` are refused the same way (``E_UNREAD_LINE``). The converter
+refuses an old section it does not convert (``kConvertedSections`` in
+``convert/src/Convert.cpp``); the sections of a newer AZURE2 that this build
+does not compute (``<channelRadii>``, ``<isospin>``) are named with what they
+state in ``Schema::NewerSections()``, whose words both refusals use. A section
+that a newer program adds is therefore refused until its row and its reader
+are written.
+
 ``pyazr.Project`` edits every record through the binding of the engine's
 grammar and needs no Python change; an unedited project is written back byte
 for byte (``tests/pyazr/project_test.py``).

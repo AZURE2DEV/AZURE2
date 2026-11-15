@@ -60,7 +60,7 @@ Write an old project (format 1 or 2) in format 3, as AZURE2 --convert; OLD is ke
 
 .. code-block:: text
 
-   python -m pyazr convert OLD NEW [--overwrite] [--report FILE] [--answers FILE] [--exact-grids] [--strict] [--json]
+   python -m pyazr convert OLD NEW [--overwrite] [--report FILE] [--answers FILE] [--exact-grids] [--strict] [--allow-questions] [--json]
 
 Calls ``pyazr.convert_azr``.
 
@@ -71,6 +71,7 @@ Calls ``pyazr.convert_azr``.
 - ``--answers``: answers to the converter's questions, {"<record>.<field>": value} (a JSON file holding one object).
 - ``--exact-grids``: keep the old energy grids exactly (an option without a value).
 - ``--strict``: refuse instead of noting an implicit meaning (an option without a value).
+- ``--allow-questions``: write '?' for an unanswered question instead of refusing (an option without a value).
 - ``--json``: one JSON document on standard output.
 
 ``schema``

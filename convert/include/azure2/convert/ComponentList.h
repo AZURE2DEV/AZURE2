@@ -36,6 +36,14 @@ struct ComponentEntry {
   double scaling = 1.0;
 };
 
+/// True when the whole token reads as a number.
+inline bool IsNumberToken(const std::string &t) {
+  if (t.empty()) return false;
+  char *end = nullptr;
+  std::strtod(t.c_str(), &end);
+  return end != t.c_str() && *end == '\0';
+}
+
 /// As ReadComponentList below; `entries` receives the components as values (the converter to format 3 reads them).
 inline std::string ReadComponentList(std::istream &in, std::string &componentsList, std::string &warning,
                                      std::vector<ComponentEntry> &entries) {
@@ -43,12 +51,6 @@ inline std::string ReadComponentList(std::istream &in, std::string &componentsLi
     std::ostringstream os;
     os << std::setprecision(17) << v;
     return os.str();
-  };
-  auto isNumber = [](const std::string &t) {
-    if (t.empty()) return false;
-    char *end = nullptr;
-    std::strtod(t.c_str(), &end);
-    return end && *end == '\0';
   };
   int numComponents;
   if (!(in >> numComponents)) return "";  // no component block (as before)
@@ -83,7 +85,7 @@ inline std::string ReadComponentList(std::istream &in, std::string &componentsLi
     const std::streampos start = in.tellg();
     long available = 0;
     std::string token;
-    while (in >> token && isNumber(token)) available++;
+    while (in >> token && IsNumberToken(token)) available++;
     in.clear();
     in.seekg(start);
     const int perComponent = (available >= 3L * numComponents) ? 3 : (available >= 2L * numComponents) ? 2 : 0;

@@ -558,7 +558,16 @@ In the GUI, check **Include User-Defined Resolution Function** in the
 *Add/Edit Experimental Effect* dialog and give the file (``Browse...``),
 the flight path, the burst and channel widths and the centring choice.
 In a format-3 project the UDR is a field of a ``detector`` record, added and
-edited from a script with ``pyazr.Project`` (``add_detector``, ``set``).
+edited from a script with ``pyazr.Project`` (``add_detector``, ``set``)::
+
+   detector tof
+       udr file nTOF_EAR1.dat flight_path 185 m burst 0 ns channel -20 ns centred yes
+
+``flight_path`` takes any length unit and is used in metres.  A burst and
+channel response that spans more than :math:`2^{24}` steps of the tabulated
+delay grid on each side of zero (a table far finer than the resolution, or a
+flight time far beyond the measurement) is refused, with the numbers, rather
+than allocated.
 
 Rectangular energy resolution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

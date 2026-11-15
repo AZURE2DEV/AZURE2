@@ -114,27 +114,19 @@
      "title": "Entrance pair key",
      "type": "integer",
      "grammar": "<integer >= 1>",
-     "applies_when": {
-      "if": "single_reaction",
-      "text": "the reaction is one reaction (no sum, no ratio)"
-     },
      "required": false,
      "rare": true,
      "min": 1,
-     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
+     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two"
     },
     "exit_pair": {
      "title": "Exit pair key",
      "type": "integer",
      "grammar": "<integer >= 1>",
-     "applies_when": {
-      "if": "single_reaction",
-      "text": "the reaction is one reaction (no sum, no ratio)"
-     },
      "required": false,
      "rare": true,
      "min": 1,
-     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
+     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two"
     },
     "quantity": {
      "title": "Quantity",
@@ -659,27 +651,19 @@
      "title": "Entrance pair key",
      "type": "integer",
      "grammar": "<integer >= 1>",
-     "applies_when": {
-      "if": "single_reaction",
-      "text": "the reaction is one reaction (no sum, no ratio)"
-     },
      "required": false,
      "rare": true,
      "min": 1,
-     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
+     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two"
     },
     "exit_pair": {
      "title": "Exit pair key",
      "type": "integer",
      "grammar": "<integer >= 1>",
-     "applies_when": {
-      "if": "single_reaction",
-      "text": "the reaction is one reaction (no sum, no ratio)"
-     },
      "required": false,
      "rare": true,
      "min": 1,
-     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
+     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two"
     },
     "quantity": {
      "title": "Quantity",
@@ -4164,6 +4148,14 @@
   "E_CONFIG_KEY_REMOVED": {
    "severity": "error",
    "meaning": "a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)"
+  },
+  "E_UNKNOWN_SECTION": {
+   "severity": "error",
+   "meaning": "a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it"
+  },
+  "E_UNREAD_LINE": {
+   "severity": "error",
+   "meaning": "a <config> key format 3 does not have, a <config> line after the eleven entries that is not key=value, or a line of <mcmc> outside <parameters>: nothing would read it"
   },
   "E_CONFIG_OPTION_VALUE": {
    "severity": "error",

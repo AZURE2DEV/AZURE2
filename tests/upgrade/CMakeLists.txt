@@ -239,6 +239,11 @@ set_tests_properties(sampler_setup_as_run PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 # src/RunRequest.cpp); about 30 s at one thread.
 add_test(NAME cli_commands COMMAND bash ${CMAKE_SOURCE_DIR}/tests/cli_commands/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(cli_commands PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600)
+# A sum in a project with two pairs of the same particles: the record's pair keys reach every term whose label names
+# both, the old composite line converts to the same file, a line whose terms take both pairs is refused
+# (tests/composite_pair_keys/check.sh, project_format3.md section 3.5); about 2 s.
+add_test(NAME composite_pair_keys COMMAND bash ${CMAKE_SOURCE_DIR}/tests/composite_pair_keys/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(composite_pair_keys PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 # Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
 # and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
 find_package(Python3 COMPONENTS Interpreter)
