@@ -19,6 +19,11 @@ holds it. The page as it grew over two weeks is `history/FOR_THE_OWNER_2026-11.m
   kinds (finite-layer yields, S factors, ratios to Rutherford, literature values as χ² terms) and its own SRIM-2013
   stopping are in the user guide.
 
+**What it costs you**, measured against `dev` at `3e502625`: the C++ outside `external/`, `gui/` and the tests is
+611 files and 129,400 lines (dev: 143 and 55,700), the Python 119 files (dev: 37); about 1,700 commits that nobody
+can review line by line, so the tests are what there is to trust (section 5); `CNuc`, `EData`, `EPoint` and pyazr 2
+do not exist here, so nothing written against them merges (section 7); every older project needs the converter.
+
 ## 2. Try it
 
 Run here with `build/src` on `PATH`, `PYTHONPATH` the checkout, `AZURE2_COULOMB_TABLE` naming a Coulomb table
@@ -157,7 +162,7 @@ point at the kinematic limit, ...) are in the history page, "What users notice".
 Elapsed time and peak resident memory of one command, the same project for both programs, the old one through its
 menu; a machine shared with other work, so read the ratios. "Branch point" is `aab1de0d`: the 65 commits `dev` has
 added since (to `3e502625`) are not in the comparison. Sources: (a) `HANDOFF.md`, 2026-11-15, the director's entry
-of 04:35 and the entries it merged, and the history page's "Speed"; (b) the director's entry of 2026-11-15 09:40;
+of 04:35 and the entries it merged, and the history page's "Speed"; (b) the director's entry of 2026-11-15 09:25;
 (c) the director's measurement of 2026-11-11 (history page, "Phase 5 so far").
 
 | Run | Threads | Branch point | This branch | Source |
@@ -178,7 +183,8 @@ of 04:35 and the entries it merged, and the history page's "Speed"; (b) the dire
 
 13N's χ² is the same (336480 printed by the old program, 336479.961 now), so are the converged fits' (28100.2,
 28100.172); the stopped fits and the samplers did the same amount of work, not the same steps. The 12C + 12C model
-(eight excitation functions folded on one mesh, four of them THM) took 10.99 GB here until a compound energy's
+(eight excitation functions folded on one mesh, four of them THM; the old program folds each point on a grid of its
+own, ten energies) took 10.99 GB here until a compound energy's
 channel rows were held once (`data_model.md` section 9). The gain: one level-matrix solve per compound energy
 instead of one per point or sub-point, one calculation site per mesh node, no copy of the compound per thread.
 
@@ -292,10 +298,10 @@ beyond the branch point, 51 of them not merges.
   refused by the converter and the reader, never read past; the UDR flight path in metres; the scattering length;
   capture with two compound nuclei (right here by the plan's run of dev's models; the test not yet ported).
 - **In work:** per-channel radii; general spin observables (as one quantity with an operator field); the
-  time-of-flight resolution at low energy, with dev's external-capture tests.
+  time-of-flight resolution at low energy, with dev's external-capture tests; the EXFOR user agent.
 - **Not started:** isospin-labelled levels across compound nuclei (the largest: 30–60 h by the plan); dev's
   gradient-based sampler `pyazr.sampling` (waits for the PI; a NUTS script on `Objective` is in the uncertainty
-  skill); the EXFOR user agent; dev's skill notes.
+  skill); dev's skill notes.
 
 A plain merge of `3e502625`, measured: 93 conflicted files (45 with 125 hunks, 48 modified on one side and deleted
 on the other), 21 merged silently, at least eight of them wrongly; most of dev's new engine code is in `CNuc`,

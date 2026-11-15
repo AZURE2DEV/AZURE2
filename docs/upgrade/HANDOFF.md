@@ -15,7 +15,7 @@ sections are in the history page.
 
 **Verified how.** Every command of section 2 run on the start commit's build (`work/b-trial81`; scratch
 `work/owner/try/`), the build commands themselves into `work/b-owner` (2 jobs, 0 warnings); the speed table read from
-the director's entries of 2026-11-15 04:35 and 09:40 and the old page, not measured again; the page's paths and code
+the director's entries of 2026-11-15 04:35 and 09:25 and the old page, not measured again; the page's paths and code
 names checked against the tree by a script (`work/owner/check_links.py`); lines at most 120 columns; the consistency
 test; `docs_build`.
 
