@@ -51,14 +51,6 @@ namespace {
 // Value returned to Minuit2 for a non-finite or absurdly large chi-squared.
 constexpr double kChi2Ceiling = 1.0e100;
 
-bool InParallelRegion() {
-#ifdef _OPENMP
-  return omp_in_parallel();
-#else
-  return false;
-#endif
-}
-
 // Central-difference step for parameter x0.  The usual scale*(|x0| + 1) is
 // absolute for |x0| < 1, which is right for widths and energies that pass
 // through zero but not for a normalization: a yield normalized in absolute
@@ -172,13 +164,13 @@ ShiftColumnCount FillShiftColumns(const CompoundSystem *lc, LevelState &state, c
     }
   };
   // The residuals of the segments `segs` (each into its own vector): folded again on the fixed nodes (ShiftedFold.h), or
-  // one point pass over them (their energy tasks, then their folds), and each point from the records it wrote; serially
-  // (inside a parallel region, or a failed point) segment by segment, point by point.
+  // one point pass over them (their energy tasks, then their folds), and each point from the records it wrote; after
+  // a failed point segment by segment, point by point.
   auto groupResiduals = [&](const std::vector<int> &segs, std::vector<vector_r> &out) {
     std::vector<const Segment *> group;
     for (int s : segs) group.push_back(ld->Data().GetSegment(s));
     const bool pre = azure2::RefoldShiftedSegments(*ld, group, config, results) ||
-                     (!InParallelRegion() && ld->CalculatePointsInParallel(group, lc, state, config, results) == 0);
+                     ld->CalculatePointsInParallel(group, lc, state, config, results) == 0;
     for (size_t m = 0; m < group.size(); m++)
       segmentResiduals(group[m], out[m], pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   };
@@ -427,8 +419,8 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), ls, CompoundSystem::ShiftOrders::kFirstDerivativesOnly);
   const auto te1 = std::chrono::steady_clock::now();
 
-  // Calculate all points in one parallel pass when not already inside a parallel
-  // region (MIGRAD with the analytic gradient, line searches, plain calculations).
+  // Calculate all points in one pass over the compound energies: with a team of its own, or on this thread alone
+  // when the caller is already inside a parallel region (Minuit2's numerical gradient).
   const bool pre = PrecalculatePoints(ls, localData, results, configure());
   const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
   if (environment.Set(azure2::support::Switch::kGradTiming)) {
