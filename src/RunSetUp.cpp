@@ -158,7 +158,7 @@ int SetUpObjective(ProgramRun &run) {
   // in the first evaluation's report.
   AZUREProfile::Report(run.configure.profile, std::cerr, "set-up");
   // The objective: the chi^2 of the data, the priors and the constraints (Objective.h), on the run's data.
-  run.objective.reset(new AZURECalc(run.data, run.results, run.compound.get(), run.state, run.inputs, run.fitterStates, run.configure, run.limits.get()));
+  run.objective.reset(new AZURECalc(run.data, run.results, run.compound.get(), run.state, run.inputs, *run.fitterStates, run.configure, run.limits.get()));
   // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
   if (run.priorCov && run.priorCov->Size() > 0) {
     const std::vector<std::string> replaced = ReplaceDiagonalPriors(run.compound.get(), run.data, *run.priorCov);

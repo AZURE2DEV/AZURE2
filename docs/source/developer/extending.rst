@@ -154,7 +154,9 @@ passes the compound, the state and the inputs to the fills and the readers.
 If evaluations of it run at the same time from ``const`` methods, the idle
 copies are a ``StatePool`` (``include/StatePool.h``) of its caller, lent as
 the ``Results`` are (``FitterStates`` of ``AZURECalc``,
-``StatePool<WalkerLevels>`` of ``AZURECalcMCMC``). No file of the engine
+``SamplerStates`` of ``AZURECalcMCMC``); so is anything else they must
+keep between calls (the fit's last gradient is in ``FitterStates``): a
+``mutable`` member is refused by the consistency test. No file of the engine
 changes: the owner's own file, and its test.
 
 A new front end that sets up a project itself (as the program's run, the

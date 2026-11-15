@@ -49,11 +49,11 @@ void FinalizeLeastSquaresCovariance(const AZURECalc &self, const vector_r &full,
                                     LeastSquaresOutcome &out, std::ostream &log);
 
 /// A least-squares solver: from `params` to its end point (left in `params`), at most `maxIter` iterations.
-using LeastSquaresSolver = LeastSquaresOutcome (*)(const AZURECalc &self, AZUREParams &params, int maxIter,
+using LeastSquaresSolver = LeastSquaresOutcome (*)(AZURECalc &self, AZUREParams &params, int maxIter,
                                                    const char *fitter, const FitControl &control);
-LeastSquaresOutcome RunLevenbergMarquardt(const AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
+LeastSquaresOutcome RunLevenbergMarquardt(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
                                           const FitControl &control);
-LeastSquaresOutcome RunGSLNonlinear(const AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
+LeastSquaresOutcome RunGSLNonlinear(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
                                     const FitControl &control);
 
 /// The row function of a least-squares fitter: the solver, or MIGRAD (numerical) where it has no analytic Jacobian.

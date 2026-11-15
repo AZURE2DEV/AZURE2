@@ -160,7 +160,9 @@ def test_t1_from_nothing_with_its_own_numbers(folder):
     with make_client(path) as client:
         w, ev, after, saved = walk(client, use_table_masses=False)
         print("\nthe walk with T1's numbers typed:\n" + table(w))
-        assert ev["chi2"] == T1_CHI2, ev["chi2"]
+        # to 1e-8: T1_CHI2 is computed with the Coulomb table; without one (the exact functions: the CI's machines)
+        # the same calculation gives 482.2752395734501, 9e-11 away
+        assert abs(ev["chi2"] / T1_CHI2 - 1) < 1e-8, ev["chi2"]
         assert after["objective"] <= ev["objective"]
         s = pyazr.Session(os.path.join(str(folder), saved["path"]) if not os.path.isabs(saved["path"])
                           else saved["path"])

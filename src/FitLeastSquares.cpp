@@ -232,7 +232,7 @@ void FinalizeLeastSquaresCovariance(const AZURECalc &self, const vector_r &full,
   gsl_matrix_free(A);
 }
 
-LeastSquaresOutcome RunLevenbergMarquardt(const AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
+LeastSquaresOutcome RunLevenbergMarquardt(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
                                           const FitControl &control) {
   std::ostream &log = *control.log;
   LeastSquaresOutcome out;

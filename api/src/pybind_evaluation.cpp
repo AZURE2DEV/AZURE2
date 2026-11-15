@@ -256,7 +256,7 @@ py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_
   double lp, constant;
   {
     py::gil_scoped_release release;
-    StatePool<WalkerLevels> walkers;
+    SamplerStates walkers;
     AZURECalcMCMC sampler(api.data(), api.compound(), api.state(), api.inputs(), walkers, api.configure());
     sampler.PrepareRun(x0, true);
     lp = sampler.LogProbability(x, true);

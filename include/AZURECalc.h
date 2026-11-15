@@ -21,13 +21,39 @@ class WorkingCopy;
 class CompoundSystem;
 class ParameterLimitsManager;
 
-/// The level states of a fitter's evaluations, owned by whoever runs the fitter (the program's run, a sweep of an
-/// adaptive grid, a test) and lent to it as its azure2::Results are: the idle states of the evaluations that run at
-/// the same time, and the state the intermediate output files are written from (WriteIterationOutput, under its
-/// lock).  Each is a copy of the caller's state, made when no idle one is left.
+/// What a fitter's evaluations run on and leave behind, owned by whoever runs the fitter (the program's run, a
+/// session's fit, a sweep of an adaptive grid, a test) and lent to it as its azure2::Results are: the evaluations
+/// are const methods (Minuit2's interface) and write nothing that is the fitter's own.  One per fitter: the copies
+/// are copies of that fitter's level state and working copy.
 struct FitterStates {
+  FitterStates();
+  ~FitterStates();  // where WorkingCopy is complete (AZURECalc.cpp)
+
+  /// The idle level states and working copies (each with the buffer it writes) of the evaluations that run at the
+  /// same time.  Each is a copy of the caller's, made when no idle one is left; no value of an evaluation survives
+  /// in a working copy that the next one does not overwrite (tests/upgrade/history_test.cpp, AZURE_TRACE_FCN=fresh).
   StatePool<LevelState> idle;
+  StatePool<WorkingData> idleData;
+
+  /// What the intermediate output files are written from (WriteIterationOutput, under outputMutex): copies made at
+  /// the first write and used again by every later one.  Cloning the whole data set afresh every 100 evaluations
+  /// (several GB for a large target-effect model) and freeing it again fragments the per-thread malloc arenas: the
+  /// freed copy is not reused by the next snapshot, so resident memory climbed by roughly one data-set copy per
+  /// snapshot until long fits were OOM-killed.
   std::unique_ptr<LevelState> output;
+  std::unique_ptr<WorkingCopy> outputData;
+  azure2::Results outputResults;
+  std::mutex outputMutex;
+
+  /// The last gradient: the point it was taken at and its value (AZURE_DUMP_NONFINITE reads them; both under
+  /// `mutex`), and the Gauss-Newton G2 the same residual Jacobian gave, with its point (Minuit2 asks for G2 at the
+  /// same point right after the gradient).
+  struct LastGradient {
+    std::vector<double> at, value;
+    std::mutex mutex;
+    std::vector<double> g2At, g2;
+  };
+  LastGradient gradient;
 };
 
 /// A function class to perform the calculation of the chi-squared value
@@ -50,7 +76,8 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * owned by the caller, which then reads it (the output files); `state` is the caller's level state, which those
    * evaluations write as they write `results`, and `inputs` the caller's level inputs (read only).  A fit's
    * evaluations run on pooled working copies, each with a buffer of its own (WorkingData), and on pooled copies of
-   * `state` held in the caller's `states`.  The compound is shared and constant; the caller outlives this object.
+   * `state`, all held in the caller's `states`.  The compound is shared and constant; the caller outlives this
+   * object.
    */
   AZURECalc(WorkingCopy *data, azure2::Results &results, const CompoundSystem *compound, LevelState &state,
             const LevelInputs &inputs, FitterStates &states, const Config &configure,
@@ -200,7 +227,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * caller before MIGRAD.  Unset (or of the wrong size) falls back to the flags
    * a fresh FillMnParams gives, the .azr's alone.
    */
-  void SetFixedMask(const std::vector<bool> &fixed) const { fixedMask_ = fixed; }
+  void SetFixedMask(const std::vector<bool> &fixed) { fixedMask_ = fixed; }
   std::vector<bool> FixedMask() const;
 
   /*!
@@ -271,34 +298,15 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   azure2::Results &results_;  ///< the caller's buffer for the evaluations on data_
   LevelState &state_;          ///< the caller's level state: those evaluations' state, the seed of the pooled ones
   const LevelInputs &inputs_;  ///< the caller's level inputs
-  FitterStates &states_;       ///< the caller's: the pooled states and the output state
+  FitterStates &states_;       ///< the caller's: the pooled copies, the output copies, the last gradient
   const CompoundSystem *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
-  mutable std::vector<bool> fixedMask_;  ///< see FixedMask()
-
-  // The idle working copies of GetPooledData (no value of an evaluation survives in them that the next one does not
-  // overwrite: tests/upgrade/history_test.cpp, AZURE_TRACE_FCN=fresh), and their lock.
-  mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;
-  mutable std::mutex pool_mutex_;
+  std::vector<bool> fixedMask_;  ///< see FixedMask()
   bool g2Enabled_ = false;
-  // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
-  // Minuit2 asks for G2 at the same point right after the gradient.
-  mutable std::vector<double> g2CacheP_, g2Cache_;
-  mutable std::vector<double> lastGradP_, lastGrad_;  ///< parameters of the last Gradient() call (AZURE_DUMP_NONFINITE)
-  mutable std::mutex lastGradMutex_;
-  /// Gradient and Gauss-Newton G2 from one residual Jacobian; false if unsupported.
+  /// Gradient and Gauss-Newton G2 from one residual Jacobian (the G2 into the caller's FitterStates::gradient);
+  /// false if unsupported.
   bool GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const;
-
-  // Working copies for WriteIterationOutput, cloned on first use and reused for
-  // every later snapshot.  Cloning the whole data set afresh every 100
-  // evaluations (several GB for a large target-effect model) and freeing it
-  // again fragments the per-thread malloc arenas: the freed copy is not reused
-  // by the next snapshot, so resident memory climbed by roughly one data-set
-  // copy per snapshot until long fits were OOM-killed.
-  mutable std::unique_ptr<WorkingCopy> output_data_;
-  mutable azure2::Results output_results_;
-  mutable std::mutex output_mutex_;
 };
 
 #endif

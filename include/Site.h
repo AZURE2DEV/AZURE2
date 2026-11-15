@@ -331,8 +331,9 @@ class Site {
   /// 1-based.
   complex GetECAmplitude(int, int) const;
   /// As GetECAmplitude, at the point's current (shifted) energy: from the energy tables
-  /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.
-  complex GetECAmplitudeWithShift(int, int, const CompoundSystem *, const Config &) const;
+  /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.  A value computed from the tables
+  /// is held in the site until its energy moves, so the caller's site is written, as by RecalcEDependentValues.
+  complex GetECAmplitudeWithShift(int, int, const CompoundSystem *, const Config &);
   /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
   void ConvertExcitationEnergy(const PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
@@ -572,7 +573,7 @@ class Site {
     complex amplitude = complex(0.0, 0.0);
     bool valid = false;
   };
-  mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
+  std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
   // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.
   std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;

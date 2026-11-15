@@ -16,8 +16,9 @@ Tick boxes as work lands; put the commit hash after each tick.
 The phases below are the plan as it was written and ticked while the work ran; this block is the state. The work
 of the upgrade stopped here by the PI's decision: the owner continues in this branch. `origin/dev` was **not**
 merged into `feature/upgrade` (the first paragraph above was the intention; a plain merge conflicts in 93 files,
-`FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: the first two pushes of the branch
-failed on all three platforms; four first causes were repaired, the result is not known (`FOR_THE_OWNER.md`
+`FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: after seven pushes all three platforms
+build, the address-sanitizer job passes, and the tests fail on each platform (Linux 10 known failures, repaired
+in rehearsal 86; Windows many, partly repaired without a Windows machine; macOS not read: `FOR_THE_OWNER.md`
 section 10). The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
 one Linux machine only.
 
@@ -43,8 +44,8 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 5 | Lab data in the frame of the data | merged | not audited |
 | 5 | Stopping module | done | SRIM's two data files under their authors' terms: the owner's decision |
 | 5 | THM observable | wired into the engine | not audited against `THM.md` §1–2 |
-| 6 | Parallel without copies | largely done | see the next row |
-| 6 | No hidden state | check 38 refuses new state | 28 pending rows of `tests/consistency/allowed_state.tsv` (`AZURECalc` 11, `AZURECalcMCMC` 16, `Site` 1) |
+| 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller): the `Site` split of `evaluation.md` §4.1 |
+| 6 | No hidden state | done: 14 permanent rows, no pending row, no `mutable` member (`evaluation.md` §7.7) | — |
 | 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
 | 8 | Object binding | built | transfer functions on potentials, the level matrix, the Weisskopf width |
 | 8 | Rename and remove | most | `wigner_widths` probe, `tabulate` / `angular`, `modelavg` / `priors` into `bands` |
@@ -350,7 +351,7 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
       grids), the THM vertex pieces of the entrance channels only (`data_model.md` §9; a 12C + 12C model of the PI,
       not in the repository: 11.0 GB -> 1.64 GB, the extrapolation 88-115 s -> 47-53 s at one thread; ctest
       `fold_memory` bounds the memory of eight folded excitation functions made from `examples/c12c12_tumino2018`).
-- [ ] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
+- [x] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
       `NuclearPotentialManager` singleton and the `thread_local` caches of `ECIntegral.cpp` become caller-owned tables
       or go; a consistency check refuses new ones.
       Status 2026-11-12 (`evaluation.md` §7): milestone 1 done (no `thread_local`, no warn-once static, no `mutable`
@@ -359,6 +360,11 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
       Status 2026-11-13: milestone 5 done (one table of 39 environment switches, one reader in `support/`, read once;
       the switches that move numbers in `Config::environment`; the counters in `RunDiagnostics`); milestone 3 partly
       (copies when needed); 53 pending rows (milestones 3 and 4), 15 permanent.
+      Status 2026-11-15 (`evaluation.md` §7.7): no pending row, 14 permanent, no `mutable` member in the engine, its
+      libraries or the binding. The fitter's and the sampler's idle copies, the snapshot copies and the last gradient
+      are the caller's (`FitterStates`, `SamplerStates`); the sampler's layout and the fitter's mask are plain members
+      written by non-`const` set-up methods; the site's memo of a shifted capture amplitude is written by a
+      non-`const` method. The copies themselves stay (the first box of this phase: `WorkingCopy::Clone`).
       The fourteen switches that move numbers are options of the program too (`--refine-quadrature=K`, ...;
       `evaluation.md` §9), listed by `--help` and with value and source by `--describe`; `--threads=N` states the
       thread count. Open: the same in a pyazr session (`pyazr3.md` §4 item 9); the ten unused switches (the PI).

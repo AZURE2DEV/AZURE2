@@ -101,7 +101,7 @@ struct Model {
   LevelState state;  // the model's levels (the run's, as AZUREMain holds them)
   LevelInputs inputs;
   FitterStates fitterStates;
-  StatePool<WalkerLevels> walkers;
+  SamplerStates walkers;
   WorkingCopy *data = nullptr;
   AZUREParams params;
   std::unique_ptr<ParameterLimitsManager> limits;

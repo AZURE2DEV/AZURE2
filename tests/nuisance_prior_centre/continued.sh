@@ -33,7 +33,8 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
 run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
-PY="$(command -v python3 || command -v python)"
+# part (5) needs numpy and the module: the interpreter the build found (ctest gives PYAZR_PYTHON), else the first on PATH
+PY="${PYAZR_PYTHON:-$(command -v python3 || command -v python)}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/nuisance_continued.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT

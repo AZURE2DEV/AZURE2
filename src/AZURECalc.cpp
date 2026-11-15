@@ -306,11 +306,11 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, const CompoundSyste
   const auto &mp = names.GetMinuitParams();
   std::ostringstream out;
   out << "==== dump " << d << ": chi2 " << chi << " (threshold " << threshold << ")\n";
-  std::vector<double> base, g2 = g2Cache_, gl;
+  std::vector<double> base, g2 = states_.gradient.g2, gl;
   {
-    std::lock_guard<std::mutex> lk(lastGradMutex_);
-    base = lastGradP_;
-    gl = lastGrad_;
+    std::lock_guard<std::mutex> lk(states_.gradient.mutex);
+    base = states_.gradient.at;
+    gl = states_.gradient.value;
   }
   out << "-- parameters, sorted by |p - p_lastgradient| / max(|p_lastgradient|, 1e-3)"
       << (base.size() == p.size() ? "" : " (no gradient point yet: |p| only)") << "\n";
@@ -490,15 +490,15 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   // disturb the objects the minimizer is stepping.  The copies are made once
   // and reused (every snapshot refills them from p below, exactly as the pooled
   // objects are refilled in operator()), instead of being cloned and deleted at
-  // every snapshot -- see output_data_ in AZURECalc.h.  The lock also keeps two
+  // every snapshot -- see FitterStates in AZURECalc.h.  The lock also keeps two
   // threads from writing the snapshot files at the same time.
-  std::lock_guard<std::mutex> outputLock(output_mutex_);
+  std::lock_guard<std::mutex> outputLock(states_.outputMutex);
   if (!states_.output) states_.output = std::make_unique<LevelState>(state_);
-  if (!output_data_) output_data_.reset(data()->Clone());
+  if (!states_.outputData) states_.outputData.reset(data()->Clone());
   const CompoundSystem *lc = compound();
   LevelState &ls = *states_.output;
-  WorkingCopy *ld = output_data_.get();
-  azure2::Results &results = output_results_;
+  WorkingCopy *ld = states_.outputData.get();
+  azure2::Results &results = states_.outputResults;
 
   try {
     lc->FillCompoundFromParams(p, ls);
@@ -526,8 +526,8 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     // A failure may leave the copies half-filled: drop them so the next
     // snapshot starts from fresh clones.
     states_.output.reset();
-    output_data_.reset();
-    output_results_.slot.clear();
+    states_.outputData.reset();
+    states_.outputResults.slot.clear();
   }
 }
 
@@ -624,8 +624,8 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   AZUREProfile::ScopedReport profileReport(configure().profile, "gradient");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradient);
   {
-    std::lock_guard<std::mutex> lk(lastGradMutex_);
-    lastGradP_ = p;
+    std::lock_guard<std::mutex> lk(states_.gradient.mutex);
+    states_.gradient.at = p;
   }
   std::vector<double> grad(p.size(), 0.0);
   const auto tg0 = std::chrono::steady_clock::now();
@@ -664,8 +664,8 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       if (environment.Text(azure2::support::Switch::kGradCheck) == "exit") ExitRun(configure(), 0);
     }
     {
-      std::lock_guard<std::mutex> lk(lastGradMutex_);
-      lastGrad_ = grad;
+      std::lock_guard<std::mutex> lk(states_.gradient.mutex);
+      states_.gradient.value = grad;
     }
     return grad;
   }
@@ -1101,13 +1101,13 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     g2[idx] += 2.0 / (e * e);
   });
   // Park's wall and the abundance sum-to-one term are residual rows (AppendModelRows): in J^T r above.
-  g2CacheP_ = p;
-  g2Cache_ = g2;
+  states_.gradient.g2At = p;
+  states_.gradient.g2 = g2;
   return true;
 }
 
 std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
-  if (!g2Cache_.empty() && g2CacheP_ == p) return g2Cache_;
+  if (!states_.gradient.g2.empty() && states_.gradient.g2At == p) return states_.gradient.g2;
   // A stopped fit: a unit curvature, so that MIGRAD's step from the zero gradient is finite and zero.
   if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 1.0);
   const auto t0 = std::chrono::steady_clock::now();
@@ -1337,6 +1337,9 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
   return nuisanceChiSquared;
 }
 
+FitterStates::FitterStates() = default;
+FitterStates::~FitterStates() = default;
+
 std::unique_ptr<LevelState> AZURECalc::GetPooledState() const {
   // None idle: one more evaluation runs at the same time as the others (a thread of a parallel gradient), on a copy of
   // the caller's state as it is now.
@@ -1347,16 +1350,12 @@ std::unique_ptr<LevelState> AZURECalc::GetPooledState() const {
  * Get a working copy of the data set and its buffer from the pool, creating new if pool is empty
  */
 WorkingData *AZURECalc::GetPooledData() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-
-  if (!edata_pool_.empty()) {
-    auto obj = std::move(edata_pool_.top());
-    edata_pool_.pop();
-    return obj.release();
-  }
-
-  // None idle: as GetPooledState.
-  return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
+  // None idle: as GetPooledState, on a copy of the caller's working copy.
+  return states_.idleData
+      .TakeOrMake([this] {
+        return std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}});
+      })
+      .release();
 }
 
 void AZURECalc::ReturnPooledState(std::unique_ptr<LevelState> state) const { states_.idle.Give(std::move(state)); }
@@ -1364,12 +1363,7 @@ void AZURECalc::ReturnPooledState(std::unique_ptr<LevelState> state) const { sta
 /*!
  * Return a working copy and its buffer to the pool for reuse
  */
-void AZURECalc::ReturnPooledData(WorkingData *obj) const {
-  if (!obj) return;
-
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  edata_pool_.push(std::unique_ptr<WorkingData>(obj));
-}
+void AZURECalc::ReturnPooledData(WorkingData *obj) const { states_.idleData.Give(std::unique_ptr<WorkingData>(obj)); }
 
 /*!
  * Write parameters to file

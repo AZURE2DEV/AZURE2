@@ -81,12 +81,14 @@ AMatrixFunc	LevelMatrixSolver	owns	evaluation		AMatrixFunc::solvers_ (std::vecto
 AMatrixFunc	CompoundSystem	reads	evaluation	const	AMatrixFunc::compound_ (const CompoundSystem *)
 AMatrixFunc	LevelState	reads	evaluation	const	AMatrixFunc(const CompoundSystem *, const LevelState &, const Config &): the state it is solved at (GenMatrixFunc::state())
 RMatrixFunc	CompoundSystem	reads	evaluation	const	RMatrixFunc(const CompoundSystem *, const LevelState &, const Config &), made per energy task in SolveAtOneEnergy (src/EnergyPass.cpp)
-AZURECalc	WorkingData	owns	inference		AZURECalc::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
+AZURECalc	WorkingData	makes	inference		AZURECalc::GetPooledData: a Clone of the caller's working copy with its buffer when the caller's pool has none idle
 AZURECalc	CompoundSystem	reads	inference	const	AZURECalc::compound_ (const CompoundSystem *): the caller's, which outlives it
-AZURECalc	FitterStates	reads	inference	nonconst	AZURECalc::states_ (FitterStates &): the caller's pooled states, taken by GetPooledState
+AZURECalc	FitterStates	reads	inference	nonconst	AZURECalc::states_ (FitterStates &): the caller's idle level states and working copies, the snapshot's copies and the last gradient, written by the evaluations
 AZURECalc	LevelState	reads	inference	nonconst	AZURECalc::state_ (LevelState &): the caller's, written by an evaluation on the data set itself, copied into the pool
-FitterStates	StatePool	owns	inference		FitterStates::idle (StatePool<LevelState>)
+FitterStates	StatePool	owns	inference		FitterStates::idle (StatePool<LevelState>), idleData (StatePool<WorkingData>)
+FitterStates	WorkingCopy	owns	inference		FitterStates::outputData (std::unique_ptr<WorkingCopy>): the copy the intermediate output files are written from
 StatePool	LevelState	owns	inference		StatePool::idle_ (std::stack<std::unique_ptr<Values>>), Values = LevelState or WalkerLevels
+StatePool	WorkingData	owns	inference		StatePool::idle_ with Values = WorkingData (FitterStates::idleData, SamplerStates::data)
 WorkingData	WorkingCopy	owns	inference		WorkingData::data (std::unique_ptr<WorkingCopy>)
 WorkingData	azure2::Results	owns	inference		WorkingData::results
 AZURECalc	ObjectiveContext	makes	inference		AZURECalc::operator(): ObjectiveContext context{...}
@@ -102,10 +104,11 @@ AZUREParams	ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<P
 ParameterRecord	ParamKindRow	reads	inference	const	ParameterRecord::Row() (const ParamKindRow &, a row of ParamKindTable())
 AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, ...) in AZURECalc::GradientBy
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
-AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
+AZURECalcMCMC	WorkingData	makes	inference		AZURECalcMCMC::GetPooledData: a Clone of the caller's working copy with its buffer when the caller's pool has none idle
 AZURECalcMCMC	CompoundSystem	reads	inference	const	AZURECalcMCMC::compound_ (const CompoundSystem *): the caller's, which outlives it
 AZURECalcMCMC	WalkerLevels	owns	inference		AZURECalcMCMC::levels_ (WalkerLevels): the sampler's own, the seed of the walkers' copies
-AZURECalcMCMC	StatePool	reads	inference	nonconst	AZURECalcMCMC::pool_ (StatePool<WalkerLevels> &): the caller's, taken by GetPooledLevels
+AZURECalcMCMC	SamplerStates	reads	inference	nonconst	AZURECalcMCMC::states_ (SamplerStates &): the caller's, taken by GetPooledLevels and GetPooledData
+SamplerStates	StatePool	owns	inference		SamplerStates::levels (StatePool<WalkerLevels>), data (StatePool<WorkingData>)
 WalkerLevels	LevelState	owns	inference		WalkerLevels::state (LevelState)
 AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
 PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
