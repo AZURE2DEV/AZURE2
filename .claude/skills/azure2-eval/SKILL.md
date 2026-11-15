@@ -421,8 +421,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   model/data 1.00 at Ep 1.0-1.6 MeV with nothing fitted (narrow: 1.43). Needs
   one open channel of the final level, a cross section (not a_k), no RMC, no
   --use-gradient. External capture into the pair: builds up to 09e5c1a8 need
-  it on (internal-only is refused there); branch `feature/linewindow-internal`
-  (2026-11-15, not on dev yet) also serves internal capture alone: the final
+  it on (internal-only is refused there); later builds (dev since 2026-11-15)
+  also serve internal capture alone: the final
   level is then the level of the pair's J^pi within 1 keV of the pair's E_x
   (must exist, with its particle width; N_f from its particle channels), and
   with --no-brune only if it is the FIRST level of its J^pi group.
