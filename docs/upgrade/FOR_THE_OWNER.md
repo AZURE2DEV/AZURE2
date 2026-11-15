@@ -203,7 +203,8 @@ one calculation, in the program and in pyazr alike:
    `LevelState` (the levels at a parameter vector) and `LevelInputs` (the input values).
 3. **Working copy on the shared mesh.** The data as set up are one immutable `DataSet`; what an evaluation changes
    (norms, shifts, apparatus values) is a `WorkingCopy`. Each mesh node is one calculation site (`Site`).
-4. **Model pass.** One level-matrix solve per compound energy (`src/EnergyPass.cpp`) into the caller's `Results`,
+4. **Model pass.** One level-matrix solve per compound energy (`src/EnergyPass.cpp`; the arithmetic is in
+   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`) into the caller's `Results`,
    then each folded point over its sites (`src/PointFold.cpp`); each data set's value is an expression tree (sum,
    ratio, scale, yield) with one forward and one adjoint implementation (`src/ModelPass.cpp`).
 5. **Objective.** One ordered list of terms (`src/Objective.cpp`): data χ², nuisance priors, Park's wall, model
@@ -227,7 +228,7 @@ Each kind of extension is a row of one table and a test (`docs/source/developer/
 | Kind | The named places | The test that fails |
 |---|---|---|
 | A data quantity | `experiment/src/Quantities.cpp` row; its tree in `Schema::Build` | `experiment_quantities` |
-| An observable at a mesh energy | `SiteObservable` row; `CalculateBareCrossSection`; `PointTBar` | gradient check |
+| An observable at a mesh energy | `Observables.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
 | An apparatus kernel | one `experiment/src/Kernel<Name>.cpp`; a line in `Kernels()` | `experiment_kernels` |
 | A parameter kind | `ParamKindTable()` row; a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records` |
 | A level parameter | a `LevelParameterLayout` slot; `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
@@ -549,10 +550,15 @@ re-read against its design at the hand-over.
    what an evaluation writes (`evaluation.md` section 4.1, about 40 accessors). The cost today is memory (one
    copy per thread that evaluates), not correctness. The locks are as they were: this step changed who owns the
    state, not how threads share it.
-5. **Large classes.** `src/AMatrixFunc.cpp` (2,766 lines), `api/src/AZUREAPI.cpp` (1,533), `src/AZURECalc.cpp`
-   (1,402), `src/AZURECalcMCMC.cpp` (1,316). The collision matrix and the observables are engine classes on
-   `CompoundSystem`, not functions of `physics/` on the arrays of `System`, which is what `ARCHITECTURE.md` drew.
-   There is no `inference/` library: the objective is `src/Objective.cpp`.
+5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
+   (1,533), `src/AZURECalc.cpp` (1,402), `src/AZURECalcMCMC.cpp` (1,316). The arithmetic of the collision matrix
+   (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
+   sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
+   `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
+   `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
+   adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
+   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`), and the level matrix is not
+   yet a row of the pyazr binding. There is no `inference/` library: the objective is `src/Objective.cpp`.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
 7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is

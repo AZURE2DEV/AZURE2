@@ -74,6 +74,17 @@ What it contains
        (``channel_space::FormalBlock``, ``ChannelSolve``):
        ``solve_channel_space``, ``f_column``, ``apply_a``,
        ``channel_bilinear``, and the small LU routines.
+   * - ``Observables.h``
+     - The observables from the T-matrix elements of the pathways at one
+       energy (header only): the coherent sums by :math:`(J, l, l')`
+       (``PartialWaveSums``) and the angle-integrated cross section, the
+       total one by the optical theorem, the phase shift, the Legendre
+       coefficients :math:`B_L` from the interference products, the
+       Coulomb-nuclear interference of elastic scattering
+       (``CoulombInterference``, ``elastic_interference``), the sums of a
+       capture analysing power, the terms of an unobserved primary, of
+       R-matrix capture and of a beta-delayed entrance.
+       :doc:`level_matrix`, "Cross Section Calculation".
    * - ``Coulomb.h``, ``Whittaker.h``
      - The Coulomb and Whittaker functions (``physics/coulomb/``, from
        pycoulomb, one directory per algorithm).
@@ -122,7 +133,8 @@ reader takes that one; the structure does not change afterwards. ``CompoundSyste
 conversions of ``LevelParameters.h`` on it; ``CompoundSystem::BuildPathways`` builds
 the ``PathwayTable`` from it. ``AMatrixFunc`` gathers a group's arrays at each
 energy and calls ``CollisionMatrix.h``, ``LevelMatrixSolver.h`` and
-``ChannelSolve.h`` (:doc:`level_matrix`). The channel functions reach the engine through
+``ChannelSolve.h`` (:doc:`level_matrix`); ``GenMatrixFunc`` hands the T-matrix
+elements of a point's pathways to ``Observables.h``. The channel functions reach the engine through
 ``ChannelFunc`` and the stage's ``ChannelTable``; the THM distortions
 (``src/ThmDistortion.cpp``, ``src/ThmDwVertex.cpp``) call
 ``physics/src/transfer``.

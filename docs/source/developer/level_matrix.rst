@@ -486,12 +486,25 @@ Cross Section Calculation
 -------------------------
 
 The cross section is computed in ``GenMatrixFunc::CalculateCrossSection()``
-from the T-matrix elements. The calculation depends on the data type:
+from the T-matrix elements. The calculation depends on the data type.
+
+The arithmetic is in ``physics/``
+(``physics/include/azure2/physics/Observables.h``, functions of the T-matrix
+elements and plain numbers, tested alone in
+``physics/tests/observables_test.cpp``): the coherent sums
+(``PartialWaveSums``), ``add_partial_wave_cross_section``, the optical
+theorem (``add_optical_theorem_term``, ``total_cross_section``),
+``phase_shift_degrees``, the Legendre coefficients
+(``add_interference_product``, ``scale_legendre_coefficients``, ``upos_term``),
+the Coulomb-nuclear interference (``CoulombInterference``,
+``elastic_interference``) and the sums of a capture analysing power
+(``add_capture_ay_term``). ``GenMatrixFunc`` walks the pathway table, reads
+the site and writes the site's record.
 
 **Angle-integrated cross section:**
 
 T-matrix elements from pathways with the same :math:`(J, l, l')` values are
-coherently summed (via the ``TempTMatrix`` structure), enabling interference
+coherently summed (``azure2::physics::PartialWaveSums``), enabling interference
 between internal and external capture pathways:
 
 .. math::

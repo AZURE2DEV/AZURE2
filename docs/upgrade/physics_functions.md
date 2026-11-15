@@ -99,18 +99,23 @@ solve_formal, solve_pencil, solve_bordered, compute_f_column, f_column, formal_a
 lu_factor, lu_solve, hessenberg_lu, hessenberg_solve, lu_factor_real, lu_solve_real (from ChannelSpace)
 ```
 
-Stage 3, `azure2/physics/Observables.h`:
+Stage 3, `azure2/physics/Observables.h` (header only; each function adds into the caller's sum):
 
 ```
-struct PartialSum { double J; int l, lp; std::complex<double> T; };     // the coherent sum of one (J, l, l')
-void add_partial(std::vector<PartialSum> &, double J, int l, int lp, std::complex<double> T);
-double integrated_cross_section(const std::vector<PartialSum> &, double geom, double i1i2);   // b
-double total_cross_section_term(...);                                   // optical theorem, per diagonal pathway
-double phase_shift_degrees(std::complex<double> U, bool identical);
-void legendre_from_products(std::vector<double> &c, double geom, double i1i2, double symmetry);
-ElasticInterference elastic_interference(...);                          // direct and exchange coefficients
-double upos_rk(double j2f, double L, double Lp, double Ic, int order);
-capture A_y numerator and denominator per order
+struct PartialWaveSum { double J; int l, lp; std::complex<double> T; };   // the coherent sum of one (J, l, l')
+struct PartialWaveSums { rows; clear(); add(J, l, lp, T); };              // of one channel-spin group
+void add_partial_wave_cross_section(sums, geom, i1i2, std::complex<double> &sum);        // fm^2
+void subtract_partial_wave_cross_section(...);  double rmc_elastic_term(geom, J, i1i2, T);   // R-matrix capture
+void add_beta_delayed_term(T, sum);             double cross_section_barns(sum);
+void add_optical_theorem_term(J, T, double &total);   double total_cross_section(geom, i1i2, total);
+std::complex<double> collision_from_t_matrix(exp_coulomb_phase, T);   double phase_shift_degrees(U, identical);
+void add_interference_product(z, T1, T2, std::complex<double> &b);    // into the Legendre order's sum
+void scale_legendre_coefficients(std::vector<double> &c, geom, i1i2, symmetry);          // B_L in b/sr
+double upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);   double upos_term(z_upos, T1, T2, l, R_l);
+struct CoulombInterference { terms; clear(); add(s, l, stat_spin, T); };  // per (channel spin, l)
+struct ElasticInterference { double coulomb, cross; std::vector<std::complex<double>> direct, exchange; };
+int elastic_interference(terms, geom, identical, spin_dependent, spin, max_order, ElasticInterference &);
+void add_capture_ay_term(ak, bk, T1, T2, double &denominator, double &numerator);
 ```
 
 The engine keeps: the traversal of its pathway table, the readers of `Site`, the record writes, the memo of an
@@ -176,3 +181,38 @@ Sizes (lines): `src/AMatrixFunc.cpp` 2766 -> 2380, `include/AMatrixFunc.h` 415 -
 
 Not done in stage 2: the formal levels' set-up (`ChannelSpace::Update` and its eigen-solvers) is still in the
 engine (section 3, first item).
+
+### Stage 3: the observables (2026-11-16)
+
+In `physics/` now: `Observables.h` (header only, 195 lines; the list of section 2). Each function is the
+expression of `GenMatrixFunc` it replaces, with the operations in the same order, and adds into a sum the caller
+holds, so the order of the additions over pathways and groups is the engine's as before. Test, no project file:
+`physics/tests/observables_test.cpp` (36 checks: a one-level, two-channel block through `collision_matrix` gives
+the Breit-Wigner cross section, and its total by the optical theorem is the elastic plus the reaction one; rows
+by (J, l, l'); the phase shift and its wrap; 4 pi B_0 = sigma for an s wave with `particle_interference` as the
+coefficient; the direct and exchange coefficients of the Coulomb-nuclear interference, the cross term's sign, the
+order limit; the capture A_y sums; the unobserved-primary, R-matrix-capture and beta-delayed terms).
+
+The engine after it (`src/GenMatrixFunc.cpp`, `include/GenMatrixFunc.h` only):
+
+- `CalculateBareCrossSection` keeps the walk over the exit's spin groups and pathways, the reads of the site and
+  of the pair, and the writes of the record; the R-matrix-capture, total, angle-integrated and phase-shift
+  branches call the functions. The `TempTMatrix` structure and its eighteen member functions (`NewTempTMatrix`,
+  `IsTempTMatrixE1` ...) are gone: three `PartialWaveSums` members take their place.
+- `BuildOrderProducts`, `LegendreCoefficientsOf`, `ElasticCoefficientsOf`, `BuildCoulombInterference` and the
+  capture branch of `AnalyzingPowerCoefficientsOf` call the functions; `rt_it_` is a `CoulombInterference`.
+
+Sizes (lines): `src/GenMatrixFunc.cpp` 756 -> 549, `include/GenMatrixFunc.h` 207 -> 152.
+
+Not done in stage 3:
+
+- `GenMatrixFunc::GetRk` (the R_k of a secondary decay) stays: it calls the engine's `AngCoeff`, which takes its
+  3j and 6j symbols from GSL, while `physics/AngularCoupling.h` computes its own; the two agree to round-off, not
+  to the last bit, so the move would change output digits.
+- The analysing power of a particle exit stays in `Polarization::AmplitudeMatrix` (`PolarizationFunc.h`, an engine
+  class over the compound system).
+- The contractions with a reader's angle (`SiteObservables.cpp`: the Legendre sum, the Coulomb amplitude times
+  the coefficients, the A_y ratio) are not touched (section 3).
+- There is no single `observables(U, geometry)` call that returns every observable of a reaction: a caller
+  outside the engine walks its own pathways (`Pathways.h` lists them for a `System`) and calls the functions
+  above, as `observables_test.cpp` does for one block.
