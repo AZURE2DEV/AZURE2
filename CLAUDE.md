@@ -42,6 +42,7 @@ and `docs/source/developer/architecture.rst`. Directory-specific rules are in
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `pyazr/` | Python package | In-process engine plus a pure-Python `.azr` reader/writer (`azrfile.py`, `datasets.py`) |
+| `rmfit/` | Global fitting campaigns on pyazr | Pure Python, not in the pip package; its own README, DESIGN.md, tests and skill (`rmfit/.claude/skills/rmfit-campaign/`) |
 | `gui/` | Qt5 + Qwt setup utility | Its own `.azr` reader/writer (`AZURESetup.cpp`, per-tab models) |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, coul, erya/pugixml | **Do not edit**; it is upstream code |

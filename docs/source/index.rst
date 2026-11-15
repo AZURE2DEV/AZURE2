@@ -41,6 +41,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    user_guide/plot
    user_guide/mcmc
    user_guide/pyazr
+   user_guide/rmfit
 
 .. toctree::
    :maxdepth: 2
