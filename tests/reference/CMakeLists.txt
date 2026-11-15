@@ -235,3 +235,10 @@ if(USE_MCMC)
            WORKING_DIRECTORY ${_sampler_objective_dir})
   set_tests_properties(sampler_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 endif()
+
+# MigradSeed: the bounded curvature of MIGRAD's seed against hand-computed values, and the watch of the first step
+# (a failed first line search is recognised and stops the pass) as a state machine.
+add_executable(migrad_seed_test migrad_seed_test.cpp)
+target_link_libraries(migrad_seed_test PRIVATE AZURE2Core)
+
+add_test(NAME migrad_seed COMMAND migrad_seed_test)

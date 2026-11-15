@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "MigradSeed.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
 #include "ModelPass.h"
@@ -621,6 +622,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const { re
 
 std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const GradientRoute &route) const {
   if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 0.0);  // a stopped fit: see operator()
+  if (seed_) seed_->GradientCalled();
   AZUREProfile::ScopedReport profileReport(configure().profile, "gradient");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradient);
   {
@@ -1101,6 +1103,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     g2[idx] += 2.0 / (e * e);
   });
   // Park's wall and the abundance sum-to-one term are residual rows (AppendModelRows): in J^T r above.
+  if (seed_) seed_->Bound(p, grad, g2);  // a bounded first MIGRAD step
   states_.gradient.g2At = p;
   states_.gradient.g2 = g2;
   return true;
@@ -1110,6 +1113,10 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   if (!states_.gradient.g2.empty() && states_.gradient.g2At == p) return states_.gradient.g2;
   // A stopped fit: a unit curvature, so that MIGRAD's step from the zero gradient is finite and zero.
   if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 1.0);
+  if (seed_) {  // the seed's bound needs the gradient of the same Jacobian
+    std::vector<double> grad;
+    if (GradientFromJacobian(p, grad)) return states_.gradient.g2;
+  }
   const auto t0 = std::chrono::steady_clock::now();
   std::vector<double> g2(p.size(), 0.0);
   vector_r r, jac;
