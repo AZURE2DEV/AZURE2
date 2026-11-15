@@ -2,6 +2,62 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-5-dev-repairs`) — two levels of one J^π at one energy
+
+**Done.** (1) A refactor with every output identical: the divided difference of S between two levels of one J^π,
+its value at E = 0 and at the channel energy, and their derivatives by the level energies are one header,
+`physics/include/azure2/physics/LevelPairShift.h` (`level_pair_shift`, `LevelPairShift<Real>`, `level_gap`,
+`inverse_level_gap`; `PairShift` in `include/LevelState.h` reads both levels from the state). Each quantity is a
+numerator over one denominator, so every caller divides (or multiplies by the inverse) in the order it did:
+`FillLevelMatrix` (Park overlap, Brune term), `RMatrixFunc::FillMatrices`, `LevelMatrixAdjoint` (Park energy and
+width parts, Brune energy part, the THM active-level inverses), `CurrentLevelArrays`/`CurrentLevelDerivatives`, the
+transformed route's K and N (long double), `formal_from_brune`. (2) The limit in that one place: below
+`kCoincidentLevelGap_MeV` = 1e-6 MeV the Taylor forms about the pair with the mean slope and curvature (the owner's
+6d3be80a on `dev` uses 1e-9 and one level's S′, S″; see `FOR_THE_OWNER.md`). `CalcShiftFunctions` computes S′ and S″
+for coincident levels in every basis (`LevelState::FirstDerivativesValidAt`, `SetShiftDerivative` now marks the
+level's version). The Brune width gradient (t1/t2) has its coincident branch. `formal_from_brune` takes the limit
+instead of refusing (equal energies ranked in listed order).
+
+**Numbers** (`identical_pp_res` + a second 2− level, gap through the vector; scratch `work/devrep1/coinc/`). Before: gap
+0 χ² 134,108 (Brune) / 134,101 (Park) for 53,300.75 / 53,297.73, no error (the 2− group is probably left out as
+singular: inferred, not traced); 5e-10 and 2e-9 off by 1e-5 (round-off). With three 2− levels (transformed route) the
+route found K, N not finite and fell back to the level route: χ² 198,494, gradient NaN; at 5e-10 dχ²/dE −1.8e10 for
++5.7e6. After: the gaps 0 – 0.99e-6 agree with the trapezoid of the analytic slopes to 3e-12 – 9e-12; across 1e-6 χ²
+steps by 5e-9 – 7e-9 relative (the accuracy of the numerical S′, inferred); transformed and level routes agree at gap 0
+to 4e-15.
+
+**Verified.** Refactor commit: all projects × 3 bases identical to `tab-t74-1` (tag `tab-devrep1-refactor`), the
+eight fits identical to `b-trial79`, 76 gradient/adjoint/Park/transformation/physics/consistency tests, T2 and 13N
+timing unchanged. Limit commit: see the report and the commit message. Test `pyazr_coincident_levels` fails 18 of
+20 checks on `b-trial79`; an injected error (S″ term doubled) fails 10 checks.
+
+**Open.** A project file still cannot hold two levels at the identical energy (the reader takes them as one level);
+levels within 1e-6 MeV and fits that drive energies together now work.
+
+## 2026-11-15 (agent, branch `feature/upgrade-5-dev-repairs`) — Coulomb functions just above a heavy-ion threshold
+
+**Done.** The owner's repair 56512d6a of `dev`, written without GSL: the zero-energy fallback of coulsm
+(`physics/coulomb/coulsm/src/cwfcomp_accurate.cpp`, `compute_asymptotic_bessel_solution`, reached where the continued
+fractions give up, η ≳ 230) takes K_0 and K_1 from `azure2::physics::bessel_k_scaled` times e^−z instead of their
+power series, which cancel to nothing for z ≳ 15. A listed local change (`physics/coulomb/README.md`). Test
+`physics_coulomb_threshold` (`physics/tests/coulomb_threshold_test.cpp`): dev's 15 cases (¹²C+¹²C, ¹⁶O+¹⁶O, α+¹²C,
+l = 0–4, 1 eV – 2.5 keV) against `zero_energy_shift` within 1e-10 |S(0)| + 1.5 s E, s the chord slope to 50 keV
+(the slope the limit leaves out); 10 of 15 fail on the base build (¹²C+¹²C l = 0: +4.6 to +11.2 for −9.594), all
+pass after (worst 0.665 of the bound).
+
+**Between the regions** (scratch table `work/devrep1/coul/switch_table.txt`): the switch is at η ≈ 222–232
+(¹²C+¹²C 3.60–3.62 keV, α+¹²C 207–210 eV, p+¹²C 16.3–16.8 eV for l = 0–4). S jumps there by the slope the limit
+leaves out: ¹²C+¹²C 2.3e-3 (l = 0), 7.1e-4 (l = 2), 4.7e-5 (l = 4); α+¹²C 1.4e-4, 7e-6, 1e-8; p+¹²C 6.6e-6, 5e-9,
+0. P is not continuous: the fallback gives 1e-260 – 1e-292 where the continued fractions give 0 (the exact P
+underflows; the fallback's e^{πη} scaling is capped). Below 1e-250 P enters no observable.
+
+**Verified.** Build 0 warnings; all projects × 3 bases against `tab-t74-1` with a build that printed the first
+fallback and the first pair of levels of one J^π within 1e-6 MeV (tag `tab-devrep1-scan`): Brune 887, formal 851,
+Park 887 files, all identical but the one `run.log` with the printed line; one project reaches the fallback
+(`ec_threshold/models/ng.azr`, η = 1045, ρ = 0.0065, l = 2, z = 7.4, where the series still gave the printed
+digits), none has two levels of one J^π within 1e-6 MeV. The quick set (T1–T3, 13N, `ec_threshold`,
+`identical_pp_res`) with the clean build: identical. Physics tests, consistency test, docs build.
+
 ## 2026-11-15 (agent, branch `feature/upgrade-8-endf-amplitudes`) — ENDF: elastic scattering as amplitudes, MF=32, the check of an evaluation
 
 **Done** (`endf.md` 13.12-13.15): the engine's door `nuclear_amplitudes` (a point output of an elastic data set,

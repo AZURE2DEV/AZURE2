@@ -254,6 +254,12 @@ with its sign.
 - **Formal basis** (``--no-brune``). The Brune amplitudes are transformed to
   formal ones by the generalized eigenproblem :math:`N a = E M a` of Brune,
   PRC 66, 044611 (2002) (``formal_from_brune``, ``LevelParameters.cpp:357-431``).
+  Two Brune levels of one :math:`J^\pi` closer than :math:`10^{-6}` MeV enter
+  :math:`M` and :math:`N` through the limits of their divided differences
+  (:math:`M_{\mu\lambda} = -\sum_c \bar S'_c \gamma_{\lambda c}\gamma_{\mu c}`,
+  :math:`N_{\mu\lambda} = \sum_c (S_c^\mu - \bar S'_c E_\mu - B_c)
+  \gamma_{\lambda c}\gamma_{\mu c}`, ``LevelPairShift.h``); levels at one
+  energy are ranked in the order listed.
   The eigenproblem leaves the sign of each eigenvector free; the one taken
   gives each formal level the orientation of the observed level it comes
   from (the eigenvector's component on that level is positive), so the

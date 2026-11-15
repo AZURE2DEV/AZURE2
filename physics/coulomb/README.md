@@ -26,9 +26,17 @@ of U, with pycoulomb's interface), `coulomb_range`, the Python module, the Numer
 - Namespace `azure2::physics::coulomb` instead of `pycoulomb`; no `Method::gsl`, no `not_available` status, and
   `Method::coulcc` added; `coulomb_range` left out (the engine asks for one l at a time).
 - The adaptors take one l (`Status <method>(int l, double eta, double rho, CoulombWaves &)`) instead of a range.
-- The third-party sources are unchanged. They are compiled with warnings off (`-w`; they are not ours to edit), COULCC without FMA
-  contraction (`-ffp-contract=off`, as in pycoulomb), and on Windows with `_USE_MATH_DEFINES` (the `M_*` constants under
-  `-std=c++17`, which AZURE2's `external/coul` copy had as `#ifndef` guards in its sources).
+- `coulsm/src/cwfcomp_accurate.cpp`, `compute_asymptotic_bessel_solution` (the zero-energy fallback where the
+  continued fractions give up, η ≳ 230): K_0(z) and K_1(z), z = (8ηρ)^½, come from `azure2::physics::bessel_k_scaled`
+  (e^z K_n(z), `physics/src/ChannelFunctions.cpp`, declared at the top of the file) times e^−z, instead of their
+  power series, which cancel to nothing for z ≳ 15 (terms of size I_n ~ e^z leave K_n ~ e^−z): the shift function of
+  ¹²C+¹²C (z ≈ 20) between 1 eV and 2.5 keV above threshold was +4.6 to +11.2 instead of −9.594, of ¹⁶O+¹⁶O (z ≈ 31)
+  −525 instead of −15.47 (`physics_coulomb_threshold` test). Four lines and a declaration; the same repair upstream
+  in pycoulomb would take its own K_n. I_0 and I_1 keep their series (positive terms, no cancellation).
+- Otherwise the third-party sources are unchanged. They are compiled with warnings off (`-w`; they are not ours to
+  edit), COULCC without FMA contraction (`-ffp-contract=off`, as in pycoulomb), and on Windows with
+  `_USE_MATH_DEFINES` (the `M_*` constants under `-std=c++17`, which AZURE2's `external/coul` copy had as `#ifndef`
+  guards in its sources).
 
 `coulsm/` is AZURE2's former `external/coul` (in it since 17fd9ded, 2025-09-05) with the namespace `coulsm`, comments
 and the guards above as the only differences; its numbers are the same bits (checked when `external/coul` was

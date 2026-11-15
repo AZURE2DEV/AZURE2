@@ -438,6 +438,15 @@ add_test(NAME pyazr_park_gradient
 set_tests_properties(pyazr_park_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
                      TIMEOUT 3600)
 
+# Two levels of one J^pi at one energy (physics/include/azure2/physics/LevelPairShift.h): chi-squared continuous
+# across the gap in the Brune and Park bases, the analytic gradient against central differences at the coincidence
+# and beside it, no jump along a path through it.
+add_test(NAME pyazr_coincident_levels
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/coincident_levels_test.py)
+set_tests_properties(pyazr_coincident_levels PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77
+                     TIMEOUT 1800)
+
 # Park's dS/dE at the level energies (bound, a few MeV, 33 MeV above threshold)
 # against mpmath, with and without the Coulomb table, in one process.
 add_test(NAME pyazr_park_dsde

@@ -43,7 +43,8 @@ void CompoundSystem::FillCompoundFromParams(const vector_r &params, LevelState &
  * This function is called for each iteration to calculate the shift
  * functions at new level energies when the Brune parametrization is used.
  *
- * In the Park formalism the first and second energy derivatives at the level
+ * In the Park formalism, and for a level coincident with another of its
+ * J-group in every basis, the first and second energy derivatives at the level
  * energies are numerical (ChannelFunc::ShiftDerivative, CoulFunc::PEShift_d2E,
  * ShftFunc), four
  * and five more shift functions per channel and level, most of a serial
@@ -71,7 +72,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
     const JGroup *group;
     int j, la;
     double energy;
-    bool recompute, second;
+    bool recompute, first, second;
   };
   std::vector<Moved> levels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
@@ -86,36 +87,45 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
           // moved since the last call.  Park's J below depends on the widths
           // too and is always refreshed.
           const bool recompute = !state.ShiftsValidAt(j, la, levelEnergy);
+          // A level on top of another of its J-group (azure2::physics::levels_coincide) takes the limits of the
+          // divided differences between them (LevelPairShift), in S' and, for the gradient, S'': in every basis.
+          bool coincident = false;
+          for (int other = 1; other <= theJGroup->NumLevels() && !coincident; other++)
+            coincident = other != la && theJGroup->GetLevel(other)->IsInRMatrix() &&
+                         azure2::physics::levels_coincide(levelEnergy, state.E(j, other));
+          const bool first = (park && recompute) || (coincident && !state.FirstDerivativesValidAt(j, la, levelEnergy));
           // d^2S/dE^2 (Park) enters only the gradient: the numerical second
           // derivative costs five shift functions per channel, so a chi-squared
           // alone leaves it out, and a later call that asks for it fills it in.
-          const bool second = park && orders == ShiftOrders::kWithSecondDerivatives && !state.SecondDerivativesValidAt(j, la, levelEnergy);
+          // Coincident levels (rare) take it at once.
+          const bool second = ((park && orders == ShiftOrders::kWithSecondDerivatives) || coincident) &&
+                              !state.SecondDerivativesValidAt(j, la, levelEnergy);
           const int firstOfLevel = (int)derivatives.size();
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             const AChannel *theChannel = theJGroup->GetChannel(ch);
             const PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
-              if (!recompute && !second) continue;
+              if (!recompute && !first && !second) continue;
               int lValue = theChannel->GetL();
-              const bool parkP = park && theChannel->GetRadType() == 'P';
+              const bool derivativeChannel = (park || coincident) && theChannel->GetRadType() == 'P';
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
                 // S as everywhere else (ChannelFunc: continuous through threshold).
                 ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
                 state.SetShift(j, la, ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
               }
-              if (parkP && (recompute || second)) {
+              if (derivativeChannel && (first || second)) {
                 // Channels that differ only in the channel spin share the derivative.
                 int source = -1;
                 for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
                   if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue && derivatives[k].two_j == thePair->SpinOrbitTwoJ(theJGroup->GetJ())) source = k;
-                derivatives.push_back({j, la, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, recompute, second, 0.0, 0.0, source});
+                derivatives.push_back({j, la, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, first, second, 0.0, 0.0, source});
               }
             } else {
               state.SetShift(j, la, ch, state.Shift(j, 1, 1));
             }
           }
-          levels.push_back({theJGroup, j, la, levelEnergy, recompute, second});
+          levels.push_back({theJGroup, j, la, levelEnergy, recompute, first, second});
         }
       }
     }
@@ -202,6 +212,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
     const ALevel *theLevel = m.group->GetLevel(m.la);
     const JGroup *theJGroup = m.group;
     if (m.recompute) state.SetShiftsEnergy(m.j, m.la, m.energy);
+    if (m.first) state.SetFirstDerivativesEnergy(m.j, m.la, m.energy);
     if (m.second) state.SetSecondDerivativesEnergy(m.j, m.la, m.energy);
     if (park) {
       // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.

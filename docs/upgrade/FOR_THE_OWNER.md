@@ -1018,6 +1018,31 @@ level parameter as a `Project` edit).  What needs the engine, function by functi
   implementation.  The validator's `E_FIELD_NOT_APPLICABLE` of a phase shift's J, l or s gives a message but no
   `allowed` and no `fix`.
 
+## Two repairs of `dev`, written the upgrade's way (2026-11-15)
+
+- **Coulomb functions just above a heavy-ion threshold** (your 56512d6a). The same repair, without GSL: where
+  Michel's continued fractions give up (η ≳ 230) the zero-energy fallback in `physics/coulomb/coulsm` takes K_0 and
+  K_1 from the upgrade's own e^z K_n(z) (`azure2::physics::bessel_k_scaled`, the integral representation that the
+  bound-channel S(0) already used, 5e-16 against mpmath) instead of the power series; four lines and a declaration
+  in the third-party copy, listed under "Local changes" in `physics/coulomb/README.md` so that it can go to
+  pycoulomb. Your 15 cases are the physics test `physics_coulomb_threshold`, now against the exact limit within the
+  slope the limit leaves out: 10 of 15 fail before (¹²C+¹²C, l = 0, 1 eV – 2.5 keV: +4.6 to +11.2 instead of
+  −9.594; ¹⁶O+¹⁶O −525 instead of −15.47), all pass after. No project of `tests/` changes (one, `ec_threshold`,
+  reaches the fallback at z = 7.4, where the series was still right to its printed digits).
+- **Two levels of one J^π at one energy** (your 6d3be80a). The divided difference (S_a − S_b)/(E_a − E_b) and its
+  energy derivatives were written out at six places (level route, R-matrix route, adjoint, derivative arrays, the
+  transformed channel-space route, `formal_from_brune`); they are now one header,
+  `physics/include/azure2/physics/LevelPairShift.h`, which gives each quantity as a numerator over one denominator
+  so that every place keeps its digits (all projects and the eight fits identical). The limit is in that one
+  place, with two differences from your commit: the gap is 1e-6 MeV (yours 1e-9) and the limit takes the mean
+  slope (S′_a + S′_b)/2 and mean curvature, which is the chord's slope to second order; just above 1e-9 the divided
+  difference still loses 1e-5 of χ² to round-off, at 1e-6 it loses 4e-10 |S|. The transformed route (not in your
+  commit) gets the limit too: before, its K and N were not finite and the group fell back to the level route
+  (χ² 198,494, gradient NaN); now it agrees with the level route to 4e-15. `formal_from_brune` takes the limit
+  instead of refusing. Tests: `pyazr_coincident_levels` (χ² continuous across 0, 5e-10, 2e-9, 1e-7 MeV to 1e-11
+  in Brune and Park, gradient against central differences at the coincidence) and section 8 of
+  `physics_level_parameters_unit`.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

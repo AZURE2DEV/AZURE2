@@ -114,6 +114,36 @@ where:
      S_c(\lambda, \lambda') = \frac{S_c^\lambda (E_\text{in} - E_{\lambda'})
      - S_c^{\lambda'} (E_\text{in} - E_\lambda)}{E_\lambda - E_{\lambda'}}
 
+This divided difference, its slope :math:`s^1` and its value :math:`s^0` at
+:math:`E_\text{in} = 0` (below), and their derivatives by the level energies
+come from one function, ``azure2::physics::level_pair_shift``
+(``physics/include/azure2/physics/LevelPairShift.h``), as fractions over the
+one denominator :math:`E_\lambda - E_{\lambda'}`; ``PairShift``
+(``include/LevelState.h``) takes the level values from the level state.
+
+Two levels of one :math:`J^\pi` closer than ``kCoincidentLevelGap_MeV``
+(:math:`10^{-6}` MeV) make the divided difference 0/0 (at the gap) or lose
+:math:`2\epsilon |S| / \Delta E` to round-off (near it). There the function
+takes the Taylor forms about the pair, with the mean slope
+:math:`\bar S' = (S'_\lambda + S'_{\lambda'})/2` and mean curvature
+:math:`\bar S'' = (S''_\lambda + S''_{\lambda'})/2`:
+
+.. math::
+
+   S_c(\lambda, \lambda') = S_c^\lambda + \bar S'_c\, (E_\text{in} - E_\lambda),
+   \qquad s^1 = \bar S'_c, \qquad s^0 = S_c^\lambda - \bar S'_c E_\lambda,
+
+exact to :math:`\Delta E^2 S'''/12`, and in the analytic gradients
+:math:`\partial s^1/\partial E_\lambda = \partial s^1/\partial E_{\lambda'} =
+\bar S''/2`, :math:`\partial S_c(\lambda,\lambda')/\partial E_\lambda =
+(S'_\lambda - S'_{\lambda'})/2 + \bar S''(E_\text{in} - E_\lambda)/2`,
+:math:`\partial S_c(\lambda,\lambda')/\partial E_{\lambda'} = \bar S''
+(E_\text{in} - E_\lambda)/2`. :math:`S'` and :math:`S''` at the level
+energies are computed for such levels in every basis
+(``CompoundSystem::CalcShiftFunctions``). Across the gap :math:`\chi^2` steps
+by the accuracy of the numerical :math:`S'` (about :math:`10^{-8}` relative);
+test ``pyazr_coincident_levels``.
+
 **RMC formalism** (``USE_RMC_FORMALISM``):
 
 For radiative channels (``radType == 'M'`` or ``'E'``), an imaginary term is
