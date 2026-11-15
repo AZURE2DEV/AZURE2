@@ -32,6 +32,45 @@ std::vector<FinalStateOfPair> ExternalCaptureFinalStates(const LevelTables &tabl
 /// The entry of pair `key` in `states`, or nullptr.
 const FinalStateOfPair *FinalStateOf(const std::vector<FinalStateOfPair> &states, int key);
 
+/// A capture asked of the model: from the particle pair `entranceKey` into the photon pair `exitKey` (-1: into every
+/// photon pair of the entrance's compound nucleus, a total capture).  `request` is the caller's index (its record).
+struct CaptureRequest {
+  int entranceKey = 0;
+  int exitKey = 0;
+  int request = 0;
+};
+
+/*!
+ * A capture into a final state that is not bound where the engine takes it as bound (E_FINAL_STATE_UNBOUND):
+ *
+ *  - Bound: the photon pair has external capture and its final state (a level of <levels>) lies at or above the
+ *    threshold of a particle pair with a channel in the final state's J^pi group.  The N_f integral, the
+ *    ANC-to-amplitude factor and the radial integral take |E_f - S| of that pair as a binding energy
+ *    (src/NFIntegral.cpp, src/ExternalCaptureFinalStates.cpp, src/ECIntegral.cpp).
+ *  - Entrance: the final state lies above the threshold of the entrance pair of a capture asked into it, internal or
+ *    external.  Between the two energies the photon energy E_gamma = E_x - E_f is negative and E_gamma^(L+1/2) is NaN
+ *    (the photon channel's penetrability, src/ChannelTables.cpp; the external amplitude, src/UnitExternalCapture.cpp).
+ *
+ * Energies are E_x of the compound nucleus (MeV): a pair's threshold is S + e1 + e2 (PairInfo::threshold); the final
+ * state's energy is the larger of the photon pair's threshold and its level's energy (they agree within 1 keV).
+ */
+struct UnboundFinalState {
+  enum class Kind { Bound, Entrance };
+  Kind kind = Kind::Bound;
+  int photonPairKey = 0;
+  int particlePairKey = 0;   ///< the pair whose threshold lies at or below the final state (the lowest one)
+  double finalEnergy = 0.0;  ///< MeV, E_x of the final state
+  double threshold = 0.0;    ///< MeV, E_x at which the particle pair opens
+  int level = -1;            ///< Bound: the final state's index into LevelTables::levels
+  /// CaptureRequest::request of the capture asked (Bound: the first one into the photon pair; -1 when none is)
+  int request = -1;
+};
+
+/// The captures of `tables` into final states above a particle threshold that the engine would compute as bound or
+/// at a negative photon energy: one Bound finding per photon pair with external capture (the lowest threshold), then
+/// one Entrance finding per request and photon pair that has no Bound finding.  Empty: none.
+std::vector<UnboundFinalState> UnboundFinalStates(const LevelTables &tables, const std::vector<CaptureRequest> &requests);
+
 }  // namespace experiment
 }  // namespace azure2
 

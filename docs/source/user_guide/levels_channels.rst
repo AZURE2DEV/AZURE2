@@ -235,3 +235,21 @@ window holds two or more levels of that :math:`J^\pi` is refused as
 ambiguous (before October 2026 the first one in the file was taken silently):
 move the extra level by more than 1 keV, or give the pair the energy of the
 level it decays to.
+
+**A final state above a particle threshold is refused.** External capture
+treats its final state as bound in every particle channel of the final
+state's :math:`J^\pi` group: the bound-state normalization :math:`N_f`, the
+conversion of an ANC to an amplitude and the radial integral take
+:math:`S - E_f` of each such pair as a binding energy. Below a final state at
+:math:`E_f`, the photon energy :math:`E_\gamma = E_x - E_f` is negative and the
+photon penetrability :math:`E_\gamma^{2L+1}` has no meaning. So a project is
+refused (``E_FINAL_STATE_UNBOUND``, by ``AZURE2 --validate``, by every run and
+by pyazr) when a photon pair with external capture has its final state at or
+above the threshold (:math:`S` plus the pair's excitations) of a particle pair
+with a channel in that :math:`J^\pi` group, or when a data set or
+extrapolation captures from an entrance pair whose threshold lies below the
+final state, with external capture or without. Capture into an unbound final
+state is not computed by this version. Internal capture into a final state
+that lies above another pair's threshold but below the entrance threshold
+(the :math:`^8`\ Be ground state in :math:`^7`\ Li(p,γ), say, without external
+capture) is computed, with the final state taken as sharp.

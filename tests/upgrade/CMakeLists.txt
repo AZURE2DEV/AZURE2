@@ -231,6 +231,11 @@ set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
 # project sets these checks (src/DataCheckFiles.cpp, docs/upgrade/edata_split.md N2).
 add_test(NAME check_files_data COMMAND bash ${CMAKE_SOURCE_DIR}/tests/check_files_data/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(check_files_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
+# A capture final state above a particle threshold is refused by --validate and the run, with external capture and
+# without; one just below the threshold runs with the start commit's chi^2 (tests/ec_final_state_unbound/check.sh;
+# experiment/src/FinalStates.cpp UnboundFinalStates); about 3 s.
+add_test(NAME ec_final_state_unbound COMMAND bash ${CMAKE_SOURCE_DIR}/tests/ec_final_state_unbound/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(ec_final_state_unbound PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
 # The sampler sets up the compound and the data as the run does: the same check files, the same text on a refused
 # last part (tests/sampler_setup/check.sh, SetUpProgramCompound in src/RunSetUp.cpp).
 add_test(NAME sampler_setup_as_run COMMAND bash ${CMAKE_SOURCE_DIR}/tests/sampler_setup/check.sh $<TARGET_FILE:AZURE2>)
