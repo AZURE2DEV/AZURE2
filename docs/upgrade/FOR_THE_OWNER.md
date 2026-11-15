@@ -1,7 +1,7 @@
 # The AZURE2 upgrade: where it stands, and how to add to it
 
-A short account for the owner of AZURE2, 2026-11-11. The details are in `HANDOFF.md` (newest first), `ROADMAP.md`
-and the design notes of `docs/upgrade/`. Nothing of this is on `dev` or `main`; it lives on the local branch
+A short account for the owner of AZURE2, begun 2026-11-11; the speed table is of 2026-11-15. The details are in
+`HANDOFF.md` (newest first), `ROADMAP.md` and the design notes of `docs/upgrade/`. Nothing of this is on `dev` or `main`; it lives on the local branch
 `feature/upgrade` and is merged with `dev` only when the reconstruction is complete.
 
 ## Why
@@ -293,6 +293,39 @@ release removed, so a skill that teaches something that no longer works fails a 
     uniform grid (`shift_sqrt_subpoints/models/dense`, now deleted) by 9.4 × 10⁻⁷.
 
 ## Speed
+
+**Against the code at the branch point with `dev`, 2026-11-15** (the project `tests/13N`, 12C + p: capture, elastic
+scattering, analysing power, external capture, a gas target; the same file for both programs, the old one through its
+menu; elapsed time and peak memory; a machine shared with other work, so read the ratios):
+
+| 13N | branch point with `dev` | now |
+|---|---|---|
+| one calculation, 1 thread | 9.3 s, 216 MB | 7.3 s, 122 MB |
+| one calculation, 4 threads | 7.3 s, 220 MB | 5.5 s, 123 MB |
+| fit with the analytic gradient, 1 thread | 92 s, 604 MB | 17.6 s, 136 MB |
+| fit with the analytic gradient, 4 threads | 30.6 s, 610 MB | 8.3 s, 140 MB |
+| Levenberg-Marquardt fit, 1 thread | 28.6 s, 295 MB | 10.1 s, 136 MB |
+| plain MIGRAD stopped at 300 calls, 1 thread | 135 to 141 s, 597 MB | 13.7 s, 128 MB |
+| plain MIGRAD stopped at 300 calls, 4 threads | 44.9 s, 602 MB | 8.2 s, 137 MB |
+| the sampler, 16 walkers, 100 steps, 4 threads | 323 s, 3.96 GB | 21.8 s, 136 MB |
+
+What the table does and does not show. The chi-squared of the calculation is the same number (336480 printed by the
+old program, 336479.961 now) and the two converged fits end at the same chi-squared (28100.2 and 28100.172); the fit
+stopped at 300 calls ends at 30367.7 in the old program and 30366.10 now (a stopped fit: the two took slightly
+different steps), and the two samplers are not the same chain (the new one stays inside the fit's limits), so those
+two rows compare the cost of the same amount of work, not identical results. It is one project. `natural_neon` (a
+target of three isotopes, folded) went from 41 s and 4.5 GB to 1.3 s and 0.34 GB for one calculation. A project of
+many folded data sets can need more memory than before: the PI's 12C + 12C model (not in the repository) takes about
+as long as in the old program (87 s) and 11 GB against 4.5 GB; not yet repaired. The 45 newest commits of `dev` are not in
+this build, so this is not a comparison with today's `dev`.
+
+Where the gain comes from: one level-matrix solve per distinct compound energy instead of one per data point or
+sub-point; one stored calculation site per mesh node; no copies of the compound system per thread or per walker (the
+sampler's 3.96 GB were those copies). The last step (2026-11-15) was a defect of the new structure itself: the pass
+over the compound energies was skipped whenever an evaluation ran inside a parallel region (the numerical gradient of
+plain MIGRAD, the residual groups of Levenberg-Marquardt) and was never used by the sampler, so plain MIGRAD was
+slower at 4 threads (24.7 s) than at 1 (13.7 s). Repaired, with every output file identical before and after
+(`fit_threads.md` section 7): plain MIGRAD at 4 threads 24.7 s to 8.2 s, the sampler 188 s to 21.8 s.
 
 Measured before Phase 4 (T2, 340 points with every apparatus kernel; `tests/upgrade/bench/`):
 
