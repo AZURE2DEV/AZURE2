@@ -259,6 +259,18 @@ re-read).
 Whether a report of AZURE2 stands behind these two shows in the first run in which both are silent: no
 thread-sanitizer run of this code has passed since 2026-11-07.
 
+**The run with the three entries (the tenth push; 72 minutes).** No report file is written by any step, under
+either sanitizer; both jobs pass. So nothing of AZURE2 stood behind the two reports in the steps that ran to their
+end. **Four steps did not**, the same four in the thread and the address job, without a sanitizer report: the
+calculation of T2 and its fit of 30 calls (exit 1), and the checks `target_auto_windows` and
+`target_window_fallback`. The job counts a failure without a report as a warning (`build.yml` gates the tests),
+which is why it passes. What the program printed was not readable (the log needs a login): the cause is not
+known, and **T2 was not run under a sanitizer in this run**. The same checks pass in the CI's Linux job, built
+with GCC; these builds differ by clang 18, the sanitizer's flags and `--no-coulomb-table`. Whether the four
+failed in the address job of the seventh push too is not known: that job passed by the same rule and its
+annotations did not list failed steps then. `scripts/sanitize_upgrade.sh` now prints the last six lines of every
+log of a failed step and the job writes them as one annotation.
+
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 
 With `SAN_LEAKS=1`, LeakSanitizer reports on every CLI run exactly one direct leak, the `AZUREMain` that
