@@ -21,9 +21,10 @@ than 2^24 table steps refused (it overflowed an int and crashed).
 (not on this machine), `AZURE2 extrapolate` 87.0 s and 11.0 GB at 1 thread (old engine at the branch point 86.9 s,
 4.47 GB). The eight curves differ from the old engine's, each difference traced: the four THM lines are THM HOES
 cross sections here and plain cross sections in the old engine, which also reads column 32 (the THM binding energy)
-as the light particle's excitation e1 (E_x shifted by 10.27 MeV); with that removed and the folds off, every curve is
-exactly twice the old one (2 +- 2e-7) once the J=4+ level at 15.1065 MeV (NaN in the old engine's input
-transformation, its group then left out: "singular level matrix") is removed from both — the factor 2 is the upgrade's
+as the light particle's excitation e1 (E_x shifted by that energy); with that removed and the folds off, every curve
+is exactly twice the old one (2 +- 2e-7) once one level (NaN in the old engine's input transformation, its group
+then left out: "singular level matrix"; the model is not in the repository, the level is named in the scratch
+notes) is removed from both — the factor 2 is the upgrade's
 (1 + delta_12) for every cross section out of an identical pair (df8c2c81; dev applies it to elastic scattering only);
 the Coulomb tables contribute 2e-8; the folds: the old uniform 10-point grid (useAdaptiveGrid=0) against the shared
 mesh, up to a factor 4.7 at resonances, 0.4-4 % median; with 80 uniform points the old engine comes to 2-10 % at the
