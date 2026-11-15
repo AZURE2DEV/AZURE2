@@ -290,6 +290,17 @@ if [ "$nrep" -gt 0 ]; then
 fi
 echo "steps: ${#results[@]}; failed: $nfail; sanitizer report files: $nrep"
 for r in "${results[@]}"; do case "$r" in FAIL*) echo "  $r" ;; esac; done
+# Why a step failed without a report: the last lines of its log (the job's log needs a login; the workflow turns
+# these lines into an annotation).  The marker is not "---- ", which the workflow reads as a sanitizer report.
+for r in "${results[@]}"; do
+  case "$r" in FAIL*) ;; *) continue ;; esac
+  step="${r#FAIL }"; step="${step%% *}"
+  for l in "$REP/$step"/*.log; do
+    [ -f "$l" ] || continue
+    echo "==== last lines of ${l#"$REP"/}"
+    grep -v '^[[:space:]]*$' "$l" | tail -6 | cut -c1-240
+  done
+done
 if [ "$nrep" -gt 0 ] || [ "$nfail" -gt 0 ]; then keep=1; echo "reports and logs: $REP"; fi
 [ "$nrep" -gt 0 ] && exit 1
 [ "$nfail" -gt 0 ] && [ "${SAN_ALLOW_FAILURES:-0}" != 1 ] && exit 2

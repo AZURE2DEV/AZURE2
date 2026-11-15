@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 23:30) — merged: the sanitizer jobs pass without a report; the regression suite run here
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 89 (one commit of mine: the sanitizer script, its
+workflow, documents; no C++). The base build stays `work/b-trial86`, the reference `tab-t74-1`.
+
+**The tenth push's sanitizer run** (thread 72 minutes, address 54). No step writes a sanitizer report under either
+sanitizer and both jobs pass: the first thread-sanitizer run of this code without a report since 2026-11-07. The
+three entries of `scripts/sanitizers/tsan.supp` for the OpenMP runtime's own libraries hold, and nothing of AZURE2
+stood behind them in the steps that ran to their end.
+
+**Four steps did not run to their end**, the same four in both jobs, with no report: T2's calculation and its
+30-call fit (exit 1), `check-target_auto_windows`, `check-target_window_fallback`. The job counts that as a
+warning. **The cause is not known, and T2 was not run under a sanitizer.** The same checks pass in the Linux job
+(GCC) and here; these builds differ by clang 18, the sanitizer's flags and `--no-coulomb-table`. Changed: the
+script prints the last six lines of every log of a failed step, the job writes them as one annotation (tried on a
+made-up log here).
+
+**The whole regression suite, run here** on rehearsal 88's tree with the base build
+(`work/director/regress88.out`, about 53 minutes at 4 threads): 172 of 172 pass. This closes, for that tree, the gap
+named in the entry of 22:06; `work/director/verify_branch.sh` is the merge check with the suite in it.
+
+**Started on the PI's word of this evening** ("go this and the physics part, so we finish our work"; "two agents,
+one for the data, one for the physics part"): two branches cut from the tenth push,
+`feature/upgrade-6-site-split` (the split of `Site`, `evaluation.md` section 4.1) and
+`feature/upgrade-1-physics-functions` (the collision matrix and the observables as functions of `physics/`).
+Neither is merged; nothing of them is in this push. **A statement of mine corrected:** the fitted level values do
+not live in the compound system (they are a `LevelState` the evaluation owns; the compound system is constant
+and shared); `evaluation.md` section 4 still says otherwise and gets a dated status line with the site branch.
+
+**Pushed** as the eleventh push after the hash check of the PI's model (no match). It replaces the pending
+`build` run of the tenth push (the ninth's macOS job was still running), so Linux, Windows and macOS are read
+from this head.
+
+**Not changed:** which tests the CI runs. **Open, for the PI:** as in the entries of 11:45 and 19:35.
+
 ## 2026-11-15 (director, 22:06) — merged: the CI's macOS, Windows and thread-sanitizer results answered
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 88 (five commits of mine: tests, `pyazr/engine_text.py`,
