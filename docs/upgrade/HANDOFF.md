@@ -2,6 +2,23 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 13:00) — the third push builds on Linux and macOS; Windows one step further
+
+**The third push** (`dbfd6abb`): the Linux and macOS jobs configure, build and pass the smoke test, for the first
+time; their physics regression tests (`tests/run_tests.sh`, 40 and 90 minutes on `dev`'s runs) were still running
+when this was written. Windows now configures and compiles the engine and stopped in a test, at
+`mkdir(path, mode)` of `tests/reference/sampler_objective_test.cpp` (one argument under MinGW): made with
+`std::filesystem`. Build with 0 warnings, that test and the consistency test pass here; the engine is not
+touched, so the projects were not run again.
+
+**The sanitizer workflow did not run on the third push**: it runs on a push that changes its script, its workflow
+or `scripts/sanitizers/`, by hand, or nightly on the default branch. The branch therefore still shows its failure
+of the second push. A note on this went into the head of `scripts/sanitize_upgrade.sh`, which also makes this push
+run it.
+
+**`tests/run_tests.sh` was never run on the merged tree by the upgrade** (the gates used the reference tables and
+ctest); the CI's run of it on this push is its first.
+
 ## 2026-11-15 (director, 12:25) — the first error of each CI job, read and repaired
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 84 (rehearsal 83, one commit of mine, and the refusal
