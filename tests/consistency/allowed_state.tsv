@@ -1,39 +1,11 @@
 # The state outside the rule 'only immutable tables are process-wide; everything else is owned by the caller'
 # (docs/upgrade/evaluation.md; repo_consistency_test.py check 38, scanner state_scan.py).  Columns, tab-separated:
-# file, symbol, kind (thread_local, static, namespace, mutable), reason.  A reason starting 'table:' is permanent;
-# 'pending (milestone N)' names the milestone of evaluation.md section 5 that removes the row.  Remove a row when
+# file, symbol, kind (thread_local, static, namespace, mutable, once), reason.  Every row is permanent (its reason
+# starts 'table:'): the last rows marked pending went on 2026-11-15 (evaluation.md section 7.7).  Remove a row when
 # its symbol goes; never add one for new code: new state is a caller-owned table or scratch (CLAUDE.md, 'Add a cache').
-include/AZURECalc.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
-include/AZURECalc.h	fixedMask_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	g2CacheP_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	g2Cache_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	lastGradMutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	lastGradP_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	lastGrad_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
-include/AZURECalc.h	output_data_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
-include/AZURECalc.h	output_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
-include/AZURECalc.h	output_results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
-include/AZURECalc.h	pool_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the lock of the pooled working copies of a fit
-include/AZURECalcMCMC.h	all_indexes	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	all_physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	all_rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies of the sampler
-include/AZURECalcMCMC.h	fixed_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	freeKinds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	paramKinds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	paramNames_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	priorCov_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	priorMeans_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	priorStds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	usePriors_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	useRWA_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/GSLException.h	h	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	m	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
-include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): per site, the EC amplitude at the last shifted energy (EC unit amplitudes per mesh energy later)
 src/LevelState.cpp	counter	static	table: the version generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
 src/AZURECalc.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalc.cpp	traceMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value

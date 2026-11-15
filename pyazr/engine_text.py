@@ -36,8 +36,10 @@ _python = None   # (sys.stdout as it was, the stream on the copy of descriptor 1
 
 try:  # the C library, loaded once (a session closed while the interpreter shuts down can no longer import)
     import ctypes
-    _LIBC = ctypes.CDLL(None)
-except (ImportError, OSError):  # pragma: no cover
+    # Windows has no handle of "the process itself" (CDLL(None) raises TypeError there): the universal C runtime,
+    # which a UCRT build of the engine and of Python both write through.
+    _LIBC = ctypes.CDLL("ucrtbase" if os.name == "nt" else None)
+except (ImportError, OSError, TypeError):  # pragma: no cover
     _LIBC = None
 
 

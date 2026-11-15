@@ -121,7 +121,7 @@ void gslProgress(const size_t iter, void *params,
 
 }  // namespace
 
-LeastSquaresOutcome RunGSLNonlinear(const AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
+LeastSquaresOutcome RunGSLNonlinear(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
                                     const FitControl &control) {
   std::ostream &log = *control.log;
   LeastSquaresOutcome out;

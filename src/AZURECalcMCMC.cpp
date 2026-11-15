@@ -317,7 +317,7 @@ void AZURECalcMCMC::SetPriors(const std::vector<double> &priorMeans,
   usePriors_ = usePriors;
 }
 
-void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
+void AZURECalcMCMC::BuildAutoPriors(bool useRWA) {
   if (!parametersInitialized_) {
     configure().outStream << "Warning: BuildAutoPriors() called before parameters were "
                           << "initialized; automatic priors skipped.\n";
@@ -505,7 +505,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   configure().outStream.flush();
 }
 
-bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
+bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) {
   useRWA_ = useRWA;
   priorCov_.reset();
   if (!(configure().paramMask & Config::CALCULATE_WITH_DATA) || configure().priorCovariance.empty()) return true;
@@ -1281,36 +1281,29 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
  */
 WalkerLevels *AZURECalcMCMC::GetPooledLevels() const {
   // None idle: a copy of the sampler's levels as they are now (one per walker evaluated at the same time).
-  return pool_.Take(levels_).release();
+  return states_.levels.Take(levels_).release();
 }
 
 /*!
  * Get a working copy of the data set and its buffer from the pool, creating new if pool is empty
  */
 WorkingData *AZURECalcMCMC::GetPooledData() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-
-  if (!edata_pool_.empty()) {
-    auto obj = std::move(edata_pool_.top());
-    edata_pool_.pop();
-    return obj.release();
-  }
-
-  // Fallback: create new if pool is empty (shouldn't happen often)
-  return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
+  // None idle: one more walker is evaluated at the same time as the others, on a copy of the sampler's working copy.
+  return states_.data
+      .TakeOrMake([this] {
+        return std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}});
+      })
+      .release();
 }
 
 /*!
  * Return a CompoundSystem object to the pool for reuse
  */
-void AZURECalcMCMC::ReturnPooledLevels(WalkerLevels *walker) const { pool_.Give(std::unique_ptr<WalkerLevels>(walker)); }
+void AZURECalcMCMC::ReturnPooledLevels(WalkerLevels *walker) const {
+  states_.levels.Give(std::unique_ptr<WalkerLevels>(walker));
+}
 
 /*!
  * Return a working copy and its buffer to the pool for reuse
  */
-void AZURECalcMCMC::ReturnPooledData(WorkingData *obj) const {
-  if (!obj) return;
-
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  edata_pool_.push(std::unique_ptr<WorkingData>(obj));
-}
+void AZURECalcMCMC::ReturnPooledData(WorkingData *obj) const { states_.data.Give(std::unique_ptr<WorkingData>(obj)); }

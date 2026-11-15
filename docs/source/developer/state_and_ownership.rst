@@ -91,12 +91,17 @@ The per-evaluation objects
      read fit settings is not ``const``, so a ``const AZUREAPI &`` only reads), a fit's evaluations (copies of the
      caller's state in its
      ``FitterStates``, ``include/AZURECalc.h``), the sampler (its own
-     ``WalkerLevels`` and a copy per walker and per snapshot), the reaction
+     ``WalkerLevels`` and a copy per walker and per snapshot, the idle ones in the caller's ``SamplerStates``,
+     ``include/AZURECalcMCMC.h``), the reaction
      rate (``ReactionRate::State``, a copy per thread), a limit's conversion
      (``ParameterLimitsManager``), the sub-point grids
      (``WorkingCopy::GridLevels``). A pool of idle copies is a
      ``StatePool`` (``include/StatePool.h``) owned by the caller, as the
-     ``Results`` are.
+     ``Results`` are. Everything else an evaluation of a fit or of the sampler writes is the caller's too, lent by
+     reference: the idle working copies with their buffers (``WorkingData``), the copies the intermediate output
+     files are written from and the last gradient (``FitterStates``). An evaluating method of ``AZURECalc`` or
+     ``AZURECalcMCMC`` is ``const`` and writes no member of its own object; one ``FitterStates`` or
+     ``SamplerStates`` serves one fitter or sampler. No class of the engine has a ``mutable`` member.
    - ``azure2::Results`` (``include/Results.h``): the evaluation's buffer --
      one record per point and slot at an offset fixed by the layout
      (``WorkingCopy::LayoutResults``), the model values, the contracted

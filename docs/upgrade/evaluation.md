@@ -91,13 +91,13 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 
 | Members (file) | Holds | Becomes |
 |---|---|---|
-| `cnuc_pool_`, `edata_pool_`, `pool_mutex_`, `pools_initialized_` (`include/AZURECalc.h`, `include/AZURECalcMCMC.h`) | `max(4, threads)` clones of `CNuc` and of the working copy with its `Results`, taken by each evaluation of a fit | deleted (milestones 3–4): an evaluation reads the problem and writes its `Results` and scratch |
-| `output_compound_`, `output_data_`, `output_results_`, `output_mutex_` (`include/AZURECalc.h`) | a clone kept for the iteration snapshots of a fit | deleted with the pools (the snapshot is an evaluation into its own `Results`) |
-| `fixedMask_`, `g2CacheP_`, `g2Cache_`, `lastGradP_`, `lastGrad_`, `lastGradMutex_` (`include/AZURECalc.h`) | the free mask; Minuit's G2 computed with the last gradient at its parameters; the last gradient for a dump | the fitter's state (owned by the minimiser adapter, non-`const` methods): milestone 4 |
-| `all_physical_`, `physical_`, `rwa_`, `all_rwa_`, `all_indexes`, `fixed_`, `paramNames_`, `paramKinds_`, `priorMeans_`, `priorStds_`, `usePriors_`, `freeKinds_`, `priorCov_`, `useRWA_` (`include/AZURECalcMCMC.h`) | the sampler's parameter layout, filled lazily in `const` methods | built at construction (milestone 4) |
+| `cnuc_pool_`, `edata_pool_`, `pool_mutex_`, `pools_initialized_` (`include/AZURECalc.h`, `include/AZURECalcMCMC.h`) | `max(4, threads)` clones of `CNuc` and of the working copy with its `Results`, taken by each evaluation of a fit | `cnuc_pool_` and `pools_initialized_` deleted; the working copies' pool is the caller's (`FitterStates::idleData`, `SamplerStates::data`; section 7.7). Still to do: no copy at all (the `Site` split of section 4.1) |
+| `output_compound_`, `output_data_`, `output_results_`, `output_mutex_` (`include/AZURECalc.h`) | a clone kept for the iteration snapshots of a fit | the caller's (`FitterStates::output`, `outputData`, `outputResults`, `outputMutex`; section 7.7). Still to do: the snapshot as an evaluation into its own `Results` |
+| `fixedMask_`, `g2CacheP_`, `g2Cache_`, `lastGradP_`, `lastGrad_`, `lastGradMutex_` (`include/AZURECalc.h`) | the free mask; Minuit's G2 computed with the last gradient at its parameters; the last gradient for a dump | done (section 7.7): the mask a plain member set by the non-`const` `SetFixedMask`; the gradient memo in the caller's `FitterStates::gradient` |
+| `all_physical_`, `physical_`, `rwa_`, `all_rwa_`, `all_indexes`, `fixed_`, `paramNames_`, `paramKinds_`, `priorMeans_`, `priorStds_`, `usePriors_`, `freeKinds_`, `priorCov_`, `useRWA_` (`include/AZURECalcMCMC.h`) | the sampler's parameter layout, filled lazily in `const` methods | done (section 7.7): plain members, written by the non-`const` `BuildAutoPriors` and `SetUpPriorCovariance` before the walkers run |
 | `levelGammas_`, `levelEnergies_`, `levelDecoupled_`, `shiftFunctions_`, `cached_max_levels_`, `cached_max_channels_` (`include/AMatrixFunc.h`) | buffers of the level-matrix fill | done (branch 2): plain members, written by the non-`const` fill |
 | `inverse_valid_`, `inverse_`, `work_` (`include/LevelMatrixSolver.h`) | the explicit inverse formed on first request from the LU factors | done (branch 2): `Inverse`, `Bilinear` non-`const` (and `AMatrixFunc::GetAMatrix`, whose `const_cast` went) |
-| `ec_shifted_` (`include/Site.h`) | per site, the EC amplitude at the last shifted energy | a field of the hand-over's table (EC unit amplitudes per mesh energy, roadmap Phase 6 box 1) |
+| `ec_shifted_` (`include/Site.h`) | per site, the EC amplitude at the last shifted energy | done as ownership (section 7.7): a plain member, `GetECAmplitudeWithShift` non-`const` (its callers hold the site they write). Still to do: a field of the hand-over's table, with the `Site` split |
 | `channelFunc_` (`include/ThmVertexBoundary.h`) | a `ChannelFunc` whose calls are non-`const` (its last-value cache) | done (branch 2): `OnShellAt` non-`const` |
 | `warned` (`ThmDistortion.h`, `ThmDwVertex.h`, `ThmLineshape.h`, `ThmOptions.h`) | warn-once flags of option objects | notices |
 | `cache_mutex_` (`include/ECAmplitudeCache.h`) | guards the session's amplitude cache | done (branch 2): a plain member, the reader non-`const` |
@@ -319,6 +319,10 @@ branch (see section 7.5); what this branch does is what does not need it:
    `AZURE_TRACE_FCN=fresh` (they compare a pooled copy with a fresh one, which still exist), `Site::ec_shifted_`
    (a value of the `Site` split).
 
+Since 2026-11-15 (section 7.7) these kept things belong to the caller: the idle working copies and the snapshot
+copies are members of the `FitterStates` or `SamplerStates` the caller lends, and `ec_shifted_` is a plain member
+written by a non-`const` method.  They still exist; the `Site` split above is what removes them.
+
 ## 5. Milestones
 
 Each is a commit series that leaves the tree passing (all projects × 3 bases identical to the reference, unit tests,
@@ -341,6 +345,9 @@ Each is a commit series that leaves the tree passing (all projects × 3 bases id
    pool code of `AZURECalc.cpp` (~250 lines).  Risk: the hand-over (energy shifts, re-placed grids) writes the working
    copy today; a copy whose history differed gave other bits before (fit_threads.md, cause A); the eight fits
    identical file by file and `AZURE_TRACE_FCN=fresh` (every pooled value equal to a fresh one) find it.
+   **Status 2026-11-15: not done as designed.**  The pool and the snapshot copies are no longer members written by
+   `const` methods (they are the caller's, section 7.7), but `WorkingData`, `WorkingCopy::Clone` and
+   `AZURE_POOL_CHECK` stay until the `Site` split of section 4.1.
 4. **`CNuc` split, the parameter vector out** (`cnuc_split.md` step 7, another agent's area): `cnuc_pool_` goes; the
    sampler's and the fitter's state become non-`const` objects of the minimiser adapter; the MCMC globals become a run
    object.  Gate: memory of a fit at 1, 3 and 12 threads equal within the `Results` size per thread.
@@ -563,6 +570,53 @@ pass over the 88 MB table, 1.2e8 user-space instructions (T1 2.9467e10 -> 2.9589
   `--use-gradient` fit 1.737368e11 / 1.736046e11, 13N fit 1.885643e11 / 1.885169e11: none slower.
 - Not done (another agent's file this night, `api/src/AZUREAPI.cpp`): the unused `intEC_cache` file name and the
   lazily read nuisance layout (`mutable` members) of the session.
+
+### 7.7 Done on 2026-11-15 (rehearsal 86, the director): the last pending rows
+
+**The 28 rows marked pending are gone** (11 of `AZURECalc`, 16 of `AZURECalcMCMC`, 1 of `Site`); the allow-list holds
+14 rows, all permanent tables.  No class of the engine, its libraries or the binding has a `mutable` member.  The rule
+that replaced them: what the `const` evaluations of a fitter or a sampler keep between calls belongs to whoever runs
+it and is lent by reference; a method that writes a member of its own object is not `const`.
+
+- **The fitter** (`AZURECalc`).  `FitterStates` (the caller's, one per fitter: `ProgramRun::fitterStates`, the
+  session's fit in `api/src/AZUREAPIFit.cpp`) now holds, beside the idle `LevelState`s it held before: the idle
+  working copies with their buffers (`idleData`, a `StatePool<WorkingData>`; the fitter's own stack and its lock are
+  gone), the copies an intermediate output is written from (`output`, `outputData`, `outputResults`, `outputMutex`)
+  and the last gradient (`gradient`: where it was taken, its value, the Gauss-Newton curvature, their lock).
+  `SetFixedMask` is not `const`; the least-squares solvers (`LeastSquares.h`, `FitLeastSquares.cpp`,
+  `FitGslTrustRegion.cpp`) take `AZURECalc &`.
+- **The sampler** (`AZURECalcMCMC`).  `SamplerStates` (the caller's: the walkers' levels and the idle working copies,
+  two `StatePool`s) replaces the sampler's own pool and lock.  The parameter layout and the priors (14 members) are
+  plain members written by `BuildAutoPriors` and `SetUpPriorCovariance`, which are not `const`.
+- **`StatePool::TakeOrMake`**: an idle value, or one made by the caller's function under the pool's lock (a working
+  copy is made by `WorkingCopy::Clone`, not copied from a seed).
+- **The site**: `Site::GetECAmplitudeWithShift` is not `const` and `ec_shifted_` is a plain member: the memo of the
+  amplitude at the last energy shift is written through a working copy the evaluation holds, never through a shared
+  one.
+
+**What this does not do.**  The design of section 4.1 (an evaluation writes only its `Results` and scratch; one
+working copy read by every thread) is **not** reached: a fit and the sampler still evaluate on copies of the working
+data (`WorkingCopy::Clone`, `WorkingData`, the two pools, the check `AZURE_POOL_CHECK`).  Those copies now have an
+owner outside the evaluator and nothing is written behind a `const`; removing them needs the split of `Site` into a
+constant part and the per-evaluation values (about 40 accessors, section 4.1).  The locks are the ones there were:
+nothing here makes a path more or less parallel.
+
+**Verification** (the director's runs; logs `work/director/verify_l86.out`, `extra86.out`, `instr86.out`, not in the
+repository).  Build with 0 warnings.  Every output file of every project in the three bases identical to the
+reference (887 Brune, 851 formal, 887 Park).  The eight fits by command identical to the base build's.  Beyond the
+usual set, identical to the base build: the T2 sampler chain (16 walkers, 100 steps) at 1 and 4 sampler threads in
+the amplitude basis and at 4 in the physical basis; a 13N chain (64 walkers, 100 steps, physical, 4 threads: the
+shifted external-capture memo and the output copies); T2 and 13N gradient fits and a 13N MIGRAD with its numerical
+gradient at 4 threads.  The tests not labelled slow: 310 of 310.  The scanner: 14 findings, 14 rows.
+User-space instructions at 1 thread, base / now: T2 `--use-gradient` fit 1.72825e11 / 1.72137e11 (-0.4 %), 13N
+`--use-gradient` fit 1.864206e11 / 1.864141e11, T2 sampler 1.271779e12 / 1.271772e12.
+**Peak memory.**  The live heap at its peak is the same to 142 bytes: 144 902 849 bytes before, 144 902 991 now
+(valgrind massif on the T2 `--use-gradient` fit at 1 thread; the peak is in the final evaluation that writes the
+output files).  The resident peak the system reports is nevertheless 0.1 to 2.4 % higher (`/usr/bin/time`, one run
+each, kB): T2 fit 159 044 / 161 656, T2 sampler 149 668 / 153 236, 13N fit 135 308 / 135 440.  A trace of the T2
+fit shows where: during the fit the resident size is lower than before (156.4 against 159.1 MB), and it rises by
+5 MB in the final evaluation, where the same bytes are requested from a heap that is laid out differently.  Which
+request does not fit freed space was not searched, and nothing was changed for it.
 
 ## 8. The environment record and the run's diagnostics (milestone 5): design
 

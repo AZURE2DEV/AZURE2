@@ -282,8 +282,9 @@ sessions may evaluate at the same time on two threads (`tests/pyazr/concurrent_s
 check (`tests/consistency/repo_consistency_test.py` check 38, scanner `tests/consistency/state_scan.py`) refuses any
 `thread_local`, non-`const` static or namespace-scope variable and `mutable` member of the engine's sources that is
 not a row of `tests/consistency/allowed_state.tsv` (file, symbol, kind, reason); a row whose symbol is gone fails too.
-Rows marked `table:` stay (the Coulomb tables read from files, GSL's error handler, locks of process-wide streams);
-rows marked `pending (milestone N)` name the milestone of `evaluation.md` §5 that removes them.  The test that two
+Every row is marked `table:` and stays (the Coulomb tables read from files, the bytes of input files, GSL's error
+handler, locks of process-wide streams, the generator of the level states' versions); no row is pending since
+2026-11-15 (`evaluation.md` §7.7), and no class of the engine has a `mutable` member.  The test that two
 calculations in one process do not see each other: `tests/pyazr/session_isolation_test.py`.  The ensemble sampler
 keeps no process-wide state: a run's state is a record of `AZURECalcMCMC::RunMCMCSampling`, its callbacks and stop
 request are members, and numcmc takes `std::function` callbacks that carry their context (`sampler_objective`, two

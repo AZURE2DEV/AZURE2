@@ -85,7 +85,7 @@ they are solved at), and every reader of the input values the
 to the readers -- the program's run and the session (made by ``SetUpCompoundSystem`` with the compound), a fit's
 evaluations (copies of the caller's state in ``FitterStates``, their pool a
 ``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
-and a copy per walker), the reaction rate, a limit's conversion and the
+and a copy per walker, the idle ones in the caller's ``SamplerStates``), the reaction rate, a limit's conversion and the
 sub-point grids. Where each level's energy and amplitudes sit in the
 parameter vector is the ``LevelParameterLayout`` (``CompoundSystem::ParameterLayout()``,
 built by ``Fill``): every walk of the level block reads it. ``CompoundSystem`` is not

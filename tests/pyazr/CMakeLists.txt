@@ -1112,7 +1112,8 @@ set_tests_properties(pyazr_ui_smoke PROPERTIES LABELS browser
 # tests/nuisance_prior_centre/continued.sh, whose part (5) needs the module (save_fit, the layouts the sessions report).
 add_test(NAME pyazr_continued_fit
          COMMAND bash ${CMAKE_SOURCE_DIR}/tests/nuisance_prior_centre/continued.sh $<TARGET_FILE:AZURE2>)
-set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" PROCESSORS 2)
+set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;PYAZR_PYTHON=${Python3_EXECUTABLE}"
+                     PROCESSORS 2)
 
 # The web UI's physics routes (GET /api/physics, POST /api/physics/{fn}, POST /api/session/channel_functions): the
 # numbers of a direct pyazr call bit for bit, the refusals with their three parts, the bound per request.  Registered

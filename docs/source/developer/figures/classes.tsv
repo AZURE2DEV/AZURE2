@@ -74,8 +74,9 @@ AZURECalc	include/AZURECalc.h	the objective: chi^2, gradient, residual rows	infe
 WorkingData	include/WorkingData.h	a pooled working copy with its buffer	inference	class	evaluation
 CompoundSystem	include/CompoundSystem.h	the compound nuclei as set up, shared constant by the pools	inference	class	immutable
 LevelState	include/LevelState.h	the levels at the vector: one per evaluation running at once	inference	class	evaluation
-StatePool	include/StatePool.h	idle level states of the evaluations that run at once, the caller's	inference	class	evaluation
-FitterStates	include/AZURECalc.h	a fit's pooled level states and its output state, the caller's	inference	class	evaluation
+StatePool	include/StatePool.h	idle level states or working copies of the evaluations that run at once, the caller's	inference	class	evaluation
+FitterStates	include/AZURECalc.h	a fit's idle level states and working copies, its snapshot copies and last gradient, the caller's	inference	class	evaluation
+SamplerStates	include/AZURECalcMCMC.h	the idle level states and working copies of the sampler's walkers, the caller's	inference	class	evaluation
 WalkerLevels	include/AZURECalcMCMC.h	a walker's level state and inputs	inference	class	evaluation
 WorkingCopy	include/WorkingCopy.h	points, norms and shifts of one evaluation	inference	class	evaluation
 azure2::Results	include/Results.h	the evaluation's buffer: records, model, objective	inference	class	evaluation

@@ -81,9 +81,19 @@ back = rf.read_reaclib(path)
 check("read back: species, label, flag, Q", all(b["species"] == ["p", "c12", "n13"] and b["label"] == "azr2"
                                                and b["flag"] == "r" and b["chapter"] == 4 and b["Q"] == 1.94349
                                                for b in back) and len(back) == f2.n_sets, back[:1])
-check("... the sets to seven digits, the rate of the sets read = the fit's to 1e-6",
-      all(np.allclose(b["a"], a, rtol=1e-6, atol=1e-12) for b, a in zip(back, f2.sets))
-      and np.allclose(rf.reaclib_rate([b["a"] for b in back], T), rf.reaclib_rate(f2.sets, T), rtol=1e-5))
+# A coefficient is written with seven digits (e13.6), so it moves by at most 5e-7 of itself, and the logarithm of a
+# set's rate by at most 5e-7 * sum_i |a_i| |basis_i(T9)|: the bound of the rate read back.  (A fixed 1e-5 failed on
+# the CI's Linux machine, whose fit of the two sets has larger coefficients that cancel; the numbers are printed.)
+coefficients = max(float(np.max(np.abs(np.asarray(b["a"]) - a) / np.maximum(np.abs(a), 1e-300)))
+                   for b, a in zip(back, f2.sets)) if len(back) == f2.n_sets else np.inf
+bound = float(np.expm1(5e-7 * max(float(np.max(np.abs(rf._basis(T)) @ np.abs(a))) for a in f2.sets)))
+moved = (float(np.max(np.abs(rf.reaclib_rate([b["a"] for b in back], T) / rf.reaclib_rate(f2.sets, T) - 1)))
+         if len(back) == f2.n_sets else np.inf)
+check("... the sets to seven digits, the rate of the sets read = the fit's within what seven digits allow",
+      coefficients <= 5.01e-7 and moved <= 1.01 * bound + 1e-12,
+      f"coefficients moved by {coefficients:.2e} (allowed 5e-7), the rate by {moved:.2e} (bound {bound:.2e}); "
+      f"sets {[list(map(float, a)) for a in f2.sets]}")
+print(f"    coefficients moved by {coefficients:.2e}, the rate by {moved:.2e} (bound {bound:.2e})")
 
 print("\n3. refusals")
 refused("a rate from 0.05 to 1 GK", lambda: rf.fit_reaclib(SimpleNamespace(T9=T[(T >= 0.05) & (T <= 1)],

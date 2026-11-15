@@ -53,7 +53,9 @@ struct ProgramRun {
   // run's data (the calculation, the final evaluation), the band and the rate, and read by the outputs.
   LevelState state;
   LevelInputs inputs;
-  FitterStates fitterStates;  ///< the fit's pooled level states (AZURECalc), before the objective that borrows them
+  /// What the fit's evaluations write (AZURECalc): before the objective that borrows it, and freed with it when the
+  /// data run ends (its copies of the working data are not held through the final transformation).
+  std::unique_ptr<FitterStates> fitterStates{new FitterStates};
   AZUREParams params;
   std::shared_ptr<const PriorCovariance> priorCov;
   bool refinesAdaptiveGrids = false;

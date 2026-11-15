@@ -1,8 +1,9 @@
 #ifndef STATEPOOL_H
 #define STATEPOOL_H
 // The idle values of the evaluations that run at the same time (a fit's threads, a sampler's walkers): a LevelState,
-// or a walker's state and inputs.  Owned by whoever runs the fitter or the sampler, as its azure2::Results are, and
-// lent to it, so that the evaluations (const methods) take and give back values that are not the evaluator's own.
+// a walker's state and inputs, or a working copy with its buffer (WorkingData.h).  Owned by whoever runs the fitter
+// or the sampler, as its azure2::Results are, and lent to it, so that the evaluations (const methods) take and give
+// back values that are not the evaluator's own.
 #include <memory>
 #include <mutex>
 #include <stack>
@@ -21,6 +22,18 @@ class StatePool {
       return values;
     }
     return std::make_unique<Values>(seed);
+  }
+  /// An idle value, or what `make` returns when none is idle (a value that is made, not copied: a working copy).
+  /// `make` runs under the pool's lock, so two threads never make one at the same time.
+  template <class Make>
+  std::unique_ptr<Values> TakeOrMake(Make make) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!idle_.empty()) {
+      std::unique_ptr<Values> values = std::move(idle_.top());
+      idle_.pop();
+      return values;
+    }
+    return make();
   }
   /// Back to the idle ones; the next Take returns it with what the last evaluation left in it.
   void Give(std::unique_ptr<Values> values) {
