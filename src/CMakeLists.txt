@@ -31,7 +31,7 @@ WorkingCopyUnits.cpp NodeTable.cpp DataSet.cpp
 PointPass.cpp
 PointFold.cpp
 TargetLayer.cpp
-ChannelTables.cpp
+ChannelTables.cpp ChannelRowFill.cpp
 UnitLegendre.cpp
 UnitExternalCapture.cpp
 SegmentParameters.cpp

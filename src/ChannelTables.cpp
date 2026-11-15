@@ -2,8 +2,11 @@
 // Coulomb and hard-sphere phase factors, THM vertex pieces), their recalculation after an energy change, their
 // sharing between points at the same energy, the Coulomb amplitude, and the getters the matrix functions read.
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <map>
 #include <memory>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -51,16 +54,16 @@ double Site::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
  * (+ the external Coulomb term, when stored) for the channel specified by positions in the JGroup and AChannel vectors,
  * assembled with the given boundary b (the per-level shift function under the
  * Brune formalism, or the channel boundary constant otherwise). Returns 0 if
- * not stored (e.g. non-entrance channels, or non-THM points).
+ * not stored (a channel of another pair than the entrance pair, or a non-THM point); the vertex reads the entrance
+ * pair's channels only (THMMatrixFunc).
  */
 
 complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
-  if (!edep_) return 0.0;
-  const EDependentTables &t = *edep_;
-  if (jGroupNum - 1 >= (int)t.thm_jl.size()) return 0.0;
-  if (channelNum - 1 >= (int)t.thm_jl[jGroupNum - 1].size()) return 0.0;
-  return (boundary - 1.0) * t.thm_jl[jGroupNum - 1][channelNum - 1] - t.thm_rhodjl[jGroupNum - 1][channelNum - 1]
-         + t.thm_coul[jGroupNum - 1][channelNum - 1];
+  if (!thm_vertex_) return 0.0;
+  const ThmVertexRows &t = *thm_vertex_;
+  const int k = t.Find(jGroupNum, channelNum);
+  if (k < 0) return 0.0;
+  return (boundary - 1.0) * t.jl[k] - t.rhodjl[k] + t.coul[k];
 }
 
 complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
@@ -187,7 +190,29 @@ void Site::ChannelKeys(WorkingCopy *data, const CompoundSystem *compound, std::v
   }
 }
 
-void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelRowSource *rows) {
+std::tuple<int, std::uint64_t, int> Site::ChannelRowsKey(const CompoundSystem *compound) {
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->GetEntranceKey()));
+  const int nucleus = entrancePair->GetNucleus();
+  const double inEnergy = this->CompoundEnergy(compound);
+  std::uint64_t bits;
+  std::memcpy(&bits, &inEnergy, sizeof bits);
+  // The walk of CalcEDependentValues: a beta-decay channel's penetrability reads the exit pair's charge.
+  int betaCharge = -1;
+  for (int j = 1; j <= compound->NumJGroups() && betaCharge < 0; j++) {
+    const JGroup *group = compound->GetJGroup(j);
+    if (!group->IsInRMatrix() || group->GetNucleus() != nucleus) continue;
+    for (int ch = 1; ch <= group->NumChannels(); ch++)
+      if (compound->GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 20) {
+        const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(this->GetExitKey()));
+        betaCharge = exitPair->GetZ(1) + exitPair->GetZ(2);
+        break;
+      }
+  }
+  return std::make_tuple(nucleus, bits, betaCharge);
+}
+
+void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelRowSource *rows,
+                                const Site *rowsOf) {
   AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kEDependent);
   const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->GetEntranceKey()));
   const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(this->GetExitKey()));
@@ -222,10 +247,17 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
   // Every table below is rebuilt from scratch: a second call (a parent
   // point's CalcEDependentValues reaches its sub-points again, e.g. after an
   // energy shift) used to append a second copy to the sub-points' tables.
-  // The tables, THM vertex tables included, are emptied in place
-  // (ClearEDependentRows), keeping their storage, as RecalcEDependentValues does.
-  this->ClearEDependentRows();
+  // The channel rows are emptied in place (ClearEDependentRows), keeping their
+  // storage, as RecalcEDependentValues does, or taken whole from rowsOf; the
+  // THM tables are made anew.
+  if (rowsOf)
+    edep_ = rowsOf->edep_;
+  else
+    this->ClearEDependentRows();
   thm_ps_.reset();
+  thm_vertex_.reset();
+  std::shared_ptr<ThmVertexRows> vertexRows;
+  if (this->IsTHM()) vertexRows = std::make_shared<ThmVertexRows>();
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
   std::vector<ThmSpectatorWindow::Node> psNodes;
@@ -266,7 +298,9 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
         const PPair *thePair = compound->GetPair(theChannel->GetPairNum());
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
-        if (thePair->GetPType() == 0) {
+        if (rowsOf) {
+          // the table is rowsOf's (the same ChannelRowsKey): nothing to compute
+        } else if (thePair->GetPType() == 0) {
           if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
@@ -372,13 +406,25 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
             WarnThmBelowB(configure, localEnergy, bindingE);
           }
         }
-        // Only a THM point reads them (GetThmFormFactor returns 0 for a
-        // missing entry): a classic point storing three zeros per channel cost
-        // 0.6 GB with dev's hard-sphere groups (includeAllJPi=1,
-        // tests/convolution_unify, 430k sub-points).
-        if (this->IsTHM()) this->AddThmFormFactor(j, ch, thmJl, thmRhoDjl, thmCoul);
+        // Only a THM point reads them, and only for the channels of its entrance pair (THMMatrixFunc; for any other
+        // GetThmFormFactor returns 0), so only those are kept: one entry per entrance channel, not one per channel
+        // of the compound nucleus.
+        if (vertexRows && thePair == entrancePair) {
+          vertexRows->channel.push_back(ch);
+          vertexRows->jl.push_back(thmJl);
+          vertexRows->rhodjl.push_back(thmRhoDjl);
+          vertexRows->coul.push_back(thmCoul);
+        }
       }
     }
+    if (vertexRows) vertexRows->groupStart.push_back((int)vertexRows->channel.size());
+  }
+  if (vertexRows) {
+    vertexRows->channel.shrink_to_fit();
+    vertexRows->jl.shrink_to_fit();
+    vertexRows->rhodjl.shrink_to_fit();
+    vertexRows->coul.shrink_to_fit();
+    thm_vertex_ = std::move(vertexRows);
   }
   if (psTable) psTable->offset.back() = (int)psTable->slot.size();
   if (psTable && !psTable->slot.empty()) {  // no channel at all: no nodes, as before
@@ -397,7 +443,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
   if (rows && rows->used) rows->used->insert(rows->used->end(), ownRows.begin(), ownRows.end());
   if (edep_ && edep_.SoleOwner()) {
     EDependentTables &t = MutableEDep();
-    t.ShrinkToFit();  // the THM vertex tables too
+    t.ShrinkToFit();
   }
   eDependentEnergy_ = this->GetCMEnergy();
   eDependentValid_ = true;
@@ -496,6 +542,7 @@ Unit::EDependentShare Site::ShareEDependentValues() const {
     share.tables = edep_;
     share.legendre = legendreP_;
     share.thmPs = thm_ps_;
+    share.thmVertex = thm_vertex_;
   }
   return share;
 }
@@ -517,6 +564,7 @@ bool Site::AdoptEDependentValues(const EDependentShare &share) {
   edep_ = share.tables;
   legendreP_ = share.legendre;
   thm_ps_ = share.thmPs;
+  thm_vertex_ = share.thmVertex;
   eDependentEnergy_ = this->GetCMEnergy();
   eDependentValid_ = true;
   return true;
@@ -540,26 +588,6 @@ void Site::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
 void Site::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
-}
-
-/*!
- * Adds the boundary-independent pieces j_l(rho) and rho dj_l/drho of the THM
- * entrance transfer form factor with reference to positions in the JGroup and
- * subsequent AChannel vectors. Filled in lockstep with the penetrabilities
- * (one entry per channel), so a non-entrance channel stores 0.
- */
-
-void Site::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
-  vector_r d;
-  vector_c dc;
-  EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.thm_jl.size()) t.thm_jl.push_back(d);
-  while (jGroupNum > t.thm_rhodjl.size()) t.thm_rhodjl.push_back(d);
-  while (jGroupNum > t.thm_coul.size()) t.thm_coul.push_back(dc);
-  t.thm_jl[jGroupNum - 1].push_back(jl);
-  t.thm_rhodjl[jGroupNum - 1].push_back(rhoDjl);
-  t.thm_coul[jGroupNum - 1].push_back(coul);
-  assert(channelNum == (int)t.thm_jl[jGroupNum - 1].size());
 }
 
 /*!

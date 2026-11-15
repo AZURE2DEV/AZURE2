@@ -542,3 +542,70 @@ Checks (`tests/consistency/repo_consistency_test.py`, and one run-time check):
   one by one; S3 (a) keeps the accessors so they keep working while they are moved.
 - The kinds surveyed from EXFOR (`data_kinds.md`, another agent) were not available; §4 covers the three cases asked
   for.
+
+## 9. The memory of a project with many folded data sets
+
+**The case.** A 12C + 12C model of the PI, not in the repository: one compound nucleus with about 700 channel rows
+at each compound energy, eight active extrapolations, all folded with a Gaussian beam spread on the one shared mesh
+of the nucleus -- four THM excitation functions (201 energies each, 60-point quadrature) and four direct ones (1201
+energies each, 10-point quadrature).  `AZURE2 extrapolate` at one thread took 88 to 115 s (a shared machine) and
+11.0 GB at the start of this work; the program at the branch point with `dev` (its uniform grid) 87 s and 4.47 GB.
+
+**How it was measured.** Peak resident memory by `/usr/bin/time`; the heap in use (`mallinfo2`) at each step of
+`WorkingCopy::Initialize`, and the bytes of every structure (vector capacities, each shared table counted once) after
+it, by an instrumentation in a scratch build that is not committed.  Sizes in MiB.
+
+| what is held | counts | before | now |
+|---|---|---|---|
+| channel rows of the slots (L_o, sqrt(P), two phase factors: 56 B a channel) | 178,456 slots; 22,488 distinct E_x | 6,813 (a table per slot) | 859 (a table per E_x) |
+| THM vertex pieces (j_l, rho j_l', Coulomb term) | 88,700 THM slots | 1,985 (every channel, a vector per J group, in the rows) | 43 (entrance channels only) |
+| channel rows of the extrapolation points themselves | 5,608 points; 1,207 distinct E_x | 232 | 46 |
+| the stage's channel table during the set-up (rows, and the capacity of every key asked for) | 5.8 M distinct rows | 2,273 | 400 |
+| `Site` objects of the slots | 178,456 x 376 B (392 B now) | 64 | 67 |
+| Legendre rows of the slots | one per slot | 52 | 52 |
+| result records | 920,320 doubles | 7 | 7 |
+| units, plan, node slots, meshes, point set-ups | 5,608 points | < 10 | < 10 |
+| node table | 44,663 nodes (22,488 direct, 22,175 THM, every THM node at a direct node's E_x) | holders of the slots' rows | the same |
+| external-capture amplitudes, row sets, spectator-window tables | none in this model | 0 | 0 |
+| heap in use after the set-up | | 9,273 | 1,128 |
+| peak resident memory (at the end of the channel rows) | | 10.99 GB | 1.64 GB |
+
+**What scaled with what, before.** The channel rows are a function of the compound energy E_x alone (and of the exit
+pair's charge where a beta-decay channel reads it; `Site::ChannelRowsKey`), but every site computed and held its own:
+memory ~ (sites) x (channels) x 56 B, where the sites of the mesh are, per sharing group (one per extrapolation line
+here), the union of its points' node ranges -- so each folded line on the mesh added a full copy of the rows at its
+nodes (eight lines, four groups on the direct nodes, four on the same energies as THM nodes: about eight copies of
+every node's rows).  The THM vertex pieces were kept for every channel of the compound (three numbers and a vector per
+J group per channel), though the vertex reads the entrance pair's channels only.  The channel table kept the
+capacity of every key asked for after removing the duplicates.  Angles do not enter (the lines are angle
+integrated); levels enter only through the channel count.
+
+**What is stored once now.**
+- One table of channel rows per E_x (`WorkingCopy::FillChannelRows`): the first site at a key computes it, every other
+  site at that key holds the same `SharedTable` (a THM site and a direct site at one E_x too), and so does the node
+  table.  The rows are the same bits (the node check already required the rows of every site at a node to be equal);
+  a site re-energised later (an energy shift, a re-placed grid) gets a table of its own by the copy-on-write rule.
+- The THM vertex pieces of the entrance pair's channels only, held by the site (`ThmVertexRows`, include/UnitTables.h).
+- The channel table is built from the keys of the sites that compute and gives back the capacity of the keys asked
+  for (`ChannelTable::Build`).
+
+Time: the channel rows are computed once per energy instead of once per site: the set-up's channel functions 32.5 s
+(thread-summed) became 4.7 s; the extrapolation at one thread 88 to 115 s became 47 to 53 s, at three threads 61.6 s
+became 19.9 s (one run each).  The eight curves are byte for byte those of the start.
+
+**The old program** held a table of rows per sub-point as well; its uniform grid has 4 x 201 x 60 + 4 x 1201 x 10 =
+96,280 sub-points (counted from the lines, not by a run), against 22,488 distinct E_x of the mesh (and 178,456 slots
+before this work, which is why it held less).  The mesh is not the cost: it has fewer energies than the old grid.
+
+**What remains** (1.13 GiB after the set-up, peak 1.64 GB): the rows themselves, 22,488 + 1,207 energies x about 700
+channels x 56 B (905 MiB); the channel table during the set-up (400 MiB, released before the calculation); the sites
+(67), their Legendre rows (52), the THM vertex pieces (43), the result records (7).  Not done, for later: the Legendre
+rows of an angle-integrated slot are one per slot though their angle is the group's (52 MiB); the rows per channel
+repeat a (pair, l, E_c) row up to the number of channel spins and J^pi blocks that hold it (16 M channel entries for
+5.8 M distinct rows here; holding the distinct rows and an index changes the 54 readers of `channel_table.md` §2);
+with the rows computed once per energy, the channel table adds little to the set-up and could be built per batch.
+
+**The test.** `tests/upgrade/fold_memory_test.py` (ctest `fold_memory`): `examples/c12c12_tumino2018` on 2-3 MeV with
+its four direct extrapolations folded as well; the peak memory above that of the same project unfolded is bounded at
+125 MiB (measured 97.6; with the THM pieces of every channel again 139, with a table per slot 229, the build before
+334).

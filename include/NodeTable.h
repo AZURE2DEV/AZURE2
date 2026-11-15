@@ -17,7 +17,8 @@ class Config;
 
 namespace azure2 {
 
-/// A node by (compound nucleus, route, bits of E_x): route 1 for a THM unit (its rows carry the vertex pieces), else 0.
+/// A node by (compound nucleus, route, bits of E_x): route 1 for a THM unit (its solve reads the level matrix's elements
+/// and its site the THM vertex pieces), else 0.
 using NodeKey = std::tuple<int, char, std::uint64_t>;
 
 /*!
@@ -29,8 +30,8 @@ using NodeKey = std::tuple<int, char, std::uint64_t>;
 struct NodeList {
   std::vector<int> nucleus;                         ///< compound nucleus of each node (1-based, PPair::GetNucleus)
   std::vector<double> energy;                       ///< E_x of each node, MeV
-  std::vector<SharedTable<EDependentTables>> rows;  ///< the channel rows at the node (shared with a unit there)
-  std::vector<char> thm;                            ///< 1: a THM node (its rows carry the THM vertex pieces as well)
+  std::vector<SharedTable<EDependentTables>> rows;  ///< the channel rows at the node (the table of its E_x)
+  std::vector<char> thm;                            ///< 1: a THM node (its units are THM sites)
   int Size() const { return (int)energy.size(); }
   NodeKey Key(int n) const;
   void Append(const NodeKey &key, double ex, SharedTable<EDependentTables> nodeRows);

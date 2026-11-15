@@ -41,6 +41,7 @@ class LevelInputs;
 class LevelState;
 class AZUREParams;
 class PriorCovariance;
+class GSLException;
 struct BandData;
 namespace ROOT {
 namespace Minuit2 {
@@ -626,7 +627,18 @@ class WorkingCopy {
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
   azure2::NodeState nodes_;  // Nodes(), Slots(), Overflow(): built at the end of Initialize, placed by the hand-over
-  std::shared_ptr<const ChannelTable> BuildChannelTable(const CompoundSystem *, const Config &, const std::vector<Unit *> &points);
+  /// The channel table of the rows `sites` will compute (each site's keys once).
+  std::shared_ptr<const ChannelTable> BuildChannelTable(const CompoundSystem *, const Config &, const std::vector<Site *> &sites);
+  /// What a failed channel function says (the point whose site failed, the error), for FillChannelRows.
+  using ChannelRowFailure = std::function<void(const Unit &, const GSLException &)>;
+  /// Unit::CalcEDependentValues for the points of `batches` (each point's own site and the slots it writes), batch by
+  /// batch, a batch's sites in parallel; a batch with a failed site (`failed` is called for it) ends the fill: -1.
+  /// The channel rows depend on the compound energy alone (UnitTables.h, ChannelRowsKey), so the first site at a key
+  /// computes them and every other site at that key holds the same table (Site::CalcEDependentValues `rowsOf`): one
+  /// table per energy, not one per site.  The stage's channel table (channelTable_) is built first, from the keys of the
+  /// sites that compute.
+  int FillChannelRows(const std::vector<std::vector<Unit *>> &batches, const CompoundSystem *, const Config &,
+                      const ChannelRowFailure &failed);
 };
 
 // The slots of a point (Unit.h), here where WorkingCopy is complete.

@@ -7,6 +7,7 @@
 #include <limits>
 #include <vector>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <cassert>
 #include <memory>
@@ -396,8 +397,15 @@ class Site {
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
   /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
-  /// of the point; rows->used, when set, receives every row used.
-  void CalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr);
+  /// of the point; rows->used, when set, receives every row used.  `rowsOf`, when given, is a site with the same
+  /// ChannelRowsKey whose rows are computed: this site holds that table instead of computing its own (the rest --
+  /// the conversion factors, the THM vertex pieces -- is its own).
+  void CalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr,
+                            const Site *rowsOf = nullptr);
+  /// What the channel rows (EDependentTables) depend on: the entrance pair's compound nucleus, the bits of the compound
+  /// energy E_x (CompoundEnergy), and the exit pair's charge Z_1 + Z_2 where a beta-decay channel of that nucleus
+  /// reads it (its Fermi function; -1 elsewhere).  Two sites with one key compute the same rows bit for bit.
+  std::tuple<int, std::uint64_t, int> ChannelRowsKey(const CompoundSystem *);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this site.
   void ChannelKeys(WorkingCopy *data, const CompoundSystem *, std::vector<ChannelTable::Key> &);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
@@ -416,8 +424,6 @@ class Site {
   void AddLoElement(int, int, complex);
   /// Store a \f$\sqrt{P_c}\f$ at (J-group, channel).
   void AddSqrtPenetrability(int, int, double);
-  /// Store the pieces of the THM form factor at (J-group, channel).
-  void AddThmFormFactor(int, int, double, double, complex = complex(0.0, 0.0));
   /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
   /// Store a hard-sphere phase factor at (J-group, channel).
@@ -548,6 +554,8 @@ class Site {
   /// This point's own, writable Legendre polynomials (copied first if shared).
   vector_r &MutableLegendre();
   std::shared_ptr<const ThmPsTable> thm_ps_;
+  /// The THM vertex pieces of the entrance pair's channels (a THM point only; UnitTables.h).
+  std::shared_ptr<const ThmVertexRows> thm_vertex_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
   // a no-op while the point's energy is unchanged (its values depend only on
   // the energy, the angle and the channel radii).

@@ -374,8 +374,8 @@ have :math:`\Omega_c = 1`. With ``--use-rmc`` the capture element is
 the phases :math:`\Omega`.
 
 Phase factors, penetrabilities and Coulomb amplitudes are computed at set-up
-and held by the ``Site`` (its channel rows, shared with its node of the
-``NodeTable``).
+and held by the ``Site`` (its channel rows: one table per compound energy,
+shared by every site at that energy and by its node of the ``NodeTable``).
 
 R-Matrix Formalism
 -------------------
