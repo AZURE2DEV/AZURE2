@@ -426,6 +426,12 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   level is then the level of the pair's J^pi within 1 keV of the pair's E_x
   (must exist, with its particle width; N_f from its particle channels), and
   with --no-brune only if it is the FIRST level of its J^pi group.
+  Fitted final-level ENERGY: in builds up to dev ba2be00a the line centre stays
+  at the .azr energy (only the width follows the fit) -- a fit with that energy
+  free moves the R-matrix pole but not the line. Branch
+  `feature/linewindow-fitted-energy` (2026-11-15, not on dev yet): the centre is
+  the level's current energy (Brune / Brune-Park; --no-brune keeps the input
+  energy), nodes re-placed per evaluation when it moves (slower).
   Record `R-matrix/AZURE2_code_audit/11-14-26_ec_unbound_broad/`; test
   `tests/ec_unbound_broad`.
   OLDER BUILDS treated such a state as BOUND by |E_x - S| without a word:

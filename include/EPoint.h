@@ -718,11 +718,14 @@ class EPoint {
   };
   std::vector<LineNodeData> line_nodes_;
   double line_nodes_cm_ = std::numeric_limits<double>::quiet_NaN();
+  double line_nodes_centre_ = std::numeric_limits<double>::quiet_NaN();  // the line centre the nodes were placed for
   bool line_active_ = false;
   LineNode line_node_;
   void SetupLineNodes(CNuc *, const Config &);
   /// The final level's observed reduced width amplitude in its open channel (EPoint.cpp, at its definition).
-  double LineObservedAmplitude(CNuc *, const Config &, int j, int la, int ch, bool ecLinked);
+  double LineObservedAmplitude(CNuc *, const Config &, int j, int la, int ch, bool ecLinked, double termsEnergy);
+  /// The excitation energy the line shape is centred on, from the current parameters (EPoint.cpp).
+  double LineCentreEnergy(CNuc *, const Config &, int j, int la, double *termsEnergy);
   std::vector<double> line_nf_terms_;  // per channel of the final level's group, at line_nf_energy_
   double line_nf_energy_ = std::numeric_limits<double>::quiet_NaN();
   matrix_c ec_amplitudes_;

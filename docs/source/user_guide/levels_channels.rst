@@ -300,6 +300,14 @@ capture cross section (angle-integrated or differential); not with the RMC forma
 or ``--use-gradient``. The cost is 48 final energies per point. Test:
 ``tests/ec_unbound_broad``.
 
+The line follows the fit: its centre is the final level's current observed energy and
+its width the current reduced width, so a fit with that level's energy free moves the
+line (the 48 final energies are then placed again at every evaluation, with their
+external-capture integrals, which is slower than a fit with the energy fixed). In
+builds before 2026-11-15 the centre stayed at the energy of the project file while
+the width followed the fit. In the formal parametrization (``--no-brune``) the centre
+still stays at the input energy.
+
 External capture into the pair need not be on. With it, the final level is the one
 the external capture is linked to. Without it (internal capture alone, since builds
 after 2026-11-15) the final level is the level of the pair's :math:`J^\pi` whose energy
