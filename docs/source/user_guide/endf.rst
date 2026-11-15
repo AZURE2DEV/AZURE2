@@ -276,24 +276,38 @@ Write an evaluation
   must equal MF=3 to 1e-5 (T2: 8e-8), else the write is refused.
 - **MF=6** (pp. 133-147), in the c.m. (LCT=2), on the energy grid of MF=3 (the grid's rule also covers the
   distributions): each particle exit as LAW=2 (the engine's Legendre coefficients, normalised as eq. 6.8) with the
-  residual as LAW=4; charged-particle elastic scattering as LAW=5 with LTP=12 (P_NI tabulated in mu, each energy
-  on the cosines it needs) and sigma_NI in MF=3/MT=2 (p. 150), from mu = -1 (0 for identical particles) to
-  ``elastic_max_cosine`` (0.98; at smaller angles the file gives the Coulomb term alone); capture to each final
-  state as its primary photon (LAW=2, its energy at zero incident energy in AWP, the yield sigma_f/sigma) and the
-  recoil (LAW=4). The cascade below the final states is not given (AZURE2 does not hold it). Elastic scattering
-  has energies of its own, chosen so that a code reading the file as the manual says (sigma_NI of MF=3 times P_NI
-  of MF=6, each interpolated) gets the cross section to the tolerance: wherever sigma_NI changes sign, the two
-  written energies around the change are at most 1e-5 x E apart, and between them that reading is wrong by up to
-  the nuclear part of the cross section. MF=1 and the answer (``w.elastic``) list these brackets, the number of
-  energies and the tolerance reached. No MF=6 section has more than 200 energies and no LAW=5 panel more than 201
-  cosines (the limits of CHECKR, which other codes share; the PI's choice): where the tolerance would need more, the
-  section is thinned to the limit by the same rule and MF=1, ``w.accuracy`` and the end of ``w.losses`` say the
-  tolerance it reaches (on T1 and 13N the elastic section, read as the manual says, is not usable near the
-  energies where sigma_NI changes sign: the stated tolerance is 5.5 and 1.3, the median error
-  1e-3). ``mf6_limits="manual"`` writes to the format's own limits instead (2,000 energies, Appendix G of
-  the manual). On T1, T2 and 13N the
-  file's dsigma/dOmega equals the engine's at the data's points and between the tabulated energies and angles to
-  3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section.
+  residual as LAW=4; capture to each final state as its primary photon (LAW=2, its energy at zero incident energy in
+  AWP, the yield sigma_f/sigma) and the recoil (LAW=4). The cascade below the final states is not given (AZURE2 does
+  not hold it). No MF=6 section has more than 200 energies and no LAW=5 panel more than 201 cosines (the limits of
+  CHECKR, which other codes share; the PI's choice): where the tolerance would need more, the section is thinned to
+  the limit by the same rule and MF=1, ``w.accuracy`` and the end of ``w.losses`` say the tolerance it reaches.
+  ``mf6_limits="manual"`` writes to the format's own limits instead (2,000 energies, Appendix G of the manual).
+- **Charged-particle elastic scattering** (MF=6/MT=2 LAW=5, pp. 145-147), in one of two forms
+  (``elastic_form``; the default is ``pyazr.endf.writer.ELASTIC_FORM``):
+
+  - ``"amplitudes"`` (the default): the nuclear amplitude expansion, LTP=1, with 1.0 in MF=3/MT=2 (p. 145). At
+    each energy the file holds the engine's coefficients b_l and a_l of eqs. 6.13 (distinguishable particles) and
+    6.14 (identical particles), from which the manual's formula gives the engine's elastic cross section at every
+    angle (measured to 1e-11 on T1, T2, 13N, p + p and d + d). The coefficients come from the collision matrix
+    of the engine's evaluation (the point output ``nuclear_amplitudes`` of an elastic data set). Between two
+    energies a reader interpolates sigma_e - sigma_c at a fixed angle; the energies are chosen by the grid's rule
+    on the cross section that interpolation gives at 17 angles. Measured within CHECKR's limits: T1 200 energies,
+    tolerance stated 6.4e-3, largest deviation 4.3e-3 between the written energies (median 9e-5); T2 117 energies,
+    1.1e-3 stated, 1.8e-4 measured; 13N 200 energies, 6.0e-3 stated, 3.4e-3 measured. With
+    ``mf6_limits="manual"`` T1 and 13N take 491 and 465 energies and reach 1.1e-3.
+  - ``"tabulated"``: LTP=12, P_NI tabulated in mu (each energy on the cosines it needs) and sigma_NI in MF=3/MT=2
+    (p. 150), from mu = -1 (0 for identical particles) to ``elastic_max_cosine`` (0.98; at smaller angles the file
+    gives the Coulomb term alone). Elastic scattering has energies of its own, chosen so that a code reading the
+    file as the manual says (sigma_NI of MF=3 times P_NI of MF=6, each interpolated) gets the cross section to the
+    tolerance: wherever sigma_NI changes sign, the two written energies around the change are at most 1e-5 x E
+    apart, and between them that reading is wrong by up to the nuclear part of the cross section. MF=1 and the
+    answer (``w.elastic``) list these brackets, the number of energies and the tolerance reached. Within CHECKR's
+    limits the 200 energies cannot follow sigma_NI near its zeros: on T1 and 13N the section, read as the manual
+    says, is not usable there (tolerance stated 5.5 and 1.3; median error 1e-3), on T2 it holds 0.12.
+
+  On T1, T2 and 13N the file's dsigma/dOmega equals the engine's at the data's points and between the tabulated
+  energies and angles to 3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section, or to the
+  tolerance the file states where CHECKR's limits thinned a section.
 
 Listed in MF=1 and in the answer (``w.losses``, ``w.not_written``), each only when the project has it: every
 section a reaction of the project needs and the file does not hold, with the reason; the photon channels (their
@@ -318,8 +332,9 @@ Measured with CHECKR 8.24, FIZCON 8.19 and PSYCHE 8.11 on the files written from
   ``mf6_limits="manual"`` may. The library's files have the first.
 - *DISCRETE 2-BODY LAW NOT PERMITTED FOR MT= 102* (FIZCON): the manual allows LAW=2 for the primary photons of
   MT=102 (p. 143); FIZCON's list of reactions omits it.
-- *CHECK NORMALIZATION= 0.998889* (FIZCON, a LAW=5 panel where sigma_NI is close to zero and P_NI large): the panel
-  integrates to 1 to 1e-7; FIZCON sums in single precision.
+- *CHECK NORMALIZATION= 0.998889* (FIZCON, a LAW=5 LTP=12 panel where sigma_NI is close to zero and P_NI large; 81
+  of the 200 panels of T1 within CHECKR's limits): FIZCON sums in single precision, and where sigma_NI is near zero
+  its sign and size are decided by the cosines a panel keeps. The amplitude form has no such panel.
 - *AP NOT IN RANGE* and *SPIN OF ISOTOPE ... DISAGREES WITH ...* (PSYCHE): PSYCHE's reading of LRF=7 (above).
 - *THE CALCULATED Q 6.67452E+06 DISSAGREES WITH THE GIVEN Q 1.94349E+06* for MT=102 (PSYCHE, note): PSYCHE's Q
   comes from its own mass formula (its function ``AMASS``: a liquid-drop formula with shell terms; a table only for

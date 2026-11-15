@@ -162,3 +162,4 @@ pyazr::endf::Material	pyazr::endf::resonances::LRF7	makes	frontends		Material.re
 pyazr::endf::resonances::LRF7	pyazr::Session	reads	frontends	const	pyazr.endf.from_session(s, x) reads s.parameters, s.pairs and the door formal_levels_of_block (api/src/pybind_level_doors.cpp)
 pyazr::endf::engine_values::Sweeps	pyazr::Session	makes	frontends		one session per sweep of a project of the session's nuclear part at x (pyazr/endf/engine_values.py Sweeps.evaluate)
 pyazr::endf::engine_values::Sweeps	pyazr::endf::elastic::ElasticSection	makes	frontends		the engine values of the elastic section (pyazr/endf/elastic.py section, Sweeps.elastic_values)
+pyazr::endf::engine_values::Sweeps	pyazr::endf::amplitudes::AmplitudeSection	makes	frontends		the coefficients of the LTP=1 section (pyazr/endf/amplitudes.py section, Sweeps.nuclear_amplitudes: the door nuclear_amplitudes)

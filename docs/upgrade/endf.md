@@ -1068,3 +1068,102 @@ proton on 12C (T1, 13N) is not usable near the zeros of sigma_NI under the manua
 cannot follow sigma_NI's ratio near four to six zeros; the median stays at 1e-3) and MF=1 says so. With `mf6_limits="manual"` the section takes what 13.10 measured. T2
 meets its tolerance outside the brackets.
 
+
+### 13.12 Elastic scattering as nuclear amplitudes (LAW=5 LTP=1)
+
+**The door.** The engine's elastic cross section at a point is already of the manual's LTP=1 form. The collision
+matrix of the point's energy (the T-matrix of `AMatrixFunc::CalculateTMatrix` or `RMatrixFunc::CalculateTMatrix`,
+read through `GenMatrixFunc::GetTMatrixElement`) is turned by `GenMatrixFunc::ElasticCoefficientsOf`
+(`src/GenMatrixFunc.cpp`) into the site's kElastic record (`include/SiteObservable.h`, `elastic_record`): the
+nuclear B_L of |F_N|^2, the complex Coulomb-nuclear D_l (X_l for identical particles with spin) and the Coulomb
+factors, which `ContractElastic` (`src/SiteObservables.cpp`) contracts with the engine's Coulomb amplitude
+f_d = eta / (sqrt(pi) (1 - mu)) exp(-i eta ln((1 - mu)/2)) (`Site::CoulombAmplitudesAt`). Eq. 6.13 (p. 145) is the
+same sum term by term with
+
+  a_l = -conj(D_l) / (sqrt(pi) (2l + 1)),   b_l = 2 B_l / (2l + 1);
+
+eq. 6.14 (identical particles) with the same a_l where X_l = (-1)^l D_l (every channel of two identical particles
+has l + s even, so the exchange sign (-1)^s is (-1)^l) and b_l = 2 B_{2l} / (4l + 1), the odd B_L zero (both
+checked by the door; a record that breaks them is refused). The spins enter only through the engine's T-matrix and
+its spin average: the a_l expand the trace of the amplitude matrix over the spin states divided by their number
+(the Coulomb amplitude is diagonal in them), which is what D_l holds. The door is a point output of an elastic
+data set, `nuclear_amplitudes` (`api/src/pybind_elastic_amplitudes.cpp`, one row of `PointOutputs()` in
+`api/src/pybind_evaluation.cpp`): the LIST values of p. 147 per point, read from the record the evaluation wrote;
+nothing is computed again and nothing of the evaluation changes. It is a data set's output, so the writer asks it
+of a data session (`Sweeps.nuclear_amplitudes`: one data set at 90 deg c.m. with placeholder values, every energy a
+row); the extrapolation path (`calculated_*` of `AZUREAPI`) is another agent's file.
+
+**The check of the door** (`work/endf6/s/door_check.py`, eqs. 6.9-6.14 written from the page, CODATA 2018
+constants; 50 lab energies over the data's range x 12 c.m. angles 10-170 deg): the cross section rebuilt from the
+coefficients against the engine's dsigma/dOmega at the same points, largest relative difference T1 7.8e-12, T2
+4.6e-12, 13N 7.4e-12, p + p (`identical_pp_res`, identical fermions) 1.3e-11, d + d (`identical_dd_mott`, spin 1)
+4.5e-12. The constants of eqs. 6.11-6.12 differ from the engine's in the last digits; nothing else is left. The test
+`tests/pyazr/endf_amplitudes_test.py` (20 energies) holds it to 1e-9; the mapping injected wrong (conj dropped)
+fails it on all three projects.
+
+**Against the library.** ENDF/B-VIII.1 3He + 4He (LTP=1 at 400 energies; `work/endf6/s/library_ltp1.py`, read
+with `python -I`): the file's MF=2 read into a project (`to_project`), the door's coefficients at 16 of the file's
+panel energies against the file's own. At 1 MeV they agree to 4e-6 of the largest coefficient (a_0 =
+-1.443711e-2 + 4.89646e-4 i in both), which confirms the convention (sign, sqrt(pi), the conjugate). The agreement
+falls off smoothly with energy: 9e-5 at 2.25 MeV, 2e-3 at 4.75, 3e-2 at 9.75, 2.5e-1 at 19.75 MeV (the file's
+cross section by eqs. 6.9-6.13 against the engine's from its own MF=2: 3e-6 at 1 MeV, 4e-2 at 7.25, 6e-1 at 14.75).
+Not explained: the file's elastic section and its MF=2 agree only at low energy (as its MF=6/MT=600 above 17 MeV,
+13.9); the file states NL = 6 where its MF=2 has l <= 3 (the extra coefficients are zero or small).
+
+**The writer.** `write(..., elastic_form="amplitudes" | "tabulated")`, the default the named constant
+`writer.ELASTIC_FORM` ("amplitudes"; the PI decides at the merge). "tabulated" is LTP=12 as before (13.10,
+13.11). "amplitudes" (`pyazr/endf/amplitudes.py`, `sections.elastic_amplitudes`): MF=3/MT=2 holds 1.0 at the first
+and last energy (p. 145: "a value of 1.0 is used in File 3"; the library file does the same), MF=6/MT=2 LAW=5 with
+per energy a LIST `0, E, LTP=1, 0, NW, NL` of the door's values. The energies: the coefficients at every energy of
+the one grid, then `grid.thin_to` on the cross section at 17 cosines over the LAW=5 range with the reader's own
+interpolation between two kept energies (sigma_e - sigma_c linear at fixed mu, the Coulomb term at the energy),
+quarter points of the kept intervals computed and the choice made again while the limit allows, and the quarter
+points and midpoints of every written interval computed once more for the tolerance stated (MF=1, `Written.elastic`,
+an `AmplitudeReport`). The rule holds the engine's cross section (the Coulomb terms on the project's masses); the
+reader's Coulomb terms use the file's masses (AWI nuclear, p. 24), which is in the measured deviation below.
+
+What the manual leaves open, and the reading taken:
+- The quantity a reader interpolates between the incident energies of LTP=1 (and 2): the manual says nothing; the
+  module interpolates sigma_e - sigma_c at fixed mu, the Coulomb term computed at the energy asked (as 13.1).
+- NL of a LIST of LTP=1: "the highest Legendre order of nuclear partial waves used" (p. 147): the highest l of the
+  record's D_l, raised where the nuclear B_L ask more (2 NL + 1 values of b for distinguishable particles).
+- The a_l normalisation: "complex coefficients for expanding the trace of the nuclear scattering amplitude matrix"
+  (p. 145) is not more precise; the reading is fixed by eqs. 6.13-6.14 themselves (the coefficients that make the
+  formula the cross section) and confirmed on the library file at 1 MeV.
+
+**Measured** (`work/endf6/s/measure.py`: the file read back with the module's reader, the manual's reading for
+LTP=12, against the engine at the quarter points and midpoint of every interval of the MF=6/MT=2 energies x 12 c.m.
+angles 20-175 deg, relative to max(|engine|, 1e-3 of its largest value); build `work/b-endf6`, one thread each,
+three runs side by side):
+
+| file | form, limits | energies | stated | measured max (where) / median | width off by > 1e-3 / 5e-3 | write | file size |
+|---|---|---|---|---|---|---|---|
+| T1 | amplitudes, checkr | 200 | 6.4e-3 | 4.3e-3 (0.494 MeV, 60 deg) / 8.6e-5 | 763 keV / 0 | 28 s | 166 kB |
+| T1 | tabulated, checkr | 200 | 5.5 | 0.84 (0.426 MeV, 90 deg) / 1.5e-3 | 1.26 MeV / 940 keV | 100 s | 1.1 MB |
+| T1 | amplitudes, manual | 491 | 1.1e-3 | 8.5e-4 / 2.6e-5 | 0 / 0 | 29 s | 468 kB |
+| T2 | amplitudes, checkr | 117 | 1.1e-3 | 1.8e-4 / 3.3e-6 | 0 / 0 | 1.5 s | 150 kB |
+| T2 | tabulated, checkr | 200 | 0.12 | 1.9e-2 (0.687 MeV, 45 deg) / 2.2e-5 | 169 keV / 13 eV | 51 s | 845 kB |
+| 13N | amplitudes, checkr | 200 | 6.0e-3 | 3.4e-3 (1.742 MeV, 30 deg) / 3.1e-5 | 478 keV / 0 | 37 s | 145 kB |
+| 13N | tabulated, checkr | 200 | 1.3 | 0.47 (1.734 MeV, 20 deg) / 6.7e-4 | 1.28 MeV / 544 keV | 137 s | 1.0 MB |
+| 13N | amplitudes, manual | 465 | 1.1e-3 | 6.2e-4 / 5.2e-6 | 0 / 0 | 37 s | 380 kB |
+
+(T2 amplitudes needs 117 energies under either limit. The write times include MF=3 and the other MF=6 sections; T1
+and 13N spend most of them on MT=102.) The real codes (CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11) on the amplitude
+files report only what 13.8 lists for every written file (LRP=2, MAT, FIZCON's LAW=2 for MT=102, PSYCHE's reading of
+LRF=7 and its notes); with the manual's limits CHECKR adds its NE > 200 for MF=6/MT=2 and MT=102. On the tabulated
+files FIZCON adds "CHECK NORMALIZATION" for 81 (T1), 62 (T2) and 70 (13N) LAW=5 panels: the panels near the zeros of
+sigma_NI.
+
+**What is left for "tabulated".** On these three projects the amplitude form is better on every number: its error
+is the interpolation between energies alone, with no product of two tables and no sign change to bracket, and it
+holds every angle (LTP=12 stops at mu = 0.98). What "tabulated" still offers: a file for a code that reads only
+tabulated LAW=5 (none is known here; the checking codes read both, and the library's own charged-particle LRF=7
+file uses LTP=1), sigma_NI in MF=3/MT=2 as a number a user may want, and a form that holds a cross section the
+engine computes but whose amplitudes are not the elastic record's (none today). Not measured: a processing code
+(NJOY, the PREPRO codes) reconstructing either form.
+
+**sigma_NI's sign from the thinning** (the tabulated form): sigma_NI of a panel is the trapezoid integral over the
+cosines the panel keeps; where the true sigma_NI is near zero, its sign is decided by those cosines (T2: three sign
+changes within 22 eV near 385.93 keV). A repair (sigma_NI from the full cosine grid) would break the normalisation
+of the written P_NI (the trapezoid over the kept cosines must be 1, eq. 6.20), so it is not a few lines; not done.
+The amplitude form has no sigma_NI.

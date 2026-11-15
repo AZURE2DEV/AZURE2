@@ -454,8 +454,11 @@ MF=6 (LAW=2 of the exits, LAW=5 of elastic scattering, the primary photons of MT
    every section (``Sweeps.energy_grid``: ``grid.refine`` from ``grid.start_grid``, the rule applied to the
    quantities the file tabulates; a second axis, as the cosines of LAW=5, refined by the same ``grid.refine``). If
    the engine has no quantity for it, a door of the binding (a new file of ``api/src/``, registered in
-   ``BindPhysics``); never a physics formula in Python. MF=6 needed no door: the ``legendre`` quantity with the
-   expansion ``rsl`` is LAW=2's a_l. A section whose reader does not interpolate linearly between energies (LAW=5
+   ``BindPhysics``, or a row of the point outputs of ``api/src/pybind_evaluation.cpp`` when the numbers are a
+   record the evaluation writes); never a physics formula in Python. LAW=2 needed no door: the ``legendre``
+   quantity with the expansion ``rsl`` is its a_l. LAW=5 LTP=1 has one: the point output ``nuclear_amplitudes``
+   (``api/src/pybind_elastic_amplitudes.cpp``) reads the elastic record of a data set's point and gives the
+   manual's b_l and a_l (``Sweeps.nuclear_amplitudes``; the energies chosen by ``pyazr/endf/amplitudes.py``). A section whose reader does not interpolate linearly between energies (LAW=5
    LTP=12: sigma_NI of MF=3 times P_NI of MF=6, each interpolated) gets energies of its own, chosen by
    ``grid.thin_to`` with the reader's own reconstruction instead of the chord (``pyazr/endf/elastic.py``).
 3. The records: a function of ``sections.py`` that lays the section out as its page of ENDF-102 says (cite it),

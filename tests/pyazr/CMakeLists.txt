@@ -117,6 +117,18 @@ add_test(NAME pyazr_endf_write_slow
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T2 13N)
 set_tests_properties(pyazr_endf_write_slow PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      LABELS slow TIMEOUT 3000)
+add_test(NAME pyazr_endf_write_tabulated
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_write_test.py T2 tabulated)
+set_tests_properties(pyazr_endf_write_tabulated PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     LABELS slow TIMEOUT 3000)
+
+# The engine's door of the nuclear amplitude expansion (LAW=5 LTP=1): the coefficients of T1, p + p and d + d give
+# the engine's elastic cross section back by the manual's eqs. 6.9-6.14 (about 10 s).
+add_test(NAME pyazr_endf_amplitudes
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_amplitudes_test.py)
+set_tests_properties(pyazr_endf_amplitudes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
 # pyazr.endf's checking codes against a stand-in (tests/pyazr/endf_standin/standin.py): finding, decks, reports read
 # into findings, a crash as a finding, candidates and their difference, accept.  The real codes run too when

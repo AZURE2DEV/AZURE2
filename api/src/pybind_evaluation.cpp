@@ -25,6 +25,7 @@
 namespace py = pybind11;
 
 void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
+std::vector<double> NuclearAmplitudeCoefficients(const Unit &point, const azure2::Results &results);  // pybind_elastic_amplitudes.cpp
 
 namespace {
 
@@ -61,6 +62,13 @@ bool Capture(const Segment &s, const CompoundSystem &nuc) {
   return exit && exit->GetPType() == 10;
 }
 
+// Elastic scattering of a charged pair at an angle, in a sample of one compound nucleus.
+bool ChargedElastic(const Segment &s, const CompoundSystem &nuc) {
+  if (!s.IsDifferential() || s.IsNatural() || s.GetEntranceKey() != s.GetExitKey()) return false;
+  const PPair *pair = nuc.GetPairFromKey(s.GetEntranceKey());
+  return pair && pair->GetPType() == 0 && pair->GetZ(1) > 0 && pair->GetZ(2) > 0;
+}
+
 const std::vector<PointOutput> &PointOutputs() {
   static const std::vector<PointOutput> rows = {
       {"energy_lab", "MeV", "every data set", "the beam's lab energy of the point (after the data set's energy shift)",
@@ -79,6 +87,11 @@ const std::vector<PointOutput> &PointOutputs() {
        "the c.m. Legendre coefficients A_L of the point, L = 0, 1, ... (a list per point)",
        true, [](const Segment &s, const CompoundSystem &) { return s.IsAngularDist(); },
        [](const PointView &v) { return v.segment.LegendreCoefficients(v.point, v.results); }},
+      {"nuclear_amplitudes", "b/sr", "charged-particle elastic scattering at an angle, a point without a target-effect fold",
+       "the coefficients b_l and a_l (re, im) of ENDF-6's nuclear amplitude expansion (LAW=5 LTP=1, ENDF-102 eqs. "
+       "6.13-6.14) at the point's energy, as the LIST record orders them (a list per point; empty for a folded point)",
+       true, [](const Segment &s, const CompoundSystem &nuc) { return ChargedElastic(s, nuc); },
+       [](const PointView &v) { return NuclearAmplitudeCoefficients(v.point, v.results); }},
       {"nucleus_terms", "model", "a sample of several compound nuclei",
        "the abundance-weighted term of each compound nucleus of the sample (a list per point, the nuclei's order)",
        true, [](const Segment &s, const CompoundSystem &) { return s.IsNatural(); },

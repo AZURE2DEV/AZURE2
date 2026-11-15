@@ -33,6 +33,9 @@ LAW2_COSINES = np.linspace(-1.0, 1.0, 9)
 ELASTIC_COSINES = 9
 #: Evenly spaced cosines the LAW=5 cosine grid starts from.
 ELASTIC_START_COSINES = 21
+#: The c.m. angle (deg) of the data set through which the engine gives the nuclear amplitude coefficients (any angle:
+#: the record the coefficients come from has none).
+AMPLITUDE_ANGLE = 90.0
 #: The most points (energies x cosines) of one elastic session (the engine keeps about 2.5 kB per point).
 SESSION_POINTS = 200000
 #: The session options a sweep keeps (the calculation's; the others are the session's own business).
@@ -247,6 +250,44 @@ class Sweeps:
             data = self.evaluate([self._elastic_record(reaction, self._energies("elastic_more", part), mu)])
             blocks.append(self._elastic_block(data[0], len(part), mu, coulomb_minus, part))
         return np.vstack(blocks) if blocks else np.zeros((0, len(mu)))
+
+    def nuclear_amplitudes(self, reaction, energies_MeV):
+        """The coefficients of LAW=5 LTP=1 at lab energies (MeV), one LIST record's values per energy (b/sr, in the
+        order of p. 147): the engine's door, the point output ``nuclear_amplitudes`` of an elastic data set, read from
+        the record each point's evaluation wrote (the collision matrix at the point's energy).  The door is a data
+        set's output, so the session is one of data: a data set of the reaction at one c.m. angle (the record has no
+        angle) with placeholder values, every energy a row."""
+        from ..project import Nuisance, Project
+        from ..session import Session
+        e = np.asarray(energies_MeV, float)
+        if not e.size:
+            return []
+        self.count += 1
+        path = os.path.join(self.workdir, "amplitudes.azr")
+        if os.path.exists(path):
+            os.remove(path)
+        rows = os.path.join(self.workdir, "amplitudes.dat")
+        np.savetxt(rows, np.column_stack([e, np.full(len(e), AMPLITUDE_ANGLE), np.ones(len(e)), np.ones(len(e))]),
+                   fmt="%.17g")
+        p = Project.new(path, nuclear_part=self.session.file)
+        p.add_dataset("elastic", reaction=reaction.label, quantity="dsigma_domega", unit="b/sr", file=rows,
+                      columns="E_lab[MeV] theta_cm[deg] value error", norm=Nuisance(1, "fixed"),
+                      **dict(reaction.pair_keys))
+        if "priorCovariance" in p.config():  # the prior of the fit names the project's data, which this one lacks
+            p.set_config(priorCovariance=None)
+        p.save()
+        s = Session(path, parameter_file=self.parameter_file, **self.options)
+        try:
+            d = s.evaluate(s.parameters.x0).data[0]
+        finally:
+            s.close()
+        lab = np.asarray(d.extra["energy_lab"], float)
+        values = d.extra.get("nuclear_amplitudes", [])
+        if len(values) != len(e) or not np.allclose(lab, e, rtol=1e-12, atol=0.0) or any(len(v) == 0 for v in values):
+            raise FormatRefused(what="the engine gave no nuclear amplitude coefficients at the energies asked",
+                                allowed="an elastic data set of a charged pair without target effects",
+                                fix="report the project to the AZURE2 developers")
+        return [np.asarray(v, float) for v in values]
 
     def elastic_cosines(self, reaction, energies_MeV, mu_range, coulomb_minus, tolerance, max_points):
         """The cosine grid of LAW=5, from ``ELASTIC_START_COSINES`` even cosines over ``mu_range``, by the rule of
