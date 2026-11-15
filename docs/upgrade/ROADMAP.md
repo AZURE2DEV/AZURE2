@@ -174,6 +174,11 @@ State on 2026-11-11:
       from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
       converter's command, the old reading path and `pyazr/azrfile.py` (3,756 lines) deleted, a second round of
       validation (the level rows, kinematic limits, combinations of target effects).
+- [x] A real project is never misread: a section, a `<config>` key or line, an old block, an old line's type or
+      trailing keyword that nothing reads is refused (`E_UNKNOWN_SECTION`, `E_UNREAD_LINE`; the converter names
+      dev's `<channelRadii>`, `<isospin>` and spin observables); `entrance_pair` / `exit_pair` on a sum or ratio
+      apply to every term whose label names two pairs (the PI's 24Mg model converts with no question); a UDR flight
+      path in metres.
 - [x] New data kinds: ratio to Rutherford and to Mott; the S factor as a quantity; units with dimensions checked;
       named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
       widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations

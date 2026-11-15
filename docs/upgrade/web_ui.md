@@ -1065,8 +1065,8 @@ edit with the evaluation that follows 0.43–0.54 s on T2, its undo 0.49 s. The 
    into the document; `#selftest?edit=1` also types a width and presses Undo. Screenshots use Chrome's old headless
    mode, whose viewport is the window size.
 6. *Forms*: a widget splits a field's text into boxes and joins it again; a text it cannot split is one text box. The
-   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`fold`,
-   `single_reaction`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
+   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`angle_axis`,
+   `fold`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
    table of its keys: finding 13).
 7. *Plots*: the model is drawn at the data points (the engine's values there), not on a dense grid (step 3); a data
    set is drawn against energy, or against angle when its energy is one value; points of a few distinct angles are

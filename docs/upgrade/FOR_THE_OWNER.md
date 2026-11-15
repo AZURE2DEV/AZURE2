@@ -823,6 +823,19 @@ them the two on automatic target-effect windows, which the upgrade deletes (the
 assessment is in `HANDOFF.md`). Until the merge, new physics is best written on the upgrade branch, following the
 recipes.
 
+**A project of `dev` in this build.** What `dev` added after the branch point and this build does not compute yet is
+refused, never read past: `AZURE2 --convert` stops at a `<channelRadii>` or `<isospin>` block (it names the block and
+what it states: radii of single channels, isospin ties of levels across compound nuclei), at a data or extrapolation
+line whose type is followed by a spin operator (`b:y`, `t:y`, ...: dev's general spin observables, type 10) and at a
+line that ends in a keyword the old grammar does not know; the engine refuses such a block in a format-3 file
+(`E_UNKNOWN_SECTION`) and a `<config>` key it does not have (`E_UNREAD_LINE`).  Before, the block was copied through,
+`--validate` said "valid" and the run computed as if it were absent (13N with `<channelRadii>` gave the same chi^2
+with and without it).  Such a project keeps running in `dev` until the features are ported (`work/devplan/PLAN.md`).
+Two other differences a `dev` user meets with a 12C + 12C model: a reaction out of an identical entrance pair is
+twice `dev`'s cross section (the factor (1 + delta_12) of every cross section out of an identical pair, the
+conventions page; `dev` applies it to elastic scattering only), and a THM model's binding energy in column 32 of
+`<levels>` is read by `dev` (the branch point and `3e502625` alike) as the light particle's excitation e1.
+
 ## The web interface: the page (2026-11-13)
 
 `python -m pyazr.ui project.azr` prints a URL; the browser shows the project. The page has a header (project, unsaved
