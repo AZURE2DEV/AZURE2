@@ -11,7 +11,9 @@ the form of the module's own format check (:class:`pyazr.endf.format_check.Findi
   reconstruction a check; with LRP=1 MF=3 holds backgrounds and the comparison is not made (said).
 - **masses** (``MASS``, ``Q``, ``Q_MASSES``): each nuclide's mass in MF=2 against AME2020 (atomic, and nuclear for a
   light particle: ENDF-102 p. 72 does not say which MA and MB are), each pair's Q against AME2020's, and against the
-  Q the file's own masses give (p. 105: Q from atomic masses).
+  Q the file's own masses give (p. 105: Q from atomic masses).  A pair that leaves the residual above its ground
+  state (MT=601, 801, ...) is compared less the residual's excitation (MF=3's QM - QI); where the file does not
+  give it, the Q is not checked and a note says so.
 - **text** (``TEXT``): every flag the MF=1 text names (``LRF=``, ``KRM=``, ``IFG=``, ``LTP=``, ``LRP=``) against the
   records that hold it; a flag whose section is not in the file is said so.
 """
@@ -19,6 +21,7 @@ the form of the module's own format check (:class:`pyazr.endf.format_check.Findi
 import dataclasses
 import os
 import re
+import shutil
 import tempfile
 
 import numpy as np
@@ -80,9 +83,12 @@ def check_resonances(material, tolerance=TOLERANCE, separation_energy="ame2020")
     for sub in ("output", "checks"):
         os.makedirs(os.path.join(work, sub), exist_ok=True)
     from .model import to_project
-    project, conversion = to_project(record, os.path.join(work, "evaluation.azr"),
-                                     separation_energy=separation_energy, material=m)
-    _reconstruction(m, project, conversion, tolerance, findings, parts, notes, work)
+    try:
+        project, conversion = to_project(record, os.path.join(work, "evaluation.azr"),
+                                         separation_energy=separation_energy, material=m)
+        _reconstruction(m, project, conversion, tolerance, findings, parts, notes, work)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the project of the reconstruction: nothing of it is kept
     _masses(m, record, conversion, findings, parts)
     _text(m, record, findings, parts)
     findings = [dataclasses.replace(f, mat=mat) for f in findings]
@@ -169,25 +175,47 @@ def _masses(m, record, conversion, findings, parts):
             return None
 
     a_in = [ame(ent.za, ent.ma), ame(ent.zb, ent.mb)]
+    # the residual's excitation of each pair as the conversion found it (MF=3's QM - QI, p. 105), eV: the masses of
+    # MF=2 and of AME2020 are the ground states', so a pair that leaves the residual excited has its Q lower by it
+    excitation = {row["mt"]: row["excitation_MeV"] * 1e6 for row in conversion.pairs}
     for p in record.pairs[1:]:
         if p.mt in (2, 102) or p.mt < 0:
             continue
         a_out = [ame(p.za, p.ma), ame(p.zb, p.mb)]
-        q_masses = (ent.ma + ent.mb - p.ma - p.mb) * M_NEUTRON_U * UC2_KEV * 1e3  # eV, the file's masses
-        q_ame = None if None in a_in + a_out else (sum(a_in) - sum(a_out)) * UC2_KEV * 1e3
-        row = {"mt": p.mt, "q_file_eV": p.q, "q_ame2020_eV": q_ame, "q_file_masses_eV": q_masses}
+        ex = excitation.get(p.mt, 0.0)
+        q_masses = (ent.ma + ent.mb - p.ma - p.mb) * M_NEUTRON_U * UC2_KEV * 1e3 - ex  # eV, the file's masses
+        q_ame = None if None in a_in + a_out else (sum(a_in) - sum(a_out)) * UC2_KEV * 1e3 - ex
+        row = {"mt": p.mt, "q_file_eV": p.q, "q_ame2020_eV": q_ame, "q_file_masses_eV": q_masses,
+               "excitation_eV": ex}
         parts["masses"].append(row)
+        if _above_ground(p.mt) and not ex:
+            # neither MF=2 nor MF=3 says how far above the ground state: the Q cannot be checked against a mass table
+            findings.append(_finding("note", "Q", 2, 151,
+                                     f"Q of the pair MT={p.mt} in MF=2 ({p.q:.10g} eV) is not checked: MT={p.mt} "
+                                     "leaves the residual above its ground state and the file does not give its "
+                                     "excitation (no MF=3 section of this MT with QM and QI)"
+                                     + ("" if q_ame is None else f"; against AME2020's ground-state Q the excitation "
+                                        f"would be {(q_ame - p.q) / 1e3:.3f} keV"), "105"))
+            continue
+        of_state = f" less the residual's excitation {ex / 1e3:.3f} keV (MF=3's QM - QI)" if ex else ""
         if q_ame is not None:
             d = (p.q - q_ame) / 1e3
             findings.append(_finding("warning" if abs(d) > MASS_TOLERANCE_KEV else "note", "Q", 2, 151,
                                      f"Q of the pair MT={p.mt} in MF=2 ({p.q:.10g} eV) is {d:+.3f} keV from "
-                                     f"AME2020's ({q_ame:.10g} eV)", "105"))
+                                     f"AME2020's{of_state} ({q_ame:.10g} eV)", "105"))
         d = (p.q - q_masses) / 1e3
         if abs(d) > MASS_TOLERANCE_KEV:
             findings.append(_finding("warning", "Q_MASSES", 2, 151,
-                                     f"Q of the pair MT={p.mt} in MF=2 ({p.q:.10g} eV) and the Q its masses give "
-                                     f"({q_masses:.10g} eV) differ by {d:+.1f} keV: the file's masses and Q values "
-                                     "do not come from one mass table", "72, 105"))
+                                     f"Q of the pair MT={p.mt} in MF=2 ({p.q:.10g} eV) and the Q its masses give"
+                                     f"{of_state} ({q_masses:.10g} eV) differ by {d:+.1f} keV: the file's masses and "
+                                     "Q values do not come from one mass table", "72, 105"))
+
+
+def _above_ground(mt):
+    """True where MT names an exit that leaves the residual above its ground state (ENDF-102 section 3.4.6, p.
+    110: 51-91 of (n,n'), and the levels and the continuum after each of 600 (p), 650 (d), 700 (t), 750 (3He),
+    800 (alpha), which "represent the ground state")."""
+    return 51 <= mt <= 91 or any(first < mt <= first + 49 for first in (600, 650, 700, 750, 800))
 
 
 FLAG = re.compile(r"\b(LRF|KRM|IFG|LTP|LRP)\s*=\s*(-?\d+)")

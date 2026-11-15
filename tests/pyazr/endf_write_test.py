@@ -335,6 +335,15 @@ for azr in PROJECTS:
               "thinned section stated", all(n <= 200 for v in counts.values() for n in v) and widest <= 201 and
               all(mt in w.reached for mt, v in counts.items() if mt != 2 and max(v) == 200) and
               all(" ".join(("- " + t).split()) in text for t in w.accuracy), (counts, widest, w.accuracy))
+        if name == "T2.azr":
+            # the check of the written evaluation: the alpha exit to 12C's first excited state (MT=801) has its Q
+            # lower than the ground-state masses' by the excitation, which MF=3 gives: compared less it, no warning
+            q = [f for f in E.check_resonances(E.read(out)).findings if f.code in ("Q", "Q_MASSES")]
+            check(f"{name}: the check of the written file: the Q of MT=801 is compared less the residual's "
+                  "excitation, a note and no warning of Q or Q_MASSES for it",
+                  any("MT=801" in f.message and "less the residual's excitation" in f.message and
+                      f.severity == "note" for f in q) and
+                  not any("MT=801" in f.message and f.severity != "note" for f in q), [str(f) for f in q])
         if os.environ.get("AZURE2_ENDF_UTILITIES") and os.environ.get("AZURE2_PREPRO"):
             result = E.check(out)
             print("\n".join("      " + line for line in str(result).splitlines()))

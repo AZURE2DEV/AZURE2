@@ -116,8 +116,8 @@ What the server keeps
   (``Material.curves(data, session=s)``) beside the data times its normalization and the model, with the ratios
   ``ratio_to_data`` (and its error from the data's) and ``ratio_to_model``, or the refusal's ``what``, ``allowed``,
   ``fix``; ``GET /api/endf/checkers`` lists the codes found and every code pyazr knows with what it does to
-  numbers. The check is the job ``endf_check``/``codes`` (``pyazr.endf.check``; settings ``path``, ``codes``,
-  ``timeout``), the rewrite the job ``endf_standardize``/``program`` (``pyazr.endf.standardize``; settings ``path``,
+  numbers. The check is the job ``endf_check``/``codes`` (``pyazr.endf.check`` with ``resonances=True``; settings
+  ``path``, ``codes``, ``timeout``), the rewrite the job ``endf_standardize``/``program`` (``pyazr.endf.standardize``; settings ``path``,
   ``program``, ``mf2``, ``timeout``), whose candidate ``POST /api/endf/accept`` (``{"job_id", "to", "overwrite"}``)
   keeps; these jobs build no session. A path outside the root is refused (403) before anything reads it.  The
   curves route also gives, per data set, its model curve (``curve``) and each file's values on its grid

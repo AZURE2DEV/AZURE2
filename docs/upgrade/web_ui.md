@@ -1698,7 +1698,9 @@ ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one 
   in the server; the tab remembers the last list per project for the page's life (`ctx.endfShown`).
 - **Check and correct** (`#/endf/check?file=a.endf[&job=id]`): the codes of `GET /api/endf/checkers` (found or not,
   what each does and does to numbers, how they are found); **Check** is the job `endf_check`/`codes`
-  (`pyazr.endf.check`): the own findings (line, MF, MT, message, page) apart from each code's (MF, MT, record, text,
+  (`pyazr.endf.check` with `resonances=True`: the format check and, for a file with MF=2 in LRF=7, MF=2 against
+  MF=3 by the engine, the masses and Q values, the text): the own findings (line, MF, MT, message, page) apart
+  from each code's (MF, MT, record, text,
   `meaning`), the counts, the raw report in a `details`; **Correct** is the job `endf_standardize`/`program`
   (`pyazr.endf.standardize`), the text of `PROGRAMS[program][3]` said before the run, `Candidate.diff()` as a table,
   then **Keep as a new file** / **Replace** (asks a second time) through `POST /api/endf/accept`.

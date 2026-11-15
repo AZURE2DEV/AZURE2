@@ -162,11 +162,14 @@ def _counts(findings):
 
 
 def check_job(tracker, x0, settings, names):
-    """``pyazr.endf.check(path, codes, timeout)``: the module's own format check, then each checking code chosen
-    (default: CHECKR, FIZCON, PSYCHE where found), each on a copy in a directory of its own; the answer's
-    ``to_dict()`` with the counts per severity of each part and the counts each report states."""
+    """``pyazr.endf.check(path, codes, timeout, resonances=True)``: the module's own format check with the check of
+    the resonance parameters (MF=2 against MF=3 by the engine, the masses and Q values, the text; a file without
+    MF=2 in LRF=7 gets a note), then each checking code chosen (default: CHECKR, FIZCON, PSYCHE where found), each
+    on a copy in a directory of its own; the answer's ``to_dict()`` with the counts per severity of each part and
+    the counts each report states."""
     from pyazr import endf
-    result = endf.check(settings["path"], codes=settings["codes"] or None, timeout=settings["timeout"])
+    result = endf.check(settings["path"], codes=settings["codes"] or None, timeout=settings["timeout"],
+                        resonances=True)
     tracker.count(1, None, x0)
     out = result.to_dict()
     out["file"] = settings["path"]

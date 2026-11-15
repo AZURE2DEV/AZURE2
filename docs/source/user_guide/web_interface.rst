@@ -302,7 +302,9 @@ with an ENDF-6 file.
 - **Check and correct** (``#/endf/check?file=a.endf``): the checking codes pyazr knows, each found or not (found
   through ``AZURE2_ENDF_UTILITIES``, ``AZURE2_PREPRO`` and ``PATH`` of the server), with what it does and what it
   does to numbers. **Check** starts a job: pyazr's own format check (always; each finding with its line and the
-  page of ENDF-102), then each code ticked, on a copy, with a time limit; each code's findings are shown apart, with
+  page of ENDF-102) and, for a file with resonance parameters in the R-Matrix Limited format, the check of the
+  evaluation itself (MF=2 against MF=3 by the engine, the masses and Q values against AME2020, the text against the
+  records), then each code ticked, on a copy, with a time limit; each code's findings are shown apart, with
   the meaning pyazr gives a known message (the known false alarms: LRP=2 in the charged-particle files, PSYCHE's
   "AP NOT IN RANGE" in R-Matrix Limited, CHECKR and LTP=15), the counts its report states and the raw report one
   click away. **Correct** runs a code that rewrites (STANEF, FIXUP, DICTIN, ENDF2C) on a copy, after saying what it

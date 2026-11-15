@@ -373,7 +373,7 @@ On the page
 
 The web interface's **ENDF** tab (:doc:`web_interface`) makes the same calls: the files of the project folder and
 what each holds (``summary()``), every data set with the files' values, the data and the model and the ratios
-(``curves(data, session=s)``), the codes found (``checkers()``), **Check** (``check(path, codes=...)``) and
+(``curves(data, session=s)``), the codes found (``checkers()``), **Check** (``check(path, codes=..., resonances=True)``) and
 **Correct** (``standardize(path, program=...)``, then ``accept(to=...)`` or, after a second question,
 ``accept(overwrite=True)``) as jobs.  **New project from a file** shows ``read(path).resonances(isotope=,
 energy_range=)`` (or its refusal) before anything is written, runs ``to_project(record, path,
