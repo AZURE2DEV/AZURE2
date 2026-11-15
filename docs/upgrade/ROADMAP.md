@@ -375,7 +375,8 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
       and words, units (external-capture integrals, extrapolations, gamma_decay numbers); a prior or a limit on a
       level parameter as a `Project` edit.  Open (the engine): the final state of an external-capture integral, the
       engine's text kept by the session instead of descriptor 1, the rate's files, a session's threads, the units of
-      `shift_fn` and `apparatus` parameters, a project started from nothing (`FOR_THE_OWNER.md`).
+      `shift_fn` and `apparatus` parameters, a project started from nothing (`history/FOR_THE_OWNER_2026-11.md`,
+      "pyazr's library calls").
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.

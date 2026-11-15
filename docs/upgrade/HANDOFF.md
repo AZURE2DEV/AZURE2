@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-7-owner-page`) — the owner's page written anew
+
+**Done.** `docs/upgrade/FOR_THE_OWNER.md` is new (350 lines, nine sections: what the branch is, commands run, the
+differences of numbers from `dev` with their checks, speed and memory, the structure, how to add to it with the
+owner's three coming features traced through the code, what `dev` has, what is asked of the owner, known defects).
+The old page is `docs/upgrade/history/FOR_THE_OWNER_2026-11.md`, unchanged but for its first line. References moved:
+`ROADMAP.md` (the library calls' open items now name the history page) and the docstring of
+`pyazr/coulomb_table.py` (section 8 of the new page). Earlier HANDOFF entries that cite sections of the old page
+("What users notice", "Fits and the number of threads", "How to add a feature now", ...) are left as written: those
+sections are in the history page.
+
+**Verified how.** Every command of section 2 run on the start commit's build (`work/b-trial81`; scratch
+`work/owner/try/`), the build commands themselves into `work/b-owner` (2 jobs, 0 warnings); the speed table read from
+the director's entries of 2026-11-15 04:35 and 09:40 and the old page, not measured again; the page's paths and code
+names checked against the tree by a script (`work/owner/check_links.py`); lines at most 120 columns; the consistency
+test; `docs_build`.
+
+**Found while writing** (listed in section 9, not repaired): a capture final state above its particle threshold is
+neither refused nor computed right (T1 with its 3/2- final state at 2.5 MeV validates; points below E_f give NaN
+and chi-squared 1e100 without a message). `tests/upgrade/node_count --plan` did not crash on T1 (the earlier entry's
+segmentation fault was not reproduced on that project).
+
 ## 2026-11-15 (director, 09:25) — merged: the memory of a project with many folded data sets
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 81 (rehearsal 80 plus one branch). The agent's entry
