@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-5-dev-repairs`) — Coulomb functions just above a heavy-ion threshold
+
+**Done.** The owner's repair 56512d6a of `dev`, written without GSL: the zero-energy fallback of coulsm
+(`physics/coulomb/coulsm/src/cwfcomp_accurate.cpp`, `compute_asymptotic_bessel_solution`, reached where the continued
+fractions give up, η ≳ 230) takes K_0 and K_1 from `azure2::physics::bessel_k_scaled` times e^−z instead of their
+power series, which cancel to nothing for z ≳ 15. A listed local change (`physics/coulomb/README.md`). Test
+`physics_coulomb_threshold` (`physics/tests/coulomb_threshold_test.cpp`): dev's 15 cases (¹²C+¹²C, ¹⁶O+¹⁶O, α+¹²C,
+l = 0–4, 1 eV – 2.5 keV) against `zero_energy_shift` within 1e-10 |S(0)| + 1.5 s E, s the chord slope to 50 keV
+(the slope the limit leaves out); 10 of 15 fail on the base build (¹²C+¹²C l = 0: +4.6 to +11.2 for −9.594), all
+pass after (worst 0.665 of the bound).
+
+**Between the regions** (scratch table `work/devrep1/coul/switch_table.txt`): the switch is at η ≈ 222–232
+(¹²C+¹²C 3.60–3.62 keV, α+¹²C 207–210 eV, p+¹²C 16.3–16.8 eV for l = 0–4). S jumps there by the slope the limit
+leaves out: ¹²C+¹²C 2.3e-3 (l = 0), 7.1e-4 (l = 2), 4.7e-5 (l = 4); α+¹²C 1.4e-4, 7e-6, 1e-8; p+¹²C 6.6e-6, 5e-9,
+0. P is not continuous: the fallback gives 1e-260 – 1e-292 where the continued fractions give 0 (the exact P
+underflows; the fallback's e^{πη} scaling is capped). Below 1e-250 P enters no observable.
+
+**Verified.** Build 0 warnings; all projects × 3 bases against `tab-t74-1` with a build that printed the first
+fallback and the first pair of levels of one J^π within 1e-6 MeV (tag `tab-devrep1-scan`): Brune 887, formal 851,
+Park 887 files, all identical but the one `run.log` with the printed line; one project reaches the fallback
+(`ec_threshold/models/ng.azr`, η = 1045, ρ = 0.0065, l = 2, z = 7.4, where the series still gave the printed
+digits), none has two levels of one J^π within 1e-6 MeV. The quick set (T1–T3, 13N, `ec_threshold`,
+`identical_pp_res`) with the clean build: identical. Physics tests, consistency test, docs build.
+
 ## 2026-11-15 (director, 00:50) — merged: the one set-up of the compound system and the data; quiet `Objective` calls
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 79 (rehearsal 78 plus two branches). The agent's

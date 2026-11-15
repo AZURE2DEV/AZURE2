@@ -77,6 +77,9 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
       GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
+      *The zero-energy fallback of coulsm just above a heavy-ion threshold takes K_0, K_1 from `bessel_k_scaled`
+      (the owner's repair 56512d6a on `dev`, written as a listed local change, `physics/coulomb/README.md`; test
+      `physics_coulomb_threshold`; branch `feature/upgrade-5-dev-repairs`, 2026-11-15).*
       *Step 3b (ii) on `feature/upgrade-1-channel-table` (2026-11-07, merged; design `channel_table.md`): the
       per-stage channel table and the radial scratch, `CoulFuncCache` deleted; outputs as on `-nomemo`, THM checks
       and thread identity deterministic; free-shift refills from the segment's last three shift tables (interim until

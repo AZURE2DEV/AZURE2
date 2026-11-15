@@ -965,6 +965,18 @@ level parameter as a `Project` edit).  What needs the engine, function by functi
   implementation.  The validator's `E_FIELD_NOT_APPLICABLE` of a phase shift's J, l or s gives a message but no
   `allowed` and no `fix`.
 
+## Two repairs of `dev`, written the upgrade's way (2026-11-15)
+
+- **Coulomb functions just above a heavy-ion threshold** (your 56512d6a). The same repair, without GSL: where
+  Michel's continued fractions give up (η ≳ 230) the zero-energy fallback in `physics/coulomb/coulsm` takes K_0 and
+  K_1 from the upgrade's own e^z K_n(z) (`azure2::physics::bessel_k_scaled`, the integral representation that the
+  bound-channel S(0) already used, 5e-16 against mpmath) instead of the power series; four lines and a declaration
+  in the third-party copy, listed under "Local changes" in `physics/coulomb/README.md` so that it can go to
+  pycoulomb. Your 15 cases are the physics test `physics_coulomb_threshold`, now against the exact limit within the
+  slope the limit leaves out: 10 of 15 fail before (¹²C+¹²C, l = 0, 1 eV – 2.5 keV: +4.6 to +11.2 instead of
+  −9.594; ¹⁶O+¹⁶O −525 instead of −15.47), all pass after. No project of `tests/` changes (one, `ec_threshold`,
+  reaches the fallback at z = 7.4, where the series was still right to its printed digits).
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch
