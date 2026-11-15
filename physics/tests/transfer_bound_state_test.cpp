@@ -12,6 +12,7 @@
 //  4. The analytic tails: Yukawa C e^{-kappa r} and Whittaker C W(2 kappa r) (= C e^{-kappa r} for eta = 0, l = 0),
 //     zero below r_min.
 //  5. Refusals: B <= 0, an imaginary well, a matching radius outside the grid.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>

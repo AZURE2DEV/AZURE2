@@ -3,6 +3,8 @@
 // objective's least-squares rows, its log-probability, and the table of the numbers a point carries beside its model
 // value.  A new point output is one row of PointOutputs(); pyazr.kinds()["data_outputs"] lists the rows and
 // Evaluation.data[i].extra holds those that apply to a data set.
+#include <algorithm>
+
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>

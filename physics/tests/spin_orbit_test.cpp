@@ -18,6 +18,7 @@
 //     DecayingSolution), to 1e-6 (P relative, the others absolute).
 //  5. <2 l.i> = 0 (s wave) with a spin-orbit term gives the bits of the central potential (IntegrateInward,
 //     DecayingSolution), and RadialPotential is bit-identical on the grid: the term is added last, never as + 0.
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>

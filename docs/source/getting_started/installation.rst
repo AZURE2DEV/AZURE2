@@ -16,9 +16,8 @@ Dependencies
 - **CMake** 3.16 or later, and ``pkg-config`` (CMake finds GSL through it)
 - **GNU Scientific Library (GSL)** (https://www.gnu.org/software/gsl/)
 
-Minuit2, the Coulomb-function library, the SRIM stopping-power utilities,
-pugixml and the MCMC sampler are vendored under ``external/`` and
-``numcmc/`` and built with AZURE2; nothing else has to be installed for
+Minuit2 (vendored under ``external/``), the Coulomb functions, the SRIM
+stopping powers and the MCMC sampler (``numcmc/``) are built with AZURE2; nothing else has to be installed for
 them.
 
 **Optional:**
