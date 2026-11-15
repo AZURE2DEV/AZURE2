@@ -819,6 +819,9 @@ int main(int argc, char **argv) {
     const ConvertResult tailTest = Convert({line, "1 1 2 0.5 1.5 0.5 0 0 0 0 total 0 frame cm\n", "", "", ""});
     check("an extrapolation line ending in a keyword the grammar does not read: refused, naming it",
           !tailTest.ok && tailTest.refusal.find("test segment #1 ends with 'frame cm'") != std::string::npos);
+    const ConvertResult effect = Convert({line, "", "1 \"1\" 20 1 0.001 0 0 \"\" 0 0 0 0 \"\" 0 sigmalab radius\n", "", ""});
+    check("a <targetInt> line ending in a keyword the grammar does not read: refused, naming it",
+          !effect.ok && effect.refusal.find("'radius' is not a keyword of a <targetInt> line") != std::string::npos);
     const ConvertResult bad = Convert({"1 1 2 0.2 1.4 0 180 0 x 0 0 0 0 0 s1.dat\n", "", "", "", ""});
     check("a data line that cannot be read for another reason keeps the old words",
           !bad.ok && bad.refusal.find("data segment #1 cannot be read") != std::string::npos);

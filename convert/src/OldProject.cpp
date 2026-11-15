@@ -224,6 +224,11 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       if (e.line.screeningError) return where + ": a screening block is 'screening Ue_eV vary sigma_eV'";
       if (e.line.dopplerError) return where + ": " + e.line.dopplerErrorText;
       if (e.line.densityFitError) return where + ": " + e.line.densityFitErrorText;
+      if (!e.line.unknownKeyword.empty())
+        return where + ": '" + e.line.unknownKeyword + "' is not a keyword of a <targetInt> line (beamprofile, sigmalab, "
+               "screening, densityfit, densitygroup, doppler, udr); the old engine dropped it without a word at the end "
+               "of a line, and a newer AZURE2 may read it.  Correct it, or delete it from a copy of the project if the "
+               "program that wrote it ignored it too, and convert the copy";
       if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) return where + " cannot be read";
       e.index = index;
       e.docLine = (int)i + 1;
