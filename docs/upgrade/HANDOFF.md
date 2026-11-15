@@ -2,6 +2,96 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 09:25) — merged: the memory of a project with many folded data sets
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 81 (rehearsal 80 plus one branch). The agent's entry
+follows.
+
+- **Channel rows once per compound energy** (`feature/upgrade-6-fold-memory`): the first site at a compound
+  energy computes its channel rows (L_o, the penetrability's root, the two phase factors), every other site at
+  that energy holds the same table (`WorkingCopy::FillChannelRows`, `Site::ChannelRowsKey`; a fit's re-placed
+  sub-point grids through `WorkingCopy::ShareChannelRows`); the THM vertex pieces are kept for the entrance
+  pair's channels only (`ThmVertexRows`); the channel table gives back the capacity of the keys asked for.
+  New quick test `fold_memory` (a project made at run time from `examples/c12c12_tumino2018`).
+
+**Read by the director.** The whole diff of `src/` and `include/`. The point checked hardest: a site that takes
+its rows from another still computes what is its own (the geometric factor, the S-factor conversion, the
+screening term, the THM vertex pieces and the spectator-window table: only the four row entries are skipped,
+`Site::CalcEDependentValues`); the key holds everything the rows read (the nucleus, the bits of E_x as
+`CompoundEnergy` gives it, and the exit pair's charge where a beta-decay channel reads it); an energy shift
+gives the site a table of its own (`ClearEDependentRows` on a shared table). No new `mutable`, `const_cast` or
+static state (one static member function). The new document section names sizes and times of the PI's model
+only.
+
+**Verified on the merged tree** (build `work/b-trial81`, 0 warnings): all projects in the three bases against
+`tab-t74-1` (tag `tab-t81-1`): Brune 887, formal 851, Park 887 files, all identical; the eight fits by command
+identical to `b-trial80`; the consistency test; the quick tests 308 (307 before): 308 of 308 passed.
+
+**The director's own runs** on `b-trial81` against `b-trial80`, by command, every output file compared
+(`work/director/try81/own81.sh`, `mg24.sh`): identical in all of them.
+
+| run | rehearsal 80 | rehearsal 81 |
+|---|---|---|
+| a 12C + 12C model of the PI, not in the repository; extrapolation, 1 thread | 87.1 s, 10.99 GB | 41.5 s, 1.64 GB |
+| the same, 4 threads | not run | 14.3 s, 1.64 GB |
+| 13N, one calculation, 1 thread | 7.9 s, 123 MB | 7.3 s, 122 MB |
+| T2, one calculation, 1 thread | 0.22 s, 124 MB | 0.19 s, 116 MB |
+| `natural_neon`, one calculation, 1 thread | 1.31 s, 351 MB | 1.00 s, 289 MB |
+| `natural_neon`, gradient fit (40 calls), 2 threads | 31.6 s, 645 MB | 31.2 s, 544 MB |
+| 13N, plain MIGRAD (300 calls), 1 thread | 13.9 s | 12.6 s |
+| 13N, plain MIGRAD (300 calls), 4 threads | 7.9 s | 7.4 s |
+| T2 sampler (16 walkers, 100 steps), 4 threads | 32.0 s, 306 MB | 32.0 s, 260 MB |
+
+The model's eleven output files (eight curves) are byte for byte those of rehearsal 80 at one and at four
+threads; the sampler's chain is identical. `fold_memory` fails on `b-trial80` (333.9 MiB above the unfolded
+project against the bound of 125) and passes on `b-trial81` (97.6 MiB).
+
+**Seen, not repaired** (the agent's findings outside its scope, not reproduced by me): the resident memory of a
+long fit of the folded example grows during the fit (0.45 to 0.59 GB; 0.91 to 1.40 GB before the branch); a fit
+of the test's folded project with `--max-calls=30` and the analytic gradient ran past 19 minutes and about
+1200 evaluations. Both go to the next engine branch. Not done, the agent's three further reductions (Legendre
+rows of angle-integrated slots; distinct rows with an index; the channel table per batch): about 0.1 GB of the
+model's 1.64 GB the first, the second changes 54 readers.
+
+**Reference** stays `tab-t74-1` for the numbers; the base build for the next comparisons is
+`work/b-trial81`; the quick test set has 308 tests.
+
+## 2026-11-15 (agent, branch `feature/upgrade-6-fold-memory`) — the memory of a project with many folded data sets
+
+**Done.** The channel rows (L_o, sqrt(P), the two phase factors of every channel) depend on the compound energy alone
+(`Site::ChannelRowsKey`: nucleus, bits of E_x, the exit charge where a beta-decay channel reads it), but every site
+held its own table, so every folded data set or extrapolation on the shared mesh added a copy of the rows at its
+nodes. Now one table per compound energy: at the set-up the first site at a key computes it and every other site there
+holds the same `SharedTable` (`WorkingCopy::FillChannelRows`, `src/ChannelRowFill.cpp`, for the data segments and the
+leaves); a fit's re-placed grids are shared the same way after placement (`WorkingCopy::ShareChannelRows`). The THM
+vertex pieces are kept for the entrance pair's channels only, held by the site (`ThmVertexRows`,
+`include/UnitTables.h`), so a THM and a direct site at one E_x hold one table. The channel table is built from the
+computing sites' keys and gives back the capacity of the keys asked for.
+
+**Measured** (`data_model.md` section 9, with the table of where the memory was): a 12C + 12C model of the PI (not in
+the repository; eight folded extrapolations, four THM): peak 10.99 GB -> 1.64 GB, the extrapolation at one thread
+88-115 s -> 47-53 s, at three threads 61.6 -> 19.9 s; the eight curves byte for byte those of the start. One
+calculation at one thread, start -> now: 13N the same instructions (74.61 G), peak 123 -> 122 MB; T2 1.42 -> 1.25 G
+instructions, 124 -> 117 MB; natural_neon 9.76 -> 8.49 G, 351 -> 289 MB (elapsed times within this machine's scatter).
+A fit of `examples/c12c12_tumino2018` with its direct extrapolations folded too, stopped after 19 min: 1.40 GB (start)
+-> 0.59 GB.
+
+**Test**: `tests/upgrade/fold_memory_test.py` (ctest `fold_memory`, 1-2 s with a Coulomb table, about 25 s without):
+the folds' peak memory on a project made from `examples/c12c12_tumino2018`, bounded at 125 MiB (97.6 now; the start
+build 334, the THM pieces of every channel 139, a table per slot 229: each fails).
+
+**Verified how** (build `work/b-mem1`, 3 jobs, 0 warnings): consistency test; docs build (60 pages); all projects x 3
+bases against `tab-t74-1` (tag `tab-mem1-F`): Brune 887, formal 851, Park 887 files, all identical; the eight fits by
+command against `b-trial80`: every output identical; the T2 sampler (16 walkers, 100 steps, one thread) against
+`b-trial80`: every output file identical (`samples.mcmc` included), the logs but for the ETA; `OMP_NUM_THREADS=1 ctest
+-LE slow -j3`: 302 of 302 (on 489f06f0; the last commit wraps lines and adds this entry: build, consistency, docs,
+`fold_memory`, the model's eight curves and the quick set again, all as before).
+
+**Open.** The Legendre rows of an angle-integrated slot are one per slot (52 MiB on that model); the rows per channel
+repeat a (pair, l, E_c) row once per channel spin and J^pi block (16 M entries for 5.8 M distinct rows there); the
+set-up's channel table could be built per batch (400 MiB during the set-up there). Resident memory still grows during
+a long fit of the folded example (0.45 -> 0.59 GB over 1200 evaluations; the start build 0.91 -> 1.40 GB): not traced.
+
 ## 2026-11-15 (director, 04:35) — merged: threads, one set-up, format readiness, ENDF amplitudes, two repairs of `dev`
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 80 (rehearsal 79 plus seven branches and four

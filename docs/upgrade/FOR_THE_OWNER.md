@@ -314,10 +314,12 @@ old program, 336479.961 now) and the two converged fits end at the same chi-squa
 stopped at 300 calls ends at 30367.7 in the old program and 30366.10 now (a stopped fit: the two took slightly
 different steps), and the two samplers are not the same chain (the new one stays inside the fit's limits), so those
 two rows compare the cost of the same amount of work, not identical results. It is one project. `natural_neon` (a
-target of three isotopes, folded) went from 41 s and 4.5 GB to 1.3 s and 0.34 GB for one calculation. A project of
-many folded data sets can need more memory than before: the PI's 12C + 12C model (not in the repository) takes about
-as long as in the old program (87 s) and 11 GB against 4.5 GB; not yet repaired. The 45 newest commits of `dev` are not in
-this build, so this is not a comparison with today's `dev`.
+target of three isotopes, folded) went from 41 s and 4.5 GB to 1.3 s and 0.29 GB for one calculation. The PI's
+12C + 12C model (not in the repository; eight excitation functions folded on one mesh, four of them THM) takes 47 to
+53 s and 1.6 GB for its extrapolation at one thread, 20 s at three, against 87 s and 4.5 GB in the old program; it took
+11 GB until the channel rows were held once per compound energy instead of once per folded data set and node
+(`data_model.md` section 9). The 45 newest commits of `dev` are not in this build, so this is not a comparison with
+today's `dev`.
 
 Where the gain comes from: one level-matrix solve per distinct compound energy instead of one per data point or
 sub-point; one stored calculation site per mesh node; no copies of the compound system per thread or per walker (the

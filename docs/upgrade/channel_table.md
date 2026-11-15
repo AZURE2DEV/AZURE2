@@ -59,6 +59,11 @@ compute the rows in parallel, row i written only by the thread that holds i. The
 `shared_ptr<const ChannelTable>` held by `EData` and passed to `EPoint::CalcEDependentValues`; nothing writes it
 again. Rows depend only on their keys, so the table does not depend on the thread count.
 
+**Who computes, since the channel rows are held once per energy** (`data_model.md` §9). A site's rows depend on its
+compound energy alone (`Site::ChannelRowsKey`), so `WorkingCopy::FillChannelRows` lets the first site at a key compute
+them and every other site there hold the same table; the table is built from the keys of the computing sites only, and
+`Build` gives back the capacity of the keys asked for once the duplicates are gone.
+
 **A new table, never a written one.** `Build(keys, previous)` copies the rows of the keys present in a previous table
 of the same system (its pairs' Z, masses, radii, thresholds, hybrid tags and the Coulomb route compared at build) and
 computes the others. The component segments' table is built so, from the data segments' one. A free energy shift or a

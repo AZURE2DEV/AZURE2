@@ -65,6 +65,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(const CompoundSystem *co
   auto table = std::make_shared<ChannelTable>();
   std::sort(keys.begin(), keys.end());
   keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+  keys.shrink_to_fit();  // the capacity of every key asked for is not kept beside the rows
   table->keys_ = std::move(keys);
   table->rows_.resize(table->keys_.size());
   table->pairSignatures_ = PairSignatures(compound, configure);
