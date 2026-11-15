@@ -195,7 +195,8 @@ for azr in PROJECTS:
                      any(t.startswith(f"the {len(s.datasets)} data set(s)") for t in w.losses),
                      any("Trojan-horse" in t for t in w.losses)]
         check(f"{name}: the losses name the photon channels, the {len(s.datasets)} data sets and THM exactly when "
-              f"the project has them ({expect})", got_items == expect and len(w.losses) == sum(expect), w.losses)
+              f"the project has them ({expect})",
+              got_items == expect and len(w.losses) - len(w.accuracy) == sum(expect), w.losses)
         check(f"{name}: MF=1 names LRP=2's statement and every loss and section not written",
               "MF=2 (LRF=7, KRM=4, IFG=1) reproduces" in text and "Not carried by this file" in text and
               all(" ".join(("- " + t).split()) in text for t in w.losses + w.not_written), text[-800:])
@@ -227,7 +228,10 @@ for azr in PROJECTS:
             # the file holds dsigma/dOmega of LAW=2 as a product of two tables, sigma and p, each interpolated to the
             # grid's rule: 3x the tolerance (measured 1.1e-3 to 3.0e-3); LAW=5 as sigma_c + sigma_NI P_NI with
             # sigma_e - sigma_c interpolated to the rule against the cross section: 5x (measured 2.5e-4 to 3.4e-3)
-            bound = (5 if key == entrance else 3) * TOLERANCE
+            # where CHECKR's limits thinned an MF=6 section (w.reached, said in MF=1), its stated tolerance
+            reached_here = w.reached.get(2, TOLERANCE) if key == entrance else \
+                max([v for mt_, v in w.reached.items() if mt_ != 2], default=TOLERANCE)
+            bound = (5 if key == entrance else 3) * max(TOLERANCE, reached_here)
             # (i) the data's points: every dsigma_domega data set of this reaction
             worst_data, n_data = 0.0, 0
             described = {rec.name: rec for rec in s.datasets}
@@ -302,9 +306,27 @@ for azr in PROJECTS:
             check(f"{name}: elastic: the manual's reading between every two written energies outside the brackets "
                   f"= the engine to {bound_el:.1e} ({'largest' if w.elastic.checked else 'median: not every interval '
                   'was checked, as MF=1 says'})", ok_el, (dev.max(), np.median(dev)))
+        # (h) CHECKR's limits (the PI's decision, the default mf6_limits="checkr"): no MF=6 section above 200
+        # incident energies, no LAW=5 panel above 201 cosines; each thinned section stated in MF=1 and w.accuracy
+        counts = {mt: [len(p.panels) for p in m.distribution(mt).products if p.law in (2, 5)]
+                  for mf, mt, _ in w.sections if mf == 6}
+        widest = max(len(p.values) // 2 for p in m.distribution(2).products[0].panels) if 2 in counts else 0
+        check(f"{name}: every MF=6 section at most 200 energies, every LAW=5 panel at most 201 cosines, each "
+              "thinned section stated", all(n <= 200 for v in counts.values() for n in v) and widest <= 201 and
+              all(mt in w.reached for mt, v in counts.items() if mt != 2 and max(v) == 200) and
+              all(" ".join(("- " + t).split()) in text for t in w.accuracy), (counts, widest, w.accuracy))
         if os.environ.get("AZURE2_ENDF_UTILITIES") and os.environ.get("AZURE2_PREPRO"):
             result = E.check(out)
             print("\n".join("      " + line for line in str(result).splitlines()))
+            report = str(result)
+            check(f"{name}: CHECKR reports neither limit (OUT OF RANGE 1 - 200, 1 - 201)",
+                  "1 - 200" not in report and "1 - 201" not in report, report[-600:])
+        try:
+            E.write(s, os.path.join(d, "refused.endf"), mf6_limits="none")
+            check(f"{name}: mf6_limits='none' refused", False)
+        except pyazr.FormatRefused as err:
+            check(f"{name}: mf6_limits='none' refused with what, allowed, fix", err.what and err.allowed and err.fix,
+                  err)
         s.close()
     finally:
         os.chdir(cwd)

@@ -2,6 +2,17 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: written MF=6 within CHECKR's limits
+
+**Done** (`endf.md` 13.11, the PI's decision): no written MF=6 section above 200 energies, no LAW=5 panel above 201
+cosines; a section that needs more is thinned by the grid's rule to the limit and states the tolerance it reaches
+(MF=1 "Accuracy:", `Written.accuracy` and the end of `Written.losses`, `Written.reached`); `write(...,
+mf6_limits="manual")` for Appendix G's limits; `write(..., project_name=)` names the project in MF=1 and the
+tape's first line. T1 100 s, T2 51 s, 13N 133 s (one thread, loaded machine). Under the limits the elastic
+section of T1 and 13N is good to about 1e-1 near the zeros of sigma_NI under the manual's reading (stated).
+**Verified how**: see the branch report (writer tests quick and slow with the real codes, read test).
+**Open**: the covariance (MF=32), the check of an evaluation and the speed-up of the export are not built.
+
 ## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: the elastic section under the manual's reading
 
 **Done** (`endf.md` 13.10): the reader reads LAW=5 LTP=12-15 as the manual says (p. 146: sigma_NI(E) of MF=3

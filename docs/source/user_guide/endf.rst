@@ -285,7 +285,13 @@ Write an evaluation
   of MF=6, each interpolated) gets the cross section to the tolerance: wherever sigma_NI changes sign, the two
   written energies around the change are at most 1e-5 x E apart, and between them that reading is wrong by up to
   the nuclear part of the cross section. MF=1 and the answer (``w.elastic``) list these brackets, the number of
-  energies and the tolerance reached. On T1, T2 and 13N the
+  energies and the tolerance reached. No MF=6 section has more than 200 energies and no LAW=5 panel more than 201
+  cosines (the limits of CHECKR, which other codes share; the PI's choice): where the tolerance would need more, the
+  section is thinned to the limit by the same rule and MF=1, ``w.accuracy`` and the end of ``w.losses`` say the
+  tolerance it reaches (on T1 and 13N the elastic section, read as the manual says, is not usable near the
+  energies where sigma_NI changes sign: the stated tolerance is 5.5 and 1.3, the median error
+  1e-3). ``mf6_limits="manual"`` writes to the format's own limits instead (2,000 energies, Appendix G of
+  the manual). On T1, T2 and 13N the
   file's dsigma/dOmega equals the engine's at the data's points and between the tabulated energies and angles to
   3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section.
 
@@ -305,10 +311,11 @@ Measured with CHECKR 8.24, FIZCON 8.19 and PSYCHE 8.11 on the files written from
 - *LRP=2 ONLY ALLOWED IN DERIVED FILES* (CHECKR): expected, the PI's decision (the library's charged-particle LRF=7
   files have the same).
 - *MATERIAL NUMBER SHOULD BE 625* (CHECKR, warning, for p + 12C): the default MAT 9999; the MAT is the evaluator's (``header``).
-- *NE = 655 OUT OF RANGE 1 - 200* in MF=6, then *SECTION CANNOT BE CHECKED* and *OUT OF SEQUENCE* in the next
-  section (CHECKR): CHECKR applies File 5's limit of 200 incident energies to MF=6; the manual's limit for MF=6 is
-  2,000 (Appendix G, p. 391). The library's files have the same finding. *NL = 208 OUT OF RANGE 1 - 201* (CHECKR,
-  a LAW=5 panel with more than 201 cosines): File 4's limit.
+- *NE = ... OUT OF RANGE 1 - 200* in MF=6, then *SECTION CANNOT BE CHECKED* and *OUT OF SEQUENCE* in the next
+  section (CHECKR), and *NL = ... OUT OF RANGE 1 - 201* for a LAW=5 panel: CHECKR applies File 5's limit of 200
+  incident energies and File 4's 201 angular points to MF=6; the manual's limit for MF=6 is 2,000 energies
+  (Appendix G, p. 391). A file written with the default limits has neither; one written with
+  ``mf6_limits="manual"`` may. The library's files have the first.
 - *DISCRETE 2-BODY LAW NOT PERMITTED FOR MT= 102* (FIZCON): the manual allows LAW=2 for the primary photons of
   MT=102 (p. 143); FIZCON's list of reactions omits it.
 - *CHECK NORMALIZATION= 0.998889* (FIZCON, a LAW=5 panel where sigma_NI is close to zero and P_NI large): the panel

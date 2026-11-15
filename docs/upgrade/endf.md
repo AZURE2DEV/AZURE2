@@ -1033,3 +1033,38 @@ more than 1e-3 lie within 2.6 keV of a zero of sigma_NI. The cost: T1 and 13N ne
 (about 20 MB files) where the product reading needed 736. The format allows it (Appendix G, p. 391: NE 2,000 in
 MF=6, exceeded here); the limits the PI chose for written MF=6 are the next section's.
 
+### 13.11 CHECKR's limits on written MF=6 (the PI's decision)
+
+The PI decided that written MF=6 stays within CHECKR's limits: at most 200 incident energies per section
+(`checkr.f` NES5MAX, File 5's limit applied to MF=6) and 201 cosines per LAW=5 panel (NANGMAX, File 4's). The
+manual's own limits (Appendix G, p. 391) are 2,000 energies in MF=6, no MF=6 limit on cosines (the general mesh
+limit NP 10,000), 50,000 points in an MF=3 TAB1; CHECKR has NPTSMAX = 50,000 for a TAB1 too, so MF=3 is not
+limited (the written MF=3 sections have 655-740 points).
+
+`write(..., mf6_limits="checkr")` (default) or `"manual"` (`writer.MF6_LIMITS`; another value is refused with
+its three parts). A section over the limit is thinned by the grid's rule to the limit (`grid.thin_to` with a
+limit: the interval with the worst dropped point is split first), and the tolerance it reaches is stated: MF=1
+("Accuracy:"), `Written.accuracy` (lines; they also end `Written.losses`, which the export screen shows without a
+change of its code) and `Written.reached` ({MT: tolerance}). The exits (LAW=2) and MT=102 keep MF=3's grid up to
+the limit and a subset above it; between MF=6 energies a reader interpolates p(mu) at fixed mu linearly (TAB2
+INT=2) and multiplies by MF=3's sigma at the energy asked, so the error is the stated one of p(mu) plus MF=3's.
+The elastic section chooses its 200 among the energies it computed by the manual's reading (13.10); the brackets
+of the sign changes are kept first (a file whose brackets alone exceed the limit is refused); each panel keeps at
+most 201 cosines.
+
+Measured (build `work/b-endf5`, one thread each, three writes side by side on a loaded machine;
+`work/endf5/s/readings.py` for the elastic column, as in 13.10):
+
+| file | write | MF=6 sections thinned: tolerance reached | elastic: 200 energies; stated tolerance; measured max / median (12 angles, quarter points) | cosines |
+|---|---|---|---|---|
+| T1 | 100 s | MT=102 2.7e-3 | 5.5; 0.84 / 1.5e-3, off by > 1e-2 over 497 keV | 1.6e-3 |
+| T2 | 51 s | MT=800 3.4e-3, MT=801 (144 energies) none | 0.12; 1.9e-2 / 2.2e-5, > 1e-2 over 8 eV | 1.0e-3 |
+| 13N | 133 s | MT=102 (147 energies) none | 1.3; 0.47 / 6.7e-4, > 1e-2 over 350 keV | 1.5e-3 |
+
+The stated tolerance is the largest deviation by the grid's rule at the energies the engine computed and at the
+quarter points and midpoint of every written interval (one more session), cosines included: a single angle where
+the cross section is small near a zero of sigma_NI sets it. So under CHECKR's limits the elastic section of a
+proton on 12C (T1, 13N) is not usable near the zeros of sigma_NI under the manual's reading (the 200 energies
+cannot follow sigma_NI's ratio near four to six zeros; the median stays at 1e-3) and MF=1 says so. With `mf6_limits="manual"` the section takes what 13.10 measured. T2
+meets its tolerance outside the brackets.
+

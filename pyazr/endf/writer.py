@@ -54,6 +54,14 @@ NOT_WRITTEN_REASONS = {
     (6, "exit"): "the exit's angular distribution was not computed",
     (3, "capture"): "the capture cross section was not computed",
     (6, "capture"): "the primary photons were not computed"}
+#: The limits of a written MF=6 section, (incident energies, cosines of a LAW=5 panel), by name.  ``"checkr"``, the
+#: default (the PI's decision): the limits of CHECKR 8.24 (``checkr.f``: NES5MAX = 200 incident energies, File 5's,
+#: applied to MF=6; NANGMAX = 201 angular points, File 4's), which a file must meet to be checked by it.
+#: ``"manual"``: ENDF-102 Appendix G (p. 391): MF=6 NE 2,000; no limit of MF=6 on the cosines of LAW=5, so the
+#: general mesh size NP 10,000.  Where the tolerance asks for more, a section is thinned by the grid's rule to the
+#: limit and the tolerance it reaches is stated (MF=1, ``Written.accuracy``).
+MF6_LIMITS = {"checkr": (200, 201), "manual": (2000, 10000)}
+LIMIT_WORDS = {"checkr": "CHECKR's limit of", "manual": "the manual's limit of"}
 #: The largest c.m. cosine of the LAW=5 table (p. 146: "as close to 1.0 as possible"; sigma_e - sigma_c grows as
 #: 1/(1 - mu) towards 1): about 11.5 degrees.  Below it the file's elastic cross section is the Coulomb term alone.
 ELASTIC_MAX_COSINE = 0.98
@@ -72,16 +80,28 @@ class ElasticReport:
     bracket_width: float
     reached: float
     checked: bool = True
+    cosines_reached: float = 0.0
+    tolerance: float = 0.0
+    limits: tuple = (None, None)
+    limits_name: str = ""
 
     def lines(self):
         """The statement of MF=1 and of the report, in words."""
+        limited = self.limits[0] is not None and self.energies >= self.limits[0] and self.reached > self.tolerance
+        cut = self.limits[1] is not None and self.cosines_reached > self.tolerance
+        words = LIMIT_WORDS.get(self.limits_name, "the limit of")
         out = [f"Elastic scattering (MF=3/MT=2 and MF=6/MT=2) on {self.energies} energies chosen of {self.candidates} "
-               f"the engine computed, so that sigma_NI(E) of MF=3 times P_NI(mu, E) of MF=6, each interpolated "
+               f"the engine computed{f' ({words} {self.limits[0]} per MF=6 section)' if limited else ''}, so that "
+               f"sigma_NI(E) of MF=3 times P_NI(mu, E) of MF=6, each interpolated "
                f"linearly (the manual's reading, p. 146), gives the elastic cross section to {self.reached:.1e} by the "
-               f"grid's rule at every computed energy outside the brackets below"
-               + (", the quarter points of every written interval among them." if self.checked else
-                  "; the search stopped at its budget before every written interval was checked at its quarter "
-                  "points.")]
+               f"grid's rule at every energy the engine computed outside the brackets below, the quarter points "
+               f"and the midpoint of every written interval among them"
+               + ("." if self.checked else "; the search for energies stopped at its budget or its limit before "
+                                            "every interval met the tolerance.")]
+        if cut:
+            out.append(f"Each energy holds at most {self.limits[1]} cosines ({words} {self.limits[1]}); between them "
+                       f"sigma_e - sigma_c is good to {self.cosines_reached:.1e} by the grid's rule (asked: "
+                       f"{self.tolerance:g}).")
         if self.brackets:
             out.append(f"sigma_NI changes sign {len(self.brackets)} time(s); each change lies between two written "
                        f"energies at most {self.bracket_width:g} x E apart, inside which the manual's reading is "
@@ -94,8 +114,11 @@ class ElasticReport:
 class Written:
     """What :func:`write` wrote: the file, its sections (MF, MT, lines), the grid of each MF=3 section (points, lab
     eV range; MF=6 has the same energies), the largest relative difference of MF=2's reconstruction from MF=3 per
-    MT, the losses, the sections not written, the cosine grid of LAW=5 per MT (points, first, last) and the number
-    of engine sessions the grids took.  ``print()`` lists it."""
+    MT, the losses, the sections not written, the cosine grid of LAW=5 per MT (points, first, last), the number
+    of engine sessions the grids took, the elastic section's report and ``accuracy``: a line per MF=6 section that
+    the limits (``MF6_LIMITS``) or the manual's reading of LAW=5 keep from the tolerance asked, with the tolerance
+    reached (the same lines end ``losses``, which the page shows), and ``reached``: {MT: that tolerance} of those
+    MF=6 sections.  ``print()`` lists it."""
     path: str
     sections: tuple
     grids: dict
@@ -105,6 +128,8 @@ class Written:
     cosines: dict = dataclasses.field(default_factory=dict)
     sessions: int = 0
     elastic: object = None
+    accuracy: tuple = ()
+    reached: dict = dataclasses.field(default_factory=dict)
 
     def __str__(self):
         out = [f"{self.path}"]
@@ -118,8 +143,6 @@ class Written:
             check = f", MF=2 reproduces it to {self.mf2_check[mt]:.1e}" if mf == 3 and mt in self.mf2_check else ""
             out.append(f"  MF={mf}/MT={mt} {names.reaction_name(mt)}: {nc}{'' if isinstance(nc, str) else ' lines'}"
                        f"{extra}{check}")
-        if self.elastic is not None:
-            out += [f"  {t}" for t in self.elastic.lines()]
         out += [f"  lost: {t}" for t in self.losses]
         out += [f"  not written: {t}" for t in self.not_written]
         return "\n".join(out)
@@ -138,6 +161,25 @@ def _zsymam(z, a):
 def _za(z, mass_neutron):
     """ZA = 1000 Z + A of a particle of the record (charge, mass in neutron masses)."""
     return 1000 * int(round(z)) + int(round(mass_neutron * M_NEUTRON_U))
+
+
+def _law2_columns(coefficients):
+    """p(mu) of a LAW=2 table at the cosines of the energy grid's rule, (n_E, 9)."""
+    return np.array([engine_values.law2_probability(a, engine_values.LAW2_COSINES) for a in coefficients])
+
+
+def _mf6_energies(mt, e_MeV, columns, tolerance, limit, limits_name, accuracy, reached_by_mt):
+    """The energies of an MF=6 section of the grid: all of them up to ``limit``; above it the subset of
+    :func:`pyazr.endf.grid.thin_to` (the grid's rule on ``columns``, (n_E, k) arrays, to the limit), with a line in
+    ``accuracy`` that says the tolerance reached."""
+    if len(e_MeV) <= limit:
+        return np.arange(len(e_MeV))
+    keep, reached = grid.thin_to(e_MeV, np.hstack(columns), tolerance, limit=limit)
+    reached_by_mt[mt] = max(reached, tolerance)
+    accuracy.append(f"MF=6/MT={mt} ({names.reaction_name(mt)}): {len(keep)} of the {len(e_MeV)} energies of MF=3 "
+                    f"({LIMIT_WORDS[limits_name]} {limit}); between them the distribution is good to "
+                    f"{max(reached, tolerance):.1e} by the grid's rule (asked: {tolerance:g}), MF=3 to the tolerance.")
+    return keep
 
 
 def not_written_known(record):
@@ -281,7 +323,8 @@ def _wrap(text, width=66):
 
 
 def write(session, path, x=None, *, header=None, energy_range_MeV=None, tolerance=1e-3, max_points=4000,
-          number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE):
+          number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE, mf6_limits="checkr",
+          project_name=None):
     """Write ``session``'s model at the fit vector ``x`` (default its start) as an ENDF-6 material at ``path``.
 
     ``header``: the evaluator's fields of MF=1 (p. 42), a dict with any of ``MAT`` (default 9999), ``NLIB``
@@ -290,6 +333,9 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     of the projectile (default: the data's, as the session has it); EL, EH of MF=2 and EMAX.  ``tolerance`` and
     ``max_points``: of the engine's adaptive grid (relative, for linear interpolation between its points).
     ``number_form``: ``"widest"`` (default), ``"classic"`` or ``"e"`` (:data:`pyazr.endf.NUMBER_FORMS`).
+    ``mf6_limits``: ``"checkr"`` (default: at most 200 energies per MF=6 section and 201 cosines per LAW=5 panel)
+    or ``"manual"`` (Appendix G's: 2,000 and 10,000), :data:`MF6_LIMITS`.  ``project_name``: the name of the
+    project that MF=1's text and the tape's first line give (default: the session's file name).
 
     Returns a :class:`Written`.  Refused (:class:`pyazr.FormatRefused`): an existing ``path`` without ``overwrite``,
     what :func:`pyazr.endf.from_session` refuses, a session without exit reactions, MF=2 that does not reproduce
@@ -299,6 +345,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         raise FormatRefused(what=f"{path} exists", allowed="a new file (an existing file is replaced only when that is "
                             "asked for)", fix="write to a file name that does not exist yet, or ask for the "
                             "existing file to be replaced (overwrite)")
+    if mf6_limits not in MF6_LIMITS:
+        raise FormatRefused(what=f"mf6_limits {mf6_limits!r}", allowed=", ".join(repr(k) for k in MF6_LIMITS),
+                            fix="leave it at \"checkr\" (files every checking code reads) or ask for \"manual\" "
+                            "(the format's own limits)")
+    energy_limit, cosine_limit = MF6_LIMITS[mf6_limits]
+    shown_name = os.path.basename(session.file) if project_name is None else str(project_name)
     if number_form not in NUMBER_FORMS:
         raise FormatRefused(what=f"number_form {number_form!r}", allowed=", ".join(NUMBER_FORMS),
                             fix="choose the widest form (the default): fixed point where it fits, 8-10 digits")
@@ -356,6 +408,8 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     za, awr = record.za, record.awr
     capture_total = next((r for r in reactions if r.role == "capture"), None)
     finals = []
+    accuracy = []
+    reached = {}  # MT of an MF=6 section -> the tolerance it reaches, where the limits thinned it
     for r in reactions:
         if r.role == "exit":
             p = next(q for q in record.pairs if q.mt == r.mt)
@@ -363,8 +417,10 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             written[(3, r.mt)] = section_rows.cross_section(za, awr, qm, p.q, e_eV, values.sigma[r.key], number_form)
             emitted = (_za(p.za, p.ma), section_rows.product_mass(round(p.za), round(p.ma * M_NEUTRON_U)))
             residual = (_za(p.zb, p.mb), section_rows.product_mass(round(p.zb), round(p.mb * M_NEUTRON_U)))
-            written[(6, r.mt)] = section_rows.two_body(za, awr, emitted, residual, e_eV, values.legendre[r.key],
-                                                   number_form)
+            a = values.legendre[r.key]
+            keep = _mf6_energies(r.mt, e_MeV, [_law2_columns(a)], tolerance, energy_limit, mf6_limits, accuracy,
+                                 reached)
+            written[(6, r.mt)] = section_rows.two_body(za, awr, emitted, residual, e_eV[keep], a[keep], number_form)
         elif r.role == "capture":
             q = s_ent * EV_PER_MEV
             written[(3, 102)] = section_rows.cross_section(za, awr, q, q, e_eV, values.sigma[r.key], number_form)
@@ -377,13 +433,17 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     if finals:
         z_c, a_c = round(ent.za + ent.zb), round((ent.ma + ent.mb) * M_NEUTRON_U)
         compound = (1000 * z_c + a_c, section_rows.product_mass(z_c, a_c))
-        written[(6, 102)] = section_rows.capture(za, awr, compound, [f[1:] for f in sorted(finals, key=lambda f: f[0])],
-                                             e_eV, number_form)
+        finals = sorted(finals, key=lambda f: f[0])
+        keep = _mf6_energies(102, e_MeV, [np.asarray(f[2])[:, None] for f in finals] +
+                             [_law2_columns(f[3]) for f in finals], tolerance, energy_limit, mf6_limits, accuracy,
+                             reached)
+        written[(6, 102)] = section_rows.capture(za, awr, compound, [(f[1], np.asarray(f[2])[keep], f[3][keep])
+                                                                     for f in finals], e_eV[keep], number_form)
     elastic = next((r for r in reactions if r.role == "elastic"), None)
     elastic_report = None
     if elastic is not None:
         el, mu_report = elastic_section.section(sweeps, elastic, e_MeV, mu_range, coulomb_minus, tolerance,
-                                                max_points)
+                                                max_points, limit=energy_limit, cosine_limit=cosine_limit)
         if mu_report.get("budget_reached"):
             raise FormatRefused(what=f"the cosine grid of elastic scattering reached {max_points} points before the "
                                 f"tolerance {tolerance:g}", allowed="a grid that meets the tolerance",
@@ -397,7 +457,10 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                                                                el_eV, panels, number_form)
         grids[2] = (len(el_eV), el_eV[0], el_eV[-1])
         elastic_report = ElasticReport(len(el_eV), el.candidates, tuple(el.brackets),
-                                       elastic_section.BRACKET_WIDTH, el.reached, el.checked)
+                                       elastic_section.BRACKET_WIDTH, el.reached, el.checked, el.cosines_reached,
+                                       tolerance, MF6_LIMITS[mf6_limits], mf6_limits)
+        accuracy += elastic_report.lines()
+        reached[2] = max(el.reached, el.cosines_reached, tolerance)
         counts = [len(m) for m, _ in panels]
         cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
@@ -434,7 +497,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
            f"----- {projectile.upper()} DATA",
            "------ ENDF-6"]
     body = [f"Written by pyazr.endf.write (AZURE2) on {today.isoformat()} from the project "
-            f"{os.path.basename(session.file)} ({'Park' if session.basis == 2 else 'Brune'} fit vector); the "
+            f"{shown_name} ({'Park' if session.basis == 2 else 'Brune'} fit vector); the "
             "particle channels converted to the formal basis with the engine's boundary values B_c = S_c(E_1) of "
             "each spin group.",
             f"LRP={LRP}: MF=3 holds the cross sections computed by AZURE2 on an adaptive grid (relative tolerance "
@@ -454,8 +517,6 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                "states is not given (AZURE2 does not hold it)" if (6, 102) in sections else "") + ".",
             "Separation energy of the incident pair: "
             f"{s_ent:.9f} MeV (the project's); masses as the project's atomic masses."]
-    if elastic_report is not None:
-        body += elastic_report.lines()
     text = std
     for paragraph in body:
         text = text + [""] + _wrap(paragraph)
@@ -463,6 +524,10 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         text += ["", "Photon widths of the levels (eV, at the level energy):"]
         for jpi, e, k, r, l, wv in losses.photon_widths:
             text.append(f"  {jpi:5s} E_x {e:11.6f} MeV to pair {k} ({r}{l}): {wv:.6g}")
+    if accuracy:
+        text += ["", "Accuracy:"]
+        for t in accuracy:
+            text += _wrap("- " + t)
     text += ["", "Not carried by this file:"]
     for t in losses.items + not_written:
         text += _wrap("- " + t)
@@ -470,8 +535,8 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         text += _wrap(t) or [""]
     header_rows = _header_rows(record, h, sections, text, number_form)
     _write_material(path, int(h["MAT"]), sections, header_rows,
-                    tpid=f" pyazr.endf.write, {os.path.basename(session.file)}")
+                    tpid=f" pyazr.endf.write, {shown_name}")
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
-    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items), not_written, cosines,
-                   sweeps.count, elastic_report)
+    return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items) + tuple(accuracy), not_written,
+                   cosines, sweeps.count, elastic_report, tuple(accuracy), reached)
