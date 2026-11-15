@@ -225,9 +225,20 @@ libomp-internal, so the entries cannot hide an AZURE2 race.
 print `<null>`, the two names match nothing, and every step of the thread job failed with this report (read from
 the job's annotation: `pthread_mutex_lock` from libomp on the main thread against `pthread_mutex_init` from libomp
 on a worker, the block allocated by libomp, AZURE2 only as the opener of the region in `ChannelRowFill.cpp`). A
-third entry, `race:^pthread_mutex_init$`, names the interceptor of the initialization itself: AZURE2 never calls
-it (its locks are `std::mutex`), so the entry cannot hide a race between AZURE2's accesses. It was not tried on
-this machine (no clang here on that date); whether other reports stand behind it shows in the first CI run with it.
+third entry, `race:^pthread_mutex_init$`, named the interceptor of the initialization itself. **It matched
+nothing**: the run with it (the seventh push) failed in every step with the same report, after 112 minutes. The
+likely reason, not checked: the name is matched as the symbol table has it, with the interceptor's prefix, and the
+report prints it without. Two entries replace it (the ninth push):
+
+- `called_from_lib:libomp.so`: TSan ignores the pthread calls libomp itself makes. AZURE2's memory accesses inside
+  a parallel region and its own `std::mutex` locks stay instrumented; the order of OpenMP constructs comes from
+  libarcher's annotations, which do not pass through the interceptors. It names the module, so it does not depend
+  on which of libomp's internal calls is reported next.
+- `race:pthread_mutex_init`, not anchored. AZURE2 never calls it (its locks are `std::mutex`), so the entry cannot
+  hide a race between AZURE2's accesses.
+
+Neither was tried on a machine of the upgrade (no clang there). Whether other reports stand behind this one shows
+in the first CI run in which it is silent: no thread-sanitizer run of this code has passed since 2026-11-07.
 
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 
