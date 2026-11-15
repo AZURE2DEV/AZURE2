@@ -341,6 +341,7 @@ void RMatrixFunc::InvertMatrices() {
  */
 
 void RMatrixFunc::CalculateTMatrix(EPoint *point) {
+  const EPoint::LineNode *lineNode = point->ActiveLineNode();
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int irEnd;
   int irStart;
@@ -371,9 +372,15 @@ void RMatrixFunc::CalculateTMatrix(EPoint *point) {
             point->GetExpHardSpherePhase(theMGroup->GetJNum(), theMGroup->GetChNum()) *
             point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChpNum()) *
             point->GetExpHardSpherePhase(theMGroup->GetJNum(), theMGroup->GetChpNum());
+        complex sqrtPenEx = point->GetSqrtPenetrability(theMGroup->GetJNum(), theMGroup->GetChpNum());
+        // a node of the line-shape integration (EPoint::CalculateLineWindow), as in AMatrixFunc
+        if (lineNode && compound()->GetPair(exitChannel->GetPairNum())->GetPType() == 10)
+          sqrtPenEx = lineNode->photonEnergy > 0.0
+                          ? lineNode->amp * pow(lineNode->photonEnergy / hbarc, (double)exitChannel->GetL() + 0.5)
+                          : 0.0;
         complex umatrix = 2.0 * std::complex<double>(0.0, 1.0) *
             point->GetSqrtPenetrability(theMGroup->GetJNum(), theMGroup->GetChNum()) *
-            point->GetSqrtPenetrability(theMGroup->GetJNum(), theMGroup->GetChpNum()) *
+            sqrtPenEx *
             this->GetRLInvRMatrixElement(theMGroup->GetJNum(),
                                          theMGroup->GetChpNum(),
                                          theMGroup->GetChNum());
@@ -407,6 +414,8 @@ void RMatrixFunc::CalculateTMatrix(EPoint *point) {
           ecAmplitude = point->GetECAmplitude(k, m);
         }
         complex tmatrix = ecNormParam * ecAmplitude;
+        // a node of the line-shape integration: the external element of the scattering state at E_f
+        if (lineNode) tmatrix = lineNode->ec[k - 1][m - 1];
         if (theECMGroup->IsChannelCapture()) {
           MGroup *chanMGroup = compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
           AChannel *chanEntranceChannel = compound()->GetJGroup(chanMGroup->GetJNum())->GetChannel(chanMGroup->GetChNum());

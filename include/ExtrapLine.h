@@ -35,6 +35,7 @@ class ExtrapLine {
     parseError_ = "";
     parseWarning_ = "";
     natural_ = "0";
+    lineWindow_ = 0.0;
     total_ = 0;
     transmission_ = 0.0;
     yield_ = 0.0;
@@ -75,6 +76,13 @@ class ExtrapLine {
         if (keyword == "sample" || keyword == "natural") {
           if (!(advancedStream >> natural_)) {
             natural_ = "0";
+            break;
+          }
+        } else if (keyword == "linewindow") {
+          // gamma-line window (keV) for capture into a broad unbound final state (SegLine.h)
+          if (!(advancedStream >> lineWindow_) || !(lineWindow_ > 0.0)) {
+            parseError_ = "linewindow needs the half-width W > 0 of the gamma-line window, in keV";
+            stream.setstate(std::ios::failbit);
             break;
           }
         } else if (keyword == "spin") {
@@ -215,6 +223,10 @@ class ExtrapLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /**
+   * Returns the half-width W (keV) of the gamma-line window ("linewindow W"); 0 if absent (SegLine.h).
+   */
+  double lineWindow() const { return lineWindow_; };
   /// 1 for "total 1" (SegLine::total).
   int total() const { return total_; };
   /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
@@ -270,6 +282,7 @@ class ExtrapLine {
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  double lineWindow_;
   int total_;
   double transmission_;
   double yield_;

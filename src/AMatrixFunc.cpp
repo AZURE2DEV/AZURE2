@@ -507,6 +507,7 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   int aa = compound()->GetPairNumFromKey(entranceKey);
   int exitPairNum = compound()->GetPairNumFromKey(exitKey);
 
+  const EPoint::LineNode *lineNode = point->ActiveLineNode();
   int irEnd;
   int irStart;
   bool isRMC = false;
@@ -545,6 +546,12 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
         complex hardSpherePhaseEx = point->GetExpHardSpherePhase(jNum, chpNum);
         complex sqrtPenEn = point->GetSqrtPenetrability(jNum, chNum);
         complex sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
+        // a node of the line-shape integration (EPoint::CalculateLineWindow): the photon channel at E - E_x(E_f),
+        // times the final-state amplitude A(E_f)
+        if (lineNode && compound()->GetPair(exitChannel->GetPairNum())->GetPType() == 10)
+          sqrtPenEx = lineNode->photonEnergy > 0.0
+                          ? lineNode->amp * pow(lineNode->photonEnergy / hbarc, (double)exitChannel->GetL() + 0.5)
+                          : 0.0;
 
         complex uphase = coulombPhaseEn * hardSpherePhaseEn * coulombPhaseEx * hardSpherePhaseEx;
         complex umatrix = 2.0 * complex(0.0, 1.0) * sqrtPenEn * sqrtPenEx *
@@ -579,6 +586,8 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
           ecAmplitude = point->GetECAmplitude(k, m);
         }
         complex tmatrix = ecNormParam * ecAmplitude;
+        // a node of the line-shape integration: the external element of the scattering state at E_f
+        if (lineNode) tmatrix = lineNode->ec[k - 1][m - 1];
         if (theECMGroup->IsChannelCapture()) {
           int internalChannel = theECMGroup->GetIntChannelNum();
           MGroup *chanMGroup = compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());

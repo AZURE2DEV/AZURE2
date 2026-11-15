@@ -101,11 +101,12 @@ _EXTRAP_OBSERVABLE = {
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
 # shiftgroup <label>; shiftfngroup <label>; normgroup <label>; covariance <file>;
-# total <0|1>; transmission <n> [vary sigma]; yield <n> [vary sigma]; thicknessgroup <label>; shiftfn and the
+# total <0|1>; transmission <n> [vary sigma]; yield <n> [vary sigma]; thicknessgroup <label>;
+# linewindow <W keV> (capture into a broad unbound final state); shiftfn and the
 # transmission / yield fit form take a variable number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfngroup": 1,
              "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "spin": 1, "shiftfn": None,
-             "transmission": 1, "yield": 1, "thicknessgroup": 1}
+             "transmission": 1, "yield": 1, "thicknessgroup": 1, "linewindow": 1}
 
 
 def _thickness_token(blocks, keyword):

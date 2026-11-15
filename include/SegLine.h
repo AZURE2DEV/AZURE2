@@ -123,6 +123,7 @@ class SegLine {
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
     natural_ = "0";
+    lineWindow_ = 0.0;
     total_ = 0;
     transmission_ = 0.0;
     yield_ = 0.0;
@@ -315,6 +316,14 @@ class SegLine {
               stream.setstate(std::ios::failbit);
               break;
             }
+          } else if (keyword == "linewindow") {
+            // capture into a BROAD unbound final state: integrate the final state's line shape over E_f in
+            // E_R +- W (W in keV, the gamma-line window of the data analysis); stage 2, 2026-11-15
+            if (!(advancedStream >> lineWindow_) || !(lineWindow_ > 0.0)) {
+              parseError_ = "linewindow needs the half-width W > 0 of the gamma-line window, in keV";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "sample" || keyword == "natural") {
             if (!(advancedStream >> natural_)) {
               natural_ = "0";
@@ -481,6 +490,11 @@ class SegLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /**
+   * Returns the half-width W (keV) of the gamma-line window for capture into a broad unbound final state
+   * ("linewindow W"); 0 if absent (the narrow, stage-1 treatment).
+   */
+  double lineWindow() const { return lineWindow_; };
   /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
   int total() const { return total_; };
   /// "transmission <n>": the segment is the transmission exp(-n sigma) of a sample n atoms/barn thick (0: not).
@@ -608,6 +622,7 @@ class SegLine {
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  double lineWindow_;
   int total_;
   double transmission_;
   double yield_;

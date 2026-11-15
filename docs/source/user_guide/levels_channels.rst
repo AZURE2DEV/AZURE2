@@ -264,10 +264,42 @@ The narrow-resonance treatment holds while the final state's width is small next
 to its energy above threshold **and** next to the photon energy,
 :math:`E_\gamma \gg \Gamma_f`. A broad final state (the 31.7 keV wide 2.366 MeV
 state of :math:`^{13}`\ N, near the photon threshold) needs the cross section
-integrated over the final state's line shape, which is not implemented. A final
+integrated over the final state's line shape: give its capture segments
+``linewindow W`` (below). A final
 state closer to the threshold than its outgoing wave can be evaluated
 (:math:`\eta > 100`) is refused with an ERROR; enter it just below the threshold
 as a bound state.
+
+**Broad final state: the line-shape integration** (``linewindow W``, November 2026).
+A capture segment (data or test) that ends with the keyword block ``linewindow W``
+is integrated over the final state's energy :math:`E_f` above its threshold, within
+:math:`E_R \pm W` (:math:`W` in keV), the window in which the experiment collected its
+:math:`\gamma`-ray line. At each :math:`E_f`
+
+* the photon energy is :math:`E - E_x(E_f)`, in the internal capture elements and in
+  external capture;
+* the final state is the scattering state of its particle channel at :math:`E_f`:
+  outside the channel radius the real standing wave :math:`\cos\delta\, F + \sin\delta\, G`,
+  with :math:`\delta` the phase of the final level (one level, its observed width and
+  energy), inside it the level times the amplitude :math:`c(E_f)`;
+* the weight is the one-level line shape :math:`\rho(E_f)/N_f` (unit area for a narrow
+  state), and capture into different :math:`E_f` adds incoherently.
+
+The window is part of the physics, not a numerical setting: off the peak the final
+state is the non-resonant continuum, whose capture grows with the window and rises
+steeply towards the photon threshold. Give the window of the data analysis. Rolfs and
+Azuma integrated their 12C(p,\ :math:`\gamma_1`) peak over :math:`E_R \pm \Gamma`; with
+``linewindow 39`` (their :math:`\Gamma_p` = 39 keV, :math:`a` = 4.48 fm, pure E1 direct
+capture, nothing fitted) the model gives their 90 degree data between
+:math:`E_p` = 1.0 and 1.6 MeV with a median model/data of 1.00, where the narrow
+treatment gives 1.43. For a narrow state with a detector-limited window
+(:math:`W \gg \Gamma_f`) the result is the narrow treatment's. Without the keyword a
+segment keeps the narrow treatment. Restrictions (refused with an ERROR at start-up):
+the final level must lie above exactly one particle threshold, external capture into
+it must be on (the final level is found through it), and the observable must be a
+capture cross section (angle-integrated or differential); not with the RMC formalism
+or ``--use-gradient``. The cost is 48 final energies per point. Test:
+``tests/ec_unbound_broad``.
 
 Before November 2026 an unbound final state was treated, without a message, as a
 state **bound** by :math:`|E_x - S|`: its exterior was the Whittaker function at the
