@@ -36,7 +36,7 @@ fits, T1 extrapolation with band, the natural-target fit in two fitters, the T2 
 directory and `run.log` identical, the two check files new. The 13 refusal cases and 9 session cases of
 `work/director/try79/` old against new: 2 differ, both unified ones (the sampler's blank line on 7Li_p_ay
 `--no-brune`; the sampler's compound and data checks on the screen in the T1 checks case, 79 + 470 new lines, equal to
-the calculation's); the session cases do not reach the rebuild. Docs build: 60 pages.
+the calculation's); the session cases do not reach the rebuild. Docs build: 60 pages. `OMP_NUM_THREADS=1 ctest -LE slow -j1`: 299 of 299.
 
 **Open, for the PI** (not unified, outside the set-up): the sampler's refusal by the data's initialization prints
 "Calculation was aborted." without the blank line the run prints; the session's first set-up initializes the data
