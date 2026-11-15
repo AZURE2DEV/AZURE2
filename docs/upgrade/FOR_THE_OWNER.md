@@ -497,7 +497,11 @@ re-read against its design at the hand-over.
    - *The sanitizers* (the seventh push): the address job passes. The thread job failed in every step, after 112
      minutes, with the same report of libomp as before: the entry written for it matched nothing. The ninth push
      replaces it with two entries (`sanitizer_findings.md` section 4.4), again not tried anywhere but on the CI.
-     Whether a report of AZURE2 stands behind libomp's is still not known.
+     With them (71 minutes) libomp's report is gone and six steps (T1, two of T3) fail with another: a double
+     lock of a mutex that libarcher keeps for an `omp critical`, on the progress bar of the external-capture
+     set-up. The mutex is the tool's; why TSan counts it as held is not understood. It is suppressed in the
+     tenth push, and the job now shows the first report of five files and the table of all distinct reports.
+     Whether a report of AZURE2 stands behind these two is still not known.
 
    **The CI is not green.** Linux passes after these repairs only if nothing stood behind what the annotations
    showed: the unit-test step printed nine failed tests, the most it could, so the 38 tests that run after
