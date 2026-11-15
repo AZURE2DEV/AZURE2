@@ -521,10 +521,17 @@ re-read against its design at the hand-over.
      tenth push, and the job now shows the first report of five files and the table of all distinct reports.
      Whether a report of AZURE2 stands behind these two is still not known.
 
-   **The CI is not green.** Linux passes after these repairs only if nothing stood behind what the annotations
-   showed: the unit-test step printed nine failed tests, the most it could, so the 38 tests that run after
-   `skill_azure2-resonance-search` may have failed unseen. The first annotation of each test step now names every
-   failing test. Windows is not expected to pass. Every build of the upgrade was made on one machine (GCC 11.5, GNU
+   **The CI is not green.** Linux in the ninth push: every unit test passes (`docs_build` is skipped, no Sphinx
+   there) and 171 of the 172 regression checks. The one is `tests/shared_point_tables` (d), a bound on the peak
+   memory of a fit against a calculation: the script sampled `/proc` every half second and the calculation now
+   ends in less than a second, so it compared against 5 to 30 MB for a true 96 to 180 MB and failed or passed by
+   chance (here it failed in four runs of four, on builds before and after the last merge). **A gap of the
+   upgrade's own checking:** the merges of the last rehearsals were checked with the unit tests and the tables of
+   all projects, not with `tests/run_tests.sh`, which `./scripts/check.sh` of section 11 runs; it is run here
+   again from the tenth push on. The check now takes the kernel's figure for the ended process; the true ratio
+   is 1.8 with a Coulomb table file and 2.4 without, against a bound of 3. So Linux is expected green in the
+   tenth push. Windows is not expected to pass; macOS runs with the GNU tools for the first time. Every build
+   of the upgrade was made on one machine (GCC 11.5, GNU
    Make, Python 3.12, numpy 2, pybind11 3.1, a Coulomb table file given by the environment). Look at the newest
    run of the branch before trusting it. Which tests the CI should run on each platform (the unit-test step is
    one to two hours) is left to the owner and the PI.
