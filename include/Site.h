@@ -400,8 +400,8 @@ class Site {
   /// of the point; rows->used, when set, receives every row used.  `rowsOf`, when given, is a site with the same
   /// ChannelRowsKey whose rows are computed: this site holds that table instead of computing its own (the rest --
   /// the conversion factors, the THM vertex pieces -- is its own).
-  void CalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr,
-                            const Site *rowsOf = nullptr);
+  void CalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &,
+                            const ChannelRowSource *rows = nullptr, const Site *rowsOf = nullptr);
   /// What the channel rows (EDependentTables) depend on: the entrance pair's compound nucleus, the bits of the compound
   /// energy E_x (CompoundEnergy), and the exit pair's charge Z_1 + Z_2 where a beta-decay channel of that nucleus
   /// reads it (its Fermi function; -1 elsewhere).  Two sites with one key compute the same rows bit for bit.

@@ -557,18 +557,23 @@ it, by an instrumentation in a scratch build that is not committed.  Sizes in Mi
 
 | what is held | counts | before | now |
 |---|---|---|---|
-| channel rows of the slots (L_o, sqrt(P), two phase factors: 56 B a channel) | 178,456 slots; 22,488 distinct E_x | 6,813 (a table per slot) | 859 (a table per E_x) |
-| THM vertex pieces (j_l, rho j_l', Coulomb term) | 88,700 THM slots | 1,985 (every channel, a vector per J group, in the rows) | 43 (entrance channels only) |
-| channel rows of the extrapolation points themselves | 5,608 points; 1,207 distinct E_x | 232 | 46 |
-| the stage's channel table during the set-up (rows, and the capacity of every key asked for) | 5.8 M distinct rows | 2,273 | 400 |
+| channel rows of the slots (a) | 178,456 slots; 22,488 distinct E_x | 6,813 (per slot) | 859 (per E_x) |
+| THM vertex pieces (b) | 88,700 THM slots | 1,985 | 43 |
+| channel rows of the extrapolation points | 5,608 points; 1,207 distinct E_x | 232 | 46 |
+| the stage's channel table, during the set-up (c) | 5.8 M distinct rows | 2,273 | 400 |
 | `Site` objects of the slots | 178,456 x 376 B (392 B now) | 64 | 67 |
 | Legendre rows of the slots | one per slot | 52 | 52 |
 | result records | 920,320 doubles | 7 | 7 |
 | units, plan, node slots, meshes, point set-ups | 5,608 points | < 10 | < 10 |
-| node table | 44,663 nodes (22,488 direct, 22,175 THM, every THM node at a direct node's E_x) | holders of the slots' rows | the same |
-| external-capture amplitudes, row sets, spectator-window tables | none in this model | 0 | 0 |
+| node table (d) | 44,663 nodes | 0 | 0 |
+| external-capture amplitudes, row sets, window tables | none in this model | 0 | 0 |
 | heap in use after the set-up | | 9,273 | 1,128 |
-| peak resident memory (at the end of the channel rows) | | 10.99 GB | 1.64 GB |
+| peak resident memory (end of the channel rows) | | 10.99 GB | 1.64 GB |
+
+(a) L_o, sqrt(P) and the two phase factors, 56 B a channel; (b) j_l, rho j_l' and the Coulomb term: before, of every
+channel, a vector per J group, inside the rows; now of the entrance channels only; (c) its rows and the capacity of
+every key asked for; (d) 22,488 direct and 22,175 THM nodes, every THM node at a direct node's E_x; it holds the
+slots' tables, nothing of its own.
 
 **What scaled with what, before.** The channel rows are a function of the compound energy E_x alone (and of the exit
 pair's charge where a beta-decay channel reads it; `Site::ChannelRowsKey`), but every site computed and held its own:

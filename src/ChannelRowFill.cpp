@@ -22,7 +22,8 @@
  * The channel table of the rows the given sites will compute, built before the threads that fill them start
  * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
  */
-std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CompoundSystem *compound, const Config &configure,
+std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CompoundSystem *compound,
+                                                                   const Config &configure,
                                                                    const std::vector<Site *> &sites) {
   // Each site's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
   // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
@@ -36,7 +37,8 @@ std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const Compoun
     own.erase(std::unique(own.begin(), own.end()), own.end());
     keys.insert(keys.end(), own.begin(), own.end());
   }
-  std::shared_ptr<const ChannelTable> table = ChannelTable::Build(compound, configure, std::move(keys), channelTable_.get());
+  std::shared_ptr<const ChannelTable> table =
+      ChannelTable::Build(compound, configure, std::move(keys), channelTable_.get());
   if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kProfile))
     configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
                         << table->Computed() << " computed" << std::endl;
@@ -84,7 +86,8 @@ int WorkingCopy::FillChannelRows(const std::vector<std::vector<Unit *>> &batches
   std::size_t at = 0;
   for (int b = 0; b < (int)batches.size(); b++) {
     computes.clear(), takes.clear();
-    for (; at < sites.size() && sites[at].batch == b; at++) (sites[at].rowsOf == (int)at ? computes : takes).push_back((int)at);
+    for (; at < sites.size() && sites[at].batch == b; at++)
+      (sites[at].rowsOf == (int)at ? computes : takes).push_back((int)at);
     bool stop = false;
     for (const std::vector<int> *part : {&computes, &takes}) {
       const int n = (int)part->size();

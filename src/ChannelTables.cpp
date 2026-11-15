@@ -211,8 +211,8 @@ std::tuple<int, std::uint64_t, int> Site::ChannelRowsKey(const CompoundSystem *c
   return std::make_tuple(nucleus, bits, betaCharge);
 }
 
-void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure, const ChannelRowSource *rows,
-                                const Site *rowsOf) {
+void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compound, const Config &configure,
+                                const ChannelRowSource *rows, const Site *rowsOf) {
   AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kEDependent);
   const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->GetEntranceKey()));
   const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(this->GetExitKey()));

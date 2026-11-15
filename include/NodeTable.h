@@ -17,8 +17,8 @@ class Config;
 
 namespace azure2 {
 
-/// A node by (compound nucleus, route, bits of E_x): route 1 for a THM unit (its solve reads the level matrix's elements
-/// and its site the THM vertex pieces), else 0.
+/// A node by (compound nucleus, route, bits of E_x): route 1 for a THM unit (its solve reads the level matrix's
+/// elements and its site the THM vertex pieces), else 0.
 using NodeKey = std::tuple<int, char, std::uint64_t>;
 
 /*!
