@@ -221,6 +221,14 @@ see because libomp is not instrumented and libarcher annotates OpenMP constructs
 Suppressed in `tsan.supp` (`race:__kmp_suspend_initialize_thread`, `race:__kmp_resume_template`); both names are
 libomp-internal, so the entries cannot hide an AZURE2 race.
 
+**On the CI (2026-11-15).** The runner's libomp (ubuntu-24.04, clang 18, `libomp.so.5`) has no symbols: its frames
+print `<null>`, the two names match nothing, and every step of the thread job failed with this report (read from
+the job's annotation: `pthread_mutex_lock` from libomp on the main thread against `pthread_mutex_init` from libomp
+on a worker, the block allocated by libomp, AZURE2 only as the opener of the region in `ChannelRowFill.cpp`). A
+third entry, `race:^pthread_mutex_init$`, names the interceptor of the initialization itself: AZURE2 never calls
+it (its locks are `std::mutex`), so the entry cannot hide a race between AZURE2's accesses. It was not tried on
+this machine (no clang here on that date); whether other reports stand behind it shows in the first CI run with it.
+
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 
 With `SAN_LEAKS=1`, LeakSanitizer reports on every CLI run exactly one direct leak, the `AZUREMain` that
