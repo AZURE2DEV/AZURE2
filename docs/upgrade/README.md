@@ -14,7 +14,8 @@ earlier performance changes; the physics itself was rarely at fault.
 The upgrade rebuilds the engine so that its structure follows the chain itself. Each stage computes one quantity and
 depends only on the stages before it: `physics/` (levels, channels, collision matrix, observables), `experiment/`
 (measurements, materials, stopping, the apparatus kernel), `inference/` (parameters, the objective, the fitter) and
-`io/` (projects and nuclear-data libraries). The calculation is written in three lines (`ARCHITECTURE.md` §1), and a
+`io/` (projects and nuclear-data libraries). (That was the plan; what was built is in `FOR_THE_OWNER.md` section 5:
+there is no `inference/` library, and the collision matrix and the observables are engine classes.) The calculation is written in three lines (`ARCHITECTURE.md` §1), and a
 new reaction, observable or apparatus effect enters at one stated place and is tested against synthetic projects
 whose true parameters are known. The rebuild is staged: every phase must reproduce the results of the present
 engine, or explain each difference, before the code it replaces is removed. It also adds what the present code
@@ -23,14 +24,16 @@ functions from pycoulomb, pyazr 3.0 and a local web interface in place of Qt.
 
 Read in this order:
 
-1. `HANDOFF.md` — where things stand, what is open, what is next.
-2. `ARCHITECTURE.md` — the target design.
-3. `ROADMAP.md` — phases 0–9 with tasks and gates.
-4. `THM.md` — the Trojan horse method in the new structure.
-5. `RULES.md` — rules for code, tests and skills.
-6. `STYLE.md` — how documentation is written.
-7. `figures/structure.html` — a summary page with the two figures (open locally in a browser). Where it and the `.md` files differ, the `.md` files win.
+1. `FOR_THE_OWNER.md` — what the branch is, how to try it, where its numbers differ, how to add to it, what is not
+   finished (section 10), and the reading order for an AI agent (section 11).
+2. `dev_features.md` — where each feature of `dev` lands in this structure.
+3. `ROADMAP.md` — phases 0–9 as planned and ticked; its block "State at the hand-over" is the state per box.
+4. `ARCHITECTURE.md` — the target design (a plan: where the code differs, `FOR_THE_OWNER.md` section 10 says so).
+5. `THM.md` — the Trojan horse method in the new structure.
+6. `RULES.md` — rules for code, tests and skills. `STYLE.md` — how documentation is written.
+7. `HANDOFF.md` — the log of every session, newest first (more than 12,000 lines): search it, do not read it whole.
+8. `figures/structure.html` — a summary page with the two figures (open locally in a browser). Where it and the
+   `.md` files differ, the `.md` files win.
 
-For an agent continuing this work: start from `HANDOFF.md`, follow `ROADMAP.md` phase by phase, obey `RULES.md` and
-the "Upgrade" section of the top-level `CLAUDE.md`, and update `HANDOFF.md` and the roadmap ticks at the end of every
-session.
+For an agent continuing this work: follow `FOR_THE_OWNER.md` section 11, obey `RULES.md` and the "Upgrade" section
+of the top-level `CLAUDE.md`, and add an entry at the top of `HANDOFF.md` at the end of every session.

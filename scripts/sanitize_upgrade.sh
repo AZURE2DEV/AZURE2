@@ -65,11 +65,15 @@ if [ "${SAN_NO_BUILD:-0}" != 1 ]; then
   else
     echo "WARNING: pybind11 not importable by $PY: no _azure2 module, the pyazr section will fail" >&2
   fi
+  mkdir -p "$BUILD"  # the logs of a failed configure or build: their first error lines are printed (ci_first_errors.sh)
   # shellcheck disable=SC2086
   cmake -S "$REPO_ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DAZURE2_SANITIZE="$SANFLAG" \
     -DBUILD_GUI=OFF -DUSE_QWT=OFF -DUSE_API=ON -DPYAZR_OUTPUT_DIR="$BUILD/pyazr-module" \
-    "${PB[@]}" ${SAN_CMAKE_ARGS:-} || die "configure failed"
-  cmake --build "$BUILD" --parallel ${SAN_JOBS:-} || die "build failed"
+    "${PB[@]}" ${SAN_CMAKE_ARGS:-} 2>&1 | tee "$BUILD/configure.log" ||
+    { bash "$REPO_ROOT/scripts/ci_first_errors.sh" "$BUILD/configure.log" "sanitize_upgrade configure"; die "configure failed"; }
+  # shellcheck disable=SC2086
+  cmake --build "$BUILD" --parallel ${SAN_JOBS:-} 2>&1 | tee "$BUILD/build.log" ||
+    { bash "$REPO_ROOT/scripts/ci_first_errors.sh" "$BUILD/build.log" "sanitize_upgrade build"; die "build failed"; }
 fi
 BIN="$BUILD/src/AZURE2"
 [ -x "$BIN" ] || die "no $BIN"

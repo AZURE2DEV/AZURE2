@@ -17,12 +17,15 @@ upgrade rebuilds the code so that each stage of that chain is one module that de
 and so that every change can be checked against synthetic projects with known parameters and against the present
 engine's results. Why, and in what order: `docs/upgrade/README.md`.
 
-This branch carries the staged rebuild described in `docs/upgrade/` (start with `docs/upgrade/HANDOFF.md`). On it,
+This branch carries the staged rebuild described in `docs/upgrade/` (start with `docs/upgrade/FOR_THE_OWNER.md`:
+its section 11 is the reading order for an agent, its section 10 what is not finished). On it,
 and on the phase branches cut from it (`feature/upgrade-<phase>-<topic>`), these rules apply on top of everything
 below (full text and reasons in `docs/upgrade/RULES.md`):
 
-- Code is shaped like the physics: `physics/`, `experiment/`, `inference/`, `io/`, plus `support/` for plumbing.
-  Modules use only the modules below them; each is its own CMake target, so a wrong dependency does not compile.
+- Code is shaped like the physics: `physics/`, `io/`, `stopping/`, `experiment/`, `convert/`, then the engine
+  (`src/`, `include/`) and the binding (`api/`), plus `support/` for plumbing. (The plan's `inference/` library was
+  not made: the objective is `src/Objective.cpp`.) Modules use only the modules below them; each is its own CMake
+  target, so a wrong dependency does not compile.
 - Design before code. Each piece of physics (a channel type, a basis or convention, an observable, a kernel, a
   prior) is a self-contained part with a stated interface, its inputs and outputs in physical units, and one test
   that would fail if it were wrong; parts fit together only through those interfaces (`ARCHITECTURE.md` §9), never by
@@ -33,7 +36,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
   changes one symbol, and appears in one of the test projects T1–T3 (`tests/upgrade/`).
 - Setup state is read-only once a fit stage starts; parallel code writes only its own slice or scratch; no caches
   beyond the per-stage tables; results independent of thread count.
-- One implementation per formula and format, in C++ (Coulomb functions from pycoulomb). Library readers live in pyazr
+- One implementation per formula and format, in C++ (Coulomb functions: `physics/coulomb`, taken from pycoulomb). Library readers live in pyazr
   `sources/`; the core reads only the project. No network in the engine; imported numbers carry provenance.
 - One internal angular-momentum and phase convention; conversions only in `level_parameters`.
 - Every physics function is exposed in the binding with array inputs, so the web UI can plot it.
@@ -61,6 +64,11 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
   as in `Merge fix/park-dsde: <what it changes>`.
 - Bring `dev` into a long-lived feature branch by merging, not rebasing. Other
   sessions build on pushed branches.
+- **Exception, until `feature/upgrade` and `dev` are joined:** work on the
+  upgrade is cut from `feature/upgrade` and merged back into it, never cut from
+  or merged with `dev`. A plain merge of `dev` conflicts in 93 files and merges
+  others silently wrong (`docs/upgrade/FOR_THE_OWNER.md` section 7); a feature
+  of `dev` is re-written in its named places (`docs/upgrade/dev_features.md`).
 - One topic per branch. A fix discovered along the way gets its own branch, or
   at least its own commit, so it can be reverted or cherry-picked alone.
 - Before starting, `git fetch` and check how far behind `origin/dev` you are;
@@ -82,7 +90,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
-| `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
+| `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by the engine's THM distortion (`src/ThmDistortion.cpp`) and the binding; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |

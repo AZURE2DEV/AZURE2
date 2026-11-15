@@ -173,6 +173,13 @@ add_test(NAME pyazr_ec_final_state
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_final_state_test.py)
 set_tests_properties(pyazr_ec_final_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A capture final state above a particle threshold is refused: Project.validate() lists E_FINAL_STATE_UNBOUND and
+# Session raises (T1 with its 3/2- final state above S_p); one just below the threshold opens.
+add_test(NAME pyazr_ec_final_state_unbound
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_final_state_unbound_test.py)
+set_tests_properties(pyazr_ec_final_state_unbound PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # write_outputs must produce the same files the binary does.
 add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}
