@@ -33,6 +33,8 @@ LAW2_COSINES = np.linspace(-1.0, 1.0, 9)
 ELASTIC_COSINES = 9
 #: Evenly spaced cosines the LAW=5 cosine grid starts from.
 ELASTIC_START_COSINES = 21
+#: The most points (energies x cosines) of one elastic session (the engine keeps about 2.5 kB per point).
+SESSION_POINTS = 200000
 #: The session options a sweep keeps (the calculation's; the others are the session's own business).
 SWEEP_OPTIONS = ("use_brune", "use_park", "use_rmc", "use_gsl_coul", "use_coulomb_table", "ignore_externals",
                  "use_long_wavelength", "ec_convection_current")
@@ -233,17 +235,30 @@ class Sweeps:
         el = np.array([cache[x]["elastic"] for x in e]) if elastic is not None else None
         return EnergyGrid(e, sigma, legendre, el, mu_el, refined)
 
+    def elastic_values(self, reaction, energies_MeV, mu, coulomb_minus):
+        """sigma_e - sigma_c (b/sr, (n_E, n_mu)) at lab energies and c.m. cosines, one session per
+        ``SESSION_POINTS`` points."""
+        e = np.asarray(energies_MeV, float)
+        mu = np.asarray(mu, float)
+        step = max(1, SESSION_POINTS // max(len(mu), 1))
+        blocks = []
+        for k in range(0, len(e), step):
+            part = e[k:k + step]
+            data = self.evaluate([self._elastic_record(reaction, self._energies("elastic_more", part), mu)])
+            blocks.append(self._elastic_block(data[0], len(part), mu, coulomb_minus, part))
+        return np.vstack(blocks) if blocks else np.zeros((0, len(mu)))
+
     def elastic_cosines(self, reaction, energies_MeV, mu_range, coulomb_minus, tolerance, max_points):
         """The cosine grid of LAW=5, from ``ELASTIC_START_COSINES`` even cosines over ``mu_range``, by the rule of
         :mod:`pyazr.endf.grid` with one component per energy of the grid: sigma_e - sigma_c (what the file tabulates)
-        plus a constant C(E), the smallest sigma_e of the start cosines at that energy.  The constant cancels in the
-        rule's chord, so the rule holds the interpolation error of sigma_e - sigma_c below tolerance x
+        plus a constant C(E), the smallest |sigma_e| of the start cosines at that energy.  The constant cancels in
+        the rule's chord, so the rule holds the interpolation error of sigma_e - sigma_c below tolerance x
         max(|sigma_e - sigma_c + C|, ...): about tolerance x sigma_e where the nuclear part is small against the
         cross section, and relative to the nuclear part where it is large.  (The rule on sigma_e - sigma_c alone asks
         for thousands of cosines where it is a small, oscillating part of a cross section; the file's error is in the
         cross section.)  The grid serves every energy; each energy keeps the cosines its own values need
-        (:func:`pyazr.endf.grid.thin`, the same rule).  Returns ([(cosines, sigma_e - sigma_c in b/sr) per energy],
-        the refinement's report)."""
+        (:mod:`pyazr.endf.elastic`, the same rule).  Returns (the cosines, sigma_e - sigma_c (n_E, n_mu) at them in
+        b/sr, the refinement's report)."""
         energies = self._energies("elastic", energies_MeV)
         e = np.asarray(energies_MeV, float)
         offset = {}
@@ -263,8 +278,4 @@ class Sweeps:
         refined = grid.refine(np.linspace(*mu_range, ELASTIC_START_COSINES), model, tolerance, max_points)
         mu = np.asarray(refined["x"], float)
         shifted = np.asarray(refined["values"], float).reshape(len(mu), len(e)).T
-        panels = []
-        for row, c in zip(shifted, offset["C"]):  # each energy keeps the cosines it needs (grid.thin, the same rule)
-            k = grid.thin(mu, row, tolerance)
-            panels.append((mu[k], row[k] - c))
-        return panels, refined
+        return mu, shifted - offset["C"][:, None], refined

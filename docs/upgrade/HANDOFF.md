@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: written MF=6 within CHECKR's limits
+
+**Done** (`endf.md` 13.11, the PI's decision): no written MF=6 section above 200 energies, no LAW=5 panel above 201
+cosines; a section that needs more is thinned by the grid's rule to the limit and states the tolerance it reaches
+(MF=1 "Accuracy:", `Written.accuracy` and the end of `Written.losses`, `Written.reached`); `write(...,
+mf6_limits="manual")` for Appendix G's limits; `write(..., project_name=)` names the project in MF=1 and the
+tape's first line. T1 100 s, T2 51 s, 13N 133 s (one thread, loaded machine). Under the limits the elastic
+section of T1 and 13N is good to about 1e-1 near the zeros of sigma_NI under the manual's reading (stated).
+**Verified how**: see the branch report (writer tests quick and slow with the real codes, read test).
+**Open**: the covariance (MF=32), the check of an evaluation and the speed-up of the export are not built.
+
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: the elastic section under the manual's reading
+
+**Done** (`endf.md` 13.10): the reader reads LAW=5 LTP=12-15 as the manual says (p. 146: sigma_NI(E) of MF=3
+times P_NI(mu, E) of MF=6, each interpolated), the product reading is a named option
+(`elastic_cross_section(..., reading=)`, `Material.curves(..., elastic_reading=)`), a curve's notes say where
+the two differ by more than 1e-3. The writer gives elastic scattering its own energies (`pyazr/endf/elastic.py`):
+every sign change of sigma_NI bracketed to 1e-5 x E, the energies chosen by the grid's rule under the manual's
+reading (`grid.thin_to`, the reader's reconstruction instead of the chord), quarter points checked; MF=1,
+`Written.elastic` state the brackets and the tolerance reached. Measured on the old files: the manual reading
+was off by up to 0.79 (T1), 2.9e-3 (T2), 0.56 (13N), over 62 / 13 / 42 keV above 1e-3; on the new ones above 5e-3
+only within the brackets and a few eV beside them (T1 22.6 eV, T2 4.3 eV, 13N 14.5 eV).
+**Verified how**: `endf_read_test` (hand values of both readings; the default reading injected wrong fails two
+checks), `endf_write_test T1 narrow`, my measurement script on T1, T2, 13N, the consistency test, the pages built.
+**Open**: T1 and 13N need 3000-3500 elastic energies (20 MB files, 5 min) without limits; the PI's limits follow.
+
 ## 2026-11-15 (director, 00:50) — merged: the one set-up of the compound system and the data; quiet `Objective` calls
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 79 (rehearsal 78 plus two branches). The agent's
