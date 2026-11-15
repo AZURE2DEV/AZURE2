@@ -48,7 +48,7 @@ AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
   limits.ReadParameterSettings();
   limits.ApplyAllParameterSettings(params);
 
-  FitterStates states;  // the fit's pooled level states, copies of the session's
+  FitterStates states;  // what this fit's evaluations write: idle copies of the session's levels and data, its gradient
   AZURECalc objective(data(), results(), compound(), state(), inputs(), states, configure(), &limits);
   objective.SetErrorDef(1.0);
   std::vector<bool> fixedMask(mp.Params().size());

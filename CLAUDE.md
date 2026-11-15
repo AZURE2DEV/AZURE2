@@ -197,8 +197,9 @@ how each was checked:
   the last call. State lives in one of three owned places: the energy task's
   scratch (`include/TaskScratch.h`, in the caller's `Results`), the run's
   per-thread scratch (`include/RunScratch.h`, `Config::scratch`), the run's
-  once-only warnings (`Config::FirstTime`). The rest still on the allow-list
-  goes by the milestones of `docs/upgrade/evaluation.md`
+  once-only warnings (`Config::FirstTime`). What a fitter's or a sampler's
+  `const` evaluations keep between calls is in the caller's `FitterStates` or
+  `SamplerStates`. The allow-list holds permanent tables only
   [check 38, `tests/consistency/allowed_state.tsv`; recipe "Add a cache"].
 - **Extension is a table row.** A new quantity, χ² term, kernel or stopping
   model is one row in the one table of its kind, with its test. No class that

@@ -54,7 +54,7 @@ complex Site::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
  * its ends, as before the tables.
  */
-complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CompoundSystem *compound, const Config &configure) const {
+complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const CompoundSystem *compound, const Config &configure) {
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
 

@@ -375,8 +375,9 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 int runMCMC(Config &configure, const RunRequest &request) {
   try {
     WorkingCopy *data = new WorkingCopy();
-    // The idle levels of the sampler's walkers; the run's levels are made by the set-up below.
-    StatePool<WalkerLevels> walkerPool;
+    // What the sampler's walkers are evaluated on (idle levels and working copies); the run's levels are made by
+    // the set-up below.
+    SamplerStates walkerPool;
 
     // The compound system from the <levels> rows, the data set up in the middle, then its last part: as the
     // program's run does it (SetUpProgramCompound), its check files and its words on a refusal included.

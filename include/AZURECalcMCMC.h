@@ -46,19 +46,27 @@ struct WalkerLevels {
   LevelInputs inputs;
 };
 
+/// What the evaluations of a sampler run on, owned by whoever runs the sampler (the program's run, a session, a
+/// test) and lent to it, as the evaluations that take from it are const: the idle levels of the walkers evaluated
+/// at the same time, and the idle working copies, each with the buffer it writes.
+struct SamplerStates {
+  StatePool<WalkerLevels> levels;
+  StatePool<WorkingData> data;
+};
+
 class AZURECalcMCMC {
  public:
   /*!
    * The AZURECalcMCMC object is created with reference to an WorkingCopy and CompoundSystem object (shared and constant; the
-   * caller outlives this object) and the caller's levels, which it copies into its own.  `pool` holds the walkers'
-   * idle levels: the caller's, as the evaluations that take from it are const.
+   * caller outlives this object) and the caller's levels, which it copies into its own.  `states` holds what the
+   * walkers' evaluations run on: the caller's, as the evaluations that take from it are const.
    * The runtime configurations are also passed through a Config structure.
    */
   AZURECalcMCMC(WorkingCopy *data, const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs,
-                StatePool<WalkerLevels> &pool, const Config &configure) :
+                SamplerStates &states, const Config &configure) :
     configure_(configure),
     levels_{state, inputs},
-    pool_(pool),
+    states_(states),
     parametersInitialized_(false) {
     data_ = data;
     compound_ = compound;
@@ -153,7 +161,7 @@ class AZURECalcMCMC {
    *
    * Requires UpdateParameterVectors() to have run first.
    */
-  void BuildAutoPriors(bool useRWA = true) const;
+  void BuildAutoPriors(bool useRWA = true);
 
   /*!
    * Parameter kind of each varying parameter; empty until BuildAutoPriors().
@@ -271,21 +279,21 @@ class AZURECalcMCMC {
 
   const Config &configure_;
   WalkerLevels levels_;  ///< the sampler's own: the start vector's (UpdateParameterVectors), the seed of the copies
-  StatePool<WalkerLevels> &pool_;  ///< the caller's
+  SamplerStates &states_;  ///< the caller's
   WorkingCopy *data_;
   const CompoundSystem *compound_;
   double theErrorDef;
 
-  // Parameter vectors for physical parameter handling (mutable for lazy initialization)
-  mutable vector_r all_physical_;
-  mutable vector_r physical_;
-  mutable vector_r rwa_;
-  mutable vector_r all_rwa_;
-  mutable vector_r all_indexes;
-  mutable std::vector<bool> fixed_;
+  // Parameter vectors for physical parameter handling, set by UpdateParameterVectors
+  vector_r all_physical_;
+  vector_r physical_;
+  vector_r rwa_;
+  vector_r all_rwa_;
+  vector_r all_indexes;
+  std::vector<bool> fixed_;
   // Name and kind (its record's) of every parameter (fixed or not), in the order of fixed_
-  mutable std::vector<std::string> paramNames_;
-  mutable std::vector<ParamKind> paramKinds_;
+  std::vector<std::string> paramNames_;
+  std::vector<ParamKind> paramKinds_;
   bool parametersInitialized_;
   // The fit's limits of each varying parameter: the support of the posterior (InsideFitLimits), set by
   // UpdateParameterVectors.
@@ -296,24 +304,20 @@ class AZURECalcMCMC {
   std::atomic<bool> stopRequested_{false};
 
   // Prior information for Bayesian analysis, indexed over varying parameters
-  mutable std::vector<double> priorMeans_;
-  mutable std::vector<double> priorStds_;
-  mutable std::vector<bool> usePriors_;
+  std::vector<double> priorMeans_;
+  std::vector<double> priorStds_;
+  std::vector<bool> usePriors_;
 
   // ParamKind of each varying parameter, filled by BuildAutoPriors()
-  mutable std::vector<ParamKind> freeKinds_;
+  std::vector<ParamKind> freeKinds_;
 
   // Prior parameter covariance (<config> priorCovariance=): a multivariate Gaussian on its parameters, which replaces
   // their own diagonal (automatic or user) priors; set up by SetUpPriorCovariance() at the start of a run.
-  mutable std::shared_ptr<const PriorCovariance> priorCov_;
-  mutable bool useRWA_ = true;
+  std::shared_ptr<const PriorCovariance> priorCov_;
+  bool useRWA_ = true;
   /// Read and match the prior covariance; false (ERROR printed) when it is refused, or names a level parameter in a
   /// physical-parameter run (the prior is in the param.sav space, the RWA one).
-  bool SetUpPriorCovariance(bool useRWA) const;
-
-  // The idle copies of GetPooledData, and their lock
-  mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;  // each copy with the buffer it writes
-  mutable std::mutex pool_mutex_;
+  bool SetUpPriorCovariance(bool useRWA);
 };
 
 #endif

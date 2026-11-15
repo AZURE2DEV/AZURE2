@@ -47,6 +47,7 @@ int AZUREMain::operator()() {
     }
     // The objective and the parameter settings end with the data run, before the transformation out.
     run.objective.reset();
+    run.fitterStates.reset();
     run.limits.reset();
   } else {
     RunReactionRate(run);

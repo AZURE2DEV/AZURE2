@@ -64,6 +64,16 @@ jobs:
         shell: ${{ matrix.name == 'windows' && 'msys2 {0}' || 'bash' }}
 
     steps:
+      # The Windows runner's Git writes every text file with CRLF at checkout
+      # (core.autocrlf true).  Tests of this branch compare committed files
+      # byte for byte (the schema, the converted fixtures), so the tree is
+      # checked out as committed.  This says nothing about a user's files: a
+      # project and its data files in CRLF give identical output.
+      - name: Check out with the committed line endings (windows)
+        if: matrix.name == 'windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@v4
 
       # ---------------------------------------------------------------- linux
@@ -85,6 +95,9 @@ jobs:
           "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
           # the web page's tests (tests/pyazr/ui): without these four they are skipped
           "$PY" -m pip install --quiet pytest fastapi httpx uvicorn
+          # the page's fit and sampler jobs (iminuit, emcee) and the figures of two skills' self-tests (matplotlib):
+          # without them tests/pyazr/ui/{jobs,sampler_bands,node}_test.py and those two self-tests fail
+          "$PY" -m pip install --quiet iminuit emcee matplotlib
           "$PY" -c 'import numpy, scipy, mpmath, pybind11; print("numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
@@ -109,6 +122,9 @@ jobs:
           # the web page's tests (tests/pyazr/ui): without these four they are skipped
           "$PY" -m pip install --quiet pytest fastapi httpx uvicorn ||
             { echo "::error::macos: pip install pytest fastapi httpx uvicorn failed"; exit 1; }
+          # the page's fit and sampler jobs and the figures of two skills' self-tests (as on linux)
+          "$PY" -m pip install --quiet iminuit emcee matplotlib ||
+            { echo "::error::macos: pip install iminuit emcee matplotlib failed"; exit 1; }
           "$PY" -c 'import sys, numpy, scipy, mpmath, pybind11; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
@@ -136,6 +152,7 @@ jobs:
             mingw-w64-ucrt-x86_64-python-scipy
             mingw-w64-ucrt-x86_64-python-mpmath
             mingw-w64-ucrt-x86_64-pybind11
+            diffutils
 
       # The UCRT64 Python, the one pacman installed numpy and scipy into, as a
       # Windows path: CMake is a native mingw program and cannot read /ucrt64.
@@ -225,8 +242,16 @@ jobs:
           if [ -n "${PYAZR_PYTHON:-}" ] && [ "${{ matrix.name }}" != "windows" ]; then
             export PATH="$(dirname "$PYAZR_PYTHON"):$PATH"
           fi
+          # Windows: the test scripts make their work directories under TMPDIR and hand the paths to native programs
+          # (python, AZURE2) inside files and variables, where MSYS does not translate /tmp: a Windows path instead.
+          if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
           if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
-            echo "::error::physics regression tests failed on ${{ matrix.name }}"
+            # Every failing test by name in the first annotation: GitHub shows ten annotations per step, and the
+            # ones below stop at nine.
+            BAD="$(awk '/^=== / { if (bad) print head; head = $0; bad = 0; next }
+                        /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/ && $0 !~ /^ *ok / { bad = 1 }
+                        END { if (bad) print head }' physics-tests.log | sed 's/^=== //; s/ ===$//' | paste -sd ',' -)"
+            echo "::error::physics regression tests failed on ${{ matrix.name }}: $(tail -1 physics-tests.log)%0A$BAD"
             # One annotation per failing test (GitHub shows only ten per step),
             # carrying that test's own output, so the reason is readable without
             # downloading the log.  %0A is a newline inside an annotation.
@@ -264,6 +289,7 @@ jobs:
         run: |
           set -o pipefail
           rc=0
+          if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
           ctest --test-dir build --output-on-failure -LE "slow|browser" 2>&1 | tee unit-tests.log || rc=$?
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.
@@ -272,7 +298,11 @@ jobs:
             echo "::warning::${{ matrix.name }}: $(echo "$SKIPPED" | wc -l | tr -d ' ') test(s) skipped:%0A$(echo "$SKIPPED" | paste -sd ' ' -)"
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "::error::unit tests failed on ${{ matrix.name }}"
+            # Every failed test by name in the first annotation (ctest's closing "The following tests FAILED:"
+            # block): GitHub shows ten annotations per step, and the ones below stop at nine.
+            BAD="$(awk 'f && /^[ \t]*[0-9]+ - / { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(.*$/, ""); print }
+                        /The following tests FAILED:/ { f = 1 }' unit-tests.log | paste -sd ' ' -)"
+            echo "::error::unit tests failed on ${{ matrix.name }}: $(echo "$BAD" | wc -w | tr -d ' ') test(s):%0A$BAD"
             # One annotation per failed test with its failing lines and the tail of its own output
             # (%0A = newline), so the reason shows without the log download.
             awk -v os="${{ matrix.name }}" '

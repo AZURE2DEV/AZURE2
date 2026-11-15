@@ -170,8 +170,12 @@ try:
           "LOGGED pyazr.engine INFO \t[*************************] 100%" in err, err[-800:])
     rate = [line for line in err.splitlines() if line.startswith("RATE ")]
     # the rate of the program's run on this project, written by a run that printed its progress (T1: 1 -> 2)
+    # (to 1e-8: these are computed with the Coulomb table; the exact functions, where there is no table file, give
+    # 5.595623194312042e-07 and 530.5291324346432, 3e-10 away)
+    want = (5.595623195798498e-07, 530.5291324488501)
+    got = [float(v) for v in rate[0].split()[1:]] if len(rate) == 1 else []
     check("reaction_rate: the numbers of a run that printed",
-          rate == ["RATE 5.595623195798498e-07 530.5291324488501"], rate)
+          len(got) == 2 and all(abs(g / w - 1) < 1e-8 for g, w in zip(got, want)), rate)
 
     # (b) the rate writes nothing beside the project
     print("(b) the rate's files")

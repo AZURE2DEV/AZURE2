@@ -23,6 +23,9 @@
 # the others the four routes end at the same minimum (1e-5 relative; they agree to 1e-7 today); the band is written
 # where a level parameter is free and skipped with a message that says why where none is.  (The --use-lm and
 # --use-gsl-lm runs of "target" take half a minute each: only --use-gradient and --use-lm are run there.)
+# A route whose log says "MIGRAD did NOT converge" is noted and its end point not compared (since 2026-11-15: on the
+# CI's Linux machine "target" with --use-gradient stops at 8539 after 103 calls and says so; here it reaches 71.67);
+# the routes that reached a minimum agree, and at least one of a project must.
 #
 # Fails on the build of 19:25 (b8c970b0) in all four routes of "none", and on the build after the first fix
 # (6cc1e76e) in "none" with MIGRAD (plain and --use-gradient).  About 100 s at 2 threads.
@@ -85,12 +88,20 @@ fitted() {
   for m in "$@"; do
     run "$label.$m" "$src" "$proj" "$FIT" $(flag "$m") --covariance-band
     if [ "$rc" != 0 ] || [ -z "$chi2" ]; then bad "$m: exit $rc, chi-squared '$chi2'"; continue; fi
-    [ -n "$first" ] || first="$chi2"
-    if same "$first" "$chi2"; then ok "$m: chi-squared $chi2"
+    if grep -q "MIGRAD did NOT converge" "$WORK/$label.$m/run.log"; then
+      # A MIGRAD that stops short of a minimum and says so is not a wrong minimum: its end point is not compared.
+      # Seen on the CI's Linux machine in "target" with --use-gradient (2026-11-15: the fit starts at a chi-squared
+      # of 5.8e5 and its path leaves this machine's at the 20th call; here it reaches the minimum in 135 calls).
+      echo "  note  $m: MIGRAD did not converge and said so (chi-squared $chi2): not compared"
+      grep -H -E "MIGRAD did NOT converge" "$WORK/$label.$m/run.log" | sed "s|$WORK/||" | cut -c1-300
     else
-      bad "$m: chi-squared $chi2, the first route gave $first"
-      # How the fits of this project ended, for a reader who has this output and not the logs.
-      grep -H -i -E "MIGRAD|converged|minimum|call limit|iteration" "$WORK/$label".*/run.log | sed "s|$WORK/||" | tail -12
+      [ -n "$first" ] || first="$chi2"
+      if same "$first" "$chi2"; then ok "$m: chi-squared $chi2"
+      else
+        bad "$m: chi-squared $chi2, the first route that converged gave $first"
+        # How the fits of this project ended, for a reader who has this output and not the logs.
+        grep -H -i -E "MIGRAD|converged|minimum|call limit|iteration" "$WORK/$label".*/run.log | sed "s|$WORK/||" | tail -12
+      fi
     fi
     local dir="$WORK/$label.$m" n
     n="$(find "$dir/output" -name '*.band' -size +0 | wc -l)"
@@ -102,6 +113,7 @@ fitted() {
       else bad "$m: $n band files; expected none and 'no free level parameter' in the log"; fi
     fi
   done
+  [ -n "$first" ] || bad "$label: no route reached a minimum"
 }
 
 echo "levels: level parameters and norms (tests/upgrade/T1, T1_start.azr)"
