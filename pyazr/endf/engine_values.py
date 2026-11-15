@@ -307,8 +307,16 @@ class Sweeps:
         def model(mus):
             order = np.argsort(mus)
             m = np.asarray(mus, float)[order]
-            data = self.evaluate([self._elastic_record(reaction, energies, m)])
-            full = self._elastic_block(data[0], len(e), m, None, e)
+            # at most SESSION_POINTS points per session (the engine keeps about 2.5 kB per point): the energies in
+            # chunks, each point's value the same whatever session computes it
+            step = max(1, SESSION_POINTS // max(len(m), 1))
+            if step >= len(e):
+                data = self.evaluate([self._elastic_record(reaction, energies, m)])
+                full = self._elastic_block(data[0], len(e), m, None, e)
+            else:
+                full = np.vstack([self._elastic_block(self.evaluate([self._elastic_record(
+                    reaction, self._energies("elastic_part", e[k:k + step]), m)])[0], len(e[k:k + step]), m, None,
+                    e[k:k + step]) for k in range(0, len(e), step)])
             block = full - coulomb_minus(e, m)
             if "C" not in offset:
                 offset["C"] = np.min(np.abs(full), axis=1)

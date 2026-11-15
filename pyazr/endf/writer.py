@@ -125,6 +125,11 @@ class ElasticReport:
         return out
 
 
+#: The steps of :func:`write`, in order, as ``progress`` names them.
+WRITE_STEPS = ("the levels in the formal basis (MF=2)", "the energy grid of MF=3 and MF=6",
+               "elastic scattering (MF=6/MT=2)", "the covariance (MF=32)", "MF=2 against MF=3", "the file")
+
+
 @dataclasses.dataclass(frozen=True)
 class AmplitudeReport:
     """The elastic section in the nuclear amplitude expansion (:mod:`pyazr.endf.amplitudes`): ``energies`` written,
@@ -370,7 +375,7 @@ def _wrap(text, width=66):
 
 def write(session, path, x=None, *, header=None, energy_range_MeV=None, tolerance=1e-3, max_points=4000,
           number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE, mf6_limits="checkr",
-          project_name=None, elastic_form=ELASTIC_FORM, covariance=None):
+          project_name=None, elastic_form=ELASTIC_FORM, covariance=None, progress=None):
     """Write ``session``'s model at the fit vector ``x`` (default its start) as an ENDF-6 material at ``path``.
 
     ``header``: the evaluator's fields of MF=1 (p. 42), a dict with any of ``MAT`` (default 9999), ``NLIB``
@@ -387,7 +392,9 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     ``"hesse"`` (HESSE in a formal-basis session at ``x``: :func:`pyazr.endf.covariance.formal_covariance`), or a
     :class:`pyazr.endf.covariance.FormalCovariance` of this session at ``x``; written as MF=32/MT=151 LCOMP=1.  A
     covariance of the fit's own basis (``EngineFitResult.covariance``, Brune or Park) or a prior's matrix is refused:
-    MF=32 holds the formal parameters of MF=2 (p. 253).
+    MF=32 holds the formal parameters of MF=2 (p. 253).  ``progress``: called as ``progress(done, total, step)``
+    after each of the :data:`WRITE_STEPS` (``step`` its words; a step the file does not need is passed over and
+    counted), from the caller's thread; an exception in it stops the write.
 
     Returns a :class:`Written`.  Refused (:class:`pyazr.FormatRefused`): an existing ``path`` without ``overwrite``,
     what :func:`pyazr.endf.from_session` refuses, a session without exit reactions, MF=2 that does not reproduce
@@ -432,6 +439,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         energy_range_MeV = (min(lab), max(lab))
     lo, hi = (float(v) for v in energy_range_MeV)
     record, losses = from_session(session, x, energy_range_eV=(lo * EV_PER_MEV, hi * EV_PER_MEV))
+
+    def step(k):
+        if progress is not None:
+            progress(k + 1, len(WRITE_STEPS), WRITE_STEPS[k])
+
+    step(0)
     from ..project import Project
     project = Project.open(session.file)
     pairs = {p.key: p.to_dict() for p in session.pairs}
@@ -500,6 +513,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                              reached)
         written[(6, 102)] = section_rows.capture(za, awr, compound, [(f[1], np.asarray(f[2])[keep], f[3][keep])
                                                                      for f in finals], e_eV[keep], number_form)
+    step(1)
     elastic = next((r for r in reactions if r.role == "elastic"), None)
     elastic_report = None
     if elastic is not None and elastic_form == "amplitudes":
@@ -539,6 +553,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         reached[2] = max(el.reached, el.cosines_reached, tolerance)
         counts = [len(m) for m, _ in panels]
         cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
+    step(2)
     covariance_text = []
     if covariance is not None:
         cov = covariance_section.formal_covariance(session, x, record) if isinstance(covariance, str) else covariance
@@ -557,6 +572,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             + (f"; {len(fixed)} parameter(s) of listed resonances were fixed in the fit and have zero rows: "
                + ", ".join(f"spin group {gi + 1} resonance {li + 1} {'ER' if col == 0 else f'GAM{col}'}"
                            for gi, li, col in fixed) if fixed else "") + "."]
+    step(3)
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
     particle = {r.mt: e_MeV for r in reactions if r.role == "exit"}
     mf2_check = {}
@@ -631,10 +647,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         text += _wrap("- " + t)
     for t in h["TEXT"]:
         text += _wrap(t) or [""]
+    step(4)
     header_rows = _header_rows(record, h, sections, text, number_form)
     _write_material(path, int(h["MAT"]), sections, header_rows,
                     tpid=f" pyazr.endf.write, {shown_name}")
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
+    step(5)
     return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items) + tuple(accuracy), not_written,
                    cosines, sweeps.count, elastic_report, tuple(accuracy), reached)

@@ -137,6 +137,13 @@ add_test(NAME pyazr_endf_evaluation_check
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_evaluation_check_test.py)
 set_tests_properties(pyazr_endf_evaluation_check PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# Two repairs of the ENDF export outside pyazr.endf: the Legendre frame of an extrapolation cut by a reshape (the
+# arrays of the loop it replaces), Project.new without the parameter settings of removed records.
+add_test(NAME pyazr_endf_export_support
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_export_support_test.py)
+set_tests_properties(pyazr_endf_export_support PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # The engine's door of the nuclear amplitude expansion (LAW=5 LTP=1): the coefficients of T1, p + p and d + d give
 # the engine's elastic cross section back by the manual's eqs. 6.9-6.14 (about 10 s).
 add_test(NAME pyazr_endf_amplitudes

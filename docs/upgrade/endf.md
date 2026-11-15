@@ -1257,3 +1257,30 @@ Q note (-0.083 keV), Q_MASSES (-22.6 keV), TEXT (the text's LTP=2; the extract h
 directory lists): the design's three findings. On the full library file (`work/endf6/s/check_full.py`, `python
 -I`): the same, and TEXT says "the record of MF=6/MT=2 holds LTP=1". The mass tolerance injected at 100 keV fails
 the test (MASS and Q_MASSES gone).
+
+### 13.15 Memory, progress, the project's name, the export's time, the warnings of a sweep
+
+- **Memory.** Peak resident size per engine session of a tabulated T2 write (`work/endf6/s/mem_tab.py`, a wrapper
+  of `Sweeps.evaluate`): 0.17-0.96 GB for the first 26 sessions, then one session of 1 858 890 points (the cosine
+  refinement of LAW=5, `Sweeps.elastic_cosines`: every energy of the grid x every cosine in one session, about
+  2.6 kB per point) at 4.85 GB. That session is now cut into sessions of at most `SESSION_POINTS` (200 000) points,
+  as `elastic_values` already was: the tabulated T2 write peaks at 0.78 GB with every section but MF=1 identical to
+  the write before (MF=1 differs by the header fields given); the tabulated T1 file is byte for byte the file the
+  start commit's code writes (same arguments; peak 0.85 GB, 2:03 min). The quick writer test (T1 in the default
+  amplitude form, and the narrow level) peaks at 0.22 GB (was 7.3 GB), 70 s.
+- **progress**: `write(..., progress=f)` calls `f(done, total, words)` after each of `writer.WRITE_STEPS` (six:
+  the levels, the grid, elastic scattering, the covariance, MF=2 against MF=3, the file); a step the file does not
+  need is counted all the same. The page's job row would use it where it builds the call (`pyazr/ui/`, another
+  agent's; not changed).
+- **project_name**: the quick writer test writes T1 as "T1.azr for the tests" and finds the name in the tape's first
+  line and in MF=1's text.
+- **The export's time.** `pyazr/evaluate.py` `_legendre_rows` (the Legendre frame of an extrapolation, read for
+  every grid) looped over the points with a `round()` each: 12.8 s for 5.6 million points without coefficients
+  (the elastic grids). A frame whose points all have the same count is now cut by one reshape (0.8 s); the arrays
+  are the loop's, value for value (`tests/pyazr/endf_export_support_test.py`: equal, varying, empty frames).
+  Every caller reads the same arrays: the callers are `_forward_pass` (the only one).
+- **The warnings of a sweep.** `Project.new(nuclear_part=)` (`pyazr/project.py`, the classmethod `new`) emptied the
+  record sections and kept `<parameterSettings>` whole, so every row of a removed data set's parameter (13N: its
+  16 shift offsets) made the engine warn W_PARAMETER_SETTING_UNKNOWN in each session of the writer (208 lines in a
+  13N write). The rows whose name starts with a removed record's name and a dot are dropped with the records
+  (`<parameterSettings>` and `<mcmc>`); the door check of 13N opens with none (16 before). The test checks the rows.

@@ -256,13 +256,22 @@ class Project(NuclearPart, ParameterSettings):
         """A project to be saved at ``path``, started from the nuclear part of the format-3 project ``nuclear_part``:
         that file's text with every record removed (the bodies of its record sections emptied: data sets,
         normalizations, energy scales, extrapolations, targets, beams, detectors, model data, potentials), every other
-        section kept as it is (``<config>``, ``<levels>``, ``<thm>``, ``<parameterSettings>``, ...).  Nothing is
+        section kept as it is (``<config>``, ``<levels>``, ``<thm>``, ``<parameterSettings>``, ...) but for the rows of
+        ``<parameterSettings>`` and ``<mcmc>`` that name a parameter of a removed record.  Nothing is
         written until :meth:`save`.  A format-1/2 file is refused with the conversion command."""
         src = cls.open(nuclear_part)
         doc = src._doc
+        removed = [_bytes(_text(r["name"])) + b"." for s in src._sections() for r in s["records"]]
         for s in sorted(src._sections(), key=lambda s: -s["open"]):
             if s["close"] > 0:
                 doc.replace_lines(s["open"], s["close"] - 1, [])
+        # the rows of <parameterSettings> and <mcmc> that name a parameter of a removed record (its norm, shift, ...)
+        # go with it: the engine would warn that the new project has no such parameter
+        for name, first, last in sorted(_sections_named(doc, _PARAMETER_SECTIONS), key=lambda t: -t[1]):
+            for i in range(last - 1, first, -1):
+                token = doc.line(i).split(None, 1)[0] if doc.line(i).split() else b""
+                if any(token.startswith(r) for r in removed):
+                    doc.replace_lines(i, i + 1, [])
         return cls(doc.write(), path)
 
     @property

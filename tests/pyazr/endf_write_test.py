@@ -124,7 +124,16 @@ for azr in PROJECTS:
     try:
         s = pyazr.Session(name)
         out = os.path.join(d, name.replace(".azr", ".endf"))
-        w = E.write(s, out, header={"AUTH": "pyazr tests", "ALAB": "TEST"}, tolerance=TOLERANCE, elastic_form=FORM)
+        steps = []
+        w = E.write(s, out, header={"AUTH": "pyazr tests", "ALAB": "TEST"}, tolerance=TOLERANCE, elastic_form=FORM,
+                    project_name=f"{name} for the tests", progress=lambda *a: steps.append(a))
+        check(f"{name}: progress called once per step in order, (k, {len(E.writer.WRITE_STEPS)}, words)",
+              steps == [(k + 1, len(E.writer.WRITE_STEPS), t) for k, t in enumerate(E.writer.WRITE_STEPS)], steps)
+        with open(out) as fh:
+            first = fh.readline()
+        check(f"{name}: project_name in the tape's first line and in MF=1's text",
+              f"{name} for the tests" in first and f"{name} for the tests" in " ".join(E.read(out).header.text),
+              first)
         print("\n".join("      " + line for line in str(w).splitlines()))
         # (a)
         found = E.check_format(out).findings
