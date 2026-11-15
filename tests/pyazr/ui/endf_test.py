@@ -126,9 +126,11 @@ def test_check_job_against_check(t1):
     job = wait_job(t1, r.json()["id"])
     assert job["state"] == "finished", job
     got = job["result"]["check"]
-    direct = E.check(os.path.join(t1.folder, EXTRACT)).to_dict()
+    # the page's check includes the check of the resonance parameters (MF=2 against MF=3, masses and Q, the text)
+    direct = E.check(os.path.join(t1.folder, EXTRACT), resonances=True).to_dict()
     assert got["own"]["findings"] == direct["own"]["findings"]
-    assert got["own"]["counts"] == {"error": 3, "warning": 1, "note": 1}
+    assert got["own"]["counts"] == {"error": 3, "warning": 6, "note": 2}
+    assert {"RECONSTRUCTION", "MASS", "Q_MASSES", "TEXT"} <= {f["code"] for f in got["own"]["findings"]}
     assert [x["program"] for x in got["reports"]] == ["checkr", "fizcon", "psyche"]
     for g, d in zip(got["reports"], direct["reports"]):
         assert g["findings"] == d["findings"] and g["totals"] == (list(d["totals"]) if d["totals"] else None)

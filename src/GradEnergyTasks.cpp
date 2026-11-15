@@ -88,7 +88,7 @@ void Forward(const CompoundSystem *compound, const LevelState &state, WorkingCop
     for (int p = 0; p < seg->NumPoints(); p++)
       if (Unit *pt = seg->GetPoint(data, p + 1)) pass.points.push_back({seg, s, p, pt});
   }
-  // The records of every unit at the parameters filled now: the point pass, or (no OpenMP, a failed task) each
+  // The records of every unit at the parameters filled now: the point pass, or (a failed task) each
   // point calculated alone, as an evaluation does.
   if (data.CalculatePointsInParallel(pass.segments, compound, state, config, results) != 0)
     for (const GradPoint &p : pass.points)

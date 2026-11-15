@@ -12,10 +12,19 @@
 - Between incident energies (the TAB2 law): the value at fixed mu is interpolated (Cartesian, eq. 7, p. 26); the
   unit-base laws 21-25 are the same as 1-5 for distributions that span the same range of mu (p. 27, note (i)),
   as a Legendre sum and an LAW=5 distribution do; the corresponding-point laws 11-15 are refused.
-- For LAW=5 the quantity interpolated between incident energies is sigma_e - sigma_c (the nuclear and interference
-  part, b/sr): the manual tabulates it directly for LTP=12-15 (eq. 6.20) and says nothing for LTP=1 and 2 (taken
-  here the same way; the Coulomb part is computed at the energy asked).  The Coulomb parts (eta and the Rutherford or
-  Mott cross section) are the engine's: a :class:`pyazr.endf.curves.CoulombTerms` given by the caller.
+- LAW=5 with LTP=12, 14, 15 (the manual's reading, the default): sigma_e = sigma_c + sigma_NI(E) P_NI(mu, E), with
+  sigma_NI(E) the TAB1 of MF=3/MT=2 under its own interpolation and P_NI(mu, E) the tabulated distribution of MF=6
+  under the TAB2's law between incident energies at fixed mu (p. 146: "The angular distribution p_NI is given in
+  File 6 as a tabulated function of mu, and sigma_NI(E) in barns is given in File 3"; eqs. 6.19-6.20).  The manual
+  states no other reading.  Where sigma_NI changes sign between two incident energies, P_NI = (sigma_e - sigma_c) /
+  sigma_NI changes sign too and is large on both sides, and this product of two interpolations differs from
+  sigma_e - sigma_c by about its own size there (docs/upgrade/endf.md 13.10).  The other reading, ``"product"``,
+  interpolates sigma_NI(E_i) P_NI(mu, E_i) of the panels (the tabulated sigma_e - sigma_c) instead: a named option,
+  for files written so that only it holds.
+- LAW=5 with LTP=1 and 2: the quantity interpolated between incident energies is sigma_e - sigma_c (the nuclear and
+  interference part, b/sr; the manual says nothing of it for these LTP).  The Coulomb parts (eta and the Rutherford or
+  Mott cross section) are computed at the energy asked, the engine's: a :class:`pyazr.endf.curves.CoulombTerms`
+  given by the caller.
 
 Values outside a table (energy or cosine) are NaN; a tabulated distribution is zero outside its cosines (p. 142).
 """
@@ -242,11 +251,43 @@ def two_body_probability(product, energies_ev, mu, where="MF=6"):
     return _between_panels(product, np.asarray(energies_ev, float), at, where)
 
 
-def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, where="MF=6/MT=2"):
+def amplitude_expansion(values, nl, identical, eta, mu):
+    """sigma_e - sigma_c (b/sr) of LAW=5 LTP=1 from the values of one LIST record (p. 147: b_0 ... b_2NL, then
+    Re a_0, Im a_0, ... Re a_NL, Im a_NL for LIDP=0; b_0 ... b_NL first for LIDP=1) at the c.m. cosines ``mu``: the
+    interference and nuclear terms of eq. 6.13 (distinguishable particles) or eq. 6.14 (identical), p. 145, with the
+    Coulomb parameter ``eta`` of eq. 6.12 at the record's energy."""
+    m = np.asarray(mu, float)
+    nb = nl + 1 if identical else 2 * nl + 1
+    v = np.asarray(values, float)
+    b = v[:nb]
+    raw = v[nb:nb + 2 * (nl + 1)]
+    a = raw[0::2] + 1j * raw[1::2]
+    terms = [(2 * l + 1) / 2.0 * a[l] * legendre.legval(m, [0] * l + [1]) for l in range(len(a))]
+    if not identical:  # eq. 6.13
+        interference = -2 * eta / (1 - m) * np.real(np.exp(1j * eta * np.log((1 - m) / 2)) * sum(terms))
+        return interference + _legendre_sum(b, m)
+    # eq. 6.14
+    s = sum(((1 + m) * np.exp(1j * eta * np.log((1 - m) / 2))
+             + (-1) ** l * (1 - m) * np.exp(1j * eta * np.log((1 + m) / 2))) * terms[l] for l in range(len(a)))
+    nuclear = sum((4 * l + 1) / 2.0 * b[l] * legendre.legval(m, [0] * (2 * l) + [1]) for l in range(len(b)))
+    return -2 * eta / (1 - m * m) * np.real(s) + nuclear
+
+
+#: The readings of a tabulated LAW=5 distribution (LTP=12, 14, 15) between incident energies (the module's text).
+ELASTIC_READINGS = ("manual", "product")
+
+
+def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, where="MF=6/MT=2", reading="manual"):
     """dsigma/dOmega (b/sr, c.m.) of LAW=5 at lab energies (eV) and c.m. cosines (pp. 144-147).
 
     ``coulomb``: the Coulomb terms (``eta(E)``, ``sigma(E, mu)``; distinguishable or identical by LIDP);
-    ``sigma_ni``: sigma_NI(E) of MF=3/MT=2 (a callable, eV -> b) for LTP=12-15."""
+    ``sigma_ni``: sigma_NI(E) of MF=3/MT=2 (a callable, eV -> b) for LTP=12-15; ``reading``: for LTP=12-15,
+    ``"manual"`` (sigma_NI(E) of MF=3 times P_NI(mu, E) interpolated between the panels, p. 146) or ``"product"``
+    (sigma_NI(E_i) P_NI(mu, E_i) of the panels interpolated), the module's text."""
+    if reading not in ELASTIC_READINGS:
+        raise FormatRefused(what=f"{where}: reading {reading!r} of a tabulated LAW=5 distribution",
+                            allowed=" or ".join(repr(r) for r in ELASTIC_READINGS),
+                            fix="leave the reading at its default, the manual's (p. 146)")
     energies_ev = np.asarray(energies_ev, float)
     mu = np.asarray(mu, float)
     identical = product.lidp == 1
@@ -257,31 +298,19 @@ def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, wher
         m = mu[k]
         if p.flag == 1:
             eta = float(coulomb.eta(np.array([p.energy]))[0])
-            nl = p.nl
-            nb = nl + 1 if identical else 2 * nl + 1
-            b = p.values[:nb]
-            a = np.array(p.values[nb:nb + 2 * (nl + 1)][0::2]) + 1j * np.array(p.values[nb:nb + 2 * (nl + 1)][1::2])
-            terms = [(2 * l + 1) / 2.0 * a[l] * legendre.legval(m, [0] * l + [1]) for l in range(nl + 1)]
-            if not identical:  # eq. 6.13
-                interference = -2 * eta / (1 - m) * np.real(np.exp(1j * eta * np.log((1 - m) / 2)) * sum(terms))
-                return interference + _legendre_sum(b, m)
-            # eq. 6.14
-            s = sum(((1 + m) * np.exp(1j * eta * np.log((1 - m) / 2))
-                     + (-1) ** l * (1 - m) * np.exp(1j * eta * np.log((1 + m) / 2))) * terms[l] for l in range(nl + 1))
-            nuclear = sum((4 * l + 1) / 2.0 * b[l] * legendre.legval(m, [0] * (2 * l) + [1]) for l in range(len(b)))
-            return -2 * eta / (1 - m * m) * np.real(s) + nuclear
+            return float(amplitude_expansion(p.values, p.nl, identical, eta, m))
         if p.flag == 2:  # eqs. 6.15-6.18
             c = p.values[:p.nl + 1]
             if not identical:
                 return _legendre_sum(c, m) / (1 - m)
             return sum((4 * l + 1) / 2.0 * c[l] * legendre.legval(m, [0] * (2 * l) + [1])
                        for l in range(len(c))) / (1 - m * m)
-        if p.flag in (12, 14, 15):  # eqs. 6.19-6.20: sigma_NI(E_i) P_NI(mu, E_i), the part interpolated
+        if p.flag in (12, 14, 15):  # eqs. 6.19-6.20: P_NI(mu, E_i), times sigma_NI(E_i) for the product reading
             ms, v = p.values[0::2], p.values[1::2]
             if not ms[0] <= m <= ms[-1]:
                 return 0.0
-            return float(sigma_ni(np.array([p.energy]))[0]) * interpolate(m, ms, v, (len(ms),),
-                                                                          (4 if p.flag == 14 else 2,))
+            p_ni = interpolate(m, ms, v, (len(ms),), (4 if p.flag == 14 else 2,))
+            return p_ni if reading == "manual" else float(sigma_ni(np.array([p.energy]))[0]) * p_ni
         raise FormatRefused(what=f"{where}: LTP={p.flag} at E={p.energy:g} eV", allowed="LTP 1, 2, 12, 14, 15 (p. 146)",
                             fix="the file breaks the format: pyazr.endf.check_format(path)")
 
@@ -289,7 +318,13 @@ def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, wher
     if flags & {12, 14, 15} and sigma_ni is None:
         raise FormatRefused(what=f"{where}: LTP={sorted(flags)} needs sigma_NI(E) of MF=3/MT=2",
                             allowed="a material with MF=3/MT=2", fix="the file lacks MF=3/MT=2")
-    # sigma_e - sigma_c at each panel's energy (for LTP 12-15 sigma_NI there times P_NI), interpolated between
-    # the panels at fixed mu: the module's reading, the part the manual tabulates (eq. 6.20)
+    # interpolated between the panels at fixed mu: sigma_e - sigma_c for LTP 1 and 2 and for the product reading;
+    # P_NI for the manual's reading of LTP 12-15, then times sigma_NI(E) of MF=3 under its own interpolation
     part = _between_panels(product, energies_ev, nuclear_and_interference, where)
+    if reading == "manual" and flags & {12, 14, 15}:
+        if not flags <= {12, 14, 15}:
+            raise FormatRefused(what=f"{where}: LTP={sorted(flags)} mixed in one section",
+                                allowed="one representation, or LTP 12, 14, 15 together (p. 147)",
+                                fix="the file breaks the format: pyazr.endf.check_format(path)")
+        part = np.asarray(sigma_ni(energies_ev), float) * part
     return coulomb.sigma(energies_ev, mu, identical=identical, two_s=two_s) + part

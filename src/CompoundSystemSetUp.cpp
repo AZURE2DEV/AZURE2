@@ -5,6 +5,8 @@
 #include "Config.h"
 #include "GSLException.h"
 
+#include <ostream>
+
 void CompoundSetUpRequests::AddEntrance(int pair) {
   for (int r : entrancePairs)
     if (r == pair) return;
@@ -45,6 +47,20 @@ CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &
   }
   out.compound.reset(building.release());
   return out;
+}
+
+void PrintSetUpRefusal(const CompoundSetUp &setUp, std::ostream &out) {
+  switch (setUp.refusal) {
+    case CompoundSetUp::Refusal::kNone: return;
+    case CompoundSetUp::Refusal::kUnreadable: out << "Could not fill compound nucleus from file." << std::endl; return;
+    case CompoundSetUp::Refusal::kNoNuclearData:
+      out << "No nuclear data exists. Calculation not possible." << std::endl;
+      return;
+    case CompoundSetUp::Refusal::kData: return;
+    case CompoundSetUp::Refusal::kFinish:
+      out << setUp.finishError << std::endl << std::endl << "Calculation was aborted." << std::endl;
+      return;
+  }
 }
 
 bool InspectCompoundStructure(

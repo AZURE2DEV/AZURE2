@@ -123,7 +123,8 @@ def rename_inactive(work):
         text = f.read().replace("<parameterSettings>\n", "<parameterSettings>\n"
                                 "s04_thick.norm 1 0 0 0.03 0 1 norm 0\n"
                                 "natN_note 1 0 0 0 0 1 note 0\n")
-    text = text.rstrip("\n") + "\n<mcmc>\nnwalkers 10\n<parameters>\ns04_thick.norm 1 0.03\n</parameters>\n</mcmc>\n"
+    # <mcmc> holds its <parameters> rows only (a run setting there is refused: E_UNREAD_LINE)
+    text = text.rstrip("\n") + "\n<mcmc>\n<parameters>\ns04_thick.norm 1 0.03\n</parameters>\n</mcmc>\n"
     with open(f3, "w") as f:
         f.write(text)
     p = Project.open(f3)

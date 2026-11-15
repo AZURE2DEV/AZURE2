@@ -180,6 +180,7 @@ void Builder::BuildData() {
     std::string why;
     if (!ReactionTokens(name, s.entranceKey(), (code == 3 || s.exitKey() == -1) ? -1 : s.exitKey(), s.isAdvanced(), s.operationType(), s.components(),
                         angleFrame, reaction, why, pairKeys)) {
+      if (!res_.refusal.empty()) return;
       if (!active) {
         Note(Construct::kDataLine, name, "inactive data line " + std::to_string(d.key) + ": " + why + "; dropped");
         continue;
@@ -470,6 +471,7 @@ void Builder::BuildExtrapolations() {
     std::string why;
     if (!ReactionTokens(name, s.entranceKey(), (code == 4 || s.exitKey() == -1) ? -1 : s.exitKey(), s.isAdvanced(), s.operationType(), s.components(),
                         angleFrame, reaction, why, pairKeys)) {
+      if (!res_.refusal.empty()) return;
       Note(Construct::kTestLine, name, (active ? "" : "inactive ") + std::string("test line ") + std::to_string(t.key) + ": " + why + "; dropped");
       continue;
     }

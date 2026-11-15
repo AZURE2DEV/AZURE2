@@ -102,6 +102,9 @@ struct TargetIntLine {
   double udrBurstFwhm = 0.0;
   double udrChannelWidth = 0.0;
   int udrCentred = 1;
+  /// A keyword of the optional blocks that this grammar does not know (a newer program's, or a typing error); the
+  /// stream fails on it, but at the end of the line that failure was cleared and the word dropped without a word.
+  std::string unknownKeyword;
 };
 
 /// Strips every '"' of a token (the engine's reading of the quoted list and expressions).
@@ -351,6 +354,7 @@ inline void ReadTargetIntLine(std::istream &stream, TargetIntLine &out) {
       out.isUdr = !out.udrFile.empty() && out.udrFlightPath > 0.0 && !stream.fail();
       if (!out.isUdr) stream.setstate(std::ios_base::failbit);
     } else {
+      out.unknownKeyword = keyword;
       stream.setstate(std::ios_base::failbit);
     }
   }

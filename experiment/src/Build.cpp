@@ -159,22 +159,57 @@ bool ResolvePair(Context &c, const ValidatedRecord &r, const std::string &labelF
 
 namespace {
 
-// One side of a reaction: the pair key, by the label and (where the label names several pairs) the pair-key field.
-// `keyField` is "" for a term of a sum or ratio, which cannot carry a key.  Returns false after an error.
+// How a record's pair-key field applies to a term (section 3.5): a single reaction's key is written only where its
+// label names several pairs; a sum's or a ratio's key applies to every term whose label names several pairs on that
+// side, and a term whose label names one pair takes that pair whatever the key says.
+enum class TermKeys { kSingleReaction, kTermOfComposite };
+
+// One side of a reaction: the pair key, by the label and (where the label names several pairs) the pair-key field
+// `keyField`.  `ambiguous` is set when the label names several pairs.  Returns false after an error.
 bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, const Particle &light, const Particle &heavy,
-                 const ResidualState &state, const std::string &text, const std::string &keyField, int &key) {
-  return build::ResolvePair(c, r, "reaction", "the " + side + " of " + text, light, heavy, state, text, keyField, key);
+                 const ResidualState &state, const std::string &text, const std::string &keyField, TermKeys use,
+                 bool &ambiguous, int &key) {
+  ambiguous = PairsNamed(light, heavy, state, c.pairs_).size() > 1;
+  const std::string field = use == TermKeys::kTermOfComposite && !ambiguous ? "" : keyField;
+  return build::ResolvePair(c, r, "reaction", "the " + side + " of " + text, light, heavy, state, text, field, key);
 }
 
+// Which sides of a reaction's terms named several pairs (the record's keys were needed there).
+struct SidesNamingSeveral {
+  bool entrance = false, exit = false;
+};
+
 // The entrance and exit pair keys of one reaction term (exit -1 for [total]).
-bool ResolveTerm(Context &c, const ValidatedRecord &r, const SingleReaction &t, bool single, int &entrance, int &exit) {
-  if (!ResolveSide(c, r, "entrance", t.projectile, t.target, t.targetState, t.text, single ? "entrance_pair" : "", entrance))
-    return false;
+bool ResolveTerm(Context &c, const ValidatedRecord &r, const SingleReaction &t, TermKeys use, SidesNamingSeveral &several,
+                 int &entrance, int &exit) {
+  bool ambiguous = false;
+  const bool in = ResolveSide(c, r, "entrance", t.projectile, t.target, t.targetState, t.text, "entrance_pair", use,
+                              ambiguous, entrance);
+  several.entrance = several.entrance || ambiguous;
+  if (!in) return false;
   if (t.state.kind == ResidualState::Total) {
     exit = -1;
     return true;
   }
-  return ResolveSide(c, r, "exit", t.ejectile, t.residual, t.state, t.text, single ? "exit_pair" : "", exit);
+  const bool out = ResolveSide(c, r, "exit", t.ejectile, t.residual, t.state, t.text, "exit_pair", use, ambiguous, exit);
+  several.exit = several.exit || ambiguous;
+  return out;
+}
+
+// A sum's or a ratio's pair key that no term needs: every term's label names one pair on that side, so the key would
+// be a second source of truth (as on a single reaction, ResolvePair).
+bool CompositeKeysNeeded(Context &c, const ValidatedRecord &r, const SidesNamingSeveral &several) {
+  bool ok = true;
+  for (const auto &side : {std::make_pair("entrance_pair", several.entrance), std::make_pair("exit_pair", several.exit)}) {
+    const Value *given = r.Get(side.first);
+    if (!given || side.second) continue;
+    c.Error(codes::kPairKey, r, side.first,
+            std::string(side.first) + " " + std::to_string(given->integer) + ": every term of the " +
+                (r.Get("reaction")->reaction.op == ReactionExpr::Sum ? "sum" : "ratio") +
+                " names one pair on that side already; a key is written only where a term's label names two pairs");
+    ok = false;
+  }
+  return ok;
 }
 
 // ---------------------------------------------------------------- fields
@@ -189,12 +224,13 @@ bool ReadReaction(Context &c, const ValidatedRecord &r, const std::string &angle
   const Value *v = r.Get("reaction");
   if (!v) return false;
   const ReactionExpr &e = v->reaction;
-  const bool single = e.op == ReactionExpr::Single;
+  const TermKeys use = e.op == ReactionExpr::Single ? TermKeys::kSingleReaction : TermKeys::kTermOfComposite;
   bool ok = true;
+  SidesNamingSeveral several;
   for (std::size_t i = 0; i < e.terms.size(); i++) {
     const ReactionTerm &t = e.terms[i];
     int in = 0, out = 0;
-    if (!ResolveTerm(c, r, t.reaction, single, in, out)) {
+    if (!ResolveTerm(c, r, t.reaction, use, several, in, out)) {
       ok = false;
       continue;
     }
@@ -222,6 +258,7 @@ bool ReadReaction(Context &c, const ValidatedRecord &r, const std::string &angle
     comp.scaling = t.hasScale ? t.scale.value : 1.0;
     spec.components.push_back(comp);
   }
+  if (ok && use == TermKeys::kTermOfComposite) ok = CompositeKeysNeeded(c, r, several);
   if (e.op == ReactionExpr::Sum) spec.combination = ReactionSpec::Combination::Sum;
   if (e.op == ReactionExpr::Ratio) spec.combination = ReactionSpec::Combination::Ratio;
   m.entranceKey = spec.entranceKey;
@@ -274,22 +311,27 @@ bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
 }
 
 // A reaction given with entrance_pair / exit_pair: its label names several pairs and the keys choose; elastic means
-// the same pair in and out, so the quantity's elastic rules are checked here on the keys (the validator left them).
+// the same pair in and out, so the quantity's elastic rules are checked here on the keys of every term (the validator
+// left them).
 bool PairsDecideElastic(Context &c, const ValidatedRecord &r, const ReactionSpec &spec) {
   if (!r.quantity || (!r.Has("entrance_pair") && !r.Has("exit_pair"))) return true;
   const ReactionRule &rule = r.quantity->reaction;
-  const bool elastic = spec.entranceKey == spec.exitKey;
-  const PairInfo *p = c.Pair(spec.entranceKey);
-  const std::string pairs = "entrance pair " + std::to_string(spec.entranceKey) + ", exit pair " + std::to_string(spec.exitKey);
-  if (rule.Has(ReactionRule::kElastic) && !elastic) {
-    c.Error(codes::kReactionNotAllowed, r, "exit_pair",
-            "quantity '" + r.quantity->name + "' is defined for elastic scattering (one pair in and out), not " + pairs);
-    return false;
-  }
-  if (rule.Has(ReactionRule::kNoChargedElastic) && elastic && p && p->kind == 0 && p->lightZ * p->heavyZ != 0) {
-    c.Error(codes::kReactionNotAllowed, r, "exit_pair",
-            "quantity '" + r.quantity->name + "' is not defined for charged-particle elastic scattering (" + pairs + ")");
-    return false;
+  std::vector<std::pair<int, int>> terms = {{spec.entranceKey, spec.exitKey}};
+  for (const ComponentSpec &t : spec.components) terms.push_back({t.entranceKey, t.exitKey});
+  for (const std::pair<int, int> &t : terms) {
+    const bool elastic = t.first == t.second;
+    const PairInfo *p = c.Pair(t.first);
+    const std::string pairs = "entrance pair " + std::to_string(t.first) + ", exit pair " + std::to_string(t.second);
+    if (rule.Has(ReactionRule::kElastic) && !elastic) {
+      c.Error(codes::kReactionNotAllowed, r, "exit_pair",
+              "quantity '" + r.quantity->name + "' is defined for elastic scattering (one pair in and out), not " + pairs);
+      return false;
+    }
+    if (rule.Has(ReactionRule::kNoChargedElastic) && elastic && p && p->kind == 0 && p->lightZ * p->heavyZ != 0) {
+      c.Error(codes::kReactionNotAllowed, r, "exit_pair",
+              "quantity '" + r.quantity->name + "' is not defined for charged-particle elastic scattering (" + pairs + ")");
+      return false;
+    }
   }
   return true;
 }

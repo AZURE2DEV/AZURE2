@@ -33,6 +33,11 @@ LAW2_COSINES = np.linspace(-1.0, 1.0, 9)
 ELASTIC_COSINES = 9
 #: Evenly spaced cosines the LAW=5 cosine grid starts from.
 ELASTIC_START_COSINES = 21
+#: The c.m. angle (deg) of the data set through which the engine gives the nuclear amplitude coefficients (any angle:
+#: the record the coefficients come from has none).
+AMPLITUDE_ANGLE = 90.0
+#: The most points (energies x cosines) of one elastic session (the engine keeps about 2.5 kB per point).
+SESSION_POINTS = 200000
 #: The session options a sweep keeps (the calculation's; the others are the session's own business).
 SWEEP_OPTIONS = ("use_brune", "use_park", "use_rmc", "use_gsl_coul", "use_coulomb_table", "ignore_externals",
                  "use_long_wavelength", "ec_convection_current")
@@ -233,17 +238,68 @@ class Sweeps:
         el = np.array([cache[x]["elastic"] for x in e]) if elastic is not None else None
         return EnergyGrid(e, sigma, legendre, el, mu_el, refined)
 
+    def elastic_values(self, reaction, energies_MeV, mu, coulomb_minus):
+        """sigma_e - sigma_c (b/sr, (n_E, n_mu)) at lab energies and c.m. cosines, one session per
+        ``SESSION_POINTS`` points."""
+        e = np.asarray(energies_MeV, float)
+        mu = np.asarray(mu, float)
+        step = max(1, SESSION_POINTS // max(len(mu), 1))
+        blocks = []
+        for k in range(0, len(e), step):
+            part = e[k:k + step]
+            data = self.evaluate([self._elastic_record(reaction, self._energies("elastic_more", part), mu)])
+            blocks.append(self._elastic_block(data[0], len(part), mu, coulomb_minus, part))
+        return np.vstack(blocks) if blocks else np.zeros((0, len(mu)))
+
+    def nuclear_amplitudes(self, reaction, energies_MeV):
+        """The coefficients of LAW=5 LTP=1 at lab energies (MeV), one LIST record's values per energy (b/sr, in the
+        order of p. 147): the engine's door, the point output ``nuclear_amplitudes`` of an elastic data set, read from
+        the record each point's evaluation wrote (the collision matrix at the point's energy).  The door is a data
+        set's output, so the session is one of data: a data set of the reaction at one c.m. angle (the record has no
+        angle) with placeholder values, every energy a row."""
+        from ..project import Nuisance, Project
+        from ..session import Session
+        e = np.asarray(energies_MeV, float)
+        if not e.size:
+            return []
+        self.count += 1
+        path = os.path.join(self.workdir, "amplitudes.azr")
+        if os.path.exists(path):
+            os.remove(path)
+        rows = os.path.join(self.workdir, "amplitudes.dat")
+        np.savetxt(rows, np.column_stack([e, np.full(len(e), AMPLITUDE_ANGLE), np.ones(len(e)), np.ones(len(e))]),
+                   fmt="%.17g")
+        p = Project.new(path, nuclear_part=self.session.file)
+        p.add_dataset("elastic", reaction=reaction.label, quantity="dsigma_domega", unit="b/sr", file=rows,
+                      columns="E_lab[MeV] theta_cm[deg] value error", norm=Nuisance(1, "fixed"),
+                      **dict(reaction.pair_keys))
+        if "priorCovariance" in p.config():  # the prior of the fit names the project's data, which this one lacks
+            p.set_config(priorCovariance=None)
+        p.save()
+        s = Session(path, parameter_file=self.parameter_file, **self.options)
+        try:
+            d = s.evaluate(s.parameters.x0).data[0]
+        finally:
+            s.close()
+        lab = np.asarray(d.extra["energy_lab"], float)
+        values = d.extra.get("nuclear_amplitudes", [])
+        if len(values) != len(e) or not np.allclose(lab, e, rtol=1e-12, atol=0.0) or any(len(v) == 0 for v in values):
+            raise FormatRefused(what="the engine gave no nuclear amplitude coefficients at the energies asked",
+                                allowed="an elastic data set of a charged pair without target effects",
+                                fix="report the project to the AZURE2 developers")
+        return [np.asarray(v, float) for v in values]
+
     def elastic_cosines(self, reaction, energies_MeV, mu_range, coulomb_minus, tolerance, max_points):
         """The cosine grid of LAW=5, from ``ELASTIC_START_COSINES`` even cosines over ``mu_range``, by the rule of
         :mod:`pyazr.endf.grid` with one component per energy of the grid: sigma_e - sigma_c (what the file tabulates)
-        plus a constant C(E), the smallest sigma_e of the start cosines at that energy.  The constant cancels in the
-        rule's chord, so the rule holds the interpolation error of sigma_e - sigma_c below tolerance x
+        plus a constant C(E), the smallest |sigma_e| of the start cosines at that energy.  The constant cancels in
+        the rule's chord, so the rule holds the interpolation error of sigma_e - sigma_c below tolerance x
         max(|sigma_e - sigma_c + C|, ...): about tolerance x sigma_e where the nuclear part is small against the
         cross section, and relative to the nuclear part where it is large.  (The rule on sigma_e - sigma_c alone asks
         for thousands of cosines where it is a small, oscillating part of a cross section; the file's error is in the
         cross section.)  The grid serves every energy; each energy keeps the cosines its own values need
-        (:func:`pyazr.endf.grid.thin`, the same rule).  Returns ([(cosines, sigma_e - sigma_c in b/sr) per energy],
-        the refinement's report)."""
+        (:mod:`pyazr.endf.elastic`, the same rule).  Returns (the cosines, sigma_e - sigma_c (n_E, n_mu) at them in
+        b/sr, the refinement's report)."""
         energies = self._energies("elastic", energies_MeV)
         e = np.asarray(energies_MeV, float)
         offset = {}
@@ -251,8 +307,16 @@ class Sweeps:
         def model(mus):
             order = np.argsort(mus)
             m = np.asarray(mus, float)[order]
-            data = self.evaluate([self._elastic_record(reaction, energies, m)])
-            full = self._elastic_block(data[0], len(e), m, None, e)
+            # at most SESSION_POINTS points per session (the engine keeps about 2.5 kB per point): the energies in
+            # chunks, each point's value the same whatever session computes it
+            step = max(1, SESSION_POINTS // max(len(m), 1))
+            if step >= len(e):
+                data = self.evaluate([self._elastic_record(reaction, energies, m)])
+                full = self._elastic_block(data[0], len(e), m, None, e)
+            else:
+                full = np.vstack([self._elastic_block(self.evaluate([self._elastic_record(
+                    reaction, self._energies("elastic_part", e[k:k + step]), m)])[0], len(e[k:k + step]), m, None,
+                    e[k:k + step]) for k in range(0, len(e), step)])
             block = full - coulomb_minus(e, m)
             if "C" not in offset:
                 offset["C"] = np.min(np.abs(full), axis=1)
@@ -263,8 +327,4 @@ class Sweeps:
         refined = grid.refine(np.linspace(*mu_range, ELASTIC_START_COSINES), model, tolerance, max_points)
         mu = np.asarray(refined["x"], float)
         shifted = np.asarray(refined["values"], float).reshape(len(mu), len(e)).T
-        panels = []
-        for row, c in zip(shifted, offset["C"]):  # each energy keeps the cosines it needs (grid.thin, the same rule)
-            k = grid.thin(mu, row, tolerance)
-            panels.append((mu[k], row[k] - c))
-        return panels, refined
+        return mu, shifted - offset["C"][:, None], refined

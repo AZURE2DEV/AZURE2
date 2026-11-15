@@ -233,9 +233,17 @@ def _final_state(material, request, lab, mu):
     return value, source
 
 
-def curves(material, request, session=None):
+#: The two readings of a tabulated LAW=5 distribution differing by more than this (relative, the floor 1e-3 of the
+#: largest value) at a point of a curve is said in the curve's notes.
+READINGS_BOUND = 1e-3
+
+
+def curves(material, request, session=None, elastic_reading="manual"):
     """The file's values at the request's points (see the module's text).  ``request``: a :class:`CurveRequest`, or
-    an ``EvaluatedData`` with ``session`` (the session it came from)."""
+    an ``EvaluatedData`` with ``session`` (the session it came from).  ``elastic_reading``: of a tabulated LAW=5
+    distribution (LTP=12, 14, 15), ``"manual"`` (sigma_NI(E) of MF=3 times P_NI(mu, E) of MF=6, each interpolated
+    under its own law, p. 146) or ``"product"`` (sigma_NI(E_i) P_NI(mu, E_i) of the tabulated energies
+    interpolated); where the two differ by more than ``READINGS_BOUND`` the notes say so."""
     if not isinstance(request, CurveRequest):
         if session is None:
             raise _refuse("a data set without its session", "Material.curves(request) or "
@@ -271,7 +279,7 @@ def curves(material, request, session=None):
             raise _refuse(f"{q} of elastic scattering", "dsigma_domega, ratio_to_rutherford, ratio_to_mott "
                           "(an integrated charged-particle elastic cross section is not defined, p. 145)",
                           "use a differential data set")
-        from .distributions import elastic_cross_section
+        from .distributions import ELASTIC_READINGS, elastic_cross_section
         product = material.distribution(2).product(projectile)
         if product.law != 5:
             raise _refuse(f"MF=6/MT=2 LAW={product.law}", "LAW=5 for charged-particle elastic scattering (p. 144)",
@@ -279,7 +287,23 @@ def curves(material, request, session=None):
         sigma_ni = material.cross_section(2) if (3, 2) in material.sections else None
         # the data set's angle is its first particle's; the file's mu the projectile's (the same when it is first)
         mu_projectile = mu if e.za1 == projectile else -mu
-        value = elastic_cross_section(product, lab, mu_projectile, CoulombTerms(material), sigma_ni)
+        coulomb = CoulombTerms(material)
+        value = elastic_cross_section(product, lab, mu_projectile, coulomb, sigma_ni, reading=elastic_reading)
+        if {p.flag for p in product.panels} & {12, 14, 15}:
+            source += f" (tabulated, the {elastic_reading} reading)"
+            other = next(r for r in ELASTIC_READINGS if r != elastic_reading)
+            alt = elastic_cross_section(product, lab, mu_projectile, coulomb, sigma_ni, reading=other)
+            ok = np.isfinite(value) & np.isfinite(alt)
+            if ok.any():
+                floor = 1e-3 * np.max(np.abs(value[ok]))
+                dev = np.abs(alt[ok] - value[ok]) / np.maximum(np.abs(value[ok]), floor)
+                if dev.max() > READINGS_BOUND:
+                    at = lab[ok][int(np.argmax(dev))] * 1e-6
+                    notes.append(f"the {other} reading of the tabulated elastic distribution differs from the "
+                                 f"{elastic_reading} reading by more than {READINGS_BOUND:g} at "
+                                 f"{int((dev > READINGS_BOUND).sum())} point(s), by up to {dev.max():.2e} "
+                                 f"(lab {at:.7g} MeV): sigma_NI changes sign "
+                                 "between two tabulated energies there (docs: the elastic section)")
     else:
         mt = _particle_mt(material, request)
         xs = material.cross_section(mt)

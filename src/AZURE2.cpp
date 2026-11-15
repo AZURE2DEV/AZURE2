@@ -17,7 +17,6 @@
 #include "azure2/support/Environment.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
-#include "CaptureAyRequests.h"
 #include "CommandLineValues.h"
 #include "Config.h"
 #include "Fitters.h"
@@ -277,6 +276,7 @@ void startMessage(const Config &configure) {
 #ifdef USE_MCMC
 #include "CompoundSystem.h"
 #include "CompoundSystemSetUp.h"
+#include "ProgramRun.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "AZURECalcMCMC.h"
@@ -378,45 +378,10 @@ int runMCMC(Config &configure, const RunRequest &request) {
     // The idle levels of the sampler's walkers; the run's levels are made by the set-up below.
     StatePool<WalkerLevels> walkerPool;
 
-    // The compound system from the <levels> rows, the data set up in the middle, then its last part
-    // (CompoundSystemSetUp.h).
-    configure.outStream << "Filling Compound Nucleus..." << std::endl;
-    const DataSetUpStep dataSetUp = [&configure, data](const CompoundSystem &structure,
-                                                       const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
-      // Fill the data object from segments and data file
-      configure.outStream << "Filling Data Structures..." << std::endl;
-      CompoundSetUpRequests requests;
-      if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-        if (const int filled = data->Fill(configure, &structure, levelInputs); filled != 0) {
-          if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
-          return std::nullopt;
-        } else if (data->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {  // model data alone run
-          configure.outStream << "There is no data provided." << std::endl;
-          return std::nullopt;
-        }
-        RequestDataEntrances(structure, configure, requests);
-      } else {
-        if (const int made = data->MakePoints(configure, &structure, levelInputs); made != 0) {
-          if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
-          return std::nullopt;
-        } else if (data->Data().NumSegments() == 0) {
-          configure.outStream << "Extrapolation segments produce no data." << std::endl;
-          return std::nullopt;
-        }
-        RequestExtrapolationEntrances(structure, configure, requests);
-      }
-      // The capture-A_y terms the data sets need, built with the pathway table
-      RequestCaptureAyTerms(structure, *data, requests);
-      return requests;
-    };
-    CompoundSetUp setUp = SetUpCompoundSystem(configure, dataSetUp);
+    // The compound system from the <levels> rows, the data set up in the middle, then its last part: as the
+    // program's run does it (SetUpProgramCompound), its check files and its words on a refusal included.
+    CompoundSetUp setUp = SetUpProgramCompound(configure, *data, DataCheckAt::kDataSetUp);
     if (setUp.refusal != CompoundSetUp::Refusal::kNone) {
-      if (setUp.refusal == CompoundSetUp::Refusal::kUnreadable)
-        configure.outStream << "Could not fill compound nucleus from file." << std::endl;
-      else if (setUp.refusal == CompoundSetUp::Refusal::kNoNuclearData)
-        configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
-      else if (setUp.refusal == CompoundSetUp::Refusal::kFinish)
-        configure.outStream << setUp.finishError << std::endl << "Calculation was aborted." << std::endl;
       delete data;
       return -1;
     }

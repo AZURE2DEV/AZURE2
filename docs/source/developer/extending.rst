@@ -177,7 +177,9 @@ what it returns:
    if (setUp.refusal != CompoundSetUp::Refusal::kNone) return;  // say why in the front end's words
    // setUp.compound (std::unique_ptr<const CompoundSystem>), setUp.state, setUp.inputs: the front end's
 
-``tests/upgrade/SetUpForTests.h`` has this form for the tests.
+``tests/upgrade/SetUpForTests.h`` has this form for the tests. A front end of the program (one more command
+beside the run and the sampler) calls ``SetUpProgramCompound`` (``include/ProgramRun.h``) instead: the
+program's data set-up, its check files and its words on a refusal (``PrintSetUpRefusal``) come with it.
 
 A set-up fact of the compound system
 ------------------------------------
@@ -242,6 +244,25 @@ key. A **diagnostic code** is a constant in
 ``experiment/tests/diagnostics_test.cpp`` (check 24). A **unit** is a row of
 ``experiment/src/Units.cpp`` (``experiment_parsers``,
 ``experiment_quantities``).
+
+A **section** (a block ``<name> ... </name>`` of the project file): a section
+of records is the record kind's row of ``Schema::Sections()``; a section with a
+grammar of its own (as ``<levels>``, ``<thm>``, ``<parameterSettings>``) is a
+row of ``Schema::GrammarSections()`` (``experiment/src/Schema.cpp``: its name,
+the code that reads it, the sections it may hold) and its reader, which opens it
+with ``Config::SectionStream("<name>")``. The reader of the project
+(``ReadFormat3Project``, ``experiment/src/ProjectReader.cpp``) refuses every
+section in neither table, and a section inside one that does not list it
+(``E_UNKNOWN_SECTION``): a block nothing reads would leave the run as if it were
+absent. A ``<config>`` key that is not a row of ``io::ConfigKeys()``, a
+``<config>`` line that is not ``key=value`` and a line of ``<mcmc>`` outside its
+``<parameters>`` are refused the same way (``E_UNREAD_LINE``). The converter
+refuses an old section it does not convert (``kConvertedSections`` in
+``convert/src/Convert.cpp``); the sections of a newer AZURE2 that this build
+does not compute (``<channelRadii>``, ``<isospin>``) are named with what they
+state in ``Schema::NewerSections()``, whose words both refusals use. A section
+that a newer program adds is therefore refused until its row and its reader
+are written.
 
 ``pyazr.Project`` edits every record through the binding of the engine's
 grammar and needs no Python change; an unedited project is written back byte
@@ -454,8 +475,13 @@ MF=6 (LAW=2 of the exits, LAW=5 of elastic scattering, the primary photons of MT
    every section (``Sweeps.energy_grid``: ``grid.refine`` from ``grid.start_grid``, the rule applied to the
    quantities the file tabulates; a second axis, as the cosines of LAW=5, refined by the same ``grid.refine``). If
    the engine has no quantity for it, a door of the binding (a new file of ``api/src/``, registered in
-   ``BindPhysics``); never a physics formula in Python. MF=6 needed no door: the ``legendre`` quantity with the
-   expansion ``rsl`` is LAW=2's a_l.
+   ``BindPhysics``, or a row of the point outputs of ``api/src/pybind_evaluation.cpp`` when the numbers are a
+   record the evaluation writes); never a physics formula in Python. LAW=2 needed no door: the ``legendre``
+   quantity with the expansion ``rsl`` is its a_l. LAW=5 LTP=1 has one: the point output ``nuclear_amplitudes``
+   (``api/src/pybind_elastic_amplitudes.cpp``) reads the elastic record of a data set's point and gives the
+   manual's b_l and a_l (``Sweeps.nuclear_amplitudes``; the energies chosen by ``pyazr/endf/amplitudes.py``). A section whose reader does not interpolate linearly between energies (LAW=5
+   LTP=12: sigma_NI of MF=3 times P_NI of MF=6, each interpolated) gets energies of its own, chosen by
+   ``grid.thin_to`` with the reader's own reconstruction instead of the chord (``pyazr/endf/elastic.py``).
 3. The records: a function of ``sections.py`` that lays the section out as its page of ENDF-102 says (cite it),
    with a ``RecordWriter`` (``records.py``), and the line of ``write`` that puts it into ``written[(MF, MT)]``.
    The directory of MF=1 and the sequence numbers follow from the sections.
@@ -542,7 +568,7 @@ that job's kind in ``follows`` and the key of its result in ``takes``; the
 server hands it that job's record (``tracker.source``), and the page offers
 it beside such a result (``tests/pyazr/ui/sampler_bands_test.py``). A new
 type of a job's setting is a row of
-``SETTING_TYPES`` (``jobs.py``) and of ``SETTING_WIDGETS``
+``SETTING_TYPES`` (``job_settings.py``) and of ``SETTING_WIDGETS``
 (``pyazr/ui/static/tabs/fitjob.js``).
 
 A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports

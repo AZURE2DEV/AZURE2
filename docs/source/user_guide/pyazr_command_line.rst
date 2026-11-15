@@ -60,7 +60,7 @@ Write an old project (format 1 or 2) in format 3, as AZURE2 --convert; OLD is ke
 
 .. code-block:: text
 
-   python -m pyazr convert OLD NEW [--overwrite] [--report FILE] [--answers FILE] [--exact-grids] [--strict] [--json]
+   python -m pyazr convert OLD NEW [--overwrite] [--report FILE] [--answers FILE] [--exact-grids] [--strict] [--allow-questions] [--json]
 
 Calls ``pyazr.convert_azr``.
 
@@ -71,6 +71,7 @@ Calls ``pyazr.convert_azr``.
 - ``--answers``: answers to the converter's questions, {"<record>.<field>": value} (a JSON file holding one object).
 - ``--exact-grids``: keep the old energy grids exactly (an option without a value).
 - ``--strict``: refuse instead of noting an implicit meaning (an option without a value).
+- ``--allow-questions``: write '?' for an unanswered question instead of refusing (an option without a value).
 - ``--json``: one JSON document on standard output.
 
 ``schema``
@@ -192,7 +193,8 @@ Serve a project to the web UI on 127.0.0.1 until interrupted (--json: the URL as
 
 Calls ``pyazr.ui.server.main``.
 
-- ``FILE``: the project to serve (an existing format-3 project file (.azr)).
+- ``FILE``: the project to serve; a new .azr starts an empty project (an existing format-3 project file (.azr), or a
+  new one in an existing folder).
 - ``--port``: the TCP port (0: a free one above 20000) (a whole number; default 0).
 - ``--threads``: the compute budget in threads (a whole number; default 1).
 - ``--token``: a fixed access token (default: a random one) (a text).
@@ -290,7 +292,7 @@ The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 and MF=6
 
 .. code-block:: text
 
-   python -m pyazr endf write PROJECT NEW [--header FILE] [--low X] [--high X] [--tolerance X] [--number-form CHOICE] [--overwrite] [--json]
+   python -m pyazr endf write PROJECT NEW [--header FILE] [--low X] [--high X] [--tolerance X] [--number-form CHOICE] [--elastic-form CHOICE] [--covariance] [--overwrite] [--json]
 
 Calls ``pyazr.endf.write``.
 
@@ -302,6 +304,9 @@ Calls ``pyazr.endf.write``.
 - ``--high``: highest lab energy of the projectile, MeV (default: the data's) (a number).
 - ``--tolerance``: relative tolerance of the engine's adaptive grid (a number; default 0.001).
 - ``--number-form``: how numbers are written (one of widest, classic, e; default widest).
+- ``--elastic-form``: charged-particle elastic scattering as the nuclear amplitude expansion (LTP=1) or tabulated
+  (LTP=12) (default: pyazr.endf.writer.ELASTIC_FORM) (one of amplitudes, tabulated).
+- ``--covariance``: write MF=32: HESSE in a formal-basis session (an option without a value).
 - ``--overwrite``: replace NEW if it exists (an option without a value).
 - ``--json``: one JSON document on standard output.
 
@@ -312,7 +317,7 @@ The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_
 
 .. code-block:: text
 
-   python -m pyazr endf check FILE [--program CHOICE] [--timeout X] [--json]
+   python -m pyazr endf check FILE [--program CHOICE] [--timeout X] [--resonances] [--json]
 
 Calls ``pyazr.endf.check``.
 
@@ -320,6 +325,8 @@ Calls ``pyazr.endf.check``.
 - ``--program``: the one checking code to run (default: CHECKR, FIZCON and PSYCHE, those found) (one of checkr,
   fizcon, psyche, inter).
 - ``--timeout``: seconds each code may take (a number; default 300.0).
+- ``--resonances``: also check the resonance parameters: MF=2 against MF=3 by the engine, the masses against
+  AME2020, the text against the records (an option without a value).
 - ``--json``: one JSON document on standard output.
 
 ``endf standardize``

@@ -279,8 +279,11 @@ An evaluation in Phase 4:
    residual is one function used by every path, §1.6; since Phase 5 in the frame of the datum, (f/J − n y)/(n δy)).
 
 Nothing in `GenMatrixFunc`, `AMatrixFunc` or the folds changes except where a value is stored: `point->SetFitCrossSection(x)`
-becomes a write to the unit's slot in the `Results` the task was given. The lazy path used inside an enclosing
-parallel region (`pre = false`) runs the plan's tasks serially and then the tree pass.
+becomes a write to the unit's slot in the `Results` the task was given. Inside an enclosing parallel
+region (Minuit2's numerical gradient, the sampler's walkers) the same pass runs on the calling thread alone, without a
+team of its own (since 2026-11-15; before, each point was calculated where the tree pass needed it, one solve per
+point instead of one per compound energy). The lazy path (`pre = false`) is left for `AZURE_SERIAL_CHI2` and for the
+points of a failed task.
 
 ### 2.5 Library placement
 

@@ -569,17 +569,25 @@ class Session(
         from .evaluate import evaluate
         return evaluate(self, x)
 
-    def model_curve(self, name, x=None, points=200):
+    def model_curve(self, name, x=None, points=200, *, alone=False, grid="refined", tolerance=3e-3):
         """The model of the data set ``name`` on a fine grid over its range at the fit vector ``x`` (default
         ``parameters.x0``): a :class:`pyazr.model_curve.ModelCurve` (c.m. and lab energies, c.m. angles and the model
-        in the unit of ``evaluate(x).data[i].model``, at ``points`` values per branch and at the data set's own
-        points; one branch per fixed angle of an excitation function, or per fixed energy of an angular
-        distribution).  The engine's evaluation of extrapolation records made from the data set's record, in a
-        session of the extrapolations opened and closed by the call (:mod:`pyazr.model_curve`; several data sets in
-        one session: :func:`pyazr.model_curve.model_curves`).  A data set that is not one function of one variable,
-        or whose columns give each point its own window or order, raises :class:`pyazr.ParameterError`."""
+        in the unit of ``evaluate(x).data[i].model``; one branch per fixed angle of an excitation function, or per
+        fixed energy of an angular distribution; the data set's own points among the grid values).  The engine's
+        evaluation of extrapolation records made from the data set's record, in sessions of the extrapolations opened
+        and closed by the call (:mod:`pyazr.model_curve`).
+
+        ``grid="refined"`` (the default): ``points`` values per branch seeded with the level energies in range and
+        refined where the curve bends to the relative ``tolerance`` (the ENDF writer's rule,
+        :func:`pyazr.model_curve.refine_plan`: a narrow level is drawn through; one session per sweep, about ten);
+        ``grid="even"``: ``points`` values evenly spaced, one session.  By default the curves of every active data
+        set are made together, so that a folded data set's curve is folded on the mesh the data session plans from
+        every data set and agrees with ``evaluate`` at the points (4e-9 on T2's folded data sets without a shift);
+        ``alone=True`` makes this one alone (cheaper; folded on a mesh of its own points: 2.4e-3 on T2's thin target).
+        A data set that is not one function of one variable, or whose columns give each point its own window or
+        order, raises :class:`pyazr.ParameterError`."""
         from .model_curve import model_curve
-        return model_curve(self, name, x, points)
+        return model_curve(self, name, x, points, alone=alone, grid=grid, tolerance=tolerance)
 
     # -- the external region, and the caches that make it affordable ----------
 

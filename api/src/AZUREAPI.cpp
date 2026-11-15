@@ -115,62 +115,9 @@ int AZUREAPI::Initialize() {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes.
-  ReplaceModel();
-
-  // The compound system with the session's radius overrides (Initialize runs again on every mode switch), the data
-  // set up in the middle, then its last part (CompoundSystemSetUp.h).  The session says nothing of a refusal but the
-  // rate's pairs and the last part's message.
-  const DataSetUpStep dataSetUp = [this](const CompoundSystem &structure,
-                                         const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
-    if ((configure().screenCheckMask | configure().fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS)
-      WriteCompoundNucleusCheck(structure, levelInputs, configure());
-    CompoundSetUpRequests requests;
-    if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
-      // Fill the data object from the segments and data file
-      //   Compound object is passed to the function for pair key verification and
-      //   center of mass conversions, s-factor conversions, etc.
-      if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-        if (data()->Fill(configure(), &structure, levelInputs) != 0) {
-          return std::nullopt;
-        } else if (data()->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {
-          return std::nullopt;
-        }
-        RequestDataEntrances(structure, configure(), requests);
-      } else {
-        if (data()->MakePoints(configure(), &structure, levelInputs) != 0 || SessionRefusesAdaptiveGrids(configure())) {
-          return std::nullopt;
-        } else if (data()->Data().NumSegments() == 0) {
-          return std::nullopt;
-        }
-        RequestExtrapolationEntrances(structure, configure(), requests);
-      }
-      if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
-        data()->PrintData(configure());
-    } else {
-      // The program's check of the rate's pairs (RunSetUp.cpp): exit -1 is the total radiative capture.
-      const std::string rateProblem =
-          structure.RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
-      if (!rateProblem.empty()) {
-        configure().outStream << rateProblem << std::endl;
-        return std::nullopt;
-      }
-      requests.AddEntrance(structure.GetPairNumFromKey(configure().rateParams.entrancePair));
-    }
-    // The capture-A_y terms the data sets need, built with the pathway table
-    RequestCaptureAyTerms(structure, *data(), requests);
-    return requests;
-  };
-  CompoundSetUp setUp = SetUpCompoundSystem(configure(), dataSetUp, radiusOverrides_);
-  if (setUp.refusal == CompoundSetUp::Refusal::kFinish) {
-    configure().outStream << setUp.finishError << std::endl;
-    configure().outStream << std::endl
-                          << "Calculation was aborted." << std::endl;
-  }
-  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return -1;
-  compound_ = std::move(setUp.compound);
-  *state_ = std::move(setUp.state);  // in place: a manager made later refers to the session's levels
-  *inputs_ = std::move(setUp.inputs);
+  // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes, with the session's radius
+  // overrides.
+  if (SetUpModel(ModelSetUpOccasion::kFirst, radiusOverrides_) != CompoundSetUp::Refusal::kNone) return -1;
 
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
@@ -653,37 +600,80 @@ void AZUREAPI::ReplaceModel() {
   nuisanceRead_ = false;
 }
 
-bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+CompoundSetUp::Refusal AZUREAPI::SetUpModel(ModelSetUpOccasion occasion, const std::map<int, double> &radii) {
+  // What a first set-up and a rebuild differ in; everything else is one set-up.
+  //  - The project's check files (compound nucleus, data): the first set-up writes them; a rebuild makes the same
+  //    project's model again and writes none.
+  const bool writesCheckFiles = occasion == ModelSetUpOccasion::kFirst;
+  //  - The external-capture integrals: a rebuild computes them again (its radii or potentials change them) instead of
+  //    reading intEC* back: USE_PREVIOUS_INTEGRALS is cleared once the data are set up, and RebuildImpl sets it
+  //    again after the data's initialization or a refusal of the last part.
+  const bool recomputesIntegrals = occasion == ModelSetUpOccasion::kRebuild;
+  //  - A refused last part: the first set-up says it in the program's words (its message, a blank line, "Calculation
+  //    was aborted."); a rebuild, asked for by a caller who handles its false, prints the message only.
+  const bool saysAbort = occasion == ModelSetUpOccasion::kFirst;
+
   ReplaceModel();
-
-  // Mirror the branch taken at startup: data mode reads the data segments,
-  // extrapolation mode builds its points from <segmentsTest>.
-  const DataSetUpStep dataSetUp = [this](const CompoundSystem &structure,
-                                         const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+  // The session is silent on a refusal (it sets Config::USE_API; the caller raises), but for the rate's pairs.
+  const DataSetUpStep dataSetUp = [this, writesCheckFiles, recomputesIntegrals](
+                                      const CompoundSystem &structure,
+                                      const LevelInputs &levelInputs) -> std::optional<CompoundSetUpRequests> {
+    if (writesCheckFiles && ((configure().screenCheckMask | configure().fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS))
+      WriteCompoundNucleusCheck(structure, levelInputs, configure());
     CompoundSetUpRequests requests;
-    if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), &structure, levelInputs) != 0) return std::nullopt;
-      RequestDataEntrances(structure, configure(), requests);
+    if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
+      // The data object from the segments and the data files: the structure gives the pair keys, the centre-of-mass
+      // conversions and the S-factor conversions.
+      if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
+        if (data()->Fill(configure(), &structure, levelInputs) != 0) {
+          return std::nullopt;
+        } else if (data()->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {
+          return std::nullopt;
+        }
+        RequestDataEntrances(structure, configure(), requests);
+      } else {
+        if (data()->MakePoints(configure(), &structure, levelInputs) != 0 || SessionRefusesAdaptiveGrids(configure())) {
+          return std::nullopt;
+        } else if (data()->Data().NumSegments() == 0) {
+          return std::nullopt;
+        }
+        RequestExtrapolationEntrances(structure, configure(), requests);
+      }
+      if (writesCheckFiles && ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA))
+        data()->PrintData(configure());
     } else {
-      if (data()->MakePoints(configure(), &structure, levelInputs) != 0 || SessionRefusesAdaptiveGrids(configure()))
+      // The program's check of the rate's pairs (SetUpProgramCompound): exit -1 is the total radiative capture.
+      const std::string rateProblem =
+          structure.RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
+      if (!rateProblem.empty()) {
+        configure().outStream << rateProblem << std::endl;
         return std::nullopt;
-      RequestExtrapolationEntrances(structure, configure(), requests);
+      }
+      requests.AddEntrance(structure.GetPairNumFromKey(configure().rateParams.entrancePair));
     }
-    if (data()->Data().NumSegments() == 0) return std::nullopt;
-
-    configure_.paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+    if (recomputesIntegrals) configure_.paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+    // The capture-A_y terms the data sets need, built with the pathway table
     RequestCaptureAyTerms(structure, *data(), requests);
     return requests;
   };
   CompoundSetUp setUp = SetUpCompoundSystem(configure(), dataSetUp, radii);
   if (setUp.refusal == CompoundSetUp::Refusal::kFinish) {
-    configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
-    configure().outStream << setUp.finishError << std::endl;
+    if (saysAbort)
+      PrintSetUpRefusal(setUp, configure().outStream);
+    else
+      configure().outStream << setUp.finishError << std::endl;
   }
-  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return false;
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return setUp.refusal;
   compound_ = std::move(setUp.compound);
-  *state_ = std::move(setUp.state);
+  *state_ = std::move(setUp.state);  // in place: a manager made later refers to the session's levels
   *inputs_ = std::move(setUp.inputs);
+  return CompoundSetUp::Refusal::kNone;
+}
+
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+  const CompoundSetUp::Refusal refusal = SetUpModel(ModelSetUpOccasion::kRebuild, radii);
+  if (refusal == CompoundSetUp::Refusal::kFinish) configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+  if (refusal != CompoundSetUp::Refusal::kNone) return false;
   if (data()->Initialize(compound(), configure()) == -1) {
     configure_.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;

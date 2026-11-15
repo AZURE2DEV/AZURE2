@@ -1065,8 +1065,8 @@ edit with the evaluation that follows 0.43–0.54 s on T2, its undo 0.49 s. The 
    into the document; `#selftest?edit=1` also types a width and presses Undo. Screenshots use Chrome's old headless
    mode, whose viewport is the window size.
 6. *Forms*: a widget splits a field's text into boxes and joins it again; a text it cannot split is one text box. The
-   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`fold`,
-   `single_reaction`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
+   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`angle_axis`,
+   `fold`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
    table of its keys: finding 13).
 7. *Plots*: the model is drawn at the data points (the engine's values there), not on a dense grid (step 3); a data
    set is drawn against energy, or against angle when its energy is one value; points of a few distinct angles are
@@ -1698,7 +1698,9 @@ ENDF-6 file.  It is a row of `TABS` (expert's depth); a first-view entry is one 
   in the server; the tab remembers the last list per project for the page's life (`ctx.endfShown`).
 - **Check and correct** (`#/endf/check?file=a.endf[&job=id]`): the codes of `GET /api/endf/checkers` (found or not,
   what each does and does to numbers, how they are found); **Check** is the job `endf_check`/`codes`
-  (`pyazr.endf.check`): the own findings (line, MF, MT, message, page) apart from each code's (MF, MT, record, text,
+  (`pyazr.endf.check` with `resonances=True`: the format check and, for a file with MF=2 in LRF=7, MF=2 against
+  MF=3 by the engine, the masses and Q values, the text): the own findings (line, MF, MT, message, page) apart
+  from each code's (MF, MT, record, text,
   `meaning`), the counts, the raw report in a `details`; **Correct** is the job `endf_standardize`/`program`
   (`pyazr.endf.standardize`), the text of `PROGRAMS[program][3]` said before the run, `Candidate.diff()` as a table,
   then **Keep as a new file** / **Replace** (asks a second time) through `POST /api/endf/accept`.
@@ -1882,6 +1884,93 @@ file on the curve's grid against `Material.curves`), `tests/pyazr/ui/endf_projec
 job, keep and its refusals, opening the kept project; the export's preview against `from_session`; the written file
 byte for byte the direct `write`), node tests (`results`, `endf`, `fitting`, `firstview`, `lists`), the self-test
 (Convert pressed) and the smoke test's views `expert-endf-new`, `first-endf-export`.
+
+### 11.17 The curve's loose ends; a prior or limits on a level parameter; a lost curve said as such (2026-11-15)
+
+- **One data set's curve agrees with the data session by default.** `Session.model_curve(name, x=None, points=200,
+  *, alone=False, grid="refined", tolerance=3e-3)` makes the curves of every active data set and returns one, so that
+  a folded data set is folded on the mesh the data session plans from every data set (T2's folded data sets without
+  a shift: 1e-8 at the points, as `model_curves`); `alone=True` makes this one alone, on a mesh of its own points
+  (2.4e-3 on T2's thin target; cheaper on a project with many data sets: one plan instead of all).
+- **The grid finds narrow levels** (`pyazr/model_curve.py refine_plan`): every branch of every data set is refined
+  at once on one abscissa t in [0, 1] over its range, each branch one component of the rule of the ENDF writer's grid
+  (`pyazr.endf.grid.start_grid` for the seeds, `refine` for the sweeps, `thin` for the points each branch keeps:
+  used, not copied; `pyazr/endf/` unchanged), one session of the extrapolations per sweep.  The start grid is the
+  even grid with the seeds of `start_grid` (the level energies in range, the energies half a width away, the
+  thresholds).  A jump (a phase shift wrapping at 90 deg) is resolved to `MIN_SPACING` (1e-5 of the range): an
+  abscissa between two known ones closer than that is given their chord, so the rule stops there (44 sessions to 14
+  on T1).  The final grid is evaluated anew in one session.  Measured on T2 (`tests/pyazr/model_curve_test.py`): the
+  16 keV wide level at 1.138 MeV, on s03_diff150, peak 0.085902 refined (247 points, 66 within 1.10 to 1.18 MeV, 11
+  sessions, about 5 s) against 0.085926 on 4000 even points and 0.080877 on the 200 even points; at the points the
+  same agreement as on the even grid.  T1 refined in full: 14 sessions, 39 s (its external capture: 3 s per
+  session).  `grid="even"` is the even grid alone.
+- **The page** (`pyazr/ui/engine.py _model_curves`): the grid is refined when the curves' session is made (the even
+  plan's records changed: an opened project, an edited data set, an energy shift) and again when a seed moved by
+  more than the grid's spacing where it was (`grid_seeds`, `seeds_moved`: a level moved by an edit or a fit); at any
+  other x the kept session evaluates its grid (as before: 0.02 s on T1).  A refinement may open `CURVE_SESSIONS` (3)
+  sessions for its sweeps (`refine_plan(max_sessions=)`), then ends with the points evaluated so far: on T2 2.6 s,
+  the peak at 1.138 MeV as in full (0.085902).
+- **Export**: the tolerance and the number form are settings of the new type `choice` (`job_settings.py SETTING_TYPES`,
+  `Setting.choices`: value and words; `GET /api/jobs/kinds` serves them, a value outside them refused 422 with the
+  choices; the page's widget `SETTING_WIDGETS.choice` is a select with the words); the data's range is said in
+  words beside the two boxes.  The job says what it is doing (`Tracker.say`: `progress.doing`, shown by the ENDF
+  tab's running job with the seconds): the writer's own words when `inspect.signature(pyazr.endf.write)` has
+  `progress`, "writing the ENDF-6 file ..." otherwise (today's writer has none).
+- **A new project from a file**: the import report's first line names the project as it will be kept
+  ("project he.azr (not yet in the project's folder: ...)"), not the job's temporary file; `POST /api/project/open`
+  resolves a relative path in the open project's folder (`State.inside_root`), and the answer of keep_project gives
+  that relative path; outside the root: 403 with what, allowed and fix.
+- **A ratio data set's unit "b"**: the engine's description, not pyazr's: `experiment/src/Describe.cpp:339` writes
+  the quantity's `engineUnit` for a `Ratio(...)` tree (and `api/src/pybind_data_rows.cpp:69` the same), which
+  `pyazr/evaluate.py:64` passes on.  C++: not changed here.
+- **A prior or limits on a level parameter** (`Project.set_parameter_setting`, `parameter_settings`): served as
+  `GET`/`PUT /api/project/parameter_settings` (no longer in `PROJECT_NOT_SERVED`); offered where a user looks at a
+  parameter, the level's screen: "Prior / limits…" beside the energy and a column "prior / limits" in the channel
+  table, one form under the table (prior centre and sigma, lower and upper limit, empty pairs for none; Remove).  The
+  old program had them nowhere; a fit's limits belong to the parameter, not to a fit, so they sit with the value.
+  `?setting=energy` (or `=pair,l,s`) opens a parameter's form (the smoke test's view `level-prior-limits`).
+- **The engine's lines in a job's log**: the workers configure the logger `pyazr.engine` (`workers.py
+  engine_lines_to_log`: every line at INFO on the worker's standard output, its log file): a rate job's log holds
+  the engine's progress lines again ("Integrating reaction rate over 4 temperatures...").
+- **The browser test's lost requests** (the director saw "Failed to fetch" of curve requests with `/api/outputs` or
+  `/api/evaluation` under load): not reproduced in this branch's runs (self-test runs at loads 3 to 14, the server's
+  request log complete in each); measured: the Plot tab sent its curve requests again at each drawing while the
+  earlier ones waited behind the session worker (now one request per data set and revision in flight,
+  `curveRequest`), and Chrome talks to Google services during the self-test despite the quiet profile (its net log:
+  Autofill queries, optimization-guide model downloads, a spelling dictionary).  The test now keeps the server's
+  request log (`python -m pyazr.ui --log-requests`) beside the screenshots on a failure and names the self-test's
+  step during which each failed request was sent and failed.
+- **A curve without an answer** (`tabs/results.js curveFailure`): a curve request that got no answer (status 0) is
+  `lost`, not `refused`: a yellow box names the data sets and the browser's words, with **Ask again**; the curve is
+  not drawn from a refusal's text.
+
+### 11.18 A first project from nothing: T1 walked through the page (2026-11-15)
+
+T1 made again from a folder that holds only its data files, with the requests the page's controls send
+(`tests/pyazr/ui/first_project_test.py`) and the screens of an empty project read (screenshots of the agent's scratch
+directory, `walk/shots/`).  "Typed or chosen" counts the boxes and choices a user fills; the old program needed the
+same numbers in its dialogs (AddPairDialog: the partners' J, parity, Z, mass, the separation energy, the radius, the
+g-factors and the external capture's multipolarities; AddLevelDialog and ChannelDetails per channel).
+
+| Step | Before | After |
+|---|---|---|
+| Start on an empty folder | `pyazr ui new.azr` refused (MissingFile: "a session and Project.open need an existing format-3 project file"); no call made an empty project (`Project.new` needed a nuclear part): **cannot be done** | `pyazr ui first.azr` opens an empty, unsaved project (`Project.new(path)`, the `<config>` entries from the engine's table), `output/` and `checks/` made; the Project tab's "Next step" sends to Particle Pairs |
+| The first screens of an empty project | every tab: "Error: records.filter is not a function" (`GET /api/project/records` answered `{}`, not `[]`) | the tabs draw; the empty states say what belongs there |
+| Pairs (p + 12C, γ + 13N twice) | every number typed: J, parity, Z, mass and g of each partner, S, the radius, the multipolarities; 3 pairs, about 24 boxes or choices | the partners by name and "Fill from the mass table" (`GET /api/masses`, AME2020): Z, the masses, S filled; J, parity, the radius, the proton's g-factor and the photon pairs' multipolarities typed (14 boxes or choices); 7 requests |
+| Levels and channels (7 levels, 23 channels) | + level with the allowed channels ticked; each width and fixed flag in the level's channel table | the same: 36 requests, 64 boxes; a prior or limits now beside each parameter |
+| Data sets (10) | + new, the file from the folder (first rows and the engine's reading shown), the reaction, quantity, unit, columns, windows, norm | the same: 21 requests, 90 boxes or choices |
+| Calculate, the curve, a fit, Save | one click each | the same; with T1's numbers typed the data's χ² is T1's bit for bit (482.27523961726735); with the table's masses 482.26440 (T1's masses are older: the proton 1.00782503223 u against 1.007825031898, S_p 62 meV lower) |
+
+What a first-time user still needs to know that no screen tells: the proton's g-factor (5.5856946893; no table of the
+page holds magnetic moments), the ground-state J^π of each nucleus (not in AME2020), the external capture's
+multipolarities of a photon pair (a number, 7 = E1 + M1 + E2), and the record fields' grammar of a data set's
+windows and normalization (typed as `0.299999 2.000001 MeV`, `1 fixed`).  The status line of an empty project shows
+the engine's refusal with the working file's name (".first.ui-session.azr: AZURE2 could not initialize ...") instead
+of "add a pair and a level".  `Project.pairs()` does not list the g-factors nor the external capture, so a pair's
+row cannot show them.  `Project.set_channel(width=0.45)` writes the width back through a conversion
+(`1.8500000000000003` for 1.85 on T1); the χ² is unchanged.  Not walked: the comparison of each step's clicks with
+the old program's beyond the fields above, and a second walk of the screens one by one (the counts after are the
+routes' and the boxes', not clicks measured in a browser).
 
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 

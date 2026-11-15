@@ -260,6 +260,13 @@ Output files
    ensemble rather than re-scattering it. Written on normal completion and on
    an early stop.
 
+Check files
+   The check files the project asks for (:doc:`configure_menu`, "Check
+   Files"), in the checks directory, as the calculation writes them: the
+   compound nucleus (``compoundnucleus.chk``), the data (``data.chk``) and the
+   others, with the same contents as ``AZURE2 calculate`` writes on the same
+   project. Set to the screen, they are printed before the chain starts.
+
 Resuming
 --------
 

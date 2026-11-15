@@ -54,7 +54,7 @@ ROWS = [
         "prior on 1 parameter(s), parametrization 1 (Brune), from 1 part(s)"),
     # calculate and compare
     Row("per_dataset_chi2", [T2], "T2.azr: chi2 = 10905.2 over 330 points"),
-    Row("model_curve", [T2], "s01_int_thin                b     40    238            0.39751          0.467377"),
+    Row("model_curve", [T2], "s01_int_thin                b     40    257            0.39751          0.467377"),
     Row("decompose_cross_section", [T1, "--level", "1/2+ 2.365"], "1/2+ 2.365       7.841e-01"),
     Row("angular_distribution", [T1, "-n", "3"], "largest |a_k>0| over the range: 0.1889", slow=True),
     Row("channel_radius_scan", [T3, "--pair", "2", "--radii", "3.5", "4.0", "4.5", "--out", "{out}"],

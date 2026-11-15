@@ -5,6 +5,10 @@
 #include <stdexcept>
 #include <iostream>
 
+// e^x K_n(x), physics/src/ChannelFunctions.cpp (local change, physics/coulomb/README.md): this directory sees only its
+// own headers.
+namespace azure2 { namespace physics { double bessel_k_scaled(int n, double x); } }
+
 namespace coulsm {
 
 // Value for which e^max_exponent is representable as double
@@ -232,19 +236,6 @@ void Coulomb_wave_functions_accurate::compute_asymptotic_bessel_solution(double 
         num_terms++;
     }
     
-    // K_0(z) from series
-    bessel_k_0 = -(std::log(zhalf) + euler) * bessel_i_0;
-    a = q;
-    b = one;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_k_0) + std::abs(a * b)) > std::abs(bessel_k_0))) {
-        double np1 = static_cast<double>(num_terms + 1);
-        bessel_k_0 += a * b;
-        b += one / np1;
-        a *= q / (np1 * np1);
-        num_terms++;
-    }
-    
     // I_1(z) from series
     a = q / two;
     num_terms = 1;
@@ -256,21 +247,11 @@ void Coulomb_wave_functions_accurate::compute_asymptotic_bessel_solution(double 
     }
     bessel_i_1 *= zhalf;
     
-    // K_1(z) from series  
-    bessel_k_1 = one / z + (std::log(zhalf) + euler) * bessel_i_1 - half * zhalf;
-    a = zhalf * q / two;
-    b = one;
-    c = half * half;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_k_1) + std::abs(a * (b + c))) > std::abs(bessel_k_1))) {
-        double np1 = static_cast<double>(num_terms + 1);
-        bessel_k_1 -= a * (b + c);
-        c = half / (np1 + one);
-        b += one / np1;
-        a *= q / (np1 * (np1 + one));
-        num_terms++;
-    }
-    
+    // K_0(z), K_1(z): local change (physics/coulomb/README.md).  Their power series cancel to nothing for z >~ 15
+    // (terms of size I_n ~ e^z leave K_n ~ e^-z); the integral representation of physics/ keeps full precision.
+    bessel_k_0 = azure2::physics::bessel_k_scaled(0, z) * std::exp(-z);
+    bessel_k_1 = azure2::physics::bessel_k_scaled(1, z) * std::exp(-z);
+
     // Convert to F, G, F', G' at L=0
     a = std::sqrt(pi * rho_r);
     b = std::sqrt(two * pi * eta_r);

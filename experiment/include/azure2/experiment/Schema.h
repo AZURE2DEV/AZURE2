@@ -146,6 +146,13 @@ struct ValidationResult {
   const ValidatedRecord *Find(const std::string &name) const;
 };
 
+/// A section of a format-3 project that holds no records: its name, what reads it, the sections it may hold.
+struct GrammarSection {
+  std::string name;
+  std::string readBy;                  ///< the code that reads it (for the documentation and the messages)
+  std::vector<std::string> children;   ///< the sections it may hold
+};
+
 class Schema {
  public:
   static constexpr const char *kVersion = "3.0";
@@ -160,6 +167,14 @@ class Schema {
   /// so a line is a header or a field by its first token (section 3.1); across sections they are not (a data set's
   /// field `target` names a record of kind `target` in <targets>), so a section is read with its own kinds only.
   static std::vector<std::string> KindsOfSection(const std::string &section);
+  /// The sections of a format-3 project that hold no records (each read by its own grammar): with Sections() every
+  /// top-level section the engine reads.  Any other section, or a section inside one that does not list it, is refused
+  /// (E_UNKNOWN_SECTION, ReadFormat3Project): nothing would read it.  A new section is one row here (or in Sections())
+  /// and its reader.
+  static const std::vector<GrammarSection> &GrammarSections();
+  /// Sections of a newer AZURE2 (its `dev` branch) that this build does not compute: the name and what it states.
+  /// Refused by the reader and by the converter with these words.
+  static const std::vector<std::pair<std::string, std::string>> &NewerSections();
 
   /*!
    * Validate the records of a project's format-3 sections against the table and return every problem

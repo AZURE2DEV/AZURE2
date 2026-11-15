@@ -312,12 +312,10 @@ int Validator::Holds(const Condition &c, const Work &w) const {
       return result(std::find(c.values.begin(), c.values.end(), v->unit->dimension) != c.values.end() ? 1 : 0);
     }
     case Condition::RatioReaction:
-    case Condition::SingleReaction:
     case Condition::GammaExit: {
       const Value *v = w.vr.Get("reaction");
       if (!v) return w.given.count("reaction") ? -1 : result(0);
       if (c.kind == Condition::RatioReaction) return result(v->reaction.op == ReactionExpr::Ratio ? 1 : 0);
-      if (c.kind == Condition::SingleReaction) return result(v->reaction.terms.size() == 1 ? 1 : 0);
       bool all = true;
       for (const ReactionTerm &t : v->reaction.terms) all = all && t.reaction.GammaExit();
       return result(all ? 1 : 0);

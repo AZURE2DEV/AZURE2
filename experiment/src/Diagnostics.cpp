@@ -118,6 +118,8 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kThmHybridPotential, E, "a THM data set or extrapolation whose entrance pair has a potential record"},
       {kOldPotentialBlock, E, "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"},
       {kRemovedConfigKey, E, "a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)"},
+      {kUnknownSection, E, "a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it"},
+      {kUnreadLine, E, "a <config> key format 3 does not have, a <config> line after the eleven entries that is not key=value, or a line of <mcmc> outside <parameters>: nothing would read it"},
       {kConfigOptionValue, E, "an option of the calculation in <config> (use_brune, transform, ...) with a value other than 0, 1, true or false"},
       {kConfigOptionsContradict, E, "two options of the calculation that cannot hold together, whatever gave them: a flag, a keyword, a <config> key or the default (use_park=1 with use_brune=0, use_rmc=1 with use_brune=1, ec_convection_current=0 with use_long_wavelength=1)"},
       {kParameterFileNoMatch, E, "a parameter file (param.sav as a run's start) none of whose names is a parameter of the run"},

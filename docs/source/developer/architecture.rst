@@ -164,8 +164,13 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    the first stages ``AZUREMain::operator()`` calls; ``include/ProgramRun.h``)
    for the program, ``runMCMC`` (``src/AZURE2.cpp``) for the sampler,
    ``AZUREAPI::Initialize`` and ``AZUREAPI::RebuildImpl``
-   (``api/src/AZUREAPI.cpp``) for a session. Each makes its compound system
-   and its data by one call, ``SetUpCompoundSystem``
+   (``api/src/AZUREAPI.cpp``) for a session. The program's run and the
+   sampler make their compound system and data by ``SetUpProgramCompound``
+   (``src/RunSetUp.cpp``: the same check files, the same words on a refusal,
+   ``PrintSetUpRefusal``); a session's first set-up and its rebuild by
+   ``AZUREAPI::SetUpModel`` (the rebuild writes no check file, computes the
+   external-capture integrals again and says a refused last part by its
+   message alone). Both make them by one call, ``SetUpCompoundSystem``
    (``include/CompoundSystemSetUp.h``, ``src/CompoundSystemSetUp.cpp``), which
    runs, in this order:
 

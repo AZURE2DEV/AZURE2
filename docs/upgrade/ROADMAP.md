@@ -77,6 +77,9 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
       GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
+      *The zero-energy fallback of coulsm just above a heavy-ion threshold takes K_0, K_1 from `bessel_k_scaled`
+      (the owner's repair 56512d6a on `dev`, written as a listed local change, `physics/coulomb/README.md`; test
+      `physics_coulomb_threshold`; branch `feature/upgrade-5-dev-repairs`, 2026-11-15).*
       *Step 3b (ii) on `feature/upgrade-1-channel-table` (2026-11-07, merged; design `channel_table.md`): the
       per-stage channel table and the radial scratch, `CoulFuncCache` deleted; outputs as on `-nomemo`, THM checks
       and thread identity deterministic; free-shift refills from the segment's last three shift tables (interim until
@@ -102,6 +105,11 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       5–7.*
       *Lectures (PI, 2026-11-08): an R-matrix lecture series in Notion-ready Markdown, later slides, from the code's
       own definitions (`docs/lectures/PLAN.md`); lecture 1 (external region) has its figures, text to write.*
+      *The divided difference of S between two levels of one J^π is one function (`LevelPairShift.h`, called from
+      the six places that wrote it out), with the limit for coincident levels (gap < 1e-6 MeV) in it (the owner's
+      repair 6d3be80a on `dev`, written the upgrade's way and extended to the transformed route; tests
+      `pyazr_coincident_levels`, `physics_level_parameters_unit` section 8; branch `feature/upgrade-5-dev-repairs`,
+      2026-11-15).*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, merged): the page states the
@@ -174,6 +182,11 @@ State on 2026-11-11:
       from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
       converter's command, the old reading path and `pyazr/azrfile.py` (3,756 lines) deleted, a second round of
       validation (the level rows, kinematic limits, combinations of target effects).
+- [x] A real project is never misread: a section, a `<config>` key or line, an old block, an old line's type or
+      trailing keyword that nothing reads is refused (`E_UNKNOWN_SECTION`, `E_UNREAD_LINE`; the converter names
+      dev's `<channelRadii>`, `<isospin>` and spin observables); `entrance_pair` / `exit_pair` on a sum or ratio
+      apply to every term whose label names two pairs (the PI's 24Mg model converts with no question); a UDR flight
+      path in metres.
 - [x] New data kinds: ratio to Rutherford and to Mott; the S factor as a quantity; units with dimensions checked;
       named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
       widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations
@@ -246,6 +259,11 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
       structure only (`InspectCompoundStructure`). `Fill`, `Initialize` and the requests are private to it; what the
       last part writes refuses to be read before it. Every output file, `run.log` included, unchanged
       (`cnuc_split.md` §12.3, the one set-up as built).
+- [x] The set-ups' four differences unified (the PI): the run and the sampler share `SetUpProgramCompound` (the
+      sampler writes the compound and data check files, and the blank line before "Calculation was aborted."); the
+      session's first set-up and its rebuild share `AZUREAPI::SetUpModel` (the rebuild has the rate's branch and
+      accepts a project of model data alone). What still differs, and why: `cnuc_split.md` §12.3, the four
+      differences unified.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -408,7 +426,12 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
       reaction, a grid, a composition, the structured fields. The first view's rough edges repaired (section 11.16:
       a fit's follow-up buttons by the form's rule, each tab's own jobs, the lists in the old program's columns by
-      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).
+      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).  A first project
+      from nothing (section 11.18, 2026-11-15): `pyazr ui new.azr` opens an empty project, the pairs by name from
+      the mass table, T1 walked through the routes to its χ²; the curve refined where it bends, a prior or limits
+      beside each level parameter, a lost curve said as such (section 11.17).  Still needed by a first-time user:
+      the g-factors and ground-state J^π (no table), the windows' and norm's grammar, the empty project's status
+      line in words.
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the

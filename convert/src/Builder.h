@@ -256,7 +256,6 @@ class Builder {
     }
     return false;
   }
-  /// The label of one reaction; exit -1 is [total].  "" with `why` set when a pair is unknown.
   /// The label of one reaction; exit -1 is [total].  An excited entrance pair writes the target's state and the
   /// projectile's excitation (section 3.5).  `inAmbiguous`/`outAmbiguous`: another pair has the same particles and
   /// states, so the label names two pairs.  "" with `why` set when a pair is unknown.
@@ -330,7 +329,8 @@ class Builder {
   void BuildPotentials();
 
   /// The reaction field of a line (base pair keys, components, operation, frame of fixed angles).
-  /// `pairKeys` receives the entrance_pair and exit_pair fields a single reaction needs when its label names two pairs.
+  /// `pairKeys` receives the entrance_pair and exit_pair fields the record needs: of the single reaction whose label
+  /// names two pairs, or of the terms of a sum or ratio whose labels name two (one key per side for all of them).
   bool ReactionTokens(const std::string &record, int entrance, int exit, int isAdvanced, int op,
                       const std::vector<ComponentEntry> &components, const std::string &angleFrame, std::vector<io::Token> &out,
                       std::string &why, std::vector<std::pair<std::string, std::string>> &pairKeys);

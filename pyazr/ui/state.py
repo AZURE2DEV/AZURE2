@@ -126,7 +126,8 @@ class State:
         full = os.path.realpath(os.path.join(base, str(path)))
         if os.path.commonpath([full, self.root]) != self.root:
             raise OutsideRoot(f"{path}: outside the directory the server may read and write ({self.root})",
-                              allowed=f"paths inside {self.root}", root=self.root)
+                              allowed=f"paths inside {self.root}", root=self.root,
+                              fix=f"name a file inside {self.root}, relative to the project's folder {base}")
         return full
 
     # -- reading ----------------------------------------------------------------------------------------------------

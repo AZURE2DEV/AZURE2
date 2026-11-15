@@ -53,9 +53,8 @@ The report (``--json-report``, or the dict ``convert_azr`` returns) lists:
   that also folded the extrapolation with the same line number), and values the
   old engine did not use, which are dropped (a group member's own norm or
   shift);
-* **questions**: where the old meaning cannot be written without a choice (two
-  pairs with the same particles and states, a fitted temperature shared by
-  lines that become two targets).  Answer them with ``--answers A.json``
+* **questions**: where the old meaning cannot be written without a choice (a
+  fitted temperature shared by lines that become two targets).  Answer them with ``--answers A.json``
   (``{"<record>.<field>": value}``); without answers the conversion stops, or,
   with ``--allow-questions``, writes ``?`` (the file then does not validate
   until it is answered);
@@ -65,8 +64,33 @@ The report (``--json-report``, or the dict ``convert_azr`` returns) lists:
   set is named after its data file; the level parameters (``energy_<k>``,
   ``width_<k>_<c>``) keep their names.
 
+Two pairs with the same particles and states (``12C+12C`` as pair 1 for THM
+data and pair 6 for direct data) are told apart by their ``<levels>`` keys: the
+converter writes ``entrance_pair`` and ``exit_pair`` on a data set or an
+extrapolation whose reaction label names two pairs.  On a sum or a ratio the
+keys apply to every term whose label names two pairs, so the old line's terms
+must take the same pair there; a line whose terms take two such pairs (one term
+from pair 1, another from pair 6) has no format-3 form and is refused, with the
+advice to split it into one data set per pair.
+
 The converter refuses a line the old engine refused (with the old engine's
-reason), so a file that did not run before does not run after.
+reason), so a file that did not run before does not run after.  It also refuses
+what it would otherwise drop or copy through unread, since the converted project
+would then compute as if it were absent:
+
+* a section it does not convert: the sections of a newer AZURE2 (its ``dev``
+  branch) that this build does not compute yet, ``<channelRadii>`` (radii of
+  single channels) and ``<isospin>`` (isospin ties of levels across compound
+  nuclei), are named as such; any other unknown section is refused as one that
+  no AZURE2 the converter knows wrote.  Keep running such a project with the
+  program that wrote it, or convert a copy without the section if its numbers
+  may change;
+* a data or extrapolation line of a newer program's type: a type followed by a
+  spin operator (``b:y``, ``t:y``, ``b:y*t:y``, ...) is a general spin
+  observable of the ``dev`` branch, which this build does not compute.
+
+The engine refuses the same sections in a format-3 file (``E_UNKNOWN_SECTION``),
+and a ``<config>`` key it does not have (``E_UNREAD_LINE``).
 
 Parameter files
 ---------------
