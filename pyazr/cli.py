@@ -231,7 +231,7 @@ def _text_validate(result, v):
 def _run_convert(v, ctx):
     from . import convert_azr
     return convert_azr(v.old, v.new, overwrite=v.overwrite, report=v.report, answers=v.answers,
-                       exact_grids=v.exact_grids, strict=v.strict)
+                       exact_grids=v.exact_grids, strict=v.strict, allow_questions=v.allow_questions)
 
 
 def _text_convert(result, v):
@@ -475,7 +475,8 @@ COMMANDS = (
                         Arg("--answers", "json-file", "answers to the converter's questions, "
                                                       "{\"<record>.<field>\": value}"),
                         Arg("--exact-grids", "flag", "keep the old energy grids exactly"),
-                        Arg("--strict", "flag", "refuse instead of noting an implicit meaning")),
+                        Arg("--strict", "flag", "refuse instead of noting an implicit meaning"),
+                        Arg("--allow-questions", "flag", "write '?' for an unanswered question instead of refusing")),
             "pyazr.convert_azr",
             "Write an old project (format 1 or 2) in format 3, as AZURE2 --convert; OLD is kept.",
             run=_run_convert, text=_text_convert, refused_exit=1,

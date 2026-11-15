@@ -178,6 +178,16 @@ def case_convert():
     code, doc, _ = run("convert", old, new, "--json")
     check("convert onto an existing file: exit 2, three parts, --overwrite named",
           code == 2 and three_parts(doc) and "--overwrite" in doc["error"]["fix"], doc)
+    # --strict asks where the old meaning was implicit: unanswered, the refusal names --allow-questions, which the
+    # command has (as AZURE2 --convert), and which writes '?' for each question
+    asked = os.path.join(folder, "T2_asked.azr")
+    code, doc, _ = run("convert", old, asked, "--strict", "--json")
+    named = bool(doc) and "--allow-questions" in json.dumps(doc)
+    check("convert --strict: refused, naming --allow-questions", code == 1 and named and not os.path.exists(asked), doc)
+    code, doc, _ = run("convert", old, asked, "--strict", "--allow-questions", "--overwrite", "--json")
+    with open(asked) if os.path.exists(asked) else open(os.devnull) as f:
+        placeholders = " ?\n" in f.read()
+    check("convert --strict --allow-questions: written with '?' placeholders", code == 0 and placeholders, doc)
 
 
 def case_schema():
