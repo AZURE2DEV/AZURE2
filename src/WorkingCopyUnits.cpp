@@ -188,7 +188,7 @@ void WorkingCopy::ContractRowSetOf(const Unit &point, azure2::Results &results) 
   }
 }
 
-long WorkingCopy::CheckReaderRows(const CompoundSystem *compound) const {
+long WorkingCopy::CheckReaderRows(const CompoundSystem *compound, std::ostream &text) const {
   long readers = 0, slots = 0, differ = 0;
   std::vector<std::string> reports;
   const int maxL = Config::maxLOrder;
@@ -264,9 +264,9 @@ long WorkingCopy::CheckReaderRows(const CompoundSystem *compound) const {
     }
   }
   const long labSets = std::count_if(rowSets_.begin(), rowSets_.end(), [](const auto &set) { return set->labFrame; });
-  std::cerr << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle (" << rowSets_.size()
-            << " row sets, " << labSets << " at a lab angle), " << slots << " slots, " << differ << " differ" << std::endl;
-  for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
+  text << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle (" << rowSets_.size()
+       << " row sets, " << labSets << " at a lab angle), " << slots << " slots, " << differ << " differ\n";
+  for (const std::string &r : reports) text << "AZURE_NODE_CHECK:   " << r << '\n';
   return differ;
 }
 
@@ -403,7 +403,7 @@ std::vector<azure2::PointRef> WorkingCopy::PlanUnits() const {
   return units;
 }
 
-long WorkingCopy::CheckSlotGroups() const {
+long WorkingCopy::CheckSlotGroups(std::ostream &text) const {
   long reads = 0, outside = 0, writers = 0, otherGroup = 0, offPlan = 0;
   std::vector<std::string> reports;
   auto report = [&reports](const std::string &r) {
@@ -488,9 +488,9 @@ long WorkingCopy::CheckSlotGroups() const {
   }
   long blocks = 0;
   for (int k = 0; k < NumSlots(); k++) blocks += slotBlock_[k] == k;
-  std::cerr << "AZURE_NODE_CHECK: slot groups: " << blocks << " blocks, " << NumSlots() << " slots, " << reads
-            << " reads; " << outside << " ranges outside a block, " << writers << " slots with a wrong writer, "
-            << otherGroup << " reads of another group, " << offPlan << " ranges off their mesh plan" << std::endl;
-  for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
+  text << "AZURE_NODE_CHECK: slot groups: " << blocks << " blocks, " << NumSlots() << " slots, " << reads << " reads; "
+       << outside << " ranges outside a block, " << writers << " slots with a wrong writer, " << otherGroup
+       << " reads of another group, " << offPlan << " ranges off their mesh plan\n";
+  for (const std::string &r : reports) text << "AZURE_NODE_CHECK:   " << r << '\n';
   return outside + writers + otherGroup + offPlan;
 }

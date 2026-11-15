@@ -223,18 +223,23 @@ const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const
 }
 
 /*!
- * One parallel pass over the points of an evaluation, shared by the CLI
- * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
+ * One pass over the points of an evaluation, shared by the CLI (AZURECalc::PrecalculatePoints) and the API's
+ * calculations (AZUREAPI): parallel over the compound energies, or serial inside a caller's parallel region.
  */
 
 int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, const CompoundSystem *compound,
                                            const LevelState &state, const Config &configure,
                                            azure2::Results &results) {
+  // Called from inside a parallel region (Minuit2's numerical gradient, the sampler's walkers), the pass runs on the
+  // calling thread alone: the energy tasks are shared as ever (one solve per compound energy), only no second team
+  // is opened.  Every record it writes is the evaluation's own (`results`, this working copy), so evaluations
+  // running at once share nothing here.  Without OpenMP the same, serially.
 #ifdef _OPENMP
-  if (omp_in_parallel()) return -1;
+  const bool ownTeam = !omp_in_parallel();
 #else
-  return -1;
+  const bool ownTeam = false;
 #endif
+  (void)ownTeam;
   if (configure.environment.serialPointPass) return -1;  // AZURE_SERIAL_CHI2
   const std::vector<int> work = PassWork(segments);
   if (azure2::NodeCheckRequested()) {
@@ -257,7 +262,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   });
   // Before the energy pass: the sub-points' energy-dependent values (external capture), point by point.
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
     for (int k = 0; k < (int)folds.size(); k++) plan_.Point(*this, folds[k])->PrepareSubPoints(this, compound, configure);
   }
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
@@ -346,11 +351,11 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     if (differ) throw std::logic_error("AZURE_PLAN_CHECK: " + std::to_string(differ) +
                                        " units differ from their own solve (listed above)");
   } else {
-#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
     for (int k = 0; k < (int)tasks.size(); k++) runEnergyTask(k);
     collectFailures();
     ContractRowSets(results);
-#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
     for (int k = 0; k < (int)folds.size(); k++) runFold(k);
   }
   // NaN on the point of a failed plan task, reported once (Unit::MarkFailed); the CLI's objective then recalculates

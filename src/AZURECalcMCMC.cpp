@@ -97,7 +97,14 @@ double AZURECalcMCMC::LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *w
   // The model value of every point, then the fit's objective as the sampler takes it (Objective::SamplerChi2,
   // objective.md section 6): every term at its value, the data with THM norms profiled as the fit does (D1), except
   // the priors this sampler normalises (CalculateLogPrior).  A term added to the objective arrives here unedited.
-  azure2::EvaluateModel(*working->data, localCompound, walker->state, configure(), results, azure2::LeafValues::Calculate);
+  // The points first in one pass over the compound energies, as a fit's evaluation (AZURECalc::PrecalculatePoints): on
+  // this thread alone when the walkers are evaluated at once, every record it writes being this evaluation's own.
+  std::vector<const Segment *> segments;
+  for (int i = 1; i <= working->data->Data().NumSegments(); i++)
+    if (const Segment *segment = working->data->Data().GetSegment(i)) segments.push_back(segment);
+  const bool pre = working->data->CalculatePointsInParallel(segments, localCompound, walker->state, configure(), results) >= 0;
+  azure2::EvaluateModel(*working->data, localCompound, walker->state, configure(), results,
+                        pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   const double chiSquared = Objective::Engine().SamplerChi2(context);
 
   ReturnPooledLevels(walker);

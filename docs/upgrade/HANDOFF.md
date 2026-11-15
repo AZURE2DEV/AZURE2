@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, branch `feature/upgrade-5-pass-under-threads`) — the point pass runs inside a parallel region
+
+**Seen.** Plain MIGRAD and the Levenberg-Marquardt fit were slower at 2 and 4 threads than at 1 (13N, 300 calls:
+13.6 s at 1 thread, 42.0 s at 2, 25.7 s at 4).
+
+**Cause.** `WorkingCopy::CalculatePointsInParallel` declined when called from inside a parallel region (Minuit2's
+numerical gradient, the residual groups of LM) and in a build without OpenMP: each point was then calculated alone, one
+level-matrix solve per point instead of one per compound energy. The sampler's likelihood never called the pass.
+
+**Repair** (`src/EnergyPass.cpp`, `src/AZURECalc.cpp`, `src/AZURECalcMCMC.cpp`): the pass always runs, on the calling
+thread alone inside a caller's region; the sampler's likelihood calls it as a fit's evaluation does.
+`AZURE_SERIAL_CHI2` still turns it off.
+
+**Measured** (elapsed, before -> after; `docs/upgrade/fit_threads.md` section 7 has the table): 13N plain MIGRAD at 4
+threads 25.7 -> 8.2 s; T2 LM at 4 threads 48.5 -> 16.2 s; T2 sampler (16 walkers, 100 steps, physical) at 1 thread
+326.5 -> 133.5 s, at 4 threads 166.0 -> 48.4 s; 13N sampler at 4 threads 187.8 -> 30.6 s. At 1 thread the fits are
+unchanged within the scatter.
+
+**The numbers are the same**: every output file of the compared runs identical before and after, the chains
+included, except the snapshot `param.fit`, which depends on the thread schedule in both builds (`fit_threads.md`
+section 4).
+
+**The node check's text** (`AZURE_NODE_CHECK=1`): the check now also runs on the threads of a numerical gradient at
+once, and its lines ran into each other (`upgrade_node_check` failed on a line count; no breach was reported). The
+lines of one check are written at once (`WorkingCopy::CheckNodeTable`).
+
+**Verified**: build 0 warnings; quick set on the branch 295 of 297 before the text repair (the node check, and the
+browser test under a machine load of 24), then `upgrade_node_check`, `fit_threads`, `sampler_objective`,
+`pyazr_ui_sampler_bands` pass; the browser test is run again on the merged rehearsal.
+
+**Not done**: a thread-sanitizer run (no clang on this host; the nightly job covers it once the branch is on the
+server); a test that fails when the pass is declined inside a region again.
+
 ## 2026-11-15 (agent, branch `feature/upgrade-8-endf-covariance`) — ENDF: written MF=6 within CHECKR's limits
 
 **Done** (`endf.md` 13.11, the PI's decision): no written MF=6 section above 200 energies, no LAW=5 panel above 201

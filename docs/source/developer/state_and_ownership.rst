@@ -171,9 +171,11 @@ thread may write:
   takes its own ``LevelState`` and ``WorkingData`` from the pools
   (``AZURECalc::GetPooledState``, ``GetPooledData``) and returns them after
   use, so evaluations that run at the same time never share one. An
-  evaluation already inside a parallel region calculates its points serially
-  (``CalculatePointsInParallel`` declines, the model pass calculates each
-  point where it needs it). The sampler does the same with its own pools.
+  evaluation already inside a parallel region (Minuit2's numerical
+  gradient) runs the same point pass on its own thread alone
+  (``CalculatePointsInParallel`` opens no second team): one solve per
+  compound energy, written into the evaluation's own ``Results``. The
+  sampler does the same with its own pools.
 - **The set-up's loops** (energy-dependent values, external capture, node
   and channel tables) write one entry per index into storage sized before
   the loop.

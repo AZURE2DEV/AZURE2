@@ -145,3 +145,66 @@ give identical outputs with `work/b-merged3` and with this branch (689 + 662 + 6
 
 Phase 6 (`ROADMAP.md`: evaluation without copies) removes the pools and with them the class of state that cause A
 belonged to; the exact comparison is the containment until then.
+
+## 7. The point pass inside a caller's parallel region (2026-11-15)
+
+**What was seen.** A plain MIGRAD fit of `tests/13N` (`fit --max-calls=300`) took 13.6 s at 1 thread, 42.0 s at 2 and
+25.7 s at 4 (34.0 / 26.8 / 25.7 s in three repeats); the Levenberg-Marquardt fit of T2 36.1 s at 1 thread, 84.2 s at 2
+and 48.5 s at 4. More threads made these fits slower; the processor time at 2 threads was five times the time at 1
+(13N: 74.3 s against 13.6 s).
+
+**Cause (verified).** `WorkingCopy::CalculatePointsInParallel` (`src/EnergyPass.cpp`) began with
+`if (omp_in_parallel()) return -1;`, and returned -1 always in a build without OpenMP. An evaluation called from
+inside a parallel region (Minuit2's numerical gradient, the residual groups of the Levenberg-Marquardt fit) therefore
+skipped the pass and calculated every point alone: one solve of the level matrix per point instead of one per compound
+energy. With `OMP_NUM_THREADS=1` no region is ever parallel, so the fit at 1 thread kept the pass and was the fastest.
+The sampler's likelihood never called the pass at all (`AZURECalcMCMC::LogLikelihoodOfFilled` evaluated point by
+point), at any thread count.
+
+**Repair.** The pass always runs. Inside a caller's region it runs on the calling thread alone (the three loops carry
+`if (ownTeam)`, with `ownTeam = !omp_in_parallel()`); without OpenMP the same, serially. `AZURE_SERIAL_CHI2` still
+turns it off. This is safe because every record the pass writes belongs to one evaluation: the `Results` (its scratch
+slots are taken by `omp_get_thread_num()`, and an evaluation inside a region stays on one thread), the pooled
+`WorkingCopy` and `LevelState`; the run's scratch (`RunScratch::ForThisThread`) is kept per thread under a mutex. The
+sampler's likelihood now calls the pass as a fit's evaluation does.
+
+**Measured** (this host, one run each unless said; elapsed seconds; `work/b-trial79` before, the branch's build after;
+scripts and logs in `work/director/speed80/`):
+
+| case | threads | before | after |
+|---|---|---|---|
+| 13N, plain MIGRAD, 300 calls | 1 | 13.6 | 13.9 |
+| | 2 | 42.0 | 10.8 |
+| | 4 | 25.7 (34.0, 26.8) | 8.2 (9.6, 9.3, 7.6) |
+| T2, plain MIGRAD, 600 calls | 1 | 17.0 | 17.8 |
+| | 2 | 16.2 | 10.3 |
+| | 4 | 10.3 | 6.9 |
+| T2, Levenberg-Marquardt | 1 | 36.1 | 36.4 |
+| | 2 | 84.2 | 20.6 |
+| | 4 | 48.5 | 16.2 |
+| T2, sampler, 16 walkers, 100 steps, physical | 1 | 326.5 | 133.5 |
+| | 4 | 166.0 | 48.4 |
+| T2, sampler, the same, RWA | 4 | 195.4 | 73.4 |
+| 13N, sampler, 16 walkers, 100 steps, physical | 4 | 187.8 | 30.6 |
+
+The differences at 1 thread of the fits (+0.3 to +0.8 s) are single runs and not separated from the scatter. Peak
+memory is unchanged (T2 sampler at 4 threads 296 MB before, 288 MB after).
+
+**The numbers are the same.** Every output file of the thirteen pairs of runs above is identical before and after
+(the chains `samples.mcmc` included, and the sampler at 1 against 4 threads), with one exception: `output/param.fit`
+in some fits at more than one thread. That file is the snapshot of section 4, whose vector depends on the thread
+schedule: it differs between two runs of one build as well (before: run 1 against run 3; after: run 1 against runs 2
+and 3), so it is not a difference of the repair.
+
+**The diagnostic `AZURE_NODE_CHECK=1`.** The check of the node table runs before each pass, so it now also runs on
+the threads of a numerical gradient at once. Its lines were written piece by piece to standard error and ran into each
+other (`tests/upgrade/node_check.sh`, the T2 fit at 2 threads: 154 whole check lines against 161 of each of the two
+other kinds; no line reported a breach). The lines of one check are now collected and written at once
+(`WorkingCopy::CheckNodeTable`); the test passes, with about twice as many checks as before in that case (83 before:
+the gradient's evaluations had no pass and so no check).
+
+**Not done.** A thread-sanitizer run (no clang on this host; the nightly job of the continuous integration covers T1
+to T3 at 8 threads once the branch is there). No test fails when the pass is declined inside a region again (a
+timing is not a test): the node check's line count in the T2 fit case would show it, and is not asserted. The fit
+with the analytic gradient (`--use-gradient`) was already
+outside a region and is unchanged (not timed again here).
