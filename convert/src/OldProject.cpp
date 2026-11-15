@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <vector>
 
 #include "azure2/io/LevelRows.h"  // the <levels> line (format 3 keeps that grammar); the converter reads only the pair columns
 #include "azure2/convert/PriorCentreRow.h"
@@ -31,6 +32,29 @@ std::string Trim(const std::string &s) {
   if (a == std::string::npos) return "";
   const std::size_t b = s.find_last_not_of(" \t\r\n");
   return s.substr(a, b - a + 1);
+}
+
+// The reason a <segmentsData> or <segmentsTest> line the old parser cannot read is one of a newer AZURE2 (its dev
+// branch), "" otherwise: its type (the token at 0-based place `typeAt`) followed by a spin operator such as b:y,
+// t:y, b:y*t:y or b:T20 (dev's general spin observables, type 10; type 9 before dev renumbered it), where this
+// program's grammar has the normalization.
+std::string NewerLineType(const std::string &line, std::size_t typeAt) {
+  std::istringstream in(line);
+  std::vector<std::string> tokens;
+  for (std::string t; in >> t;) tokens.push_back(t);
+  if (tokens.size() <= typeAt + 1 || tokens[typeAt + 1].find(':') == std::string::npos) return "";
+  return " has type " + tokens[typeAt] + " followed by the spin operator '" + tokens[typeAt + 1] +
+         "': a general spin observable (an analysing power, a spin correlation, a polarization or a tensor power) of "
+         "a newer AZURE2 (its dev branch), which this build does not compute yet.  Keep running the project with that "
+         "program, or convert a copy without this line";
+}
+
+// The refusal of a line's end that no keyword block of the old grammar reads: the old engine stopped reading there
+// without a word, a newer program may read it; converted, it would be lost.
+std::string UnreadTail(const std::string &tail) {
+  return " ends with '" + Trim(tail) + "', which no keyword block of this program's grammar reads (the old engine "
+         "stopped reading the line there without a word; a newer AZURE2 may read it).  Correct the keyword, or delete "
+         "it from a copy of the project if the program that wrote it ignored it too, and convert the copy";
 }
 
 }  // namespace
@@ -130,9 +154,14 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       std::istringstream stm(line);
       auto parsed = std::make_shared<SegLine>(stm);
       key++;
-      if (stm.rdstate() & (std::ios::failbit | std::ios::badbit))
+      // a newer program's type first: its operator token can leave the old parser's reading intact (a test line)
+      const std::string newer = NewerLineType(line, 7);
+      if (!newer.empty()) return "data segment #" + std::to_string(key) + newer;
+      if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) {
         return "data segment #" + std::to_string(key) + " cannot be read" +
                (parsed->parseError().empty() ? "" : ": " + parsed->parseError());
+      }
+      if (!parsed->unreadTail().empty()) return "data segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
       if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
@@ -157,9 +186,14 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       std::istringstream stm(line);
       auto parsed = std::make_shared<ExtrapLine>(stm);
       key++;
-      if (stm.rdstate() & (std::ios::failbit | std::ios::badbit))
+      // a newer program's type first: its operator token can leave the old parser's reading intact (a test line)
+      const std::string newer = NewerLineType(line, 9);
+      if (!newer.empty()) return "test segment #" + std::to_string(key) + newer;
+      if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) {
         return "test segment #" + std::to_string(key) + " cannot be read" +
                (parsed->parseError().empty() ? "" : ": " + parsed->parseError());
+      }
+      if (!parsed->unreadTail().empty()) return "test segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
       const int d = parsed->isDiff();
       if (parsed->hasCovariance()) return "test segment #" + std::to_string(key) + " carries a covariance block, which the old engine refused";
       if (d == 9 || d == 19) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (angular coefficients, a data-segment type), which the old engine refused";

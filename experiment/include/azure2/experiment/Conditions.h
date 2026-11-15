@@ -21,7 +21,6 @@ struct Condition {
     FieldPresent,   ///< `field` is given
     UnitDimension,  ///< the record's `unit` has one of the dimensions `values`
     RatioReaction,  ///< the reaction expression is a ratio
-    SingleReaction, ///< the reaction expression is one reaction (no sum, no ratio)
     AngleAxis,      ///< the record has an angle axis: a theta column (data set) or an angle grid (extrapolation)
     GammaExit,      ///< every reaction term has a photon exit
     ThmExperiment,  ///< `thm` names an experiment of <thm> (not `global`)

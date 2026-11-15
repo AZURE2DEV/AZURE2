@@ -166,6 +166,10 @@ constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
 // A <config> key that format 3 no longer has (ReadFormat3Project)
 constexpr const char *kRemovedConfigKey = "E_CONFIG_KEY_REMOVED";
+// What the engine would read nothing of (ReadFormat3Project): a section format 3 does not have, or a section inside one
+// that does not hold it; a <config> key it does not have, or a line of <config> or <mcmc> that no reader reads
+constexpr const char *kUnknownSection = "E_UNKNOWN_SECTION";
+constexpr const char *kUnreadLine = "E_UNREAD_LINE";
 // An option of the calculation in <config> (project_format3.md section 3.12): a value other than 0, 1, true, false; two
 // options that cannot hold together (ReadFormat3Project, and the run once the flags or keywords are applied)
 constexpr const char *kConfigOptionValue = "E_CONFIG_OPTION_VALUE";

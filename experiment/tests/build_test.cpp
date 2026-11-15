@@ -394,6 +394,39 @@ int main() {
           BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 6\n")).diagnostics.empty());
     ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 5\n")));
   }
+  {
+    // a sum or ratio: entrance_pair / exit_pair apply to every term whose label names several pairs on that side
+    // (d+12C: pairs 5 and 6); a term whose label names one pair keeps it
+    const std::string sigma = Set(dd, "quantity", "    quantity sigma");
+    auto composite = [&](const std::string &reaction, const std::string &keys) {
+      return BuildText(Data(Set(sigma, "reaction", "    reaction " + reaction) + keys));
+    };
+    const BuiltProject both = composite("12C(d,d)12C + 0.5*12C(d,d)12C", "    entrance_pair 5\n    exit_pair 6\n");
+    const auto &sum = both.data.datasets.items;
+    check("a sum of two ambiguous terms with entrance_pair 5, exit_pair 6: every term from 5 to 6",
+          both.diagnostics.empty() && sum.size() == 1 && sum[0].spec.reaction.entranceKey == 5 &&
+              sum[0].spec.reaction.exitKey == 6 && sum[0].spec.reaction.components.size() == 1 &&
+              sum[0].spec.reaction.components[0].entranceKey == 5 && sum[0].spec.reaction.components[0].exitKey == 6);
+    const BuiltProject mixed = composite("15N(p,a)12C + 12C(d,d)12C", "    entrance_pair 6\n    exit_pair 5\n");
+    const auto &m = mixed.data.datasets.items;
+    check("15N(p,a)12C + 12C(d,d)12C with keys 6, 5: the first term keeps its one pair (1 -> 2), the second takes the keys",
+          mixed.diagnostics.empty() && m.size() == 1 && m[0].spec.reaction.entranceKey == 1 &&
+              m[0].spec.reaction.exitKey == 2 && m[0].spec.reaction.components.size() == 1 &&
+              m[0].spec.reaction.components[0].entranceKey == 6 && m[0].spec.reaction.components[0].exitKey == 5);
+    const BuiltProject ratio = BuildText(Data(Set(Set(sigma, "reaction", "    reaction 12C(d,d)12C / 15N(p,a)12C"), "unit",
+                                                  "    unit 1") + "    entrance_pair 6\n    exit_pair 5\n"));
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(sigma, "reaction", "    reaction 12C(d,d)12C / 15N(p,a)12C"),
+                                                           "unit", "    unit 1") + "    entrance_pair 6\n    exit_pair 6\n")));
+    check("a ratio: the numerator's keys from the record, the denominator's from its label",
+          ratio.diagnostics.empty() && ratio.data.datasets.items.size() == 1 &&
+              ratio.data.datasets.items[0].spec.reaction.entranceKey == 6 &&
+              ratio.data.datasets.items[0].spec.reaction.components[0].entranceKey == 1);
+    // without keys the label decides elastic: sigma_nuclear (elastic only) of a sum whose second term names two pairs
+    ExpectOne("E_AMBIGUOUS_PAIR", BuildText(Data(Set(dd, "reaction", "    reaction 15N(p,p)15N + 12C(d,d)12C"))));
+    ExpectOne("E_PAIR_KEY", composite("15N(p,a)12C + 15N(p,a)12C[4.439]", "    entrance_pair 1\n"));
+    ExpectOne("E_PAIR_KEY", composite("15N(p,a)12C + 12C(d,d)12C", "    entrance_pair 7\n    exit_pair 5\n"));
+    ExpectOne("E_PAIR_KEY", composite("15N(p,a)12C + 15N(p,a)12C[4.439]", "    exit_pair 2\n"));
+  }
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true));
   // a run that does not use the data (an extrapolation): the same file is a warning, and the project builds
   {
@@ -715,6 +748,40 @@ int main() {
       check("E_OLD_POTENTIAL_BLOCK alone, at the block's line, naming the converter", one);
       if (!one)
         for (const Diagnostic &d : p.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+    }
+    // what nothing would read (the reading path: ProjectReader): a section format 3 does not have (a newer AZURE2's
+    // blocks named as such), a section inside one that does not hold it, a <config> key or line, a line of <mcmc>
+    {
+      Format3ReadOptions read;
+      read.build = false;
+      const std::string config = "<config>\ntrue\noutput/\nchecks/\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nnone\n";
+      auto one = [&read](const std::string &text, const char *code, int line, const std::string &words) {
+        const Format3Project p = ReadFormat3Text(text, read);
+        const bool ok = p.diagnostics.size() == 1 && p.diagnostics[0].code == code && p.diagnostics[0].line == line &&
+                        p.diagnostics[0].message.find(words) != std::string::npos;
+        if (!ok)
+          for (const Diagnostic &d : p.diagnostics) std::printf("        got %s line %d: %s\n", d.code.c_str(), d.line, d.message.c_str());
+        return ok;
+      };
+      const std::string base = config + "format=3\n</config>\n";
+      check("E_UNKNOWN_SECTION: <channelRadii> named as a newer AZURE2's block",
+            one(base + "<channelRadii>\n1 0 5.5\n</channelRadii>\n", "E_UNKNOWN_SECTION", 15, "newer AZURE2"));
+      check("E_UNKNOWN_SECTION: <isospin> named as a newer AZURE2's block",
+            one(base + "<isospin>\nreference 1\n</isospin>\n", "E_UNKNOWN_SECTION", 15, "isospin ties"));
+      check("E_UNKNOWN_SECTION: a section of no AZURE2", one(base + "<notes>\nhello\n</notes>\n", "E_UNKNOWN_SECTION", 15,
+                                                              "not a section of format 3"));
+      check("E_UNKNOWN_SECTION: a section inside <mcmc> other than <parameters>",
+            one(base + "<mcmc>\n<priors>\n</priors>\n</mcmc>\n", "E_UNKNOWN_SECTION", 16, "inside <mcmc>"));
+      check("<mcmc> with its <parameters> block: no diagnostic",
+            ReadFormat3Text(base + "<mcmc>\n<parameters>\n</parameters>\n</mcmc>\n", read).diagnostics.empty());
+      check("E_UNREAD_LINE: a <config> key format 3 does not have",
+            one(config + "useChannelRadii=1\nformat=3\n</config>\n", "E_UNREAD_LINE", 13, "not a key of <config>"));
+      check("E_UNREAD_LINE: a <config> line that is not key=value",
+            one(config + "maxOrbitalMomentum 4\nformat=3\n</config>\n", "E_UNREAD_LINE", 13, "not key=value"));
+      check("a comment and a blank line after the entries of <config>: no diagnostic",
+            ReadFormat3Text(config + "# a note\n\nformat=3\n</config>\n", read).diagnostics.empty());
+      check("E_UNREAD_LINE: a line of <mcmc> outside <parameters>",
+            one(base + "<mcmc>\nnwalkers 50\n<parameters>\n</parameters>\n</mcmc>\n", "E_UNREAD_LINE", 16, "outside its"));
     }
     // the removed <config> key useAdaptiveGrid (the reading path: ProjectReader), with either value
     for (const char *value : {"0", "1"}) {

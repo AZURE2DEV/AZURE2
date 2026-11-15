@@ -3,6 +3,8 @@
 // used: numbers are written as the old line wrote them (NumberText), defaults the old engine applied silently are
 // written out, and what it ignored is dropped with a note.  This file: reaction labels, phase-shift spins, the order of
 // the parts (Builder::Run).
+#include <set>
+
 #include "Builder.h"
 
 namespace azure2 {
@@ -13,11 +15,14 @@ bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, 
                              const std::vector<ComponentEntry> &components, const std::string &angleFrame,
                              std::vector<io::Token> &out, std::string &why,
                              std::vector<std::pair<std::string, std::string>> &pairKeys) {
-  bool inAmbiguous = false, outAmbiguous = false, termAmbiguous = false;
+  bool inAmbiguous = false, outAmbiguous = false;
   const std::string base = Reaction(entrance, exit, why, inAmbiguous, outAmbiguous);
   if (base.empty()) return false;
   out.push_back(Tok(base));
-  bool composite = false;
+  // The pair keys of the terms whose label names two pairs, per side (the record's entrance_pair and exit_pair).
+  std::set<int> inKeys, outKeys;
+  if (inAmbiguous) inKeys.insert(entrance);
+  if (outAmbiguous) outKeys.insert(exit);
   if (isAdvanced == 1) {
     Count(Construct::kComposite);
     if (components.empty()) {
@@ -28,11 +33,11 @@ bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, 
       return false;
     }
     for (const ComponentEntry &c : components) {
-      composite = true;
       bool a = false, b = false;
       std::string term = Reaction(c.entrance, c.exit, why, a, b);
       if (term.empty()) return false;
-      termAmbiguous = termAmbiguous || a || b;
+      if (a) inKeys.insert(c.entrance);
+      if (b) outKeys.insert(c.exit);
       if (c.hasScaling) term = ShortestText(c.scaling) + "*" + term;
       out.push_back(Tok(op == 1 ? "/" : "+"));
       out.push_back(Tok(term));
@@ -44,20 +49,21 @@ bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, 
       }
     }
   }
-  if (composite && (inAmbiguous || outAmbiguous || termAmbiguous)) {
-    // A sum or a ratio cannot name pairs by key (section 3.5): it waits for named pairs in <levels>.
-    std::string text;
-    for (const io::Token &t : out) text += (text.empty() ? "" : " ") + t.text;
-    const std::string answer = Ask(Construct::kReaction, record + ".reaction",
-                                   "a term of the sum or ratio names two pairs with the same particles and states; a "
-                                   "composite reaction cannot carry pair keys",
-                                   text);
-    out = Words(answer);
-  } else {
-    // The label names two pairs: the <levels> pair keys say which (entrance_pair, exit_pair; section 3.5).
-    if (inAmbiguous) pairKeys.push_back({"entrance_pair", std::to_string(entrance)});
-    if (outAmbiguous) pairKeys.push_back({"exit_pair", std::to_string(exit)});
+  // A key applies to every term whose label names two pairs on its side (section 3.5): the old line's terms carry
+  // their own keys, so a line whose such terms take different pairs of the same particles has no format-3 form.
+  for (const auto &side : {std::make_pair("entrance", &inKeys), std::make_pair("exit", &outKeys)}) {
+    if (side.second->size() < 2) continue;
+    std::string keys;
+    for (int k : *side.second) keys += (keys.empty() ? "" : " and ") + std::to_string(k);
+    // The old engine computed the line: refused, never dropped (BuildData stops at res_.refusal).
+    res_.refusal = record + ": its terms take the " + std::string(side.first) + " pairs " + keys +
+          ", which have the same particles and states; format 3 writes one " + side.first +
+          "_pair for every term of a sum or ratio whose label names two pairs, so this line has no format-3 form. "
+          "Split it into one data set per pair, or give the pairs different particles or states in <levels>";
+    return false;
   }
+  if (!inKeys.empty()) pairKeys.push_back({"entrance_pair", std::to_string(*inKeys.begin())});
+  if (!outKeys.empty()) pairKeys.push_back({"exit_pair", std::to_string(*outKeys.begin())});
   Count(Construct::kReaction);
   return true;
 }

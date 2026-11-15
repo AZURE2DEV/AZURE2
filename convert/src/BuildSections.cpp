@@ -110,7 +110,13 @@ void Builder::RewriteSettings() {
     body.push_back(line);
   }
   Count(Construct::kSettings);
-  if (centreRows) Note(Construct::kSettings, "", std::to_string(centreRows) + " prior_centre row(s) folded into the norm and shift fields and removed");
+  if (centreRows)
+    Note(Construct::kSettings, "", std::to_string(centreRows) + " prior_centre row(s) folded into the norm and shift fields "
+                                   "and removed: each prior is centred on the row's value.  An AZURE2 without these rows "
+                                   "(the dev branch, and this program before October 2026) ignored them and centred the "
+                                   "prior on the line's start value; if the project was run with such a program, its "
+                                   "priors move here");
+
   if (droppedRows)
     Note(Construct::kSettings, "", std::to_string(droppedRows) + " row(s) for parameters format 3 does not have (a fixed zero shift, an "
                                    "inactive or dropped line) removed");

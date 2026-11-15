@@ -380,7 +380,15 @@ class SegLine {
               break;
             }
           } else {
-            break;  // not a keyword this reader knows: leave the rest alone
+            // a word that is not a keyword of this grammar (a newer program's, or a typing error): kept for the caller
+            // to refuse.  Numbers left here are the old grammar's own (a component list shorter than its count, which the
+            // old engine read as a plain line with a warning).
+            if (!IsNumberToken(keyword)) {
+              std::string rest;
+              std::getline(advancedStream, rest);
+              unreadTail_ = keyword + rest;
+            }
+            break;
           }
         }
       } else {
@@ -538,6 +546,8 @@ class SegLine {
   std::string parseError() const { return parseError_; };
   /// A note about the line that did not fail it (printed by WorkingCopy with the segment number).
   std::string parseWarning() const { return parseWarning_; };
+  /// The end of the line from the first token the keyword blocks do not know ("" when every token was read).
+  const std::string &unreadTail() const { return unreadTail_; };
   /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
@@ -602,6 +612,7 @@ class SegLine {
   std::vector<int> shiftFnVary_;
   std::string parseError_;
   std::string parseWarning_;
+  std::string unreadTail_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;

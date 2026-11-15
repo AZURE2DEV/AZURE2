@@ -288,13 +288,15 @@ const Forms &StructuredValues() {
 // ---------------------------------------------------------------- fields shared by several kinds
 /// The pair keys of <levels> for a reaction whose label names two pairs (section 3.5): written labels, as the level
 /// ID of a datum (F13 (a)); accepted only where the label alone is ambiguous and required there (step 3 checks both
-/// against <levels>); not for a sum or a ratio (their terms wait for named pairs).
+/// against <levels>).  On a sum or a ratio a key applies to every term whose label names several pairs on that side
+/// (a term whose label names one pair keeps it), so the terms that need a key share it.
 std::vector<FieldDef> PairKeyFields() {
-  const Condition single = Condition::Of(Condition::SingleReaction);
-  return {Rare(OptionalWhen("entrance_pair", "Entrance pair key", IntAtLeast(1), single,
-                            "the <levels> pair key of the entrance pair, only where the reaction label names two pairs")),
-          Rare(OptionalWhen("exit_pair", "Exit pair key", IntAtLeast(1), single,
-                            "the <levels> pair key of the exit pair, only where the reaction label names two pairs"))};
+  return {Rare(Opt("entrance_pair", "Entrance pair key", IntAtLeast(1),
+                   "the <levels> pair key of the entrance pair, only where the reaction label names two pairs; on a "
+                   "sum or ratio, of every term whose label names two")),
+          Rare(Opt("exit_pair", "Exit pair key", IntAtLeast(1),
+                   "the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum "
+                   "or ratio, of every term whose label names two"))};
 }
 
 /// Fields of the apparatus that format 3 had and no longer has, with what to do (RecordKind::deleted).
@@ -630,7 +632,6 @@ const char *ConditionKindName(Condition::Kind k) {
     case Condition::FieldPresent: return "field_present";
     case Condition::UnitDimension: return "unit_dimension";
     case Condition::RatioReaction: return "ratio_reaction";
-    case Condition::SingleReaction: return "single_reaction";
     case Condition::AngleAxis: return "angle_axis";
     case Condition::GammaExit: return "gamma_exit";
     case Condition::ThmExperiment: return "thm_experiment";
@@ -649,7 +650,6 @@ std::string Describe(const Condition &c) {
     case Condition::FieldPresent: return c.field + " is" + (c.negate ? " not" : "") + " given";
     case Condition::UnitDimension: return "the unit is" + std::string(no) + " " + values;
     case Condition::RatioReaction: return "the reaction is" + std::string(no) + " a ratio";
-    case Condition::SingleReaction: return "the reaction is" + std::string(no) + " one reaction (no sum, no ratio)";
     case Condition::AngleAxis: return "the record has" + std::string(c.negate ? " no" : " an") + " angle axis (a theta column or an angle grid)";
     case Condition::GammaExit: return "the reaction has" + std::string(c.negate ? " no" : " a") + " photon exit";
     case Condition::ThmExperiment: return "thm" + std::string(c.negate ? " does not name" : " names") + " an experiment of <thm>";
@@ -674,6 +674,25 @@ const std::vector<std::pair<std::string, std::vector<std::string>>> &Schema::Sec
       {"modelData", {"datum"}},
       {"potentials", {"potential"}},
       {"gammaDecays", {"gamma_decay"}},
+  };
+  return sections;
+}
+
+const std::vector<GrammarSection> &Schema::GrammarSections() {
+  static const std::vector<GrammarSection> sections = {
+      {"config", "the options and directories of the run: io::ReadConfigSection (io/src/ConfigSection.cpp)", {}},
+      {"levels", "the particle pairs, channels and levels: io::ReadLevelSection (io/src/LevelRows.cpp)", {}},
+      {"thm", "the THM experiments: src/ConfigThm.cpp", {}},
+      {"parameterSettings", "limits and fixed flags of parameters: src/ParameterLimitsManager.cpp", {}},
+      {"mcmc", "the priors of its <parameters> block: src/AZURE2.cpp", {"parameters"}},
+  };
+  return sections;
+}
+
+const std::vector<std::pair<std::string, std::string>> &Schema::NewerSections() {
+  static const std::vector<std::pair<std::string, std::string>> sections = {
+      {"channelRadii", "radii of single channels, in place of their pair's radius"},
+      {"isospin", "isospin ties of levels across compound nuclei"},
   };
   return sections;
 }

@@ -343,6 +343,8 @@ int main(int argc, char **argv) {
                                      "<parameterSettings>\nsegment_2_norm prior_centre 1\n</parameterSettings>\n", ""});
     check("prior_centre of no line: refused", !r.ok && r.refusal.find("names no parameter a prior_centre row can move: it "
                                                                       "takes segment_1_norm ... segment_1_norm") != std::string::npos);
+    check("prior_centre of no line: the refusal says what to do",
+          r.refusal.find("Delete the row, or rename it after the data line it means") != std::string::npos);
     const ConvertResult z = Convert({"1 1 2 0.2 1.4 0 180 0 1.1 1 8 0 0 0 n1.dat\n", "", "",
                                      "<parameterSettings>\nsegment_01_norm prior_centre 1\n</parameterSettings>\n", ""});
     check("prior_centre with a leading zero: refused", !z.ok);
@@ -747,7 +749,8 @@ int main(int argc, char **argv) {
     check("charged elastic: no question", r.questions.empty());
   }
   // ---- director's D2: two pairs with the same particles and states (7 is a copy of 5, n + 20Ne): the label names both,
-  //      so the <levels> pair keys are written; a sum with such a term is still a question
+  //      so the <levels> pair keys are written; on a sum they apply to every term whose label names both, so the
+  //      terms must take the same pair there (the old line gives each term its own keys)
   {
     const std::string pair7 = "0.5 1 7.0 0 7 7 1 0 4 1 0 1.0 0.5 1 0.0 1 0.0 1.008665 19.99244 0 10 6.76 6.76 0 0 0.0 0 5.0 0 0 0\n";
     Old o = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 k7.dat\n1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 k5.dat\n", "", "", "", ""};
@@ -763,7 +766,62 @@ int main(int argc, char **argv) {
     Old c = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 ks.dat 1 0 1 6 6 -999\n", "", "", "", ""};
     c.levels = pair7;
     const ConvertResult q = Convert(c);
-    check("pair keys: a sum with an ambiguous term is a question", !q.ok && q.questions.size() == 1 && q.questions[0].key == "ks.reaction");
+    Expect("pair keys on a sum: the ambiguous first term's keys, the second term's label", q, "dataset ks",
+           F{{"reaction", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"}, {"quantity", "sigma"},
+             {"unit", "b"}, {"file", "ks.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
+             {"norm", "1 fixed"}});
+    check("pair keys on a sum: no question", q.ok && q.questions.empty());
+    Old same = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 kt.dat 1 0 -1 1 7 7 -999 0.5\n", "", "", "", ""};
+    same.levels = pair7;
+    Expect("pair keys on a sum of two ambiguous terms of one pair", Convert(same), "dataset kt",
+           F{{"reaction", "20Ne(n,n)20Ne + 0.5*20Ne(n,n)20Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"}, {"quantity", "sigma"},
+             {"unit", "b"}, {"file", "kt.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
+             {"norm", "1 fixed"}});
+    Old two = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 ku.dat 1 0 1 5 5 -999\n", "", "", "", ""};
+    two.levels = pair7;
+    const ConvertResult t = Convert(two);
+    check("a sum whose terms take pairs 5 and 7 of the same particles: refused, naming them and the way out",
+          !t.ok && t.questions.empty() && t.refusal.find("ku: its terms take the entrance pairs 5 and 7") != std::string::npos &&
+              t.refusal.find("Split it into one data set per pair") != std::string::npos);
+    Old test = {"", "1 7 7 0.5 1.5 0.5 0 0 0 0 1 0 1 7 7\n", "", "", ""};
+    test.levels = pair7;
+    const ConvertResult x = Convert(test);
+    check("an extrapolation sum of pair 7 twice: entrance_pair 7, exit_pair 7",
+          x.ok && x.text.find("    reaction       20Ne(n,n)20Ne + 20Ne(n,n)20Ne\n    entrance_pair  7\n    exit_pair      7\n") !=
+                      std::string::npos);
+  }
+  // ---- what the converter would otherwise copy through or drop unread: a section of a newer AZURE2 (its dev branch),
+  //      a section no AZURE2 wrote, a section inside <mcmc> other than <parameters>, a data or extrapolation line of
+  //      dev's general spin observables (a type followed by a spin operator); each refused, with what to do
+  {
+    const std::string line = "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat\n";
+    const ConvertResult cr = Convert({line, "", "", "<channelRadii>\n1 0 5.5\n</channelRadii>\n", ""});
+    check("<channelRadii>: refused as a newer AZURE2's section, with the way out",
+          !cr.ok && cr.refusal.find("<channelRadii>") != std::string::npos &&
+              cr.refusal.find("newer AZURE2 (its dev branch: radii of single channels") != std::string::npos &&
+              cr.refusal.find("convert a copy without the section") != std::string::npos);
+    const ConvertResult iso = Convert({line, "", "", "<isospin>\nreference 1\n</isospin>\n", ""});
+    check("<isospin>: refused as a newer AZURE2's section", !iso.ok && iso.refusal.find("isospin ties") != std::string::npos);
+    const ConvertResult notes = Convert({line, "", "", "<notes>\nrun 7 was bad\n</notes>\n", ""});
+    check("<notes>: refused as a section of no AZURE2", !notes.ok && notes.refusal.find("not a section of any AZURE2") != std::string::npos);
+    const ConvertResult nested = Convert({line, "", "", "<mcmc>\n<priors>\n</priors>\n</mcmc>\n", ""});
+    check("<priors> inside <mcmc>: refused", !nested.ok && nested.refusal.find("<priors> inside <mcmc>") != std::string::npos);
+    const ConvertResult spin = Convert({"1 1 1 1.9 10.1 0 180 10 b:y 1 0 0 0 0 0 by.dat\n", "", "", "", ""});
+    check("a data line of type 10 with the operator b:y: refused as dev's spin observable",
+          !spin.ok && spin.refusal.find("data segment #1 has type 10 followed by the spin operator 'b:y'") != std::string::npos &&
+              spin.refusal.find("general spin observable") != std::string::npos);
+    const ConvertResult spinTest = Convert({line, "1 1 1 1.9 10.1 0.1 0 180 10 10 t:y 0\n", "", "", ""});
+    check("an extrapolation line of type 10 with the operator t:y: refused as dev's spin observable",
+          !spinTest.ok && spinTest.refusal.find("test segment #1 has type 10 followed by the spin operator 't:y'") != std::string::npos);
+    const ConvertResult tail = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat sample 1 radius 5.5\n", "", "", "", ""});
+    check("a data line ending in a keyword the grammar does not read: refused, naming it",
+          !tail.ok && tail.refusal.find("data segment #1 ends with 'radius 5.5'") != std::string::npos);
+    const ConvertResult tailTest = Convert({line, "1 1 2 0.5 1.5 0.5 0 0 0 0 total 0 frame cm\n", "", "", ""});
+    check("an extrapolation line ending in a keyword the grammar does not read: refused, naming it",
+          !tailTest.ok && tailTest.refusal.find("test segment #1 ends with 'frame cm'") != std::string::npos);
+    const ConvertResult bad = Convert({"1 1 2 0.2 1.4 0 180 0 x 0 0 0 0 0 s1.dat\n", "", "", "", ""});
+    check("a data line that cannot be read for another reason keeps the old words",
+          !bad.ok && bad.refusal.find("data segment #1 cannot be read") != std::string::npos);
   }
   // ---- director's D3: an entrance pair with an excited heavy particle (8: n + 16O(2.143)): the target's state
   {

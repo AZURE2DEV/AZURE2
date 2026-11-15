@@ -80,6 +80,8 @@ struct ConfigKey {
 /// The keys, in the order the engine applies them: the options in the order a session applies its keywords (use_brune
 /// before use_park, so that use_park=True with use_brune=False gives Park, as before the keys).
 const std::vector<ConfigKey> &ConfigKeys();
+/// The key named `name` (an option or not), or nullptr when <config> has no such key.
+const ConfigKey *ConfigKeyNamed(const std::string &name);
 /// The option named `name`, or nullptr when it is not an option.
 const ConfigKey *ConfigOptionNamed(const std::string &name);
 /// An option key's value: 1 | true is on, 0 | false off; false when the text is neither.
