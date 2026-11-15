@@ -13,6 +13,8 @@
 #include "AbundancesModel.h"
 #include "ChannelRadiiModel.h"
 #include <QGroupBox>
+#include <QLabel>
+#include <QShowEvent>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QTextStream>
@@ -43,6 +45,14 @@ class PairsTab : public QWidget {
   /// Write the block body; the caller writes the tags, and only when hasChannelRadii().
   bool writeChannelRadii(QTextStream &);
   bool hasChannelRadii() const;
+  /// The list of every particle channel of the calculation (ChannelRadiiListModel), and where it comes from: the
+  /// Levels tab's channels of its active levels (AZURESetup).  Refreshed when the tab is shown and after a file read.
+  ChannelRadiiListModel *getChannelRadiiListModel() { return channelRadiiListModel; }
+  void setChannelEnumerator(std::function<QList<ChannelKey>()> enumerate) { channelEnumerator = std::move(enumerate); }
+  /// Configure > Runtime Options "Per-channel radii": the box is shown when this is on, and always for a project
+  /// whose file carries <channelRadii> rows (so model input is never hidden).
+  void setPerChannelRadiiOption(bool on);
+  bool perChannelRadiiOption() const { return perChannelRadiiOn; }
   bool parseOldECSection(QTextStream &);
   /*! Read the <abundances> block ("[<sample>:] Z A abundance vary sigma" and "[<sample>:] sum sigma" lines) up to its closing tag. */
   bool readAbundances(QTextStream &);
@@ -65,8 +75,10 @@ class PairsTab : public QWidget {
   void showInfo(int which = 0, QString title = "");
   void updateNucleusColumn();
   void updateAbundancesBox();
-  void addChannelRadius();
-  void removeChannelRadius();
+  /// Rebuild the channel list from the enumerator and update the box (visibility, the note on broader rows).
+  void refreshChannelRadii();
+  /// Remove the selected channel's own radius (its pair's, or a broader row's, applies again).
+  void resetChannelRadius();
   /*! The sample selector follows the model's samples; the sum width shown is the chosen sample's. */
   void updateSampleCombo();
   void sampleChosen(int index);
@@ -93,10 +105,19 @@ class PairsTab : public QWidget {
   QPushButton *removeSampleButton;
   QDoubleSpinBox *sampleSumSigmaSpin;
   ChannelRadiiModel *channelRadiiModel;
+  ChannelRadiiListModel *channelRadiiListModel;
   QTableView *channelRadiiView;
   QGroupBox *channelRadiiBox;
-  QPushButton *addRadiusButton;
-  QPushButton *removeRadiusButton;
+  QLabel *channelRadiiNote;
+  QPushButton *resetRadiusButton;
+  std::function<QList<ChannelKey>()> channelEnumerator;
+  bool perChannelRadiiOn = false;
+  void updateChannelRadiiBox();
+
+ protected:
+  void showEvent(QShowEvent *event) override;
+
+ private:
   QPushButton *addButton;
   QPushButton *deleteButton;
   QPushButton *massButton;

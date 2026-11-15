@@ -30,7 +30,9 @@ Drawing Plots
 After selecting one or more segments, click the **Draw** button in the
 lower-left corner to render the plot.
 
-- **R-matrix calculations** are shown as red lines.
+- **R-matrix calculations** are shown as red lines.  A segment of a single point (one energy, or one angle
+  of an angular distribution) has no line to draw: its calculation is shown as an
+  open diamond around the data point, and its uncertainty band, when shown, as a bar.
 - **Data points** are shown in black with different marker shapes for different
   segments.
 

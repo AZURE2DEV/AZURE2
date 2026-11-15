@@ -44,6 +44,12 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
                                    "(the kinematics of the LANL code EDA, ENDF KRL=1).  Level energies stay excitation energies; "
                                    "relativistic.out lists them in EDA's E(s) convention.  Saved as relativistic=1 in <config>, "
                                    "so command-line and pyazr runs of the project use it too."));
+  perChannelRadiiCheck = new QCheckBox(tr("Per-channel radii (Particle Pairs tab)"));
+  perChannelRadiiCheck->setObjectName("perChannelRadiiCheck");
+  perChannelRadiiCheck->setToolTip(tr("Show the list of every particle channel with its radius under the pairs table, to give "
+                                      "some channels a radius of their own (an advanced option).  A project whose file "
+                                      "already has per-channel radii shows the list whatever this setting.  A setting of "
+                                      "this GUI, not of the project."));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -109,10 +115,17 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
+  QGroupBox *advancedBox = new QGroupBox(tr("Advanced (GUI)"));
+  advancedBox->setObjectName("advancedBox");
+  QVBoxLayout *advancedLayout = new QVBoxLayout;
+  advancedLayout->addWidget(perChannelRadiiCheck);
+  advancedBox->setLayout(advancedLayout);
+
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addWidget(optionsBox);
   mainLayout->addWidget(kinematicsBox);
   mainLayout->addWidget(priorBox);
+  mainLayout->addWidget(advancedBox);
   mainLayout->addLayout(buttonBox);
   setWindowTitle(tr("Edit Options"));
   setLayout(mainLayout);

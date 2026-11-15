@@ -92,6 +92,24 @@ nuisance flags (`src/ParameterLimitsManager.cpp:116`); free-versus-fixed comes
 from `levelFix` and `channelFix`. A new project can ship the block with its two
 comment lines and nothing else.
 
+**Hard-sphere scattering in every J^π: write `includeAllJPi=1`, not dummy levels.**
+A J^π group exists only if an active level carries it, so a model without a level in some J^π silently lacks that
+partial wave's potential scattering (p+12C elastic: up to 14 %, `tests/hard_sphere`). The GUI writes, for every
+project it saves, two lines into `<config>` just before `</config>`:
+
+```
+includeAllJPi=1 #Hard-sphere scattering in every J^pi up to maxOrbitalMomentum
+maxOrbitalMomentum=2
+```
+
+and a new GUI project has it on. A headless-built file must carry the same two lines (N = the largest particle
+l you enumerate); if the `azrbuild` writer does not emit them, append them yourself. The old workaround -- a fixed,
+zero-width "dummy" level at e.g. 20 MeV in every J^π -- gives the identical result (`tests/hard_sphere`) but is easily
+mistaken for a background pole; do not add dummies to a new project. A file WITHOUT the key computes without these
+groups (every project saved before 2026-10-11): DeBoer 2026-11-15, old files keep that behaviour until the box
+is ticked, so check `grep includeAllJPi` before trusting an elastic curve of an old file (azure2-eval skill,
+"A J^π is in the calculation only if an active level carries it").
+
 **Level ordering.** The GUI writes levels sorted by ascending J, then parity
 (−1 before +1), then energy, and assigns `levelID` sequentially over that
 order. AZURE2 does not require the order, but matching it keeps `levelID`,

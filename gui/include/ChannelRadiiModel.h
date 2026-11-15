@@ -4,6 +4,7 @@
 #include <QAbstractTableModel>
 #include <QList>
 #include <QString>
+#include <functional>
 
 class QTextStream;
 
@@ -48,6 +49,11 @@ class ChannelRadiiModel : public QAbstractTableModel {
 
   /// The radius the engine gives channel (pair key, l, s, J): the most specific matching row, else \p pairRadius.
   double radiusFor(int pairKey, int l, double s, double J, double pairRadius) const;
+  /// The row that decides channel (pair key, l, s, J) -- the most specific match, as the engine -- or -1.
+  int matchFor(int pairKey, int l, double s, double J) const;
+  /// Give channel (pair key, l, s, J) the radius \p radius: through a row naming l, s and J (added, changed, or
+  /// removed when the channel would take \p radius without it, from its pair or from a broader row).
+  void setChannelRadius(int pairKey, int l, double s, double J, double radius, double pairRadius);
 
   /// Read the block body up to and including </channelRadii>; false on a malformed line or a missing end tag.
   bool readBlock(QTextStream &in);
@@ -68,6 +74,54 @@ class ChannelRadiiModel : public QAbstractTableModel {
 
  private:
   QList<ChannelRadiusRow> rows_;
+};
+
+/// One particle channel of the calculation: pair key, l, channel spin s, and the J^pi of its level group.
+struct ChannelKey {
+  int pairKey = 1;
+  int l = 0;
+  double s = 0.0;
+  double J = 0.0;
+  int parity = 1;
+};
+
+/*!
+ * Every particle channel of the calculation with the radius it takes (the Pairs tab's "Per-channel radii" box,
+ * 2026-11-15): the pair's radius, or one of its own from the <channelRadii> rows (\c ChannelRadiiModel, which
+ * stays the file's content).  Editing a radius writes a row naming the channel's l, s and J
+ * (ChannelRadiiModel::setChannelRadius).  Columns: pair, l, s, J^pi, radius, source ("pair", "this channel", or the
+ * broader row that decides it).  The channels come from the Levels tab (setChannels).
+ */
+class ChannelRadiiListModel : public QAbstractTableModel {
+  Q_OBJECT
+
+ public:
+  enum Column { PairCol = 0, LCol, SCol, JCol, RadiusCol, SourceCol, NumCols };
+  explicit ChannelRadiiListModel(ChannelRadiiModel *rows, QObject *parent = nullptr);
+
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+  QVariant data(const QModelIndex &index, int role) const override;
+  QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
+  Qt::ItemFlags flags(const QModelIndex &index) const override;
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+
+  /// The pair radius (fm) and a label for a pair key, from the Pairs table.
+  void setPairInfo(std::function<double(int)> pairRadius, std::function<QString(int)> pairLabel);
+  /// Replace the channel list (sorted by pair, J, parity, l, s; duplicates dropped).
+  void setChannels(QList<ChannelKey> channels);
+  const QList<ChannelKey> &channels() const { return channels_; }
+  /// Give channel \p row back its pair's radius (removes its own row; a broader row still applies).
+  void resetToPair(int row);
+  /// Rows of the file that decide no channel of the list.
+  int unusedRowCount() const;
+
+ private:
+  ChannelRadiiModel *rows_;
+  QList<ChannelKey> channels_;
+  std::function<double(int)> pairRadius_;
+  std::function<QString(int)> pairLabel_;
+  double pairRadiusOf(int pairKey) const { return pairRadius_ ? pairRadius_(pairKey) : 5.0; }
 };
 
 #endif

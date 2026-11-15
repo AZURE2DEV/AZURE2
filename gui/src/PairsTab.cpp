@@ -158,44 +158,62 @@ PairsTab::PairsTab(QWidget *parent) :
   abundancesBox->setVisible(false);
   connect(abundancesModel, SIGNAL(modelReset()), this, SLOT(updateAbundancesBox()));
 
-  // Per-channel radii (<channelRadii>, 2026-11-10): rows that give some channels of a particle pair a radius of their
-  // own; every other channel keeps its pair's radius (the table above).
+  // Per-channel radii (<channelRadii>, 2026-11-10): every particle channel of the calculation with the radius it
+  // takes, its pair's or one of its own (2026-11-15: the list of all channels replaced rows typed by hand).  An
+  // advanced option: shown when Configure > Runtime Options "Per-channel radii" is on, or the file has rows.
   channelRadiiModel = new ChannelRadiiModel(this);
+  channelRadiiListModel = new ChannelRadiiListModel(channelRadiiModel, this);
+  channelRadiiListModel->setPairInfo(
+      [this](int key) {
+        const QList<PairsData> pairs = pairsModel->getPairs();
+        return (key >= 1 && key <= pairs.size() && pairs.at(key - 1).channelRadius > 0.0) ? pairs.at(key - 1).channelRadius
+                                                                                          : 5.0;
+      },
+      [this](int key) {
+        const QList<PairsData> pairs = pairsModel->getPairs();
+        if (key < 1 || key > pairs.size()) return QString::number(key);
+        // "12C+p", without the threshold the pair label carries ("[0.000 MeV]")
+        const QString label = PairsModel::plainText(pairsModel->getPairLabel(pairs.at(key - 1)));
+        const int bracket = label.indexOf(" [");
+        return QString("%1: %2").arg(key).arg(bracket > 0 ? label.left(bracket) : label);
+      });
   channelRadiiView = new QTableView;
   channelRadiiView->setObjectName("channelRadiiView");
-  channelRadiiView->setModel(channelRadiiModel);
+  channelRadiiView->setModel(channelRadiiListModel);
   channelRadiiView->verticalHeader()->setVisible(false);
   channelRadiiView->horizontalHeader()->setHighlightSections(false);
   channelRadiiView->setSelectionBehavior(QAbstractItemView::SelectRows);
   channelRadiiView->setSelectionMode(QAbstractItemView::SingleSelection);
   channelRadiiView->setShowGrid(false);
-  for (int i = 0; i < ChannelRadiiModel::NumCols; i++)
+  for (int i = 0; i < ChannelRadiiListModel::NumCols; i++)
     channelRadiiView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
-  channelRadiiView->setMaximumHeight(120);
-  addRadiusButton = new QPushButton(tr("+"));
-  addRadiusButton->setObjectName("addChannelRadiusButton");
-  addRadiusButton->setToolTip(tr("Add a row for the selected pair (l = 0, at the pair's radius); edit l, s, J and the radius in the table."));
-  removeRadiusButton = new QPushButton(tr("-"));
-  removeRadiusButton->setObjectName("removeChannelRadiusButton");
-  removeRadiusButton->setToolTip(tr("Remove the selected row: its channels go back to the pair's radius."));
-  connect(addRadiusButton, SIGNAL(clicked()), this, SLOT(addChannelRadius()));
-  connect(removeRadiusButton, SIGNAL(clicked()), this, SLOT(removeChannelRadius()));
+  channelRadiiView->setMinimumHeight(120);
+  channelRadiiView->setMaximumHeight(240);
+  resetRadiusButton = new QPushButton(tr("Clear own radius"));
+  resetRadiusButton->setObjectName("resetChannelRadiusButton");
+  resetRadiusButton->setToolTip(tr("Remove the selected channel's own radius: it takes its pair's radius again (or that of a "
+                                   "broader row of the file that covers it)."));
+  connect(resetRadiusButton, SIGNAL(clicked()), this, SLOT(resetChannelRadius()));
+  connect(channelRadiiModel, &ChannelRadiiModel::rowsEdited, this, [this]() { updateChannelRadiiBox(); });
   QHBoxLayout *radiusButtons = new QHBoxLayout;
-  radiusButtons->addWidget(addRadiusButton);
-  radiusButtons->addWidget(removeRadiusButton);
+  radiusButtons->addWidget(resetRadiusButton);
   radiusButtons->addStretch(1);
-  QLabel *radiiLabel = new QLabel(tr("A row gives the channels (pair, l) -- only channel spin s and/or total spin J when given -- "
-                                     "a radius of their own; every other channel keeps its pair's radius.  The most specific row wins "
-                                     "(l+s+J, l+J, l+s, l).  External capture needs the initial and final channels of a transition "
-                                     "at one radius."));
+  QLabel *radiiLabel = new QLabel(tr("Every particle channel of the active levels.  A channel takes its pair's radius "
+                                     "(italic) unless it has its own (bold): edit the radius to set one.  External capture "
+                                     "needs the initial and final channels of a transition at one radius."));
   radiiLabel->setWordWrap(true);
+  channelRadiiNote = new QLabel;
+  channelRadiiNote->setObjectName("channelRadiiNote");
+  channelRadiiNote->setWordWrap(true);
   QVBoxLayout *radiiLayout = new QVBoxLayout;
   radiiLayout->addWidget(radiiLabel);
   radiiLayout->addWidget(channelRadiiView);
+  radiiLayout->addWidget(channelRadiiNote);
   radiiLayout->addLayout(radiusButtons);
   channelRadiiBox = new QGroupBox(tr("Per-channel radii"));
   channelRadiiBox->setObjectName("channelRadiiBox");
   channelRadiiBox->setLayout(radiiLayout);
+  channelRadiiBox->setVisible(false);
 
   QVBoxLayout *layout = new QVBoxLayout();
   layout->addWidget(pairsView);
@@ -222,23 +240,41 @@ bool PairsTab::hasChannelRadii() const {
   return !channelRadiiModel->isEmpty();
 }
 
-void PairsTab::addChannelRadius() {
-  int pairKey = 1;
-  double radius = 5.0;
-  QModelIndexList selected = pairsView->selectionModel() ? pairsView->selectionModel()->selectedRows() : QModelIndexList();
-  if (!selected.isEmpty()) pairKey = selected.first().row() + 1;
-  if (pairKey >= 1 && pairKey <= pairsModel->getPairs().size()) {
-    const double r = pairsModel->getPairs().at(pairKey - 1).channelRadius;
-    if (r > 0.0) radius = r;
-  }
-  const int row = channelRadiiModel->addRow(pairKey, 0, radius);
-  channelRadiiView->selectRow(row);
-}
-
-void PairsTab::removeChannelRadius() {
+void PairsTab::resetChannelRadius() {
   QModelIndexList selected = channelRadiiView->selectionModel()->selectedRows();
   if (selected.isEmpty()) return;
-  channelRadiiModel->removeRowAt(selected.first().row());
+  channelRadiiListModel->resetToPair(selected.first().row());
+}
+
+void PairsTab::setPerChannelRadiiOption(bool on) {
+  perChannelRadiiOn = on;
+  refreshChannelRadii();
+}
+
+void PairsTab::refreshChannelRadii() {
+  if (channelEnumerator) channelRadiiListModel->setChannels(channelEnumerator());
+  updateChannelRadiiBox();
+}
+
+void PairsTab::updateChannelRadiiBox() {
+  channelRadiiBox->setVisible(perChannelRadiiOn || hasChannelRadii());
+  const int unused = channelRadiiListModel->unusedRowCount();
+  int broad = 0;
+  for (const ChannelRadiusRow &r : channelRadiiModel->rows())
+    if (r.s < 0.0 || r.J < 0.0) broad++;
+  QStringList notes;
+  if (broad)
+    notes << tr("%n row(s) of the project file cover several channels (Source \"row: ...\"); they stay as written, "
+                "and a channel edited here gets a row of its own.", "", broad);
+  if (unused)
+    notes << tr("%n row(s) of the project file match no channel of the calculation (AZURE2 warns about them).", "", unused);
+  channelRadiiNote->setText(notes.join("  "));
+  channelRadiiNote->setVisible(!notes.isEmpty());
+}
+
+void PairsTab::showEvent(QShowEvent *event) {
+  refreshChannelRadii();
+  QWidget::showEvent(event);
 }
 
 AbundancesModel *PairsTab::getAbundancesModel() {
@@ -357,6 +393,8 @@ void PairsTab::setAbundanceSumSigma(double sigma) {
 void PairsTab::reset() {
   abundancesModel->clear();
   channelRadiiModel->clear();
+  channelRadiiListModel->setChannels(QList<ChannelKey>());
+  updateChannelRadiiBox();
   sumSigmaSpin->setValue(0.0);
 }
 

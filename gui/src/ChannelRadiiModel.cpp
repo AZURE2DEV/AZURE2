@@ -3,6 +3,10 @@
 #include <QStringList>
 #include <QTextStream>
 #include <cmath>
+#include <algorithm>
+#include <QColor>
+#include <QFont>
+#include <QVector>
 
 ChannelRadiiModel::ChannelRadiiModel(QObject *parent) : QAbstractTableModel(parent) {}
 
@@ -121,20 +125,51 @@ void ChannelRadiiModel::clear() { setRows(QList<ChannelRadiusRow>()); }
 
 static bool sameSpin(double a, double b) { return std::fabs(a - b) < 1.0e-6; }
 
-double ChannelRadiiModel::radiusFor(int pairKey, int l, double s, double J, double pairRadius) const {
-  int best = 0;
-  double radius = pairRadius;
-  for (const ChannelRadiusRow &r : rows_) {
+int ChannelRadiiModel::matchFor(int pairKey, int l, double s, double J) const {
+  int best = 0, found = -1;
+  for (int i = 0; i < rows_.size(); i++) {
+    const ChannelRadiusRow &r = rows_.at(i);
     if (r.pairKey != pairKey || r.l != l) continue;
     if (r.s >= 0.0 && !sameSpin(r.s, s)) continue;
     if (r.J >= 0.0 && !sameSpin(r.J, J)) continue;
     const int rank = 1 + (r.s >= 0.0 ? 1 : 0) + (r.J >= 0.0 ? 2 : 0);
     if (rank > best) {
       best = rank;
-      radius = r.radius;
+      found = i;
     }
   }
-  return radius;
+  return found;
+}
+
+double ChannelRadiiModel::radiusFor(int pairKey, int l, double s, double J, double pairRadius) const {
+  const int i = matchFor(pairKey, l, s, J);
+  return i < 0 ? pairRadius : rows_.at(i).radius;
+}
+
+void ChannelRadiiModel::setChannelRadius(int pairKey, int l, double s, double J, double radius, double pairRadius) {
+  QList<ChannelRadiusRow> rows = rows_;
+  int own = -1;
+  for (int i = 0; i < rows.size(); i++)
+    if (rows.at(i).pairKey == pairKey && rows.at(i).l == l && rows.at(i).s >= 0.0 && sameSpin(rows.at(i).s, s) &&
+        rows.at(i).J >= 0.0 && sameSpin(rows.at(i).J, J))
+      own = i;
+  if (own >= 0) rows.removeAt(own);
+  // what the channel takes without a row of its own
+  ChannelRadiiModel probe;
+  probe.rows_ = rows;
+  if (std::fabs(probe.radiusFor(pairKey, l, s, J, pairRadius) - radius) > 1.0e-9) {
+    ChannelRadiusRow r;
+    r.pairKey = pairKey;
+    r.l = l;
+    r.s = s;
+    r.J = J;
+    r.radius = radius;
+    if (own >= 0)
+      rows.insert(own, r);  // keep the file's order
+    else
+      rows.append(r);
+  }
+  setRows(rows);
 }
 
 bool ChannelRadiiModel::parseSpin(const QString &text, double &value) {
@@ -215,4 +250,135 @@ bool ChannelRadiiModel::readBlock(QTextStream &in) {
 
 void ChannelRadiiModel::writeBlock(QTextStream &out) const {
   for (const ChannelRadiusRow &r : rows_) out << lineFor(r) << Qt::endl;
+}
+
+// ---- ChannelRadiiListModel ------------------------------------------------------------------------------------
+
+ChannelRadiiListModel::ChannelRadiiListModel(ChannelRadiiModel *rows, QObject *parent)
+    : QAbstractTableModel(parent), rows_(rows) {
+  connect(rows_, &ChannelRadiiModel::rowsEdited, this, [this]() {
+    if (!channels_.isEmpty()) emit dataChanged(index(0, 0), index(channels_.size() - 1, NumCols - 1));
+  });
+}
+
+int ChannelRadiiListModel::rowCount(const QModelIndex &parent) const { return parent.isValid() ? 0 : channels_.size(); }
+
+int ChannelRadiiListModel::columnCount(const QModelIndex &parent) const { return parent.isValid() ? 0 : NumCols; }
+
+void ChannelRadiiListModel::setPairInfo(std::function<double(int)> pairRadius, std::function<QString(int)> pairLabel) {
+  pairRadius_ = std::move(pairRadius);
+  pairLabel_ = std::move(pairLabel);
+}
+
+void ChannelRadiiListModel::setChannels(QList<ChannelKey> channels) {
+  std::sort(channels.begin(), channels.end(), [](const ChannelKey &a, const ChannelKey &b) {
+    if (a.pairKey != b.pairKey) return a.pairKey < b.pairKey;
+    if (std::fabs(a.J - b.J) > 1e-6) return a.J < b.J;
+    if (a.parity != b.parity) return a.parity < b.parity;
+    if (a.l != b.l) return a.l < b.l;
+    return a.s < b.s - 1e-6;
+  });
+  QList<ChannelKey> unique;
+  for (const ChannelKey &c : channels)
+    if (unique.isEmpty() || unique.last().pairKey != c.pairKey || unique.last().l != c.l ||
+        !sameSpin(unique.last().s, c.s) || !sameSpin(unique.last().J, c.J) || unique.last().parity != c.parity)
+      unique.append(c);
+  beginResetModel();
+  channels_ = unique;
+  endResetModel();
+}
+
+QVariant ChannelRadiiListModel::data(const QModelIndex &index, int role) const {
+  if (!index.isValid() || index.row() >= channels_.size()) return QVariant();
+  const ChannelKey &c = channels_.at(index.row());
+  const int match = rows_->matchFor(c.pairKey, c.l, c.s, c.J);
+  const ChannelRadiusRow *row = match >= 0 ? &rows_->rows().at(match) : nullptr;
+  const bool own = row && row->s >= 0.0 && row->J >= 0.0;
+  const double radius = row ? row->radius : pairRadiusOf(c.pairKey);
+  if (role == Qt::DisplayRole || role == Qt::EditRole) {
+    switch (index.column()) {
+      case PairCol: return pairLabel_ ? pairLabel_(c.pairKey) : QString::number(c.pairKey);
+      case LCol: return c.l;
+      case SCol: return ChannelRadiiModel::spinText(c.s);
+      case JCol: return ChannelRadiiModel::spinText(c.J) + (c.parity > 0 ? QString::fromUtf8("\u207A") : QString::fromUtf8("\u207B"));
+      case RadiusCol: return role == Qt::EditRole ? QVariant(radius) : QVariant(QString::number(radius, 'g', 6));
+      case SourceCol: {
+        if (!row) return tr("pair");
+        if (own) return tr("this channel");
+        QStringList named;
+        named << QString("l = %1").arg(row->l);
+        if (row->s >= 0.0) named << QString("s = %1").arg(ChannelRadiiModel::spinText(row->s));
+        if (row->J >= 0.0) named << QString("J = %1").arg(ChannelRadiiModel::spinText(row->J));
+        return tr("row: %1").arg(named.join(", "));
+      }
+    }
+  }
+  if (role == Qt::FontRole && index.column() == RadiusCol) {
+    QFont f;
+    f.setItalic(!row);
+    f.setBold(own);
+    return f;
+  }
+  if (role == Qt::ForegroundRole && index.column() == RadiusCol && !row) return QColor(Qt::gray);
+  if (role == Qt::TextAlignmentRole) return int(Qt::AlignCenter);
+  if (role == Qt::ToolTipRole) {
+    if (index.column() == RadiusCol)
+      return tr("Channel radius in fm.  Italic: the pair's radius.  Bold: this channel's own.  Edit to give the channel "
+                "its own radius; enter the pair's radius (or use Reset) to give it back.");
+    if (index.column() == SourceCol)
+      return tr("Where the radius comes from: the pair, this channel's own row, or a broader row of the file "
+                "(one naming l, and s or J, but not all three) that covers several channels.");
+  }
+  return QVariant();
+}
+
+QVariant ChannelRadiiListModel::headerData(int section, Qt::Orientation orientation, int role) const {
+  if (role != Qt::DisplayRole || orientation != Qt::Horizontal) return QVariant();
+  switch (section) {
+    case PairCol: return tr("Pair");
+    case LCol: return tr("l");
+    case SCol: return tr("s");
+    case JCol: return QString::fromUtf8("J\u03C0");
+    case RadiusCol: return tr("Radius [fm]");
+    case SourceCol: return tr("Source");
+  }
+  return QVariant();
+}
+
+Qt::ItemFlags ChannelRadiiListModel::flags(const QModelIndex &index) const {
+  if (!index.isValid()) return Qt::ItemIsEnabled;
+  Qt::ItemFlags f = QAbstractTableModel::flags(index);
+  if (index.column() == RadiusCol) f |= Qt::ItemIsEditable;
+  return f;
+}
+
+bool ChannelRadiiListModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+  if (!index.isValid() || role != Qt::EditRole || index.column() != RadiusCol || index.row() >= channels_.size())
+    return false;
+  bool ok = false;
+  const double v = value.toString().trimmed().toDouble(&ok);
+  if (!ok || !(v > 0.0)) return false;
+  const ChannelKey &c = channels_.at(index.row());
+  rows_->setChannelRadius(c.pairKey, c.l, c.s, c.J, v, pairRadiusOf(c.pairKey));
+  return true;
+}
+
+void ChannelRadiiListModel::resetToPair(int row) {
+  if (row < 0 || row >= channels_.size()) return;
+  const ChannelKey &c = channels_.at(row);
+  QList<ChannelRadiusRow> rows = rows_->rows();
+  for (int i = rows.size() - 1; i >= 0; i--)
+    if (rows.at(i).pairKey == c.pairKey && rows.at(i).l == c.l && rows.at(i).s >= 0.0 && sameSpin(rows.at(i).s, c.s) &&
+        rows.at(i).J >= 0.0 && sameSpin(rows.at(i).J, c.J))
+      rows.removeAt(i);
+  rows_->setRows(rows);
+}
+
+int ChannelRadiiListModel::unusedRowCount() const {
+  QVector<bool> used(rows_->rows().size(), false);
+  for (const ChannelKey &c : channels_) {
+    const int m = rows_->matchFor(c.pairKey, c.l, c.s, c.J);
+    if (m >= 0) used[m] = true;
+  }
+  return int(std::count(used.begin(), used.end(), false));
 }
