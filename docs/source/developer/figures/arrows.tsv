@@ -115,13 +115,13 @@ AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
 AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
 ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
-ProgramRun	CompoundSystem	owns	frontends		ProgramRun::compound (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in SetUpRun
-ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by SetUpCompoundSystem in SetUpRun
+ProgramRun	CompoundSystem	owns	frontends		ProgramRun::compound (std::unique_ptr<const CompoundSystem>), from SetUpProgramCompound (SetUpCompoundSystem) in SetUpRun
+ProgramRun	LevelState	owns	frontends		ProgramRun::state (LevelState): the run's, made by SetUpCompoundSystem (SetUpProgramCompound) in SetUpRun
 ProgramRun	LevelInputs	owns	frontends		ProgramRun::inputs (LevelInputs): the run's
 ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
 AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
-AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in AZUREAPI::Initialize and RebuildImpl
+AZUREAPI	CompoundSystem	owns	frontends		AZUREAPI::compound_ (std::unique_ptr<const CompoundSystem>), from SetUpCompoundSystem in AZUREAPI::SetUpModel (Initialize, RebuildImpl)
 AZUREAPI	LevelState	owns	frontends		AZUREAPI::state_ (std::unique_ptr<LevelState>): the session's, made by SetUpCompoundSystem
 AZUREAPI	LevelInputs	owns	frontends		AZUREAPI::inputs_ (std::unique_ptr<LevelInputs>): the session's
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)

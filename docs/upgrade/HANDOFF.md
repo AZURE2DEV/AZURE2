@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-5-setup-unify`) — the set-ups' four differences unified
+
+**Done** (the PI: "unify"). The program's data set-up is one function, `SetUpProgramCompound`
+(`include/ProgramRun.h`, `src/RunSetUp.cpp`), which `SetUpRun` and the sampler's `runMCMC` call; the words of a
+refused set-up are one function, `PrintSetUpRefusal` (`include/CompoundSystemSetUp.h`), which it calls and which the
+session's first set-up calls for a refused last part. The session's set-up is one member, `AZUREAPI::SetUpModel`
+(occasion `kFirst` from `Initialize`, `kRebuild` from `RebuildImpl`); what the occasion changes (check files,
+external-capture integrals recomputed, the words on a refused last part) is named at the top of its body. What a user
+sees change:
+- the sampler writes `checks/compoundnucleus.chk` and `checks/data.chk` (or prints them, set to the screen) when the
+  project asks for them, equal to the calculation's, in the project's checks directory (the sampler has no output
+  directory of its own: `samples.mcmc` goes to the project's output directory);
+- the sampler prints the blank line before "Calculation was aborted." when the compound's last part refuses;
+- a rate session rebuilt at another radius (`AZUREAPI::SetRadius`) takes the rate's branch: p12C at 4.0 fm was refused
+  (`SetRadius` false), now its rate equals a fresh session's at 4.0 fm;
+- a rebuild accepts a project of model data alone (T2 without data sets: was refused, now equal to a fresh session).
+`SetRadius` and `Rebuild` have no pyazr caller (their bindings were removed with the bindings nothing called): only
+the C++ test reaches the rebuild. The table of what still differs between the five callers: `cnuc_split.md` §12.3,
+"The four differences unified".
+
+**Tests**: `upgrade_session_rebuild` (`tests/upgrade/session_rebuild_test.cpp`), `sampler_setup_as_run`
+(`tests/sampler_setup/check.sh`); both fail on the start commit (4 and 3 failures, run on the old code with the new
+tests).
+
+**Verified how** (build `work/b-unify`, 3 jobs, 0 warnings; scripts in `work/unify/`): consistency test; the tests
+near the change (17, among them the two new ones, `upgrade_compound_setup`, `check_files_data`, `cli_commands`,
+`sampler_objective`, the pyazr rate, model-data and rebuild tests); the quick set (12 folders x 3 bases) identical to
+`tab-t74-1`; all projects x 3 bases (`tab-unify-T`): Brune 887, formal 851, Park 887 files, all identical to
+`tab-t74-1`; the director's own runs (`own.sh`, `extra.sh`: MINOS, fit with band, two rates, three `gamma_decay`
+fits, T1 extrapolation with band, the natural-target fit in two fitters, the T2 sampler in both bases) against
+`b-trial79`: outputs and `run.log` identical; the T1 sampler with the two checks to file against `b-trial79`: output
+directory and `run.log` identical, the two check files new. The 13 refusal cases and 9 session cases of
+`work/director/try79/` old against new: 2 differ, both unified ones (the sampler's blank line on 7Li_p_ay
+`--no-brune`; the sampler's compound and data checks on the screen in the T1 checks case, 79 + 470 new lines, equal to
+the calculation's); the session cases do not reach the rebuild. Docs build: 60 pages.
+
+**Open, for the PI** (not unified, outside the set-up): the sampler's refusal by the data's initialization prints
+"Calculation was aborted." without the blank line the run prints; the session's first set-up initializes the data
+after `UpdateParameters` and the prior covariance, the rebuild before them; the sampler prints "Initialized and
+cleared EC amplitude cache..." before "Creating New param.par File...", the run after; a refused rebuild says the last
+part's message alone.
+
 ## 2026-11-15 (director, 00:50) — merged: the one set-up of the compound system and the data; quiet `Objective` calls
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 79 (rehearsal 78 plus two branches). The agent's
