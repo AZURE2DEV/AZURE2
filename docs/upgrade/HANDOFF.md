@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-6-fold-memory`) — the memory of a project with many folded data sets
+
+**Done.** The channel rows (L_o, sqrt(P), the two phase factors of every channel) depend on the compound energy alone
+(`Site::ChannelRowsKey`: nucleus, bits of E_x, the exit charge where a beta-decay channel reads it), but every site
+held its own table, so every folded data set or extrapolation on the shared mesh added a copy of the rows at its
+nodes. Now one table per compound energy: at the set-up the first site at a key computes it and every other site there
+holds the same `SharedTable` (`WorkingCopy::FillChannelRows`, `src/ChannelRowFill.cpp`, for the data segments and the
+leaves); a fit's re-placed grids are shared the same way after placement (`WorkingCopy::ShareChannelRows`). The THM
+vertex pieces are kept for the entrance pair's channels only, held by the site (`ThmVertexRows`,
+`include/UnitTables.h`), so a THM and a direct site at one E_x hold one table. The channel table is built from the
+computing sites' keys and gives back the capacity of the keys asked for.
+
+**Measured** (`data_model.md` section 9, with the table of where the memory was): a 12C + 12C model of the PI (not in
+the repository; eight folded extrapolations, four THM): peak 10.99 GB -> 1.64 GB, the extrapolation at one thread
+88-115 s -> 47-53 s, at three threads 61.6 -> 19.9 s; the eight curves byte for byte those of the start. One
+calculation at one thread, start -> now: 13N the same instructions (74.61 G), peak 123 -> 122 MB; T2 1.42 -> 1.25 G
+instructions, 124 -> 117 MB; natural_neon 9.76 -> 8.49 G, 351 -> 289 MB (elapsed times within this machine's scatter).
+A fit of `examples/c12c12_tumino2018` with its direct extrapolations folded too, stopped after 19 min: 1.40 GB (start)
+-> 0.59 GB.
+
+**Test**: `tests/upgrade/fold_memory_test.py` (ctest `fold_memory`, 1-2 s with a Coulomb table, about 25 s without):
+the folds' peak memory on a project made from `examples/c12c12_tumino2018`, bounded at 125 MiB (97.6 now; the start
+build 334, the THM pieces of every channel 139, a table per slot 229: each fails).
+
+**Verified how** (build `work/b-mem1`, 3 jobs, 0 warnings): consistency test; docs build (60 pages); all projects x 3
+bases against `tab-t74-1` (tag `tab-mem1-F`): Brune 887, formal 851, Park 887 files, all identical; the eight fits by
+command against `b-trial80`: every output identical; the T2 sampler (16 walkers, 100 steps, one thread) against
+`b-trial80`: every output file identical (`samples.mcmc` included), the logs but for the ETA; `OMP_NUM_THREADS=1 ctest
+-LE slow -j3`: 302 of 302 (on 489f06f0; the last commit wraps lines and adds this entry: build, consistency, docs,
+`fold_memory`, the model's eight curves and the quick set again, all as before).
+
+**Open.** The Legendre rows of an angle-integrated slot are one per slot (52 MiB on that model); the rows per channel
+repeat a (pair, l, E_c) row once per channel spin and J^pi block (16 M entries for 5.8 M distinct rows there); the
+set-up's channel table could be built per batch (400 MiB during the set-up there). Resident memory still grows during
+a long fit of the folded example (0.45 -> 0.59 GB over 1200 evaluations; the start build 0.91 -> 1.40 GB): not traced.
+
 ## 2026-11-15 (director, 04:35) — merged: threads, one set-up, format readiness, ENDF amplitudes, two repairs of `dev`
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 80 (rehearsal 79 plus seven branches and four

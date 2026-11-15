@@ -252,6 +252,14 @@ if(Python3_Interpreter_FOUND)
            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/poison_results_test.py --binary $<TARGET_FILE:AZURE2>)
   set_tests_properties(upgrade_poison_results PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
 endif()
+# The memory of eight folded excitation functions on one mesh (docs/upgrade/data_model.md section 9): the peak resident
+# memory of an extrapolation made from examples/c12c12_tumino2018 above that of the same project unfolded, bounded;
+# about 2 s with a Coulomb table, 25 s without; skipped where getrusage is missing.
+if(Python3_Interpreter_FOUND)
+  add_test(NAME fold_memory
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fold_memory_test.py --binary $<TARGET_FILE:AZURE2>)
+  set_tests_properties(fold_memory PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600 SKIP_RETURN_CODE 77)
+endif()
 # What every data set and extrapolation of tests/ and examples/ predicts (docs/upgrade/data_model.md section 3, step
 # S10): `AZURE2 --print-predictions` against the committed table tests/upgrade/predictions.txt (regenerate with
 # predictions_test.py --write).

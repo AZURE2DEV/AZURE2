@@ -41,29 +41,17 @@ bool SameBits(const V &a, const V &b) {
   return a.size() == b.size() && (a.empty() || std::memcmp(a.data(), b.data(), a.size() * sizeof(a[0])) == 0);
 }
 
-template <class M>
-bool SameRows(const M &a, const M &b) {
-  if (a.size() != b.size()) return false;
-  for (std::size_t i = 0; i < a.size(); i++)
-    if (!SameBits(a[i], b[i])) return false;
-  return true;
-}
-
 // The channel rows of two units at one node, bit for bit.
 bool SameTables(const EDependentTables &a, const EDependentTables &b) {
   return SameBits(a.rowStart, b.rowStart) && SameBits(a.lo_elements, b.lo_elements) &&
          SameBits(a.penetrabilities, b.penetrabilities) && SameBits(a.coulombphase, b.coulombphase) &&
-         SameBits(a.hardspherephase, b.hardspherephase) && SameRows(a.thm_jl, b.thm_jl) &&
-         SameRows(a.thm_rhodjl, b.thm_rhodjl) && SameRows(a.thm_coul, b.thm_coul);
+         SameBits(a.hardspherephase, b.hardspherephase);
 }
 
 std::size_t TableBytes(const EDependentTables &t) {
   std::size_t n = sizeof t + t.rowStart.capacity() * sizeof(int) +
                   (t.lo_elements.capacity() + t.coulombphase.capacity() + t.hardspherephase.capacity()) * sizeof(complex) +
                   t.penetrabilities.capacity() * sizeof(double);
-  for (const auto &r : t.thm_jl) n += r.capacity() * sizeof(double);
-  for (const auto &r : t.thm_rhodjl) n += r.capacity() * sizeof(double);
-  for (const auto &r : t.thm_coul) n += r.capacity() * sizeof(complex);
   return n;
 }
 

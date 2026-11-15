@@ -47,10 +47,10 @@ const PPair *FramePair(const PPair *entrance, const PPair *exit);
 /// support in E_x, [max(E_0 - r sigma, floor) + S + E_x, E_0 + r sigma + S + E_x], with lowHard when the floor clips
 /// it: lowHard means what it means for a thick target -- a physical floor that is itself a node, below which no node is
 /// evaluated for this support.  The planner works in E_x and needs nothing else.  Nodes: a THM site at E_x and a
-/// direct site at the same E_x hold the same channel rows (L_o, P, the phases), and a THM site its vertex pieces
-/// besides (j_l, rho j_l', the Coulomb term, the window's table: Site::GetThmFormFactor).  The level matrix at E_x is
-/// the same for both; NodeKey's route flag (NodeTable.h) keeps the THM rows apart from the direct ones until the energy
-/// pass solves a node once for every reader (CalculationPlan.h).
+/// direct site at the same E_x hold one table of channel rows (L_o, P, the phases; WorkingCopy::FillChannelRows), and
+/// a THM site its vertex pieces besides (j_l, rho j_l', the Coulomb term, the window's table: Site::GetThmFormFactor).
+/// The level matrix at E_x is the same for both; NodeKey's route flag (NodeTable.h) keeps the THM units apart from the
+/// direct ones until the energy pass solves a node once for every reader (CalculationPlan.h).
 bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *exit);
 
 /// Whether a support's lower edge lies at a physical floor (a thick target's 1 keV, the integration floor or a

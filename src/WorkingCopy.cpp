@@ -863,69 +863,6 @@ void WorkingCopy::CalcLegendreP(int maxL, const CompoundSystem *compound) {
  */
 
 /*!
- * The channel table of the given points and their sub-points, built before the threads that fill them start
- * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
- */
-std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(const CompoundSystem *compound, const Config &configure,
-                                                             const std::vector<Unit *> &points) {
-  // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
-  // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
-  std::vector<ChannelTable::Key> keys, own;
-  std::size_t requested = 0;
-  for (Unit *point : points) {
-    own.clear();
-    point->ChannelKeys(this, compound, own);
-    requested += own.size();
-    std::sort(own.begin(), own.end());
-    own.erase(std::unique(own.begin(), own.end()), own.end());
-    keys.insert(keys.end(), own.begin(), own.end());
-  }
-  std::shared_ptr<const ChannelTable> table = ChannelTable::Build(compound, configure, std::move(keys), channelTable_.get());
-  if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kProfile))
-    configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
-                        << table->Computed() << " computed" << std::endl;
-  return table;
-}
-
-int WorkingCopy::CalcEDependentValues(const CompoundSystem *compound, const Config &configure) {
-  {
-    std::vector<Unit *> points;
-    for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
-      for (int i = 1; i <= segment->NumPoints(); i++)
-        points.push_back(segment->GetPoint(*this, i));
-    try {
-      channelTable_ = BuildChannelTable(compound, configure, points);
-    } catch (std::exception &e) {
-      configure.outStream << "Channel functions: " << e.what() << std::endl;
-      return -1;
-    }
-  }
-  ChannelRowSource rows;
-  rows.tables.push_back(channelTable_.get());
-  const ChannelRowSource *table = &rows;
-  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
-    bool localStop = false;
-#pragma omp parallel for shared(localStop, configure)
-    for (int i = 1; i <= segment->NumPoints(); i++) {
-      if (configure.stopFlag || localStop) continue;
-      Unit *point = segment->GetPoint(*this, i);
-      try {
-        point->CalcEDependentValues(this, compound, configure, table);
-      } catch (GSLException e) {
-#pragma omp critical
-        {
-          std::cout << point->GetLabEnergy() << "\t" << point->GetLabAngle() << std::endl;
-          configure.outStream << e.what() << std::endl;
-          localStop = true;
-        }
-      }
-    }
-    if (configure.stopFlag || localStop) return -1;
-  }
-  return 0;
-}
-
-/*!
  * Calls Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
@@ -1025,43 +962,20 @@ int WorkingCopy::InitializeLeaves(const CompoundSystem *compound, const Config &
   }
   this->SeparateSlotsByAngle(angled);
 
-  // CalcEDependentValues for the leaves, in parallel as for the data segments
-  // (WorkingCopy::CalcEDependentValues).  Each point writes only itself and its sub-points.  Serial, this
-  // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
+  // CalcEDependentValues for the leaves, in parallel as for the data segments (WorkingCopy::CalcEDependentValues).
+  // Each point writes only itself and its sub-points.  Serial, this loop was 9 of the 17.6 s of a natural_neon
+  // calculation on 24 threads.
   {
-    std::vector<Unit *> points;
-    for (const std::pair<int, int> &leaf : Draft().leafRefs_)
+    std::vector<std::vector<Unit *>> batches;
+    for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
+      batches.emplace_back();
       for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++)
-        points.push_back(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
-    if (!points.empty()) {
-      try {
-        channelTable_ = BuildChannelTable(compound, configure, points);
-      } catch (std::exception &e) {
-        configure.outStream << "Channel functions: " << e.what() << std::endl;
-        return -1;
-      }
+        batches.back().push_back(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
     }
-  }
-  ChannelRowSource componentRows;
-  if (channelTable_) componentRows.tables.push_back(channelTable_.get());
-  const ChannelRowSource *componentTable = &componentRows;
-  for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
-    bool localStop = false;
-#pragma omp parallel for shared(localStop, configure)
-    for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
-      if (configure.stopFlag || localStop) continue;
-      Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
-      try {
-        point->CalcEDependentValues(this, compound, configure, componentTable);
-      } catch (GSLException e) {
-#pragma omp critical
-        {
+    if (FillChannelRows(batches, compound, configure, [&configure](const Unit &, const GSLException &e) {
           configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
-          localStop = true;
-        }
-      }
-    }
-    if (configure.stopFlag || localStop) return -1;
+        }) == -1)
+      return -1;
   }
 
   // CalcLegendreP for the leaves
