@@ -204,7 +204,16 @@ Available Options
        undoes its ``--no-`` form given earlier.
    * - ``--use-gradient``
      - Fit with MIGRAD using the analytic gradient instead of numerical
-       derivatives.
+       derivatives.  MIGRAD is seeded with the Gauss-Newton second
+       derivatives; its first step is bounded, so that a parameter the data
+       hardly constrain, or one near a limit, moves by at most ten of its
+       initial step sizes (the log line ``MIGRAD seed: the first step of ...
+       parameters was bounded``; ``AZURE_SEED_BOUND=0`` in the environment
+       gives the unbounded seed).  If the first step still finds no
+       improvement, the fit restarts once with Minuit2's numerical seed.
+       When MIGRAD runs a numerical HESSE (about n(n-1)/2 function
+       evaluations for n free parameters, during which :math:`\chi^2` does
+       not change) the log says so.
    * - ``--max-calls=N``
      - Stop a MIGRAD or NLopt fit after about N function calls (MIGRAD checks
        the limit between its steps, so it overshoots a little).  Default: no

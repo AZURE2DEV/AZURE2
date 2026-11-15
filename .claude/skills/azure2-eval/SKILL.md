@@ -3841,6 +3841,17 @@ complete:
   single-threaded Chi2Value, ~10x slower than a fit evaluation), `AZURE_GRAD_DEBUG=1` (names the
   segment/reason when the adjoint bails and everything falls back to finite differences),
   `AZURE_GRAD_ADJOINT=1` (force the adjoint gradient instead of the Jacobian path).
+  Seed robustness (branch feature/migrad-seed-robust, 2026-11-15; NOT in builds <= dev ba2be00a): the
+  first MIGRAD step from the Gauss-Newton seed was unbounded for parameters with G2 near zero and
+  for limited parameters near a limit (12C+a, 547 free: chi2 1.2e5 -> 4.4e6 at the unit step).
+  When the 12-evaluation line search then finds no improvement, Minuit2 runs a numerical HESSE of
+  n(n-1)/2 evaluations with NO gradient call: hours of flat chi2 that look like a hang (it is not;
+  check the binary's age first, then wait or restart). Builds with the fix bound the seed step to
+  ten initial step sizes per parameter (log: "MIGRAD seed: the first step of N of M free parameters
+  was bounded"; `AZURE_SEED_BOUND=0` = old seed), restart once with Minuit2's numerical seed if the
+  first step still fails ("restarting with Minuit2's numerical seed"), and print "MIGRAD is
+  computing a numerical Hessian (HESSE): about N function evaluations" whenever a HESSE starts.
+  Same 12C+a start: 372 calls instead of 480, same minimum, no evaluation above 1.3e5.
   Follow-up the same day (commit "perf(fit): parallel chi2 ..."): a SINGLE chi2 evaluation was serial
   everywhere (operator(), Chi2Value); numerical MIGRAD only used all cores because Minuit evaluates
   parameters in parallel, so with --use-gradient every line-search evaluation ran on ONE core. Now

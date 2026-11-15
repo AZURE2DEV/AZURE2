@@ -560,6 +560,42 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
 }
 
 double AZURECalc::operator()(const vector_r &p) const {
+  const int mode = seedWatch_;
+  if (mode == 0 || watchInGradient_ > 0) return Evaluate(p);
+  if (watchStalled_) return watchF0_;  // see below: lets Minuit2's HESSE fail at once
+  if (watchGradCalls_ == 0) {
+    const double f = Evaluate(p);
+    watchF0_ = f;  // the value at the seed point: the last one before the first gradient call
+    return f;
+  }
+  // MIGRAD's line search (serial, at most about 15 function calls) is followed by a gradient call when it
+  // found an improvement.  Otherwise Minuit2 starts a numerical HESSE: first a numerical gradient inside an
+  // OpenMP region, then n(n-1)/2 evaluations.
+  const long run = ++watchFcnSinceGrad_;
+  const bool first = mode == 2 && watchGradCalls_ == 1;
+  const bool hesse = omp_in_parallel() || run >= 40;
+  // Test hook (tests/migrad_seed): make the first line search fail.
+  if (first && !hesse && std::getenv("AZURE_SEED_STALL_TEST")) return 1e30;
+  if (first && hesse && !watchImproved_ && seedEdm_ > 1e-3 * theErrorDef) {
+    // The first step from the analytic seed found nothing.  An exception cannot leave Minuit2's OpenMP region,
+    // so answer every further call with the seed value: HESSE then fails within n cheap calls and MIGRAD
+    // returns; the caller sees SeedStalled() and restarts with the numerical seed.
+    watchStalled_ = true;
+    return watchF0_;
+  }
+  if (run == 40 && !watchHesseSaid_.exchange(true)) {
+    long n = 0;
+    for (const SeedParam &s : seedParams_) n += s.free ? 1 : 0;
+    configure().outStream << std::endl << "MIGRAD is computing a numerical Hessian (HESSE)";
+    if (n > 1) configure().outStream << ": about " << n * (n - 1) / 2 + 4 * n << " function evaluations for " << n << " free parameters";
+    configure().outStream << ", with no gradient calls; chi^2 does not change while it runs." << std::endl;
+  }
+  const double f = Evaluate(p);
+  if (first && f < watchF0_) watchImproved_ = true;
+  return f;
+}
+
+double AZURECalc::Evaluate(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport("evaluation");
   AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
   int thisIteration = data()->Iterations();
@@ -882,6 +918,19 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     std::lock_guard<std::mutex> lk(lastGradMutex_);
     lastGradP_ = p;
   }
+  // Start-of-fit watch (SetSeedWatch): function calls made from inside the
+  // gradient (finite-difference columns) are not Minuit2's.
+  struct WatchScope {
+    const AZURECalc &c;
+    explicit WatchScope(const AZURECalc &c_) : c(c_) {
+      c.watchInGradient_++;
+      c.watchGradCalls_++;
+    }
+    ~WatchScope() {
+      c.watchFcnSinceGrad_ = 0;
+      c.watchInGradient_--;
+    }
+  } watchScope(*this);
   std::vector<double> grad(p.size(), 0.0);
   const auto tg0 = std::chrono::steady_clock::now();
   // With G2 enabled, one residual Jacobian gives both the gradient (2 J^T r +
@@ -1372,13 +1421,119 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       }
     }
   }
+  BoundSeedCurvature(p, grad, g2);
   g2CacheP_ = p;
   g2Cache_ = g2;
   return true;
 }
 
+void AZURECalc::SetSeedParameters(const ROOT::Minuit2::MnUserParameters &start) {
+  seedParams_.clear();
+  const char *env = std::getenv("AZURE_SEED_BOUND");
+  if (env && (std::string(env) == "0" || std::string(env) == "off")) return;
+  const auto &mp = start.Parameters();
+  seedParams_.resize(mp.size());
+  for (size_t i = 0; i < mp.size(); i++) {
+    SeedParam &s = seedParams_[i];
+    s.free = !mp[i].IsFixed() && !mp[i].IsConst();
+    s.hasLower = mp[i].HasLowerLimit();
+    s.hasUpper = mp[i].HasUpperLimit();
+    s.lower = mp[i].LowerLimit();
+    s.upper = mp[i].UpperLimit();
+    s.step = std::fabs(mp[i].Error());
+  }
+  seedReportPending_ = true;
+  g2Cache_.clear();
+  g2CacheP_.clear();
+}
+
+void AZURECalc::SetSeedWatch(int mode) const {
+  watchGradCalls_ = 0;
+  watchFcnSinceGrad_ = 0;
+  watchHesseSaid_ = false;
+  watchStalled_ = false;
+  watchImproved_ = false;
+  seedWatch_ = mode;
+}
+
+// MIGRAD starts from the inverse Hessian diag(1 / G2) in Minuit2's INTERNAL
+// coordinates and takes the step -g / G2 there.  Two things make that first
+// step useless (12C+a, 547 parameters, 2026-11-15: chi^2 4.4e6 at step length 1
+// from 1.2e5; if the 12-evaluation line search then finds no improvement,
+// Minuit2 starts a numerical HESSE of n(n-1)/2 evaluations):
+//  - a parameter the data hardly constrain has a Gauss-Newton G2 near zero and
+//    a step of any size (a width stepping 1e7 times its value);
+//  - for a limited parameter x(u) Minuit2 forms the internal G2 as
+//    (dx/du)^2 G2 and leaves out the term g d2x/du2, so near a limit
+//    (dx/du -> 0) the internal step g / (G2 dx/du) diverges.
+// Here G2 is raised, never lowered, so that (a) the term g d2x/du2 is included
+// where it is positive (the parameter is pushed against its limit), (b) no
+// parameter moves by more than kSteps of its initial Minuit step sizes, and
+// (c) a two-sided-limited parameter moves by at most kInternal in its internal
+// angle.  All three corrections are proportional to the gradient: they vanish
+// at a minimum, and the line search can still lengthen a step that was cut.
+void AZURECalc::BoundSeedCurvature(const std::vector<double> &p, const std::vector<double> &grad,
+                                   std::vector<double> &g2) const {
+  if (seedParams_.size() != p.size() || grad.size() != p.size() || g2.size() != p.size()) return;
+  const double kSteps = 10.0, kInternal = 0.5;
+  int nFree = 0, nRaised = 0, worst = -1;
+  double worstStep = 0.0, edm = 0.0;
+  for (size_t i = 0; i < p.size(); i++) {
+    const SeedParam &s = seedParams_[i];
+    if (!s.free) continue;
+    nFree++;
+    const double g = grad[i];
+    if (!std::isfinite(g) || !std::isfinite(g2[i]) || g == 0.0) continue;
+    // a = (dx/du)^2 and d2 = d2x/du2 of Minuit2's transformations, from the external value.
+    double a = 1.0, d2 = 0.0;
+    if (s.hasLower && s.hasUpper) {
+      a = std::max(0.0, (p[i] - s.lower) * (s.upper - p[i]));
+      d2 = -(p[i] - 0.5 * (s.lower + s.upper));
+      if (a <= 1e-24 * (s.upper - s.lower) * (s.upper - s.lower)) continue;  // on the limit: internal gradient 0
+    } else if (s.hasLower || s.hasUpper) {
+      const double w = s.hasLower ? p[i] - s.lower + 1.0 : s.upper - p[i] + 1.0;
+      if (w <= 1.0 + 1e-12) continue;
+      a = (w * w - 1.0) / (w * w);
+      d2 = (s.hasLower ? 1.0 : -1.0) / (w * w * w);
+    }
+    double gInt = a * std::max(0.0, g2[i]) + std::max(0.0, g * d2);
+    if (s.step > 0.0) gInt = std::max(gInt, a * std::fabs(g) / (kSteps * s.step));
+    if (s.hasLower && s.hasUpper) gInt = std::max(gInt, std::fabs(g) * std::sqrt(a) / kInternal);
+    const double bounded = gInt / a;
+    if (bounded > g2[i] * (1.0 + 1e-12)) {
+      nRaised++;
+      const double rel = (g2[i] > 0.0 && s.step > 0.0) ? std::fabs(g) / g2[i] / s.step : HUGE_VAL;
+      if (rel > worstStep) {
+        worstStep = rel;
+        worst = (int)i;
+      }
+      g2[i] = bounded;
+    }
+    if (g2[i] > 0.0) edm += 0.5 * g * g / g2[i];
+  }
+  seedEdm_ = edm;
+  if (seedReportPending_ && g2Enabled_) {
+    seedReportPending_ = false;
+    if (nRaised > 0) {
+      configure().outStream << "MIGRAD seed: the first step of " << nRaised << " of " << nFree
+                            << " free parameters was bounded (weakly constrained or near a limit; largest: parameter "
+                            << worst + 1 << ", ";
+      if (std::isfinite(worstStep))
+        configure().outStream << worstStep << " initial step sizes";
+      else
+        configure().outStream << "no curvature";
+      configure().outStream << ")." << std::endl;
+    }
+  }
+}
+
 std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   if (!g2Cache_.empty() && g2CacheP_ == p) return g2Cache_;
+  if (g2Enabled_ && !seedParams_.empty()) {
+    // The seed bound needs the gradient too: take both from one Jacobian.
+    std::vector<double> grad;
+    if (GradientFromJacobian(p, grad)) return g2Cache_;
+  }
   const auto t0 = std::chrono::steady_clock::now();
   std::vector<double> g2(p.size(), 0.0);
   vector_r r, jac;

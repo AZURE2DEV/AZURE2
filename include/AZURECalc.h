@@ -3,6 +3,8 @@
 
 #include "Minuit2/FCNBase.h"
 #include "Minuit2/FCNGradientBase.h"
+#include "Minuit2/MnUserParameters.h"
+#include <atomic>
 #include "Constants.h"
 #include "AZUREParams.h"
 #include <vector>
@@ -76,6 +78,24 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   bool HasG2() const override { return g2Enabled_; }
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
+  /// Back to Minuit2's numerical seed (used for the retry after a failed first step).
+  void DisableG2() { g2Enabled_ = false; }
+  /*!
+   * Limits and initial step sizes of the parameters MIGRAD is about to start
+   * from.  With them G2() returns a seed curvature that keeps the first
+   * (diagonal Newton) step bounded: see BoundSeedCurvature().  Switched off by
+   * AZURE_SEED_BOUND=0.
+   */
+  void SetSeedParameters(const ROOT::Minuit2::MnUserParameters &start);
+  /*!
+   * Watch the start of a gradient MIGRAD run.  mode 2: when the first line
+   * search finds no improvement (Minuit2 then starts a numerical HESSE of
+   * n(n-1)/2 evaluations) make that HESSE fail at once and set SeedStalled(),
+   * so that the caller can restart with the numerical seed.  mode 1: only say
+   * when a numerical HESSE is running.  mode 0: off.
+   */
+  void SetSeedWatch(int mode) const;
+  bool SeedStalled() const { return watchStalled_; }
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
   void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const;
   /// True when the limits manager declares at least one nuisance parameter.
@@ -251,6 +271,23 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
   bool g2Enabled_ = false;
+  // Seed bound (SetSeedParameters) and start-of-fit watch (SetSeedWatch).
+  struct SeedParam {
+    bool free = false, hasLower = false, hasUpper = false;
+    double lower = 0.0, upper = 0.0, step = 0.0;
+  };
+  std::vector<SeedParam> seedParams_;
+  mutable bool seedReportPending_ = false;
+  mutable std::atomic<int> seedWatch_{0};
+  mutable std::atomic<long> watchGradCalls_{0}, watchFcnSinceGrad_{0};
+  mutable std::atomic<int> watchInGradient_{0};
+  mutable std::atomic<bool> watchHesseSaid_{false}, watchStalled_{false}, watchImproved_{false};
+  mutable std::atomic<double> watchF0_{0.0};
+  /// The chi-squared evaluation behind operator().
+  double Evaluate(const vector_r &p) const;
+  mutable double seedEdm_ = 0.0;
+  /// Raise g2 where the diagonal Newton step grad/g2 would be unbounded.
+  void BoundSeedCurvature(const std::vector<double> &p, const std::vector<double> &grad, std::vector<double> &g2) const;
   // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
   // Minuit2 asks for G2 at the same point right after the gradient.
   mutable std::vector<double> g2CacheP_, g2Cache_;

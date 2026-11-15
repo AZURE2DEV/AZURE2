@@ -522,10 +522,30 @@ int AZUREMain::operator()() {
             if (configure().paramMask & Config::USE_ANALYTIC_GRADIENT) {
               configure().outStream << "Using analytic gradient for Minuit2." << std::endl;
               std::vector<double> p0 = start.Params();
-              if (theFunc.EnableG2(p0))
+              theFunc.SetSeedParameters(start);
+              const bool haveG2 = theFunc.EnableG2(p0);
+              if (haveG2)
                 configure().outStream << "Seeding MIGRAD with the analytic Gauss-Newton G2." << std::endl;
               else
                 configure().outStream << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
+              // Watch the start: if the first line search finds no improvement Minuit2 goes
+              // straight to a numerical HESSE (n(n-1)/2 evaluations).  Restart once with
+              // Minuit2's own numerical seed instead (AZURECalc::operator()).
+              struct WatchOff {
+                const AZURECalc &f;
+                ~WatchOff() { f.SetSeedWatch(0); }
+              } watchOff{theFunc};
+              theFunc.SetSeedWatch(haveG2 ? 2 : 1);
+              {
+                ROOT::Minuit2::MnMigrad migrad(theFunc, start);
+                ROOT::Minuit2::FunctionMinimum first = migrad(migradCalls);
+                if (!theFunc.SeedStalled()) return first;
+              }
+              configure().outStream << "MIGRAD's first step from the analytic seed found no improvement; restarting "
+                                       "with Minuit2's numerical seed."
+                                    << std::endl;
+              theFunc.DisableG2();
+              theFunc.SetSeedWatch(1);
               ROOT::Minuit2::MnMigrad migrad(theFunc, start);
               return migrad(migradCalls);
             } else {
