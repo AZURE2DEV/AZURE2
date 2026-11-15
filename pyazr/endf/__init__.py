@@ -17,6 +17,7 @@ sections, the S-factor conversion) is a row of :mod:`pyazr.physics`, the engine'
     cov = m.covariance()                          # MF=32 (LRF=7, LCOMP=1): names, values, matrix
     findings = pyazr.endf.check_format(path)      # the module's own check of the format, each finding with its page
     result = pyazr.endf.check(path)               # the own check, then CHECKR, FIZCON, PSYCHE when they are found
+    r = pyazr.endf.check_resonances(m)            # MF=2 against MF=3 (the engine), the masses, the text
     candidate = pyazr.endf.standardize(path)      # STANEF on a copy: candidate.diff(), candidate.accept(to=...)
 
 Errors: a malformed file is a :class:`pyazr.FormatError` (file:line:columns, what was found, what is allowed, the
@@ -36,6 +37,7 @@ from .resonances import LRF7, ParticlePair, Channel, Level, SpinGroup, read_reso
 from .model import Conversion, ConvertedLevel, Losses, to_project, from_session
 from .writer import Written, write
 from .covariance import FormalCovariance, ResonanceCovariance, formal_covariance, read_covariance
+from .evaluation_check import ResonanceCheck, check_resonances
 from .checkers import (PROGRAMS, Checker, CheckReport, CheckResult, Candidate, SectionChange, checkers, check,
                        standardize, compare)
 
@@ -46,4 +48,4 @@ __all__ = ["read", "Material", "Header", "Section", "Summary", "CrossSection", "
            "CheckResult", "Candidate", "SectionChange", "checkers", "check", "standardize", "compare", "LRF7",
            "ParticlePair", "Channel", "Level", "SpinGroup", "read_resonances", "Conversion", "ConvertedLevel", "Losses",
            "to_project", "from_session", "Written", "write", "FormalCovariance", "ResonanceCovariance",
-           "formal_covariance", "read_covariance"]
+           "formal_covariance", "read_covariance", "ResonanceCheck", "check_resonances"]

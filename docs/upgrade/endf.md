@@ -1227,3 +1227,33 @@ J C_fit J^T, which the test's lines already form for door 2. Not built (the PI's
 project, so the part needs the Jacobian of door 2 at the file's levels (as the test computes it) and the units
 (MeV, MeV^1/2 c.m.), and names that map `"<J^pi>#<k>.ER"` to the new project's parameter names (the order of
 `to_project`'s levels is MF=2's). The lines: `PART_KINDS` (one row), a `_endf_part` beside `_fit_part`.
+
+### 13.14 The check of an evaluation
+
+`pyazr/endf/evaluation_check.py`: `check_resonances(material_or_path, tolerance=1e-4, separation_energy="ame2020")`
+-> `ResonanceCheck` (findings, parts with the numbers, notes; `print()`, `to_dict()`). The findings are the own
+format check's `Finding` with `source` "pyazr.endf resonances", so that `pyazr.endf.check(path, resonances=True)`
+puts them among the own findings and the page's Check screen lists them without a change of its code; the page's
+job passes no `resonances` today: the one line is `pyazr/ui/evaluations.py` line 169 (`endf.check(...,
+timeout=settings["timeout"])` would add `resonances=True`, or a setting of the job; another agent's file, not
+changed). Command: an option of the existing check, `pyazr endf check FILE --resonances` (one check of a file, one
+report; a separate command would print the own findings twice). The three parts:
+
+- **reconstruction**: `to_project` of MF=2 (AME2020 separation energy of the incident pair, the file's Q values),
+  the engine's sigma of each particle exit at the energies of its MF=3 section, the relative difference per point
+  (`RECONSTRUCTION`: largest, median, points off by more than the tolerance, a warning when any is), MF=3 above the
+  reconstruction by more than 3 orders of magnitude (`THRESHOLD`). LRP=1 (MF=3 holds backgrounds) is not compared
+  (a note). Not built: MF=6 against the reconstruction (the LAW=2 distributions and, with the door of 13.12, LAW=5
+  LTP=1: `work/endf6/s/library_ltp1.py` does it by hand for the library file).
+- **masses**: each nuclide of MF=2 against AME2020 (`MASS` above 1 keV: the masses' frame is not stated, p. 72,
+  so the atomic mass is the reference), each pair's Q against AME2020's (`Q`, a note within 1 keV) and against the
+  Q its own masses give (`Q_MASSES` above 1 keV).
+- **text**: every `LRF=`, `KRM=`, `IFG=`, `LTP=`, `LRP=` the MF=1 text names against the record that holds it
+  (`TEXT`); a flag whose section is absent is said so.
+
+On the committed extract (`tests/pyazr/endf_evaluation_check_test.py`): RECONSTRUCTION (97 energies, 2 off: 7.05
+and 7.10 MeV, median 6.9e-8), THRESHOLD (37 orders at 7.05 MeV: 4.01e-9 b against 3.36e-46 b), MASS (6Li -21.7 keV),
+Q note (-0.083 keV), Q_MASSES (-22.6 keV), TEXT (the text's LTP=2; the extract has no MF=6/MT=2, which its
+directory lists): the design's three findings. On the full library file (`work/endf6/s/check_full.py`, `python
+-I`): the same, and TEXT says "the record of MF=6/MT=2 holds LTP=1". The mass tolerance injected at 100 keV fails
+the test (MASS and Q_MASSES gone).

@@ -425,7 +425,8 @@ def _run_endf_write(v, ctx):
     rng = (v.low, v.high) if v.low is not None and v.high is not None else None
     with Session(v.project) as s:
         written = endf.write(s, v.new, header=header, energy_range_MeV=rng, tolerance=v.tolerance,
-                             number_form=v.number_form, overwrite=v.overwrite)
+                             number_form=v.number_form, overwrite=v.overwrite, elastic_form=v.elastic_form or endf.writer.ELASTIC_FORM,
+                             covariance="hesse" if v.covariance else None)
     if not ctx.json:
         return str(written)
     return {"file": written.path, "sections": [{"mf": a, "mt": b, "lines": c} for a, b, c in written.sections],
@@ -436,7 +437,8 @@ def _run_endf_write(v, ctx):
 
 def _run_endf_check(v, ctx):
     from . import endf
-    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout)
+    result = endf.check(v.file, codes=[v.program] if v.program else None, timeout=v.timeout,
+                        resonances=v.resonances)
     return result.to_dict() if ctx.json else str(result)
 
 
@@ -570,6 +572,10 @@ COMMANDS = (
                                default=1e-3),
                            Arg("--number-form", "choice", "how numbers are written", default="widest",
                                choices=("widest", "classic", "e")),
+                           Arg("--elastic-form", "choice", "charged-particle elastic scattering as the nuclear "
+                               "amplitude expansion (LTP=1) or tabulated (LTP=12) (default: pyazr.endf.writer.ELASTIC_FORM)",
+                               choices=("amplitudes", "tabulated")),
+                           Arg("--covariance", "flag", "write MF=32: HESSE in a formal-basis session"),
                            Arg("--overwrite", "flag", "replace NEW if it exists")),
             "pyazr.endf.write",
             "The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 and MF=6 from the engine "
@@ -578,7 +584,9 @@ COMMANDS = (
     Command("endf check", (Arg("FILE", "file", "an ENDF-6 file"),
                            Arg("--program", "choice", "the one checking code to run (default: CHECKR, FIZCON and "
                                "PSYCHE, those found)", choices=("checkr", "fizcon", "psyche", "inter")),
-                           Arg("--timeout", "number", "seconds each code may take", default=300.0)),
+                           Arg("--timeout", "number", "seconds each code may take", default=300.0),
+                           Arg("--resonances", "flag", "also check the resonance parameters: MF=2 against MF=3 by "
+                               "the engine, the masses against AME2020, the text against the records")),
             "pyazr.endf.check",
             "The module's own format check, then the ENDF checking codes found ($AZURE2_ENDF_UTILITIES), their "
             "reports read into findings.", run=_run_endf_check,

@@ -328,6 +328,20 @@ an excited light particle. Refused: a session in the formal basis, Reich-Moore
 reaction families, a session without an exit. A cross section far below 1e-3 of its largest value in the energy
 range is good to the absolute tolerance only: give a lower range (``energy_range_MeV``) for sub-barrier capture.
 
+Checking an evaluation's resonance parameters
+---------------------------------------------
+
+``pyazr.endf.check_resonances(m)`` (or ``pyazr.endf.check(path, resonances=True)``, ``pyazr endf check FILE
+--resonances``) does for a file with MF=2 in LRF=7 what the checking codes do not (they count the records of
+LRF=7): MF=2 read into a project and the engine's cross section of every particle exit at the energies of its MF=3
+section, against MF=3 (per section the largest and median relative difference and the points off by more than
+1e-4, and points where MF=3 lies orders of magnitude above what MF=2 gives); each nuclide's mass against AME2020,
+each pair's Q against AME2020's and against the Q the file's own masses give; every flag the MF=1 text names
+(LRF, KRM, IFG, LTP, LRP) against the record that holds it. Each finding has a severity, the section and the
+manual's page, as the format check's. On the ENDF/B-VIII.1 3He + 4He file it finds the first point of MF=3/MT=600
+37 orders of magnitude above its own MF=2, the 6Li mass 21.7 keV below AME2020 while the Q value agrees with
+AME2020 (the two from different tables), and a text that says LTP=2 where the record holds LTP=1.
+
 What the checking codes say about a written file
 ------------------------------------------------
 

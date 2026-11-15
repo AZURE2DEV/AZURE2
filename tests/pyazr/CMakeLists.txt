@@ -130,6 +130,13 @@ add_test(NAME pyazr_endf_covariance
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_covariance_test.py)
 set_tests_properties(pyazr_endf_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
+# pyazr.endf.check_resonances on the committed 3He + 4He extract: the design's three findings (reconstruction and
+# threshold, the 6Li mass against AME2020 and the Q values, the text against the records), and check(resonances=True).
+add_test(NAME pyazr_endf_evaluation_check
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/endf_evaluation_check_test.py)
+set_tests_properties(pyazr_endf_evaluation_check PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # The engine's door of the nuclear amplitude expansion (LAW=5 LTP=1): the coefficients of T1, p + p and d + d give
 # the engine's elastic cross section back by the manual's eqs. 6.9-6.14 (about 10 s).
 add_test(NAME pyazr_endf_amplitudes
