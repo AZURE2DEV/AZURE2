@@ -428,8 +428,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   with --no-brune only if it is the FIRST level of its J^pi group.
   Fitted final-level ENERGY: in builds up to dev ba2be00a the line centre stays
   at the .azr energy (only the width follows the fit) -- a fit with that energy
-  free moves the R-matrix pole but not the line. Branch
-  `feature/linewindow-fitted-energy` (2026-11-15, not on dev yet): the centre is
+  free moves the R-matrix pole but not the line. Later builds (dev since
+  2026-11-15): the centre is
   the level's current energy (Brune / Brune-Park; --no-brune keeps the input
   energy), nodes re-placed per evaluation when it moves (slower).
   Record `R-matrix/AZURE2_code_audit/11-14-26_ec_unbound_broad/`; test
@@ -3847,7 +3847,7 @@ complete:
   single-threaded Chi2Value, ~10x slower than a fit evaluation), `AZURE_GRAD_DEBUG=1` (names the
   segment/reason when the adjoint bails and everything falls back to finite differences),
   `AZURE_GRAD_ADJOINT=1` (force the adjoint gradient instead of the Jacobian path).
-  Seed robustness (branch feature/migrad-seed-robust, 2026-11-15; NOT in builds <= dev ba2be00a): the
+  Seed robustness (dev since 2026-11-15; NOT in builds <= dev ba2be00a): the
   first MIGRAD step from the Gauss-Newton seed was unbounded for parameters with G2 near zero and
   for limited parameters near a limit (12C+a, 547 free: chi2 1.2e5 -> 4.4e6 at the unit step).
   When the 12-evaluation line search then finds no improvement, Minuit2 runs a numerical HESSE of
