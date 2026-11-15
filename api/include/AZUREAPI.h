@@ -2,6 +2,7 @@
 #define AZUREAPI_H
 
 #include "AZUREMain.h"
+#include "CompoundSystemSetUp.h"
 
 #include "Constants.h"
 #include "AZUREGrad.h"
@@ -515,6 +516,15 @@ class AZUREAPI {
   void ReplaceModel();
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
+  /// Which set-up of the session's model SetUpModel makes: the first (Initialize, again after a mode switch) or a
+  /// rebuild (RebuildImpl: SetRadius, Rebuild).
+  enum class ModelSetUpOccasion { kFirst, kRebuild };
+  /// The session's compound system and data, made anew (ReplaceModel) by SetUpCompoundSystem with the session's one
+  /// data set-up and the channel-radius overrides \p radii; the levels moved into state_ and inputs_.  Its data
+  /// set-up: the data sets, or the extrapolations, or the rate's pairs (Config::CALCULATE_REACTION_RATE), refused as
+  /// the program refuses them (a data set-up with no segments and no model data; extrapolations with no point).
+  /// What \p occasion changes is named at the top of its body.  The refusing step, or kNone.
+  CompoundSetUp::Refusal SetUpModel(ModelSetUpOccasion occasion, const std::map<int, double> &radii);
   /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data
   /// object; false (ERROR printed) when the file is refused.
   bool SetUpPriorCovariance();

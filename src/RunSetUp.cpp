@@ -1,5 +1,5 @@
-// The set-up stages of a program run (ProgramRun.h): the compound nucleus, the data, the parameter vector, and for a
-// data run the objective.
+// The set-up stages of a program run (ProgramRun.h): the compound nucleus and the data (the sampler's set-up too),
+// the parameter vector, and for a data run the objective.
 #include "ProgramRun.h"
 
 #include <iostream>
@@ -22,77 +22,68 @@
 #include "Profile.h"
 #include "WorkingCopy.h"
 
+CompoundSetUp SetUpProgramCompound(const Config &configure, WorkingCopy &data, DataCheckAt dataCheck) {
+  configure.outStream << "Filling Compound Nucleus..." << std::endl;
+  const DataSetUpStep dataSetUp = [&configure, &data, dataCheck](
+                                      const CompoundSystem &structure,
+                                      const LevelInputs &inputs) -> std::optional<CompoundSetUpRequests> {
+    if ((configure.screenCheckMask | configure.fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS)
+      WriteCompoundNucleusCheck(structure, inputs, configure);
+    CompoundSetUpRequests requests;
+    if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
+      // The data object from the segments and the data files: the structure gives the pair keys, the centre-of-mass
+      // conversions and the S-factor conversions.
+      configure.outStream << "Filling Data Structures..." << std::endl;
+      if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
+        if (const int filled = data.Fill(configure, &structure, inputs); filled != 0) {
+          if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (data.Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {  // model data alone run
+          configure.outStream << "There is no data provided." << std::endl;
+          return std::nullopt;
+        }
+        RequestDataEntrances(structure, configure, requests);
+      } else {
+        if (const int made = data.MakePoints(configure, &structure, inputs); made != 0) {
+          if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
+          return std::nullopt;
+        } else if (data.Data().NumSegments() == 0) {
+          configure.outStream << "Extrapolation segments produce no data." << std::endl;
+          return std::nullopt;
+        }
+        RequestExtrapolationEntrances(structure, configure, requests);
+      }
+      // The capture-A_y terms the data sets need are built with the pathway table (the compound's last part).
+      RequestCaptureAyTerms(structure, data, requests);
+      // The data check lists the points that are calculated: on a grid refined later, it is written after that.
+      if (((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_DATA) && dataCheck == DataCheckAt::kDataSetUp)
+        data.PrintData(configure);
+    } else {
+      const std::string rateProblem =
+          structure.RatePairsProblem(configure.rateParams.entrancePair, configure.rateParams.exitPair);
+      if (!rateProblem.empty()) {
+        configure.outStream << rateProblem << std::endl;
+        return std::nullopt;
+      }
+      requests.AddEntrance(structure.GetPairNumFromKey(configure.rateParams.entrancePair));
+    }
+    return requests;
+  };
+  CompoundSetUp setUp = SetUpCompoundSystem(configure, dataSetUp);
+  PrintSetUpRefusal(setUp, configure.outStream);
+  return setUp;
+}
+
 int SetUpRun(ProgramRun &run) {
   // An extrapolation run whose project has an adaptive grid refines it once the parameters are known (below).
   run.refinesAdaptiveGrids =
       !(run.configure.paramMask & (Config::CALCULATE_WITH_DATA | Config::CALCULATE_REACTION_RATE)) &&
       HasAdaptiveGrids(run.configure);
 
-  // The compound system from the <levels> rows, the run's data set up in the middle, then its last part
-  // (CompoundSystemSetUp.h).
-  run.configure.outStream << "Filling Compound Nucleus..." << std::endl;
-  const DataSetUpStep dataSetUp = [&run](const CompoundSystem &structure,
-                                         const LevelInputs &inputs) -> std::optional<CompoundSetUpRequests> {
-    if ((run.configure.screenCheckMask | run.configure.fileCheckMask) & Config::CHECK_COMPOUND_NUCLEUS)
-      WriteCompoundNucleusCheck(structure, inputs, run.configure);
-    CompoundSetUpRequests requests;
-    if (!(run.configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
-      // Fill the data object from the segments and data file
-      //   Compound object is passed to the function for pair key verification and
-      //   center of mass conversions, s-factor conversions, etc.
-      run.configure.outStream << "Filling Data Structures..." << std::endl;
-      if (run.configure.paramMask & Config::CALCULATE_WITH_DATA) {
-        if (const int filled = run.data->Fill(run.configure, &structure, inputs); filled != 0) {
-          if (filled != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
-          return std::nullopt;
-        } else if (run.data->Data().NumSegments() == 0 && structure.GetModelData().NumResiduals() == 0) {  // model data alone run
-          run.configure.outStream << "There is no data provided." << std::endl;
-          return std::nullopt;
-        }
-        RequestDataEntrances(structure, run.configure, requests);
-      } else {
-        if (const int made = run.data->MakePoints(run.configure, &structure, inputs); made != 0) {
-          if (made != WorkingCopy::kFillRefused) run.configure.outStream << "Could not fill data object from file." << std::endl;
-          return std::nullopt;
-        } else if (run.data->Data().NumSegments() == 0) {
-          run.configure.outStream << "Extrapolation segments produce no data." << std::endl;
-          return std::nullopt;
-        }
-        RequestExtrapolationEntrances(structure, run.configure, requests);
-      }
-      // The capture-A_y terms the data sets need are built with the pathway table (the compound's last part).
-      RequestCaptureAyTerms(structure, *run.data, requests);
-      // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it
-      // after the refinement below, on the refined grid.
-      if (((run.configure.fileCheckMask | run.configure.screenCheckMask) & Config::CHECK_DATA) && !run.refinesAdaptiveGrids)
-        run.data->PrintData(run.configure);
-    } else {
-      const std::string rateProblem =
-          structure.RatePairsProblem(run.configure.rateParams.entrancePair, run.configure.rateParams.exitPair);
-      if (!rateProblem.empty()) {
-        run.configure.outStream << rateProblem << std::endl;
-        return std::nullopt;
-      }
-      requests.AddEntrance(structure.GetPairNumFromKey(run.configure.rateParams.entrancePair));
-    }
-    return requests;
-  };
-  CompoundSetUp setUp = SetUpCompoundSystem(run.configure, dataSetUp);
-  switch (setUp.refusal) {
-    case CompoundSetUp::Refusal::kNone: break;
-    case CompoundSetUp::Refusal::kUnreadable:
-      run.configure.outStream << "Could not fill compound nucleus from file." << std::endl;
-      return -1;
-    case CompoundSetUp::Refusal::kNoNuclearData:
-      run.configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
-      return -1;
-    case CompoundSetUp::Refusal::kData: return -1;  // the data's set-up said why
-    case CompoundSetUp::Refusal::kFinish:
-      run.configure.outStream << setUp.finishError << std::endl;
-      run.configure.outStream << std::endl
-                              << "Calculation was aborted." << std::endl;
-      return -1;
-  }
+  // The compound system from the <levels> rows, the run's data set up in the middle, then its last part.
+  CompoundSetUp setUp = SetUpProgramCompound(
+      run.configure, *run.data, run.refinesAdaptiveGrids ? DataCheckAt::kAfterGridRefinement : DataCheckAt::kDataSetUp);
+  if (setUp.refusal != CompoundSetUp::Refusal::kNone) return -1;
   run.compound = std::move(setUp.compound);
   run.state = std::move(setUp.state);
   run.inputs = std::move(setUp.inputs);
