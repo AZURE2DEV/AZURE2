@@ -2,6 +2,57 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 10:20) — merged: the owner's page written anew
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 82 (rehearsal 81 plus
+`feature/upgrade-7-owner-page` and one commit of mine). Documents and one docstring only: no C++ changed, the
+base build stays `work/b-trial81`, the reference `tab-t74-1`, the quick set 308 tests.
+
+**Read against the sources by me.** The commands of section 2 run again on `work/b-trial81` (validate,
+calculate 482.275239617, the fit 462.273515393 after 733 calls, the rate's two lines, the five lines of pyazr with
+the same objective and gradient): as printed. The pyazr names of the rmfit table exist (`residuals_and_jacobian`,
+`value_and_grad`, `bounds`, `log_prob`, `fit_with_engine`, `save_fit`, `refreeze_covariance`,
+`fetch_levels`, `add_dataset`, `evaluate(x).data[i].chi2`, `.terms`); the files and functions of sections 5
+and 6 exist under the names given; 65 commits of `dev` beyond the branch point, 51 not merges; the merge figures
+(93 conflicted files) and the 40 to 80 hours per week are the join plan's. The consistency test and the build of
+the published pages (60 pages) pass on the merged tree. Not run again by me: the sampler line, the converter line
+and the page server of section 2 (the agent's runs).
+
+**My commit.** A paragraph "What it costs you" in section 1, measured against `dev` at `3e502625`: the C++
+outside `external/`, `gui/` and the tests is 611 files and 129,400 lines here against 143 and 55,700, the
+Python 119 files against 37. The old program's ten-energy grid said beside the 12C + 12C row; the EXFOR user
+agent moved to "in work"; the time of the entry cited as source (b).
+
+**To do at the next merge** (the three ports of `dev`'s features): section 7 ("in work" becomes "done", with
+each port's count of places touched against section 6's table), section 9 with what the ports find.
+
+**Open, for the PI** (the agent's questions): refuse a capture final state above its particle threshold now,
+ahead of the unbound-capture feature (today: valid, NaN below E_f without a message); refuse a repeated
+top-level section in `--validate`; whether section 8's proposals (drop the two print-only switches, follow
+`dev` for `rmfit-campaign`, the logo, the format of dev's new blocks) are his to put to the owner as written.
+
+## 2026-11-15 (agent, branch `feature/upgrade-7-owner-page`) — the owner's page written anew
+
+**Done.** `docs/upgrade/FOR_THE_OWNER.md` is new (350 lines, nine sections: what the branch is, commands run, the
+differences of numbers from `dev` with their checks, speed and memory, the structure, how to add to it with the
+owner's three coming features traced through the code, what `dev` has, what is asked of the owner, known defects).
+The old page is `docs/upgrade/history/FOR_THE_OWNER_2026-11.md`, unchanged but for its first line. References moved:
+`ROADMAP.md` (the library calls' open items now name the history page) and the docstring of
+`pyazr/coulomb_table.py` (section 8 of the new page). Earlier HANDOFF entries that cite sections of the old page
+("What users notice", "Fits and the number of threads", "How to add a feature now", ...) are left as written: those
+sections are in the history page.
+
+**Verified how.** Every command of section 2 run on the start commit's build (`work/b-trial81`; scratch
+`work/owner/try/`), the build commands themselves into `work/b-owner` (2 jobs, 0 warnings); the speed table read from
+the director's entries of 2026-11-15 04:35 and 09:25 and the old page, not measured again; the page's paths and code
+names checked against the tree by a script (`work/owner/check_links.py`); lines at most 120 columns; the consistency
+test; `docs_build`.
+
+**Found while writing** (listed in section 9, not repaired): a capture final state above its particle threshold is
+neither refused nor computed right (T1 with its 3/2- final state at 2.5 MeV validates; points below E_f give NaN
+and chi-squared 1e100 without a message). `tests/upgrade/node_count --plan` did not crash on T1 (the earlier entry's
+segmentation fault was not reproduced on that project).
+
 ## 2026-11-15 (director, 09:25) — merged: the memory of a project with many folded data sets
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 81 (rehearsal 80 plus one branch). The agent's entry
