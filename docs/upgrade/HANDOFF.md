@@ -2,6 +2,18 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 17:50) — the thread sanitizer's report on the CI read: libomp's own, without symbols
+
+The annotation of the sixth push shows the first report of the thread job: `pthread_mutex_lock` called from libomp
+on the main thread against `pthread_mutex_init` called from libomp on a worker, the block allocated by libomp,
+AZURE2 only as the frame that opened the parallel region (`ChannelRowFill.cpp:41`). It is the report of
+`sanitizer_findings.md` section 4.4; the runner's libomp (clang 18) has no symbols, so the two suppressions by
+function name matched nothing. Added: `race:^pthread_mutex_init$` in `scripts/sanitizers/tsan.supp`, with its
+reason (AZURE2 never calls that function, so the entry cannot hide a race between AZURE2's accesses; a module
+entry for libomp would hide every race in a parallel region and is not used). **Not tried here** (no clang on this
+machine): the next CI run shows whether it matches and what stands behind it. No thread-sanitizer run of this
+code has passed since 2026-11-07.
+
 ## 2026-11-15 (director, 16:40) — the sanitizer workflow's first report was not shown; its order changed
 
 The thread-sanitizer job of `dbe15286` failed as before (a data race in `pthread_mutex_lock`, every step), the

@@ -412,10 +412,11 @@ re-read against its design at the hand-over.
      and all routes here reach 71.67 (start 1.1e7; here with and without a table, at 2 and 4 threads). One check
      of `tests/gamma_decay` and one of `pyazr_rate_formats`: their lines were cut from the annotations. The
      annotations now put the failing lines first, and `fit_modes` prints how each fit ended.
-   - *The thread sanitizer* reports a data race in `pthread_mutex_lock` in every run. The stacks were not seen
-     (the annotation now carries the first report); a suppression for libomp's worker suspend and resume exists
-     by function name, and whether this is that report with unresolved names is a guess.
-
+   - *The thread sanitizer* failed in every step with one report, now read: libomp's own worker suspend and
+     resume (`sanitizer_findings.md` section 4.4), which the suppression file names by function. The runner's
+     libomp has no symbols, so the names matched nothing. An entry for the unnamed form is added (it names the
+     interceptor `pthread_mutex_init`, which AZURE2 never calls). Whether other reports stand behind it is not
+     known: no thread-sanitizer run of this code has passed since 2026-11-07.
    - *The time.* On the third push the Linux job took 52 min for the regression checks and 63 min for the unit
      tests, macOS 92 min and more than 60 min; the last run of `dev` (`09e5c1a8`) took 40 and 4.5 min on Linux,
      90 and 10 min on macOS. The unit-test step is 309 tests run one after the other, without a
