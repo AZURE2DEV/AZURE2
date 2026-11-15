@@ -22,6 +22,9 @@
 #       found by J^pi and energy and its N_f formed from its channels): the ratio of (c), and the cross section
 #       itself equal to the internal part of (c) within 2e-5; --no-brune the same; a pair whose excitation energy
 #       is 2 keV off the level stops with an ERROR.
+#   (g) the line shape follows the final level's CURRENT energy (Brune parametrizations; before 2026-11-15 the centre
+#       stayed at the energy of the project file): the level 20 keV higher through a parameter file gives the cross
+#       sections of the project file with the level there, within 1e-6.
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
 
@@ -153,6 +156,24 @@ if grep -q "but its final state (J^pi = 0.5+, E_x = 2.3675 MeV) is not a level o
 else
   bad "(f) a pair energy off the level was not refused"
   tail -5 "$WORK/g_off/run.log"
+fi
+
+echo "(g) the line follows the final level's current energy"
+# the same parameters reach the engine twice: with the level (and its pair) 20 keV higher in the project file, and
+# through a parameter file on the unchanged project
+model h_file d52.azr 's/2\.3655/2.3855/g' " linewindow 39" 0 $ED
+model h_par d52.azr 's/^$/&/' " linewindow 39" 0 $ED
+model h_base d52.azr 's/^$/&/' " linewindow 39" 0 $ED
+run h_file "" || bad "(g) h_file: engine exit status $?"
+run h_base "" || bad "(g) h_base: engine exit status $?"
+cp "$WORK/h_file/output/param.par" "$WORK/h_par/moved.par" 2>/dev/null
+(cd "$WORK/h_par" && printf '3\nn\nmoved.par\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1) ||
+  bad "(g) h_par: engine exit status $?"
+compare "(g) level energy from the parameter file = level energy in the project file" h_par h_file 1e-6 1 1 1
+if paste -d ' ' <(values h_par) <(values h_base) | awk '{ d = $1 / $2 - 1; if (d < 0) d = -d; if (d > 0.02) moved++ } END { exit !(moved == NR && NR > 0) }'; then
+  ok "(g) the 20 keV move changes every cross section by more than 2 %"
+else
+  bad "(g) the moved level energy did not change the cross sections"
 fi
 
 if [ $failures -eq 0 ]; then

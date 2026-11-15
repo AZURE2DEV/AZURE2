@@ -1954,10 +1954,12 @@ std::vector<double> LineNFTerms(CNuc *c, const Config &configure, const LineFina
  * parameters.  With the external-capture link the level carries N_f; without it (internal capture alone) N_f is
  * formed here, 1/N_f = 1 + sum_c gamma~_c^2 dS_c/dE over the level's particle channels (terms kept per level energy).
  */
-double EPoint::LineObservedAmplitude(CNuc *theCNuc, const Config &configure, int j, int la, int ch, bool ecLinked) {
+double EPoint::LineObservedAmplitude(CNuc *theCNuc, const Config &configure, int j, int la, int ch, bool ecLinked,
+                                     double e) {
   ALevel *lv = theCNuc->GetJGroup(j)->GetLevel(la);
-  if (ecLinked) return lv->GetECFitGamma(ch) * lv->GetECSqrtNFFactor();
-  const double e = lv->GetECEnergy();
+  // With the external-capture link the level carries N_f, at its input energy.  Once the line centre has moved
+  // away from that energy (a fitted final-level energy, Brune parametrization) N_f is formed here, at the centre.
+  if (ecLinked && (lv->HasECFinalState() || e == lv->GetECEnergy())) return lv->GetECFitGamma(ch) * lv->GetECSqrtNFFactor();
   if (!(line_nf_energy_ == e) || (int)line_nf_terms_.size() != theCNuc->GetJGroup(j)->NumChannels()) {
     LineFinal lf;
     lf.j = j;
@@ -1969,6 +1971,24 @@ double EPoint::LineObservedAmplitude(CNuc *theCNuc, const Config &configure, int
   for (size_t c = 0; c < line_nf_terms_.size(); c++)
     if (line_nf_terms_[c] != 0.0) sum += pow(lv->GetECFitGamma((int)c + 1), 2.0) * line_nf_terms_[c];
   return lv->GetECFitGamma(ch) / sqrt(sum);
+}
+
+/*
+ * The excitation energy the line shape is centred on: the final level's observed energy from the CURRENT
+ * parameters, so that a fitted final-level energy moves the line (DeBoer 2026-11-15; before, the centre stayed at
+ * the energy of the input file while the width followed the fit).  In the Brune and Brune-Park parametrizations
+ * the level's working energy is the observed one.  In the formal parametrization (--no-brune) the working energy
+ * is not, and the centre stays at the observed energy kept from the input, as before.
+ * `termsEnergy`: the energy the N_f terms of LineObservedAmplitude belong to (the centre).
+ */
+double EPoint::LineCentreEnergy(CNuc *theCNuc, const Config &configure, int j, int la, double *termsEnergy) {
+  ALevel *lv = theCNuc->GetJGroup(j)->GetLevel(la);
+  double centre = lv->GetECEnergy();
+  const double fit = lv->GetFitE();
+  // (fit == 0: the working values are not filled yet)
+  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) && !lv->HasECFinalState() && fit != 0.0) centre = fit;
+  if (termsEnergy) *termsEnergy = centre;
+  return centre;
 }
 
 std::string EPoint::LineWindowProblem(CNuc *theCNuc, const Config &configure) const {
@@ -2003,8 +2023,11 @@ void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
   const int l = fc->GetL();
   const double a = fc->GetRadius();
   CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-  const double ER = lv->GetECEnergy() - lf.thr;
-  const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked);
+  double termsEnergy = 0.0;
+  const double centre = this->LineCentreEnergy(theCNuc, configure, lf.j, lf.la, &termsEnergy);
+  const double ER = centre - lf.thr;
+  if (!(ER > 0.0)) throw std::runtime_error("linewindow: the final level's energy has moved below its particle threshold.");
+  const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked, termsEnergy);
   const double gam = 2.0 * coul.Penetrability(l, a, ER) * gt * gt;
   // (checked here, not in LineWindowProblem: at start-up the level parameters are not filled yet)
   if (!(gam > 0.0)) throw std::runtime_error("linewindow: the final level has no width in its open channel.");
@@ -2017,6 +2040,7 @@ void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
   while (lo < hi && Kinematics::Channel(lf.fp).Eta(lo) > 100.0) lo *= 1.05;
   line_nodes_.clear();
   line_nodes_cm_ = this->GetCMEnergy();
+  line_nodes_centre_ = centre;
   if (!(hi > lo)) return;
   static thread_local gsl_integration_glfixed_table *gl = gsl_integration_glfixed_table_alloc(kLineNodes);
   const double t0 = atan(2.0 * (lo - ER) / gam), t1 = atan(2.0 * (hi - ER) / gam);
@@ -2050,19 +2074,33 @@ void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
 }
 
 void EPoint::CalculateLineWindow(CNuc *theCNuc, const Config &configure, GenMatrixFunc *matrixFunc) {
-  if (!(line_nodes_cm_ == this->GetCMEnergy())) this->SetupLineNodes(theCNuc, configure);
+  LineFinal lf;
+  double termsEnergy = 0.0, centre = 0.0;
+  bool fresh = line_nodes_cm_ == this->GetCMEnergy();
+  if (fresh) {
+    // The nodes belong to one line centre: when the final level's energy has moved (a fit with that energy
+    // free), they are placed again around the new centre, with their final-state wave functions and external
+    // integrals.  A fixed final energy never comes here twice.
+    FindLineFinal(theCNuc, this, lf);
+    centre = this->LineCentreEnergy(theCNuc, configure, lf.j, lf.la, &termsEnergy);
+    fresh = centre == line_nodes_centre_;
+  }
+  if (!fresh) {
+    this->SetupLineNodes(theCNuc, configure);
+    lf = LineFinal();
+    FindLineFinal(theCNuc, this, lf);
+    centre = this->LineCentreEnergy(theCNuc, configure, lf.j, lf.la, &termsEnergy);
+  }
   double sum = 0.0, sumE1 = 0.0, sumE2 = 0.0;
   if (!line_nodes_.empty()) {
-    LineFinal lf;
-    FindLineFinal(theCNuc, this, lf);
     ALevel *lv = theCNuc->GetJGroup(lf.j)->GetLevel(lf.la);
     AChannel *fc = theCNuc->GetJGroup(lf.j)->GetChannel(lf.ch);
     const int l = fc->GetL();
     const double a = fc->GetRadius();
     CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     // the current parameters of the final level
-    const double ER = lv->GetECEnergy() - lf.thr;
-    const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked);
+    const double ER = centre - lf.thr;
+    const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked, termsEnergy);
     const double SR = coul.PEShift(l, a, ER), dSR = coul.PEShift_dE(l, a, ER);
     if (!(1.0 - gt * gt * dSR > 0.0) || gt == 0.0)
       throw std::runtime_error("linewindow: the final level's reduced width has no formal (one-level) equivalent.");
