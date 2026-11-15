@@ -46,8 +46,9 @@ its nucleus, so no existing project is refused, by this rule or a wider one.
 threshold itself, a total capture, 27 keV below builds), `experiment_diagnostics`; new ctests `ec_final_state_unbound`
 (T1 at 2.5 MeV with and without external capture: `--validate` exit 2 and the run refused with the same line; at
 1.94 MeV the start commit's χ² 219429.963689) and `pyazr_ec_final_state_unbound`; the injected errors (the check not
-called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1` and
-`ctest -LE slow` (see the report).
+called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1`: Brune
+887, formal 851, Park 887 files, all identical; `scripts/check.sh --quick` (consistency, build, `ctest -LE slow`
+310 of 310 passed, one job at a time); `docs_build` 60 pages.
 
 **Open.** The rate's entrance is a command-line option, which the validation does not see: below such a final state
 its cross section is NaN, dropped by the rate as zero with "singular level matrix" warnings (R). In the formal
