@@ -274,7 +274,9 @@ def test_selftest_and_screenshots(name, tmp_path):
                   f"{fit['chi2_back']}")
         endf = result["endf"]  # the ENDF tab: Check pressed on the first file, the stand-in codes' findings drawn
         assert endf["checked"] and endf["file"] == "endf/h-002_He_004_extract.endf", endf
-        assert endf["headings"][0].startswith("pyazr.endf's own format check: 3 errors, 1 warning"), endf
+        # the own check is the format's and the evaluation's (MF=2 against MF=3, masses, Q values, text)
+        assert endf["headings"][0].startswith(
+            "pyazr.endf's own check of the format and the evaluation: 3 errors, 6 warnings, 2 notes"), endf
         assert [x.split(" ")[0] for x in endf["headings"][1:]] == ["CHECKR", "FIZCON", "PSYCHE"], endf
         assert "the report counts 3 errors, 0 warnings" in endf["headings"][1], endf
         assert endf["converted"] and "levels in" in endf["report"], endf  # Convert: to_project's report drawn

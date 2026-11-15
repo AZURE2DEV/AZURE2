@@ -311,8 +311,10 @@ async function renderCheck(ctx, el, listing, params) {
     "endf_check", "codes", { path: file, codes: boxes.filter(([, b]) => b.checked).map(([n]) => n).join(" "),
       timeout: timeout.value.trim() }), "primary");
   const checkPanel = h("div.endf-check-job");
-  el.appendChild(section("Check", h("p.hint", {}, "pyazr.endf's own format check always runs (each finding with "
-    + "the page of ENDF-102 that states the rule); then each code ticked, on a copy, in a directory of its own."),
+  el.appendChild(section("Check", h("p.hint", {}, "pyazr.endf's own check always runs: the format (each finding with "
+    + "the page of ENDF-102 that states the rule) and, for resonance parameters in the R-Matrix Limited format, the "
+    + "evaluation itself (MF=2 against MF=3, the masses, the Q values, the text); then each code ticked, on a copy, "
+    + "in a directory of its own."),
   h("div.inline-form", {}, ...boxes.flatMap(([n, b]) => [h("label", {}, b, ` ${n}`), " "]),
     h("label", {}, "time limit ", timeout, " s"), " ", check), checkPanel));
   const checkJob = shown("endf_check");
@@ -429,7 +431,7 @@ function drawCheck(ctx, panel, job) {
   panel.appendChild(h("p.endf-check-summary", { data: { job: job.id } }, h("strong", {}, `${c.file}: `),
     job.result.message, ` (job ${job.id})`));
   const own = c.own;
-  panel.appendChild(h("h3", {}, `pyazr.endf's own format check: ${countText(own.counts)}`));
+  panel.appendChild(h("h3", {}, `pyazr.endf's own check of the format and the evaluation: ${countText(own.counts)}`));
   panel.appendChild(own.findings.length ? renderTable(document, { columns: findingColumns(true),
     rows: findingRows(own.findings), rowKey: (r) => r.k, withFilter: false, label: "own findings" }).element
     : h("p.hint", {}, "No finding."));

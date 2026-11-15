@@ -178,7 +178,7 @@ def check_job(tracker, x0, settings, names):
         r["counts"] = _counts(r["findings"])
     ran = ", ".join(r["program"] for r in out["reports"]) or "no checking code (none found)"
     errors = out["own"]["counts"]["error"] + sum(r["counts"]["error"] for r in out["reports"])
-    return "finished", f"the own format check and {ran}: {errors} errors in all", {"check": out}
+    return "finished", f"the own check and {ran}: {errors} errors in all", {"check": out}
 
 
 def standardize_job(tracker, x0, settings, names):
