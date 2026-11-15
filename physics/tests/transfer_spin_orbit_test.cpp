@@ -11,6 +11,7 @@
 //  3. FRESCO (dn_finite_range_so, dn_zero_range_so): potentials with their spin-orbit terms, bound states,
 //     dsigma/dOmega from 0 to 90 deg above 1 % of its maximum to 1 %, the deuteron's iT11 to 1e-3 (absolute), and
 //     FRESCO's reference against its refined run (0.2 %, 1e-3).
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>

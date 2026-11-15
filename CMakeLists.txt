@@ -323,7 +323,7 @@ set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
 # -fopenmp (GCC, and clang outside Apple's), but AppleClang is driven with
 # -Xpreprocessor -fopenmp, which is a preprocessor flag only: nothing links
 # libomp, and the build fails at the link step on undefined _omp_* symbols.
-set(EXTRA_LIBS pugixml ${OpenMP_CXX_LIBRARIES})
+set(EXTRA_LIBS ${OpenMP_CXX_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
 function(copy_dll_if_exists target_name dll_name dll_path)

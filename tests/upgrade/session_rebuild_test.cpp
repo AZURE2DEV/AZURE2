@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -146,13 +147,22 @@ int main(int argc, char **argv) {
     return 2;
   }
   const fs::path tests = fs::absolute(argv[1]);
-  char pattern[] = "/tmp/session_rebuild.XXXXXX";
-  const char *made = mkdtemp(pattern);
-  if (!made) {
+  // A new directory under the system's temporary directory (std::filesystem: mkdtemp is POSIX only).
+  fs::path root;
+  {
+    std::error_code ec;
+    const fs::path base = fs::temp_directory_path(ec);
+    std::random_device device;
+    for (int attempt = 0; !ec && attempt < 16 && root.empty(); ++attempt) {
+      const fs::path candidate = base / ("session_rebuild." + std::to_string(device()));
+      std::error_code made;
+      if (fs::create_directory(candidate, made) && !made) root = candidate;
+    }
+  }
+  if (root.empty()) {
     std::fprintf(stderr, "session_rebuild_test: no temporary directory\n");
     return 2;
   }
-  const fs::path root(made);
 
   std::printf("a rate session rebuilt at another radius (p12C, entrance 1, exit 2; pair 1 at 4.0 fm, the file's 3.6)\n");
   {

@@ -19,6 +19,7 @@
 //  5. The order of the sum: the blocks summed in reverse order give ProjectSource's numbers bit for bit.
 //  6. Refinement of case 4: twice the nodes in u and in cos(theta_u), partial waves + 20 and the wave tables' steps
 //     halved change the Gram entries by less than 1e-7 of the largest (measured 1.2e-8 to 3.7e-8).
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
