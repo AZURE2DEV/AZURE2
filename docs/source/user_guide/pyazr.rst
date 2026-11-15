@@ -436,7 +436,7 @@ other.
 χ² (``Total-Chi-Squared`` of ``chiSquared.out``); ``terms``, each term of the engine's objective by its name;
 ``data[i]`` per data set with ``model``, ``residuals``, ``chi2`` (its row of ``chiSquared.out``), ``norm``,
 ``energies``, ``angles``, ``values``, ``errors`` and ``extra`` (the lab energy and angle, the S-factor conversion,
-the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_outputs"]``); ``model_data``;
+the E1 and E2 parts of a capture, Legendre coefficients, the nuclear amplitude coefficients of charged-particle elastic scattering: ``pyazr.kinds()["data_outputs"]``); ``model_data``;
 ``rows`` (its rows of ``f.residuals(x)``); ``model_data``; ``table()``.  In extrapolation mode the data sets are
 the extrapolations and every χ² field is ``None``.  ``ev.objective - ev.chi2`` are the priors: on the fitted T2 the
 objective is 297.86, the data χ² 293.94.

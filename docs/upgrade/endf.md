@@ -1068,3 +1068,219 @@ proton on 12C (T1, 13N) is not usable near the zeros of sigma_NI under the manua
 cannot follow sigma_NI's ratio near four to six zeros; the median stays at 1e-3) and MF=1 says so. With `mf6_limits="manual"` the section takes what 13.10 measured. T2
 meets its tolerance outside the brackets.
 
+
+### 13.12 Elastic scattering as nuclear amplitudes (LAW=5 LTP=1)
+
+**The door.** The engine's elastic cross section at a point is already of the manual's LTP=1 form. The collision
+matrix of the point's energy (the T-matrix of `AMatrixFunc::CalculateTMatrix` or `RMatrixFunc::CalculateTMatrix`,
+read through `GenMatrixFunc::GetTMatrixElement`) is turned by `GenMatrixFunc::ElasticCoefficientsOf`
+(`src/GenMatrixFunc.cpp`) into the site's kElastic record (`include/SiteObservable.h`, `elastic_record`): the
+nuclear B_L of |F_N|^2, the complex Coulomb-nuclear D_l (X_l for identical particles with spin) and the Coulomb
+factors, which `ContractElastic` (`src/SiteObservables.cpp`) contracts with the engine's Coulomb amplitude
+f_d = eta / (sqrt(pi) (1 - mu)) exp(-i eta ln((1 - mu)/2)) (`Site::CoulombAmplitudesAt`). Eq. 6.13 (p. 145) is the
+same sum term by term with
+
+  a_l = -conj(D_l) / (sqrt(pi) (2l + 1)),   b_l = 2 B_l / (2l + 1);
+
+eq. 6.14 (identical particles) with the same a_l where X_l = (-1)^l D_l (every channel of two identical particles
+has l + s even, so the exchange sign (-1)^s is (-1)^l) and b_l = 2 B_{2l} / (4l + 1), the odd B_L zero (both
+checked by the door; a record that breaks them is refused). The spins enter only through the engine's T-matrix and
+its spin average: the a_l expand the trace of the amplitude matrix over the spin states divided by their number
+(the Coulomb amplitude is diagonal in them), which is what D_l holds. The door is a point output of an elastic
+data set, `nuclear_amplitudes` (`api/src/pybind_elastic_amplitudes.cpp`, one row of `PointOutputs()` in
+`api/src/pybind_evaluation.cpp`): the LIST values of p. 147 per point, read from the record the evaluation wrote;
+nothing is computed again and nothing of the evaluation changes. It is a data set's output, so the writer asks it
+of a data session (`Sweeps.nuclear_amplitudes`: one data set at 90 deg c.m. with placeholder values, every energy a
+row); the extrapolation path (`calculated_*` of `AZUREAPI`) is another agent's file.
+
+**The check of the door** (`work/endf6/s/door_check.py`, eqs. 6.9-6.14 written from the page, CODATA 2018
+constants; 50 lab energies over the data's range x 12 c.m. angles 10-170 deg): the cross section rebuilt from the
+coefficients against the engine's dsigma/dOmega at the same points, largest relative difference T1 7.8e-12, T2
+4.6e-12, 13N 7.4e-12, p + p (`identical_pp_res`, identical fermions) 1.3e-11, d + d (`identical_dd_mott`, spin 1)
+4.5e-12. The constants of eqs. 6.11-6.12 differ from the engine's in the last digits; nothing else is left. The test
+`tests/pyazr/endf_amplitudes_test.py` (20 energies) holds it to 1e-9; the mapping injected wrong (conj dropped)
+fails it on all three projects.
+
+**Against the library.** ENDF/B-VIII.1 3He + 4He (LTP=1 at 400 energies; `work/endf6/s/library_ltp1.py`, read
+with `python -I`): the file's MF=2 read into a project (`to_project`), the door's coefficients at 16 of the file's
+panel energies against the file's own. At 1 MeV they agree to 4e-6 of the largest coefficient (a_0 =
+-1.443711e-2 + 4.89646e-4 i in both), which confirms the convention (sign, sqrt(pi), the conjugate). The agreement
+falls off smoothly with energy: 9e-5 at 2.25 MeV, 2e-3 at 4.75, 3e-2 at 9.75, 2.5e-1 at 19.75 MeV (the file's
+cross section by eqs. 6.9-6.13 against the engine's from its own MF=2: 3e-6 at 1 MeV, 4e-2 at 7.25, 6e-1 at 14.75).
+Not explained: the file's elastic section and its MF=2 agree only at low energy (as its MF=6/MT=600 above 17 MeV,
+13.9); the file states NL = 6 where its MF=2 has l <= 3 (the extra coefficients are zero or small).
+
+**The writer.** `write(..., elastic_form="amplitudes" | "tabulated")`, the default the named constant
+`writer.ELASTIC_FORM` ("amplitudes"; the PI decides at the merge). "tabulated" is LTP=12 as before (13.10,
+13.11). "amplitudes" (`pyazr/endf/amplitudes.py`, `sections.elastic_amplitudes`): MF=3/MT=2 holds 1.0 at the first
+and last energy (p. 145: "a value of 1.0 is used in File 3"; the library file does the same), MF=6/MT=2 LAW=5 with
+per energy a LIST `0, E, LTP=1, 0, NW, NL` of the door's values. The energies: the coefficients at every energy of
+the one grid, then `grid.thin_to` on the cross section at 17 cosines over the LAW=5 range with the reader's own
+interpolation between two kept energies (sigma_e - sigma_c linear at fixed mu, the Coulomb term at the energy),
+quarter points of the kept intervals computed and the choice made again while the limit allows, and the quarter
+points and midpoints of every written interval computed once more for the tolerance stated (MF=1, `Written.elastic`,
+an `AmplitudeReport`). The rule holds the engine's cross section (the Coulomb terms on the project's masses); the
+reader's Coulomb terms use the file's masses (AWI nuclear, p. 24), which is in the measured deviation below.
+
+What the manual leaves open, and the reading taken:
+- The quantity a reader interpolates between the incident energies of LTP=1 (and 2): the manual says nothing; the
+  module interpolates sigma_e - sigma_c at fixed mu, the Coulomb term computed at the energy asked (as 13.1).
+- NL of a LIST of LTP=1: "the highest Legendre order of nuclear partial waves used" (p. 147): the highest l of the
+  record's D_l, raised where the nuclear B_L ask more (2 NL + 1 values of b for distinguishable particles).
+- The a_l normalisation: "complex coefficients for expanding the trace of the nuclear scattering amplitude matrix"
+  (p. 145) is not more precise; the reading is fixed by eqs. 6.13-6.14 themselves (the coefficients that make the
+  formula the cross section) and confirmed on the library file at 1 MeV.
+
+**Measured** (`work/endf6/s/measure.py`: the file read back with the module's reader, the manual's reading for
+LTP=12, against the engine at the quarter points and midpoint of every interval of the MF=6/MT=2 energies x 12 c.m.
+angles 20-175 deg, relative to max(|engine|, 1e-3 of its largest value); build `work/b-endf6`, one thread each,
+three runs side by side):
+
+| file | form, limits | energies | stated | measured max (where) / median | width off by > 1e-3 / 5e-3 | write | file size |
+|---|---|---|---|---|---|---|---|
+| T1 | amplitudes, checkr | 200 | 6.4e-3 | 4.3e-3 (0.494 MeV, 60 deg) / 8.6e-5 | 763 keV / 0 | 28 s | 166 kB |
+| T1 | tabulated, checkr | 200 | 5.5 | 0.84 (0.426 MeV, 90 deg) / 1.5e-3 | 1.26 MeV / 940 keV | 100 s | 1.1 MB |
+| T1 | amplitudes, manual | 491 | 1.1e-3 | 8.5e-4 / 2.6e-5 | 0 / 0 | 29 s | 468 kB |
+| T2 | amplitudes, checkr | 117 | 1.1e-3 | 1.8e-4 / 3.3e-6 | 0 / 0 | 1.5 s | 150 kB |
+| T2 | tabulated, checkr | 200 | 0.12 | 1.9e-2 (0.687 MeV, 45 deg) / 2.2e-5 | 169 keV / 13 eV | 51 s | 845 kB |
+| 13N | amplitudes, checkr | 200 | 6.0e-3 | 3.4e-3 (1.742 MeV, 30 deg) / 3.1e-5 | 478 keV / 0 | 37 s | 145 kB |
+| 13N | tabulated, checkr | 200 | 1.3 | 0.47 (1.734 MeV, 20 deg) / 6.7e-4 | 1.28 MeV / 544 keV | 137 s | 1.0 MB |
+| 13N | amplitudes, manual | 465 | 1.1e-3 | 6.2e-4 / 5.2e-6 | 0 / 0 | 37 s | 380 kB |
+
+(T2 amplitudes needs 117 energies under either limit. The write times include MF=3 and the other MF=6 sections; T1
+and 13N spend most of them on MT=102.) The real codes (CHECKR 8.24, FIZCON 8.19, PSYCHE 8.11) on the amplitude
+files report only what 13.8 lists for every written file (LRP=2, MAT, FIZCON's LAW=2 for MT=102, PSYCHE's reading of
+LRF=7 and its notes); with the manual's limits CHECKR adds its NE > 200 for MF=6/MT=2 and MT=102. On the tabulated
+files FIZCON adds "CHECK NORMALIZATION" for 81 (T1), 62 (T2) and 70 (13N) LAW=5 panels: the panels near the zeros of
+sigma_NI.
+
+**What is left for "tabulated".** On these three projects the amplitude form is better on every number: its error
+is the interpolation between energies alone, with no product of two tables and no sign change to bracket, and it
+holds every angle (LTP=12 stops at mu = 0.98). What "tabulated" still offers: a file for a code that reads only
+tabulated LAW=5 (none is known here; the checking codes read both, and the library's own charged-particle LRF=7
+file uses LTP=1), sigma_NI in MF=3/MT=2 as a number a user may want, and a form that holds a cross section the
+engine computes but whose amplitudes are not the elastic record's (none today). Not measured: a processing code
+(NJOY, the PREPRO codes) reconstructing either form.
+
+**sigma_NI's sign from the thinning** (the tabulated form): sigma_NI of a panel is the trapezoid integral over the
+cosines the panel keeps; where the true sigma_NI is near zero, its sign is decided by those cosines (T2: three sign
+changes within 22 eV near 385.93 keV). A repair (sigma_NI from the full cosine grid) would break the normalisation
+of the written P_NI (the trapezoid over the kept cosines must be 1, eq. 6.20), so it is not a few lines; not done.
+The amplitude form has no sigma_NI.
+
+### 13.13 Covariances: MF=32 LCOMP=1 for LRF=7
+
+`pyazr/endf/covariance.py`: `formal_covariance(session, x)` -> `FormalCovariance`, `rows(record, covariance)` (the
+records), `read_covariance(material)` -> `ResonanceCovariance` behind `Material.covariance()`; `write(...,
+covariance=None | "hesse" | FormalCovariance)`; the own format check counts the records of MF=32 (`_read_mf32`).
+
+**What is computed** (the PI's decision 10): the session's fit vector written as a project beside it
+(`Session.save_fit`, a hidden file removed afterwards: its data and covariance files are named relative to the
+project) and opened with `use_brune=False`; its objective at its start must equal the fit's at x (T1 at its MIGRAD
+minimum: 462.2735112936359 and ...363933, 7e-15; the fitted T2: 1.9e-7, the snapshot's round trip through the
+observed widths; refused above 1e-5); iminuit's HESSE of that objective (the recipe of `pyazr/objective.py`,
+errordef 1 from the objective), symmetrised; refused when not positive definite (the unfitted T2 start, and T2 after
+an engine MIGRAD whose gradient stays at 38-72: both refused). The rows of MF=2's parameters are taken out (norms,
+shifts and the photon channels are marginalised), scaled to the file's units (ER: lab factor x 1e6; GAM: the
+amplitude scale) and checked against MF=2's values (door 1; 1e-7). T1: 0.7 s.
+
+**The records** (pp. 253-259): HEAD, isotope, range (LRU=1, LRF=7, NRO=0); `0, 0, 0, LCOMP=1, 0, ISR=0`;
+`AWRI, 0, 0, 0, NSRS=1, NLRS=0`; one block: `0, 0, NJSX, 0, 0, 0`, per spin group with a listed resonance a LIST
+`0, 0, NCH, NRB, 6*NX, NX` of ER and GAM per resonance, each resonance starting a new line as in MF=2; then the
+upper triangle, row by row, LIST `0, 0, 0, 0, N, NPARB`. A resonance whose every parameter is fixed in the fit is not
+listed (p. 255: "not all resonances need to be included"); a fixed parameter of a listed resonance has a zero row
+and column, and MF=1 names it ("zero rows").
+
+What the manual leaves open, and the reading taken:
+- L1 of the LCOMP=1 flags record: p. 258 prints `0.0, 0.0, 0, LCOMP, 0, ISR`, p. 255 says "IFG is relevant only for
+  LRF=7 and its meaning is the same as in File 2"; the LCOMP=2 record (p. 268) puts IFG there. Written as p. 258
+  prints it (0); GAM is the amplitude of MF=2's IFG=1.
+- NX of a spin group's LIST: "the number of lines per resonance" and "6 times the number of lines" (p. 258): taken
+  as MF=2's LIST (p. 74), NX the lines of the whole list, each resonance starting a new line.
+- A spin group carries no J in MF=32: the reader identifies it by NCH and by the listed ER and GAM against MF=2
+  (p. 256: the parameters are listed "for positive identification"); names `"<J^pi>#<k>.ER"`, `"...GAM<c>"`.
+- The covariance LIST header is printed `[MAT,2,151]` on p. 259: taken as MF=32 (a misprint).
+
+**Tests** (`tests/pyazr/endf_covariance_test.py`, T1 fitted by MIGRAD, 40 s): the two objectives equal to 1e-9;
+symmetric, positive semi-definite, zero rows for the fixed parameters; written and read back (`Material.covariance`)
+to 1e-6 of each row's largest element (measured 2.9e-9; the number form keeps 7-10 digits), the values exactly
+MF=2's; the own format check without error; the Brune fit's covariance as `covariance=` and a session of the
+extrapolations refused with three parts. The off-diagonal layout injected wrong (1.001 on every off-diagonal
+element) fails the read-back check. The real codes on the written T1 file: CHECKR, FIZCON and PSYCHE report nothing
+on MF=32 (their findings are those of 13.12). No library file of `work/endf/evals` has MF=32 (the only one, 3He +
+4He, holds MF=1, 2, 3, 6): no library file was read.
+
+**A finding for the PI (decision 10).** The formal-basis session fixes the parameters the project marks fixed *in
+the formal basis*: a fixed observed energy (T1's bound states at 0 and 1.0 MeV) or a fixed width (T1's background
+poles, its fixed photon widths) becomes a fixed formal E_lambda or gamma, which is another constraint than the fit's.
+So the covariance written is the formal parameters' covariance with those formal values held, not the fit's
+uncertainty mapped to the formal basis. Measured on T1: the formal covariance taken back to the Brune basis through
+the Jacobian of door 2 (central differences of `observed_levels_of_block`) differs from the Brune fit's own
+covariance by up to 3.9 sigma_i sigma_j (the formal sigma of the free level energies, on the c.m. scale, 1.6 to 8.7
+times the Brune ones). Not separated by a run of mine from any other cause: a T1 with every level parameter free
+did not fit (MIGRAD invalid). The alternative needs no new C++: the fit's covariance (Brune or Park basis, with the
+fit's own fixed parameters) times the Jacobian of door 1 (`formal_levels_of_block`, central differences), C_formal =
+J C_fit J^T, which the test's lines already form for door 2. Not built (the PI's decision stands until he answers).
+
+**For `pyazr.priors`** (not changed): a part kind `"endf"` (fields: the file, the isotope) would read
+`Material.covariance()`; its parameters are formal ER and GAM on the lab scale, while `to_project` makes a Brune
+project, so the part needs the Jacobian of door 2 at the file's levels (as the test computes it) and the units
+(MeV, MeV^1/2 c.m.), and names that map `"<J^pi>#<k>.ER"` to the new project's parameter names (the order of
+`to_project`'s levels is MF=2's). The lines: `PART_KINDS` (one row), a `_endf_part` beside `_fit_part`.
+
+### 13.14 The check of an evaluation
+
+`pyazr/endf/evaluation_check.py`: `check_resonances(material_or_path, tolerance=1e-4, separation_energy="ame2020")`
+-> `ResonanceCheck` (findings, parts with the numbers, notes; `print()`, `to_dict()`). The findings are the own
+format check's `Finding` with `source` "pyazr.endf resonances", so that `pyazr.endf.check(path, resonances=True)`
+puts them among the own findings and the page's Check screen lists them without a change of its code; the page's
+job passes no `resonances` today: the one line is `pyazr/ui/evaluations.py` line 169 (`endf.check(...,
+timeout=settings["timeout"])` would add `resonances=True`, or a setting of the job; another agent's file, not
+changed). Command: an option of the existing check, `pyazr endf check FILE --resonances` (one check of a file, one
+report; a separate command would print the own findings twice). The three parts:
+
+- **reconstruction**: `to_project` of MF=2 (AME2020 separation energy of the incident pair, the file's Q values),
+  the engine's sigma of each particle exit at the energies of its MF=3 section, the relative difference per point
+  (`RECONSTRUCTION`: largest, median, points off by more than the tolerance, a warning when any is), MF=3 above the
+  reconstruction by more than 3 orders of magnitude (`THRESHOLD`). LRP=1 (MF=3 holds backgrounds) is not compared
+  (a note). Not built: MF=6 against the reconstruction (the LAW=2 distributions and, with the door of 13.12, LAW=5
+  LTP=1: `work/endf6/s/library_ltp1.py` does it by hand for the library file).
+- **masses**: each nuclide of MF=2 against AME2020 (`MASS` above 1 keV: the masses' frame is not stated, p. 72,
+  so the atomic mass is the reference), each pair's Q against AME2020's (`Q`, a note within 1 keV) and against the
+  Q its own masses give (`Q_MASSES` above 1 keV).
+- **text**: every `LRF=`, `KRM=`, `IFG=`, `LTP=`, `LRP=` the MF=1 text names against the record that holds it
+  (`TEXT`); a flag whose section is absent is said so.
+
+On the committed extract (`tests/pyazr/endf_evaluation_check_test.py`): RECONSTRUCTION (97 energies, 2 off: 7.05
+and 7.10 MeV, median 6.9e-8), THRESHOLD (37 orders at 7.05 MeV: 4.01e-9 b against 3.36e-46 b), MASS (6Li -21.7 keV),
+Q note (-0.083 keV), Q_MASSES (-22.6 keV), TEXT (the text's LTP=2; the extract has no MF=6/MT=2, which its
+directory lists): the design's three findings. On the full library file (`work/endf6/s/check_full.py`, `python
+-I`): the same, and TEXT says "the record of MF=6/MT=2 holds LTP=1". The mass tolerance injected at 100 keV fails
+the test (MASS and Q_MASSES gone).
+
+### 13.15 Memory, progress, the project's name, the export's time, the warnings of a sweep
+
+- **Memory.** Peak resident size per engine session of a tabulated T2 write (`work/endf6/s/mem_tab.py`, a wrapper
+  of `Sweeps.evaluate`): 0.17-0.96 GB for the first 26 sessions, then one session of 1 858 890 points (the cosine
+  refinement of LAW=5, `Sweeps.elastic_cosines`: every energy of the grid x every cosine in one session, about
+  2.6 kB per point) at 4.85 GB. That session is now cut into sessions of at most `SESSION_POINTS` (200 000) points,
+  as `elastic_values` already was: the tabulated T2 write peaks at 0.78 GB with every section but MF=1 identical to
+  the write before (MF=1 differs by the header fields given); the tabulated T1 file is byte for byte the file the
+  start commit's code writes (same arguments; peak 0.85 GB, 2:03 min). The quick writer test (T1 in the default
+  amplitude form, and the narrow level) peaks at 0.22 GB (was 7.3 GB), 70 s.
+- **progress**: `write(..., progress=f)` calls `f(done, total, words)` after each of `writer.WRITE_STEPS` (six:
+  the levels, the grid, elastic scattering, the covariance, MF=2 against MF=3, the file); a step the file does not
+  need is counted all the same. The page's job row would use it where it builds the call (`pyazr/ui/`, another
+  agent's; not changed).
+- **project_name**: the quick writer test writes T1 as "T1.azr for the tests" and finds the name in the tape's first
+  line and in MF=1's text.
+- **The export's time.** `pyazr/evaluate.py` `_legendre_rows` (the Legendre frame of an extrapolation, read for
+  every grid) looped over the points with a `round()` each: 12.8 s for 5.6 million points without coefficients
+  (the elastic grids). A frame whose points all have the same count is now cut by one reshape (0.8 s); the arrays
+  are the loop's, value for value (`tests/pyazr/endf_export_support_test.py`: equal, varying, empty frames).
+  Every caller reads the same arrays: the callers are `_forward_pass` (the only one).
+- **The warnings of a sweep.** `Project.new(nuclear_part=)` (`pyazr/project.py`, the classmethod `new`) emptied the
+  record sections and kept `<parameterSettings>` whole, so every row of a removed data set's parameter (13N: its
+  16 shift offsets) made the engine warn W_PARAMETER_SETTING_UNKNOWN in each session of the writer (208 lines in a
+  13N write). The rows whose name starts with a removed record's name and a dot are dropped with the records
+  (`<parameterSettings>` and `<mcmc>`); the door check of 13N opens with none (16 before). The test checks the rows.

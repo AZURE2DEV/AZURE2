@@ -13,7 +13,8 @@ What it checks, each finding with the page of ENDF-102 (2023) that states the ru
   number readable (p. 31), counts NPL, NR, NP, NZ that fit the section (pp. 34-35), no line left after the last
   record; the interpolation laws 1-6 in MF=3 (Table 16, p. 26); energies that do not decrease (p. 25); the HEAD's ZA
   and AWR those of MF=1 (p. 34);
-- MF=2/MT=151 with LRF=7 (pp. 71-74): the record counts (the R-matrix itself is the engine's business).
+- MF=2/MT=151 with LRF=7 (pp. 71-74): the record counts (the R-matrix itself is the engine's business);
+- MF=32/MT=151 with LRF=7, LCOMP=1 (pp. 253-259): the record counts and NPARB against the spin groups' lists.
 
 Severity: ``error`` breaks a rule a reader relies on; ``warning`` breaks a rule of the manual a reader can live with;
 ``note`` is information (a file without sequence numbers).
@@ -231,6 +232,8 @@ def _check_records(material, add):
                         c.i = len(s.lines)
             elif (mf, mt) == (2, 151):
                 _read_mf2(c, material, add)
+            elif (mf, mt) == (32, 151):
+                _read_mf32(c, material, add)
             else:
                 continue  # sections whose records are not read here
         except Error as e:
@@ -280,6 +283,43 @@ def _read_mf2(c, material, add):
                     f"LRU={rng.l1} LRF={rng.l2}: only LRF=7 records are counted here", "63")
                 c.i = len(c.lines)
                 return
+
+
+def _read_mf32(c, material, add):
+    """MF=32/MT=151 (pp. 253-259): HEAD, per isotope a CONT, per range a CONT; for LRF=7 with LCOMP=1 the records
+    counted (p. 258: the flags, the radius list when ISR > 0, NSRS and NLRS, per block NJSX and a LIST per spin group,
+    then the covariance LIST of NPARB (NPARB+1)/2 values, NPARB = sum (NCH+1) NRB); other forms are not read."""
+    head = c.cont()
+    for _ in range(max(head.n1, 0)):
+        iso = c.cont()
+        for _ in range(max(iso.n1, 0)):
+            rng = c.cont()
+            flags = c.cont() if rng.l1 == 1 and rng.l2 == 7 and rng.n1 == 0 else None
+            if flags is None or flags.l2 != 1:
+                add("note", "MF32_NOT_READ", rng.line, material.mat, 32, 151, f"LRU={rng.l1} LRF={rng.l2} NRO={rng.n1}"
+                    + (f" LCOMP={flags.l2}" if flags is not None else "") + ": only LRF=7 with LCOMP=1 is counted "
+                    "here", "258")
+                c.i = len(c.lines)
+                return
+            if flags.n2 > 0:
+                c.list()
+            blocks = c.cont()
+            if blocks.n2:
+                add("error", "MF32_LONG_RANGE", blocks.line, material.mat, 32, 151, f"NLRS={blocks.n2}: no long-range "
+                    "subsections are allowed for LRF=7", "258")
+            for _ in range(max(blocks.n1, 0)):
+                nparb = 0
+                for _ in range(max(c.cont().l1, 0)):
+                    rec = c.list()
+                    nparb += (rec.l1 + 1) * rec.l2
+                    if rec.l2 and len(rec.values) < rec.l2 * (rec.l1 + 1):
+                        add("error", "MF32_COUNT", rec.line, material.mat, 32, 151, f"{len(rec.values)} values for "
+                            f"NRB={rec.l2} resonances of NCH={rec.l1} channels", "258")
+                tri = c.list()
+                if tri.n2 != nparb or len(tri.values) != nparb * (nparb + 1) // 2:
+                    add("error", "MF32_COUNT", tri.line, material.mat, 32, 151, f"NPARB={tri.n2} and {len(tri.values)} "
+                        f"covariance values where the spin groups list {nparb} parameters "
+                        f"({nparb * (nparb + 1) // 2} values)", "259")
 
 
 def _limit(add, material, mf, mt, line, name, value, limit):

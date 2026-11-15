@@ -305,13 +305,22 @@ def _run_check(checker, path, timeout, header_text):
     return CheckReport(checker.name, checker.path, version, status, findings, report, terminal, folder, totals)
 
 
-def check(path, codes=None, search=None, timeout=300):
+def check(path, codes=None, search=None, timeout=300, resonances=False):
     """Check an ENDF-6 file: the module's own format check first (``own``, needs no program), then each checking
     code found (``codes``: names of :data:`PROGRAMS` of kind check; default CHECKR, FIZCON, PSYCHE), each in a fresh
     directory of its own with its deck, one process, ``timeout`` seconds.  A code asked for and not found is refused
-    (:class:`pyazr.FormatRefused`)."""
+    (:class:`pyazr.FormatRefused`).  ``resonances``: also check the resonance parameters
+    (:func:`pyazr.endf.check_resonances`: MF=2 against MF=3 by the engine, the masses, the text); its findings join
+    the own findings (``source`` "pyazr.endf resonances"); a file it cannot check gives a note saying why."""
     from .material import read
     own = check_format(path)
+    if resonances:
+        from .evaluation_check import SOURCE, check_resonances
+        try:
+            own.findings.extend(check_resonances(path).findings)
+        except FormatRefused as e:
+            own.findings.append(Finding("note", "RESONANCES", 0, 0, 2, 151, f"the resonance parameters are not "
+                                        f"checked: {e.what}", "71-77", source=SOURCE))
     found = {c.name: c for c in checkers(search)}
     wanted = list(codes) if codes else [n for n in CHECK_DEFAULT if n in found]
     for name in wanted:

@@ -132,6 +132,13 @@ class Material:
         from .resonances import read_resonances
         return read_resonances(self, isotope=isotope, energy_range=energy_range)
 
+    def covariance(self):
+        """MF=32/MT=151 (LRF=7, LCOMP=1) as a :class:`pyazr.endf.covariance.ResonanceCovariance`: the parameters of
+        MF=2 it covers, named by spin group and resonance, their values and covariance in the file's units
+        (:func:`pyazr.endf.covariance.read_covariance`)."""
+        from .covariance import read_covariance
+        return read_covariance(self)
+
     def summary(self):
         """What the file holds, as a :class:`pyazr.endf.summary.Summary` that prints itself."""
         from .summary import summarize

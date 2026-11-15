@@ -15,9 +15,14 @@ What is written:
   reaction cross sections compared with MF=3 at every grid point (the PI's decision: LRP=2 with the statement that
   MF=2 reproduces MF=3); a difference above ``MF2_TOLERANCE`` refuses the write.
 
-What is not written is listed in the MF=1 text and in the report (never dropped silently): MF=3/MT=2 and MF=6
-(the elastic channel needs MF=6 LAW=5, the exits MF=6 LAW=2, the primary photons MF=6/MT=102), the photon channels
-(MF=1 text), and what :class:`pyazr.endf.Losses` names.
+- MF=6 (pp. 133-147): LAW=2 of every exit with its residual (LAW=4), the primary photons of MT=102, and
+  charged-particle elastic scattering as LAW=5 in one of :data:`ELASTIC_FORMS`: the nuclear amplitude expansion
+  LTP=1 with 1.0 in MF=3/MT=2 (:mod:`pyazr.endf.amplitudes`, the engine's door ``nuclear_amplitudes``), or LTP=12
+  with sigma_NI in MF=3/MT=2 (:mod:`pyazr.endf.elastic`).
+
+What is not written is listed in the MF=1 text and in the report (never dropped silently): every section a reaction
+of the project needs and the file lacks, the photon channels (MF=1 text), and what :class:`pyazr.endf.Losses`
+names.
 """
 
 import dataclasses
@@ -28,6 +33,9 @@ import tempfile
 import numpy as np
 
 from ..errors import FormatRefused
+from . import amplitudes as amplitude_section
+from . import covariance as covariance_section
+from .covariance import FormalCovariance
 from . import elastic as elastic_section
 from . import engine_values, grid, names
 from . import sections as section_rows
@@ -65,6 +73,13 @@ LIMIT_WORDS = {"checkr": "CHECKR's limit of", "manual": "the manual's limit of"}
 #: The largest c.m. cosine of the LAW=5 table (p. 146: "as close to 1.0 as possible"; sigma_e - sigma_c grows as
 #: 1/(1 - mu) towards 1): about 11.5 degrees.  Below it the file's elastic cross section is the Coulomb term alone.
 ELASTIC_MAX_COSINE = 0.98
+#: The forms of charged-particle elastic scattering (MF=6/MT=2 LAW=5, pp. 145-147): ``"amplitudes"``, the nuclear
+#: amplitude expansion LTP=1 with the engine's coefficients and 1.0 in MF=3/MT=2 (p. 150: "Whenever possible, the
+#: nuclear amplitude expansion should be used with LAW=5"); ``"tabulated"``, P_NI tabulated in mu, LTP=12, with
+#: sigma_NI in MF=3/MT=2.
+ELASTIC_FORMS = ("amplitudes", "tabulated")
+#: The form written when none is asked (one named value: the PI decides it).
+ELASTIC_FORM = "amplitudes"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -108,6 +123,42 @@ class ElasticReport:
                        "wrong by up to sigma_e - sigma_c: " + ", ".join(f"{lo * 1e6:.3f}-{hi * 1e6:.3f} eV"
                                                                        for lo, hi in self.brackets) + ".")
         return out
+
+
+#: The steps of :func:`write`, in order, as ``progress`` names them.
+WRITE_STEPS = ("the levels in the formal basis (MF=2)", "the energy grid of MF=3 and MF=6",
+               "elastic scattering (MF=6/MT=2)", "the covariance (MF=32)", "MF=2 against MF=3", "the file")
+
+
+@dataclasses.dataclass(frozen=True)
+class AmplitudeReport:
+    """The elastic section in the nuclear amplitude expansion (:mod:`pyazr.endf.amplitudes`): ``energies`` written,
+    ``candidates`` the engine computed, ``reached`` (the largest deviation by the grid's rule of the reader's
+    interpolation, at the energies computed and the quarter points and midpoint of every written interval),
+    ``checked`` (every written interval passed its quarter points), the tolerance asked, the limits.  ``form`` is
+    "amplitudes"; ``brackets`` is empty (no sigma_NI, no sign change)."""
+    energies: int
+    candidates: int
+    reached: float
+    checked: bool
+    tolerance: float
+    limits: tuple = (None, None)
+    limits_name: str = ""
+    form: str = "amplitudes"
+    brackets: tuple = ()
+
+    def lines(self):
+        """The statement of MF=1 and of the report, in words."""
+        limited = self.limits[0] is not None and self.energies >= self.limits[0] and self.reached > self.tolerance
+        words = LIMIT_WORDS.get(self.limits_name, "the limit of")
+        return [f"Elastic scattering (MF=6/MT=2, LAW=5 LTP=1, the nuclear amplitude expansion of eqs. 6.13-6.14 with "
+                f"the engine's coefficients; MF=3/MT=2 holds 1.0) on {self.energies} energies chosen of "
+                f"{self.candidates} the engine computed{f' ({words} {self.limits[0]} per MF=6 section)' if limited else ''}"
+                f", so that sigma_e - sigma_c interpolated linearly at fixed mu between them, the Coulomb term at the "
+                f"energy, gives the elastic cross section to {max(self.reached, 0.0):.1e} by the grid's rule at every "
+                f"energy the engine computed, the quarter points and the midpoint of every written interval"
+                + ("." if self.checked else "; the search for energies stopped at its budget or its limit before "
+                                            "every interval met the tolerance.")]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -324,7 +375,7 @@ def _wrap(text, width=66):
 
 def write(session, path, x=None, *, header=None, energy_range_MeV=None, tolerance=1e-3, max_points=4000,
           number_form="widest", overwrite=False, elastic_max_cosine=ELASTIC_MAX_COSINE, mf6_limits="checkr",
-          project_name=None):
+          project_name=None, elastic_form=ELASTIC_FORM, covariance=None, progress=None):
     """Write ``session``'s model at the fit vector ``x`` (default its start) as an ENDF-6 material at ``path``.
 
     ``header``: the evaluator's fields of MF=1 (p. 42), a dict with any of ``MAT`` (default 9999), ``NLIB``
@@ -335,7 +386,15 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
     ``number_form``: ``"widest"`` (default), ``"classic"`` or ``"e"`` (:data:`pyazr.endf.NUMBER_FORMS`).
     ``mf6_limits``: ``"checkr"`` (default: at most 200 energies per MF=6 section and 201 cosines per LAW=5 panel)
     or ``"manual"`` (Appendix G's: 2,000 and 10,000), :data:`MF6_LIMITS`.  ``project_name``: the name of the
-    project that MF=1's text and the tape's first line give (default: the session's file name).
+    project that MF=1's text and the tape's first line give (default: the session's file name).  ``elastic_form``:
+    charged-particle elastic scattering as ``"amplitudes"`` (LAW=5 LTP=1) or ``"tabulated"`` (LTP=12 with sigma_NI
+    in MF=3/MT=2), :data:`ELASTIC_FORMS`; default :data:`ELASTIC_FORM`.  ``covariance``: None (no MF=32),
+    ``"hesse"`` (HESSE in a formal-basis session at ``x``: :func:`pyazr.endf.covariance.formal_covariance`), or a
+    :class:`pyazr.endf.covariance.FormalCovariance` of this session at ``x``; written as MF=32/MT=151 LCOMP=1.  A
+    covariance of the fit's own basis (``EngineFitResult.covariance``, Brune or Park) or a prior's matrix is refused:
+    MF=32 holds the formal parameters of MF=2 (p. 253).  ``progress``: called as ``progress(done, total, step)``
+    after each of the :data:`WRITE_STEPS` (``step`` its words; a step the file does not need is passed over and
+    counted), from the caller's thread; an exception in it stops the write.
 
     Returns a :class:`Written`.  Refused (:class:`pyazr.FormatRefused`): an existing ``path`` without ``overwrite``,
     what :func:`pyazr.endf.from_session` refuses, a session without exit reactions, MF=2 that does not reproduce
@@ -350,6 +409,15 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                             fix="leave it at \"checkr\" (files every checking code reads) or ask for \"manual\" "
                             "(the format's own limits)")
     energy_limit, cosine_limit = MF6_LIMITS[mf6_limits]
+    if not (covariance is None or (isinstance(covariance, str) and covariance == "hesse") or
+            isinstance(covariance, FormalCovariance)):
+        raise FormatRefused(what=f"covariance of type {type(covariance).__name__}",
+                            allowed="None, \"hesse\" or a pyazr.endf.covariance.FormalCovariance",
+                            fix="MF=32 holds the covariance of MF=2's formal parameters: ask for \"hesse\" (HESSE in a "
+                            "formal-basis session at the fit vector), not the fit's covariance in its own basis")
+    if elastic_form not in ELASTIC_FORMS:
+        raise FormatRefused(what=f"elastic_form {elastic_form!r}", allowed=", ".join(repr(k) for k in ELASTIC_FORMS),
+                            fix="leave it at the default or name one of the two forms")
     shown_name = os.path.basename(session.file) if project_name is None else str(project_name)
     if number_form not in NUMBER_FORMS:
         raise FormatRefused(what=f"number_form {number_form!r}", allowed=", ".join(NUMBER_FORMS),
@@ -371,6 +439,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         energy_range_MeV = (min(lab), max(lab))
     lo, hi = (float(v) for v in energy_range_MeV)
     record, losses = from_session(session, x, energy_range_eV=(lo * EV_PER_MEV, hi * EV_PER_MEV))
+
+    def step(k):
+        if progress is not None:
+            progress(k + 1, len(WRITE_STEPS), WRITE_STEPS[k])
+
+    step(0)
     from ..project import Project
     project = Project.open(session.file)
     pairs = {p.key: p.to_dict() for p in session.pairs}
@@ -439,9 +513,25 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
                              reached)
         written[(6, 102)] = section_rows.capture(za, awr, compound, [(f[1], np.asarray(f[2])[keep], f[3][keep])
                                                                      for f in finals], e_eV[keep], number_form)
+    step(1)
     elastic = next((r for r in reactions if r.role == "elastic"), None)
     elastic_report = None
-    if elastic is not None:
+    if elastic is not None and elastic_form == "amplitudes":
+        projectile = (_za(ent.za, ent.ma), awi)
+        target = (_za(ent.zb, ent.mb), section_rows.product_mass(round(ent.zb), round(ent.mb * M_NEUTRON_U)))
+        # the engine's own Coulomb terms (the project's masses): the cross section the rule holds is the engine's
+        engine_coulomb = CoulombTerms.of(entrance["Z1"], entrance["Z2"], entrance["M1"], entrance["M2"])
+        am = amplitude_section.section(sweeps, elastic, e_MeV, mu_range, engine_coulomb, identical,
+                                       int(round(2 * ent.spin_a)), tolerance, max_points, limit=energy_limit)
+        el_eV = am.energies * EV_PER_MEV
+        written[(3, 2)], written[(6, 2)] = section_rows.elastic_amplitudes(za, awr, projectile, target, identical,
+                                                                          ent.spin_a, el_eV, am.records, number_form)
+        grids[2] = (len(el_eV), el_eV[0], el_eV[-1])
+        elastic_report = AmplitudeReport(len(el_eV), am.candidates, am.reached, am.checked, tolerance,
+                                         MF6_LIMITS[mf6_limits], mf6_limits)
+        accuracy += elastic_report.lines()
+        reached[2] = max(am.reached, tolerance)
+    elif elastic is not None:
         el, mu_report = elastic_section.section(sweeps, elastic, e_MeV, mu_range, coulomb_minus, tolerance,
                                                 max_points, limit=energy_limit, cosine_limit=cosine_limit)
         if mu_report.get("budget_reached"):
@@ -463,6 +553,26 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         reached[2] = max(el.reached, el.cosines_reached, tolerance)
         counts = [len(m) for m, _ in panels]
         cosines[2] = (max(counts), float(panels[0][0][0]), float(panels[0][0][-1]))
+    step(2)
+    covariance_text = []
+    if covariance is not None:
+        cov = covariance_section.formal_covariance(session, x, record) if isinstance(covariance, str) else covariance
+        sizes = {(gi, li): len(g.channels) + 1 for gi, g in enumerate(record.groups) for li in range(len(g.levels))}
+        if any((gi, li) not in sizes or col >= sizes[(gi, li)] for gi, li, col in cov.parameters):
+            raise FormatRefused(what="the covariance names parameters MF=2 does not have",
+                                allowed="a FormalCovariance of this session at this fit vector",
+                                fix="ask for covariance=\"hesse\"")
+        written[(32, 151)] = covariance_section.rows(record, cov, number_form)
+        fixed = [p for p, f in zip(cov.parameters, cov.fixed) if f]
+        covariance_text = [
+            f"MF=32 (LCOMP=1, one block): the covariance of {len(cov.parameters)} parameters of MF=2 (ER, GAM of "
+            f"{sum(len(v) for v in cov.levels.values())} resonances in {len(cov.groups)} spin group(s)): {cov.source} "
+            f"(objective {cov.objective_fit:.10g} of the fit, {cov.objective_formal:.10g} of the formal basis); the "
+            "norms and other parameters of the fit and the photon channels are marginalised (their rows dropped)"
+            + (f"; {len(fixed)} parameter(s) of listed resonances were fixed in the fit and have zero rows: "
+               + ", ".join(f"spin group {gi + 1} resonance {li + 1} {'ER' if col == 0 else f'GAM{col}'}"
+                           for gi, li, col in fixed) if fixed else "") + "."]
+    step(3)
     # MF=2 must reproduce MF=3 for the particle reactions (the photon channels are not in MF=2)
     particle = {r.mt: e_MeV for r in reactions if r.role == "exit"}
     mf2_check = {}
@@ -508,6 +618,9 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             "MF=6 holds the engine's angular distributions in the c.m. (LCT=2), on the energy grid of MF=3 (elastic "
             "scattering on its own, below): LAW=2 "
             "Legendre coefficients of each two-body exit with the residual as LAW=4"
+            + ("; charged-particle elastic scattering as LAW=5 LTP=1, the nuclear amplitude expansion (eqs. "
+               "6.13-6.14) with the engine's coefficients b_l and a_l at each energy, valid at every angle, and 1.0 "
+               "in MF=3/MT=2" if (6, 2) in sections and elastic_form == "amplitudes" else "")
             + (f"; charged-particle elastic scattering as LAW=5 LTP=12, P_NI tabulated on up to {cosines[2][0]} "
                f"cosines from {cosines[2][1]:g} to {cosines[2][2]:g} with sigma_NI in MF=3/MT=2 (below the largest "
                "cosine "
@@ -515,6 +628,7 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
             + ("; for capture (MT=102) the primary photon to each final state (LAW=2, AWP its energy at zero "
                "incident energy, the yield sigma_f/sigma) and its recoil (LAW=4); the cascade below the final "
                "states is not given (AZURE2 does not hold it)" if (6, 102) in sections else "") + ".",
+            *covariance_text,
             "Separation energy of the incident pair: "
             f"{s_ent:.9f} MeV (the project's); masses as the project's atomic masses."]
     text = std
@@ -533,10 +647,12 @@ def write(session, path, x=None, *, header=None, energy_range_MeV=None, toleranc
         text += _wrap("- " + t)
     for t in h["TEXT"]:
         text += _wrap(t) or [""]
+    step(4)
     header_rows = _header_rows(record, h, sections, text, number_form)
     _write_material(path, int(h["MAT"]), sections, header_rows,
                     tpid=f" pyazr.endf.write, {shown_name}")
     listed_sections = [(1, 451, len(header_rows))] + [(mf, mt, len(rows))
                                                        for (mf, mt), rows in sorted(sections.items())]
+    step(5)
     return Written(path, tuple(listed_sections), grids, mf2_check, tuple(losses.items) + tuple(accuracy), not_written,
                    cosines, sweeps.count, elastic_report, tuple(accuracy), reached)

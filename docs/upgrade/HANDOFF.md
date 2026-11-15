@@ -2,6 +2,24 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-8-endf-amplitudes`) — ENDF: elastic scattering as amplitudes, MF=32, the check of an evaluation
+
+**Done** (`endf.md` 13.12-13.15): the engine's door `nuclear_amplitudes` (a point output of an elastic data set,
+`api/src/pybind_elastic_amplitudes.cpp`; the LTP=1 coefficients read from the record `GenMatrixFunc::
+ElasticCoefficientsOf` wrote); `write(..., elastic_form="amplitudes" | "tabulated")`, default the named constant
+`writer.ELASTIC_FORM` = "amplitudes" (the PI decides); MF=32 LCOMP=1 from HESSE in a formal-basis session
+(`covariance="hesse"`, `Material.covariance()`); `check_resonances` and `check(path, resonances=True)` /
+`pyazr endf check --resonances`; `write(..., progress=)`; the cosine sessions of the tabulated form in chunks (T2
+4.85 -> 0.78 GB, files unchanged); `_legendre_rows` by a reshape; `Project.new` without the settings of removed
+records. **Verified how**: the branch report (door to 1e-11 against the engine on T1, T2, 13N, p+p, d+d; the quick
+set in three bases identical to tab-t79-1; the writer, amplitude, covariance, evaluation-check and support tests;
+the real codes on the written files; all projects in three bases identical to tab-t79-1, 887/851/887 files;
+`ctest -LE slow` 295 of 297, the two failures timing and browser tests that pass when run alone; the slow writer
+tests). **Open** (for the PI): the default elastic form; decision 10 (the formal
+session fixes the project's fixed parameters in the formal basis: on T1 its covariance differs from the fit's by
+up to 3.9 sigma_i sigma_j; the fit's covariance through door 1's Jacobian is the alternative); the page's job rows
+for `resonances=True` and `progress` (pyazr/ui, not changed).
+
 ## 2026-11-15 (agent, branch `feature/upgrade-6-format-readiness`) — a real project is never misread
 
 **Done.** (1) What nothing reads is refused. The reader of format 3 (`ReadFormat3Project`): a section that is neither a

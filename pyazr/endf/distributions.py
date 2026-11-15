@@ -251,6 +251,28 @@ def two_body_probability(product, energies_ev, mu, where="MF=6"):
     return _between_panels(product, np.asarray(energies_ev, float), at, where)
 
 
+def amplitude_expansion(values, nl, identical, eta, mu):
+    """sigma_e - sigma_c (b/sr) of LAW=5 LTP=1 from the values of one LIST record (p. 147: b_0 ... b_2NL, then
+    Re a_0, Im a_0, ... Re a_NL, Im a_NL for LIDP=0; b_0 ... b_NL first for LIDP=1) at the c.m. cosines ``mu``: the
+    interference and nuclear terms of eq. 6.13 (distinguishable particles) or eq. 6.14 (identical), p. 145, with the
+    Coulomb parameter ``eta`` of eq. 6.12 at the record's energy."""
+    m = np.asarray(mu, float)
+    nb = nl + 1 if identical else 2 * nl + 1
+    v = np.asarray(values, float)
+    b = v[:nb]
+    raw = v[nb:nb + 2 * (nl + 1)]
+    a = raw[0::2] + 1j * raw[1::2]
+    terms = [(2 * l + 1) / 2.0 * a[l] * legendre.legval(m, [0] * l + [1]) for l in range(len(a))]
+    if not identical:  # eq. 6.13
+        interference = -2 * eta / (1 - m) * np.real(np.exp(1j * eta * np.log((1 - m) / 2)) * sum(terms))
+        return interference + _legendre_sum(b, m)
+    # eq. 6.14
+    s = sum(((1 + m) * np.exp(1j * eta * np.log((1 - m) / 2))
+             + (-1) ** l * (1 - m) * np.exp(1j * eta * np.log((1 + m) / 2))) * terms[l] for l in range(len(a)))
+    nuclear = sum((4 * l + 1) / 2.0 * b[l] * legendre.legval(m, [0] * (2 * l) + [1]) for l in range(len(b)))
+    return -2 * eta / (1 - m * m) * np.real(s) + nuclear
+
+
 #: The readings of a tabulated LAW=5 distribution (LTP=12, 14, 15) between incident energies (the module's text).
 ELASTIC_READINGS = ("manual", "product")
 
@@ -276,19 +298,7 @@ def elastic_cross_section(product, energies_ev, mu, coulomb, sigma_ni=None, wher
         m = mu[k]
         if p.flag == 1:
             eta = float(coulomb.eta(np.array([p.energy]))[0])
-            nl = p.nl
-            nb = nl + 1 if identical else 2 * nl + 1
-            b = p.values[:nb]
-            a = np.array(p.values[nb:nb + 2 * (nl + 1)][0::2]) + 1j * np.array(p.values[nb:nb + 2 * (nl + 1)][1::2])
-            terms = [(2 * l + 1) / 2.0 * a[l] * legendre.legval(m, [0] * l + [1]) for l in range(nl + 1)]
-            if not identical:  # eq. 6.13
-                interference = -2 * eta / (1 - m) * np.real(np.exp(1j * eta * np.log((1 - m) / 2)) * sum(terms))
-                return interference + _legendre_sum(b, m)
-            # eq. 6.14
-            s = sum(((1 + m) * np.exp(1j * eta * np.log((1 - m) / 2))
-                     + (-1) ** l * (1 - m) * np.exp(1j * eta * np.log((1 + m) / 2))) * terms[l] for l in range(nl + 1))
-            nuclear = sum((4 * l + 1) / 2.0 * b[l] * legendre.legval(m, [0] * (2 * l) + [1]) for l in range(len(b)))
-            return -2 * eta / (1 - m * m) * np.real(s) + nuclear
+            return float(amplitude_expansion(p.values, p.nl, identical, eta, m))
         if p.flag == 2:  # eqs. 6.15-6.18
             c = p.values[:p.nl + 1]
             if not identical:

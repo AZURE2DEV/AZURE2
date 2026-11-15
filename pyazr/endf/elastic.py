@@ -1,6 +1,6 @@
-"""The energies and panels of charged-particle elastic scattering as the writer writes it, LAW=5 LTP=12 with
-sigma_NI in MF=3/MT=2 (ENDF-102, 2023 edition, pp. 144-147), so that the file holds its tolerance under the
-manual's reading.
+"""The energies and panels of charged-particle elastic scattering in the tabulated form
+(``elastic_form="tabulated"``), LAW=5 LTP=12 with sigma_NI in MF=3/MT=2 (ENDF-102, 2023 edition, pp. 144-147), so
+that the file holds its tolerance under the manual's reading.
 
 The manual's reading (p. 146: "The angular distribution p_NI is given in File 6 as a tabulated function of mu, and
 sigma_NI(E) in barns is given in File 3"; eqs. 6.19-6.20): a processing code interpolates sigma_NI(E) in MF=3 and

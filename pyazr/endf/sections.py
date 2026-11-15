@@ -16,6 +16,9 @@ LTP=12 asks for.
   for P_NI linear in mu (LTP=12), so that P_NI integrates to 1 over the table.  Eq. 6.19 integrates over mu, not
   over the solid angle, though p. 146 calls sigma_NI "in barns": the equations are taken as written, so that
   sigma_e = sigma_c + sigma_NI P_NI (eq. 6.20), as the module's reader computes it.
+- LAW=5 LTP=1 (pp. 145-147): the nuclear amplitude expansion, per incident energy a LIST ``0, E, LTP=1, 0, NW,
+  NL`` of b_0 ... b_2NL (b_0 ... b_NL for identical particles), Re a_0, Im a_0, ..., Re a_NL, Im a_NL, the engine's
+  coefficients (barns/sr); MF=3/MT=2 holds 1.0 (p. 145).
 - MF=6/MT=102 (p. 136): per final state, in order of excitation, the primary photon (ZAP=0, LAW=2) and its recoil
   (LAW=4), each with the yield y_f = sigma_f / sigma of MF=3/MT=102 (eq. 12.1, p. 200, the multiplicity of a discrete
   photon).  AWP of the photon "can contain the energy of a primary photon" (p. 135); the manual does not say at which
@@ -110,3 +113,23 @@ def elastic(za, awr, projectile, target, identical, spin, energies_eV, panels, n
     if not identical:  # the recoil of distinguishable particles; identical ones are one product (LIDP=1)
         _yield(w, target[0], target[1], 0, 4, ends, [1.0, 1.0])
     return mf3, w.rows, sigma_ni
+
+
+def elastic_amplitudes(za, awr, projectile, target, identical, spin, energies_eV, records, number_form):
+    """MF=3/MT=2 and MF=6/MT=2 of charged-particle elastic scattering in the nuclear amplitude expansion, LTP=1
+    (pp. 145-147): MF=3 holds 1.0 (p. 145) at the first and last energy; per energy a LIST ``0, E, LTP=1, 0, NW, NL``
+    of the coefficients (``records``: b_l, then Re a_l, Im a_l, in barns/sr; NW = 4 NL + 3, or 3 NL + 3 for identical
+    particles, p. 147).  Returns (MF=3 rows, MF=6 rows)."""
+    ends = [energies_eV[0], energies_eV[-1]]
+    mf3 = cross_section(za, awr, 0.0, 0.0, ends, [1.0, 1.0], number_form)
+    w = RecordWriter(number_form)
+    w.cont(za, awr, 0, 2, 1 if identical else 2, 0)
+    _yield(w, projectile[0], projectile[1], 0, 5, ends, [1.0, 1.0])
+    w.tab2(float(spin), 0.0, 1 if identical else 0, 0, [len(energies_eV)], [2], len(energies_eV))
+    for e, values in zip(energies_eV, records):
+        values = [float(v) for v in values]
+        nl = (len(values) - 3) // 3 if identical else (len(values) - 3) // 4
+        w.list(0.0, float(e), 1, 0, nl, values)
+    if not identical:  # the recoil of distinguishable particles; identical ones are one product (LIDP=1)
+        _yield(w, target[0], target[1], 0, 4, ends, [1.0, 1.0])
+    return mf3, w.rows

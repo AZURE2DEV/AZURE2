@@ -16,8 +16,9 @@ For each project:
 With AZURE2_ENDF_UTILITIES and AZURE2_PREPRO set, CHECKR, FIZCON and PSYCHE run on each written file and every
 finding is printed (not judged here: the report of the branch reads them).
 Exits 77 (skipped) without the compiled engine module.  Run from anywhere:  python3 tests/pyazr/endf_write_test.py
-With arguments, only the named parts run (``T1``, ``T2``, ``13N``, ``narrow``): the quick test set runs
-``T1 narrow``, the slow set ``T2 13N`` (several minutes: the elastic LAW=5 tables of T2).
+With arguments, only the named parts run (``T1``, ``T2``, ``13N``, ``narrow``), and ``tabulated`` writes elastic
+scattering as LAW=5 LTP=12 instead of the default form (LTP=1, the nuclear amplitude expansion): the quick test set
+runs ``T1 narrow``, the slow set ``T2 13N`` and ``T2 tabulated``.
 """
 import os
 import shutil
@@ -43,9 +44,10 @@ PROJECTS = [os.path.join(ROOT, "tests", "upgrade", "T1", "T1.azr"), os.path.join
                                                                                   "T2.azr"),
             os.path.join(ROOT, "tests", "13N", "13N.azr")]
 PARTS = sys.argv[1:] or ["T1", "T2", "13N", "narrow"]
-unknown = sorted(set(PARTS) - {"T1", "T2", "13N", "narrow"})
+unknown = sorted(set(PARTS) - {"T1", "T2", "13N", "narrow", "tabulated"})
 if unknown:
-    sys.exit(f"endf_write_test.py: unknown part(s) {unknown}; allowed: T1, T2, 13N, narrow")
+    sys.exit(f"endf_write_test.py: unknown part(s) {unknown}; allowed: T1, T2, 13N, narrow, tabulated")
+FORM = "tabulated" if "tabulated" in PARTS else E.writer.ELASTIC_FORM
 T2_PROJECT = PROJECTS[1]
 PROJECTS = [p for p in PROJECTS if os.path.basename(p).replace(".azr", "") in PARTS]
 TOLERANCE = 1e-3
@@ -122,7 +124,16 @@ for azr in PROJECTS:
     try:
         s = pyazr.Session(name)
         out = os.path.join(d, name.replace(".azr", ".endf"))
-        w = E.write(s, out, header={"AUTH": "pyazr tests", "ALAB": "TEST"}, tolerance=TOLERANCE)
+        steps = []
+        w = E.write(s, out, header={"AUTH": "pyazr tests", "ALAB": "TEST"}, tolerance=TOLERANCE, elastic_form=FORM,
+                    project_name=f"{name} for the tests", progress=lambda *a: steps.append(a))
+        check(f"{name}: progress called once per step in order, (k, {len(E.writer.WRITE_STEPS)}, words)",
+              steps == [(k + 1, len(E.writer.WRITE_STEPS), t) for k, t in enumerate(E.writer.WRITE_STEPS)], steps)
+        with open(out) as fh:
+            first = fh.readline()
+        check(f"{name}: project_name in the tape's first line and in MF=1's text",
+              f"{name} for the tests" in first and f"{name} for the tests" in " ".join(E.read(out).header.text),
+              first)
         print("\n".join("      " + line for line in str(w).splitlines()))
         # (a)
         found = E.check_format(out).findings
@@ -272,7 +283,15 @@ for azr in PROJECTS:
         # MF=6, each interpolated): every sign change of sigma_NI in the file lies in a stated bracket at most
         # BRACKET_WIDTH x E wide, named in MF=1; at the midpoint of every two written energies outside the brackets,
         # at 6 c.m. angles, the file's dsigma/dOmega equals the engine's to the bound of (f)
-        if w.elastic is not None:
+        tabulated = w.elastic is not None and getattr(w.elastic, "form", "tabulated") == "tabulated"
+        if w.elastic is not None and not tabulated:
+            prod = m.distribution(2).product(m.header.projectile_za)
+            ltps = {p.flag for p in prod.panels}
+            mt2 = m.cross_section(2)
+            check(f"{name}: elastic as LAW=5 LTP=1 on {len(prod.panels)} energies, MF=3/MT=2 holds 1.0 (p. 145), the "
+                  "statement in MF=1", ltps == {1} and set(mt2.table.y) == {1.0} and
+                  all(" ".join(line.split())[:60] in text for line in w.elastic.lines()), (ltps, mt2.table.y))
+        if tabulated:
             from pyazr.endf.distributions import elastic_cross_section
             from pyazr.endf import elastic as elastic_module
             prod = m.distribution(2).product(m.header.projectile_za)
@@ -310,7 +329,8 @@ for azr in PROJECTS:
         # incident energies, no LAW=5 panel above 201 cosines; each thinned section stated in MF=1 and w.accuracy
         counts = {mt: [len(p.panels) for p in m.distribution(mt).products if p.law in (2, 5)]
                   for mf, mt, _ in w.sections if mf == 6}
-        widest = max(len(p.values) // 2 for p in m.distribution(2).products[0].panels) if 2 in counts else 0
+        widest = max(len(p.values) // 2 for p in m.distribution(2).products[0].panels) if 2 in counts and tabulated \
+            else 0
         check(f"{name}: every MF=6 section at most 200 energies, every LAW=5 panel at most 201 cosines, each "
               "thinned section stated", all(n <= 200 for v in counts.values() for n in v) and widest <= 201 and
               all(mt in w.reached for mt, v in counts.items() if mt != 2 and max(v) == 200) and
