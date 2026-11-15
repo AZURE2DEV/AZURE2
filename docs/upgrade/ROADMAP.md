@@ -21,8 +21,9 @@ build, the address-sanitizer job passes, and the tests fail on each platform. Li
 unit test passes and 171 of 172 regression checks; the one was a memory bound measured by sampling, repaired in
 rehearsal 88. Windows: 159 of 172 regression checks and 142 of 309 unit tests, partly repaired without a Windows
 machine. macOS: read after its first full run and answered in rehearsal 88 with GNU tools for its test steps and
-three test repairs, none run on macOS. Thread sanitizer: two reports from the OpenMP runtime's own libraries
-silenced, what stands behind them not yet seen (`FOR_THE_OWNER.md` section 10). The gates' other parts (reference
+three test repairs, none run on macOS. Sanitizers (tenth push): no report under either, both jobs pass, after
+three entries for the OpenMP runtime's own libraries; four steps (T2's calculation and fit, two target checks)
+fail there without a report for a cause not yet seen (`FOR_THE_OWNER.md` section 10). The gates' other parts (reference
 outputs, the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):

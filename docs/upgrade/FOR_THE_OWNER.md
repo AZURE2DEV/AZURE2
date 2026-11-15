@@ -519,7 +519,14 @@ re-read against its design at the hand-over.
      lock of a mutex that libarcher keeps for an `omp critical`, on the progress bar of the external-capture
      set-up. The mutex is the tool's; why TSan counts it as held is not understood. It is suppressed in the
      tenth push, and the job now shows the first report of five files and the table of all distinct reports.
-     Whether a report of AZURE2 stands behind these two is still not known.
+     **With the three entries (the tenth push; thread 72 minutes, address 54) neither job writes a sanitizer
+     report, and both jobs pass**: the first thread-sanitizer run of this code without a report since
+     2026-11-07. Four steps fail without a report, the same four under both sanitizers, which the job counts as a
+     warning: the calculation and the 30-call fit of T2 (exit 1) and the checks `target_auto_windows` and
+     `target_window_fallback`. **The cause is not known and T2, the largest of the three projects, was therefore
+     not run under either sanitizer.** The same checks pass in the Linux job (GCC); what differs is clang 18 with
+     the sanitizer's build flags. The script now prints the last lines of each failed step's log and the job
+     writes them as an annotation.
 
    **The CI is not green.** Linux in the ninth push: every unit test passes (`docs_build` is skipped, no Sphinx
    there) and 171 of the 172 regression checks. The one is `tests/shared_point_tables` (d), a bound on the peak
