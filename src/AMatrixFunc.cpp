@@ -1016,7 +1016,8 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     // Away from UPOS the sum is linear in the Legendre polynomials with
     // angle-independent coefficients: the cotangent of each pathway is a sum
     // over orders of products taken once per T-matrix (TBarProducts).
-    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(theDecay, inelasticParticle)) {
+    const bool captureCascade = (exitPairDiff->GetPType() == 10 && point->IsUPOS());  // as in GenMatrixFunc
+    if (!(inelasticParticle && point->IsUPOS()) && !captureCascade && this->TBarProducts(theDecay, inelasticParticle)) {
       const complex scale = fitBar * cR;
       const std::vector<InterferencePathway> &paths = theDecay->InterferencePathways();
       const int nl = theDecay->NumInterferenceOrders();
@@ -1069,6 +1070,12 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
             }
             double W = cR * itf->GetZ1Z2_UPOS() * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
             addQuad(K, m1, 'R', m2, 'R', W);
+          }
+        } else if (captureCascade) {
+          // Secondary gamma ray after an unobserved primary capture photon (GenMatrixFunc).
+          if (itf->GetZ1Z2_UPOS() != 0.0) {
+            const double R_L = this->SecondaryRk(point, exitPairDiff->GetJ(2), lOrder);
+            addQuad(K, m1, rad1, m2, rad2, cR * itf->GetZ1Z2_UPOS() * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP);
           }
         } else {
           // Standard case (entrance==exit pair, or gamma exit).

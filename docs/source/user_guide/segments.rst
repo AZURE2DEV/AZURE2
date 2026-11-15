@@ -544,6 +544,28 @@ appears with the following fields:
    (Segments Without Data) cannot be UPOS; to draw a UPOS curve, give a data
    segment a grid of pseudo-data.
 
+   **Capture cascades.** With a *capture* pair as the exit pair, a UPOS segment
+   is the secondary gamma ray of the capture final state :math:`B` after an
+   **unobserved primary capture photon**: :math:`A(a,\gamma_1)B`,
+   :math:`B \to C + \gamma_2`, with :math:`\gamma_2` detected. This is the
+   extension named in the conclusions of the paper: a photon summed over its
+   direction and both helicities leaves no interference between multipoles
+   (:math:`L`, electric or magnetic), and it orients :math:`B` exactly as a
+   spin-0 particle of orbital angular momentum :math:`L` would, so Eq. (22)
+   applies with :math:`l' = L` and :math:`s' = J_B`. Internal (resonant) and
+   external capture amplitudes of one multipole interfere as they do in the
+   capture cross section. The three fields describe :math:`\gamma_2` as above;
+   the calculated quantity is :math:`d\sigma/d\Omega_{\gamma_2}` for **direct
+   feeding** of :math:`B` only, with 100 % branching to :math:`C`: feeding of
+   :math:`B` through higher states (a multi-step cascade) is not included, and
+   an angle-integrated cascade segment is the capture cross section into
+   :math:`B`. A secondary gamma ray from a state of spin 0 or 1/2 is isotropic
+   whatever feeds it. Laboratory angles are converted as for any capture gamma
+   ray (the recoil from the primary photon is neglected). Not available with
+   ``linewindow`` or the ``--use-rmc`` formalism. Engines before November 2026
+   ignored the UPOS fields on a capture pair and returned the *primary*
+   photon's distribution without a message (``tests/capture_cascade``).
+
 Editing and Managing Data Segments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
