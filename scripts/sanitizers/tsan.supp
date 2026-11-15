@@ -13,3 +13,13 @@
 # (T1 calculation, clang 23.1.4, libomp 23.1.4, 8 threads).
 race:__kmp_suspend_initialize_thread
 race:__kmp_resume_template
+
+# The same report where libomp carries no symbols (GitHub's ubuntu-24.04 runner, clang 18, libomp.so.5: its
+# frames print "<null>", so the two names above match nothing).  Seen in every step of the CI's thread job,
+# 2026-11-15: pthread_mutex_lock called from libomp on the main thread against pthread_mutex_init called from
+# libomp on a worker, the heap block allocated by libomp; AZURE2 appears only as the frame that opened the
+# parallel region (ChannelRowFill.cpp).  The entry names the interceptor of the initialization itself, anchored:
+# AZURE2 never calls pthread_mutex_init (its locks are std::mutex, which has no run-time initialization), so a
+# report with this frame cannot be a race between accesses of AZURE2.  A module entry (race:libomp.so) would
+# hide every race inside a parallel region, whose stacks all pass through libomp, and is not used.
+race:^pthread_mutex_init$
