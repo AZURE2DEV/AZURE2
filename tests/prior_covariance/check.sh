@@ -307,11 +307,13 @@ SEGF2="$(seg xs_90_s09.dat 90 "1.25 fixed")"
 mk f_a fixE "" "$SEGF1" "$SEGF2"
 run f_a fit "--use-lm --covariance-band"
 if need f_a && [ -s "$WORK/f_a/output/covariance.dat" ]; then
-  "$PY" -I - "$ROOT/pyazr/priors.py" "$WORK/f_a/output" "$WORK/f_prior.txt" > "$WORK/f_helper.log" 2>&1 <<'PYEOF'
-import importlib.util, sys
-spec = importlib.util.spec_from_file_location("priors", sys.argv[1])
-m = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(m)
+  "$PY" -I - "$ROOT/pyazr" "$WORK/f_a/output" "$WORK/f_prior.txt" > "$WORK/f_helper.log" 2>&1 <<'PYEOF'
+import importlib, sys, types
+# pyazr.priors with its sibling modules and without the package's __init__ (which asks for the engine module)
+package = types.ModuleType("pyazr")
+package.__path__ = [sys.argv[1]]
+sys.modules["pyazr"] = package
+m = importlib.import_module("pyazr.priors")
 m.prior_from_fit(sys.argv[2] + "/param.sav", sys.argv[2] + "/covariance.dat", sys.argv[3])
 PYEOF
   cols="$(awk '$1 == "#columns" { $1 = ""; sub(/^ /, ""); print }' "$WORK/f_a/output/covariance.dat")"

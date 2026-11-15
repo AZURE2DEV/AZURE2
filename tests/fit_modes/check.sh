@@ -86,7 +86,12 @@ fitted() {
     run "$label.$m" "$src" "$proj" "$FIT" $(flag "$m") --covariance-band
     if [ "$rc" != 0 ] || [ -z "$chi2" ]; then bad "$m: exit $rc, chi-squared '$chi2'"; continue; fi
     [ -n "$first" ] || first="$chi2"
-    if same "$first" "$chi2"; then ok "$m: chi-squared $chi2"; else bad "$m: chi-squared $chi2, the first route gave $first"; fi
+    if same "$first" "$chi2"; then ok "$m: chi-squared $chi2"
+    else
+      bad "$m: chi-squared $chi2, the first route gave $first"
+      # How the fits of this project ended, for a reader who has this output and not the logs.
+      grep -H -i -E "MIGRAD|converged|minimum|call limit|iteration" "$WORK/$label".*/run.log | sed "s|$WORK/||" | tail -12
+    fi
     local dir="$WORK/$label.$m" n
     n="$(find "$dir/output" -name '*.band' -size +0 | wc -l)"
     if [ "$band" = yes ]; then

@@ -21,7 +21,11 @@ import shutil
 import sys
 
 import numpy as np
-import pytest
+try:
+    import pytest
+except ImportError:  # ctest counts exit 77 as skipped
+    print("skip: the package pytest is not installed (pip install pyazr[web])")
+    sys.exit(77)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
