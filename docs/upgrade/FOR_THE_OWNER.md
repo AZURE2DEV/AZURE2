@@ -356,6 +356,11 @@ Each checked against the start commit of this page, by a run (R) or by reading t
   named on the command line is not seen by the validation: below such a final state its cross section is NaN, which
   the rate drops as zero, one warning "singular level matrix" per grid point (R: the same T1 with its capture data
   set and extrapolation switched off, internal capture only, `rate --rate-entrance=1 --rate-exit=3`).
+  Seen by reading only, not run and not repaired: a THM data set that exits into a photon pair reaches energies
+  near zero at its sub-points, where even a bound final state gives a negative photon energy; in the formal basis
+  the final state's Brune energy can differ from the energy of `<levels>` that the validation compares, which
+  matters near a threshold; `photon_penetrability` (`physics/src/Widths.cpp`) takes |E_γ|, so a level below its
+  own final state has a finite photon width.
 - A project file cannot hold two levels of one J^π at the identical energy: their lines are read as one level, with
   a warning (R). Levels within 1e-6 MeV, and a fit that brings two together, work.
 - A repeated top-level section: the run reads the first and warns; `--validate` passes a repeated empty section (R).
