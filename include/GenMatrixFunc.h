@@ -141,6 +141,8 @@ class GenMatrixFunc {
   complex GetECTMatrixElement(int, int) const;
   /// Racah coefficient \f$R_k\f$ of the angular-distribution algebra.
   double GetRk(double, double, double, double, int);
+  /// The secondary gamma ray's R_k of a UPOS point (mixing ratio included; 0 for odd k), for a decaying state of spin j2f.
+  double SecondaryRk(EPoint *point, double j2f, int lOrder);
 
   /*!
    *This virtual function in implemented in the child class.

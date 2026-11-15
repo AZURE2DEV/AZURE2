@@ -267,7 +267,9 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
       // k-groups of equal channel spins; UPOS points and angular-distribution
       // coefficients take the loop below.
       const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
-      if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
+      // A capture cascade: the secondary gamma ray of the capture final state, the primary photon unobserved.
+      const bool captureCascade = (exitPairDiff->GetPType() == 10 && point->IsUPOS());
+      if (!point->IsAngularDist() && !(particleExit && point->IsUPOS()) && !captureCascade) {
         const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
         if (rt_decay_ != theDecay && theDecay->TablesBuilt()) {
           rt_wl_.clear();
@@ -395,6 +397,24 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
                     real(theInterference->GetZ1Z2_UPOS() * T1 * conj(T2)) * point->GetGeometricalFactor() *
                         compound()->GetPair(aa)->GetI1I2Factor() / 100. * pow(2. * lOrder + 1., 0.5) * R_L / angleIntegratedXS;
                 angularCoeff[lOrder] = tempCoeff;
+              }
+            }
+          } else if (captureCascade) {
+            // Unobserved primary capture photon, observed secondary gamma ray.  The coefficient (CNuc) is zero
+            // unless the two pathways share the multipole; internal and external capture interfere.
+            const double zUpos = theInterference->GetZ1Z2_UPOS();
+            if (zUpos != 0.) {
+              const int kNum = theDecay->GetKLGroup(kL)->GetK();
+              T1 = (interferenceType[0] == 'E') ? this->GetECTMatrixElement(kNum, theInterference->GetM1())
+                                                : this->GetTMatrixElement(kNum, theInterference->GetM1());
+              T2 = (interferenceType[1] == 'E') ? this->GetECTMatrixElement(kNum, theInterference->GetM2())
+                                                : this->GetTMatrixElement(kNum, theInterference->GetM2());
+              const int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
+              const double R_L = this->SecondaryRk(point, exitPairDiff->GetJ(2), lOrder);
+              sum += zUpos * T1 * conj(T2) * pow(2. * lOrder + 1., 0.5) / (4.) * R_L * point->GetLegendreP(lOrder);
+              if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
+                angularCoeff[lOrder] += real(zUpos * T1 * conj(T2)) * point->GetGeometricalFactor() *
+                    compound()->GetPair(aa)->GetI1I2Factor() / 100. * pow(2. * lOrder + 1., 0.5) * R_L / angleIntegratedXS;
               }
             }
           } else {
@@ -782,6 +802,27 @@ double GenMatrixFunc::GetRk(double j2f, double finalL, double finalLp, double Ic
       angCoeff.Racah(finalL, finalLp, j2f, j2f, lOrder, Ic);
 }
 
+
+/*!
+ * The R_k coefficient of a UPOS point's secondary gamma ray: Eq. (7) of Brune and deBoer (2020), with the multipole
+ * mixing ratio of the segment line.  Zero for odd k (a gamma-ray distribution after an unobserved radiation has even
+ * orders only).  j2f is the spin of the decaying state, the segment gives the multipolarity, the spin of the state fed
+ * and the mixing ratio.
+ */
+
+double GenMatrixFunc::SecondaryRk(EPoint *point, double j2f, int lOrder) {
+  if (lOrder % 2 != 0) return 0.;
+  const double finalL = (double)point->GetSecondaryDecayL();
+  const double Ic = point->GetIc();
+  const double delta = point->GetDelta();
+  double R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
+  if (delta != 0.) {
+    const double finalLp = finalL + 1.;
+    R_L = (R_L + 2. * delta * this->GetRk(j2f, finalL, finalLp, Ic, lOrder) +
+           delta * delta * this->GetRk(j2f, finalLp, finalLp, Ic, lOrder)) / (1. + delta * delta);
+  }
+  return R_L;
+}
 
 bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
                                              double *analyzingPower) {

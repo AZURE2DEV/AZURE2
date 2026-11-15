@@ -2885,6 +2885,18 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     4.44 MeV gamma of 12C(2+) for 15N(p,a1 gamma)), NOT the primary particle's
     cross section. Then `L` = multipolarity of that secondary gamma, `Ic` =
     spin of the state it decays to, `delta` = its multipole mixing ratio.
+  - **On a capture pair UPOS is a capture cascade** (engines from November
+    2026, `tests/capture_cascade`): the secondary gamma ray of the capture
+    final state B after an UNOBSERVED primary capture photon, A(a,g1)B,
+    B -> C + g2, e.g. the 452 keV gamma of 25Al in 24Mg(p,g). Same three
+    fields (L, Ic, delta of g2). Direct feeding of B only: feeding through
+    higher states is not modelled, and the result assumes 100 % branching to C
+    (scale the data or the norm). Internal and external capture interfere as in
+    the capture cross section. A state of spin 0 or 1/2 emits isotropically,
+    so such data test only feeding x branching. Refused with `linewindow` and
+    `--use-rmc`. OLDER ENGINES IGNORE the UPOS fields on a capture pair and
+    return the primary photon's distribution silently: check
+    `~/AZURE2/INSTALLED` / the campaign's pinned engine before trusting one.
   - Reading a tail: `file 0 0` = plain segment; `file 0 1 2 0 0` = UPOS, E2
     gamma to a 0+ state, no mixing (12C+a 8-6-26 segment 391, Bashkin
     15N(p,a1 gamma) at 0 deg); `file 1 0 3 ...` = sum of three components.

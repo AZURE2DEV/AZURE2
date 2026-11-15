@@ -116,8 +116,12 @@ static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int nu
  * light ejectile of the exit pair, which is right for a gamma measured in coincidence with it and not otherwise
  * (segments.rst, UPOS).  Say so instead of converting silently (audit 2026-10-25, item 31).
  */
-static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Config &configure) {
+static void UPOSLabNote(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !segment.IsDifferential() || segment.IsCMDifferential() || segment.IsPhase()) return;
+  // A capture cascade is converted as a capture gamma ray (emitted by the recoiling compound system; the recoil from
+  // the primary photon is neglected), which is what the secondary gamma ray is.
+  if (theCNuc->IsPairKey(segment.GetExitKey()) &&
+      theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()))->GetPType() == 10) return;
   configure.outStream << "WARNING: " << (isTest ? "test segment #" : "segment #") << key
                       << " (UPOS, lab differential): the lab angle is converted with the kinematics of particle b, "
                       << "the light ejectile of the exit pair (not the gamma's); give c.m. angles if that is not meant."
@@ -158,6 +162,21 @@ static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, co
 static bool UPOSAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  if (exitPair->GetPType() == 10) {
+    // A capture cascade (the secondary gamma ray of the capture final state, primary photon unobserved).
+    std::string why;
+    if (configure.paramMask & Config::USE_RMC_FORMALISM)
+      why = "not with the R-matrix-for-capture formalism (--use-rmc)";
+    else if (segment.GetLineWindow() > 0.0)
+      why = "not together with \"linewindow\" (the line-shape integration has no secondary-gamma form yet)";
+    else if (segment.IsAnalyzingPower())
+      why = "an analyzing power of the secondary gamma ray is not implemented";
+    if (why.empty()) return true;
+    configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key
+                        << " (UPOS on a capture pair, the secondary gamma ray of a capture cascade): " << why << "."
+                        << std::endl;
+    return false;
+  }
   if (exitPair->GetLightExE() == 0.) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
                       << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
@@ -379,7 +398,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
-          UPOSLabNote(NewSegment, numTotalSegments, false, configure);
+          UPOSLabNote(theCNuc, NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -621,7 +640,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
-          UPOSLabNote(NewSegment, numTotalSegments, true, configure);
+          UPOSLabNote(theCNuc, NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus

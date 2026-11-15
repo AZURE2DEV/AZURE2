@@ -2528,6 +2528,23 @@ void CNuc::CalcAngularDists(int maxL) {
                       AngCoeff::Racah(lOrder, sp, j2, l1p, sp2, j1) *
                       AngCoeff::Racah(lOrder, j1, l2, s, j2, l1);
                 }
+                // Capture cascade: the secondary gamma ray of the capture FINAL state after an unobserved primary
+                // capture photon.  A photon summed over its direction and both helicities leaves no interference
+                // between multipoles (L, electric / magnetic), and the orientation it leaves in the final state is
+                // that left by a spin-0 particle of orbital angular momentum L: Eq. (22) with l' = L, I_b = 0 and
+                // s' = s2' = I_B = J_f (the conclusions of Brune and deBoer name this extension).  External-capture
+                // pathways are capture amplitudes of a given multipole like any other and interfere coherently.
+                bool captureUpos = false;
+                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 10 && l1p == l2p && w1p == w2p) {
+                  const double jf = this->GetPair(theDecay->GetPairNum())->GetJ(2);
+                  z1z2_upos = pow(-1., lOrder) * (2. * j1 + 1.) * (2. * j2 + 1.) *
+                      pow((2. * l1 + 1.) * (2. * jf + 1.), 0.5) * (2. * jf + 1.) *
+                      AngCoeff::ClebGord(lOrder, l1, l2, 0., 0., 0.) *
+                      AngCoeff::Racah(lOrder, jf, jf, 0., jf, jf) *
+                      AngCoeff::Racah(lOrder, jf, j2, l1p, jf, j1) *
+                      AngCoeff::Racah(lOrder, j1, l2, s, j2, l1);
+                  captureUpos = fabs(z1z2_upos) > 1e-10;
+                }
                 if (fabs(z1z2) > 1e-10 || fabs(z1z2_upos) > 1e-10) {
                   KLGroup NewKLGroup(k, lOrder);
                   int KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
@@ -2535,7 +2552,8 @@ void CNuc::CalcAngularDists(int maxL) {
                     theDecay->AddKLGroup(NewKLGroup);
                     KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
                   }
-                  if (aa == theDecay->GetPairNum() || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
+                  if (aa == theDecay->GetPairNum() ||
+                      (this->GetPair(theDecay->GetPairNum())->GetPType() == 10 && !captureUpos)) {
                     // Standard interference (elastic or gamma capture)
                     Interference NewInterference(path1, path2, z1z2, interferenceType);
                     int InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
