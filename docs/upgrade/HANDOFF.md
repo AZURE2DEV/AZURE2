@@ -2,6 +2,13 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 16:40) — the sanitizer workflow's first report was not shown; its order changed
+
+The thread-sanitizer job of `dbe15286` failed as before (a data race in `pthread_mutex_lock`, every step), the
+address job passed, and the annotation with the first report did not appear. Probable cause (not confirmed): a
+step shows ten annotations of a kind, and the first report was the eleventh. `upgrade-sanitizers.yml` now writes
+it first and six failed steps instead of eight. Tried on a made-up log, not on GitHub. Nothing else changed.
+
 ## 2026-11-15 (director, 15:05) — the CI's first test run read; tests and workflows repaired (no C++)
 
 **State of the CI before this commit.** Third and fourth pushes (`dbfd6abb`, `3e14a7a4`): Linux and macOS

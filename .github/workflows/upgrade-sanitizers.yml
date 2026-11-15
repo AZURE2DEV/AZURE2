@@ -87,13 +87,15 @@ jobs:
           # test failed without a report; build.yml gates test failures, so here it is a warning, one per step.
           # Exit 3: the toolchain or build is broken (the job fails).
           sev=error; [ "$rc" -eq 2 ] && sev=warning
-          grep -E '^  FAIL' sanitize.log | head -8 | while read -r l; do echo "::$sev::${{ matrix.sanitizer }}: $l"; done
-          grep -m2 -E '^(SUMMARY: (Thread|Address)Sanitizer|==[0-9]+==ERROR)' sanitize.log | while read -r l; do echo "::error::$l"; done
-          grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
+          # A step shows ten annotations of a kind and drops the rest: the first report goes first, then two
+          # summary lines, the script's own line and six failed steps.
           # The first report with its stacks, as one annotation: a summary line does not say whose race it is.
           first="$(awk '/^---- / { n++ } n == 1' sanitize.log | head -45 | sed "s|$GITHUB_WORKSPACE/||g" \
                    | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
           [ -n "$first" ] && echo "::error::${{ matrix.sanitizer }}: the first report:%0A$first"
+          grep -m2 -E '^(SUMMARY: (Thread|Address)Sanitizer|==[0-9]+==ERROR)' sanitize.log | while read -r l; do echo "::error::$l"; done
+          grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
+          grep -E '^  FAIL' sanitize.log | head -6 | while read -r l; do echo "::$sev::${{ matrix.sanitizer }}: $l"; done
           [ "$rc" -eq 2 ] && exit 0
           exit "$rc"
 
