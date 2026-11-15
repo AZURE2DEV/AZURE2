@@ -99,6 +99,28 @@ AZURESetup::AZURESetup() :
   levelsTab = new LevelsTab;
   levelsTab->setPairsModel(pairsTab->getPairsModel());
   levelsTab->setChannelRadiiModel(pairsTab->getChannelRadiiModel());
+  // The per-channel radii box lists every particle channel of the active levels (2026-11-15), as the Levels tab
+  // builds them; shown when Configure > Runtime Options "Per-channel radii" is on (a GUI preference, QSettings),
+  // or for a project whose file has <channelRadii> rows.
+  pairsTab->setChannelEnumerator([this]() {
+    QList<ChannelKey> keys;
+    const QList<LevelsData> levels = levelsTab->getLevelsModel()->getLevels();
+    for (const LevelsData &level : levels) {
+      if (!level.isActive) continue;
+      for (const ChannelsData &c : levelsTab->calculateChannels(level, -1)) {
+        if (c.radType != 'P') continue;
+        ChannelKey k;
+        k.pairKey = c.pairIndex + 1;
+        k.l = c.lValue;
+        k.s = c.sValue;
+        k.J = level.jValue;
+        k.parity = level.piValue;
+        keys.append(k);
+      }
+    }
+    return keys;
+  });
+  pairsTab->setPerChannelRadiiOption(QSettings().value("gui/perChannelRadii", false).toBool());
   connect(pairsTab, SIGNAL(pairAdded(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairEdited(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairRemoved(int)), levelsTab, SLOT(updateChannelsPairRemoved(int)));
@@ -526,6 +548,7 @@ bool AZURESetup::readFile(QString filename) {
   settings.setValue("recentFileList", files);
   updateRecent();
 
+  pairsTab->refreshChannelRadii();  // a file with <channelRadii> rows shows the box whatever the option
   return true;
 }
 
@@ -1342,6 +1365,7 @@ void AZURESetup::editOptions() {
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
   aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
+  aDialog.perChannelRadiiCheck->setChecked(pairsTab->perChannelRadiiOption());
   aDialog.priorCovarianceEdit->setText(QString::fromStdString(GetConfig().priorCovariance));
   if (!GetConfig().configfile.empty())
     aDialog.setProjectDirectory(QFileInfo(QString::fromStdString(GetConfig().configfile)).absolutePath());
@@ -1385,6 +1409,8 @@ void AZURESetup::editOptions() {
 
     GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
     GetConfig().relativistic = aDialog.relativisticCheck->isChecked();
+    QSettings().setValue("gui/perChannelRadii", aDialog.perChannelRadiiCheck->isChecked());
+    pairsTab->setPerChannelRadiiOption(aDialog.perChannelRadiiCheck->isChecked());
     GetConfig().priorCovariance = aDialog.priorCovarianceEdit->text().trimmed().toStdString();
 
     // Update tab visibility based on hybrid method setting

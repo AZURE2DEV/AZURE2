@@ -666,3 +666,26 @@ endif()
 add_test(NAME isospin_levels COMMAND isospin_levels_test)
 set_tests_properties(isospin_levels PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The plotter draws a one-point calculation as a marker (no line to draw), 2026-11-15.
+if(USE_QWT)
+    add_executable(single_point_plot_test single_point_plot_test.cpp)
+    set_target_properties(single_point_plot_test PROPERTIES AUTOMOC OFF)
+    target_include_directories(single_point_plot_test PRIVATE
+        ${AZURE2_SOURCE_DIR}/gui/include
+        ${AZURE2_SOURCE_DIR}/include
+    )
+    target_link_libraries(single_point_plot_test PRIVATE
+        ${AZURESETUP_LIBRARIES}
+        ${AZUREAPI_LIBRARIES}
+        AZURE2Core
+        Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+        ${QWT_LIBRARIES}
+    )
+    if(USE_ERYA)
+        target_link_libraries(single_point_plot_test PRIVATE pugixml srim_utilities)
+    endif()
+    add_test(NAME single_point_plot COMMAND single_point_plot_test)
+    set_tests_properties(single_point_plot PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

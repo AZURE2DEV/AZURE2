@@ -121,9 +121,8 @@ Channel Radius
       re-running the calculation with different values. The channel radius
       **cannot** currently be used as a fit parameter.
 
-   The radius in this table applies to every channel of the pair unless the
-   **Per-channel radii** box below gives some of them their own
-   (:ref:`per-channel-radii`).
+   The radius in this table applies to every channel of the pair unless some
+   channels are given their own (:ref:`per-channel-radii`, an advanced option).
 
 External Capture Multipolarities
    For **(Particle, Gamma)** pairs only. Select **E1** and/or **E2**
@@ -137,10 +136,14 @@ Per-channel radii
 
 The formal theory allows a different radius for every channel
 :math:`c = (\alpha, l, s, J)`; elastic-scattering fits in particular can want
-one partial wave matched at a different surface from the others. The
-**Per-channel radii** box under the pairs table lists rows that give some
-channels of a particle pair a radius of their own; every other channel keeps
-the pair's radius from the table above.
+one partial wave matched at a different surface from the others. This is an
+advanced option: the **Per-channel radii** box under the pairs table appears when
+**Configure > Runtime Options > Per-channel radii (Particle Pairs tab)** is ticked
+(a setting of the GUI, not of the project), and always for a project whose file
+already gives some channel a radius of its own.
+
+The box lists **every particle channel of the active levels**, as the Levels tab
+builds them (up to its maximum orbital momentum):
 
 .. list-table::
    :header-rows: 1
@@ -149,21 +152,27 @@ the pair's radius from the table above.
    * - Column
      - Meaning
    * - Pair
-     - The pair key (the row number of the pairs table). Only particle pairs
-       have channel radii.
-   * - l
-     - The orbital angular momentum of the channels.
-   * - s
-     - The channel spin (``1/2``, ``3/2`` ...), or blank (``any``) for every
-       channel spin.
-   * - J
-     - The total spin of the level's :math:`J^\pi` group, or blank for every
-       J. With l and the pair, J fixes the parity.
+     - The pair (key and name). Only particle pairs have channel radii.
+   * - l, s
+     - The orbital angular momentum and channel spin of the channel.
+   * - J\ :math:`\pi`
+     - The spin and parity of the level group the channel belongs to.
    * - Radius [fm]
-     - The radius of the channels the row matches.
+     - The radius the channel takes: its pair's (shown in italic) or one of its
+       own (bold). Edit it to give the channel its own radius; enter the pair's
+       radius, or select the channel and press **Clear own radius**, to give it
+       back.
+   * - Source
+     - Where the radius comes from: ``pair``, ``this channel``, or a broader row
+       of the project file (below).
 
-**+** adds a row for the selected pair (l = 0, at the pair's radius); edit l,
-s, J and the radius in the table. **-** removes the selected row.
+The radii are written to the project file as the ``<channelRadii>`` block, one
+row per channel that has its own radius, naming its l, s and J. The block may
+also hold broader rows, written by hand or by older GUIs, that name l alone or l
+with s or J and so cover several channels; the list shows which channels such a
+row decides, keeps the row as written, and gives a channel edited in the list a
+row of its own. A note under the list counts the broader rows and any row that
+matches no channel of the calculation.
 
 The most specific row wins: one naming l, s and J over one naming l and J,
 over one naming l and s, over one naming l alone. A channel matched by an

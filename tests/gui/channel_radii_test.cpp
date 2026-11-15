@@ -25,8 +25,10 @@ void startMessage(const Config&) {}
 
 namespace {
 int failures = 0;
-void ok(const std::string &what, bool cond) {
-  std::cout << (cond ? "  ok    " : "  FAIL  ") << what << std::endl;
+void ok(const std::string &what, bool cond, const QString &detail = QString()) {
+  std::cout << (cond ? "  ok    " : "  FAIL  ") << what;
+  if (!cond && !detail.isEmpty()) std::cout << "  -- " << detail.toStdString();
+  std::cout << std::endl;
   if (!cond) failures++;
 }
 QString readAll(const QString &path) {
@@ -116,19 +118,48 @@ int main(int argc, char **argv) {
     ok("written file opens", again.readProjectFile(out1));
     ok("same rows after the round trip", sameRows(again.getPairsTab()->getChannelRadiiModel()->rows(), cr->rows()));
 
-    // the Pairs tab's buttons: + adds a row for the selected pair at its radius, - removes the selected row
+    // The Pairs tab lists every particle channel of the active levels (2026-11-15) with the radius it takes; an edit
+    // writes a row naming the channel's l, s and J, and "Clear own radius" removes it again.
     PairsTab *tab = setup.getPairsTab();
-    QPushButton *add = tab->findChild<QPushButton *>("addChannelRadiusButton");
-    QPushButton *rem = tab->findChild<QPushButton *>("removeChannelRadiusButton");
+    QWidget *box = tab->findChild<QWidget *>("channelRadiiBox");
     QTableView *view = tab->findChild<QTableView *>("channelRadiiView");
-    ok("box, view and buttons present", add && rem && view && tab->findChild<QWidget *>("channelRadiiBox"));
-    if (add && rem && view) {
-      add->click();
-      ok("+ adds a row (pair 1, l = 0, at the pair's 5 fm)",
-         cr->rows().size() == 3 && cr->rows().at(2).pairKey == 1 && cr->rows().at(2).l == 0 && cr->rows().at(2).radius == 5.0);
-      view->selectRow(0);
-      rem->click();
-      ok("- removes the selected row", cr->rows().size() == 2 && cr->rows().at(0).l == 2);
+    QPushButton *clear = tab->findChild<QPushButton *>("resetChannelRadiusButton");
+    ok("box, view and button present", box && view && clear);
+    tab->setPerChannelRadiiOption(false);
+    ok("the box shows for a file with rows even with the option off", box && box->isVisibleTo(tab));
+    ChannelRadiiListModel *lm = tab->getChannelRadiiListModel();
+    auto rowOf = [&](int l, double s, double J) {
+      for (int i = 0; i < lm->channels().size(); i++) {
+        const ChannelKey &c = lm->channels().at(i);
+        if (c.pairKey == 1 && c.l == l && c.s == s && c.J == J) return i;
+      }
+      return -1;
+    };
+    const int pJ = rowOf(1, 0.5, 1.5), sHalf = rowOf(0, 0.5, 0.5);
+    std::cout << "    " << lm->channels().size() << " channels listed" << std::endl;
+    ok("the channels of the levels are listed (p 3/2- and s 1/2+ of pair 1)", pJ >= 0 && sHalf >= 0);
+    if (pJ >= 0 && sHalf >= 0 && view && clear) {
+      auto cell = [&](int row, int col) { return lm->data(lm->index(row, col), Qt::DisplayRole).toString(); };
+      ok("l = 1, J = 3/2: 4 fm from the file's J row", cell(pJ, ChannelRadiiListModel::RadiusCol) == "4" &&
+                                                           cell(pJ, ChannelRadiiListModel::SourceCol) == "row: l = 1, J = 3/2",
+         cell(pJ, ChannelRadiiListModel::RadiusCol) + " / " + cell(pJ, ChannelRadiiListModel::SourceCol));
+      ok("s 1/2+: the pair's 5 fm", cell(sHalf, ChannelRadiiListModel::RadiusCol) == "5" &&
+                                        cell(sHalf, ChannelRadiiListModel::SourceCol) == "pair");
+      lm->setData(lm->index(pJ, ChannelRadiiListModel::RadiusCol), "4.2");
+      ok("an edit adds a row naming l, s and J", cr->rows().size() == 3 && cr->rows().at(2).s == 0.5 &&
+                                                     cr->rows().at(2).J == 1.5 && cr->rows().at(2).radius == 4.2 &&
+                                                     cell(pJ, ChannelRadiiListModel::SourceCol) == "this channel");
+      lm->setData(lm->index(pJ, ChannelRadiiListModel::RadiusCol), "5");
+      ok("the pair's radius under a broader row stays a row of its own", cr->rows().size() == 3 &&
+                                                                             cr->rows().at(2).radius == 5.0);
+      view->selectRow(pJ);
+      clear->click();
+      ok("Clear own radius: back to the broader row", cr->rows().size() == 2 && cell(pJ, ChannelRadiiListModel::RadiusCol) == "4");
+      lm->setData(lm->index(sHalf, ChannelRadiiListModel::RadiusCol), "4.8");
+      ok("a channel without a row gets one", cr->rows().size() == 3 && cr->radiusFor(1, 0, 0.5, 0.5, 5.0) == 4.8);
+      lm->setData(lm->index(sHalf, ChannelRadiiListModel::RadiusCol), "5");
+      ok("... and the pair's radius removes it", cr->rows().size() == 2);
+      ok("radius 0 refused", !lm->setData(lm->index(sHalf, ChannelRadiiListModel::RadiusCol), "0"));
     }
     if (qEnvironmentVariableIsSet("AZURE2_CHANNEL_RADII_PNG")) {
       tab->resize(900, 640);
@@ -143,6 +174,14 @@ int main(int argc, char **argv) {
     writeAll(in2, text);
     AZURESetup setup;
     ok("plain project opens", setup.readProjectFile(in2));
+    PairsTab *tab = setup.getPairsTab();
+    QWidget *box = tab->findChild<QWidget *>("channelRadiiBox");
+    tab->setPerChannelRadiiOption(false);
+    ok("no rows, option off: the box is hidden", box && !box->isVisibleTo(tab));
+    tab->setPerChannelRadiiOption(true);
+    ok("option on: shown, with every channel", box && box->isVisibleTo(tab) &&
+                                                   !tab->getChannelRadiiListModel()->channels().isEmpty());
+    tab->setPerChannelRadiiOption(false);
     const QString out2 = tmp.filePath("out2.azr");
     setup.writeProjectFile(out2);
     ok("no block written for a project without one", !readAll(out2).contains("channelRadii"));

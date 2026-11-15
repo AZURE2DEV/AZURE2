@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <QBrush>
 #include <QCheckBox>
 #include <QDialog>
@@ -377,9 +378,18 @@ void PlotEntry::attach(QwtPlot *plot, int xAxisType, int yAxisType, bool showBan
     if (any) {
       bandCurve_ = new QwtPlotIntervalCurve;
       bandCurve_->setRenderHint(QwtPlotItem::RenderAntialiased);
-      bandCurve_->setStyle(QwtPlotIntervalCurve::Tube);
       bandCurve_->setItemAttribute(QwtPlotItem::Legend, false);
       QColor bandColor = (type_ == 0 && fitColor_.isValid()) ? fitColor_ : color_;
+      if (points_.size() == 1) {
+        // a tube needs two points: one point's band is a bar (beside the marker of the calculation, below)
+        bandCurve_->setStyle(QwtPlotIntervalCurve::NoCurve);
+        QwtIntervalSymbol *bar = new QwtIntervalSymbol(QwtIntervalSymbol::Bar);
+        bar->setWidth(14);
+        bar->setPen(QPen(bandColor, 2));
+        bandCurve_->setSymbol(bar);
+      } else {
+        bandCurve_->setStyle(QwtPlotIntervalCurve::Tube);
+      }
       bandColor.setAlpha(60);
       bandCurve_->setBrush(QBrush(bandColor));
       bandCurve_->setPen(QPen(Qt::NoPen));
@@ -405,7 +415,18 @@ void PlotEntry::attach(QwtPlot *plot, int xAxisType, int yAxisType, bool showBan
     fitCurve_->setTitle(label_);
   }
 
-  fitCurve_->setSymbol(new QwtSymbol(QwtSymbol::NoSymbol));
+  if (points_.size() == 1) {
+    // One point has no line to draw: show the calculation as an open marker in its colour, larger than the data
+    // symbol so a data point stays visible inside it (a single-energy or single-angle segment, 2026-11-15).
+    fitCurve_->setStyle(QwtPlotCurve::NoCurve);
+    QwtSymbol *marker = new QwtSymbol(QwtSymbol::Diamond);
+    marker->setSize(symbolSize_ + 6);
+    marker->setPen(QPen(lineColor, std::max(1.5, (double)lineWidth_)));
+    marker->setBrush(Qt::NoBrush);
+    fitCurve_->setSymbol(marker);
+  } else {
+    fitCurve_->setSymbol(new QwtSymbol(QwtSymbol::NoSymbol));
+  }
   fitCurve_->setSamples(fit);
 
   // Draw the calculation line on top of the data points and error bars.
