@@ -47,11 +47,12 @@ refused() {
     bad "$name: exit $rc, $(printf '%s\n' "$out" | sed -n '1,3p' | tr '\n' ' ')"
   fi
 }
-# accepted NAME ENV ARGS...: no ERROR, the run goes on to the missing project (exit 255)
+# accepted NAME ENV ARGS...: no ERROR, the run goes on to the missing project (exit 255; 127 in the MSYS2 shell of the
+# Windows CI, where the same exit -1 of a Windows program reads so: seen there, 2026-11-15)
 accepted() {
   local name="$1"; shift
   probe "$@"
-  if [ "$rc" = 255 ] && ! grep -q "^ERROR" <<< "$out" && grep -q "Could not open" <<< "$out"; then
+  if { [ "$rc" = 255 ] || [ "$rc" = 127 ]; } && ! grep -q "^ERROR" <<< "$out" && grep -q "Could not open" <<< "$out"; then
     ok "$name: accepted"
   else
     bad "$name: exit $rc, $(printf '%s\n' "$out" | sed -n '1,3p' | tr '\n' ' ')"

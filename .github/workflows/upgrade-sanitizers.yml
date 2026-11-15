@@ -87,15 +87,22 @@ jobs:
           # test failed without a report; build.yml gates test failures, so here it is a warning, one per step.
           # Exit 3: the toolchain or build is broken (the job fails).
           sev=error; [ "$rc" -eq 2 ] && sev=warning
-          # A step shows ten annotations of a kind and drops the rest: the first report goes first, then two
-          # summary lines, the script's own line and six failed steps.
-          # The first report with its stacks, as one annotation: a summary line does not say whose race it is.
-          first="$(awk '/^---- / { n++ } n == 1' sanitize.log | head -45 | sed "s|$GITHUB_WORKSPACE/||g" \
-                   | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
-          [ -n "$first" ] && echo "::error::${{ matrix.sanitizer }}: the first report:%0A$first"
-          grep -m2 -E '^(SUMMARY: (Thread|Address)Sanitizer|==[0-9]+==ERROR)' sanitize.log | while read -r l; do echo "::error::$l"; done
+          # A step shows ten annotations of a kind and drops the rest.  Eight at most are written: the first report
+          # of up to five report files, the table of distinct reports, the script's own line, the failed steps.
+          # A report with its stacks, as one annotation: a summary line does not say whose race it is.
+          for k in 1 2 3 4 5; do
+            rep="$(awk -v k="$k" '/^---- / { n++ } /^steps: / { n = 0 } n == k' sanitize.log | head -45 \
+                   | sed "s|$GITHUB_WORKSPACE/||g" | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+            [ -n "$rep" ] && echo "::error::${{ matrix.sanitizer }}: the first report of report file $k:%0A$rep"
+          done
+          # Every distinct report with its count (the script's table), so that one run shows what stands behind
+          # the first report.
+          table="$(awk '/^first report of each file/ { t = 0 } t; /^SANITIZER REPORTS:/ { t = 1; print }' sanitize.log \
+                   | head -40 | sed "s|$GITHUB_WORKSPACE/||g" | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          [ -n "$table" ] && echo "::error::${{ matrix.sanitizer }}: $table"
           grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
-          grep -E '^  FAIL' sanitize.log | head -6 | while read -r l; do echo "::$sev::${{ matrix.sanitizer }}: $l"; done
+          failed="$(grep -E '^  FAIL' sanitize.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          [ -n "$failed" ] && echo "::$sev::${{ matrix.sanitizer }}: failed steps:%0A$failed"
           [ "$rc" -eq 2 ] && exit 0
           exit "$rc"
 

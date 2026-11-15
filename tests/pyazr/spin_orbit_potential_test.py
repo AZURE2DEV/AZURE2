@@ -136,20 +136,29 @@ try:
         for p in M.ec_integrals(1, E):
             if p["multipolarity"] == 1 and p["lf"] == 1 and p["li"] in (0, 2):
                 paths.setdefault((name, p["li"]), []).append(np.asarray(p["value"]))
-    worst, n = 0.0, 0
+    worst, n, seen = 0.0, 0, []
     with open(EC_REF) as f:
         for row in csv.DictReader(f):
             li, e = int(row["li"]), float(row["E_MeV"])
             i = int(np.argmin(np.abs(E - e)))
-            # the two pathways of (l_i, E1, l_f): direct (purely imaginary here) and channel capture
+            # the two pathways of (l_i, E1, l_f): direct (imaginary here) and channel capture (its real part is the
+            # larger one).  The direct one is told by size, not by a real part that is exactly 0: it is exactly 0
+            # with GCC on Linux, and on the CI's macOS machine the test failed by the distance between the two
+            # ratios (4.1e-2), i.e. took a direct value for a channel one (its values were not printed then).
             for w, wo in zip(paths[("with", li)], paths[("without", li)]):
                 r = w[i] / wo[i]
-                want = (float(row["direct_ratio"]) if abs(w[i].real) == 0.0
+                direct = abs(w[i].real) <= 1e-9 * abs(w[i])
+                want = (float(row["direct_ratio"]) if direct
                         else complex(float(row["channel_ratio_re"]), float(row["channel_ratio_im"])))
                 worst = max(worst, abs(r - want))
+                seen.append(f"li {li} E {e} {'direct' if direct else 'channel'}: with {w[i]!r} without {wo[i]!r} "
+                            f"ratio {r!r} want {want!r}")
                 n += 1
     check(f"EC integrals with/without the term = ec_reference.py ({n} values, worst {worst:.1e})", n == 8 and worst <= 1e-5,
-          f"n = {n}, {worst:.3e}")
+          f"n = {n}, {worst:.3e}\n    " + "\n    ".join(seen))
+    check("EC integrals: one direct and one channel pathway per (l_i, E)",
+          sorted(x.split(":")[0] for x in seen) == sorted(f"li {li} E {e} {k}" for li in (0, 2) for e in (0.5, 1.0)
+                                                          for k in ("direct", "channel")), "\n    " + "\n    ".join(seen))
 except Exception as e:  # pragma: no cover
     check("session", False, repr(e))
 finally:

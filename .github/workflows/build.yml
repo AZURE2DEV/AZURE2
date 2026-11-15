@@ -110,6 +110,19 @@ jobs:
         if: matrix.name == 'macos'
         run: |
           brew install ninja gsl readline libomp
+          # GNU tools for the two test steps only.  The test scripts added by the upgrade were written and run
+          # against GNU tools and fail with the BSD ones of macOS (sed -i FILE, "\n" in a sed replacement, the
+          # padded output of wc, a newline in an awk -v value) or without timeout (tools/run_one.sh; the shell
+          # watchdog of tests/lib/guard.sh cannot follow "env VAR=..."): read from the first macOS run of these
+          # tests.  The build keeps Apple's tools.
+          brew install coreutils gnu-sed gawk grep findutils ||
+            { echo "::error::macos: brew install coreutils gnu-sed gawk grep findutils failed"; exit 1; }
+          GNUBIN=""
+          for f in coreutils gnu-sed gawk grep findutils; do
+            d="$(brew --prefix "$f")/libexec/gnubin"
+            if [ -d "$d" ]; then GNUBIN="$GNUBIN${GNUBIN:+:}$d"; else echo "::warning::macos: no directory $d"; fi
+          done
+          echo "GNUBIN=$GNUBIN" >> "$GITHUB_ENV"
           # pybind11, numpy and scipy from pip in a venv: one interpreter that
           # _azure2 is built for and the pyazr tests run under, independent of
           # which python@3.x keg Homebrew's own numpy happens to use.
@@ -242,16 +255,27 @@ jobs:
           if [ -n "${PYAZR_PYTHON:-}" ] && [ "${{ matrix.name }}" != "windows" ]; then
             export PATH="$(dirname "$PYAZR_PYTHON"):$PATH"
           fi
+          # macOS: the GNU tools of the install step before Apple's (see there)
+          if [ "${{ matrix.name }}" = "macos" ] && [ -n "${GNUBIN:-}" ]; then export PATH="$GNUBIN:$PATH"; fi
           # Windows: the test scripts make their work directories under TMPDIR and hand the paths to native programs
           # (python, AZURE2) inside files and variables, where MSYS does not translate /tmp: a Windows path instead.
           if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
           if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
             # Every failing test by name in the first annotation: GitHub shows ten annotations per step, and the
-            # ones below stop at nine.
+            # ones below stop at ten.
             BAD="$(awk '/^=== / { if (bad) print head; head = $0; bad = 0; next }
                         /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/ && $0 !~ /^ *ok / { bad = 1 }
                         END { if (bad) print head }' physics-tests.log | sed 's/^=== //; s/ ===$//' | paste -sd ',' -)"
             echo "::error::physics regression tests failed on ${{ matrix.name }}: $(tail -1 physics-tests.log)%0A$BAD"
+            # The first failing lines of every failing test in one annotation: the nine below hid four of thirteen
+            # failing checks in the first Windows run that reached them.
+            awk -v os="${{ matrix.name }}" '
+              function flush() { if (bad) out = out "%0A" head why; head = ""; why = ""; nwhy = 0; bad = 0 }
+              /^=== / { flush(); head = $0; next }
+              head != "" && /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/ && $0 !~ /^ *ok / {
+                bad = 1; gsub(/%/, "%25"); gsub(/\r/, ""); if (++nwhy <= 4) why = why "%0A    " substr($0, 1, 240) }
+              END { flush(); if (out != "") printf "::error::%s: the first failing lines of every failing check:%s\n", os, out }
+              ' physics-tests.log
             # One annotation per failing test (GitHub shows only ten per step),
             # carrying that test's own output, so the reason is readable without
             # downloading the log.  %0A is a newline inside an annotation.
@@ -263,7 +287,7 @@ jobs:
                           # the lines that say what failed come first: GitHub cuts a long annotation
                           if ($0 ~ /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/ && $0 !~ /^ *ok /) {
                             bad = 1; if (++nwhy <= 12) why = why "%0A" $0 } }
-              END { flush() }' physics-tests.log | head -9
+              END { flush() }' physics-tests.log | head -8
             exit 1
           fi
 
@@ -290,6 +314,8 @@ jobs:
           set -o pipefail
           rc=0
           if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
+          # macOS: the GNU tools of the install step before Apple's (see there)
+          if [ "${{ matrix.name }}" = "macos" ] && [ -n "${GNUBIN:-}" ]; then export PATH="$GNUBIN:$PATH"; fi
           ctest --test-dir build --output-on-failure -LE "slow|browser" 2>&1 | tee unit-tests.log || rc=$?
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.
@@ -299,10 +325,24 @@ jobs:
           fi
           if [ "$rc" -ne 0 ]; then
             # Every failed test by name in the first annotation (ctest's closing "The following tests FAILED:"
-            # block): GitHub shows ten annotations per step, and the ones below stop at nine.
+            # block): GitHub shows ten annotations per step, and the ones below stop at ten.
             BAD="$(awk 'f && /^[ \t]*[0-9]+ - / { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(.*$/, ""); print }
                         /The following tests FAILED:/ { f = 1 }' unit-tests.log | paste -sd ' ' -)"
             echo "::error::unit tests failed on ${{ matrix.name }}: $(echo "$BAD" | wc -w | tr -d ' ') test(s):%0A$BAD"
+            # The failed tests grouped by the last line of their output, in one annotation: one cause that fails
+            # a hundred tests (the first Windows run: 130 on one missing call) is then one row, and the others show.
+            awk -v os="${{ matrix.name }}" '
+              function flush() { if (name != "") { if (!(last in cnt)) order[++m] = last
+                                   if (++cnt[last] <= 5) who[last] = who[last] " " name } name = ""; last = "" }
+              /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $4; next }
+              /^[0-9]+% tests passed/ { flush() }
+              name != "" && $0 !~ /^ *Start +[0-9]+: / && $0 !~ /^[ \t\r]*$/ {
+                gsub(/%/, "%25"); gsub(/\r/, ""); last = substr($0, 1, 220) }
+              END { flush()
+                    for (i = 1; i <= m && i <= 40; i++) { k = order[i]
+                      out = out "%0A" cnt[k] " test(s):" who[k] (cnt[k] > 5 ? " ..." : "") "%0A    " k }
+                    if (out != "") printf "::error::%s: failed unit tests by the last line of their output:%s\n", os, out }
+              ' unit-tests.log
             # One annotation per failed test with its failing lines and the tail of its own output
             # (%0A = newline), so the reason shows without the log download.
             awk -v os="${{ matrix.name }}" '
@@ -313,7 +353,7 @@ jobs:
                                    printf "::error::%s: %s%s%s\n", os, name, why, out } name = ""; buf = "" }
               /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $0; next }
               name != "" { gsub(/%/, "%25"); gsub(/\r/, ""); buf = buf $0 "\n" }
-              END { flush() }' unit-tests.log | head -9
+              END { flush() }' unit-tests.log | head -8
             exit 1
           fi
           # The web page's tests need pytest, fastapi, httpx and uvicorn, which the Windows job does not install:

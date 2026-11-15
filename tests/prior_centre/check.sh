@@ -119,9 +119,10 @@ if [ "$cx" = "$cy" ] && grep -q "prior_centre row(s) folded" "$dx/convert.log"; 
 else
   fail "a row for an inactive segment line: chi2 $cx (without the row $cy), converter: $(tail -1 "$dx/convert.log")"
 fi
-for c in "unknown:$du:names no parameter a prior_centre row can move" "typo:$dt:cannot be read" "bad:$db:cannot be read" \
-         "nonpos:$dn:must be positive"; do
-  IFS=: read -r what dir msg <<< "$c"
+# the separator is not a colon: a Windows path (D:/...) holds one (seen on the CI, 2026-11-15)
+for c in "unknown|$du|names no parameter a prior_centre row can move" "typo|$dt|cannot be read" "bad|$db|cannot be read" \
+         "nonpos|$dn|must be positive"; do
+  IFS='|' read -r what dir msg <<< "$c"
   if [ ! -f "$dir/run.azr" ] && grep -q "not converted: <parameterSettings> row .*$msg" "$dir/convert.log"; then
     pass "the row of the original ($what) is refused by the converter"
   else

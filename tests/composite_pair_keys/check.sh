@@ -74,7 +74,7 @@ if [ ! -s "$s6" ] || [ ! -s "$p6" ] || [ ! -s "$a6" ] || [ ! -s "$s1" ]; then
   bad "no extrapolation written ($(grep -h -m1 ERROR "$WORK"/*/run.log))"
 else
   # column 4: sigma (b) at the energies of column 1; every row of the three files at the same energy
-  if worst="$(paste "$s6" "$p6" "$a6" | awk -v re='^[-+]?[0-9.]+([eE][-+]?[0-9]+)?$' '
+  if worst="$(paste "$s6" "$p6" "$a6" | tr -d '\r' | awk -v re='^[-+]?[0-9.]+([eE][-+]?[0-9]+)?$' '
         NF == 0 { next }
         { n++; if ($1 != $6 || $1 != $11 || $4 !~ re || $9 !~ re || $14 !~ re) { bad = 1; next }
           want = $9 + 0.5 * $14; d = $4 - want; if (d < 0) d = -d; s = want < 0 ? -want : want

@@ -224,6 +224,10 @@ fitproj() {  # fitproj NAME WG_VALUE: the fit project with a strength datum of v
 }
 # The term's share of the gradient: AZURE_GRAD_CHECK's analytic and finite-difference gradients with the datum minus
 # those without it (the data part's own finite-difference error, 5e-5 relative in E here, cancels).
+# The tolerance is 5e-6: the finite-difference side is the difference of two finite differences and moves with the
+# machine.  --no-brune, parameter 23, analytic / finite differences: -3138.73784458 / -3138.73798362 (4e-8) with the
+# Coulomb table file, -3138.73840766 / -3138.7372511 (3.7e-7) without it, -3138.73552009 / -3138.7389307 (1.1e-6) on
+# the CI's macOS machine (Intel, Apple's clang); the other five parameters agree to 5e-8 or better on all three.
 gradline() { awk -v i="$2" '/\[grad-check\] idx/ && $3 == i { for (k = 1; k <= NF; k++) if ($k == "analytic") a = $(k + 1); else if ($k == "fd") f = $(k + 1); print a, f; exit }' "$WORK/$1/run.log"; }
 for b in "" --no-brune --use-park; do
   fitproj "gradw$b" 2.6918028
@@ -236,7 +240,7 @@ for b in "" --no-brune --use-park; do
     read -r aw fw <<< "$(gradline "gradw$b" "$i")"
     read -r a0 f0 <<< "$(gradline "grad0$b" "$i")"
     check "gradient ${b:---use-brune}, parameter $i: the term's share, analytic = finite differences" \
-      "$(awk -v x="$aw" -v y="$a0" 'BEGIN { printf "%.12g", x - y }')" "$(awk -v x="$fw" -v y="$f0" 'BEGIN { printf "%.12g", x - y }')" 1e-6
+      "$(awk -v x="$aw" -v y="$a0" 'BEGIN { printf "%.12g", x - y }')" "$(awk -v x="$fw" -v y="$f0" 'BEGIN { printf "%.12g", x - y }')" 5e-6
   done
 done
 fitproj free ""

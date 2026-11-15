@@ -84,6 +84,29 @@ def _python_stdout_back(old, new):
         new.close()
 
 
+def _read_at(fd, count, offset):
+    """``count`` bytes of descriptor ``fd`` from ``offset``, with the descriptor's position left where it was.
+    ``os.pread`` where the platform has it.  Windows has none (seen on the CI, 2026-11-15: every session failed
+    here): seek, read and seek back, under this module's lock.  Text that a thread of the engine writes between the
+    two seeks lands at the wrong place of the sink, so there, and only there, the text of an engine still running
+    in another thread can be garbled; no result is."""
+    if hasattr(os, "pread"):
+        return os.pread(fd, count, offset)
+    back = os.lseek(fd, 0, os.SEEK_CUR)
+    os.lseek(fd, offset, os.SEEK_SET)
+    parts = []
+    try:
+        while count > 0:
+            got = os.read(fd, count)
+            if not got:
+                break
+            parts.append(got)
+            count -= len(got)
+    finally:
+        os.lseek(fd, back, os.SEEK_SET)
+    return b"".join(parts)
+
+
 def _engine_lines(text):
     """The lines of the engine's text, without the frames of its progress bars (a carriage return starts a new
     frame of the same line: only the last frame is kept) and without empty lines."""
@@ -149,9 +172,9 @@ def held():
             if _sink is not None:
                 fd = _sink.fileno()
                 end = os.lseek(fd, 0, os.SEEK_CUR)
-                mine.extend(_engine_lines(os.pread(fd, end - start, start).decode("utf-8", "replace")))
+                mine.extend(_engine_lines(_read_at(fd, end - start, start).decode("utf-8", "replace")))
                 if _depth == 0:
-                    everything = _engine_lines(os.pread(fd, end, 0).decode("utf-8", "replace"))
+                    everything = _engine_lines(_read_at(fd, end, 0).decode("utf-8", "replace"))
             if _depth == 0:
                 if _python is not None:
                     _python_stdout_back(*_python)

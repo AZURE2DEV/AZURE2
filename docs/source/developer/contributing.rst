@@ -205,6 +205,24 @@ A check must not pass for the wrong reason: test that a run succeeded
 (``counted``) before reporting it equal. Strip ``\r`` before counting fields
 (Windows line ends), and use portable ``sed``/``awk`` (macOS has BSD tools).
 
+.. note::
+
+   Many of the scripts added in November 2026 do not follow the last rule yet:
+   they were written with GNU tools only (``sed -i FILE``, ``\n`` in a ``sed``
+   replacement, ``timeout``). To run the tests on macOS, install the GNU tools
+   and put them first on ``PATH``, as the CI's macOS job does:
+
+   .. code-block:: bash
+
+      brew install coreutils gnu-sed gawk grep findutils
+      for f in coreutils gnu-sed gawk grep findutils; do
+        PATH="$(brew --prefix "$f")/libexec/gnubin:$PATH"
+      done
+
+   The shell watchdog ``run_guard`` is a function: it does not work after
+   ``env VAR=value``, which six scripts use, so those need ``timeout`` or
+   ``gtimeout``.
+
 A script that sets ``pipefail`` (most do) never pipes into a reader that
 leaves before the end of its input: ``grep -q``, ``grep -m``, ``head -n``,
 ``sed`` with ``q``, ``awk`` with ``exit`` outside ``END``. The reader leaves
