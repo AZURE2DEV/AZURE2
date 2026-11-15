@@ -443,7 +443,8 @@ bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &lo
  * convolution and normalisation.
  */
 
-std::shared_ptr<const azure2::experiment::UdrKernel> TargetEffect::BuildUdrKernel(double eLab, double mass) const {
+std::shared_ptr<const azure2::experiment::UdrKernel> TargetEffect::BuildUdrKernel(double eLab, double mass,
+                                                                                   std::string &refusal) const {
   std::shared_ptr<azure2::experiment::UdrKernel> k = std::make_shared<azure2::experiment::UdrKernel>();
   if (!udrTable_ || udrTable_->energy.empty()) return k;
   const UdrTable &t = *udrTable_;
@@ -495,7 +496,19 @@ std::shared_ptr<const azure2::experiment::UdrKernel> TargetEffect::BuildUdrKerne
   if (sigma > 0.0 || width > 0.0) {
     double dt = (k->tau.back() - k->tau.front()) / (n - 1);
     double half = 5.0 * sigma + 0.5 * width;
-    int m = static_cast<int>(std::ceil(half / dt));
+    const double halfNodes = std::ceil(half / dt);
+    if (!(halfNodes <= kMaxUdrHalfNodes)) {
+      std::ostringstream why;
+      why << "the burst and channel response (" << half << " us on each side of zero, the channel "
+          << width << " us at a flight time of "
+          << azure2::experiment::UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_) << " us over "
+          << udrFlightPath_ << " m) spans " << halfNodes << " steps of " << dt << " us of the table " << udrFile_
+          << ", more than " << kMaxUdrHalfNodes << ": tabulate the delay distribution on a coarser grid, or check "
+          << "the flight path and the channel width";
+      refusal = why.str();
+      return nullptr;
+    }
+    const int m = static_cast<int>(halfNodes);
     std::vector<double> h(2 * m + 1);
     double hsum = 0.0;
     for (int i = -m; i <= m; i++) {

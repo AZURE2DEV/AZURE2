@@ -300,7 +300,9 @@ void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffect
   if (const Value *u = d.Get("udr")) {
     e.udr = true;
     if (const Value *v = u->Get("file")) e.udrFile = v->word;
-    if (const Value *v = u->Get("flight_path")) e.udrFlightPath = Context::InBase(v->number, v->unit);
+    // metres, the unit the kernel's flight times are computed in (TargetEffectSpec::udrFlightPath), not the base
+    // length unit fm of the table
+    if (const Value *v = u->Get("flight_path")) e.udrFlightPath = ToUnit(v->number.value, v->unit, "m");
     if (const Value *v = u->Get("burst")) e.udrBurstFwhm = Context::InBase(v->number, v->unit);
     if (const Value *v = u->Get("channel")) e.udrChannelWidth = Context::InBase(v->number, v->unit);
     if (const Value *v = u->Get("centred")) e.udrCentred = v->word == "yes";
