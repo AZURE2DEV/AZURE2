@@ -276,8 +276,9 @@ Narrow case: the final level's particle channel is open, so the tail beyond the 
 function at E_f instead of a Whittaker function, and N_f has no closed-channel integral; the places are the three
 files above that take |E_f − S|, the observable unchanged. Broad case: E_γ varies across the final state's width,
 so the observable is folded over E_f, inside the observable (`src/GenMatrixFunc.cpp`) or as a new tree kind of the
-prediction. Today a final state above its threshold is not refused (section 9). Not known without trying: whether
-the pathway table and the capture masks need a change for an open final channel.
+prediction. Today a final state above a threshold is refused where the project is validated (`E_FINAL_STATE_UNBOUND`,
+section 9); the feature replaces that rule (`UnboundFinalStates` in `experiment/src/FinalStates.cpp`). Not known
+without trying: whether the pathway table and the capture masks need a change for an open final channel.
 
 **(c) Secondary γ-ray transitions as fitted data.** What exists: the unobserved-primary, observed-secondary path
 (a data set's field `secondary_gamma` with L, I_c and δ; `experiment/src/Build.cpp`, the R_k weighting in
@@ -341,9 +342,14 @@ against this branch and its recipes, or at least against pyazr 3.0's names (`Ses
 
 Each checked against the start commit of this page, by a run (R) or by reading the code (C):
 
-- A capture final state above its particle threshold is not refused (R: T1 with its 3/2⁻ final state moved to
-  2.5 MeV, S_p = 1.943 MeV: `--validate` says valid; points below E_f give NaN and χ² 1e100 without a message;
-  above it the external part takes |E_f − S| as a binding energy, C).
+- Capture into a final state above a particle threshold is refused, not computed (R: T1 with its 3/2⁻ final state
+  moved to 2.5 MeV, S_p = 1.943 MeV, is refused by `--validate`, the run and pyazr with `E_FINAL_STATE_UNBOUND`):
+  with external capture, a final state at or above the threshold of a pair with a channel in its J^π group (the
+  external part would take |E_f − S| as a binding energy, C); with or without it, a final state above the entrance
+  threshold of a data set or extrapolation captured into it (points below E_f gave NaN, R). A rate whose entrance is
+  named on the command line is not seen by the validation: below such a final state its cross section is NaN, which
+  the rate drops as zero, one warning "singular level matrix" per grid point (R: the same T1 with its capture data
+  set and extrapolation switched off, internal capture only, `rate --rate-entrance=1 --rate-exit=3`).
 - A project file cannot hold two levels of one J^π at the identical energy: their lines are read as one level, with
   a warning (R). Levels within 1e-6 MeV, and a fit that brings two together, work.
 - A repeated top-level section: the run reads the first and warns; `--validate` passes a repeated empty section (R).

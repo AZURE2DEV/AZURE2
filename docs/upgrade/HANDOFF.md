@@ -2,6 +2,57 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (agent, branch `feature/upgrade-5-unbound-final-refused`) — a capture final state above a threshold is refused
+
+**Done.** `E_FINAL_STATE_UNBOUND`, an error of the build checks: the rule `UnboundFinalStates`
+(`experiment/src/FinalStates.cpp`, one function on the `<levels>` tables and the captures the data sets and
+extrapolations ask), reported by `Schema::Build` in every reading (not only with `setUpChecks`), so `AZURE2
+--validate`, every run, `pyazr.Project.validate()` (the page's Check) and `pyazr.Session` say the same line. No
+engine file changed; the engine's set-up keeps no second copy.
+
+**The rule.** A capture into the final state of a photon pair at E_f is refused when the photon pair has external
+capture and E_f is at or above the threshold (S + e1 + e2) of a particle pair with a channel in the final state's
+J^π group, or when a data set or extrapolation (active; each term of a sum or ratio; a total capture asks every
+photon pair of its nucleus) captures from an entrance pair whose threshold lies below E_f, with external capture or
+without. E_f is the larger of the photon pair's E_x and its level's energy (within 1 keV). Why this width: the
+places below; internal capture into a final state above another pair's threshold but below the entrance threshold
+(⁸Be(0⁺) in ⁷Li(p,γ) without external capture) is computed right in the sharp-final-state approximation
+(Γ_γ ∝ E_γ^(2L+1) with E_γ = E_x − E_f > 0 at every point, no binding energy enters), so it is not refused.
+
+**Where the code assumes a bound final state** (read in the start commit; T1 with its 3/2⁻ final state at 2.5 MeV,
+S_p = 1.94349 MeV, run where marked R):
+
+| Place | What it takes | Which pair | External capture | Below E_f |
+|---|---|---|---|---|
+| `src/ExternalCaptureFinalStates.cpp` `ParseExternalCapture` | N_f integral (`NFIntegral`) and ANC→amplitude factor `ecConvert`, Whittaker at \|E_f − S − e\| | every particle pair with a channel in the final J^π group | on only (`USE_EXTERNAL_CAPTURE`, column 31 ≠ 0) | — |
+| `src/NFIntegral.cpp` | binding = \|E_f − S − e\| | as above | on only | — |
+| `src/ECIntegral.cpp` `CalculateDirect` (and `ECTable`, the same through it) | bound-state Whittaker at \|E_f − S − e\| in the radial integral | the final channel's pair: a particle channel of the final state that is an exit of the entrance (`physics/src/Pathways.cpp`) | on only | — |
+| `src/UnitExternalCapture.cpp` `ECPathwayAmplitude` | (E_x − E_f)^(L+1/2) | the entrance pair of the point | on only | NaN (R) |
+| `src/ChannelTables.cpp` photon channel | √P = (E_x − S_γ − E_f)^(l+1/2) | the entrance pair of the point | on or off | NaN (R, column 31 = 0: 10 points of cap_g1 NaN, χ² 1e100) |
+| `physics/src/Widths.cpp` `photon_penetrability` (level transforms) | \|E_γ\|^(2L+1) at a level energy | — | either | finite (fabs): not this defect |
+
+A bound final state (E_f below every entrance threshold) gives E_γ > 0 at every computed point: the folded
+sub-points are floored at a positive c.m. energy (`Segment::IntegrationFloor`, `MeshSlots.cpp` `EdgeAtFloor`) and an
+external amplitude below the entrance threshold is zero (`ChannelFunc::IsClosed`); T1 with a 0.6 MeV (lab) beam
+spread on cap_g1 runs finite (R). Not covered: a THM data set exiting into a photon pair (its sub-points reach E_x
+near 0), read only.
+
+**Counted before the change** (`work/unbound/scan/scan.py` on every `<levels>` block of the start commit): 415 `.azr`
+files with levels (the tests, the examples, the converter's fixtures of `tests/convert/`), 295 photon pairs, plus 42
+other files with a `<levels>` block (2 photon pairs): none has a final state at or above any particle threshold of
+its nucleus, so no existing project is refused, by this rule or a wider one.
+
+**Verified how.** Build 0 warnings; `experiment_build` (new cases: each kind, the place of the diagnostic, the
+threshold itself, a total capture, 27 keV below builds), `experiment_diagnostics`; new ctests `ec_final_state_unbound`
+(T1 at 2.5 MeV with and without external capture: `--validate` exit 2 and the run refused with the same line; at
+1.94 MeV the start commit's χ² 219429.963689) and `pyazr_ec_final_state_unbound`; the injected errors (the check not
+called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1` and
+`ctest -LE slow` (see the report).
+
+**Open.** The rate's entrance is a command-line option, which the validation does not see: below such a final state
+its cross section is NaN, dropped by the rate as zero with "singular level matrix" warnings (R). In the formal
+basis the final state's Brune energy (`SetUpECFinalBlocks`) is compared as written in `<levels>`.
+
 ## 2026-11-15 (director, 10:20) — merged: the owner's page written anew
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 82 (rehearsal 81 plus

@@ -187,6 +187,11 @@ State on 2026-11-11:
       dev's `<channelRadii>`, `<isospin>` and spin observables); `entrance_pair` / `exit_pair` on a sum or ratio
       apply to every term whose label names two pairs (the PI's 24Mg model converts with no question); a UDR flight
       path in metres.
+- [x] A capture final state above a particle threshold is refused (`E_FINAL_STATE_UNBOUND`, `UnboundFinalStates` in
+      `experiment/src/FinalStates.cpp`, reported by `Schema::Build` in every reading): with external capture, at or
+      above the threshold of a pair with a channel in its J^π group; with or without, above the entrance threshold of
+      a data set or extrapolation captured into it. Open: capture into an unbound final state itself (the owner's
+      feature on `dev`), which lifts the refusal.
 - [x] New data kinds: ratio to Rutherford and to Mott; the S factor as a quantity; units with dimensions checked;
       named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
       widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations

@@ -139,6 +139,7 @@ constexpr const char *kDataError = "W_DATA_ERROR";
 constexpr const char *kCovarianceFile = "E_COVARIANCE_FILE";
 constexpr const char *kFinalStateNotLevel = "E_FINAL_STATE_NOT_LEVEL";
 constexpr const char *kFinalStateShared = "E_FINAL_STATE_SHARED";
+constexpr const char *kFinalStateUnbound = "E_FINAL_STATE_UNBOUND";
 constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";

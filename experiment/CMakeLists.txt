@@ -29,6 +29,7 @@ add_library(azure2_experiment STATIC
   src/Build.cpp
   src/ValueText.cpp
   src/BuildEffects.cpp
+  src/BuildFinalStates.cpp
   src/BuildPotentials.cpp
   src/BuildUnits.cpp
   src/Expression.cpp
