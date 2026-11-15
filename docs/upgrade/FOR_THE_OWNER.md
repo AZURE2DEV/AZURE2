@@ -462,6 +462,24 @@ re-read against its design at the hand-over.
      of `build.yml`, the owner's to undo). Tried here on Linux: T1 and T2 with the project and every data file
      in CRLF give identical output files, so a user's CRLF files are read. `main` and `dev` run their tests on
      Windows; this branch's tests were written on Linux only.
+   - *Windows after those repairs* (the ninth push; the job took 80 minutes). 159 of the 172 regression checks
+     pass and 142 of the 309 unit tests (145 fail, 22 are skipped). The schema, fixture and stand-alone tests of
+     the bullet above pass now, so the line endings or the temporary directory were their cause (which of the two
+     was not separated). Read from the annotations and repaired in the tenth push, again **without a Windows
+     machine**:
+     - every `pyazr.Session` failed in `pyazr/engine_text.py` on `os.pread`, which Windows does not have (130
+       `pyazr_` tests, and probably the nine `skill_` tests and the regression checks that call pyazr, three seen): it now
+       seeks, reads and seeks back there. Run here with `os.pread` removed: five tests. On Windows the text of an
+       engine running in another thread can be garbled by this; no result can;
+     - `tests/prior_centre` split a list at `:`, which cuts a drive letter; `tests/cli_option_values` wanted
+       exit 255 where the MSYS2 shell reports 127 for the same exit of a Windows program;
+       `tests/composite_pair_keys` read output files with CRLF; `tests/format3_engine` compared a path that the
+       program prints with backslashes and removed a link that is a copy there; `tests/cli_route_exit` compared
+       messages of several lines (the text and the exit code were right; a carriage return is the guess).
+     Not seen, because a step shows ten annotations: why `tests/cli_commands` and `tests/gamma_decay` fail, and
+     anything of `progress_bars`, `ratio_to_rutherford`, `units_scales`, `tests/upgrade` and of the unit tests
+     `repo_consistency`, `tools_runall`, `physics_pathway_table`, `upgrade_poison_results`. What stands behind
+     the `os.pread` failure in the 130 tests is not known either.
    - *Run here for the first time:* the 309 tests of the CI's unit-test step without a Coulomb table file, as the
      CI has none: all pass (the CI's compiler, Python and packages were not reproduced).
    - *macOS* (the fifth push; the job took four hours: regression 93 minutes, unit tests 140). Read from its

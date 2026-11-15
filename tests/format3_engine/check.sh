@@ -124,7 +124,7 @@ fi
 # ---- 4. --describe
 if [ -f "$WORK/new/m.azr" ]; then
   d="$(cd "$WORK/new" && "$AZURE2_BIN" --describe m.azr)"
-  if grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" <<< "$d" && grep -q "data file $WORK/new/data/" <<< "$d" &&
+  if grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" <<< "$d" && grep -q "data file $WORK/new/data/" <<< "${d//\\//}" &&
      grep -q ".shift.offset (energy shift, fixed)" <<< "$d"; then
     ok "--describe: pair keys with their pairs, the resolved data file, the parameters"
   else
@@ -210,7 +210,7 @@ if [ -f "$WORK/new/m.azr" ]; then
   for f in "$WORK/new"/*.f3.txt; do [ -f "$f" ] && cp "$f" "$WORK/x3data/"; done
   run3 x3data
   setup x3nodata "$WORK/x3data/m.azr"
-  rm "$WORK/x3nodata/data"
+  rm -rf "$WORK/x3nodata/data"   # a link here; a copy where ln -s copies (the Windows CI's MSYS2)
   run3 x3nodata
   n=$(ls "$WORK/x3data/output" | wc -l)
   if [ "$n" -gt 0 ] && diff -r "$WORK/x3data/output" "$WORK/x3nodata/output" > /dev/null &&
