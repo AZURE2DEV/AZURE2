@@ -172,7 +172,7 @@ CONVERT_LINE() { echo "       Convert it:  AZURE2 --convert $1 ${1%.azr}_f3.azr 
 KEEPS_LINE() { echo "       The converter keeps $1 unchanged and reports every change it makes."; }
 # refused NAME FIRST-LINE [MORE-LINES...]: every command on $dir/NAME ends with these lines and exits 3
 refused() {
-  local name="$1" expect cmd out rc
+  local name="$1" expect cmd out rc got
   shift
   expect="$(printf '%s\n' "$@")"
   for cmd in run --validate --describe --print-predictions; do
@@ -181,9 +181,14 @@ refused() {
     else
       out="$(cd "$dir" && "$AZURE2_BIN" "$cmd" "$name" 2>&1)"; rc=$?
     fi
-    [ "$rc" = 3 ] && [ "$(printf '%s\n' "$out" | tail -n "$#")" = "$expect" ] \
+    # without carriage returns: on the Windows CI (2026-11-15) the messages of several lines failed this comparison
+    # with the right text and the right exit code; a CR inside the captured text is the guess, the byte counts in
+    # the failure line are there to tell
+    out="${out//$'\r'/}"
+    got="$(printf '%s\n' "$out" | tail -n "$#")"
+    [ "$rc" = 3 ] && [ "$got" = "$expect" ] \
       && ok "$name, $cmd: refused with the message as the last line(s), exit 3" \
-      || bad "$name, $cmd: exit $rc (want 3), output ends '$(printf '%s\n' "$out" | tail -n 3)'"
+      || bad "$name, $cmd: exit $rc (want 3), ${#got} bytes (want ${#expect}), output ends '$(printf '%s\n' "$out" | tail -n 3)'"
   done
 }
 refused f1.azr "ERROR: f1.azr is a format-1 project (<segmentsData> at line 53). This AZURE2 reads format 3 only." \

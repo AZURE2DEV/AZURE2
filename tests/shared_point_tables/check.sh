@@ -17,6 +17,7 @@
 #   (c) its output files are byte-identical at 1 and 4 threads;
 #   (d) the peak RSS of the 4-thread fit stays below FACTOR x that of the calculation (Linux only): measured
 #       947 MB against 385 MB (2.5x); with a full copy of the data per pooled copy (dev 2d97b1f0) 3513 MB against 751 MB (4.7x).
+#       2026-11-15, after the memory work on folded data: 317 MB against 180 MB (1.8x) with a Coulomb table file, 235 MB against 96 MB (2.4x) without.
 #
 #   ./tests/shared_point_tables/check.sh path/to/AZURE2
 
@@ -47,22 +48,29 @@ make_project() {  # DIR
     awk '/^[[:space:]]*#/ || NF == 0 { print; next } { n++ } n % 16 == 1' "$f" > "$1/data/$(basename "$f")"
   done
 }
-# run DIR THREADS MENU [args]: runs AZURE2, prints its peak RSS in kB (0 where /proc is missing)
+# run DIR THREADS MENU [args]: runs AZURE2, prints its exit code and its peak RSS in kB (0 where it is not measured:
+# not Linux, or no python3).  The peak is the kernel's figure for the ended process (getrusage of the children).
+# It was sampled from /proc/<pid>/status every 0.5 s until 2026-11-15; the calculation now ends in 0.5 to 1 s, so
+# the samples caught its start (5 to 30 MB for a true 99 to 185 MB) and (d) failed or passed by chance: on the CI's
+# Linux machine it failed in the ninth push, here in four runs of four.
+PY="$(command -v python3 || true)"
 run() {
   local dir="$1" th="$2" command="$3"; shift 3
-  (cd "$dir" && OMP_NUM_THREADS="$th" AZURE_GRID_TIMING=1 exec ${TIMEOUT_CMD:+"$TIMEOUT_CMD" 1800} \
-                      "$AZURE2_BIN" $command --no-gui "$@" t.azr > run.log 2>&1) &
-  local sub=$! pid="" hwm=0 h
-  while kill -0 "$sub" 2> /dev/null; do
-    # the AZURE2 process: the subshell itself, or the child of timeout
-    [ -z "$pid" ] && { if [ -n "$TIMEOUT_CMD" ]; then pid="$(pgrep -P "$sub" 2> /dev/null | sed -n 1p)"; else pid="$sub"; fi; }
-    if [ -n "$pid" ] && [ -r "/proc/$pid/status" ]; then
-      h="$(awk '/VmHWM/ { print $2 }' "/proc/$pid/status" 2> /dev/null)"
-      [ -n "$h" ] && [ "$h" -gt "$hwm" ] && hwm="$h"
-    fi
-    sleep 0.5
-  done
-  wait "$sub"; echo "$? $hwm"
+  if [ -n "$PY" ]; then
+    (cd "$dir" && OMP_NUM_THREADS="$th" AZURE_GRID_TIMING=1 "$PY" -c '
+import subprocess, sys
+with open("run.log", "w") as log:
+    rc = subprocess.call(sys.argv[1:], stdout=log, stderr=subprocess.STDOUT)
+peak = 0
+if sys.platform.startswith("linux"):
+    import resource
+    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+print(rc, peak)' ${TIMEOUT_CMD:+"$TIMEOUT_CMD" 1800} "$AZURE2_BIN" $command --no-gui "$@" t.azr)
+  else
+    (cd "$dir" && OMP_NUM_THREADS="$th" AZURE_GRID_TIMING=1 exec ${TIMEOUT_CMD:+"$TIMEOUT_CMD" 1800} \
+                        "$AZURE2_BIN" $command --no-gui "$@" t.azr > run.log 2>&1)
+    echo "$? 0"
+  fi
 }
 chi2() { grep -h 'Total Chi-Squared' "$1/run.log" | tail -1 | awk '{ print $NF }'; }
 
@@ -107,7 +115,7 @@ if [ "$hwm_calc" -gt 0 ] && [ "$hwm_fit" -gt 0 ]; then
     bad "(d) peak RSS: fit at 4 threads $((hwm_fit / 1024)) MB > $FACTOR x calculation $((hwm_calc / 1024)) MB"
   fi
 else
-  echo "  skip  (d) peak RSS: no /proc/<pid>/status here"
+  echo "  skip  (d) peak RSS: not measured here (Linux with python3 only)"
 fi
 
 [ "$failures" -eq 0 ] && echo "shared_point_tables: all checks passed" || echo "shared_point_tables: $failures check(s) failed"

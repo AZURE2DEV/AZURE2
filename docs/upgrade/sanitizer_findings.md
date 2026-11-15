@@ -237,8 +237,27 @@ report prints it without. Two entries replace it (the ninth push):
 - `race:pthread_mutex_init`, not anchored. AZURE2 never calls it (its locks are `std::mutex`), so the entry cannot
   hide a race between AZURE2's accesses.
 
-Neither was tried on a machine of the upgrade (no clang there). Whether other reports stand behind this one shows
-in the first CI run in which it is silent: no thread-sanitizer run of this code has passed since 2026-11-07.
+Neither was tried on a machine of the upgrade (no clang there).
+
+**The run with the two entries (the ninth push, 71 minutes).** libomp's report is gone and every step but six
+passes. The six (all four of T1, the fit and the rate of T3) fail with a report of another kind, **"double lock of
+a mutex"**: `pthread_mutex_lock` called from libarcher on a worker, the mutex in a 56-byte heap block that
+libarcher allocated and first locked on the main thread, AZURE2 only as the place of the `omp critical(ec_progress)`
+that redraws the progress bar of the external-capture set-up (`ExternalCaptureSetup.cpp`). clang 18's libarcher
+keeps a `std::mutex` of its own per critical section, locks it when the section is entered and unlocks it when it is
+left (`openmp/tools/archer/ompt-tsan.cpp`, release 18: read); TSan counts the main thread's lock as still held when
+a worker takes it. **Why is not understood.** It may be an effect of `called_from_lib` or have stood behind the
+first report in every earlier run; the two were not separated, and the libarcher of the cluster's runs (23.1.4) no
+longer has this lock. The mutex is the tool's and no access of AZURE2 is in the report, so it is suppressed
+(`mutex:libarcher.so`: mutex-misuse reports with a frame in libarcher, nothing else), again without a trial here.
+Only the first report of the first file was readable; the job now writes the first report of five report files and
+the table of all distinct reports into its annotations. Not tried, the next thing to try if the entry does not
+hold: `ignore_noninstrumented_modules=1` in `TSAN_OPTIONS` for every step (the script sets it for the pyazr steps
+only), the flag usually given for a libomp built without instrumentation (Archer's README, from memory: not
+re-read).
+
+Whether a report of AZURE2 stands behind these two shows in the first run in which both are silent: no
+thread-sanitizer run of this code has passed since 2026-11-07.
 
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 

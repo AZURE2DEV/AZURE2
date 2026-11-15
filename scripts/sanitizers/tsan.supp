@@ -33,3 +33,15 @@ race:__kmp_resume_template
 #    symbol table has it, with the interceptor's prefix, and the report prints it without.
 called_from_lib:libomp.so
 race:pthread_mutex_init
+
+# libarcher's own lock around an "omp critical" (clang 18's libarcher: for each critical section it keeps a
+# std::mutex of its own in a map, locks it when the section is entered and unlocks it when the section is left).
+# Seen on the CI, 2026-11-15, in the first run in which the report above was silent (the ninth push; six steps, all
+# of T1 and two of T3): "double lock of a mutex", pthread_mutex_lock called from libarcher on a worker, the mutex in
+# a 56-byte heap block allocated by libarcher and first locked by libarcher on the main thread, AZURE2 only as the
+# place of the critical section (ec_progress, ExternalCaptureSetup.cpp).  The mutex is the tool's, not AZURE2's;
+# why TSan counts it as still held is NOT understood (it may follow from called_from_lib above, or have stood
+# behind the first report all along: not separated).  The entry silences mutex-misuse reports (double lock, bad
+# unlock) with a frame in libarcher and nothing else: a misuse of a std::mutex of AZURE2 has no such frame, and
+# data races are of another kind (race:).  Not tried on a machine of the upgrade.
+mutex:libarcher.so
