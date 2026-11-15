@@ -295,11 +295,21 @@ capture, nothing fitted) the model gives their 90 degree data between
 treatment gives 1.43. For a narrow state with a detector-limited window
 (:math:`W \gg \Gamma_f`) the result is the narrow treatment's. Without the keyword a
 segment keeps the narrow treatment. Restrictions (refused with an ERROR at start-up):
-the final level must lie above exactly one particle threshold, external capture into
-it must be on (the final level is found through it), and the observable must be a
+the final level must lie above exactly one particle threshold, and the observable must be a
 capture cross section (angle-integrated or differential); not with the RMC formalism
 or ``--use-gradient``. The cost is 48 final energies per point. Test:
 ``tests/ec_unbound_broad``.
+
+External capture into the pair need not be on. With it, the final level is the one
+the external capture is linked to. Without it (internal capture alone, since builds
+after 2026-11-15) the final level is the level of the pair's :math:`J^\pi` whose energy
+is the pair's excitation energy within 1 keV; one such level must exist, with its
+particle width, and its :math:`N_f` is formed from its particle channels,
+:math:`1/N_f = 1 + \sum_c \tilde\gamma_c^2\, dS_c/dE`. In the formal parametrization
+(``--no-brune``) that route serves only a final level that is the first of its
+:math:`J^\pi` group; any other is refused (use the Brune parametrization, or switch
+external capture on for the pair). Builds up to 09e5c1a8 refuse ``linewindow`` on a
+pair without external capture.
 
 Before November 2026 an unbound final state was treated, without a message, as a
 state **bound** by :math:`|E_x - S|`: its exterior was the Whittaker function at the

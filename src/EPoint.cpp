@@ -6,6 +6,7 @@
 #include "Config.h"
 #include "CoulFunc.h"
 #include "Kinematics.h"
+#include "NFIntegral.h"
 #include "DataLine.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
@@ -1856,6 +1857,7 @@ struct LineFinal {
   int j = 0, la = 0, ch = 0, irDecay = 0;
   PPair *fp = nullptr;
   double thr = 0.0;
+  bool ecLinked = true;  // false: internal capture alone, the final level found by J^pi and energy
 };
 
 std::string FindLineFinal(CNuc *c, const EPoint *pt, LineFinal &lf) {
@@ -1873,8 +1875,34 @@ std::string FindLineFinal(CNuc *c, const EPoint *pt, LineFinal &lf) {
         lf.la = la;
         break;
       }
-  if (!lf.j)
-    return "it needs external capture into its final state (switched on for the capture pair, and not off for the run)";
+  if (!lf.j) {
+    // Internal capture alone (no external capture into the pair, or external capture off for the run): the
+    // final state is not linked to a level.  It is the level of the pair's J^pi whose input energy is the
+    // pair's excitation energy (within 1 keV, the rule of the external-capture link, CNuc::ParseExternalCapture).
+    PPair *xp = c->GetPair(ir);
+    JGroup probe(xp->GetJ(2), xp->GetPi(2));
+    probe.SetNucleus(xp->GetNucleus(), xp->GetNucleusZ(), xp->GetNucleusA());
+    const int jn = c->IsJGroup(probe);
+    int matches = 0;
+    if (jn && c->GetJGroup(jn)->IsInRMatrix())
+      for (int la = 1; la <= c->GetJGroup(jn)->NumLevels(); la++) {
+        ALevel *cand = c->GetJGroup(jn)->GetLevel(la);
+        if (!cand->IsInRMatrix() || fabs(cand->GetInputE() - xp->GetHeavyExE()) > 1.0e-3) continue;
+        matches++;
+        lf.j = jn;
+        lf.la = la;
+      }
+    if (matches != 1) {
+      lf.j = lf.la = 0;
+      std::ostringstream os;
+      os << "its final state (J^pi = " << xp->GetJ(2) << (xp->GetPi(2) > 0 ? "+" : "-") << ", E_x = " << xp->GetHeavyExE()
+         << " MeV) " << (matches ? "is ambiguous: more than one level of that J^pi lies"
+                                 : "is not a level of the project: the line shape needs that level, with its particle width,")
+         << " within 1 keV of the pair's excitation energy";
+      return os.str();
+    }
+    lf.ecLinked = false;
+  }
   JGroup *jg = c->GetJGroup(lf.j);
   ALevel *lv = jg->GetLevel(lf.la);
   int open = 0;
@@ -1897,7 +1925,51 @@ std::string FindLineFinal(CNuc *c, const EPoint *pt, LineFinal &lf) {
         return "its external capture also runs through a closed channel of the final level, which the line-shape integration does not handle";
   return "";
 }
+
+// 1/N_f - 1 = sum over the particle channels of gamma~_c^2 dS_c/dE at the level energy, per unit gamma~_c^2:
+// dS/dE for an open channel, (2 mu a / hbar^2) int_a^inf W^2/W(a)^2 dr for a closed one (the same quantity, CNuc's
+// ECFinalStateFactors).  Used for a final level without the external-capture link, whose N_f the level does not carry.
+std::vector<double> LineNFTerms(CNuc *c, const Config &configure, const LineFinal &lf, double levelEnergy) {
+  JGroup *jg = c->GetJGroup(lf.j);
+  std::vector<double> terms(jg->NumChannels(), 0.0);
+  for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+    AChannel *chan = jg->GetChannel(ch);
+    PPair *p = c->GetPair(chan->GetPairNum());
+    if (p->GetPType() != 0 || chan->GetRadType() != 'P') continue;
+    const double e = levelEnergy - p->GetSepE() - p->GetExE();
+    if (e > 0.0) {
+      CoulFunc coul(p, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+      terms[ch - 1] = coul.PEShift_dE(chan->GetL(), chan->GetRadius(), e);
+    } else {
+      NFIntegral nf(p, chan->GetRadius());
+      terms[ch - 1] = 2.0 * p->GetRedMass() * uconv * chan->GetRadius() / (hbarc * hbarc) * nf(chan->GetL(), levelEnergy);
+    }
+  }
+  return terms;
+}
 }  // namespace
+
+/*
+ * The final level's observed reduced width amplitude in its open channel, gamma~ N_f^(1/2), from the current
+ * parameters.  With the external-capture link the level carries N_f; without it (internal capture alone) N_f is
+ * formed here, 1/N_f = 1 + sum_c gamma~_c^2 dS_c/dE over the level's particle channels (terms kept per level energy).
+ */
+double EPoint::LineObservedAmplitude(CNuc *theCNuc, const Config &configure, int j, int la, int ch, bool ecLinked) {
+  ALevel *lv = theCNuc->GetJGroup(j)->GetLevel(la);
+  if (ecLinked) return lv->GetECFitGamma(ch) * lv->GetECSqrtNFFactor();
+  const double e = lv->GetECEnergy();
+  if (!(line_nf_energy_ == e) || (int)line_nf_terms_.size() != theCNuc->GetJGroup(j)->NumChannels()) {
+    LineFinal lf;
+    lf.j = j;
+    lf.la = la;
+    line_nf_terms_ = LineNFTerms(theCNuc, configure, lf, e);
+    line_nf_energy_ = e;
+  }
+  double sum = 1.0;
+  for (size_t c = 0; c < line_nf_terms_.size(); c++)
+    if (line_nf_terms_[c] != 0.0) sum += pow(lv->GetECFitGamma((int)c + 1), 2.0) * line_nf_terms_[c];
+  return lv->GetECFitGamma(ch) / sqrt(sum);
+}
 
 std::string EPoint::LineWindowProblem(CNuc *theCNuc, const Config &configure) const {
   if (configure.paramMask & Config::USE_RMC_FORMALISM) return "the RMC formalism is not supported";
@@ -1906,7 +1978,19 @@ std::string EPoint::LineWindowProblem(CNuc *theCNuc, const Config &configure) co
   if (this->IsAngularDist() || this->IsPhase() || this->IsAnalyzingPower() || this->GetSpinObservable())
     return "only a capture cross section (angle-integrated or differential) can be integrated over the line shape";
   LineFinal lf;
-  return FindLineFinal(theCNuc, this, lf);
+  const std::string why = FindLineFinal(theCNuc, this, lf);
+  // Without the external-capture link nothing keeps the observed energy and amplitude of a final state whose
+  // formal parameters differ from them (CNuc::MarkFormalECFinalState does, for linked levels only).
+  if (lf.j && !lf.ecLinked && !(configure.paramMask & Config::USE_BRUNE_FORMALISM) &&
+      !(lf.la == 1 && !theCNuc->GetJGroup(lf.j)->BoundaryMinusL()))
+    return "without external capture into its pair, the formal parametrization (--no-brune) serves only a final "
+           "state that is the first level of its J^pi group (the one the boundary conditions are taken from); use "
+           "the Brune parametrization, or switch external capture on for the pair";
+  if (!lf.j && why.find("is not a level of the project") != std::string::npos &&
+      !(configure.paramMask & Config::USE_BRUNE_FORMALISM))
+    return why + " (in the formal parametrization, --no-brune, only the first level of a J^pi group keeps its "
+                 "observed energy: use the Brune parametrization, or switch external capture on for the pair)";
+  return why;
 }
 
 void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
@@ -1920,7 +2004,7 @@ void EPoint::SetupLineNodes(CNuc *theCNuc, const Config &configure) {
   const double a = fc->GetRadius();
   CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
   const double ER = lv->GetECEnergy() - lf.thr;
-  const double gt = lv->GetECFitGamma(lf.ch) * lv->GetECSqrtNFFactor();
+  const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked);
   const double gam = 2.0 * coul.Penetrability(l, a, ER) * gt * gt;
   // (checked here, not in LineWindowProblem: at start-up the level parameters are not filled yet)
   if (!(gam > 0.0)) throw std::runtime_error("linewindow: the final level has no width in its open channel.");
@@ -1978,7 +2062,7 @@ void EPoint::CalculateLineWindow(CNuc *theCNuc, const Config &configure, GenMatr
     CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     // the current parameters of the final level
     const double ER = lv->GetECEnergy() - lf.thr;
-    const double gt = lv->GetECFitGamma(lf.ch) * lv->GetECSqrtNFFactor();
+    const double gt = this->LineObservedAmplitude(theCNuc, configure, lf.j, lf.la, lf.ch, lf.ecLinked);
     const double SR = coul.PEShift(l, a, ER), dSR = coul.PEShift_dE(l, a, ER);
     if (!(1.0 - gt * gt * dSR > 0.0) || gt == 0.0)
       throw std::runtime_error("linewindow: the final level's reduced width has no formal (one-level) equivalent.");

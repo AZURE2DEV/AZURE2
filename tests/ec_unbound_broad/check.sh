@@ -17,7 +17,11 @@
 #   (c) internal capture alone (the E2 part of d52, angle-integrated, so E1 and E2 add incoherently): windowed over
 #       unwindowed = int rho/N_f ((E - E_f)/(E - E_R))^5 dE_f (scipy quad), within 2e-5;
 #   (d) --no-brune gives the Brune result;
-#   (e) start-up: a NOTE per windowed segment; "linewindow" on an elastic segment stops with an ERROR.
+#   (e) start-up: a NOTE per windowed segment; "linewindow" on an elastic segment stops with an ERROR;
+#   (f) internal capture alone, external capture into the pair OFF (its multipole mask 0; the final level is then
+#       found by J^pi and energy and its N_f formed from its channels): the ratio of (c), and the cross section
+#       itself equal to the internal part of (c) within 2e-5; --no-brune the same; a pair whose excitation energy
+#       is 2 keV off the level stops with an ERROR.
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
 
@@ -126,6 +130,29 @@ if grep -q "ERROR: segment 1 (entrance 1, exit 1) has \"linewindow 39\", but its
 else
   bad "(e) linewindow on an elastic segment was not refused"
   tail -5 "$WORK/f_elastic/run.log"
+fi
+
+echo "(f) internal capture alone, external capture into the pair off"
+ECOFF='s/\( 0\.5 1 2\.3655 0 13\.0057 0 7 .* 10 0 0 0\) 1$/\1 0/'
+model g_none d52.azr "$ECOFF" "" 0 $ED
+model g_w1 d52.azr "$ECOFF" " linewindow 39" 0 $ED
+model g_formal d52.azr "$ECOFF" " linewindow 39" 0 $ED
+for m in g_none g_w1; do run $m "" || bad "(f) $m: engine exit status $?"; done
+run g_formal "--no-brune" || bad "(f) --no-brune: engine exit status $?"
+if grep -q " 0\.5 1 2\.3655 0 13\.0057 .* 1$" "$WORK/g_w1/t.azr"; then bad "(f) external capture was not switched off in the model"; fi
+compare "(f) internal capture alone over the line shape" g_w1 g_none 2e-5 0.698914 0.697808 0.697589
+# (the internal part of (c) is a difference of two printed totals, kept to 6 digits)
+compare "(f) = the internal part with external capture on" g_w1 d_int_w 2e-5 1 1 1
+compare "(f) --no-brune = Brune" g_formal g_w1 1e-9 1 1 1
+mkdir -p "$WORK/g_off/output" "$WORK/g_off/checks"
+sed -e 's/ 0\.5 1 2\.3655 0 13\.0057 / 0.5 1 2.3675 0 13.0057 /' "$WORK/g_w1/t.azr" > "$WORK/g_off/t.azr"
+run g_off ""
+if grep -q "but its final state (J^pi = 0.5+, E_x = 2.3675 MeV) is not a level of the project" "$WORK/g_off/run.log" &&
+  [ ! -s "$WORK/g_off/$CAP3" ]; then
+  ok "(f) a pair energy off the level stops with an ERROR"
+else
+  bad "(f) a pair energy off the level was not refused"
+  tail -5 "$WORK/g_off/run.log"
 fi
 
 if [ $failures -eq 0 ]; then
