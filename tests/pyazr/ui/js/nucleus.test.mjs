@@ -61,3 +61,23 @@ test("add_level's body: the channels checked, width 0, fixed; every one checked:
   assert.equal(n.newLevelRequest(level, allowed, [true, true, true]).channels, "allowed");
   assert.deepEqual(n.newLevelRequest(level, [], []).channels, []);
 });
+
+test("a prior and limits: both boxes of a pair or neither; empty pairs are null; a row found by level and channel",
+  () => {
+  assert.deepEqual(n.settingRequest("1/2+ 2.365", [1, 0, 0.5], { centre: "36300", sigma: "1650", lower: " ",
+    upper: "" }), { level: "1/2+ 2.365", channel: [1, 0, 0.5], prior: [36300, 1650], limits: null });
+  assert.deepEqual(n.settingRequest("1/2+ 2.365", null, { lower: "2.3", upper: "2.4" }),
+    { level: "1/2+ 2.365", channel: null, prior: null, limits: [2.3, 2.4] });
+  assert.deepEqual(n.settingRequest("L", null, {}), { level: "L", channel: null, prior: null, limits: null });
+  assert.match(n.settingRequest("L", null, { centre: "1" }).refused, /prior.*both boxes or neither/);
+  assert.match(n.settingRequest("L", null, { upper: "1" }).refused, /limits.*both boxes or neither/);
+  const rows = [{ level: "L", channel: null, value: 2.3, error: 0.1, nuisance: true, lower: 0, upper: 0 },
+    { level: "L", channel: [1, 0, 0.5], value: 5, error: 0, nuisance: false, lower: 1, upper: 9 }];
+  assert.equal(n.settingOf(rows, "L", null), rows[0]);
+  assert.equal(n.settingOf(rows, "L", [1, 0, 0.5]), rows[1]);
+  assert.equal(n.settingOf(rows, "L", [1, 1, 0.5]), undefined);
+  assert.equal(n.settingOf(rows, "M", null), undefined);
+  assert.equal(n.settingText(rows[0]), "prior 2.3 ± 0.1");
+  assert.equal(n.settingText(rows[1]), "limits 1 … 9");
+  assert.equal(n.settingText(undefined), "");
+});

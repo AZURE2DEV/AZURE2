@@ -14,9 +14,10 @@ first and last point, together with the data set's own points.  Energies are the
 (``extra["energy_lab"]``, after the data set's energy shift at x), so the curve at a point's energy is the model of
 that point without the shift applied twice; the fixed angle of an excitation function is the frame in which the
 points' angle is one value (where it is one value in both frames, as for elastic scattering at a lab angle, the
-frame of the file's angle column); an angular distribution's angles are c.m.  A narrow resonance
-between two grid values is not seen: ``points`` sets the spacing (the engine's adaptive grid needs a run of the
-program, ``pyazr.refine_grid``).
+frame of the file's angle column); an angular distribution's angles are c.m.  The even grid misses a resonance
+narrower than its spacing; the refined grid (:func:`refine_plan`, the default of :func:`model_curves`) starts from
+the even grid seeded with the level energies in range and refines where the curves bend, by the rule of the ENDF
+writer's grid (:mod:`pyazr.endf.grid`), one session per sweep.
 
 What the curve is at the data set's points.  For a data set without a fold the curve's value at a point is the
 model of :meth:`Session.evaluate` to rounding (T1, T2, an alpha + 12C ratio to Rutherford: identical).  A folded
@@ -24,8 +25,9 @@ point (a target, a beam's energy spread, a detector's resolution) is integrated 
 engine plans per compound nucleus from the folded points of the session (``docs/upgrade/energy_grid.md`` section
 2.2; a data set with an energy shift, and THM, on grids of their own).  :func:`model_curves` makes the curves of
 several data sets in one session, so their folds share one mesh as the data's do: on T2 an unshifted folded data set
-agrees with the data session to 4e-9, a shifted one or THM to 8e-5 (the quadrature).  The curve of one data set alone
-(:meth:`Session.model_curve`) is folded on a mesh of its own points: 2.4e-3 on T2.
+agrees with the data session to 4e-9, a shifted one or THM to 8e-5 (the quadrature), on the even and on the refined
+grid.  :meth:`Session.model_curve` makes every curve and returns one, for the same agreement; the curve of one data
+set alone (``alone=True``) is folded on a mesh of its own points: 2.4e-3 on T2.
 
 Refused, with the three parts (:class:`pyazr.ParameterError`): a data set not in the evaluation (inactive or
 unknown: :class:`pyazr.ParameterKeyError`), a session of the extrapolations, a data set whose columns give each
@@ -50,6 +52,18 @@ CURVE_COLUMNS = ("E_lab", "E_cm", "theta_lab", "theta_cm", "value", "error", "er
 
 #: The grid values per branch between its first and last point, by default.
 DEFAULT_POINTS = 200
+
+#: The relative tolerance of a refined grid (:func:`refine_plan`): the rule of :mod:`pyazr.endf.grid`.
+DEFAULT_TOLERANCE = 3e-3
+
+#: The most values of the common abscissa of a refinement (every branch is evaluated at each).
+REFINE_POINTS = 2000
+
+#: The smallest interval a refinement splits, as a fraction of the branch's range (a jump stops there).
+MIN_SPACING = 1e-5
+
+#: The grids a curve is made on: refined where it bends (the default), or evenly spaced.
+GRIDS = ("refined", "even")
 
 #: The most branches (fixed angles of excitation functions, or fixed energies of angular distributions) of one curve.
 MAX_BRANCHES = 64
@@ -410,20 +424,184 @@ class CurveSession:
         self.close()
 
 
-def model_curves(session, names=None, x=None, points=DEFAULT_POINTS):
+def _on_grids(plan, grids):
+    """``plan`` with the grid of each branch replaced: ``grids[name]`` is one ``(grid, at_data)`` per branch (MeV lab
+    of an energy branch, deg c.m. of an angle branch); data sets not in ``grids`` are left out."""
+    records, layouts = {}, {}
+    for n, branches in grids.items():
+        variable, layout = plan.layouts[n]
+        records[n], layouts[n] = [], (variable, [])
+        for f, (fixed, value, _, _), (grid, at) in zip(plan.records[n], layout, branches):
+            f = dict(f)
+            key, unit = ("energies", "MeV lab") if variable == "energy" else ("angles", "deg cm")
+            f[key] = f"list {_numbers(grid)} {unit}"
+            records[n].append(f)
+            layouts[n][1].append((fixed, value, np.asarray(grid, float), np.asarray(at, bool)))
+    names = tuple(n for n in plan.names if n in grids)
+    text = "\n".join(f"{n} {r}" for n in names for r in records[n])
+    return CurvePlan(names, records, layouts, dict(plan.refused), plan.quantities, text)
+
+
+class _SessionBudget(Exception):
+    """The refinement used the sessions it was given (:func:`refine_plan`'s ``max_sessions``)."""
+
+
+def refine_plan(session, plan, x=None, points=DEFAULT_POINTS, tolerance=DEFAULT_TOLERANCE, max_points=REFINE_POINTS,
+                count=None, max_sessions=None):
+    """``plan`` on grids refined where the curves bend: the rule of the ENDF writer's grid
+    (:func:`pyazr.endf.grid.start_grid` and :func:`pyazr.endf.grid.refine`, which is :func:`pyazr.refine_grid` with
+    a check of the quarter points).  Every branch of every data set of the plan is refined at once on one abscissa,
+    ``t`` from 0 to 1 over the branch's range (each branch is one component of the rule), so that every sweep is one
+    session of the extrapolations; the start grid in ``t`` is the plan's even spacing with the seeds of
+    :func:`~pyazr.endf.grid.start_grid` inside each energy branch (the level energies of the compound in range and
+    the energies half a width away; thresholds), so that a level narrower than the spacing is found.  Each branch
+    keeps the points it needs (:func:`pyazr.endf.grid.thin`) and the data set's own points.  ``count``: a list that
+    gets the number of sessions opened.  ``max_sessions``: the sweeps' sessions at most (each costs a session's
+    set-up: 0.3 s on T2, 3 s on T1 with its external capture); the refinement then ends with the points evaluated so
+    far (the seeds and the sweeps done), which is what an interactive caller can afford.  A data set the engine
+    refuses on a grid stays refused (``plan.refused``)."""
+    from .endf import grid as endf_grid
+    x = np.array(session.parameters.x0 if x is None else x, float).ravel()
+    with CurveSession(session, plan) as even:  # the engine's refusals on a grid, before anything is refined
+        refused = even.refused
+    if count is not None:
+        count.append(1)
+    names = [n for n in plan.names if n in plan.records and n not in refused]
+    if not names:
+        return dataclasses.replace(_on_grids(plan, {}), refused=refused)
+    ranges = []  # (name, branch index, low, high, own grid values, mask of own values)
+    for n in names:
+        variable, layout = plan.layouts[n]
+        for k, (_, _, grid, at) in enumerate(layout):
+            ranges.append((n, k, variable, float(grid[0]), float(grid[-1]), grid[at]))
+    start = set(np.linspace(0.0, 1.0, max(int(points), 2)).tolist())
+    for n, k, variable, lo, hi, _ in ranges:
+        if variable == "energy" and hi > lo:
+            seeds = endf_grid.start_grid(session, x, (lo, hi))
+            start |= {(e - lo) / (hi - lo) for e in seeds}
+
+    def on(t, lo, hi):
+        return lo + np.asarray(t, float) * (hi - lo)
+
+    known_t, known_v = [], []  # every abscissa given to the rule so far, and its values (sorted by t)
+    sessions = [0]  # the sweeps' sessions opened
+
+    def model(ts):
+        # an abscissa between two known ones closer than MIN_SPACING is given their chord: the rule then splits
+        # there no further (a jump, a phase shift wrapping at 90 deg, is resolved to MIN_SPACING and not to the last
+        # bit); the final grid is evaluated anew, so no drawn value is a chord's
+        ts = np.asarray(ts, float)
+        out = np.empty((len(ts), len(ranges)))
+        todo = []
+        for i, t in enumerate(ts):
+            j = int(np.searchsorted(known_t, t))
+            if 0 < j < len(known_t) and known_t[j] - known_t[j - 1] < 2 * MIN_SPACING:
+                w = (t - known_t[j - 1]) / (known_t[j] - known_t[j - 1])
+                out[i] = (1 - w) * known_v[j - 1] + w * known_v[j]
+            else:
+                todo.append(i)
+        if todo:
+            if max_sessions is not None and sessions[0] >= max_sessions:
+                raise _SessionBudget()
+            sessions[0] += 1
+            grids = {}
+            for n, k, _, lo, hi, _ in ranges:
+                grids.setdefault(n, []).append((on(ts[todo], lo, hi), np.zeros(len(todo), bool)))
+            with CurveSession(session, _on_grids(plan, grids)) as c:
+                curves = c.evaluate(x)
+            if count is not None:
+                count.append(1)
+            for j, (n, k, *_) in enumerate(ranges):
+                b = curves[n].branches[k]
+                out[todo, j] = curves[n].model[b.start:b.stop]
+        for t, v in zip(ts, out):
+            j = int(np.searchsorted(known_t, t))
+            known_t.insert(j, float(t))
+            known_v.insert(j, v)
+        return out.tolist()
+
+    try:
+        refined = endf_grid.refine(sorted(start), model, tolerance, max_points)
+        t = np.asarray(refined["x"], float)
+        values = np.asarray(refined["values"], float).reshape(len(t), -1)
+    except _SessionBudget:  # the points evaluated so far
+        t, values = np.asarray(known_t, float), np.asarray(known_v, float).reshape(len(known_t), -1)
+    grids = {}
+    for j, (n, k, _, lo, hi, own) in enumerate(ranges):
+        kept = on(t[endf_grid.thin(t, values[:, j], tolerance)], lo, hi)
+        merged = _unique(np.concatenate([own, kept]))
+        at = np.array([any(_same(g, o) for o in own) for g in merged]) if own.size <= 2000 else np.isin(merged, own)
+        for i in np.flatnonzero(at):
+            merged[i] = own[np.argmin(np.abs(own - merged[i]))]
+        grids.setdefault(n, []).append((merged, at))
+    return dataclasses.replace(_on_grids(plan, grids), refused=refused)
+
+
+def grid_seeds(session, plan, x=None):
+    """The seeds of :func:`pyazr.endf.grid.start_grid` at ``x`` inside each energy branch of ``plan`` (the level
+    energies of the compound in range, the energies half a width away, the thresholds; lab MeV), one sorted array per
+    branch in the plan's order; an angle branch has none.  Cheap: the session's parameter transform."""
+    from .endf import grid as endf_grid
+    x = np.array(session.parameters.x0 if x is None else x, float).ravel()
+    out = []
+    for n in plan.names:
+        variable, layout = plan.layouts.get(n, (None, []))
+        for _, _, grid, _ in layout:
+            if variable != "energy" or len(grid) < 2:
+                out.append(np.empty(0))
+                continue
+            lo, hi = float(grid[0]), float(grid[-1])
+            even = set(np.linspace(lo, hi, endf_grid.START_POINTS).tolist())
+            out.append(np.array(sorted(set(endf_grid.start_grid(session, x, (lo, hi))) - even), float))
+    return out
+
+
+def seeds_moved(plan, before, after):
+    """True when the seeds ``after`` (:func:`grid_seeds`) are not those ``before`` the grid of ``plan`` was refined
+    with, to the grid's spacing: a seed more or less, or one moved by more than the grid's spacing where it was (a
+    level moved by an edit or a fit, which the refined grid no longer resolves)."""
+    branches = [layout for n in plan.names for layout in plan.layouts.get(n, (None, []))[1]]
+    for (_, _, grid, _), old, new in zip(branches, before, after):
+        if old.size != new.size:
+            return True
+        grid = np.asarray(grid, float)
+        for e_old, e_new in zip(old, new):
+            j = int(np.clip(np.searchsorted(grid, e_old), 1, grid.size - 1))
+            if abs(e_new - e_old) > grid[j] - grid[j - 1]:
+                return True
+    return False
+
+
+def model_curves(session, names=None, x=None, points=DEFAULT_POINTS, *, grid="refined", tolerance=DEFAULT_TOLERANCE):
     """The model of the data sets ``names`` (default: every active one) of ``session`` on fine grids at the fit
     vector ``x`` (default ``parameters.x0``): ``{name: ModelCurve or ParameterError}`` (a refusal is returned, not
-    raised, so that one data set does not stop the others).  One session of the extrapolations for all of them,
-    closed before the call returns."""
+    raised, so that one data set does not stop the others).  ``grid``: ``"refined"`` (the default: the even grid of
+    ``points`` values per branch, seeded with the level energies and refined where the curve bends to
+    ``tolerance``, :func:`refine_plan`) or ``"even"`` (``points`` values evenly spaced and the data set's points,
+    one session).  The final curves come from one session of the extrapolations for all of them, closed before the
+    call returns."""
+    if grid not in GRIDS:
+        raise ParameterError(f"grid={grid!r}", what=f"the grid {grid!r}", allowed=", ".join(GRIDS),
+                             fix='model_curves(session, grid="refined")')
     plan = plan_curves(session, names, x, points)
+    if grid == "refined":
+        plan = refine_plan(session, plan, x, points, tolerance)
     with CurveSession(session, plan) as c:
         return c.evaluate(x)
 
 
-def model_curve(session, name, x=None, points=DEFAULT_POINTS):
+def model_curve(session, name, x=None, points=DEFAULT_POINTS, *, alone=False, grid="refined",
+                tolerance=DEFAULT_TOLERANCE):
     """The model of the data set ``name`` on a fine grid (:class:`ModelCurve`); a data set that cannot be drawn as a
-    curve raises :class:`pyazr.ParameterError` with the three parts."""
-    out = model_curves(session, [name], x, points)[name]
+    curve raises :class:`pyazr.ParameterError` with the three parts.  By default the curves of every active data set
+    are made together and this one is returned, so that its folds share the mesh the data session plans from every
+    folded data set (at its points it then agrees with ``Session.evaluate``: 4e-9 on T2's folded data sets without a
+    shift, 8e-5 with one); ``alone=True`` makes this data set's curve alone (its folds on a mesh of its own points:
+    cheaper where the project has many data sets, 2.4e-3 from the data session on T2's thin target)."""
+    out = model_curves(session, [name] if alone else None, x, points, grid=grid, tolerance=tolerance)
+    if name not in out:
+        model_curves(session, [name], x, 2, grid="even")  # the refusal of an unknown or inactive data set
+    out = out[name]
     if isinstance(out, Exception):
         raise out
     return out

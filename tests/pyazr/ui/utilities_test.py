@@ -97,6 +97,8 @@ def test_rate_job(t1):
     assert r.status_code == 200, r.text
     job = wait_job(t1, r.json()["id"])
     assert job["state"] == "finished", job
+    # the engine's lines (pyazr's logger pyazr.engine) reach the job's log, as the program prints them
+    assert any("Integrating reaction rate over 4 temperatures" in line for line in job["log"]), job["log"]
     res = job["result"]
     # the job's parameters are a data session's x0 (the start of every job), given to the rate by name; a rate
     # session's own transformation of the .azr's capture widths differs from it at 1e-10 (the program's rate takes

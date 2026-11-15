@@ -67,6 +67,10 @@ program whose `chiSquared.out` the API's numbers are compared with.
   history entry (the text equals `Project.set_config`'s, the term of the server's evaluation a session's and
   d^T C^-1 d), a second write under the same name one entry whose Undo puts the first file back, Undo and Redo
   byte for byte, the key removed through the config route.
+- `first_project_test.py`: T1 made from nothing through the routes the page's controls send: `python -m pyazr.ui` on a
+  new file (an empty project), the pairs by name with the mass table (`GET /api/masses`), the levels and their
+  channels, the data sets from the folder's files, the calculation equal to T1's bit for bit with T1's numbers (to
+  1e-4 with the table's masses), the curve, a fit accepted, Save; prints the requests and the fields of each step.
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails
@@ -263,3 +267,22 @@ Added with the prior builder (shown failing on 2026-11-14, the file restored aft
   returning without an entry when the text is unchanged; fails `prior_builder_test.py::test_prior_builder`.
 - `GET /api/parameters` leaves the session's description as built: `Server.parameters` back to setting `x` on the
   cached rows (a fixed row's start became null, its centre nan); fails `prior_builder_test.py::test_prior_builder`.
+
+Added with the curve's loose ends, the prior and limits, the first project (each shown failing on 2026-11-15, the file
+restored after):
+
+- a lost curve is not a refusal: `curveFailure` returning `refused` for status 0; fails `node_test.py`
+  (`js/results.test.mjs`).
+- a prior's or limits' pair of boxes typed half is refused: the check returning null; fails `node_test.py`
+  (`js/nucleus.test.mjs`).
+- the engine's lines reach a job's log: `workers.py` as before (no `engine_lines_to_log`): the rate job's log held 2
+  lines instead of 8, which `utilities_test.py::test_rate_job`'s new assertion refuses.
+- the refined grid draws a narrow level through: `refine_plan` returning the even plan; fails
+  `tests/pyazr/model_curve_test.py` (the peak at 1.138 MeV).
+- a relative path of `POST /api/project/open` is the project's folder's: `Server.open` passing the path as given;
+  fails `endf_project_test.py::test_resonances_and_new_project`.
+
+The browser test keeps the server's request log (`python -m pyazr.ui --log-requests`) and, when the self-test records
+a failed request, copies it beside the screenshots (`<project>_server.log`) and names for each failure the step of
+the self-test during which it was sent and failed (the page's failure log carries `sent` and `at`, the steps `at`).
+

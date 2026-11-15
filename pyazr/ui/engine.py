@@ -55,6 +55,11 @@ RESIDUAL = {
 }
 # The dimension (pyazr.kinds()["units"]) of a data set's engine unit for which the S factor is offered, with a
 # charged entrance pair (the S factor's own rule in the engine's quantity table); the unit of the converted values.
+# The sessions the refinement of the curves' grid may open per refinement (pyazr.model_curve.refine_plan's
+# max_sessions): the even grid with the level energies and two sweeps where the curves bend, as an interactive page
+# can afford (each a session's set-up: 0.3 s on T2, 3 s on T1 with its external capture).
+CURVE_SESSIONS = 3
+
 S_FACTOR_DIMENSION = "cross_section"
 S_FACTOR_UNIT = "MeV*b"
 
@@ -70,6 +75,7 @@ class Engine:
         self._extrapolation_session = None
         self._curves = None  # the session of the model curves (pyazr.model_curve.CurveSession) of the open session
         self._curves_at = (None, None)  # (x as bytes, {name: ModelCurve or refusal}) of the last curves evaluated
+        self._curves_even, self._curves_seeds = None, None  # the even plan's text; the seeds the grid was refined at
 
     # -- the session ----------------------------------------------------------------------------------------------
 
@@ -238,14 +244,19 @@ class Engine:
         return export_preview(self.s, np.asarray(x, float))
 
     def _model_curves(self, x):
-        """``{name: ModelCurve or refusal}`` of every active data set at x (see :meth:`curve`)."""
-        from pyazr.model_curve import CurveSession, plan_curves
+        """``{name: ModelCurve or refusal}`` of every active data set at x (see :meth:`curve`).  The grid is refined
+        where the curves bend (``pyazr.model_curve.refine_plan``) when the curves' session is made (the records of
+        the even plan changed: an opened project, an edited data set, an energy shift) and again when a level moved
+        beyond the refined grid's spacing (``seeds_moved``); at any other x the kept session evaluates its grid."""
+        from pyazr.model_curve import CurveSession, grid_seeds, plan_curves, refine_plan, seeds_moved
         key = x.tobytes()
         if self._curves_at[0] != key:
-            plan = plan_curves(self.s, None, x)
-            if self._curves is None or self._curves.plan.text != plan.text:
+            even = plan_curves(self.s, None, x)
+            kept = self._curves is not None and self._curves_even == even.text
+            if not kept or seeds_moved(self._curves.plan, self._curves_seeds, grid_seeds(self.s, self._curves.plan, x)):
                 self._close_curves()
-                self._curves = CurveSession(self.s, plan)
+                self._curves = CurveSession(self.s, refine_plan(self.s, even, x, max_sessions=CURVE_SESSIONS))
+                self._curves_even, self._curves_seeds = even.text, grid_seeds(self.s, self._curves.plan, x)
             self._curves_at = (key, self._curves.evaluate(x))
         return self._curves_at[1]
 

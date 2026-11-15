@@ -544,7 +544,7 @@ that job's kind in ``follows`` and the key of its result in ``takes``; the
 server hands it that job's record (``tracker.source``), and the page offers
 it beside such a result (``tests/pyazr/ui/sampler_bands_test.py``). A new
 type of a job's setting is a row of
-``SETTING_TYPES`` (``jobs.py``) and of ``SETTING_WIDGETS``
+``SETTING_TYPES`` (``job_settings.py``) and of ``SETTING_WIDGETS``
 (``pyazr/ui/static/tabs/fitjob.js``).
 
 A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports

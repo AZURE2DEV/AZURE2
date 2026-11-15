@@ -408,7 +408,12 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       from pyazr's table, the Fit tab's two depths (section 11.14, 2026-11-14). Still typed: the columns, a
       reaction, a grid, a composition, the structured fields. The first view's rough edges repaired (section 11.16:
       a fit's follow-up buttons by the form's rule, each tab's own jobs, the lists in the old program's columns by
-      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).
+      one table, "whole file", a list of numbers that grows as it is typed, keys to every tab).  A first project
+      from nothing (section 11.18, 2026-11-15): `pyazr ui new.azr` opens an empty project, the pairs by name from
+      the mass table, T1 walked through the routes to its χ²; the curve refined where it bends, a prior or limits
+      beside each level parameter, a lost curve said as such (section 11.17).  Still needed by a first-time user:
+      the g-factors and ground-state J^π (no table), the windows' and norm's grammar, the empty project's status
+      line in words.
 - [ ] The project edits and descriptions the page lacks, in pyazr (`web_ui.md` section 12, findings 9-11, 24, 27, 28):
       the THM binding energy and amplitude flag as `set_pair` / `set_channel` edits; pairs added and removed with the
       channels a J^π allows (`add_pair`, `remove_pair`, `allowed_channels`, the Qt rule); the `<thm>` keys as the

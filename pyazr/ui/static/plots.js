@@ -127,12 +127,12 @@ const FIXED = { angle_lab: ["θ_lab", "deg"], angle_cm: ["θ_cm", "deg"], energy
 
 /**
  * The model curve of a data set (`d.curve`, the answer of GET /api/evaluation/curve/{name}) as one line per branch
- * against the x choice `xKey` and the y choice `yc`, or null where it has none to draw: no curve (refused or not
+ * against the x choice `xKey` and the y choice `yc`, or null where it has none to draw: no curve (refused, lost or not
  * fetched), a curve along another variable than x's, or no values for that y.  The numbers are the server's.
  */
 export function curveTraces(d, xKey, yc, style) {
   const c = d.curve;
-  if (!c || c.refused || ALONG[xKey] !== c.variable) return null;
+  if (!c || c.refused || c.lost || ALONG[xKey] !== c.variable) return null;
   const ys = yc.curve ? yc.curve(c) : null;
   if (!ys || !c[xKey]) return null;
   return c.branches.map((b) => {

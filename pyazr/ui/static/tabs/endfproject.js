@@ -219,7 +219,9 @@ export async function renderExport(ctx, el, params, { showJob, routeOf, go }) {
     () => startJob(ctx, el, "endf_write", "writer", Object.fromEntries(widgets.map(({ s, w }) => [s.name,
       w.read()])), (id) => `#/endf/export?job=${id}`, go), "primary");
   write.disabled = Boolean(preview.refused);
-  el.appendChild(section("Write", h("div.endf-settings", {}, ...widgets.flatMap((x) => x.el)),
+  const rangeWords = range.length ? h("p.hint.endf-range", {}, `The energy range: with both boxes empty, the data's, `
+    + `${range[0]} to ${range[1]} MeV (the projectile's lab energy); type both ends for another.`) : null;
+  el.appendChild(section("Write", h("div.endf-settings", {}, ...widgets.flatMap((x) => x.el)), rangeWords,
     h("div.form-actions", {}, write)));
   const result = h("div.endf-write-job", {}, h("p.hint", {}, "Write shows the file's sections and what it does "
     + "not hold here."));

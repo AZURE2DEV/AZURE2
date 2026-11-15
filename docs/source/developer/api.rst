@@ -117,7 +117,8 @@ engine without it. Fits, bands and model averages are Python on top of it
 (``pyazr/bands.py``, ``pyazr/modelavg.py``), as is the model of a data set on
 a fine grid (``Session.model_curve``, ``pyazr/model_curve.py``: a
 ``CurveSession`` owns a session of the extrapolations made from the data
-sets' records, trimmed by ``bands``).
+sets' records, trimmed by ``bands``; ``refine_plan`` refines their grid with
+the ENDF writer's rule, ``pyazr.endf.grid.start_grid`` and ``refine``).
 
 ``python -m pyazr`` (``pyazr/cli.py``) is one table of commands
 (``COMMANDS``), each calling one ``pyazr`` function.

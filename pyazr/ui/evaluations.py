@@ -281,10 +281,13 @@ def import_job(tracker, x0, settings, names):
     project, conversion = endf.to_project(record, os.path.join(work, os.path.basename(name)),
                                           separation_energy=_separation(settings["separation_energy"]), material=m)
     tracker.count(1, None, x0)
-    report = dataclasses.asdict(conversion)
+    # the report names the project as the user will keep it, not the job's temporary file (``candidate``)
+    report = dict(dataclasses.asdict(conversion), path=name)
+    text = str(conversion).replace(f"project {project.path}", f"project {name} (not yet in the project's folder: "
+                                   "\"Write the new project\" puts it there)", 1)
     return "finished", f"{len(conversion.levels)} levels in {len(conversion.pairs)} pairs", {"project": {
         "file": settings["path"], "name": name, "candidate": project.path, "report": report,
-        "report_text": str(conversion), "record_text": str(record), "text": project.text}}
+        "report_text": text, "record_text": str(record), "text": project.text}}
 
 
 def keep_project(state, record, to=None):
@@ -312,8 +315,9 @@ def keep_project(state, record, to=None):
         raise Refused(f"the job's project {result['candidate']} is gone (a temporary file of the job)",
                       allowed="a project that still exists", fix="run New project from this file again")
     shutil.copyfile(result["candidate"], target)
-    # open_path: what POST /api/project/open takes (it resolves a relative path in the server's working directory)
-    return {"path": os.path.relpath(target, state.directory), "open_path": target}
+    # open_path: what POST /api/project/open takes (relative to the open project's folder, as path)
+    path = os.path.relpath(target, state.directory)
+    return {"path": path, "open_path": path}
 
 
 def export_preview(session, x):
@@ -354,11 +358,18 @@ def write_job(tracker, x0, settings, names):
     # the writer names the session's file in MF=1: a session of the same text under the project's name
     from .engine import session_named
     from .state import project_file_of
+    # what the job is doing: the writer's own words where it reports its progress, "writing" otherwise
+    import inspect
+    progress = {}
+    if "progress" in inspect.signature(endf.write).parameters:
+        progress["progress"] = lambda *what, **more: tracker.say(" ".join(str(w) for w in what) or "writing")
+    tracker.say("writing the ENDF-6 file: the engine's sessions on a refined grid (a minute or more)")
     with session_named(s, project_file_of(s.file) or os.path.basename(s.file)) as named:
         written = endf.write(named, os.path.join(s.cwd, name), np.asarray(x0, float), header=header,
                              energy_range_MeV=None if lo is None else (lo, hi),
-                             tolerance=settings["tolerance"] or 1e-3, number_form=settings["number_form"] or "widest")
-    tracker.count(1, None, x0)
+                             tolerance=float(settings["tolerance"] or 1e-3),
+                             number_form=settings["number_form"] or "widest", **progress)
+    tracker.count(1, None, x0, doing="written")
     path = os.path.relpath(written.path, s.cwd)
     return "finished", f"{path}: {len(written.sections)} sections", {"written": {
         "path": path, "sections": [list(x) for x in written.sections],
@@ -366,6 +377,15 @@ def write_job(tracker, x0, settings, names):
         "mf2_check": {str(mt): v for mt, v in written.mf2_check.items()}, "losses": list(written.losses),
         "not_written": list(written.not_written)}}
 
+
+#: The tolerances an export offers (pyazr.endf.write's ``tolerance``), each with its words.
+TOLERANCES = (("1e-2", "1 %: a coarse grid, written fastest"), ("3e-3", "0.3 %"),
+              ("1e-3", "0.1 %: the writer's default"), ("3e-4", "0.03 %: a fine grid, written slowest"))
+
+#: The number forms of an export (pyazr.endf.NUMBER_FORMS), each with its words (the forms' own docs).
+NUMBER_FORMS = (("widest", "the most digits the 11 columns hold (fixed point where it fits)"),
+                ("classic", "7 significant digits, the exponent without E (-1.234567+6)"),
+                ("e", "6 significant digits with E (-1.23456E+6)"))
 
 #: The MF=1 fields of an export (pyazr.endf.write's header keys, p. 42) and the job's settings that give them.
 HEADER_SETTINGS = (("MAT", "mat"), ("AUTH", "authors"), ("ALAB", "lab"), ("EDATE", "date"), ("REF", "reference"),
@@ -427,9 +447,10 @@ def job_rows():
                                  "the data's)"),
                          Setting("e_high", "number", None, "the highest lab energy of the projectile (MeV; empty: "
                                  "the data's)"),
-                         Setting("tolerance", "number", 1e-3, "the grid's tolerance: linear interpolation between "
-                                 "its points within this (relative)"),
-                         Setting("number_form", "text", "widest", "the number form: widest, classic or e "
-                                 "(pyazr.endf.NUMBER_FORMS)")),
+                         Setting("tolerance", "choice", "1e-3", "how closely the file's energy grid follows the "
+                                 "model: linear interpolation between its points within this (relative); a finer "
+                                 "grid takes longer to write", choices=TOLERANCES),
+                         Setting("number_form", "choice", "widest", "how the numbers are written in the file's "
+                                 "11-column fields (pyazr.endf.NUMBER_FORMS)", choices=NUMBER_FORMS)),
                facts=(("pyazr call", "pyazr.endf.write"), ("writes", "a new ENDF-6 file of the project folder"))),
     )

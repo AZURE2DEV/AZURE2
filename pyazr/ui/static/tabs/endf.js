@@ -385,7 +385,11 @@ async function showJob(ctx, panel, id, draw) {
   const paint = (j) => {
     panel.textContent = "";
     if (!isFinal(j.state)) {
-      panel.appendChild(h("p.endf-running", {}, `job ${j.id}: ${progressView(j).words}…`));
+      // what the job says it is doing (an export's stage: the writer's progress), and for how long
+      const doing = j.progress?.doing;
+      const elapsed = j.progress?.elapsed;
+      panel.appendChild(h("p.endf-running", {}, `job ${j.id}: ${progressView(j).words}…`
+        + (doing ? ` ${doing}` : "") + (elapsed ? ` (${Math.round(elapsed)} s)` : "")));
       return;
     }
     if (j.state !== "finished" || !j.result) {
