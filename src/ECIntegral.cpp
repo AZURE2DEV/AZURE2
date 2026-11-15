@@ -254,6 +254,96 @@ void ECIntegral::Integrate(double chanrad) {
 }
 
 /*!
+ * The radial integrals for an unbound (narrow-resonance) final state; see the declaration in ECIntegral.h.
+ *
+ * With O = G + iF for both states (O_i at the entrance energy E_i, O_f at the final energy E_f), the four real
+ * products are real and imaginary parts of P = O_i O_f and Q = O_i conj(O_f):
+ *   G_i G_f = Re(P + Q)/2,  F_i F_f = Re(Q - P)/2,  F_i G_f = Im(P + Q)/2,  G_i F_f = Im(P - Q)/2.
+ * Beyond R both P and Q oscillate with the phases phi_P,Q = theta_i +- theta_f, theta = k r - eta ln(2 k r), and
+ * phi_Q' = (k_i - k_f) + (eta_f - eta_i)/r > 0 because E_i > E_f.  With C_0 = w Z e^{-i phi}/(i phi'), Z = P or Q,
+ * and C_{n+1} = C_n'/(i phi'), the Abel-regularized tail is int_R^inf w Z dr = e^{i phi(R)} (-C_0 + C_1 - C_2 ...);
+ * C_0 is smooth (the fast phase is divided out), so its derivatives are taken by five-point differences.  R is
+ * beyond three classical turning points of either state and has phi_Q' R >= 40, so each term is a few percent of
+ * the one before and the tail itself is small next to the integral to R.
+ */
+bool ECIntegral::IntegrateUnbound(double chanrad, double finalEnergy) {
+  if (!unboundCoul_) {
+    unboundCoul_ = std::make_unique<CoulFunc>(pair_, !!(configure_->paramMask & Config::USE_GSL_COULOMB_FUNC));
+    unboundCoul_->SetUseGlobalCache(false);
+  }
+  CoulFunc *cf = unboundCoul_.get();
+  const Kinematics::Channel kin(pair());
+  const int li = params_.liValue, lf = params_.lfValue, L = params_.multLValue;
+  const double Ei = params_.pairEnergy, Ef = finalEnergy;
+  const double ki = kin.Rho(1.0, Ei), kf = kin.Rho(1.0, Ef);
+  const double etai = kin.Eta(Ei), etaf = kin.Eta(Ef);
+  auto O = [&](int l, double r, double E) {
+    struct CoulWaves c = cf->operator()(l, r, E);
+    return complex(c.G, c.F);
+  };
+  auto w = [&](double r) {
+    double v = pow(r, L);
+    return params_.useChargeFunction ? params_.effectiveCharge->operator()(r) * v : v;
+  };
+  auto turning = [](double eta, int l, double k) { return (eta + sqrt(eta * eta + l * (l + 1.0))) / k; };
+
+  double R = std::max(chanrad + 20.0, 3.0 * std::max(turning(etai, li, ki), turning(etaf, lf, kf)));
+  R = std::max(R, 40.0 / (ki - kf));
+  if (!(R <= 50000.0)) return false;
+
+  // a to R: 16-point Gauss-Legendre panels no wider than 8 fm or a quarter of the fastest period, 2 pi/(k_i + k_f)
+  // (2 fm before the speed check of 2026-11-13: the same integrals to 1e-9, four times faster).
+  static thread_local gsl_integration_glfixed_table *gl = gsl_integration_glfixed_table_alloc(16);
+  const double width = std::min(8.0, 0.25 * 2.0 * M_PI / (ki + kf));
+  const int nPanels = (int)ceil((R - chanrad) / width);
+  const double h = (R - chanrad) / nPanels;
+  long double sGG = 0.0L, sGF = 0.0L, sFG = 0.0L, sFF = 0.0L;
+  for (int p = 0; p < nPanels; ++p) {
+    const double lo = chanrad + p * h, hi = lo + h;
+    for (size_t j = 0; j < gl->n; ++j) {
+      double x, wt;
+      gsl_integration_glfixed_point(lo, hi, j, &x, &wt, gl);
+      const complex oi = O(li, x, Ei), of = O(lf, x, Ef);
+      const double ww = wt * w(x);
+      sGG += (long double)(ww * std::real(oi) * std::real(of));
+      sGF += (long double)(ww * std::real(oi) * std::imag(of));
+      sFG += (long double)(ww * std::imag(oi) * std::real(of));
+      sFF += (long double)(ww * std::imag(oi) * std::imag(of));
+    }
+  }
+
+  // R to infinity: the P (s = +1) and Q (s = -1) tails.
+  auto theta = [](double k, double eta, double r) { return k * r - (eta != 0.0 ? eta * log(2.0 * k * r) : 0.0); };
+  auto tail = [&](int s) {
+    auto phi = [&](double r) { return theta(ki, etai, r) + s * theta(kf, etaf, r); };
+    auto dphi = [&](double r) { return (ki - etai / r) + s * (kf - etaf / r); };
+    auto c0 = [&](double r) {
+      complex of = O(lf, r, Ef);
+      if (s < 0) of = std::conj(of);
+      return w(r) * O(li, r, Ei) * of * std::exp(complex(0.0, -phi(r))) / complex(0.0, dphi(r));
+    };
+    const double d = 0.02 * R;
+    const complex fm2 = c0(R - 2 * d), fm1 = c0(R - d), f0 = c0(R), fp1 = c0(R + d), fp2 = c0(R + 2 * d);
+    const complex d1 = (-fp2 + 8.0 * fp1 - 8.0 * fm1 + fm2) / (12.0 * d);
+    const complex d2 = (-fp2 + 16.0 * fp1 - 30.0 * f0 + 16.0 * fm1 - fm2) / (12.0 * d * d);
+    const complex iphi1(0.0, dphi(R));
+    const complex iphi2(0.0, etai / (R * R) + s * etaf / (R * R));
+    const complex c1 = d1 / iphi1;
+    const complex c2 = (d2 / iphi1 - d1 * iphi2 / (iphi1 * iphi1)) / iphi1;
+    return std::exp(complex(0.0, phi(R))) * (-f0 + c1 - c2);
+  };
+  const complex tP = tail(+1), tQ = tail(-1);
+  const double tGG = 0.5 * std::real(tP + tQ), tFF = 0.5 * std::real(tQ - tP);
+  const double tFG = 0.5 * std::imag(tP + tQ), tGF = 0.5 * std::imag(tP - tQ);
+
+  const complex ofa = O(lf, chanrad, Ef);
+  FWc_ = complex((double)sFG + tFG, (double)sFF + tFF) / ofa;
+  GWc_ = complex((double)sGG + tGG, (double)sGF + tGF) / ofa;
+  return std::isfinite(std::real(FWc_)) && std::isfinite(std::imag(FWc_)) && std::isfinite(std::real(GWc_)) &&
+         std::isfinite(std::imag(GWc_));
+}
+
+/*!
  * Overloaded operator to make the class instance callable as a function.  The intial and final orbital
  * angular momentum, the gamma multipolarity, and the incoming energy and final state energy in the
  * compound system are the dependent variables. The function returns an ECIntResult structure.
@@ -284,6 +374,16 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   double outEnergy = inEnergy - sepEnergy;
   double chanRad = chanrad_;
   double redMass = pair()->GetRedMass();
+
+  // No photon below the final level: the transition is closed.  Before 2026-11-13 this happened only for an
+  // unbound final state (E < E_f), and its cross section came out NaN instead of 0.
+  if (!(inEnergy - levelEnergy > 0.0)) return complex(0.0, 0.0);
+  // An unbound final state (E_f > 0 above this pair's threshold) is treated as a narrow resonance
+  // (IntegrateUnbound).  Before 2026-11-13 it was silently taken as BOUND by |E_f|.  It is reached from an open
+  // entrance channel only (E > E_f > threshold).
+  const double finalEnergy = levelEnergy - sepEnergy;
+  const bool unboundFinal = finalEnergy > 0.0;
+  if (unboundFinal && !(outEnergy > 0.0)) return complex(0.0, 0.0);
 
   // Just above a charged-particle threshold the open-channel form fails: with eta >~ 110 the penetrability
   // underflows while G overflows, and sqrt(P) * int (G + iF) W came out as 0, as an overflow, as NaN or (from
@@ -328,8 +428,9 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   // the scale back afterwards.  Both branches need this -- a sub-threshold
   // entrance channel makes the WW integrand ~1e-500 (which used to divide as
   // 0/0), and a final level close to the separation energy does the same to
-  // the bound-state factor in FW/GW (which used to vanish silently).
-  {
+  // the bound-state factor in FW/GW (which used to vanish silently).  (Not for an unbound final state, which
+  // has no Whittaker function.)
+  if (!unboundFinal) {
     double sOut;
     whitfunction()->Scaled(theFinalLValue, chanRad, params_.bindingEnergy, sOut);
     params_.log10RefOut = sOut;
@@ -351,9 +452,25 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   // it to an M1 term multiplied that term by the E1 charge (x0.56 for p+16O, 0
   // for an N=Z pair) before 2026-10-23.
   params_.useChargeFunction = !params_.useLongWavelengthApprox && radType == 'E';
-  Integrate(chanRad);
 
   complex overlapIntegral(0., 0.);
+  if (unboundFinal) {
+    // Same expressions as the bound branch below, with the complex integrals of the outgoing final-state wave.
+    if (!IntegrateUnbound(chanRad, finalEnergy)) {
+      status_ |= 1;
+      return complex(0.0, 0.0);
+    }
+    struct CoulWaves coul = coulfunction()->operator()(theInitialLValue, chanRad, outEnergy);
+    const complex hsp = CoulombHardSpherePhase(coul);
+    const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
+    if (isChannelCapture)
+      overlapIntegral = complex(0.0, -0.5) * sqrt(coulfunction()->Penetrability(theInitialLValue, chanRad, outEnergy)) *
+          flux * hsp * (GWc_ + complex(0.0, 1.0) * FWc_);
+    else
+      overlapIntegral = (std::real(hsp) * FWc_ + std::imag(hsp) * GWc_) * flux;
+  } else {
+  Integrate(chanRad);
+
   if (outEnergy > 0.0) {
     struct CoulWaves
         coul = coulfunction()->operator()(theInitialLValue, chanRad, outEnergy);
@@ -401,6 +518,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     overlapIntegral = complex(0.0, -0.5) * ratio *
         sqrt(redMass * uconv * chanRad) / hbarc;
   }
+  }  // bound final state
 
 
   double effectiveCharge;

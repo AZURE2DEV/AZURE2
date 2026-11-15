@@ -1402,7 +1402,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         } else if (thePair->GetPType() == 10) {
           complex loElement = complex(0.0, 0.0);
           this->AddLoElement(j, ch, loElement);
-          double sqrtPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
+          // A photon channel into a final level above this energy (an unbound final state, E < E_x) is closed.
+          // Before 2026-11-13 the power below came out NaN there and made every cross section of the point NaN.
+          double sqrtPene = !(localEnergy > 0.0) ? 0.
+                          : (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
@@ -1736,6 +1739,9 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   complex expHSP = theCoulombFunction.HardSpherePhase(
       theECMGroup->GetL(), entrancePair->GetChRad(theECMGroup->GetL(), theKGroup->GetS(), theECMGroup->GetJ()), cmEnergy);
 
+  // No photon below the final level (an unbound final state above the entrance energy): the pathway is closed.
+  // Before 2026-11-13 the power below came out NaN there and made the whole cross section NaN.
+  if (!(inEnergy - levelEnergy > 0.0)) return complex(0.0, 0.0);
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
   AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());

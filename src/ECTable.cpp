@@ -136,7 +136,11 @@ complex ECTable::Integral(PPair *finalPair, double radius, const Config &configu
   CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
   if (RateMode(configure)) coul.SetUseGlobalCache(false);  // rate energies never recur
   complex reduction;
-  if (!(outEnergy > 0.0) || !Reduction(radius, coul, li, outEnergy, isChannelCapture, reduction)) {
+  // An unbound final state (levelEnergy above this pair's threshold, ECIntegral::IntegrateUnbound) is integrated
+  // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero
+  // below it, which a Lagrange stencil in ln(E_out) cannot follow.
+  if (!(outEnergy > 0.0) || levelEnergy > threshold ||
+      !Reduction(radius, coul, li, outEnergy, isChannelCapture, reduction)) {
     ++g_direct;
     return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
