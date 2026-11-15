@@ -35,6 +35,7 @@
  */
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -42,7 +43,6 @@
 #include <set>
 #include <sstream>
 #include <string>
-#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -112,7 +112,8 @@ struct Model {
     cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
     cfg.paramMask |= Config::USE_BRUNE_FORMALISM | extraMask;
     if (park) cfg.paramMask |= Config::USE_PARK_FORMALISM;
-    mkdir(outdir.c_str(), 0755);
+    std::error_code made;  // an existing directory is fine
+    std::filesystem::create_directory(outdir, made);
     cfg.outputdir = outdir + "/";
     if (!ok) return;
     data = new WorkingCopy();

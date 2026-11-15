@@ -11,6 +11,10 @@
 # -DAZURE2_SANITIZE=<kind> (CMakeLists.txt) and built unless SAN_NO_BUILD=1; an existing directory configured
 # for another sanitizer is refused.  The compiler is CMake's choice, or $CC/$CXX.
 #
+# On GitHub the workflow upgrade-sanitizers runs this on a push that changes this file, the workflow or
+# scripts/sanitizers/, by hand, and nightly on the default branch only: a push that changes nothing of these does
+# not run it, and the branch then shows the result of its last run.
+#
 # Environment (all optional):
 #   SAN_THREADS        OpenMP threads (default 8)
 #   SAN_FIT_CALLS      function calls of the bounded T2 fit (default 30; the full fit needs about 1100)
