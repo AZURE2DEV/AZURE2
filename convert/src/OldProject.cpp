@@ -161,7 +161,8 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
         return "data segment #" + std::to_string(key) + " cannot be read" +
                (parsed->parseError().empty() ? "" : ": " + parsed->parseError());
       }
-      if (!parsed->unreadTail().empty()) return "data segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
+      if (!parsed->unreadTail().empty())
+        return "data segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
       if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
@@ -193,7 +194,8 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
         return "test segment #" + std::to_string(key) + " cannot be read" +
                (parsed->parseError().empty() ? "" : ": " + parsed->parseError());
       }
-      if (!parsed->unreadTail().empty()) return "test segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
+      if (!parsed->unreadTail().empty())
+        return "test segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
       const int d = parsed->isDiff();
       if (parsed->hasCovariance()) return "test segment #" + std::to_string(key) + " carries a covariance block, which the old engine refused";
       if (d == 9 || d == 19) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (angular coefficients, a data-segment type), which the old engine refused";
@@ -225,10 +227,10 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       if (e.line.dopplerError) return where + ": " + e.line.dopplerErrorText;
       if (e.line.densityFitError) return where + ": " + e.line.densityFitErrorText;
       if (!e.line.unknownKeyword.empty())
-        return where + ": '" + e.line.unknownKeyword + "' is not a keyword of a <targetInt> line (beamprofile, sigmalab, "
-               "screening, densityfit, densitygroup, doppler, udr); the old engine dropped it without a word at the end "
-               "of a line, and a newer AZURE2 may read it.  Correct it, or delete it from a copy of the project if the "
-               "program that wrote it ignored it too, and convert the copy";
+        return where + ": '" + e.line.unknownKeyword + "' is not a keyword of a <targetInt> line (beamprofile, "
+               "sigmalab, screening, densityfit, densitygroup, doppler, udr); the old engine dropped it without a word "
+               "at the end of a line, and a newer AZURE2 may read it.  Correct it, or delete it from a copy of the "
+               "project if the program that wrote it ignored it too, and convert the copy";
       if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) return where + " cannot be read";
       e.index = index;
       e.docLine = (int)i + 1;

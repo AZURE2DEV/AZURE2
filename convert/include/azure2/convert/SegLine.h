@@ -380,9 +380,9 @@ class SegLine {
               break;
             }
           } else {
-            // a word that is not a keyword of this grammar (a newer program's, or a typing error): kept for the caller
-            // to refuse.  Numbers left here are the old grammar's own (a component list shorter than its count, which the
-            // old engine read as a plain line with a warning).
+            // a word that is not a keyword of this grammar (a newer program's, or a typing error): kept for the
+            // caller to refuse.  Numbers left here are the old grammar's own (a component list shorter than its
+            // count, which the old engine read as a plain line with a warning).
             if (!IsNumberToken(keyword)) {
               std::string rest;
               std::getline(advancedStream, rest);

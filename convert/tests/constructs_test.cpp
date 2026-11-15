@@ -767,15 +767,15 @@ int main(int argc, char **argv) {
     c.levels = pair7;
     const ConvertResult q = Convert(c);
     Expect("pair keys on a sum: the ambiguous first term's keys, the second term's label", q, "dataset ks",
-           F{{"reaction", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"}, {"quantity", "sigma"},
-             {"unit", "b"}, {"file", "ks.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
+           F{{"reaction", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"},
+             {"quantity", "sigma"}, {"unit", "b"}, {"file", "ks.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
              {"norm", "1 fixed"}});
     check("pair keys on a sum: no question", q.ok && q.questions.empty());
     Old same = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 kt.dat 1 0 -1 1 7 7 -999 0.5\n", "", "", "", ""};
     same.levels = pair7;
     Expect("pair keys on a sum of two ambiguous terms of one pair", Convert(same), "dataset kt",
-           F{{"reaction", "20Ne(n,n)20Ne + 0.5*20Ne(n,n)20Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"}, {"quantity", "sigma"},
-             {"unit", "b"}, {"file", "kt.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
+           F{{"reaction", "20Ne(n,n)20Ne + 0.5*20Ne(n,n)20Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"},
+             {"quantity", "sigma"}, {"unit", "b"}, {"file", "kt.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"},
              {"norm", "1 fixed"}});
     Old two = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 ku.dat 1 0 1 5 5 -999\n", "", "", "", ""};
     two.levels = pair7;
