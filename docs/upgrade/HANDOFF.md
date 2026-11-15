@@ -2,6 +2,104 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 11:45) — merged: the refusal of an unbound final state; the report for the owner
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 83 (rehearsal 82 plus
+`feature/upgrade-5-unbound-final-refused` and one commit of mine). The base build is now `work/b-trial83`, the
+reference stays `tab-t74-1`, the quick set is 310 tests.
+
+**The refusal** (the agent's entry is below this one). A capture final state at or above a particle threshold is
+refused at set-up with `E_FINAL_STATE_UNBOUND`, in every build of a project. Read by me: the whole diff
+(`experiment/src/FinalStates.cpp`, `experiment/src/BuildFinalStates.cpp`, the diagnostic, the two tests, the
+pages). The agent ended its turn before committing; I committed its tree as it stood, after the consistency test.
+**My runs on the merged tree** (`work/director/verify_l83.out`): build with 0 warnings; every output file of every
+project in the three bases identical to `tab-t74-1` (887 Brune, 851 formal, 887 Park; no project of the
+repository is refused); the eight fits by command identical to the base build's, same times; the tests that are
+not labelled slow: 310 of 310 pass. Not run by me: the agent's scan of 415 `.azr` files and 42 other project
+files (its run: none refused). Open, the agent's: a rate whose entrance pair is named on the command line is not seen by
+validation.
+
+**My commit: the report for the owner and his agents.** Documents and the CI scripts, no C++.
+
+- `FOR_THE_OWNER.md`: section 7 says that `dev`'s features are **not ported** (the PI's decision of 2026-11-15:
+  the owner writes them in this branch) and that work on the upgrade is cut from `feature/upgrade` until the two
+  are joined; section 10 "What is not finished" (fourteen items, ranked); section 11 "For an AI agent working in
+  this branch" (what to read and in which order, how to verify, when to stop and ask).
+- `dev_features.md` (new): feature by feature, the named places each feature of `dev` touches here.
+- `ROADMAP.md`: "State at the hand-over", with a table of every open box and what remains of it; six boxes
+  ticked that were done and not ticked.
+- `CLAUDE.md`, `README.md`: lines that described the plan and not the code (no `inference/` library was made).
+- A model of the PI is named "a 12C + 12C model of the PI, not in the repository" (three places of this log and
+  `project_format3.md` named its nucleus; nothing of its content was ever committed).
+
+**What these documents rest on.** A reading of the tree, counts by `grep` and `wc` on 2026-11-15, the ledgers of
+the repository, and this log. Every path they name was checked to exist. They were not reviewed by anyone but
+me. The consistency test and the build of the published pages (60 pages) pass.
+
+**The CI is red, and the cause is not known.** On the first pushed commit (`56f4dac7`) the Linux and macOS jobs
+failed in "Build", the Windows job in "Configure", both sanitizer jobs failed. The job logs need a login that this
+machine does not have. Excluded here: the same commit builds with the CI's own flags (`-Werror`, Release, the
+binding on) with GCC 13 and make, 0 warnings. Not tried: Ninja, GCC 11.4 with Python 3.10 (the Linux runner),
+AppleClang, clang 18, MinGW; none is installed and none may be fetched. **Nothing of this branch was ever built
+or run on macOS or Windows.** To see the cause at the next push, `scripts/ci_first_errors.sh` (new) prints the
+first error lines of a failed configure or build as an annotation, which the public API shows without a login
+(`build.yml`, `scripts/sanitize_upgrade.sh`). It was tried by hand on made-up logs, never on GitHub.
+
+**Open, for the PI.** The rule for the next pushes; the CI's log lines if he reads them first; whether the three
+unfinished ports (local branches, not reviewed) should be given to the owner; the earlier questions (a repeated
+top-level section in `--validate`; section 8's proposals).
+
+## 2026-11-15 (agent, branch `feature/upgrade-5-unbound-final-refused`) — a capture final state above a threshold is refused
+
+**Done.** `E_FINAL_STATE_UNBOUND`, an error of the build checks: the rule `UnboundFinalStates`
+(`experiment/src/FinalStates.cpp`, one function on the `<levels>` tables and the captures the data sets and
+extrapolations ask), reported by `Schema::Build` in every reading (not only with `setUpChecks`), so `AZURE2
+--validate`, every run, `pyazr.Project.validate()` (the page's Check) and `pyazr.Session` say the same line. No
+engine file changed; the engine's set-up keeps no second copy.
+
+**The rule.** A capture into the final state of a photon pair at E_f is refused when the photon pair has external
+capture and E_f is at or above the threshold (S + e1 + e2) of a particle pair with a channel in the final state's
+J^π group, or when a data set or extrapolation (active; each term of a sum or ratio; a total capture asks every
+photon pair of its nucleus) captures from an entrance pair whose threshold lies below E_f, with external capture or
+without. E_f is the larger of the photon pair's E_x and its level's energy (within 1 keV). Why this width: the
+places below; internal capture into a final state above another pair's threshold but below the entrance threshold
+(⁸Be(0⁺) in ⁷Li(p,γ) without external capture) is computed right in the sharp-final-state approximation
+(Γ_γ ∝ E_γ^(2L+1) with E_γ = E_x − E_f > 0 at every point, no binding energy enters), so it is not refused.
+
+**Where the code assumes a bound final state** (read in the start commit; T1 with its 3/2⁻ final state at 2.5 MeV,
+S_p = 1.94349 MeV, run where marked R):
+
+| Place | What it takes | Which pair | External capture | Below E_f |
+|---|---|---|---|---|
+| `src/ExternalCaptureFinalStates.cpp` `ParseExternalCapture` | N_f integral (`NFIntegral`) and ANC→amplitude factor `ecConvert`, Whittaker at \|E_f − S − e\| | every particle pair with a channel in the final J^π group | on only (`USE_EXTERNAL_CAPTURE`, column 31 ≠ 0) | — |
+| `src/NFIntegral.cpp` | binding = \|E_f − S − e\| | as above | on only | — |
+| `src/ECIntegral.cpp` `CalculateDirect` (and `ECTable`, the same through it) | bound-state Whittaker at \|E_f − S − e\| in the radial integral | the final channel's pair: a particle channel of the final state that is an exit of the entrance (`physics/src/Pathways.cpp`) | on only | — |
+| `src/UnitExternalCapture.cpp` `ECPathwayAmplitude` | (E_x − E_f)^(L+1/2) | the entrance pair of the point | on only | NaN (R) |
+| `src/ChannelTables.cpp` photon channel | √P = (E_x − S_γ − E_f)^(l+1/2) | the entrance pair of the point | on or off | NaN (R, column 31 = 0: 10 points of cap_g1 NaN, χ² 1e100) |
+| `physics/src/Widths.cpp` `photon_penetrability` (level transforms) | \|E_γ\|^(2L+1) at a level energy | — | either | finite (fabs): not this defect |
+
+A bound final state (E_f below every entrance threshold) gives E_γ > 0 at every computed point: the folded
+sub-points are floored at a positive c.m. energy (`Segment::IntegrationFloor`, `MeshSlots.cpp` `EdgeAtFloor`) and an
+external amplitude below the entrance threshold is zero (`ChannelFunc::IsClosed`); T1 with a 0.6 MeV (lab) beam
+spread on cap_g1 runs finite (R). Not covered: a THM data set exiting into a photon pair (its sub-points reach E_x
+near 0), read only.
+
+**Counted before the change** (`work/unbound/scan/scan.py` on every `<levels>` block of the start commit): 415 `.azr`
+files with levels (the tests, the examples, the converter's fixtures of `tests/convert/`), 295 photon pairs, plus 42
+other files with a `<levels>` block (2 photon pairs): none has a final state at or above any particle threshold of
+its nucleus, so no existing project is refused, by this rule or a wider one.
+
+**Verified how.** Build 0 warnings; `experiment_build` (new cases: each kind, the place of the diagnostic, the
+threshold itself, a total capture, 27 keV below builds), `experiment_diagnostics`; new ctests `ec_final_state_unbound`
+(T1 at 2.5 MeV with and without external capture: `--validate` exit 2 and the run refused with the same line; at
+1.94 MeV the start commit's χ² 219429.963689) and `pyazr_ec_final_state_unbound`; the injected errors (the check not
+called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1` and
+`ctest -LE slow` (see the report).
+
+**Open.** The rate's entrance is a command-line option, which the validation does not see: below such a final state
+its cross section is NaN, dropped by the rate as zero with "singular level matrix" warnings (R). In the formal
+basis the final state's Brune energy (`SetUpECFinalBlocks`) is compared as written in `<levels>`.
+
 ## 2026-11-15 (director, 10:20) — merged: the owner's page written anew
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 82 (rehearsal 81 plus
@@ -79,7 +177,7 @@ only.
 identical to `b-trial80`; the consistency test; the quick tests 308 (307 before): 308 of 308 passed.
 
 **The director's own runs** on `b-trial81` against `b-trial80`, by command, every output file compared
-(`work/director/try81/own81.sh`, `mg24.sh`): identical in all of them.
+(`work/director/try81/own81.sh` and a script for the PI's model): identical in all of them.
 
 | run | rehearsal 80 | rehearsal 81 |
 |---|---|---|
@@ -365,7 +463,8 @@ particles. (3) `python -m pyazr convert --allow-questions`. (4) The prior_centre
 an AZURE2 without the rows centred the prior on the start value. (5) UDR `flight_path` in metres; a response of more
 than 2^24 table steps refused (it overflowed an int and crashed).
 
-**The PI's 24Mg model** (`work/format1/mg24/`): converts with 0 questions, validates but for the 25 missing data files
+**A 12C + 12C model of the PI, not in the repository**: converts with 0 questions,
+validates but for the 25 missing data files
 (not on this machine), `AZURE2 extrapolate` 87.0 s and 11.0 GB at 1 thread (old engine at the branch point 86.9 s,
 4.47 GB). The eight curves differ from the old engine's, each difference traced: the four THM lines are THM HOES
 cross sections here and plain cross sections in the old engine, which also reads column 32 (the THM binding energy)
@@ -388,7 +487,7 @@ setting (`nwalkers 10`) into `<mcmc>`, now refused (line removed from the fixtur
 registered in ctest after that run (passes). Injected: the reader's section check off (4 failures), composite keys ignored
 (5), the old flight-path conversion (6 failures), the UDR guard off (crash). Docs built.
 
-**Open.** The new engine's 11 GB on the 24Mg folds (2.5 times the old); the old engine's NaN level (not traced);
+**Open.** The new engine's 11 GB on that model's folds (2.5 times the old); the old engine's NaN level (not traced);
 a per-term pair key (not written: no project needs it); a repeated top-level section is still read with a warning
 (only the first); the first token of a positional `<config>` entry ends its reading (the rest of the line unread).
 A test line whose type 10 is followed by a spin operator was, before, read as a THM extrapolation (the operator

@@ -238,7 +238,7 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
   written label as the level ID of F13 (a). They are accepted only where the label alone is ambiguous and required
   there (the reader checks both against `<levels>`: a redundant key is a second source of truth); they apply to a
   single reaction only — a sum or a ratio with an ambiguous term waits for named pairs in `<levels>`.
-  **[Correction (2026-11-15, the PI's 24Mg model, pairs 1 and 6 both ¹²C + ¹²C, four sums of a pair-6 entrance): on a
+  **[Correction (2026-11-15, found on a 12C + 12C model of the PI, not in the repository): on a
   sum or a ratio `entrance_pair` / `exit_pair` apply to every term whose label names two pairs on that side; a term
   whose label names one pair keeps it; `E_PAIR_KEY` where no term needs the key or a term's label does not name it.
   The old line gives every term its own keys (`EData::CreateComponentSegment` copied the base segment with the

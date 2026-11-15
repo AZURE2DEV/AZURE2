@@ -144,6 +144,7 @@ jobs:
       # --------------------------------------------------------------- build
       - name: Configure
         run: |
+          trap 'echo "::error::${{ matrix.name }} configure: failed at: $BASH_COMMAND"' ERR
           # An array, so the spaces inside the OpenMP flags survive intact.
           EXTRA=()
           if [ "${{ matrix.name }}" = "macos" ]; then
@@ -168,16 +169,27 @@ jobs:
           EXTRA+=(-DPython3_EXECUTABLE="$PYAZR_PYTHON")
           EXTRA+=(-DPYTHON_EXECUTABLE="$PYAZR_PYTHON")
           if [ -n "${PYBIND11_DIR:-}" ]; then EXTRA+=(-Dpybind11_DIR="$PYBIND11_DIR"); fi
-          cmake -S . -B build -G Ninja \
+          # A failure's first lines as an annotation: the log itself needs a
+          # login, the annotations are public with the run.
+          set -o pipefail
+          if ! cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_API=ON \
             -DUSE_MCMC=ON \
             -DUSE_READLINE=${{ matrix.use_readline }} \
-            "${EXTRA[@]}"
+            "${EXTRA[@]}" 2>&1 | tee configure.log; then
+            bash scripts/ci_first_errors.sh configure.log "${{ matrix.name }} configure"
+            exit 1
+          fi
 
       - name: Build
         id: build
-        run: cmake --build build --parallel
+        run: |
+          set -o pipefail
+          if ! cmake --build build --parallel 2>&1 | tee build.log; then
+            bash scripts/ci_first_errors.sh build.log "${{ matrix.name }} build"
+            exit 1
+          fi
 
       # Catches link errors and libraries the binary cannot resolve at runtime.
       # --help exits 0 and needs no display, so it works on a headless runner.

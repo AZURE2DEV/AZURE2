@@ -1,5 +1,5 @@
-// Internal to Schema::Build (experiment/src/Build.cpp, BuildEffects.cpp): the state of one build and the helpers both
-// files use.  Not for other callers: Schema::Build (Schema.h) is the interface.
+// Internal to Schema::Build (experiment/src/Build.cpp, BuildEffects.cpp, BuildFinalStates.cpp): the state of one
+// build and the helpers the files use.  Not for other callers: Schema::Build (Schema.h) is the interface.
 #ifndef AZURE2_EXPERIMENT_BUILDCONTEXT_H
 #define AZURE2_EXPERIMENT_BUILDCONTEXT_H
 
@@ -90,6 +90,13 @@ void BuildPotentials(Context &c);
 /// The effects of targets, beams and detectors on the data sets and extrapolations, the abundances of the targets'
 /// isotopes and the sample thicknesses (BuildEffects.cpp).
 void BuildEffects(Context &c);
+
+/// The refusals of the set-up's external capture (BuildFinalStates.cpp): a final state that is not one level of
+/// <levels> (E_FINAL_STATE_NOT_LEVEL) or that two photon pairs share (E_FINAL_STATE_SHARED).  BuildOptions::setUpChecks.
+void CheckFinalStates(Context &c, const LevelTables &levels);
+/// A capture into a final state above a particle threshold (E_FINAL_STATE_UNBOUND, FinalStates.h UnboundFinalStates):
+/// in every build.  After the data sets and extrapolations are built.
+void CheckUnboundFinalStates(Context &c, const LevelTables &levels);
 
 }  // namespace build
 }  // namespace experiment
