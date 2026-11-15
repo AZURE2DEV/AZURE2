@@ -12,6 +12,8 @@
 #
 # Model: tests/natural_neon with every 16th data point (same segments, components and target effects); the fit
 # is MIGRAD with the analytic gradient capped at 5 calls, which re-places sub-point grids at every evaluation.
+# (expected/chi2_fit: 109.134 until 2026-11-15; the bounded MIGRAD seed step takes another path in these 5 calls, 106.338;
+# AZURE_SEED_BOUND=0 gives the old value back.)
 #   (a) a calculation gives byte-identical output files at 1 and 4 threads;
 #   (b) the capped fit completes at 1 and at 4 threads, re-placing grids, with the recorded chi-squared;
 #   (c) its output files are byte-identical at 1 and 4 threads;
