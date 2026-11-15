@@ -356,6 +356,11 @@ Each checked against the start commit of this page, by a run (R) or by reading t
   named on the command line is not seen by the validation: below such a final state its cross section is NaN, which
   the rate drops as zero, one warning "singular level matrix" per grid point (R: the same T1 with its capture data
   set and extrapolation switched off, internal capture only, `rate --rate-entrance=1 --rate-exit=3`).
+  Seen by reading only, not run and not repaired: a THM data set that exits into a photon pair reaches energies
+  near zero at its sub-points, where even a bound final state gives a negative photon energy; in the formal basis
+  the final state's Brune energy can differ from the energy of `<levels>` that the validation compares, which
+  matters near a threshold; `photon_penetrability` (`physics/src/Widths.cpp`) takes |E_γ|, so a level below its
+  own final state has a finite photon width.
 - A project file cannot hold two levels of one J^π at the identical energy: their lines are read as one level, with
   a warning (R). Levels within 1e-6 MeV, and a fit that brings two together, work.
 - A repeated top-level section: the run reads the first and warns; `--validate` passes a repeated empty section (R).
@@ -372,14 +377,23 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 In the order of what it costs the next person. "Not audited" means: merged with its agent's tests passing, and not
 re-read against its design at the hand-over.
 
-1. **The CI has never been green on this branch.** The first push (2026-11-15, `56f4dac7`) failed in the Build step
-   on Linux (ubuntu-22.04) and macOS (macos-15-intel), in the Configure step on Windows (MSYS2 UCRT64), and in both
-   jobs of `upgrade-sanitizers` ("build failed"); `skills` passed. The cause is **not known**: the logs need a login
-   the upgrade's agent did not have. Every build of the upgrade was made on one machine (GCC 11.5, GNU Make, Python
-   3.12, numpy 2, pybind11 3.1). A local build with the CI's configure flags, CMake 4.4 and `-Wl,--as-needed`
-   passes; not tried: Ninja, GCC 11.4 with Python 3.10, AppleClang with libc++, clang 18, MinGW. `build.yml` and
-   `scripts/sanitize_upgrade.sh` now print the first error lines of a failed configure or build as annotations of
-   the run, so that the next push shows them. **Nothing was ever built or run on macOS or Windows.**
+1. **The CI has never been green on this branch.** The two pushes of 2026-11-15 (`56f4dac7`, `474bc69d`) failed in
+   the Build step on Linux (ubuntu-22.04) and macOS (macos-15-intel), in the Configure step on Windows (MSYS2
+   UCRT64), and in both jobs of `upgrade-sanitizers`; `skills` passed. The first error of each job, read from the
+   run's annotations (`scripts/ci_first_errors.sh` prints them; the public API shows them without a login), and
+   repaired in the commit after `474bc69d`:
+   - Linux: `cannot find -lpugixml`. The top `CMakeLists.txt` still linked `pugixml`, a target of the removed
+     `external/erya`; the upgrade's machine has a system pugixml, which hid it. Nothing uses pugixml.
+   - clang 18: `std::max({...})` without `<algorithm>` in `physics/tests/transfer_bound_state_test.cpp` (the header
+     added there and in five more files that use an algorithm without it).
+   - macOS: `mkdtemp` undeclared in `tests/upgrade/session_rebuild_test.cpp` (now `std::filesystem`).
+   - Windows: `tests/upgrade/CMakeLists.txt` split `name:directory` pairs at `:`, which cuts a drive letter.
+
+   **Whether the CI is green after these is not known**: each job stops at its first error, so more may follow,
+   above all on macOS and Windows, where **nothing of this branch was ever built or run**. Every build of the
+   upgrade was made on one machine (GCC 11.5, GNU Make, Python 3.12, numpy 2, pybind11 3.1). Look at the newest
+   run of the branch before trusting it; a library found on that machine and not installed by the CI is the
+   kind of defect to expect.
 2. **The web page was not compared with the Qt program item by item.** `qt_parity.md` lists 201 behaviours of the
    Qt program; 20 are dropped by the PI's decision, the other 181 are not ticked. The gate of Phase 9 ("every item
    of the Qt parity checklist") is not met. The page's tests are the `/api` tests and one smoke test in a headless

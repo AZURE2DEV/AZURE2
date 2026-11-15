@@ -95,7 +95,11 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "usage: results_owner_test <T2.azr>\n");
     return 2;
   }
+#ifdef _WIN32
+  _putenv_s("AZURE_POISON_RESULTS", "1");  // read once, at the first evaluation
+#else
   setenv("AZURE_POISON_RESULTS", "1", 1);  // read once, at the first evaluation
+#endif
   check("AZURE_POISON_RESULTS on", azure2::Results::PoisonRequested());
   std::ostringstream sink;
   Config cfg(sink);

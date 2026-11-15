@@ -152,9 +152,10 @@ set_tests_properties(upgrade_energy_task_gradient PROPERTIES TIMEOUT 600)
 add_executable(history_test history_test.cpp)
 target_link_libraries(history_test PRIVATE AZURE2Core)
 set(_history_dir ${CMAKE_CURRENT_BINARY_DIR}/history)
-foreach(_h T2:${CMAKE_CURRENT_SOURCE_DIR}/T2 natural_neon:${CMAKE_SOURCE_DIR}/tests/natural_neon
-        shift_sqrt:${CMAKE_SOURCE_DIR}/tests/shift_sqrt_subpoints/models thm:${CMAKE_SOURCE_DIR}/tests/18O_p_a_thm)
-  string(REPLACE ":" ";" _hp ${_h})
+# name|directory: '|' and not ':', which would split a Windows drive letter (D:/...)
+foreach(_h "T2|${CMAKE_CURRENT_SOURCE_DIR}/T2" "natural_neon|${CMAKE_SOURCE_DIR}/tests/natural_neon"
+        "shift_sqrt|${CMAKE_SOURCE_DIR}/tests/shift_sqrt_subpoints/models" "thm|${CMAKE_SOURCE_DIR}/tests/18O_p_a_thm")
+  string(REPLACE "|" ";" _hp "${_h}")
   list(GET _hp 0 _name)
   list(GET _hp 1 _src)
   file(MAKE_DIRECTORY ${_history_dir}/${_name}/output ${_history_dir}/${_name}/checks)

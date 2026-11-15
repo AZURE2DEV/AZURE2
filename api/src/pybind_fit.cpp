@@ -1,6 +1,8 @@
 // The engine's fitters from Python (docs/upgrade/fit.md; pyazr/session_fit.py): the fitter table (fitters()), a stop
 // request another thread can set (StopRequest), and the session's fit (FitWithEngineDict, Session.fit_with_engine).
 // The fit runs without the GIL; the progress callable is called with the GIL taken, from the engine's threads.
+#include <algorithm>
+
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>

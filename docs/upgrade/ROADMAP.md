@@ -16,9 +16,10 @@ Tick boxes as work lands; put the commit hash after each tick.
 The phases below are the plan as it was written and ticked while the work ran; this block is the state. The work
 of the upgrade stopped here by the PI's decision: the owner continues in this branch. `origin/dev` was **not**
 merged into `feature/upgrade` (the first paragraph above was the intention; a plain merge conflicts in 93 files,
-`FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: the first push of the branch failed on
-all three platforms, cause not known (`FOR_THE_OWNER.md` section 10). The gates' other parts (reference outputs,
-the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
+`FOR_THE_OWNER.md` section 7), and **the gate "CI green" was never met**: the first two pushes of the branch
+failed on all three platforms; four first causes were repaired, the result is not known (`FOR_THE_OWNER.md`
+section 10). The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
+one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
 

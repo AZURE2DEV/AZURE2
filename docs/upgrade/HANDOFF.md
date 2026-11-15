@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (director, 12:25) — the first error of each CI job, read and repaired
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 84 (rehearsal 83, one commit of mine, and the refusal
+agent's last three log lines). The base build is now `work/b-trial84`, the reference stays `tab-t74-1`.
+
+**What the second push showed** (`474bc69d`; the annotations of `scripts/ci_first_errors.sh`, read through the
+public API): Linux `cannot find -lpugixml`; clang 18 in both sanitizer jobs, `std::max({...})` without
+`<algorithm>`; macOS `mkdtemp` undeclared; Windows a `name:directory` pair of `tests/upgrade/CMakeLists.txt` cut at
+the drive letter. The repairs are in the commit's message and in `FOR_THE_OWNER.md` section 10, item 1. The
+pugixml line is the instructive one: a target of the removed `external/erya` left in the link list, hidden on the
+upgrade's machine by a system library of the same name.
+
+**My runs on the merged tree** (`work/director/verify_l84.out`): build with 0 warnings, no link line names
+pugixml; every output file of every project in the three bases identical to `tab-t74-1` (887 / 851 / 887); the
+eight fits identical to the base build's; 309 of 310 tests not labelled slow passed and `repo_consistency` failed
+on an `#include` I had added to `src/AMatrixFunc.cpp` (one line over its recorded size): taken back, rebuilt, that
+test and the nine tests of the touched files pass; the published pages build (60 pages).
+
+**Not known.** Whether the CI is green with these: each job stops at its first error, and nothing of this branch
+was ever built or run on macOS or Windows. The Windows change (`_putenv_s`, the `|` separator) and the macOS one
+were not compiled on their platforms.
+
+**The refusal agent's report came after the merge of rehearsal 83.** Its own quick check: 310 of 310. Defects it
+found outside its scope, not repaired, by its reading unless said: a rate with the entrance named on the command
+line is not seen by validation (its run; in `FOR_THE_OWNER.md` section 9); a THM data set that exits into a photon
+pair can reach a negative photon energy at its sub-points; in the formal basis the final state's Brune energy can
+differ from the energy of `<levels>` that validation compares, near a threshold; `photon_penetrability` takes
+|E_γ|, so a level below its own final state has a finite photon width.
+
 ## 2026-11-15 (director, 11:45) — merged: the refusal of an unbound final state; the report for the owner
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 83 (rehearsal 82 plus
@@ -93,8 +122,9 @@ its nucleus, so no existing project is refused, by this rule or a wider one.
 threshold itself, a total capture, 27 keV below builds), `experiment_diagnostics`; new ctests `ec_final_state_unbound`
 (T1 at 2.5 MeV with and without external capture: `--validate` exit 2 and the run refused with the same line; at
 1.94 MeV the start commit's χ² 219429.963689) and `pyazr_ec_final_state_unbound`; the injected errors (the check not
-called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1` and
-`ctest -LE slow` (see the report).
+called; `<` made `<=`) failed 8 + 2 + 4 checks of the three; all projects × 3 bases against `tab-t74-1`: Brune
+887, formal 851, Park 887 files, all identical; `scripts/check.sh --quick` (consistency, build, `ctest -LE slow`
+310 of 310 passed, one job at a time); `docs_build` 60 pages.
 
 **Open.** The rate's entrance is a command-line option, which the validation does not see: below such a final state
 its cross section is NaN, dropped by the rate as zero with "singular level matrix" warnings (R). In the formal
