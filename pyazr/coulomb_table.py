@@ -7,8 +7,8 @@ session and the program read the file named by the option ``coulomb_table``, els
 later session and run uses the table with nothing set.  Command line: ``pyazr coulomb-table where|fetch|build|check``.
 
 :func:`fetch` downloads :data:`TABLE_URL` and accepts the file only if its SHA-256 is :data:`TABLE_SHA256`; both
-are empty until the owner publishes the file (``FOR_THE_OWNER.md``), and :func:`build` is the way until then (and
-offline): about 5 minutes on 4 threads.
+are empty until the owner publishes the file (``docs/upgrade/FOR_THE_OWNER.md``, section 8), and :func:`build` is
+the way until then (and offline): about 5 minutes on 4 threads.
 """
 
 import hashlib
