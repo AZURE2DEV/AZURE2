@@ -83,6 +83,8 @@ jobs:
           PY="$RUNNER_TEMP/pyazr-venv/bin/python"
           "$PY" -m pip install --quiet --upgrade pip
           "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
+          # the web page's tests (tests/pyazr/ui): without these four they are skipped
+          "$PY" -m pip install --quiet pytest fastapi httpx uvicorn
           "$PY" -c 'import numpy, scipy, mpmath, pybind11; print("numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
@@ -104,6 +106,9 @@ jobs:
           "$PY" -m pip install --quiet --upgrade pip
           "$PY" -m pip install --quiet pybind11 numpy scipy mpmath ||
             { echo "::error::macos: pip install pybind11 numpy scipy failed"; exit 1; }
+          # the web page's tests (tests/pyazr/ui): without these four they are skipped
+          "$PY" -m pip install --quiet pytest fastapi httpx uvicorn ||
+            { echo "::error::macos: pip install pytest fastapi httpx uvicorn failed"; exit 1; }
           "$PY" -c 'import sys, numpy, scipy, mpmath, pybind11; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
@@ -215,16 +220,24 @@ jobs:
       - name: Physics regression tests
         run: |
           set -o pipefail
+          # The check.sh scripts call python3: the interpreter of the pyazr venv, which has numpy and mpmath (the
+          # runner's own python3 has neither), comes first on PATH.
+          if [ -n "${PYAZR_PYTHON:-}" ] && [ "${{ matrix.name }}" != "windows" ]; then
+            export PATH="$(dirname "$PYAZR_PYTHON"):$PATH"
+          fi
           if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
             echo "::error::physics regression tests failed on ${{ matrix.name }}"
             # One annotation per failing test (GitHub shows only ten per step),
             # carrying that test's own output, so the reason is readable without
             # downloading the log.  %0A is a newline inside an annotation.
             awk -v os="${{ matrix.name }}" '
-              function flush() { if (bad && blk != "") printf "::error::%s: %s\n", os, blk; blk = ""; bad = 0 }
-              /^=== / { flush(); blk = $0; next }
+              function flush() { if (bad && blk != "") printf "::error::%s: %s%s%%0A--%s\n", os, head, why, blk
+                                 blk = ""; head = ""; why = ""; nwhy = 0; bad = 0 }
+              /^=== / { flush(); head = $0; blk = " "; next }
               blk != "" { gsub(/%/, "%25"); gsub(/\r/, ""); blk = blk "%0A" $0
-                          if ($0 ~ /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/) bad = 1 }
+                          # the lines that say what failed come first: GitHub cuts a long annotation
+                          if ($0 ~ /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/ && $0 !~ /^ *ok /) {
+                            bad = 1; if (++nwhy <= 12) why = why "%0A" $0 } }
               END { flush() }' physics-tests.log | head -9
             exit 1
           fi
@@ -246,10 +259,12 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # The pyazr tests labelled slow (tests/pyazr/CMakeLists.txt) take 5-40 min
         # each; run them locally (ctest -L slow) when changing pyazr.
+        # The test labelled browser (the page in a headless Chrome, minutes) is
+        # run locally too (ctest -L browser): it has never run on a CI machine.
         run: |
           set -o pipefail
           rc=0
-          ctest --test-dir build --output-on-failure -LE slow 2>&1 | tee unit-tests.log || rc=$?
+          ctest --test-dir build --output-on-failure -LE "slow|browser" 2>&1 | tee unit-tests.log || rc=$?
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.
           SKIPPED="$(awk '/ - .* \(Skipped\)/ { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(Skipped\).*$/, ""); print }' unit-tests.log)"
@@ -258,23 +273,29 @@ jobs:
           fi
           if [ "$rc" -ne 0 ]; then
             echo "::error::unit tests failed on ${{ matrix.name }}"
-            # One annotation per failed test with the tail of its own output
+            # One annotation per failed test with its failing lines and the tail of its own output
             # (%0A = newline), so the reason shows without the log download.
             awk -v os="${{ matrix.name }}" '
-              function flush() { if (name != "") { n = split(buf, L, "\n"); s = (n > 25) ? n - 24 : 1; out = ""
+              function flush() { if (name != "") { n = split(buf, L, "\n"); s = (n > 25) ? n - 24 : 1; out = ""; why = ""; k = 0
+                                   # the lines that say what failed come first, then the tail
+                                   for (i = 1; i < s; i++) if (L[i] ~ /FAIL|Error|error:/ && ++k <= 10) why = why "%0A" L[i]
                                    for (i = s; i <= n; i++) out = out "%0A" L[i]
-                                   printf "::error::%s: %s%s\n", os, name, out } name = ""; buf = "" }
+                                   printf "::error::%s: %s%s%s\n", os, name, why, out } name = ""; buf = "" }
               /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $0; next }
               name != "" { gsub(/%/, "%25"); gsub(/\r/, ""); buf = buf $0 "\n" }
               END { flush() }' unit-tests.log | head -9
             exit 1
           fi
-          if [ "${{ matrix.pyazr_engine }}" = "ON" ] && echo "$SKIPPED" | grep -q '^pyazr_'; then
+          # The web page's tests need pytest, fastapi, httpx and uvicorn, which the Windows job does not install:
+          # there they are skipped and listed in the warning above, and do not fail the job.
+          MUST_RUN="$(echo "$SKIPPED" | grep '^pyazr_' || true)"
+          if [ "${{ matrix.name }}" = "windows" ]; then MUST_RUN="$(echo "$MUST_RUN" | grep -v '^pyazr_ui_' || true)"; fi
+          if [ "${{ matrix.pyazr_engine }}" = "ON" ] && [ -n "$MUST_RUN" ]; then
             # Why: the import every engine test starts with, run here so the
             # reason reaches the annotation rather than only the test's output.
             WHY="$( { "$PYAZR_PYTHON" -c 'import numpy, scipy, mpmath, pyazr._azure2' 2>&1 || true; } | tail -3 \
                    | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%s", (NR > 1 ? "%0A" : ""), $0 }')"
-            echo "::error::${{ matrix.name }}: pyazr engine tests skipped although pybind11, numpy and scipy were installed:%0A$(echo "$SKIPPED" | grep '^pyazr_' | paste -sd ' ' -)%0Amodule files: $(ls pyazr/_azure2* 2>/dev/null | paste -sd ' ' - || true)%0A${WHY:-the import succeeds here; see unit-tests.log}"
+            echo "::error::${{ matrix.name }}: pyazr engine tests skipped although pybind11, numpy and scipy were installed:%0A$(echo "$MUST_RUN" | paste -sd ' ' -)%0Amodule files: $(ls pyazr/_azure2* 2>/dev/null | paste -sd ' ' - || true)%0A${WHY:-the import succeeds here; see unit-tests.log}"
             exit 1
           fi
 

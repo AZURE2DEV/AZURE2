@@ -12,16 +12,20 @@ formal energies; its transformation at a coincidence is section 8 of physics_lev
     (outside) each value equals chi2(0) + g (dchi2/dE_b(0) + dchi2/dE_b(g)) / 2 from the analytic gradients.
     Inside the limit the Taylor forms are exact to gap^2 S'''/12: bound 1e-10 relative (measured 3e-12 to 9e-12,
     which also bounds the trapezoid's own error).  Across the threshold chi2 steps by what the numerical S' (Richardson
-    differences, about 1e-8 relative) differs from the divided difference of S: bound 2e-8 relative (measured 7e-9
-    Brune, 5e-9 Park; the step is inferred to be that of S', not shown term by term).  Without the limits chi2(0)
+    differences, about 1e-8 relative) differs from the divided difference of S: bound 1e-7 relative (measured 7e-9
+    Brune, 5e-9 Park with the default Coulomb table, 2.3e-8 and 2.0e-8 with the exact Coulomb functions, which is
+    what a machine without a table file computes; the step is inferred to be that of S', not shown term by term).
+    Without the limits chi2(0)
     is 134,108 instead of 53,300.75 (no error), and the gaps 5e-10 and 2e-9 are off by 1e-5 relative;
   * the analytic gradient (energies and widths of the two levels) equals five-point central differences at gap 0
-    (steps 2e-7 MeV, inside the limit on both sides) and at gap 1e-5 (steps 1e-6 MeV), to 1e-5 relative to its
-    largest component (measured 4e-8 and 2e-6);
+    (steps 2e-7 MeV, inside the limit on both sides) to 1e-5 relative to its largest component (measured 4e-8
+    with the table, 2e-7 without) and at gap 1e-5 (steps 1e-6 MeV) to 1e-4 (measured 2e-6 with the table, 2.7e-5
+    without: the differences of chi2 see the rounding of the exact functions in the divided difference of S);
   * the same with a third 2- level, so that the group takes the transformed (channel-space) route: before, its K and
     N were not finite at gap 0 and the group fell back to the level route (chi2 198,494, gradient NaN);
   * a path that drives E_b through E_a (41 points over +-2e-6 MeV) has no jump beyond the step of S' at the
-    threshold: every second difference of chi2 along it is below 2e-8 chi2 (measured 1.2e-8, at +-1e-6).
+    threshold: every second difference of chi2 along it is below 1e-7 chi2 (measured 1.2e-8 with the table, 4.1e-8
+    without, at +-1e-6).
 
 Needs numpy and the compiled engine; exits 77 (skipped) without them.  Run: python3 tests/pyazr/coincident_levels_test.py
 """
@@ -121,7 +125,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 chi, grad = f.value_and_grad(at_gap(gap))
                 trapezoid = chi0 + 0.5 * gap * (grad0[b] + grad[b])
                 d = abs(chi - trapezoid) / chi0
-                bound = 1e-10 if gap < 1e-6 else 2e-8
+                bound = 1e-10 if gap < 1e-6 else 1e-7
                 check(f"{basis}: chi2 at gap {gap:.2e} = chi2(0) + its slopes' trapezoid (rel {d:.1e} < {bound:.0e})",
                       d < bound,
                       f"{chi:.10f} vs {trapezoid:.10f}")
@@ -134,7 +138,8 @@ with tempfile.TemporaryDirectory() as tmp:
                 num = fd_gradient(f, z, h, which)
                 scale = max(np.max(np.abs(g[which])), 1e-300)
                 d = float(np.max(np.abs(g[which] - num)) / scale)
-                check(f"{basis}: gradient at gap {gap:.0e} = central differences (rel {d:.1e})", d < 1e-5,
+                check(f"{basis}: gradient at gap {gap:.0e} = central differences (rel {d:.1e})",
+                      d < (1e-5 if gap == 0.0 else 1e-4),
                       "\n      analytic " + np.array2string(g[which], precision=6) +
                       "\n      numeric  " + np.array2string(num, precision=6))
 
@@ -142,7 +147,7 @@ with tempfile.TemporaryDirectory() as tmp:
             path = np.array([f(at_gap(g)) for g in np.linspace(-2e-6, 2e-6, 41)])
             second = np.abs(path[2:] - 2 * path[1:-1] + path[:-2])
             check(f"{basis}: no jump along E_b through E_a (max second difference {second.max() / chi0:.1e} chi2)",
-                  bool(np.all(np.isfinite(path))) and second.max() < 2e-8 * chi0)
+                  bool(np.all(np.isfinite(path))) and second.max() < 1e-7 * chi0)
 
 print("\nall passed" if not failures else f"\n{len(failures)} failed: {failures}")
 sys.exit(1 if failures else 0)

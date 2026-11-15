@@ -98,7 +98,9 @@ with tempfile.TemporaryDirectory() as work:
     cr, cm = chi2_of(r0), chi2_of(m0)
     tr0 = truth.chi2_values(DATA, "0")
     check("chi2 ratio = chi2 multiplied to 1e-12", rel(cr, cm) <= 1e-12, f"{cr!r} {cm!r} ({rel(cr, cm):.2e})")
-    check("chi2 ratio = truth.py to 1e-9", rel(cr, float(tr0[0])) <= 1e-9, f"{cr!r} {float(tr0[0])!r}")
+    # 1e-8: with the exact Coulomb functions (no table file, as in the CI) the difference is 1.5e-9; with the default
+    # table it is below 1e-9
+    check("chi2 ratio = truth.py to 1e-8", rel(cr, float(tr0[0])) <= 1e-8, f"{cr!r} {float(tr0[0])!r}")
 
     print("2. a fixed 5 keV lab energy shift")
     r5 = project(work, "r5", base.replace("    norm           1 fixed\n", SHIFT))

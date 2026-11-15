@@ -322,9 +322,9 @@ for azr in PROJECTS:
             # intervals it did not check are not bounded: the median is then the check
             bound_el = 5 * max(TOLERANCE, w.elastic.reached)
             ok_el = dev.max() < bound_el if w.elastic.checked else np.median(dev) < bound_el
+            which = "largest" if w.elastic.checked else "median: not every interval was checked, as MF=1 says"
             check(f"{name}: elastic: the manual's reading between every two written energies outside the brackets "
-                  f"= the engine to {bound_el:.1e} ({'largest' if w.elastic.checked else 'median: not every interval '
-                  'was checked, as MF=1 says'})", ok_el, (dev.max(), np.median(dev)))
+                  f"= the engine to {bound_el:.1e} ({which})", ok_el, (dev.max(), np.median(dev)))
         # (h) CHECKR's limits (the PI's decision, the default mf6_limits="checkr"): no MF=6 section above 200
         # incident energies, no LAW=5 panel above 201 cosines; each thinned section stated in MF=1 and w.accuracy
         counts = {mt: [len(p.panels) for p in m.distribution(mt).products if p.law in (2, 5)]

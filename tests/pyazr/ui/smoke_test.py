@@ -27,7 +27,11 @@ import time
 from html import unescape
 from urllib.parse import quote, unquote
 
-import pytest
+try:
+    import pytest
+except ImportError:  # ctest counts exit 77 as skipped
+    print("skip: the package pytest is not installed (pip install pyazr[web])")
+    sys.exit(77)
 
 import uitest
 from uitest import TOKEN, copy_project, gone
