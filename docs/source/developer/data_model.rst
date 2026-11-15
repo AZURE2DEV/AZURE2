@@ -36,9 +36,15 @@ The objects
    One calculation site: an energy and an angle at which the point pass
    solves the level matrix and writes an observable. It holds what depends on
    the point at that energy: the c.m., lab and compound energies, the angle
-   and its Legendre rows, the channel rows (shared with its node of the
-   ``NodeTable``), the Coulomb amplitude, the screening factor, the stopping,
-   the external-capture amplitudes, and where its result record lies.
+   and its Legendre rows, the channel rows, the Coulomb amplitude, the
+   screening factor, the stopping, the external-capture amplitudes, a THM
+   site's vertex pieces of its entrance channels (``ThmVertexRows``), and
+   where its result record lies. The channel rows (:math:`L^0_c`,
+   :math:`\sqrt{P_c}` and the two phase factors of every channel) depend on
+   the compound energy alone (``Site::ChannelRowsKey``): one table per energy,
+   computed by the first site there and held by every other site at that
+   energy and by its node of the ``NodeTable``
+   (``WorkingCopy::FillChannelRows``).
 
 ``Unit`` (``include/Unit.h``)
    A data point: a ``Site`` with its measurement row, its target-effect fold
