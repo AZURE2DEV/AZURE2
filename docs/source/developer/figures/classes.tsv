@@ -67,7 +67,7 @@ azure2::TaskScratch	include/TaskScratch.h	one thread's solvers and buffers	evalu
 AMatrixFunc	include/AMatrixFunc.h	level matrix, T-matrix, observables (a GenMatrixFunc)	evaluation	class	evaluation
 THMMatrixFunc	include/THMMatrixFunc.h	the HOES cross section of THM sites	evaluation	class	evaluation
 RMatrixFunc	include/RMatrixFunc.h	the channel-matrix route (a GenMatrixFunc)	evaluation	class	evaluation
-LevelMatrixSolver	include/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
+azure2::physics::LevelMatrixSolver	physics/include/azure2/physics/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
 CompoundSystem	include/CompoundSystem.h	the compound nuclei as set up, shared constant by every evaluation	evaluation	class	immutable
 LevelState	include/LevelState.h	the levels at the evaluation's vector, the owner's	evaluation	class	evaluation
 AZURECalc	include/AZURECalc.h	the objective: chi^2, gradient, residual rows	inference	class	run

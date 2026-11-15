@@ -61,6 +61,19 @@ What it contains
        double). Every place that writes these divided differences calls it
        (the level route, the R-matrix route, the adjoint, the derivative
        arrays, the transformed route, ``formal_from_brune``).
+   * - ``CollisionMatrix.h``, ``LevelMatrixSolver.h``
+     - The level matrix of one :math:`J^\pi` block at one energy from arrays
+       (``LevelMatrixTables``; ``fill_level_matrix``: standard, Brune, Park,
+       the Reich-Moore term), its factorization (``LevelMatrixSolver``), and
+       the collision matrix: ``pathway_amplitude``, ``collision_element``,
+       ``t_matrix_element`` per channel pair, the capture elements, and
+       ``collision_matrix`` for a whole block (:math:`A`, :math:`U`,
+       :math:`T`). :doc:`level_matrix`.
+   * - ``ChannelSolve.h``
+     - The channel route at one energy on the formal levels of a block
+       (``channel_space::FormalBlock``, ``ChannelSolve``):
+       ``solve_channel_space``, ``f_column``, ``apply_a``,
+       ``channel_bilinear``, and the small LU routines.
    * - ``Coulomb.h``, ``Whittaker.h``
      - The Coulomb and Whittaker functions (``physics/coulomb/``, from
        pycoulomb, one directory per algorithm).
@@ -107,7 +120,9 @@ blocks; ``CompoundSystem::SystemAllGroups``: every group, for the reports), and 
 reader takes that one; the structure does not change afterwards. ``CompoundSystem::TransformIn``,
 ``CompoundSystem::CalcBoundaryConditions`` and ``CompoundSystem::TransformOut`` call the
 conversions of ``LevelParameters.h`` on it; ``CompoundSystem::BuildPathways`` builds
-the ``PathwayTable`` from it. The channel functions reach the engine through
+the ``PathwayTable`` from it. ``AMatrixFunc`` gathers a group's arrays at each
+energy and calls ``CollisionMatrix.h``, ``LevelMatrixSolver.h`` and
+``ChannelSolve.h`` (:doc:`level_matrix`). The channel functions reach the engine through
 ``ChannelFunc`` and the stage's ``ChannelTable``; the THM distortions
 (``src/ThmDistortion.cpp``, ``src/ThmDwVertex.cpp``) call
 ``physics/src/transfer``.

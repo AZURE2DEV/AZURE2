@@ -2,7 +2,7 @@
 #define AMATRIXFUNC_H
 
 #include "GenMatrixFunc.h"
-#include "LevelMatrixSolver.h"
+#include "azure2/physics/CollisionMatrix.h"
 #include "ChannelSpace.h"
 #include <memory>
 
@@ -234,8 +234,6 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   bool LevelBasis(Site *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
                   const vector_matrix_r *shiftDeriv, std::vector<double> &block);
-  /// Store an \f$A^{-1}\f$ element.
-  void AddAInvMatrixElement(int, int, int, complex);
   /*!
    * The single-term form of BilinearAdjoint for the diagonal form B = g_ch^T A g_ch of one channel:
    * accumulates Re(conj(mBar) dB) into accum through the explicit widths of channel chNum and the
@@ -276,37 +274,12 @@ class AMatrixFunc : public GenMatrixFunc {
   ChannelSpace::LevelArrays lma_active_;
 
   enum Route : char { kRouteNone = 0, kRouteLevel = 1, kRouteChannel = 2 };
-  /// Per-energy channel-space state of one J-group.
-  struct ChannelState {
-    std::vector<complex> dinv;   ///< 1/(e_lambda - E), n
-    std::vector<complex> lam;    ///< Lambda per channel, nch
-    std::vector<complex> lamAct; ///< Lambda over the active channels, m
-    std::vector<complex> R;      ///< R over the active channels (without deflated levels), m x m
-    std::vector<complex> lu;     ///< LU factors of the bordered system (1 - Lambda R without deflated levels)
-    std::vector<int> piv;
-    std::vector<complex> F;      ///< (1 - R Lambda)^-1 R, column b at F[b*m]
-    std::vector<char> fcol;      ///< columns of F computed
-    std::vector<vector_c> usolve;  ///< formal channel solves A_f Gamma_c (per channel)
-    std::vector<char> uvalid;
-    matrix_c inverse;            ///< A, materialized on request
-    bool inverseValid = false;
-    vector_c w1, w2, w3, w4;     ///< scratch
-    vector_c w3b, wp, wz;        ///< scratch of the bordered solves
-    std::vector<int> defl;       ///< deflated formal levels (near a pole), kept in the bordered system
-    std::vector<char> isDefl;
-    std::vector<double> rreal;   ///< scratch of the real R
-    std::vector<double> P;       ///< pencil route: LU factors of H - E T (upper Hessenberg)
-    std::vector<char> hswap;     ///< pencil route: row interchanges of that LU
-    std::vector<double> X;       ///< pencil route: (H - E T)^-1 Qt G over the active channels, n x m
-  };
+  /// Per-energy channel-space state of one J-group (the solve of azure2/physics/ChannelSolve.h and this class's memo).
+  typedef azure2::physics::channel_space::ChannelSolve ChannelState;
   /// Level matrix of J-group j at this energy, into a_inv_matrices_ (level route).
   void FillLevelMatrix(int j, Site *point, double inEnergy);
   /// Channel-space solve of J-group j at this energy; false sends it to the level route.
   bool SolveChannelSpace(int j, Site *point, double inEnergy);
-  /// R of the pencil route (no formal representation); false sends the J-group to the level route.
-  bool SolvePencil(int j, double inEnergy);
-  /// R of the formal route; false sends the J-group to the level route.
-  bool SolveFormal(int j, double inEnergy);
   /// Rank-two derivatives of the bilinear terms by free level parameter (see LevelBasis).
   template <class Add>
   bool LevelAdjoint(Site *energyPoint, int j, const std::vector<BilinearTerm> &terms, const FreeMask &mask,
@@ -353,7 +326,7 @@ class AMatrixFunc : public GenMatrixFunc {
   const LevelState *state_;
   vector_matrix_c a_inv_matrices_;
   /// Factored level matrix of each J-group.
-  std::vector<LevelMatrixSolver> solvers_;
+  std::vector<azure2::physics::LevelMatrixSolver> solvers_;
   /// Whether the corresponding solver holds a usable factorization.
   std::vector<char> solver_valid_;
   // private:
@@ -378,16 +351,15 @@ class AMatrixFunc : public GenMatrixFunc {
   vector_c chan_cap_entrance_;
   vector_c chan_cap_exit_;
 
-  // Pre-allocated buffers to prevent memory fragmentation
-  std::vector<std::vector<double>> levelGammas_;
-  std::vector<double> levelEnergies_;
-  /// 1 for a level whose widths are all below the fill's cutoff (FillLevelMatrix).
-  std::vector<char> levelDecoupled_;
+  /// The arrays FillLevelMatrix collects of a J-group for azure2::physics::fill_level_matrix (kept between calls).
+  struct LevelMatrixGather {
+    std::vector<double> E, gamma, shift, shiftD1, shiftD2, parkNorm, boundary;
+    std::vector<complex> lo;
+    std::vector<char> radType;
+  };
+  LevelMatrixGather level_gather_;
   /// Total energy of the last FillMatrices (for the singular-matrix warning).
   double lastInEnergy_ = 0.0;
-  std::vector<std::vector<double>> shiftFunctions_;
-  int cached_max_levels_;
-  int cached_max_channels_;
   /// Compound nucleus (1-based) of the point being evaluated: groups of the
   /// others are skipped by FillMatrices and InvertMatrices.
   int activeNucleus_ = 0;

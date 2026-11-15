@@ -1,7 +1,7 @@
 # The collision matrix and the observables as functions of `physics/`
 
 Status: stage 1 (inventory) written 2026-11-15 on `feature/upgrade-1-physics-functions`, cut from `feature/upgrade`
-at `486d746e`. The sections "Done" at the end say what of the list below exists; until a line stands there, it is a
+at `486d746e`. Section 4, "Done", says what of the list below exists; until a line stands there, it is a
 plan. Goal (`ARCHITECTURE.md` section 3, `FOR_THE_OWNER.md` section 10 item 5): the arithmetic of the collision
 matrix and of the observables lives in `physics/` as functions of arrays and plain structs, with unit tests that
 need no project file; the engine's classes collect the arrays and call. Every output file stays identical: the
@@ -84,16 +84,19 @@ struct LevelMatrixTables {            // one J-pi block at one energy; n levels,
 };
 void fill_level_matrix(const LevelMatrixTables &, double E, std::vector<std::vector<std::complex<double>>> &M);
 class LevelMatrixSolver;              // moved whole: Decompose, Solve, SolveInto, Bilinear, Inverse
-std::complex<double> width_bilinear(const double *g, const std::complex<double> *Ag, int n);
-std::complex<double> collision_element(...phases, sqrt penetrabilities, bilinear form...);   // U-matrix part of T
-std::complex<double> t_matrix_element(...);                   // T of an internal pathway
-struct CollisionMatrix { std::vector<std::complex<double>> A, U; int n, nc; };
+std::complex<double> width_bilinear(const double *g, const std::complex<double> *Ag, std::size_t n);
+std::complex<double> pathway_amplitude(sqrt_pen_in, sqrt_pen_out, bilinear);   // 2i sqrt(P P') g^T A g'
+struct ChannelPhases { std::complex<double> coulomb, hard_sphere; };
+std::complex<double> collision_element(diagonal, in, out, amplitude);          // U
+std::complex<double> t_matrix_element(diagonal, in, out, amplitude);           // T of an internal pathway
+rmc_t_matrix_element, external_capture_element, channel_capture_factor         // the capture elements
+struct CollisionMatrix { int n, nc; bool singular; std::vector<std::complex<double>> A, U, T; };
 CollisionMatrix collision_matrix(const LevelMatrixTables &, double E, const ChannelTablesAtE &);  // whole block
-// the channel route at one energy, on the formal levels of a block:
-struct FormalBlock;  struct ChannelSolve;
-ChannelRoute solve_channel_space(const FormalBlock &, const std::complex<double> *lo, double E, ChannelSolve &);
-void solve_bordered(...);  const std::complex<double> *f_column(...);  void formal_apply(...);  void apply_a(...);
-double lu_factor(...); void lu_solve(...); hessenberg and real variants (from ChannelSpace)
+// the channel route at one energy, on the formal levels of a block (namespace channel_space):
+struct FormalBlock;  struct ChannelSolve;  enum class Route { kTaken, kPole, kPivot };
+Route solve_channel_space(const FormalBlock &, const std::complex<double> *lo, double E, ChannelSolve &);
+solve_formal, solve_pencil, solve_bordered, compute_f_column, f_column, formal_apply, apply_a, channel_bilinear
+lu_factor, lu_solve, hessenberg_lu, hessenberg_solve, lu_factor_real, lu_solve_real (from ChannelSpace)
 ```
 
 Stage 3, `azure2/physics/Observables.h`:
@@ -136,4 +139,40 @@ energy, the choice of the route, the profile counters.
 
 ## 4. Done
 
-Nothing yet (stage 1 is this document).
+### Stage 2: the collision matrix (2026-11-15)
+
+In `physics/` now (namespace `azure2::physics`; nothing of the engine is included):
+
+- `LevelMatrixSolver.h`, `src/LevelMatrixSolver.cpp`: the class, moved whole from `include/`, `src/`.
+- `CollisionMatrix.h`, `src/CollisionMatrix.cpp`: `LevelMatrixTables`, `fill_level_matrix` (the loop of the old
+  `AMatrixFunc::FillLevelMatrix`), `width_bilinear`, `pathway_amplitude`, `ChannelPhases`, `collision_element`,
+  `t_matrix_element`, `rmc_t_matrix_element`, `external_capture_element`, `channel_capture_factor`, and
+  `collision_matrix` (a whole block on the level route: A, U, T for every channel pair; the call for a Python user
+  or an agent, not used by the engine, which evaluates per pathway).
+- `ChannelSolve.h`, `src/ChannelSolve.cpp` (namespace `channel_space`): `FormalBlock`, `ChannelSolve`, `Route`,
+  `solve_channel_space`, `solve_formal`, `solve_pencil`, `solve_bordered`, `compute_f_column`, `f_column`,
+  `formal_apply`, `apply_a`, `channel_bilinear` (bodies of the `AMatrixFunc` routines of those names), the six LU
+  routines of `ChannelSpace`, and the six limits (`kMaxPoleRatio` ...).
+- Tests, no project file: `physics/tests/collision_matrix_test.cpp` (29 checks: one level in closed form, |U| = 1,
+  symmetry and unitarity for three levels and three channels, the Brune and Park elements, the Reich-Moore term,
+  the decoupled level, the cutoff, the element functions) and `physics/tests/channel_solve_test.cpp` (11 checks:
+  the channel route against the level route between levels, at a level energy and 1e-9 MeV from it, the refusal,
+  the LU routines).
+
+The engine after it:
+
+- `AMatrixFunc::FillLevelMatrix` gathers the arrays of a group (`LevelMatrixGather level_gather_`) and calls
+  `fill_level_matrix`; `AddAInvMatrixElement` is gone.
+- `AMatrixFunc::SolveChannelSpace` gathers the Lo-matrix elements, calls `solve_channel_space` and counts the
+  outcome for the profile; `SolvePencil` and `SolveFormal` are gone; `SolveBordered`, `FColumn`, `FormalApply`,
+  `ApplyA`, `ChannelBilinear` are one-line calls (the reverse mode still uses those names).
+- `AMatrixFunc::CalculateTMatrix` keeps the traversal of the pathways and the reads of the site, and calls the
+  element functions.
+- `ChannelState` is `channel_space::ChannelSolve`; `FormalLevels` is a `channel_space::FormalBlock` with the
+  engine's key; `ChannelSpace::LUFactor` ... are inline calls.
+
+Sizes (lines): `src/AMatrixFunc.cpp` 2766 -> 2380, `include/AMatrixFunc.h` 415 -> 387, `src/ChannelSpace.cpp`
+867 -> 697, `src/LevelMatrixSolver.cpp` 112 -> gone; `physics/src/*.cpp` 2658 -> 3416.
+
+Not done in stage 2: the formal levels' set-up (`ChannelSpace::Update` and its eigen-solvers) is still in the
+engine (section 3, first item).
