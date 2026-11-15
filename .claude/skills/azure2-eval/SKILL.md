@@ -419,8 +419,13 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   2026-11-15: per segment, in keV; no keyword = the narrow result. 12C(p,g1)
   Rolfs & Azuma (Gamma 39 keV, their window +-Gamma, linewindow 39): median
   model/data 1.00 at Ep 1.0-1.6 MeV with nothing fitted (narrow: 1.43). Needs
-  external capture on for the pair (internal-only is refused), one open channel
-  of the final level, a cross section (not a_k), no RMC, no --use-gradient.
+  one open channel of the final level, a cross section (not a_k), no RMC, no
+  --use-gradient. External capture into the pair: builds up to 09e5c1a8 need
+  it on (internal-only is refused there); branch `feature/linewindow-internal`
+  (2026-11-15, not on dev yet) also serves internal capture alone: the final
+  level is then the level of the pair's J^pi within 1 keV of the pair's E_x
+  (must exist, with its particle width; N_f from its particle channels), and
+  with --no-brune only if it is the FIRST level of its J^pi group.
   Record `R-matrix/AZURE2_code_audit/11-14-26_ec_unbound_broad/`; test
   `tests/ec_unbound_broad`.
   OLDER BUILDS treated such a state as BOUND by |E_x - S| without a word:
