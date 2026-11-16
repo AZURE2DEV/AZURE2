@@ -235,7 +235,12 @@ A term of the objective
    ``ForEachDiagonalPrior`` its gradient, Minuit's :math:`G_2` and its
    least-squares row. Its
    gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
-   in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. No term
+   in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. The
+   walk of the engine's objects is a gather in the engine that fills plain
+   arrays; the arithmetic on them (value, gradient, rows) is one header of
+   ``inference/`` with its test in ``inference/tests/`` (``AbundancePriors.h``
+   with ``AbundanceBlockOf``, ``ParkWall.h`` with ``ParkLevelsOf`` are the
+   pattern), which the value, the gradient and the rows call. No term
    is added anywhere else (check 11).
 2. Tests: the analytic gradient against finite differences
    (``AZURE_GRAD_CHECK``), the program and ``pyazr`` giving the same
