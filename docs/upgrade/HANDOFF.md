@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 90 (one commit of mine: `scripts/sanitize_upgrade.sh`
+and documents; no C++). The base build stays `work/b-trial86`, the reference `tab-t74-1`.
+
+**What the eleventh push's sanitizer run showed** (both jobs pass again, no report file; address 86 minutes,
+thread 68). The new annotation printed the last lines of the four failed steps' logs:
+
+- T2's calculation and its fit of 30 calls ended at set-up: "cannot open the prior covariance file
+  prior_cov.f3.txt". `run_project` of the script copied `prior_cov.txt` only; T2's project names
+  `prior_cov.f3.txt` since it is written in format 3.
+- `check-target_auto_windows` and `check-target_window_fallback`: no `check.sh`. Both directories were deleted
+  with the fold windows (decision D3); the names stayed in the script's list.
+
+So the cause was the script's, not clang's, and what entry e92 and the documents said ("the same checks pass in
+the Linux job") was wrong for the two checks, which do not exist. Corrected in `FOR_THE_OWNER.md` section 10
+item 1, `sanitizer_findings.md` section 4.4 and `ROADMAP.md`.
+
+**Changed.** The script copies `prior_cov.f3.txt` too, and the two names are out of its list (23 checks; every
+one of them has a `check.sh`, checked).
+
+**My runs** (GCC build of rehearsal 86, no sanitizer; `--no-coulomb-table` as the script): T2 copied with the old
+file list fails with the CI's message; with the new list the calculation writes its output and the fit of 30
+calls ends with exit 0. The consistency test passes. **No sanitizer run was made here** (no clang).
+
+**What this means for the record.** T2, the largest of the three projects, has not run under either sanitizer
+since its conversion to format 3. "No report under the thread sanitizer" of the tenth and eleventh pushes covers
+T1, T3, the checks, the regression projects, the reference tests and the pyazr tests, not T2. The twelfth push's
+run is its first; its result is not known at the time of this entry.
+
+**The data branch reported** (`feature/upgrade-6-site-split`, not merged yet; it merges with the physics branch
+after my check of the merged tree). The split of `Site` was not made: the classification shows that a working copy
+already is the shared problem plus the evaluation's state, so the split would not remove the copies
+(`evaluation.md` section 7.8 in that branch; 11.6 MB for each further evaluating thread on T2). I read the diff
+of `Site.h`, section 7.8 and `WorkingCopy::Clone`, and the finding holds. Told to the PI with my recommendation
+(close milestone 3 as it stands); the variant that would shrink a copy is his decision and is not started.
+
+**Pushed** as the twelfth push after the hash check of the PI's model (no match).
+
+**Not changed:** which tests the CI runs. **Open, for the PI:** as in the entries of 11:45 and 19:35 of
+2026-11-15, and the variant above.
+
 ## 2026-11-15 (director, 23:30) — merged: the sanitizer jobs pass without a report; the regression suite run here
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 89 (one commit of mine: the sanitizer script, its

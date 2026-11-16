@@ -523,10 +523,15 @@ re-read against its design at the hand-over.
      report, and both jobs pass**: the first thread-sanitizer run of this code without a report since
      2026-11-07. Four steps fail without a report, the same four under both sanitizers, which the job counts as a
      warning: the calculation and the 30-call fit of T2 (exit 1) and the checks `target_auto_windows` and
-     `target_window_fallback`. **The cause is not known and T2, the largest of the three projects, was therefore
-     not run under either sanitizer.** The same checks pass in the Linux job (GCC); what differs is clang 18 with
-     the sanitizer's build flags. The script now prints the last lines of each failed step's log and the job
-     writes them as an annotation.
+     `target_window_fallback`. T2, the largest of the three projects, was therefore not run under either
+     sanitizer. The script now prints the last lines of each failed step's log and the job writes them as an
+     annotation. **The eleventh push showed the cause, and it is the script's, not the compiler's:**
+     `scripts/sanitize_upgrade.sh` copied T2 without `prior_cov.f3.txt`, the prior covariance file that the
+     project names since it is written in format 3 (the program refused it at set-up), and it still listed two
+     checks whose directories were deleted with the fold windows (decision D3). Repaired in the twelfth push:
+     the file is copied and the two names are gone (23 checks). The T2 steps were run here with the script's
+     file list before and after (GCC, no sanitizer). **What T2 gives under the thread sanitizer is not known
+     until that run ends**; it is the first of T2 there since the project was converted.
 
    **The CI is not green.** Linux in the ninth push: every unit test passes (`docs_build` is skipped, no Sphinx
    there) and 171 of the 172 regression checks. The one is `tests/shared_point_tables` (d), a bound on the peak
