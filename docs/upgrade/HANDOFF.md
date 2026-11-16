@@ -2,6 +2,202 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 03:30) — merged: the collision matrix and observables in `physics/`; a site's members grouped
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 91: `feature/upgrade-6-site-split` (stage 1 only) and
+`feature/upgrade-1-physics-functions` (the two agents' entries are below this one, as they wrote them before the
+merge), and two commits of mine. The base build is now `work/b-trial91`, the reference stays `tab-t74-1`, the quick
+set is 314 tests. The PI's word of 2026-11-15: finish the structure with two agents, one for the data, one for the
+physics.
+
+**1. The data job ended with a finding, not with the split.** A site's members are grouped by who writes them
+(`Site::Values`; no accessor and no ownership changed). The split itself was not made: a working copy already is
+the shared problem plus one evaluation's state, and moving the values out of the site would not remove the copies
+(`evaluation.md` section 7.8). Whether a site should hold its values by pointer is the PI's decision; my advice
+was to close it.
+
+**2. The physics job: stages 1 to 3 and a Python call; the gradient not moved** (`physics_functions.md`). The
+collision matrix of one block and the observables' sums are functions of `physics/` on arrays
+(`CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`), with their own tests; the engine's classes keep the walk
+over pathways and the memo. `src/AMatrixFunc.cpp` went from 2,766 to 2,380 lines, `src/GenMatrixFunc.cpp` from 756
+to 549, `src/ChannelSpace.cpp` from 867 to 697. `pyazr.physics.collision_matrix` gives A, U and T of formal levels
+and particle channels without a session. **Still engine code:** the analytic gradient (about 1,500 lines of
+adjoints in `AMatrixFunc.cpp`), the R_k of a secondary decay, the particle analysing power, the set-up of the
+formal levels. A new observable still touches about five places; only the first is outside the engine.
+
+**What I read.** The three new headers in full, the binding's door, the Python function, the whole diff of
+`src/GenMatrixFunc.cpp` (a move: same expressions, same order). No added line has `mutable`, `const_cast`, `static`
+or `thread_local`. **Not read line by line:** the diff of `src/AMatrixFunc.cpp`, `physics/src/ChannelSolve.cpp`,
+`physics/src/CollisionMatrix.cpp`, the new tests. For those I rest on the outputs below.
+
+**My runs on the merged tree** (`work/director/verify_l91.out`, `extra91.out`, `pyazr91.out`): build with 0
+warnings; every output file of every project in the three bases identical to `tab-t74-1` (887 Brune, 851 formal,
+887 Park); the eight fits by command identical to the base build's; 314 of 314 quick tests; the 172 regression
+scripts. Identical to the base build's, file by file: T2 and 13N gradient fits, the T2 sampler chain at 1 and 4
+sampler threads, a 13N chain (64 walkers, 100 steps, 4 threads), a T2 MIGRAD with its numerical gradient at 4
+threads. User-space instructions at one thread, before / after: T2 gradient fit 1.7212e11 / 1.6894e11 (-1.8 %),
+13N gradient fit 1.8643e11 / 1.8539e11 (-0.6 %), T2 sampler 1.27175e12 / 1.25444e12 (-1.4 %). The Python call, by
+hand: one level and one channel against the closed form, five levels and three channels against a direct numpy
+inverse (off a level, 1e-7 MeV beside one, with a closed channel): agreement below 1e-15, U unitary and symmetric.
+After my last edits (Python and tests only): the consistency test, the published pages, every quick pyazr test.
+
+**3. The sanitizers pass with T2** (the twelfth push; thread 73 minutes, address 69): no failed step, no report.
+Everything `scripts/sanitize_upgrade.sh` runs is clean under clang 18's address, undefined-behaviour and thread
+sanitizers, with three entries for the OpenMP runtime's own libraries.
+
+**4. macOS, the ninth push's unit tests** (the last run without the GNU tools; `FOR_THE_OWNER.md` section 10
+item 1). Six failures that were new:
+
+- `upgrade_mesh_planner`: the test's tolerance, not the planner. Its random cases differ under libc++; the check
+  asked today's step closer to a node than the node's rounding. On Linux 374 of 400 other seeds failed the same
+  way; with the inset no less than four rounding steps, 0 of 1000.
+- `pyazr_fit_engine_control`, `pyazr_ui_engine_jobs`: **a fault of pyazr.** A `threading.Event` given as `stop`
+  reached the engine through a helper thread every 20 ms; on T3 (1 ms per record) up to 13 records followed the
+  request. `fit_with_engine` now looks after every progress record too: at most 1 on the same case. The first
+  test also counted before it set the request.
+- `tools_runall`: expected gone with the GNU tools. The test also inherited its caller's `REPLACE_TAG` and
+  standard input (repaired).
+- `pyazr_ui_sampler_bands` (T3's linear band without numbers) and `pyazr_examples` (`fit_iminuit` on T3): **not
+  understood, not changed.**
+
+**The CI at 03:15.** The eleventh push's build run: Linux passed its regression step and is in the unit tests;
+Windows and macOS failed the regression step and are in the unit tests (annotations readable when a job ends). The
+twelfth push's build run waits behind it and is cancelled by this push.
+
+**Open, for the PI** (none acted on): the pointer variant of a site's values; the physics agent's three (the
+engine's GSL coupling coefficients replaced by those of `physics/`, which changes last digits; the gradient split
+as a next stage; Brune's and Park's parameters and photon channels in the Python call); the earlier ones (the
+entries of 2026-11-15, 11:45 and 19:35).
+
+## 2026-11-16 (physics agent, 03:10) — the collision matrix and the observables' sums as functions of `physics/`
+
+**Not merged.** Branch `feature/upgrade-1-physics-functions` in `wt-phys1`, cut from `feature/upgrade` at 486d746e,
+four commits: 7328b4da (inventory), e6f833f7 (collision matrix), 0944e496 (observables), 2580cc1e (Python call).
+Build `work/b-phys1`. The whole account is `docs/upgrade/physics_functions.md` (section 4 is what was done).
+
+**What was changed.**
+
+- *The collision matrix* (e6f833f7). `physics/` has `LevelMatrixSolver.h` (moved from the engine), `ChannelSolve.h`
+  (the channel-space solve of one block: the pencil and formal routes, `solve_channel_space`) and
+  `CollisionMatrix.h` (`fill_level_matrix`, `collision_matrix`, and the element functions the engine's walk of the
+  pathways calls). They take arrays and plain structs; nothing of the engine. `AMatrixFunc` and `ChannelSpace` call
+  them: `src/AMatrixFunc.cpp` 2766 -> 2380 lines, `include/AMatrixFunc.h` 415 -> 387, `src/ChannelSpace.cpp`
+  867 -> 697, `include/ChannelSpace.h` 215 -> 172, `src/LevelMatrixSolver.cpp` and its header (196 lines) moved.
+- *The observables* (0944e496). `physics/include/azure2/physics/Observables.h` (195 lines, header only): the
+  partial-wave sums, the optical-theorem total, the phase shift, the Coulomb and elastic interference terms, the
+  Legendre scaling, the capture A_y term, the beta-delayed and RMC terms. `GenMatrixFunc` calls them:
+  `src/GenMatrixFunc.cpp` 756 -> 549, `include/GenMatrixFunc.h` 207 -> 152.
+- *From Python* (2580cc1e). `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=,
+  shift=, boundary=, hard_sphere_phase=, coulomb_phase=)` returns A, U and T of one block at one energy, without a
+  session. Door `api/src/pybind_collision_matrix.cpp`; test `tests/pyazr/collision_matrix_test.py`.
+- `physics/src` grew from 5193 to 5951 lines, `physics/include` from 2977 to 3583; three new test programs
+  (`physics_channel_solve`, `physics_collision_matrix`, `physics_observables`) and one Python test.
+- Documents: `physics_functions.md`, `ARCHITECTURE.md` section 3, `FOR_THE_OWNER.md` sections 5, 6 and 10 item 5,
+  `ROADMAP.md` row 1, `README.md`, the Developer Guide (`extending.rst`, `physics_core.rst`, `level_matrix.rst`,
+  `classes.rst` through the class scheme tables), the User Guide's `pyazr.rst`, `pyazr/CLAUDE.md`.
+
+**What was run** (`work/director/verify_branch.sh wt-phys1 phys1 tab-t74-1 trial86`, once per commit with code).
+
+- e6f833f7: `work/director/verify_phys1_stage2.out`. 0 warnings; 887, 851 and 887 files identical in the three
+  bases, none differs, none new; eight fits identical to `work/b-trial86`; 312 of 312 quick tests; 172 of 172
+  regression scripts.
+- 0944e496: `work/director/verify_phys1_stage3.out` (logs `work/director/vlphys1-stage3/`). The same numbers, with
+  312 of 313 quick tests: `tools_runall` failed because my launch exported `REPLACE_TAG=1`, which that test
+  inherits (its check 2 expects a refusal); it passes without the variable.
+- 2580cc1e: `work/director/verify_phys1_stage4.out`. 0 warnings; 887, 851 and 887 files identical, none
+  differs, none new; eight fits identical; 314 of 314 quick tests; 172 of 172 regression scripts (run without
+  `REPLACE_TAG`; the earlier results are kept as `work/cmp/*/tab-phys1-1-stage3`).
+- Instructions at one thread against `work/b-trial86` after the observables' commit
+  (`work/director/phys1_speed_stage3.out`): a calculation 1,252,352,203 -> 1,242,828,231 (-0.76 %), a gradient fit
+  172,432,881,738 -> 169,181,248,071 (-1.89 %), a second gradient fit 186,435,944,428 -> 185,402,936,343
+  (-0.55 %), a sampler run 1,271,781,212,129 -> 1,254,718,544,570 (-1.34 %); wall times 0.19 -> 0.18 s,
+  14.48 -> 14.36 s, 15.49 -> 15.38 s, 118.54 -> 116.43 s; no output file differs.
+
+**What is not done.**
+
+- The analytic gradient: `PointTBar`, `TBarAdjoint`, `LevelMatrixAdjoint`, `BilinearAdjoint`,
+  `FormalBilinearAdjoint`, `ResolveFormalCotangents`, `LevelAdjoint` stay in `src/AMatrixFunc.cpp` (about 1,500 of
+  its 2,380 lines). A new observable still needs its adjoint written there.
+- `GenMatrixFunc::GetRk` stays: the engine's `AngCoeff` takes 3j and 6j symbols from GSL, `physics/` computes its
+  own, and the two differ in the last digits.
+- The particle analysing power (`Polarization::AmplitudeMatrix`), the contractions of `SiteObservables.cpp` and the
+  set-up of the formal levels (`ChannelSpace::Update`) are not touched.
+- There is no single `observables(U, geometry)` call; the functions are per term, and the engine keeps the walk of
+  the pathways.
+- The Python call takes formal levels and particle channels only (no Brune or Park parameters, no photon channel),
+  and its test compares to numpy, not to an engine session.
+
+**Found on the way.** `tests/consistency/runall_test.py` depends on its caller: it inherits `REPLACE_TAG`, and its
+check 4 runs `tools/run_one.sh` with the caller's standard input, where the fake engine's `cat` waits 900 s if the
+input is an open socket. Both are faults of the test, not repaired here.
+
+## 2026-11-15 (the data agent, `feature/upgrade-6-site-split`) — a site's members by who writes them; the split not made
+
+**Not merged; not reviewed.** One commit on `feature/upgrade-6-site-split` (cut from `feature/upgrade` at the tenth
+push, 486d746e): 546563db (committed 2026-11-16, 00:29). The task was the last step of `evaluation.md` milestone 3 in
+three stages: (1) classify and group what an evaluation writes into a site, (2) take those values out of the site, (3)
+remove `WorkingCopy::Clone`, `WorkingData` and the pools. **Stage 1 is done and verified. Stages 2 and 3 were not
+started**, on what stage 1 found; nothing half-done is in the tree.
+
+**Stage 1, what changed.** Every member of `Site`, and what else of `Unit` and `WorkingCopy` an evaluation writes,
+was classified from the code (the writers followed from the hand-over). Of the 38 members of a site, 10 are fixed
+at set-up, 25 are written by an evaluation, 3 are the place of the result record. The 25 are one struct now,
+`Site::Values`, held by the site as `values_`; no accessor changed, no ownership changed. Files: `include/Site.h`,
+`include/UnitTables.h` (a comment), `src/Unit.cpp`, `src/ChannelTables.cpp`, `src/UnitLegendre.cpp`,
+`src/UnitExternalCapture.cpp`, `src/ModelPass.cpp` (one line), `src/SiteObservables.cpp` (four lines). The table,
+with the writer of each member, is `evaluation.md` section 7.8.
+
+**Lines changed in the files of the physics branch** (`feature/upgrade-1-physics-functions`), for the merge:
+`src/SiteObservables.cpp` lines 267, 268, 275, 276 (in `Site::CoulombAmplitudesAt`: `rowset_`, `rowset_at_`,
+`coulombamplitude_`, `spinDependentCoulomb_`, `coulombexchange_` became `values_.rowset`, `values_.rowset_at`,
+`values_.coulombamplitude`, `values_.spinDependentCoulomb`, `values_.coulombexchange`). No line of
+`src/AMatrixFunc.cpp`, `LevelMatrixSolver`, `THMMatrixFunc`, `src/EnergyPass.cpp` or `src/GradEnergyTasks.cpp`
+changed. If the physics branch moved `CoulombAmplitudesAt`, the same five names are to be renamed where it went;
+a missed one is a compile error.
+
+**What was found.** The design expected the values an evaluation writes to be a small table beside the problem.
+They are most of a site: 280 of its 392 bytes (96 are fixed, 48 of those the two external-capture matrices that a
+copy holds empty). The `DataSet`, the channel table, the compound system and the large tables of the sites are
+shared between copies already. `WorkingCopy::Clone` therefore copies the evaluation's own state and little else,
+and evaluations that run at the same time each need that state whoever holds it. Measured
+(`work/director/site1_mem.out`; MIGRAD with the numerical gradient, peak resident memory at 1 and 4 threads, one
+run each): T2 161 908 and 196 628 kB, 11.6 MB for each further evaluation at the same time (14 422 slots, whose
+fixed members are 1.4 MB); 13N 124 836 and 134 900 kB, 3.4 MB each (2 416 slots, 0.2 MB). Taking the values out of
+the site would save at most the fixed members per further evaluation and would not remove `Clone` or the pools.
+
+**What is left, and whose decision.** Three ways to go on are written in section 7.8 with their costs: every
+accessor takes the evaluation's table (about 450 calls in about 30 files, among them the physics branch's); the
+evaluation's entry points to a shared fixed part (no reader changes, 96 bytes a site gained); the values of a site
+held by pointer and copied when first written (an evaluation of a project without shifts would share nearly
+everything; one more indirection in every accessor, one more allocation per site: a speed risk). None was started.
+Whether to do the third, or to close milestone 3 as it stands (the working copy is the evaluation's value; the
+copies have an owner), is the director's and the PI's.
+
+**The switches.** `AZURE_POOL_CHECK` and `AZURE_TRACE_FCN=fresh` were not touched and work as before.
+
+**Documents.** `evaluation.md`: section 7.8 (new), dated status lines at section 4, at item 1 of the list of 4.1,
+and at milestones 3 and 4 (the compound system is constant and shared; an evaluation owns a `LevelState`; no
+`cnuc_pool_`). `FOR_THE_OWNER.md` section 10 item 4; `ROADMAP.md`, the hand-over row 6; the Developer Guide pages
+`state_and_ownership.rst` and `data_model.rst` (`Site::Values`). The class scheme has no box for a nested struct:
+unchanged.
+
+**Verification** (`work/director/verify_site1_stage1.out`, on the tree of the commit but for its last document
+paragraph, after which the consistency test and the pages were repeated): build with 0 warnings; every output file
+of every project in the three bases identical to `tab-t74-1` (887 Brune, 851 formal, 887 Park); the eight fits
+identical to the base build's (`work/b-trial86`); the tests not labelled slow, 310 of 310; the regression scripts,
+172 of 172; the consistency test; the published pages (60). Against the base build
+(`work/director/site1_extra.out`), identical file by file: T2 and 13N gradient fits at one thread, the T2 sampler
+chain (16 walkers, 100 steps, amplitudes) at 1 and at 4 sampler threads, T2 MIGRAD with its numerical gradient at
+4 threads. User-space instructions at one thread, base / now: T2 gradient fit 1.718033e11 / 1.717964e11, 13N
+gradient fit 1.864297e11 / 1.864300e11, T2 sampler 1.271775e12 / 1.271426e12. Peak resident memory, kB, one run
+each: 161 908 / 161 860, 135 448 / 135 608, 153 928 / 153 064; T2 sampler at 4 threads 254 592 / 253 860, T2
+MIGRAD at 4 threads 194 928 / 196 200. `sizeof(Site)` and `sizeof(Unit)` are what they were (392, 504).
+
+**Not done.** Stages 2 and 3. The 13N chain and the chain in physical values were not run for stage 1. Not separated:
+what part of the sampler's 33.6 MB for each further thread (T2, 153 064 kB at one sampler thread, 253 860 kB at four)
+is the working copy. Three code lines of `src/ChannelTables.cpp` and `src/UnitLegendre.cpp` grew past 120 columns with
+the rename and were not wrapped.
+
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 90 (one commit of mine: `scripts/sanitize_upgrade.sh`

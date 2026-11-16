@@ -46,12 +46,17 @@ An observable of a reaction at a mesh energy
 1. A kind in ``SiteObservable`` (``include/SiteObservable.h``) and its row in
    ``kSiteObservables`` (``src/SiteObservables.cpp``): the record's slots and
    the contraction with a reader's row (``Site::ValueFor``).
-2. Its formula at the energy: one branch of
-   ``GenMatrixFunc::CalculateBareCrossSection``; its adjoint in
-   ``AMatrixFunc::PointTBar``.
-3. What a reader needs per slot (angular row, Coulomb amplitude) in its row
+2. Its formula at the energy, as a function of the T-matrix elements and
+   plain numbers in ``physics/include/azure2/physics/Observables.h``, with
+   its closed-form check in ``physics/tests/observables_test.cpp`` (no
+   project file needed).
+3. One branch of ``GenMatrixFunc::CalculateBareCrossSection`` that walks the
+   pathways, calls the function and writes the record; its adjoint in
+   ``AMatrixFunc::PointTBar`` (the derivative is still written there, not in
+   ``physics/``).
+4. What a reader needs per slot (angular row, Coulomb amplitude) in its row
    set (``include/RowSet.h``, built by ``WorkingCopy::BuildRowSets``).
-4. Tests: the analytic gradient against finite differences
+5. Tests: the analytic gradient against finite differences
    (``AZURE_GRAD_CHECK``) and a test project of the quantity that uses it.
 
 An experimental effect (an apparatus kernel)

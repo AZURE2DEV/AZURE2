@@ -78,7 +78,10 @@ The per-evaluation objects
      (``WorkingCopy::AbundanceValues``) and of the THM coherent backgrounds
      (``WorkingCopy::ThmCoherentValues``, handed to the HOES model), the points (``Unit``) and slots (``Site``) with
      their energies after a shift, the plan's positions. ``WorkingCopy::Clone``
-     is a plain copy that shares the ``DataSet``.
+     is a plain copy that shares the ``DataSet``. What an evaluation writes
+     into a site is one struct of it, ``Site::Values`` (``include/Site.h``);
+     the rest of a site is fixed by the set-up, or by the evaluation that
+     makes the site when it places a grid anew.
    - ``LevelState`` (``include/LevelState.h``): the levels at the present
      parameter vector (energies, amplitudes, shift functions, Park's
      :math:`J`, the external-capture parts, the ``gamma_decay`` fills), and

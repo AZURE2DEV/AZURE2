@@ -20,6 +20,9 @@ Calling convention, the same for every function:
 ``functions`` maps each name to its function; ``table()`` is the rows as plain data (``pyazr.kinds()["physics"]``
 is the same), with the argument a plot puts on its horizontal axis (``axis``) and every returned field's unit.
 A new function is a row of the binding's table and a test naming it (``pyazr/CLAUDE.md``, "Add a physics function").
+
+One function is not a row, because it takes matrices: :func:`collision_matrix`, the level matrix and the collision
+matrix of one J^pi block at one energy from the arrays of its levels and channels (``physics/CollisionMatrix.h``).
 """
 import copy
 import inspect
@@ -166,6 +169,60 @@ def _make(row):
     return function
 
 
+def collision_matrix(level_energies, reduced_widths, energy, *, penetrability, shift, boundary, hard_sphere_phase,
+                     coulomb_phase=None):
+    """The level matrix and the collision matrix of one J^pi block at one energy, without a session or a project.
+
+    The block is n formal (standard R-matrix) levels and nc particle channels.  With L_c = S_c - B_c + i P_c the
+    inverse level matrix is ``M[l, m] = (E_l - E) delta_lm - sum_c gamma_lc gamma_mc L_c``, ``A = M^-1``, and
+
+        U[c, c'] = Omega_c Omega_c' (delta_cc' + 2i sqrt(P_c P_c') gamma_c^T A gamma_c'),
+        Omega_c = exp(i (omega_c - phi_c)),      T[c, c'] = exp(2i omega_c) delta_cc' - U[c, c'],
+
+    the engine's own arithmetic (``physics/CollisionMatrix.h``: ``collision_matrix``; one factorization of M, one
+    solve per channel).  The channel functions at ``energy`` are the caller's: for a pair of the rows of this
+    module, ``penetrability``, ``shift``, ``hard_sphere_phase`` and ``coulomb_phase(l, eta) - coulomb_phase(0, eta)``.
+
+    Parameters
+    ----------
+    level_energies : array (n,), MeV
+        E_l, on the energy scale of ``energy`` (the engine's is the excitation energy of the compound nucleus).
+    reduced_widths : array (n, nc), MeV^1/2
+        The reduced-width amplitudes gamma_lc.
+    energy : float, MeV
+        E.
+    penetrability, shift, boundary, hard_sphere_phase : arrays (nc,)
+        P_c (0 for a closed channel), S_c, B_c and phi_c (rad) of each channel at ``energy``.
+    coulomb_phase : array (nc,), rad, optional
+        omega_c = sigma_l - sigma_0 of each channel; zero (neutral pairs) when not given.
+
+    Returns
+    -------
+    dict
+        ``A`` (n, n), ``U`` (nc, nc) and ``T`` (nc, nc), complex.  The cross sections follow from T
+        (``docs/source/developer/level_matrix.rst``, "Cross Section Calculation").
+
+    Raises
+    ------
+    ValueError
+        A shape that does not fit, a value that is not finite, a negative penetrability.
+    pyazr.EngineError
+        The inverse level matrix is singular at this energy.
+    """
+    widths = np.ascontiguousarray(reduced_widths, dtype=float)
+    channels = widths.shape[1] if widths.ndim == 2 else 0
+    omega = np.zeros(channels) if coulomb_phase is None else coulomb_phase
+    out = _azure2.collision_matrix(np.ascontiguousarray(level_energies, dtype=float), widths, float(energy),
+                                   np.ascontiguousarray(penetrability, dtype=float),
+                                   np.ascontiguousarray(shift, dtype=float),
+                                   np.ascontiguousarray(boundary, dtype=float),
+                                   np.ascontiguousarray(hard_sphere_phase, dtype=float),
+                                   np.ascontiguousarray(omega, dtype=float))
+    if out.pop("singular"):
+        raise EngineError(f"collision_matrix: the inverse level matrix is singular at energy = {float(energy)!r} MeV")
+    return out
+
+
 functions = {name: _make(row) for name, row in _ROWS.items()}
 globals().update(functions)
-__all__ = sorted(functions) + ["functions", "table", "status_text", "STATUS"]
+__all__ = sorted(functions) + ["functions", "table", "status_text", "STATUS", "collision_matrix"]

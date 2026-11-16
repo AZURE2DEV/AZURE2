@@ -804,6 +804,14 @@ add_test(NAME pyazr_whittaker_wave
                  ${CMAKE_CURRENT_SOURCE_DIR}/whittaker_wave_test.py)
 set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.physics.collision_matrix: the level matrix and the collision matrix of one J^pi block at one energy from
+# arrays, without a session (physics/CollisionMatrix.h through api/src/pybind_collision_matrix.cpp), against the
+# level matrix written in numpy, unitarity, the one-level phase shift and Breit-Wigner form, and the errors.
+add_test(NAME pyazr_collision_matrix
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/collision_matrix_test.py)
+set_tests_properties(pyazr_collision_matrix PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
 # own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,
 # errors="mask", DomainError (docs/upgrade/pyazr3.md section 2.7).  tests/consistency check 41 asks for a row_test per row.

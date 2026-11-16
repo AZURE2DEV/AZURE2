@@ -112,6 +112,10 @@ all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
 - `level_parameters(θ, convention, basis)` → E_λ, γ_λc: observed ↔ formal (Brune, Park, none), angular-momentum and
   phase conventions (§5). Brune needs S_c(E_λ), which moves with θ: evaluated here, a few per evaluation.
 - `collision_matrix(block, tables at E_n)` → A-matrix and U. One solve per Jπ block per grid energy.
+  In the code: `CollisionMatrix.h` (`fill_level_matrix`, `collision_matrix`, the elements of one pathway),
+  `LevelMatrixSolver.h` (the factorization) and `ChannelSolve.h` (the channel-space route), functions of arrays; the
+  engine's `AMatrixFunc` collects the arrays of a site and calls them per pathway (`physics_functions.md`); from
+  Python, `pyazr.physics.collision_matrix`.
 - `external_capture`: radial integrals per grid energy, tabulated once per fit stage as unit amplitudes and scaled by
   the ANC or γ (they depend on the fit parameters only through that scale).
 - `observables(U, geometry)` → O_n: integrated σ; Legendre coefficients B_L for angular distributions (coupling
@@ -119,6 +123,10 @@ all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
   and Coulomb–nuclear interference are not a finite Legendre series (f_C(θ) enters through the kernel row); A_y as a
   numerator series folded separately from σ; phase shifts; total cross section (optical theorem); β-delayed spectra;
   THM half-off-shell amplitudes (`THM.md`); identical particles through symmetrised coefficients.
+  In the code: `Observables.h`, one function per sum (not one call for every observable); the engine's
+  `GenMatrixFunc` walks its pathway table and calls them. Still in the engine: the R_k of a secondary decay (GSL's
+  3j and 6j symbols), the particle analysing power's amplitude matrix, the contraction with a reader's angle
+  (`physics_functions.md`, section 4).
 - `transfer/` (DWBA, for THM vertices; `physics/transfer`, `transfer.md`): bound states, distorted waves, form
   factors (`THM.md` §3), the zero-range THM weight and the global optical sets (one table, `GlobalOptical.h`). The
   engine's `src/ThmDistortion.cpp` (R(E)) and `src/ThmDwVertex.cpp` (its waves) call it; `src/ThmOptical.cpp` is
