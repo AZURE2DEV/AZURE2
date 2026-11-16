@@ -1,8 +1,9 @@
-// AZURECalc, the priors of the limits manager: the diagonal Gaussian prior a `nuisance` flag of the parameter
-// limits puts on a parameter (NuisancePriorOf, with the rule that a parameter of the prior covariance has none),
-// its chi-squared (CalculateNuisanceChiSquared, which the objective calls through ObjectiveContext::nuisance), its
-// gradient (AddNuisanceGradient), and whether any such prior exists (HasNuisanceParameters, which switches the
-// analytic G2 off).  One unit because the four must index the parameters the same way.
+// AZURECalc, the priors of the limits manager (T5): the diagonal Gaussian prior a `nuisance` flag of the parameter
+// limits puts on a parameter (NuisancePriorOf; the rule, with a parameter of the prior covariance having none, is the
+// gather's, DiagonalPriors.h, which the API asks too), its chi-squared (CalculateNuisanceChiSquared, which the
+// objective calls through ObjectiveContext::nuisance), its gradient (AddNuisanceGradient), and whether any such prior
+// exists (HasNuisanceParameters, which switches the analytic G2 off).  One unit because the four must index the
+// parameters the same way.
 #include "AZURECalc.h"
 #include "azure2/support/Environment.h"
 #include "Objective.h"
@@ -17,6 +18,7 @@
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "AZUREGrad.h"
+#include "DiagonalPriors.h"
 
 namespace {
 
@@ -60,46 +62,20 @@ bool AZURECalc::HasNuisanceParameters() const {
   return false;
 }
 
-bool AZURECalc::CoveredByPriorCovariance(int f) const {
-  const PriorCovariance *pc = data()->Data().GetPriorCovariance();
-  if (!pc) return false;
-  const std::vector<int> &listed = pc->FullIndex();
-  return std::find(listed.begin(), listed.end(), f) != listed.end();
-}
-
 bool AZURECalc::NuisancePriorOf(int f, double &nominal, double &sigma) const {
-  if (!limitsManager_) return false;
-  // A parameter of the prior covariance has no diagonal prior of its own: the multivariate Gaussian replaces it
-  // (docs/upgrade/objective.md D3).
-  if (CoveredByPriorCovariance(f)) return false;
-  return limitsManager_->NuisancePrior(f, nominal, sigma);
+  return ::NuisancePriorOf(limitsManager_, data()->Data().GetPriorCovariance(), f, nominal, sigma);
 }
 
 void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const {
-  if (!limitsManager_) return;
-  // p and grad are the full parameter vector (fixed parameters included), and
-  // the prior is looked up by that same full index.
-  const int n = (int)std::min(p.size(), grad.size());
-  for (int f = 0; f < n; f++) {
-    double nominalValue, paramError;
-    if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
-    // d/dp of ((p - nominal)/error)^2.
-    grad[f] += GaussianPriorGradient(p[f], nominalValue, paramError);
-  }
+  // p and grad are the full parameter vector (fixed parameters included), and the prior is looked up by that same
+  // full index: d/dp of ((p - nominal)/error)^2.
+  AddPriorsGradient(NuisancePriorsOf(limitsManager_, data()->Data().GetPriorCovariance(), p), p, grad);
 }
 
 double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
-  if (!limitsManager_) return 0.0;
-  // p is the full parameter vector (fixed parameters included), as
-  // CompoundSystem::FillCompoundFromParams reads it; the prior is looked up by the same
-  // full index.  (Indexing p by the limits manager's non-fixed index, as this
-  // once did, evaluates a prior on whatever parameter sits at that position as
-  // soon as a fixed parameter precedes the one carrying it.)
-  double nuisanceChiSquared = 0.0;
-  for (int f = 0; f < (int)p.size(); f++) {
-    double nominalValue, paramError;
-    if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
-    nuisanceChiSquared += GaussianPriorChi2(p[f], nominalValue, paramError);
-  }
-  return nuisanceChiSquared;
+  // p is the full parameter vector (fixed parameters included), as CompoundSystem::FillCompoundFromParams reads it;
+  // the prior is looked up by the same full index.  (Indexing p by the limits manager's non-fixed index, as this
+  // once did, evaluates a prior on whatever parameter sits at that position as soon as a fixed parameter precedes the
+  // one carrying it.)  The sum from 0 in index order.
+  return PriorsChi2(NuisancePriorsOf(limitsManager_, data()->Data().GetPriorCovariance(), p));
 }

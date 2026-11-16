@@ -1,8 +1,10 @@
 #ifndef DIAGONALPRIORS_H
 #define DIAGONALPRIORS_H
 
+#include "Constants.h"
 #include "InferenceTypes.h"
 
+class ParameterLimitsManager;
 class WorkingCopy;
 
 /*!
@@ -49,6 +51,18 @@ void AppendAbundancePriors(const WorkingCopy &data, const ParamIndexMap *pmap, D
  * thickness, apparatus, abundances.  An entry whose parameter `pmap` does not hold (index -1) is left out.
  */
 DiagonalPriors DiagonalPriorsOf(const WorkingCopy &data, const ParamIndexMap &pmap);
+
+/*!
+ * T5: the nuisance prior of the parameter at full index `f` (<parameterSettings> useAsNuisance; a level parameter or
+ * the THM coherent background), its centre and width in the parameter's unit (a width's in the reduced amplitude,
+ * MeV^1/2): none without a limits manager, none for a parameter of the prior covariance, whose multivariate Gaussian
+ * replaces it (docs/upgrade/objective.md D3).  The one statement of the rule; the program's and the API's evaluations,
+ * gradients, rows and least-squares penalties ask it.
+ */
+bool NuisancePriorOf(const ParameterLimitsManager *limits, const PriorCovariance *pc, int f, double &centre, double &sigma);
+
+/// T5's priors over the full vector `p`, in index order: index f, value p[f].
+DiagonalPriors NuisancePriorsOf(const ParameterLimitsManager *limits, const PriorCovariance *pc, const vector_r &p);
 
 /// f(full index, centre, sigma) for each entry of DiagonalPriorsOf, in its order: the derivatives, the curvature and
 /// the least-squares rows of the diagonal priors (each path keeps its own form of the expression).

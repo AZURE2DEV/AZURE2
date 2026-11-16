@@ -206,30 +206,19 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) {
 
 bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) {
   ReadFitSettings();
-  if (!nuisance_) return false;
-  // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
-  if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) {
-    const std::vector<int> &listed = pc->FullIndex();
-    if (std::find(listed.begin(), listed.end(), f) != listed.end()) return false;
-  }
-  return nuisance_->NuisancePrior(f, nominal, sigma);
+  return ::NuisancePriorOf(nuisance_.get(), data()->Data().GetPriorCovariance(), f, nominal, sigma);
 }
 
-double AZUREAPI::NuisanceChi2(const vector_r &full) {
-  double chi2 = 0.0;
-  for (int f = 0; f < (int)full.size(); f++) {
-    double nominal, sigma;
-    if (!NuisancePriorOf(f, nominal, sigma)) continue;
-    chi2 += GaussianPriorChi2(full[f], nominal, sigma);
-  }
-  return chi2;
+DiagonalPriors AZUREAPI::NuisancePriors(const vector_r &full) {
+  if (full.empty()) return DiagonalPriors();
+  ReadFitSettings();
+  return NuisancePriorsOf(nuisance_.get(), data()->Data().GetPriorCovariance(), full);
 }
+
+double AZUREAPI::NuisanceChi2(const vector_r &full) { return PriorsChi2(NuisancePriors(full)); }
 
 void AZUREAPI::AddNuisanceGradient(const vector_r &full, vector_r &gradFull) {
-  for (int f = 0; f < (int)full.size() && f < (int)gradFull.size(); f++) {
-    double nominal, sigma;
-    if (NuisancePriorOf(f, nominal, sigma)) gradFull[f] += GaussianPriorGradient(full[f], nominal, sigma);
-  }
+  AddPriorsGradient(NuisancePriors(full), full, gradFull);
 }
 
 std::vector<std::string> AZUREAPI::ObjectiveTermNames() const {

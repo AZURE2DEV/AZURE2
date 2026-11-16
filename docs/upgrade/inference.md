@@ -175,3 +175,25 @@ injected error.
 - The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11's field in
   `chiSquared.out` (`Total-Gamma-Decay-Chi-Squared`) was added afterwards, with the PI's word.
 - `ObjectiveContext` still holds the two flags of a request (`thmOnly`, `segmentPriors`) beside what a term reads.
+
+## 8. The diagonal priors on one list (2026-11-16, `objective_arrays.md` slices 1-3)
+
+Slices 1, 2 and 3 of `objective_arrays.md` section 5 are built, one commit each.
+
+- `inference/`'s `DiagonalPriors.h`: the list of diagonal priors (full index, the value the objective reads, centre,
+  width, the source of the prior, a group: the segment or the apparatus row) and its arithmetic, `AddPriorsChi2`
+  (into a running sum), `PriorsChi2` (a subtotal from 0, by source and group), `AddPriorsGradient` (on `p[index]`),
+  `AddPriorsCurvature`; test `inference_diagonal_priors`.
+- The engine's gathers, `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`): `AppendNormPrior`,
+  `AppendShiftPriors`, `AppendTargetPriors`, `AppendAbundancePriors`, `DiagonalPriorsOf` (every prior with its
+  index, in the order the API's rows expect) and, for T5, `NuisancePriorOf` / `NuisancePriorsOf`.  Each rule of
+  eligibility is written there once; the terms (T3, T4, T5, T8), the gradients, G2, the least-squares rows, the
+  sampler (`ForEachDiagonalPrior`, a loop over `DiagonalPriorsOf`) and the `chiSquared.out` writer read it.
+- Gone: the five `WorkingCopy::*Penalty` sums, the per-object penalties of `TargetEffect`, `Segment` and
+  `ApparatusParam`, `Segment::AddShiftPenalty` and `ShiftPenaltyParts`, the six `ForEach...Prior` helpers of
+  `Objective.h`, the two written-out copies of the nuisance rule (`AZURECalcNuisance.cpp`, `AZUREAPIChi2.cpp`).
+- Before slice 2, a scratch build compared the old enumeration's priors with the gather's on 343 runs (every project
+  of `tests/` with data, and the runs of 26 regression scripts): equal in all, element by element (the commit message
+  of slice 2 has the counts).
+
+Not moved: T7's value and gradient, T6, T1a and T1b (slices 4-6 of the note).

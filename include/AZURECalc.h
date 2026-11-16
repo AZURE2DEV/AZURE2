@@ -261,10 +261,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Calculate nuisance parameter chi-squared contribution
    */
   double CalculateNuisanceChiSquared(const vector_r &p) const;
-  /// The nuisance prior (nominal, sigma) of full index f, false for none or one the prior covariance replaces (D3).
+  /// The nuisance prior (nominal, sigma) of full index f, false for none or one the prior covariance replaces (D3;
+  /// the rule: NuisancePriorOf of DiagonalPriors.h).
   bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
-  /// Is full index f a parameter of the prior covariance (<config> priorCovariance=)?
-  bool CoveredByPriorCovariance(int f) const;
 
   /*!
    * Add the analytic gradient of the nuisance-parameter penalty to `grad`,

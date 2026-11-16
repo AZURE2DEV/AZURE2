@@ -4,10 +4,12 @@
 // least-squares rows, the sampler and the chiSquared.out writer all take their priors from here.
 #include "DiagonalPriors.h"
 
+#include <algorithm>
 #include <limits>
 
 #include "AbundanceSamples.h"
 #include "ApparatusParameters.h"
+#include "ParameterLimitsManager.h"
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
@@ -143,4 +145,21 @@ void AppendTargetPriors(const WorkingCopy &data, PriorSource source, const Param
     default:
       break;
   }
+}
+
+bool NuisancePriorOf(const ParameterLimitsManager *limits, const PriorCovariance *pc, int f, double &centre, double &sigma) {
+  if (!limits) return false;
+  // A parameter of the prior covariance has no diagonal prior of its own: the multivariate Gaussian replaces it.
+  if (pc && std::find(pc->FullIndex().begin(), pc->FullIndex().end(), f) != pc->FullIndex().end()) return false;
+  return limits->NuisancePrior(f, centre, sigma);
+}
+
+DiagonalPriors NuisancePriorsOf(const ParameterLimitsManager *limits, const PriorCovariance *pc, const vector_r &p) {
+  DiagonalPriors out;
+  if (!limits) return out;
+  for (int f = 0; f < (int)p.size(); f++) {
+    double centre, sigma;
+    if (NuisancePriorOf(limits, pc, f, centre, sigma)) Add(out, f, p[f], centre, sigma, PriorSource::kNuisance, 0);
+  }
+  return out;
 }
