@@ -57,6 +57,11 @@ web page shows `line_window` from the schema; nothing else of pyazr names it.
 **Run here** (CRC, GCC 11.5): build; the unit tests; `tests/ec_unbound_broad`, `tests/ec_unbound_final`,
 `tests/ec_final_state_unbound`. The full gate: see the end of this entry. **Not run:** CI.
 
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; ctest all but the base's
+two (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 172 pass and 2 fail, the base's two
+(`capture_ay_coupling`, "a warning for ancai06 inside its range"), `tests/ec_unbound_broad` and
+`tests/ec_unbound_final` passing and every chi2 line equal to the base's.
+
 ## 2026-11-16 (owner's session, dev port) — external capture into an unbound final state, stage 1 (a narrow resonance)
 
 **Branch** `feature/upgrade-5-dev-ec-unbound`, cut from `feature/upgrade` `0c6167c1`. dev's change of 2026-11-13
@@ -104,6 +109,13 @@ A THM data set exiting into an unbound photon pair is not covered (read only, as
 
 **Run here** (CRC, GCC 11.5): build; `experiment_build`; the two test directories; the pyazr test. The full gate: see
 the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots, on the commit of the entry above, which holds this one): consistency,
+configure, build and the docs clean; ctest all but the base's two (`pyazr_park_dsde`, `pyazr_units_scales`); the
+regression suites 172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
+range"), every chi2 line equal to the base's. A gate of this entry's commit alone had shown the same suites (171
+pass) and, in ctest, `upgrade_predictions` (the table had not been regenerated for the ten new models; done in the
+next commit) and `physics_standalone` at its 300 s limit while other jobs of the account built (it passes alone).
 
 ## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
 
