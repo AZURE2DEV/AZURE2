@@ -90,7 +90,7 @@ def main():
     check("edge mode: the old C / dd^T metric is huge in u", np.sqrt(Cu_old[1, 1]) > 1e3, f"{np.sqrt(Cu_old[1, 1]):.3g}")
     check("edge mode: the Hessian metric's bounded sd <= 1 in u", np.sqrt(Cu_new[1, 1]) <= 1.0 + 1e-9, f"{np.sqrt(Cu_new[1, 1]):.3g}")
     check("edge mode: the unbounded coordinate's sd in u follows the ridge, not the Laplace", np.sqrt(Cu_new[0, 0]) < 10, f"{np.sqrt(Cu_new[0, 0]):.3g} (Laplace {np.sqrt(C_r[0, 0]):.3g})")
-    from pyazr.sampling import nuts, split_rhat
+    from rmfit.sampling import nuts, split_rhat
     xg = np.linspace(-0.8, 0.8, 20001); wg = np.exp(5 * xg)
     m_exact = float((xg * wg).sum() / wg.sum())
     res = []
@@ -108,7 +108,7 @@ def main():
     check("edge mode: NUTS with the Hessian metric mixes (R-hat < 1.05)", rh < 1.05, f"{rh:.3f}")
     check("edge mode: NUTS with the Hessian metric gives the exact mean of x2 within 0.03", abs(m2 - m_exact) < 0.03, f"{m2:.4f} vs {m_exact:.4f}")
     # NUTS on a truncated normal N(0, 1) on [-0.5, 2]: mean and sd against the closed form
-    from pyazr.sampling import nuts
+    from rmfit.sampling import nuts
     from scipy.stats import truncnorm
     T1 = Gauss([0.0], [[1.0]])
     B1 = BoundedTarget(T1, [-0.5], [2.0])
