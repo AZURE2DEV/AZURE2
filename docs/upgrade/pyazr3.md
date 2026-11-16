@@ -607,7 +607,9 @@ shipped. `cli.py`'s `REFERENCE_PAGE` (the docs page) is written by the consisten
   the option works; a default build is unchanged), build targets `_azure2` and `AZURE2` only, install component
   `python` only (so Minuit2's rules install nothing).
 - `install(TARGETS _azure2 LIBRARY DESTINATION pyazr COMPONENT python)` and `install(TARGETS AZURE2 RUNTIME
-  DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)` in a wheel build; elsewhere the program's rule is as
+  DESTINATION pyazr/bin COMPONENT python)` in a wheel build, with the console script `AZURE2 =
+  pyazr.program:main` that runs it (until 2026-11-16 the program was in the wheel's scripts; pip moves a script,
+  and on macOS the installed program then did not find the wheel's own libgsl); elsewhere the program's rule is as
   before. In a wheel build `PYAZR_OUTPUT_DIR` defaults to the build directory, so the build writes nothing into
   the source; every other build keeps today's default and `work/build.sh`'s `-DPYAZR_OUTPUT_DIR`.
 - Run-time data: found next to the module (`__file__`) as today, so the unpacked or installed package needs no

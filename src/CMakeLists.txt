@@ -154,9 +154,12 @@ if(CROSS_COMPILE_WINDOWS)
         COMMENT "Windows executable with DLLs built")
 endif()
 
-# A wheel build (scikit-build-core) puts the program into the wheel's scripts, so that pip installs it on the PATH.
+# A wheel build (scikit-build-core) puts the program inside the package, pyazr/bin/AZURE2, and the console script
+# AZURE2 (pyproject.toml, pyazr/program.py) runs it.  Not the wheel's scripts: pip moves a script, and the libraries
+# the wheel carries are found relative to the program's own file (seen on macOS, 2026-11-16: the installed program
+# could not load libgsl).
 if(SKBUILD)
-    install(TARGETS AZURE2 RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)
+    install(TARGETS AZURE2 RUNTIME DESTINATION pyazr/bin COMPONENT python)
 else()
     install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
 endif()

@@ -133,8 +133,9 @@ and every test imports pyazr from the checkout. A user's ``pip install .`` (or
 ``pip wheel .``) goes through ``pyproject.toml``: scikit-build-core runs the
 same CMake files with the option set of a wheel (``BUILD_TESTING`` off, the
 vendored sampler on; targets ``_azure2`` and ``AZURE2``),
-installs the module into the package and the program into the wheel's scripts
-(the install rules of component ``python``, keyed on ``SKBUILD``), and copies
+installs the module into the package and the program into ``pyazr/bin``
+(the install rules of component ``python``, keyed on ``SKBUILD``; the console
+script ``AZURE2`` of ``pyazr/program.py`` runs it), and copies
 the package directory as it is, less ``wheel.exclude``. The package finds its
 data files next to its own modules; ``pyazr/datafiles.py`` lists them. The
 workflow ``.github/workflows/wheels.yml`` builds and tests wheels for Linux
