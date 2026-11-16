@@ -28,6 +28,26 @@ def main():
     worst = max(abs(per[k] - chisq[k]["chi2"]) / max(chisq[k]["chi2"], 1) for k in per)
     check("per-segment chi2 matches (1e-3)", worst < 1e-3, f"worst rel {worst:.2e}")
     check("angles carried for differential segments", np.isfinite(tab.ang[tab.key == 3]).all() and np.isnan(tab.ang[tab.key == 1]).all())
+    # 1b. a c.m. differential segment (isDiff 4, "differential-cm") carries its angles too (missing from ANGLE_OBS until
+    #     2026-11-15): the same output read through a copy of the model with segment 3 marked c.m.
+    tmpc = tempfile.mkdtemp(prefix="rmfit_review_cm_")
+    try:
+        lines = open(azr).read().split("\n")
+        i3 = [i for i, ln in enumerate(lines) if "meyer_84.dat" in ln][0]
+        f = lines[i3].split()
+        f[7] = "4"
+        lines[i3] = " ".join(f)
+        azr_cm = os.path.join(tmpc, "13N.azr")
+        open(azr_cm, "w").write("\n".join(lines))
+        os.symlink(os.path.join(SRC, "data"), os.path.join(tmpc, "data"))
+        tabc = rv.table_from_output(azr_cm, odir)
+        from rmfit.model import base_segments
+        segc = [s for s in base_segments(azr_cm) if s.key == 3][0]
+        check("differential-cm segment carries its angles", segc.observable == "differential-cm" and
+              np.isfinite(tabc.ang[tabc.key == 3]).all() and np.allclose(tabc.ang[tabc.key == 3], tab.ang[tab.key == 3]),
+              segc.observable)
+    finally:
+        shutil.rmtree(tmpc, ignore_errors=True)
     # 2. levels from parameters.out: the 1/2+ 2.3682 has G = 34 keV + 480 meV
     lv = rv.levels_from_parameters_out(os.path.join(odir, "parameters.out"))
     l1 = [l for l in lv if l.jpi == "1/2+" and abs(l.energy - 2.3682) < 1e-3]

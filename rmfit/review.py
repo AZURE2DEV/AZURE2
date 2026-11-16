@@ -31,7 +31,10 @@ import numpy as np
 
 from .spec import Finding
 
-ANGLE_OBS = ("differential", "analyzing-power", "phase-shift")
+# observables measured at an angle (pyazr.datasets._OBSERVABLE names).  "differential-cm" (isDiff 4) was missing until
+# 2026-11-15: every c.m. differential set lost its angles, so the angle checks (norm-angle-trend, detector curves) skipped
+# them.
+ANGLE_OBS = ("differential", "differential-cm", "analyzing-power", "phase-shift")
 RATIO_OBS_SKIP = ("analyzing-power", "phase-shift")      # fit/data ratios mean nothing there
 BLUR_SCALES = (0.02, 0.05, 0.1, 0.2)                       # MeV in Ex
 UNIT_MEV = {"meV": 1e-9, "eV": 1e-6, "keV": 1e-3, "MeV": 1.0}
