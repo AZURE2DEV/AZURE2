@@ -88,7 +88,7 @@ SESSION_CLASSES = {"Session", "_HybridPotentials", "SessionPhysics", "SessionTHM
 def unlocked_uses(path):
     """The lines of `path` that read `<x>._engine` outside a class of the session, outside a function wrapped by
     engine_call and outside a `with session_lock(...)` / `with self._lock` block."""
-    tree = ast.parse(open(path).read())
+    tree = ast.parse(open(path, encoding="utf-8").read())
     bad = []
 
     def locked_with(node):

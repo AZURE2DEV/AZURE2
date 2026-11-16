@@ -1279,6 +1279,8 @@ try:
         if not _rel.startswith("pyazr/") or _rel.endswith(".py"):
             continue
         _rel = _rel[len("pyazr/"):]
+        if _rel.startswith("_azure2"):
+            continue  # the engine module of an in-tree build (no file of git; seen where git cannot list: Windows CI)
         _in, _out = _datafiles.shipped(_rel), _datafiles.excluded(_rel)
         if _in and _out:
             problems.append(f"pyazr/{_rel}: both in DATA_FILES and in NOT_SHIPPED of pyazr/datafiles.py (check 48)")
