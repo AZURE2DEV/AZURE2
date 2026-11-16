@@ -246,8 +246,14 @@ is the level's observed width in that channel, and the normalization
 :math:`N_f` is continued as :math:`(\hbar^2/2\mu a)\,dS/dE`, which joins the
 bound value at the threshold. The run says so in a ``NOTE``. This is right
 while the width is small next to the photon energy and next to the distance
-to the threshold; a broad final state needs its line shape integrated, which
-this version does not do. Below the final state there is no photon
+to the threshold. For a broad final state give the capture data set or
+extrapolation the field ``line_window`` (the half-width :math:`W` of the
+gamma-line window of the analysis, e.g. ``line_window 39 keV``): its cross
+section is then integrated over the final state's line shape for
+:math:`E_f` within :math:`E_R \pm W`, with the photon energy
+:math:`E_x - E_x(E_f)` and the scattering wave of the final channel at each
+:math:`E_f`; the line is centred on the final level's current energy, so a
+fitted level energy moves it. Below the final state there is no photon
 (:math:`E_\gamma = E_x - E_f \le 0`): the capture is zero there, for internal
 and external capture alike.
 

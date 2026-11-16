@@ -86,6 +86,9 @@ struct ReactionSpec {
   int exitKey = 0;      ///< pair key of <levels>; -1 = every capture pair (TotalCapture)
   Observable observable = Observable::CrossSection;
   bool thm = false;     ///< a THM (half-off-shell) observable of the same kind
+  /// > 0: a capture into a broad unbound final state, integrated over the final state's line shape for E_f within
+  /// E_R +- this (keV; the field line_window, the engine's LineWindow.h)
+  double lineWindow_keV = 0.0;
   double phaseJ = 0.0;  ///< PhaseShift: total spin J of the partial wave
   int phaseL = 0;       ///< PhaseShift: orbital angular momentum l
   double phaseS = -1.0; ///< PhaseShift: channel spin s, < 0 when not given

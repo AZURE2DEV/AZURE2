@@ -117,6 +117,15 @@ class ECIntegral {
   /// Nonzero if a quadrature of the last call reported an error (GSL status),
   /// which happens only with the GSL error handler off.
   int Status() const { return status_; }
+  /// For an unbound final state, the last call's amplitude split by the final-state exterior function: with
+  /// F_lf(k_f r) and with G_lf(k_f r) in place of O_lf(k_f r)/O_lf(k_f a), unnormalized (the line-shape integration
+  /// of a broad final state: the real scattering wave at E_f is cos d F + sin d G).  False if the last call was not
+  /// unbound.
+  bool StandingParts(complex &withF, complex &withG) const {
+    withF = partF_;
+    withG = partG_;
+    return hasParts_;
+  }
 
  private:
   /// Clear the cached FW, GW and WW integrals.
@@ -125,6 +134,9 @@ class ECIntegral {
     GW_ = 0.;
     FWc_ = complex(0.0, 0.0);
     GWc_ = complex(0.0, 0.0);
+    partF_ = complex(0.0, 0.0);
+    partG_ = complex(0.0, 0.0);
+    hasParts_ = false;
   };
   /// Evaluate the three radial integrals at one energy.
   void Integrate(double);
@@ -163,6 +175,13 @@ class ECIntegral {
   /// The FW/GW integrals of an unbound final state (complex: its exterior is an outgoing wave).
   complex FWc_ = complex(0.0, 0.0);
   complex GWc_ = complex(0.0, 0.0);
+  /// The four real products behind FWc_ and GWc_ (a to infinity, before the division by O_f(a)):
+  /// int F_i F_f w, int F_i G_f w, int G_i F_f w, int G_i G_f w.
+  double rawFF_ = 0.0, rawFG_ = 0.0, rawGF_ = 0.0, rawGG_ = 0.0;
+  /// StandingParts.
+  complex partF_ = complex(0.0, 0.0);
+  complex partG_ = complex(0.0, 0.0);
+  bool hasParts_ = false;
   /// Coulomb functions for the unbound-final-state integrals, without a radial memo: their many radial nodes at each
   /// energy would only grow it.
   std::unique_ptr<CoulFunc> unboundCoul_;

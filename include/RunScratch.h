@@ -11,6 +11,7 @@
 #include "ECAmplitudeCache.h"
 #include "ECIntegral.h"
 #include "ECTable.h"
+#include "LineWindow.h"
 #include "ThmVertexBoundary.h"
 
 namespace azure2 {
@@ -68,6 +69,8 @@ class RunScratch {
   /// (ECTable.h) and Park's shift-function derivatives at level energies.
   ECTermStore ecTerms;
   ShiftDerivativeMemo shiftDerivatives;
+  /// The quadrature nodes of the line-shape integration of a broad capture final state (LineWindow.h; its own lock).
+  LineNodeStore lineNodes;
   /// The external-capture amplitudes at the energies of each segment's points, interpolated at a shifted energy with
   /// --no-ec-table (ECAmplitudeCache.h; its own lock).  Null until the run's set-up starts it
   /// (InitializeECAmplitudeCache, single-threaded); a site then returns its own amplitudes.

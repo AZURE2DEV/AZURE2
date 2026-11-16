@@ -467,6 +467,7 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
   int aa = compound()->GetPairNumFromKey(entranceKey);
   int exitPairNum = compound()->GetPairNumFromKey(exitKey);
   const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
+  const azure2::LineNode *lineNode = this->ActiveLineNode();
 
   int irEnd;
   int irStart;
@@ -495,8 +496,17 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
                                                       point->GetExpHardSpherePhase(jNum, chNum)};
         const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
                                                   point->GetExpHardSpherePhase(jNum, chpNum)};
-        const complex umatrix = azure2::physics::pathway_amplitude(point->GetSqrtPenetrability(jNum, chNum),
-                                                                   point->GetSqrtPenetrability(jNum, chpNum),
+        double sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
+        // a node of the line-shape integration (LineWindow.h): the photon channel at E - E_x(E_f), times the
+        // final-state amplitude A(E_f)
+        if (lineNode) {
+          const AChannel *exitChannel = compound()->GetJGroup(jNum)->GetChannel(chpNum);
+          if (compound()->GetPair(exitChannel->GetPairNum())->GetPType() == 10)
+            sqrtPenEx = lineNode->photonEnergy > 0.0
+                            ? lineNode->amp * pow(lineNode->photonEnergy / hbarc, (double)exitChannel->GetL() + 0.5)
+                            : 0.0;
+        }
+        const complex umatrix = azure2::physics::pathway_amplitude(point->GetSqrtPenetrability(jNum, chNum), sqrtPenEx,
                                                                    this->GetUBilinear(jNum, chNum, chpNum));
         if (isRMC)
           this->AddTMatrixElement(k, m, azure2::physics::rmc_t_matrix_element(umatrix), ir);
@@ -521,6 +531,8 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
             state.ECGamma(theECMGroup.final_group, theECMGroup.final_level, theECMGroup.final_channel),
             state.SqrtNF(theECMGroup.final_group, theECMGroup.final_level),
             finalLevel->GetECConversionFactor(theECMGroup.final_channel), ecAmplitude);
+        // a node of the line-shape integration: the external element of the scattering state at E_f
+        if (lineNode) tmatrix = lineNode->ec[k - 1][m - 1];
         if (theECMGroup.channel_capture) {
           int internalChannel = theECMGroup.photon_channel;
           const azure2::InternalRow &chanMGroup = P.internal[theECMGroup.cc_row];

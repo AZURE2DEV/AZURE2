@@ -35,6 +35,7 @@ void Segment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   exitkey_ = r.exitKey;
   isTHM_ = r.thm;
   isAnalyzingPower_ = (r.observable == Observable::AnalyzingPower);
+  lineWindow_ = r.lineWindow_keV;
   iscmdifferential_ = (r.observable == Observable::DifferentialCM || r.observable == Observable::AnalyzingPower);
   isdifferential_ = iscmdifferential_ || r.observable == Observable::DifferentialLab;
   isphase_ = (r.observable == Observable::PhaseShift);
@@ -772,6 +773,7 @@ std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   t->thm = IsTHM();
   t->angularDist = IsAngularDist() || IsCoefficients();
   t->analyzingPower = IsAnalyzingPower();
+  t->lineWindow = GetLineWindow();
   t->total = IsTotalTerm();
   t->upos = IsUPOS();
   t->coefficientAbsolute = IsCoefficientAbsolute();

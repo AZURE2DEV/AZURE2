@@ -109,6 +109,8 @@ class Segment {
    * dimensionless and bounded by one.
    */
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
+  /// Half-width (keV) of the final-state line window of a capture into a broad unbound final state; 0: none.
+  double GetLineWindow() const { return lineWindow_; };
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.
@@ -563,6 +565,7 @@ class Segment {
   bool varyNorm_;
   bool isAngDist_;
   bool isAnalyzingPower_;
+  double lineWindow_ = 0.0;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

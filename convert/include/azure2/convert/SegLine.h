@@ -325,6 +325,13 @@ class SegLine {
               stream.setstate(std::ios::failbit);
               break;
             }
+          } else if (keyword == "linewindow") {
+            // dev: capture into a broad unbound final state, the half-width W (keV) of the gamma-line window
+            if (!(advancedStream >> lineWindow_) || !(lineWindow_ > 0.0)) {
+              parseError_ = "linewindow needs the half-width W > 0 of the gamma-line window, in keV";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "total") {
             if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
               parseError_ = "total needs 0 or 1";
@@ -489,6 +496,8 @@ class SegLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (Segment::IsTotal).
   int total() const { return total_; };
+  /// dev's "linewindow W": the half-width (keV) of the final-state line window; 0 if absent.
+  double lineWindow() const { return lineWindow_; };
   /// "transmission <n>": the segment is the transmission exp(-n sigma) of a sample n atoms/barn thick (0: not).
   double transmission() const { return transmission_; };
   /// "yield <n>": the segment is the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)) (0: not).
@@ -617,6 +626,7 @@ class SegLine {
   int operationType_;
   std::string natural_;
   int total_;
+  double lineWindow_ = 0.0;
   double transmission_;
   double yield_;
   bool thicknessFit_;

@@ -2,6 +2,61 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — capture into a broad unbound final state: `line_window`
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, on the entry below (stage 1). dev's stages 2 to 4 (2026-11-15): the
+line-shape integration of a broad final state, its form for internal capture alone, and the line centre that follows
+a fitted final-level energy. Ported from dev's final code, not commit by commit.
+
+**The field.** `line_window <W> <energy unit>` on a `dataset` or `extrapolation` of quantity `sigma`, `sfactor`,
+`modified_sfactor` or `dsigma_domega`, allowed for a photon exit only (the table's condition, so the validator
+refuses it elsewhere with `E_FIELD_NOT_APPLICABLE`); `ReactionSpec::lineWindow_keV`; `TermSettings::lineWindow`,
+compared in `SameObservable` (two windows do not share sites). The converter reads dev's `linewindow W` (keV) on a
+data or extrapolation line.
+
+**The engine.** `src/LineWindow.cpp`, `include/LineWindow.h`. The energy pass (`src/EnergyPass.cpp`, both the
+evaluation and `AZURE_PLAN_CHECK`'s own solve) calls `azure2::LineWindowCrossSection` for a unit with a window in
+place of one T-matrix and one cross section: per node of the final-energy quadrature (48 Gauss-Legendre nodes in
+theta, E_f = E_R + (Gamma/2) tan theta, clipped to E_f > 1 keV and E_gamma > 1 keV) it sets the node on the matrix
+function (`GenMatrixFunc::SetActiveLineNode`), rebuilds the T-matrix from the solved level matrix and computes the
+unit's record; the unit's record is the weighted sum of the nodes' records (every value of a record is linear in the
+cross section; the count of an angular part is kept). `AMatrixFunc::CalculateTMatrix` and
+`RMatrixFunc::CalculateTMatrix` read the node: the photon channel's sqrt(P) becomes A(E_f) (E_gamma/hbar c)^(l+1/2)
+and an external element the node's (the final state's real scattering wave, cos d F + sin d G, from
+`ECIntegral::StandingParts` through `ExternalCapturePathwayParts`, `src/UnitExternalCapture.cpp`: direct integrals,
+never the table). The unit after a windowed one rebuilds its T-matrix.
+
+The nodes of a site (final-state functions and external integrals at each E_f) depend on the site's energy, the
+window and the line centre only: they are made once and kept in the run's scratch
+(`RunScratch::lineNodes`, a `LineNodeStore` behind its lock, as the external-capture terms are), the newest two
+centres of a site, so that a fit that moves the centre does not grow the table. dev keeps them in the point.
+
+The line centre is the final level's working energy (`LevelState::E`) in the Brune parametrizations, the energy of
+the set-up in the formal one. A final level with the external-capture link takes its observed amplitude from the
+state (`ECGamma` x `SqrtNF`) while the centre is the set-up's; once it has moved, and for a level without the link
+(internal capture alone: found by J^pi and its energy in `<levels>` within 1 keV of the pair's), N_f is formed from
+the level's channels at the centre. In the formal parametrization a level without the link is served only when it
+is the lowest level of its group (where this branch takes the boundary conditions, so that its formal parameters
+are its observed ones; dev's rule names the first level, where dev takes them).
+
+**Checked at set-up** (`CheckLineWindows`, `src/CompoundSystemBuild.cpp`, after the pathways are built; a refusal of
+the last part): the RMC formalism, `--use-gradient`, another observable than a cross section, a THM data set, a sum
+or ratio, an exit that is not a capture pair, a final state that is bound, above two thresholds, not a level, or
+with external capture through a closed channel. A NOTE per windowed data set in the run's log.
+
+**Tests.** `tests/ec_unbound_broad` (dev's 13 checks on dev's models, converted: the independent references of the
+windowed direct capture and of the internal line shape, the narrow limit, formal = Brune, external capture off, the
+moved centre through a parameter file); this engine's values equal dev's on all 18 models (0 to 7e-11).
+`experiment_build` and `experiment_quantities` cases of the field. `tests/upgrade/predictions.txt`,
+`tests/schema/schema_v3.json`, `docs/source/reference/format3.rst` regenerated.
+
+**Open.** No analytic gradient over the line shape (refused with `--use-gradient`, as on dev). One open particle
+channel of the final level only. The capture cascade (UPOS on a capture pair, dev 2026-11-15) is not ported. The
+web page shows `line_window` from the schema; nothing else of pyazr names it.
+
+**Run here** (CRC, GCC 11.5): build; the unit tests; `tests/ec_unbound_broad`, `tests/ec_unbound_final`,
+`tests/ec_final_state_unbound`. The full gate: see the end of this entry. **Not run:** CI.
+
 ## 2026-11-16 (owner's session, dev port) — external capture into an unbound final state, stage 1 (a narrow resonance)
 
 **Branch** `feature/upgrade-5-dev-ec-unbound`, cut from `feature/upgrade` `0c6167c1`. dev's change of 2026-11-13

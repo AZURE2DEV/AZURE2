@@ -142,8 +142,12 @@ rmfit, capture into an unbound final state and fitted secondary γ transitions a
   `HANDOFF.md`) are changed as on dev: `src/ExternalCaptureFinalStates.cpp` (N_f and the ANC conversion),
   `src/ECIntegral.cpp` (`IntegrateUnbound`), `src/ECTable.cpp` (direct integration), `src/UnitExternalCapture.cpp` and
   `src/ChannelTables.cpp` (no photon below the final state: closed). `tests/ec_unbound_final` is dev's test.
-  *Not written yet:* dev's stage 2 (a broad final state, the line-shape integration `linewindow`), the internal-only
-  line shape, the line centre following a fitted final level, and the capture cascade (UPOS after a capture).
+  *Stages 2 to 4 are written too* (2026-11-16): the field `line_window` of a capture data set or extrapolation (dev's
+  `linewindow W`; the converter reads the old keyword), the line-shape integration of a broad final state
+  (`src/LineWindow.cpp`, one routine called by the energy pass; the T-matrix builders read its node through
+  `GenMatrixFunc::ActiveLineNode`), its form for internal capture alone, and the line centre that follows the final
+  level's current energy. `tests/ec_unbound_broad` is dev's test. *Not written yet:* the capture cascade (UPOS after
+  a capture).
 - **rmfit** is expected as its own top-level package beside `pyazr/`, on pyazr 3.0's names only (`Session`,
   `Objective`, `Project`, `Parameters`, `pyazr.sources`). It touches `tools/check_skills.py` (a second package's
   skills) and the CI. The ported copy of the `rmfit-campaign` skill here is a question to the owner

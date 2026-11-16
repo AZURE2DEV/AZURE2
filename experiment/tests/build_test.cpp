@@ -951,6 +951,17 @@ int main() {
     }
   }
 
+  // ---- line_window: capture into a broad unbound final state; keV in the spec; a photon exit only
+  {
+    auto data = [](const BuiltProject &b) -> const DatasetSpec & { return b.data.datasets.items.at(0).spec; };
+    const std::string capture = Set(kDataset, "reaction", "    reaction 15N(p,g)16O");
+    const BuiltProject w = BuildText(Data(capture + "    line_window 0.039 MeV\n"));
+    check("line_window 0.039 MeV on a capture: 39 keV in the reaction's spec",
+          w.Ok() && std::fabs(data(w).reaction.lineWindow_keV - 39.0) < 1e-12);
+    check("no line_window: 0", BuildText(Data(capture)).Ok() && data(BuildText(Data(capture))).reaction.lineWindow_keV == 0.0);
+    ExpectOne("E_FIELD_NOT_APPLICABLE", BuildText(Data(kDataset + "    line_window 39 keV\n")));
+  }
+
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

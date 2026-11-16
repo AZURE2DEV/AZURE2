@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "Site.h"
 #include "LevelState.h"
+#include "LineWindow.h"
 #include "azure2/physics/Observables.h"
 
 #include <cstring>
@@ -54,6 +55,10 @@ class GenMatrixFunc {
     ResetTMatrix();
     CalculateTMatrix(point);
   }
+  /// A node of the line-shape integration of a broad capture final state (LineWindow.h), read by CalculateTMatrix
+  /// while LineWindowCrossSection runs; null otherwise.
+  const azure2::LineNode *ActiveLineNode() const { return lineNode_; }
+  void SetActiveLineNode(const azure2::LineNode *node) { lineNode_ = node; }
   /// True when `other` holds the same T-matrix bit for bit, internal and external elements (the shared-solve check
   /// of AZURE_PLAN_CHECK, CalculationPlan.h).
   bool SameTMatrix(const GenMatrixFunc &other) const {
@@ -147,6 +152,8 @@ class GenMatrixFunc {
   azure2::physics::PartialWaveSums partial_sums_;
   azure2::physics::PartialWaveSums partial_sums_E1_;
   azure2::physics::PartialWaveSums partial_sums_E2_;
+  /// ActiveLineNode.
+  const azure2::LineNode *lineNode_ = nullptr;
 };
 
 #endif

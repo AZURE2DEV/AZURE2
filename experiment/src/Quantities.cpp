@@ -92,6 +92,7 @@ Quantity Sigma() {
   q.windowRoles = true;
   q.reaction = {R::kSum | R::kRatio | R::kNoChargedElastic, "sums and ratios; no charged-particle elastic"};
   q.fields = {Allows("target", kNoThm), Allows("beam"), Allows("detector"), Allows("multipole", kGammaExit),
+              Allows("line_window", kGammaExit),
               Allows("secondary_gamma"), Allows("thm")};
   q.targetKinds = {"layer", "none"};
   q.tree = "Sigma(r) [amplitude filter]; Sum/Scale/Ratio from the reaction; Weighted if the target has isotopes; folds "
@@ -171,7 +172,8 @@ Quantity DsigmaDomega() {
   q.angle = Quantity::RequiredAngle;
   q.windowRoles = true;  // a beam-profile kernel on differential data (tests/beam_profile_kernel)
   q.reaction = {R::kSum | R::kRatio | R::kNoTotal, "sums and ratios; no [total] exit"};
-  q.fields = {Allows("target", kNoThm), Allows("beam"), Allows("detector"), Allows("secondary_gamma"), Allows("thm")};
+  q.fields = {Allows("target", kNoThm), Allows("beam"), Allows("detector"), Allows("secondary_gamma"), Allows("thm"),
+              Allows("line_window", kGammaExit)};
   q.targetKinds = {"layer", "none"};
   q.tree = "dsdo_cm(r, theta); lab data converted at load";
   q.exfor = {",DA", "PAR,DA"};
@@ -192,7 +194,7 @@ Quantity SFactor() {
   q.units = {AnyUnitOf("sfactor")};
   q.energyRoles = {"E_cm", "E_lab"};
   q.reaction = {R::kChargedEntrance, "charged entrance"};
-  q.fields = {Allows("multipole", kGammaExit)};
+  q.fields = {Allows("multipole", kGammaExit), Allows("line_window", kGammaExit)};
   q.tree = "Scale_SF(E) o Sigma(r)";
   q.exfor = {",SIG,,SFC", "PAR,SIG,,SFC", "EP/PAR,SIG,,SFC"};
   q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
@@ -210,7 +212,7 @@ Quantity ModifiedSFactor() {
   q.units = {AnyUnitOf("sfactor")};
   q.energyRoles = {"E_cm", "E_lab"};
   q.reaction = {R::kChargedEntrance, "charged entrance"};
-  q.fields = {Requires("shape"), Allows("multipole", kGammaExit)};
+  q.fields = {Requires("shape"), Allows("multipole", kGammaExit), Allows("line_window", kGammaExit)};
   q.tree = "Scale_SF*(E; g) o Sigma(r)";
   // no EXFOR code: S* is not an EXFOR quantity (its data are SIG, which the importer maps to sigma)
   q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",

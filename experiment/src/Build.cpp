@@ -337,6 +337,8 @@ bool PairsDecideElastic(Context &c, const ValidatedRecord &r, const ReactionSpec
 
 // The observable of a data set or an extrapolation from its quantity and its angle frame ("" angle-integrated).
 bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &angleFrame, ReactionSpec &spec) {
+  // capture into a broad unbound final state (the table allows the field for a gamma exit): keV for the engine
+  if (const Value *w = r.Get("line_window")) spec.lineWindow_keV = ToBase(w->number.value, w->unit) * 1.0e3;
   const std::string q = r.quantity ? r.quantity->name : "";
   const bool data = r.kind == "dataset";
   using O = Observable;

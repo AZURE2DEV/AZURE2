@@ -298,6 +298,10 @@ bool ECIntegral::IntegrateUnbound(double chanrad, double finalEnergy) {
   const double tGG = 0.5 * std::real(tP + tQ), tFF = 0.5 * std::real(tQ - tP);
   const double tFG = 0.5 * std::imag(tP + tQ), tGF = 0.5 * std::imag(tP - tQ);
 
+  rawFF_ = (double)sFF + tFF;
+  rawFG_ = (double)sFG + tFG;
+  rawGF_ = (double)sGF + tGF;
+  rawGG_ = (double)sGG + tGG;
   const complex ofa = O(lf, twoJf, chanrad, Ef);
   FWc_ = complex((double)sFG + tFG, (double)sFF + tFF) / ofa;
   GWc_ = complex((double)sGG + tGG, (double)sGF + tGF) / ofa;
@@ -416,6 +420,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   params_.useChargeFunction = !params_.useLongWavelengthApprox && radType == 'E';
 
   complex overlapIntegral(0., 0.);
+  complex overlapF(0., 0.), overlapG(0., 0.);  // StandingParts
   if (unboundFinal) {
     // The expressions of the open bound branch below, with the complex integrals of the outgoing final-state wave.
     if (!IntegrateUnbound(chanRad, finalEnergy)) {
@@ -425,12 +430,18 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     struct CoulWaves coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     const complex hsp = CoulombHardSpherePhase(coul);
     const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
-    if (isChannelCapture)
-      overlapIntegral = complex(0.0, -0.5) *
-          sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) * flux * hsp *
-          (GWc_ + complex(0.0, 1.0) * FWc_);
-    else
-      overlapIntegral = (std::real(hsp) * FWc_ + std::imag(hsp) * GWc_) * flux;
+    auto overlap = [&](complex fw, complex gw) {
+      if (isChannelCapture)
+        return complex(0.0, -0.5) *
+               sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) * flux * hsp *
+               (gw + complex(0.0, 1.0) * fw);
+      return (std::real(hsp) * fw + std::imag(hsp) * gw) * flux;
+    };
+    overlapIntegral = overlap(FWc_, GWc_);
+    // the same with the exterior F_f alone and G_f alone (unnormalized), for StandingParts
+    overlapF = overlap(complex(rawFF_, 0.0), complex(rawGF_, 0.0));
+    overlapG = overlap(complex(rawFG_, 0.0), complex(rawGG_, 0.0));
+    hasParts_ = true;
   } else if (outEnergy > 0.0) {
     Integrate(chanRad);
     struct CoulWaves
@@ -534,5 +545,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
         (orbitalTerm + spinTerm);
   }
 
+  partF_ = ecAmplitude * overlapF;
+  partG_ = ecAmplitude * overlapG;
   return ecAmplitude * overlapIntegral;
 }

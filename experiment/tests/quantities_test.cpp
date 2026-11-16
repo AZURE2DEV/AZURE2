@@ -177,7 +177,7 @@ int main() {
       {"expansion", "absolute"}, {"multipole", "E1"}, {"secondary_gamma", "L 1 Ic 1 delta 0"}, {"charge_state", "1"},
       {"efficiency", "0.1 fixed"}, {"thm", "global"}, {"level", "1"}, {"reaction", "15N(p,a)12C"}, {"frame", "E_x"},
       {"pair", "p+15N"}, {"imag", "1 fm"}, {"imag_error", "1 fm"}, {"orders", "0 2"}, {"shape", "0.46 1/MeV"},
-      {"reference", "data/ref.dat"}};
+      {"reference", "data/ref.dat"}, {"line_window", "39 keV"}};
 
   for (const Quantity &q : Quantities()) {
     const auto it = variants.find(q.name);
