@@ -16,6 +16,7 @@
 #include "azure2/io/ProjectFormat.h"
 #include "Config.h"
 #include "ProjectOptions.h"
+#include "pybind_engine_call.h"
 #include <sstream>
 
 namespace py = pybind11;
@@ -34,7 +35,7 @@ void BindConvert(py::module_ &m) {
             azure2::convert::ConvertParameterFile(parameterText, oldProjectText, projectDir);
         return py::make_tuple(c.refusal, py::bytes(c.text), c.renamed);
       },
-      py::arg("parameter_text"), py::arg("old_project_text"), py::arg("project_dir"),
+      PrecisionGuard(), py::arg("parameter_text"), py::arg("old_project_text"), py::arg("project_dir"),
       "A parameter file of an old project renamed for the project's format-3 conversion (AZURE2 --convert-params; "
       "convert::ConvertParameterFile): (refusal or '', the renamed file as bytes, [(old name, new name)]).");
   m.def(
@@ -69,7 +70,7 @@ void BindConvert(py::module_ &m) {
         json += c.diagnostics.empty() ? "]" : "\n]";
         return py::make_tuple(std::string(), json, c.buildChecksSkipped);
       },
-      py::arg("text"), py::arg("file_name"), py::arg("project_dir") = "",
+      PrecisionGuard(), py::arg("text"), py::arg("file_name"), py::arg("project_dir") = "",
       "Validate a format-3 project text (AZURE2 --validate; data files relative to project_dir, '' = the working "
       "directory): (refusal of a format-1/2 text or '', the diagnostics as a "
       "JSON array, the number of the table's build checks not made: all of them when the validation found an error or "
@@ -97,7 +98,7 @@ void BindConvert(py::module_ &m) {
                               WithOptions(json ? azure2::experiment::DescribeJson(c, record)
                                                : azure2::experiment::DescribeText(c, record), json, options));
       },
-      py::arg("text"), py::arg("file_name"), py::arg("json"), py::arg("project_dir") = "", py::arg("record") = "",
+      PrecisionGuard(), py::arg("text"), py::arg("file_name"), py::arg("json"), py::arg("project_dir") = "", py::arg("record") = "",
       "Describe a format-3 project text (AZURE2 --describe [--json]; data files relative to project_dir, '' = the "
       "working directory; only the record named `record`, '' = all): (refusal of a format-1/2 text or '', the "
       "diagnostics as a JSON array, the description: '' when the project has an error).");
@@ -122,7 +123,7 @@ void BindConvert(py::module_ &m) {
         d["side_files"] = side;
         return d;
       },
-      py::arg("text"), py::arg("project_dir"), py::arg("answers"), py::arg("exact_grids"), py::arg("strict"),
+      PrecisionGuard(), py::arg("text"), py::arg("project_dir"), py::arg("answers"), py::arg("exact_grids"), py::arg("strict"),
       py::arg("allow_questions"), py::arg("input"), py::arg("output"),
       "Convert an old project text to format 3 (AZURE2 --convert ... --to 3): a dict with ok, refusal, text (bytes), "
       "report (the JSON report) and side_files [(path, bytes)].");

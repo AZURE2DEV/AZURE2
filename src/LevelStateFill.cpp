@@ -1,6 +1,7 @@
 #include <cmath>
 #include <exception>
 #include <mutex>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -140,6 +141,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
 #pragma omp parallel for schedule(dynamic, 1) if (numDerivatives > 1 && !omp_in_parallel())
 #endif
   for (int k = 0; k < numDerivatives; k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     try {
       Derivative &d = derivatives[k];
       if (d.source >= 0) continue;

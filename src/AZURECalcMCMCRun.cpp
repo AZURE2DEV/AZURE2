@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "AZURECalcMCMCRun.h"
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -282,6 +283,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       std::vector<double> startLogP(nwalkers, -std::numeric_limits<double>::infinity());
 #pragma omp parallel for num_threads(std::max(1, nthreads)) schedule(dynamic)
       for (int k = 0; k < nwalkers; k++) {
+        const azure2::support::ExtendedPrecisionScope fpPrecision;
         const std::vector<double> &x = initial_positions[k];
         const double lp = CalculateLogPrior(x);
         if (std::isfinite(lp)) startLogP[k] = lp + (useRWA ? LogLikelihood(x) : LogLikelihoodPhysical(x));

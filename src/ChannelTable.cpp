@@ -10,6 +10,7 @@
 #include "CoulFunc.h"
 #include "Kinematics.h"
 #include "PPair.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -89,6 +90,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(const CompoundSystem *co
 #pragma omp parallel for schedule(dynamic, 16) if (n > 32 && !omp_in_parallel())
 #endif
   for (int t = 0; t < n; t++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     try {
       const Key &k = table->keys_[todo[t]];
       table->rows_[todo[t]] = Compute(compound->GetPair(k.pair), k.l, k.two_j, k.energy, configure);
