@@ -62,7 +62,7 @@ interface (complex l, η, ρ; Bessel functions) is not exposed: AZURE2 has no us
 
 GSL's `gsl_sf_coulomb_wave_FG_e` is not a method of `physics/coulomb/` (physics/ links nothing). It stays as an
 independent cross-check in a test outside physics/ (section 5), and the engine's `--gsl-coul` path stays in the
-engine (section 4, open question).
+engine (section 4, open question; section 8 has what reaches it and what it gives).
 
 ### 1.4 Whittaker functions (bound channels)
 
@@ -423,3 +423,183 @@ second pyazr session.
 **Next (step 3b).** The table of section 2.3, one evaluation per (α, l, a_c, E_c) of the run's evaluation energies,
 shared read-only, and a per-integral table of F, G at the quadrature radii for the external-capture integrals; then
 the `-nomemo` commits re-cut on it, with the timings above repeated (they must come back near those of this branch).
+
+## 8. GSL's Coulomb functions in the engine: where they are still called (2026-11-16)
+
+`FOR_THE_OWNER.md` section 10 item 6 said that GSL's `gsl_sf_coulomb_wave_FG_e` is still called in
+`src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`. This section records what reaches those calls,
+what the two routines give at the arguments the test projects ask for, and what replacing the calls would change.
+Nothing in the engine was changed for it. Engine: `feature/upgrade` at 3ac4a34a, GCC 11.5, Release, GSL 2.6.
+
+### 8.1 The calls and the paths to them
+
+- `gsl_sf_coulomb_wave_FG_e` in `CoulFunc::PlainWaves` (F, F′, G, G′ of a point-Coulomb or neutral pair): reached
+  only with the option `use_gsl_coul`.
+- `gsl_sf_coulomb_wave_FG_e` in `CoulFunc::computeHybrid` (H⁺ = G + iF at the matching radius of a pair with a
+  potential): reached only with the option `use_gsl_coul`.
+- `gsl_sf_coulomb_wave_FG_e` in `src/coulomb_table_main.cpp`: always in `azure2-coulomb-table validate`, at 5000
+  random points, for one printed line ("references: Michel vs GSL Coulomb P …, S …") that is not part of its
+  PASS/FAIL. `build` does not call it.
+- `gsl_sf_hyperg_U`: not called by the engine since 2026-11-09 (section 1.4). `src/ECIntegral.cpp` only names it in
+  a comment.
+
+So with the default options the engine evaluates no GSL Coulomb function: `PlainWaves` and the hybrid boundary
+values call `CoulombWavesAt`, the engine's one call of `physics/coulomb` (`coulsm`). The two sets of item 6 are one
+set and one option.
+
+**The option.** `use_gsl_coul` is a `<config>` key, the flag `--gsl-coul` and the pyazr keyword
+`Session(use_gsl_coul=)`; default off (`io::ConfigKeys()`, bit `Config::USE_GSL_COULOMB_FUNC`). The bit is handed to
+every `CoulFunc` and `ChannelFunc` the engine makes (22 places in `src/` and `api/src/`); the level doors of the
+binding take it as the argument `use_gsl_coulomb` (`pyazr.endf` passes the session's option). With the option on,
+GSL's routine gives:
+
+- P, S, φ of the channel table and S, S′ at the level energies, **where the Coulomb table does not serve the
+  point**: `CoulFunc` asks the table first, whatever the option, so with a table the option changes charged
+  channels only outside the table, and without one it changes every open charged channel. What the option does to
+  a result therefore depends on whether the machine has a table file;
+- the same for neutral pairs and, through the boundary values, for pairs with a hybrid potential (never tabulated);
+- F and G of the entrance channel at every radius of the external-capture integrals, and the hard-sphere phase and
+  penetrability the capture amplitude uses at the channel radius;
+- the Coulomb term of the THM vertex (`ThmCoulombTerm`) and the channel functions the binding returns.
+
+The option does not reach `CoulombTable::ExactOpen` (the table's contents are always `physics/coulomb`'s), the
+distorted waves of `physics/transfer`, or anything below threshold (Whittaker functions). Every store that depends
+on it is keyed by it: the external-capture file's signature (`WorkingCopy::ECSignature`), the channel tables' pair
+signature, `CoulRadialMemo::Key`, `ThmShiftMemo`. GSL's return status is not read at the two calls; an error
+reaches the engine's handler (`GSLException::GSLErrorHandler`), which throws.
+
+**Tests that use the option or GSL's routine.** `tests/config_options/check.sh` and
+`tests/pyazr/config_options_test.py` (both values of the key), `tests/ec_integrals_signature/check.sh` (a file
+computed with the default routine is refused with `--gsl-coul`), `experiment/tests/build_test.cpp` (the key is
+read), `coulomb_gsl_crosscheck` (section 5: `coulsm` against GSL beyond the outer turning point). No test project
+sets the option.
+
+### 8.2 The two routines at the arguments the test projects ask for
+
+*Method.* A copy of the engine with a probe in `CoulFunc` (not committed): at every evaluation of the default path
+it also called GSL at the same (l, η, ρ), timed both calls, and kept the largest differences per band of η. Every
+project file under `tests/` (208 files in 73 folders; `tests/convert` left out) was run with `calculate`, Brune
+basis, one thread, once with `--no-coulomb-table` and once with the table. A sample of the arguments (every 499th
+call, at most 400 per run) was compared with mpmath's `coulombf`/`coulombg` at 40 digits.
+
+*Arguments.* Without the table 1,682,514 evaluations in 55 folders; with it 1,298,285 in 30 folders (capture
+radii, neutral and hybrid pairs, points the table does not cover). l ≤ 8.
+
+ΔP is the largest relative difference of P between GSL and `coulsm`, ΔS that of S per max(1, |S|); the times
+are per call.
+
+| η | calls (no table) | ρ | ΔP | ΔS | `coulsm`, µs | GSL, µs |
+|---|---|---|---|---|---|---|
+| 0 | 207 × 10³ | 7.5 × 10⁻⁴ – 5178 | 1.8 × 10⁻¹⁴ | 5.8 × 10⁻¹³ | 0.14 | 0.44 |
+| 0 – 1 | 497 × 10³ | 0.081 – 47520 | 5.0 × 10⁻² | 6.6 × 10⁻² | 45 | 1.2 |
+| 1 – 10 | 918 × 10³ | 0.041 – 30680 | 4.9 × 10⁻² | 4.9 × 10⁻² | 39 | 0.91 |
+| 10 – 30 | 48 × 10³ | 0.023 – 563 | 2.0 × 10⁻² | 3.6 × 10⁻³ | 36 | 0.63 |
+| 30 – 100 | 12 × 10³ | 0.022 – 315 | 2.0 × 10⁻² | 3.6 × 10⁻³ | 71 | 0.68 |
+| > 100 | 66 | 0.006 – 0.067 | 2.3 × 10⁻² (7 points) | 5.6 × 10⁻³ | 153 | 0.67 |
+
+For η > 100 (`ec_threshold`, capture just above a charged threshold) GSL returned an error at 27 of the 66 points
+and F² + G² overflowed at 32. Summed over all runs the default routine took 60.9 s and GSL 1.6 s: for a charged
+pair with η ≤ 100 GSL is 36 to 100 times faster per call, for a neutral pair three times slower.
+
+*Which one is right.* Largest errors on 1500 distinct sampled arguments against mpmath (P relative, S per max(1, |S|);
+ρ_tp = η + [η² + l(l+1)]^½ is the outer turning point):
+
+| region | points | `coulsm`: P | `coulsm`: S | GSL: P | GSL: S |
+|---|---|---|---|---|---|
+| η = 0 | 192 | 9.9 × 10⁻¹⁶ | 2.5 × 10⁻¹⁴ | 4.6 × 10⁻¹⁵ | 2.0 × 10⁻¹⁴ |
+| η > 0, ρ ≥ ρ_tp | 523 | 7.6 × 10⁻¹⁰ | 7.9 × 10⁻⁹ | 1.7 × 10⁻¹⁵ | 4.0 × 10⁻¹² |
+| 0 < η ≤ 10, ρ < ρ_tp | 726 | 6.9 × 10⁻¹⁰ | 4.5 × 10⁻¹⁰ | 5.2 × 10⁻² | 6.2 × 10⁻² |
+| 10 < η ≤ 100, ρ < ρ_tp | 58 | 8.7 × 10⁻¹⁰ | 3.0 × 10⁻¹³ | 1.6 × 10⁻² | 3.3 × 10⁻³ |
+
+The differences of the first table are GSL's errors below the Coulomb barrier. Example: l = 3, η = 0.6449,
+ρ = 1.2011 (`13N_capture_ay`): mpmath P = 2.35457878 × 10⁻³, `coulsm` the same to 3 × 10⁻¹¹, GSL 2.4771 × 10⁻³
+(+5.2 %; its G is 2.5 % low, its own error estimate of G 1 × 10⁻³). Beyond the turning point GSL is the more accurate
+of the two (10⁻¹⁵ against 10⁻⁹). Why GSL 2.6 loses accuracy inside the turning point was not examined. This agrees
+with `docs/source/developer/coulomb_table.rst` ("not a usable reference") and with pycoulomb's measurements.
+
+*A property of the default routine seen on the way.* For η = 0 and l ≥ 2 at small ρ, `coulsm`'s F alone is
+inaccurate relative to itself (it is known: the comment of `coulomb_gsl_crosscheck`): against mpmath, at
+ρ = 7.5 × 10⁻⁴ the relative error of F is 4 × 10⁻³ (l = 2), 3 × 10⁵ (l = 3), 3 × 10¹³ (l = 4); in the projects
+the largest difference from GSL is 1.5 (η = 0, l ≤ 4, ρ ≥ 0.018: the neutral channels of `7Li_p_ay`, `7Li_p_a`,
+`beam_spread_ay` and `data_file_comments`). The error is below 2.5 × 10⁻¹⁶ of
+(F² + G²)^½, so P, S and φ do not see it (first row of the first table). F enters alone only in the
+external-capture integrand: in `ec_threshold`, a capture project with a neutral pair (l ≤ 3, ρ ≥ 1.3), the
+difference of F from GSL is 2.7 × 10⁻¹². A capture through a neutral d wave or higher at ρ ≪ 1 would read that F;
+whether any project integrates it was not traced.
+
+### 8.3 What the option changes in the outputs, and what it saves
+
+Engine `work/b-trial95` (the same engine code as 3ac4a34a), `calculate`, Brune basis, one thread, default against
+`--gsl-coul`, every output file compared with `tools/classify.py` (887 files of 208 project files):
+
+| | files identical | project files that differ | observable files that differ | above 10⁻³ | above 10⁻² |
+|---|---|---|---|---|---|
+| with the table | 711 | 38 | 50 | 27 | 20 |
+| `--no-coulomb-table` | 458 | 100 | 139 | 53 | 42 |
+
+("above": the largest relative difference of a number in the observable file.)
+
+χ² of the stored parameters, default → option: `13N` 336479.96 → 335217.54 (−0.38 %, with or without the table: its
+change is the capture integrals); `T1` 482.2752 → 482.5713; `13N_capture_ay` 3.7395 → 3.7190; `T2` unchanged with
+the table (10910.1338428, every channel is served by it) and 10910.1338 → 10897.1227 without. Largest changes of
+an observable: with the table 3.2 × 10⁻² (`13N_capture_ay`, R = 2) apart from a cross section near a zero
+(`ec_e1m1_phase` `s_1`, 0.67); without it 0.19 (`channel_space`), 0.17 (`beta_delayed_alpha` `16N`). All 23
+external-capture files (`intEC.dat`) differ. No run failed with the option.
+
+User-space instructions at one thread (`perf stat -e instructions:u`), default → `--gsl-coul`:
+
+| run | default | `--gsl-coul` | change | χ² at the fit's end |
+|---|---|---|---|---|
+| `13N` calculation | 74.58 × 10⁹ | 16.75 × 10⁹ | −78 % | |
+| `13N` calculation, no table | 76.50 × 10⁹ | 16.60 × 10⁹ | −78 % | |
+| `T2` calculation, no table | 7.39 × 10⁹ | 1.23 × 10⁹ | −83 % | |
+| `T2` gradient fit | 169.58 × 10⁹ | 169.12 × 10⁹ | −0.3 % | 297.860308551, unchanged |
+| `T2` gradient fit, no table | 334.45 × 10⁹ | 305.38 × 10⁹ | −8.7 % | 297.8603 → 298.0371 |
+| `13N` gradient fit | 183.85 × 10⁹ | 125.86 × 10⁹ | −32 % | 28100.17 → 28121.46 |
+
+(Each a single run; two runs of the `T2` gradient fit with the same engine and options differed by 0.5 %, so its −0.3
+% is no change. Wall times: `13N` calculation 7.6 → 3.2 s, `13N` fit 22.4 → 13.9 s.) What the option saves is the
+default routine's time in the capture integrals and, without a table, in the channel functions; with a table and no
+capture it saves nothing.
+
+### 8.4 What calling `physics/coulomb` at the two places would change
+
+The two calls would become `CoulombWavesAt`, and `useGSLFunctions_` with the constructor argument of `CoulFunc`
+and `ChannelFunc`, the `gsl` members of the memo keys and the 22 hand-overs of the bit would go; `CoulFunc` would no
+longer include a GSL header. Less than a day of code. Then:
+
+- **No output of a run with the default options moves**: those runs do not reach GSL (expected: every project in
+  three bases and the eight fits identical; no change of the external-capture signature's version).
+- **Every run with the option gives the default's numbers**: it moves by the amounts of section 8.3 (percent in
+  cross sections, 0.4 % in the χ² of `13N`), towards the values mpmath supports, and slows down by the factors
+  there (a capture calculation 4.5 times in instructions).
+- The option then means nothing. Removing a `<config>` key, a flag and a pyazr keyword, or keeping them without
+  effect, changes what a user's project file or script does: `CLAUDE.md` leaves that to the owner. The places are
+  the row of `io::ConfigKeys()`, `OptionStorages()`, `Session.__init__`, the tests of section 8.1, and the pages
+  that name the flag (`command_line.rst`, `data_formats.rst`, `output_files.rst`, `pyazr.rst`,
+  `coulomb_table.rst`, `README.md`, the skills' `physics-options.md` and `legacy-params.md`).
+
+So the replacement was not made: it is the retirement of a user-visible option, to be decided (section 6 listed
+it). The choices, with what was measured for each:
+
+1. *Keep the option as it is.* It is documented as fast and inaccurate; its numbers are wrong by up to 5 % in P
+   below the barrier, and its meaning depends on the table file.
+2. *Retire it* (the key refused with a message, or accepted without effect): the places listed above.
+3. *Give it another routine of `physics/coulomb`.* Measured on 2387 of the sampled arguments (0 < η ≤ 100):
+   `coulfg` (Barnett) takes 1.5 µs per call but has GSL's weakness (up to 1.1 × 10⁻¹ in P inside the turning
+   point, 450 points against mpmath) and fails at 6 points (η ≥ 59); `coulcc` takes 15 µs against `coulsm`'s 48,
+   with errors of 6.5 × 10⁻¹² in P and 7.2 × 10⁻¹² in S, but fails (NaN, status `failed`) at 11 points, all with
+   η ≥ 48. None is both fast and safe as it stands; a faster default is a separate question, and it moves every
+   output at about 10⁻⁹.
+
+The cross-check line of `azure2-coulomb-table validate` compares over the whole table domain, where GSL is wrong
+below the barrier, so it prints percent-size numbers that say nothing about the table; restricting it to
+ρ ≥ ρ_tp (as `coulomb_gsl_crosscheck` does) would make it a check. Not changed here: it is the tool's output.
+
+### 8.5 What was changed with this section
+
+Two places of the engine, an include and a comment, no statement: `include/CoulFunc.h` no longer includes
+`gsl/gsl_sf_coulomb.h` (the header declared nothing from it; `src/CoulFunc.cpp` includes it for the two calls), so
+GSL's Coulomb functions are named in `src/CoulFunc.cpp` and `src/coulomb_table_main.cpp` only; and the comment of
+`src/ECIntegral.cpp` that named `gsl_sf_hyperg_U` as the present cost says what it is now. The option, the two
+calls and the tool's line are as they were.

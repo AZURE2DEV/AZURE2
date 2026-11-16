@@ -334,6 +334,9 @@ estimate from the 65 commits read, not a measurement).
 
 - **The Coulomb repair's home**: a listed local change in `physics/coulomb/coulsm` (as now) or pycoulomb.
 - **The coincidence gap**: 1e-6 MeV with the mean S′ (section 3, row 4); proposed for `dev` too.
+- **The option `use_gsl_coul` (`--gsl-coul`)**: keep it (fast, wrong by up to 5 % in P below the barrier, and its
+  effect depends on whether a Coulomb table file exists), retire it, or give it another routine (`coulomb.md`
+  section 8.4, with the numbers). Proposed: retire it, the key refused with a message that names the default.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
@@ -685,8 +688,14 @@ re-read against its design at the hand-over.
    objective's terms are still `src/Objective.cpp` (each reads the working copy, the segments, the level state or
    the caller's `Results`), the vector's values are still `AZUREParams` on Minuit2's parameters, and the fitters
    are still `src/Fit*.cpp`: making those a library means giving the data χ² arrays, a change of the evaluation.
-6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
-   `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
+6. **GSL's Coulomb functions behind the option `use_gsl_coul`.** With the default options the engine calls
+   `physics/coulomb` only. GSL's `gsl_sf_coulomb_wave_FG_e` is left in `src/CoulFunc.cpp` (two places), reached
+   only with `use_gsl_coul` (`--gsl-coul`), and in one printed line of `azure2-coulomb-table validate`;
+   `gsl_sf_hyperg_U` is not called any more. Measured on the arguments of every test project (`coulomb.md`
+   section 8): below the Coulomb barrier GSL's P and S are wrong by up to 5 % (mpmath decides), so a run with
+   the option differs from the default by percent (χ² of `13N` 336479.96 → 335217.54) and takes 78 % fewer
+   instructions in a capture calculation. Calling `physics/coulomb` there moves no default output and is less
+   than a day of code, but it empties a user-visible option: not done, asked in section 8.
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to

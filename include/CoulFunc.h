@@ -6,7 +6,6 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
-#include <gsl/gsl_sf_coulomb.h>
 #include "Kinematics.h"
 #include "azure2/physics/ChannelFunctions.h"
 #include "azure2/physics/HybridPotential.h"
