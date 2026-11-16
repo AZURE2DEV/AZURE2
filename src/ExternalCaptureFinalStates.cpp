@@ -122,16 +122,17 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
     this->Group(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
     for (int ch = 1; ch <= this->Group(jGroupNum)->NumChannels(); ch++) {
       PPair *theFinalPair = this->Pair(this->Group(jGroupNum)->GetChannel(ch)->GetPairNum());
+      const double finalRadius = this->Group(jGroupNum)->GetChannel(ch)->GetRadius();
       double nfIntegralValue = 0.;
       double ecConvert = 0.;
       if (theFinalPair->GetPType() == 0) {
-        NFIntegral newNFIntegral(theFinalPair);
+        NFIntegral newNFIntegral(theFinalPair, finalRadius);
         nfIntegralValue = newNFIntegral(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
         WhitFunc newWhitFunc(theFinalPair);
         double whitConv = newWhitFunc(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
-                                      theFinalPair->GetChRad(),
+                                      finalRadius,
                                       fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
-        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
+        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * finalRadius * uconv / pow(hbarc, 2.0)) / whitConv;
       }
       this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
       this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);

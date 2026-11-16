@@ -41,7 +41,7 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
   const PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
   if (!pair) return out;
-  if (radius <= 0.0) radius = pair->GetChRad();  // the channel radius by default
+  if (radius <= 0.0) radius = pair->GetPairRadius();  // the pair's radius by default
 
   const bool spinOrbit = pair->GetHybridPotential() && pair->GetHybridPotential()->spin_orbit;
   const azure2::experiment::SpinOrbitRefusal refusal =
@@ -67,8 +67,8 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
         // A failed evaluation returns zeros for that energy rather than aborting the grid.
         F = dF = G = dG = P = S = delta = 0.;
       }
-    } else if (radius == pair->GetChRad()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
-      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, twoJ, energy);
+    } else if (radius == pair->GetPairRadius()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
+      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC), radius).Shift(lValue, twoJ, energy);
     }
     out.insert(out.end(), {F, dF, G, dG, P, S, delta});
   }

@@ -399,10 +399,10 @@ double FinalSqrtNF(const CompoundSystem &compound, bool park, bool gsl, int j, i
     const AChannel *channel = group->GetChannel(ch);
     const PPair *pair = compound.GetPair(channel->GetPairNum());
     if (dN && ch <= level->NumNFIntegrals())
-      (*dN)[ch - 1] += 2.0 * gamma[ch - 1] * phys::bound_state_coefficient(pair->GetChRad(), pair->GetRedMass()) *
+      (*dN)[ch - 1] += 2.0 * gamma[ch - 1] * phys::bound_state_coefficient(channel->GetRadius(), pair->GetRedMass()) *
                        level->GetNFIntegral(ch);
     if (!park || channel->GetRadType() != 'P' || pair->GetPType() != 0) continue;
-    ChannelFunc cf(pair, gsl);
+    ChannelFunc cf(pair, gsl, channel->GetRadius());
     const double dS = cf.ShiftDerivative(channel->GetL(), pair->SpinOrbitTwoJ(group->GetJ()),
                                          E - pair->GetSepE() - pair->GetExE());
     n0 -= std::pow(gamma[ch - 1], 2.0) * dS;

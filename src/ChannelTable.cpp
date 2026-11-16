@@ -15,16 +15,16 @@
 #include <omp.h>
 #endif
 
-ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, double energy, const Config &configure) {
+ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, double radius, double energy,
+                                        const Config &configure) {
   const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
-  ChannelFunc channelFunc(pair, gsl);
+  ChannelFunc channelFunc(pair, gsl, radius);
   if (channelFunc.IsClosed(energy)) {
     // At and below threshold, and just above it where the Coulomb barrier makes P = 0 to double precision: the
     // shift function continued through E = 0 (ChannelFunc).  The Coulomb-wave routines are not usable there.
     return Row{0.0, channelFunc.Shift(l, two_j, energy), 1.0, 1.0};
   }
   CoulFunc coulomb(pair, gsl);
-  const double radius = pair->GetChRad();
   Row row;
   row.P = coulomb.Penetrability(l, two_j, radius, energy);
   row.S = coulomb.PEShift(l, two_j, radius, energy);
@@ -48,7 +48,7 @@ std::vector<std::vector<double>> PairSignatures(const CompoundSystem *compound, 
     const PPair *pair = compound->GetPair(p);
     CoulFunc coulomb(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     s.push_back({(double)pair->GetPType(), (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2),
-                 pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(),
+                 pair->GetRedMass(), pair->GetPairRadius(), pair->GetSepE(), pair->GetExE(),
                  coulomb.UsesTable() ? 1.0 : 0.0, (configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1.0 : 0.0,
                  pair->FunctionSettings().relativistic ? 1.0 : 0.0});
     // the pair's hybrid potential, by value
@@ -92,7 +92,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(const CompoundSystem *co
   for (int t = 0; t < n; t++) {
     try {
       const Key &k = table->keys_[todo[t]];
-      table->rows_[todo[t]] = Compute(compound->GetPair(k.pair), k.l, k.two_j, k.energy, configure);
+      table->rows_[todo[t]] = Compute(compound->GetPair(k.pair), k.l, k.two_j, k.radius, k.energy, configure);
     } catch (...) {
 #ifdef _OPENMP
 #pragma omp critical(channel_table_error)

@@ -62,10 +62,11 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
     int j, la;
     const PPair *pair;
     int ch, l, two_j;  ///< two_j: the channel's 2J key (PPair::SpinOrbitTwoJ)
+    double radius;     ///< the channel's radius a_c (fm)
     double energy;
     bool first, second;
     double d1, d2;
-    int source;  ///< an earlier entry of the same level, pair and l (another channel spin), or -1
+    int source;  ///< an earlier entry of the same level, pair, l and radius (another channel spin), or -1
   };
   std::vector<Derivative> derivatives;
   struct Moved {
@@ -111,15 +112,18 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
                 // S as everywhere else (ChannelFunc: continuous through threshold).
-                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), theChannel->GetRadius());
                 state.SetShift(j, la, ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
               }
               if (derivativeChannel && (first || second)) {
-                // Channels that differ only in the channel spin share the derivative.
+                // Channels that differ only in the channel spin share the derivative (at one radius).
                 int source = -1;
                 for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
-                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue && derivatives[k].two_j == thePair->SpinOrbitTwoJ(theJGroup->GetJ())) source = k;
-                derivatives.push_back({j, la, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, first, second, 0.0, 0.0, source});
+                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue && derivatives[k].two_j == thePair->SpinOrbitTwoJ(theJGroup->GetJ()) &&
+                      derivatives[k].radius == theChannel->GetRadius())
+                    source = k;
+                derivatives.push_back({j, la, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), theChannel->GetRadius(),
+                                       levelEnergy, first, second, 0.0, 0.0, source});
               }
             } else {
               state.SetShift(j, la, ch, state.Shift(j, 1, 1));
@@ -149,7 +153,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
       const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
                               theCoulombFunction.UsesTable(), d.pair->FunctionSettings().relativistic, d.pair->GetRedMass(),
-                              d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
+                              d.pair->GetM(1) + d.pair->GetM(2), d.radius, threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
       {
         std::lock_guard<std::mutex> lock(memo.mutex);
@@ -169,15 +173,15 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
       // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
       // under Brune); d^2S/dE^2 from the branch the level is on.
       if (need1) {
-        ChannelFunc channelFunc(d.pair, gslCoulomb);
+        ChannelFunc channelFunc(d.pair, gslCoulomb, d.radius);
         d.d1 = channelFunc.ShiftDerivative(d.l, d.two_j, resonanceEnergy);
       }
       if (need2) {
         if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(d.pair);
+          ShftFunc theShiftFunction(d.pair, d.radius);
           d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.two_j, d.energy);
         } else {
-          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.two_j, d.pair->GetChRad(), resonanceEnergy);
+          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.two_j, d.radius, resonanceEnergy);
         }
       }
       std::lock_guard<std::mutex> lock(memo.mutex);

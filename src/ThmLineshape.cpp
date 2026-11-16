@@ -91,7 +91,7 @@ double ThmLevelWidth(const CompoundSystem *compound, int j, int la, double energ
     double localEnergy = energy - pair->GetSepE() - pair->GetExE();
     char type = channel->GetRadType();
     if (type == 'P') {
-      ChannelFunc channelFunc(pair, useGSL);
+      ChannelFunc channelFunc(pair, useGSL, channel->GetRadius());
       const int twoJ = pair->SpinOrbitTwoJ(jgroup->GetJ());
       normSum += channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy) * gamma * gamma;
       if (!channelFunc.IsClosed(localEnergy))

@@ -23,9 +23,9 @@ class ShftFunc {
   /*!
    * The ShftFunc object is created with reference to a particle pair.
    */
-  ShftFunc(const PPair *pPair) {
+  ShftFunc(const PPair *pPair, double radius) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
-    radius_ = (double)pPair->GetChRad();
+    radius_ = radius;  // the channel's radius a_c (AChannel::GetRadius)
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();

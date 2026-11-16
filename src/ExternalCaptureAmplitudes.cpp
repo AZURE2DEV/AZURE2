@@ -24,7 +24,7 @@ double SqrtNFFactor(const CompoundSystem &compound, const JGroup *group, const A
   std::vector<phys::BoundChannel> channels;
   for (int ch = 1; ch <= group->NumChannels() && ch <= level->NumNFIntegrals(); ch++) {
     const PPair *pair = compound.GetPair(group->GetChannel(ch)->GetPairNum());
-    channels.push_back({pair->GetChRad(), pair->GetRedMass(), gamma[ch - 1], level->GetNFIntegral(ch)});
+    channels.push_back({group->GetChannel(ch)->GetRadius(), pair->GetRedMass(), gamma[ch - 1], level->GetNFIntegral(ch)});
   }
   return 1.0 / std::sqrt(phys::bound_state_normalization(n0, channels));
 }
@@ -86,7 +86,7 @@ complex ExternalReducedWidthAt(const CompoundSystem &compound, const JGroup *gro
   std::vector<unsigned char> known(in.size() * out.size(), 0);
   const phys::RadialIntegral integral = [&](std::size_t c, std::size_t cf) {
     if (known[c * out.size() + cf]) return integrals[c * out.size() + cf];
-    ECIntegral theECIntegral(compound.GetPair(outChannels[cf]->GetPairNum()), configure);
+    ECIntegral theECIntegral(compound.GetPair(outChannels[cf]->GetPairNum()), configure, outChannels[cf]->GetRadius());
     const complex v = theECIntegral(inChannels[c]->GetL(), outChannels[cf]->GetL(), inChannels[c]->GetS(),
                                     outChannels[cf]->GetS(), group->GetJ(), finalGroup->GetJ(), L, type,
                                     values.levelEnergy, values.finalEnergy, true);

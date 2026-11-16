@@ -37,11 +37,12 @@ class ShftFunc;
  * exactly at threshold).
  *
  * Neutral pairs never reach the Coulomb-threshold branch.  The radius is the
- * pair's channel radius, as at every call site.
+ * channel's (AChannel::GetRadius), given at construction.
  */
 class ChannelFunc {
  public:
-  ChannelFunc(const PPair *pair, bool useGSLFunctions);
+  /// \p radius: the channel's radius a_c in fm (AChannel::GetRadius).
+  ChannelFunc(const PPair *pair, bool useGSLFunctions, double radius);
   ~ChannelFunc();
 
   /// e > 0 and a charged pair with Sommerfeld parameter eta above kEtaClosed.

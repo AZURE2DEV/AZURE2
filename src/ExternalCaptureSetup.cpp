@@ -276,7 +276,7 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
       hash.Add("light excitation");
       hash.Add(pair->GetLightExE());
     }
-    hash.Add(pair->GetChRad());
+    hash.Add(pair->GetPairRadius());
     // The hybrid potential bends the Coulomb functions of this pair, and so
     // both the entrance-channel phases and the final-state integrand.
     const std::optional<azure2::physics::HybridPotential> &potential = pair->GetHybridPotential();

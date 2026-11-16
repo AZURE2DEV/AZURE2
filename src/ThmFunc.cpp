@@ -363,7 +363,7 @@ complex coulombTermUncached(const PPair *pair, int l, double E, double p) {
   if (zz == 0 || !(p > 0.0)) return complex(0.0, 0.0);
   const double mu = pair->GetRedMass() * uconv;  // MeV/c^2
   const double c = zz * fstruc * mu / hbarc;     // eta k, fm^-1 (energy independent)
-  const double a = pair->GetChRad();
+  const double a = pair->GetPairRadius();
   complex integral(0.0, 0.0);
 
   if (E > 0.0) {

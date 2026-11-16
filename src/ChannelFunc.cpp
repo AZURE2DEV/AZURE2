@@ -7,11 +7,11 @@
 #include <cmath>
 #include "azure2/physics/Derivatives.h"
 
-ChannelFunc::ChannelFunc(const PPair *pair, bool useGSLFunctions)
+ChannelFunc::ChannelFunc(const PPair *pair, bool useGSLFunctions, double radius)
     : pair_(pair),
       useGSL_(useGSLFunctions),
       threshold_(pair->GetSepE() + pair->GetExE()),
-      radius_(pair->GetChRad()) {}
+      radius_(radius) {}
 
 ChannelFunc::~ChannelFunc() = default;
 
@@ -21,7 +21,7 @@ CoulFunc &ChannelFunc::coul() {
 }
 
 ShftFunc &ChannelFunc::shft() {
-  if (!shft_) shft_.reset(new ShftFunc(pair_));
+  if (!shft_) shft_.reset(new ShftFunc(pair_, radius_));
   return *shft_;
 }
 

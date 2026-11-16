@@ -1269,7 +1269,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         int numD = parkFinal ? jgf->NumChannels() : numNF;
         for (int d = 1; d <= numD; d++) {
           const PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
-          double Ad = (d <= numNF) ? azure2::physics::bound_state_coefficient(pd->GetChRad(), pd->GetRedMass()) *
+          double Ad = (d <= numNF) ? azure2::physics::bound_state_coefficient(jgf->GetChannel(d)->GetRadius(), pd->GetRedMass()) *
                                          finalLevel->GetNFIntegral(d)
                                    : 0.0;
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)

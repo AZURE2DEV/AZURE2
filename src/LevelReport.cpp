@@ -71,7 +71,7 @@ void WriteCompoundNucleusCheck(const CompoundSystem &compound, const LevelInputs
           << std::setw(30) << "Excitation Energy [MeV]: " << pair->GetHeavyExE() << std::endl;
       // the light particle's excitation (32nd column) only when it is set, so older outputs are unchanged
       if (pair->GetLightExE() != 0.) out << std::setw(30) << "Light Excitation [MeV]: " << pair->GetLightExE() << std::endl;
-      out << std::setw(30) << "Channel Radius: " << pair->GetChRad() << std::endl;
+      out << std::setw(30) << "Channel Radius: " << pair->GetPairRadius() << std::endl;
       if (pair->GetPType() == 0)
         out << std::setw(30) << "Pair Type: " << "Particle,Particle" << std::endl;
       else if (pair->GetPType() == 10)

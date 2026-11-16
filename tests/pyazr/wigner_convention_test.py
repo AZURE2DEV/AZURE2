@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AZURE2's Wigner limit is the Teichmann-Wigner sum-rule unit 3 hbar^2 / (2 mu a^2).
 
-`Parameter.wigner_limit` comes from `AChannel::SetWignerLimit`, 1.5 hbar^2 / (mu a^2) in MeV with mu the pair's
+`Parameter.wigner_limit` comes from `AChannel::SetRadius`, 1.5 hbar^2 / (mu a^2) in MeV with mu the pair's
 reduced mass and a its channel radius; `pyazr.physics.wigner_limit` is the same number (a hbar^2 / (mu a^2) unit is
 2/3 of it, and a theta^2 quoted against that unit is 1.5 times larger).
 

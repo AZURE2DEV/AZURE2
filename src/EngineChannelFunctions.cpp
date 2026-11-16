@@ -12,15 +12,14 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec, bool gsl) {
+phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double radius, double Ec, bool gsl) {
   phys::ChannelValues v;
-  ChannelFunc cf(&pair, gsl);
+  ChannelFunc cf(&pair, gsl, radius);
   v.S = cf.Shift(l, twoJ, Ec);
   if (Ec > 0.0) {
     v.P = cf.Penetrability(l, twoJ, Ec);
   } else if (Ec < 0.0) {
     // The ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2) (level_parameters.md section 1).
-    const double radius = pair.GetChRad();
     WhitFunc whit(&pair);
     const double W = whit(l, twoJ, radius, std::fabs(Ec));
     v.P = pair.GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
@@ -48,7 +47,7 @@ phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, co
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
-      v = ParticleChannelValues(*pair, l, twoJ, Ec, gsl);
+      v = ParticleChannelValues(*pair, l, twoJ, channel->GetRadius(), Ec, gsl);
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
         // A static moment (LevelTransforms.cpp TransformIn, "Static moments" in conventions.rst).

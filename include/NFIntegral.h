@@ -18,9 +18,9 @@ class NFIntegral {
   /*!
    * The NFIntegral object is created with reference to a PPair object. A WhitFunc object is also created.
    */
-  NFIntegral(const PPair *pPair) {
+  NFIntegral(const PPair *pPair, double radius) {
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
-    chanrad_ = pPair->GetChRad();
+    chanrad_ = radius;  // the channel's radius a_c (AChannel::GetRadius)
     total_sep_e_ = pPair->GetSepE() + pPair->GetExE();
   };
   /*!

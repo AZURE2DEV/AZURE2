@@ -189,7 +189,7 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
 
         // Calculate and set Wigner Limit for the newly created channel
         PPair *channelPair = this->Pair(PairNum);
-        this->Group(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+        this->Group(JGroupNum)->GetChannel(ChannelNum)->SetRadius(channelPair->GetPairRadius(), channelPair->GetRedMass());
       }
       // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
       // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
@@ -266,15 +266,14 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
     }
     PPair *changedPair = this->Pair(it->first);
     changedPair->SetChRad(it->second);
-    // The Wigner limits above were computed inside the parse loop, i.e. with
+    // The channels' radii and Wigner limits above were set inside the parse loop, i.e. with
     // the radius as written in the .azr.  Redo them for the overridden pair,
-    // or every theta^2 reported after a radius change is against the old limit.
+    // or every channel quantity after a radius change is at the old radius.
     for (int j = 1; j <= this->NumJGroups(); j++) {
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         AChannel *theChannel = this->Group(j)->GetChannel(ch);
         if (theChannel->GetPairNum() == it->first)
-          theChannel->SetWignerLimit(changedPair->GetRedMass(),
-                                     changedPair->GetChRad());
+          theChannel->SetRadius(changedPair->GetPairRadius(), changedPair->GetRedMass());
       }
     }
   }
@@ -368,7 +367,7 @@ int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
                 AChannel newChannel(cL, cS, ir, 'P');
                 if (jg->IsChannel(newChannel)) continue;
                 jg->AddChannel(newChannel);
-                jg->GetChannel(jg->NumChannels())->SetWignerLimit(chPair->GetRedMass(), chPair->GetChRad());
+                jg->GetChannel(jg->NumChannels())->SetRadius(chPair->GetPairRadius(), chPair->GetRedMass());
               }
             }
           }

@@ -114,7 +114,7 @@ SystemOfCompound BuildSystemOfCompound(const CompoundSystem &compound, const Lev
       c.kind = ChannelKindOf(channel->GetRadType());
       c.l = channel->GetL();
       c.two_s = TwiceSpin(channel->GetS(), what + " channel " + std::to_string(ch) + " channel spin");
-      c.radius_fm = compound.GetPair(channel->GetPairNum())->GetChRad();
+      c.radius_fm = channel->GetRadius();
       int index = -1;
       for (size_t k = 0; k < channels.size() && index < 0; k++)
         if (channels[k].partition == c.partition && channels[k].kind == c.kind && channels[k].l == c.l &&

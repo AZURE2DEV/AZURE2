@@ -240,7 +240,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
       same(w + "channel kind", KindLetter(c.kind), ch->GetRadType());
       same(w + "channel l", c.l, ch->GetL());
       same(w + "channel 2s", (double)c.two_s, 2.0 * ch->GetS());
-      same(w + "channel radius", c.radius_fm, cn.GetPair(ch->GetPairNum())->GetChRad());
+      same(w + "channel radius", c.radius_fm, cn.GetPair(ch->GetPairNum())->GetPairRadius());
       same(w + "B_c", blk.B(k), ch->GetBoundaryCondition());
     }
     std::vector<int> rmLevels;

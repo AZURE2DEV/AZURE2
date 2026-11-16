@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (owner's session, dev port) — per-channel radii, step 1: the channel holds its radius
+
+**Branch `feature/upgrade-5-dev-channel-radii`** (from `feature/upgrade` `7a1d96d0`), not merged. Step 1 of
+`dev_features.md` section 2 only: a refactor, no new input, every output meant to be identical.
+
+**What changed.**
+- `AChannel::SetRadius(radius, reducedMass)` (was `SetWignerLimit`) stores the radius and the Wigner limit;
+  `AChannel::GetRadius()` gives it and throws `std::logic_error` on a channel never set up. The three places that
+  make or re-radius a channel (`CompoundSystemBuild.cpp`) fill it from the pair, as before.
+- `PPair::GetChRad` is renamed `GetPairRadius`, so that no channel quantity reads it by habit. It stays for what
+  belongs to the pair: the beta Fermi function, the THM vertex's form factor (`ThmBesselParts`, `ThmCoulombTerm`,
+  `ThmDwVertex`, the THM reports), the signatures of the tables, the report line, the API's default radius.
+- The helpers take the radius instead of reading the pair's: `ChannelFunc(pair, gsl, radius)`,
+  `ShftFunc(pair, radius)`, `NFIntegral(pair, radius)`, `ECIntegral(pair, configure, radius)`,
+  `ECTable::Integral(pair, radius, ...)` (the radius was already in its term key), `ScatteringLength::CoulombX /
+  ZeroEnergyShift / FormulaCoefficients`, `ParticleChannelValues`, `ThmVertexBoundary::ShiftAtLevelEnergy`. Every
+  caller with a channel in hand passes `channel->GetRadius()`.
+- `ChannelTable::Key` gains `radius` (compared exactly, between 2J and the energy) and a constructor of all five
+  members: a key written one member short does not compile (as an aggregate it took the energy for the radius --
+  the unit test found that). `docs/upgrade/channel_table.md` section 2 says so.
+- The shared shift derivative of `LevelStateFill.cpp` (channels that differ only in channel spin) is shared at
+  one radius; the system's channel (`SystemOfCompound.cpp`) takes `radius_fm` from the channel.
+- External capture (`UnitExternalCapture.cpp`): two radii. The radial integral runs from the final channel's
+  radius. The entrance wave's closed test and hard-sphere phase are at the entrance channel's radius: for channel
+  capture that is the entrance channel of the internal pathway the capture passes through, which can be of another
+  partition (`tests/beam_profile_kernel`: 12C+alpha at 5.43 fm in, capture in 15N+p at 5.03 fm). The first form of
+  this step took both at the final channel's radius, and that project moved by 3.1e-3 in chi2 -- the only one of
+  the gate that did; with the two radii its outputs are byte-identical to the base's. For direct capture the
+  entrance and final channels are of one partition; dev refuses a transition whose two channels have different
+  radii, and that refusal belongs to step 4 here.
+
+**Open for the next steps.**
+- THM with radii per channel: the vertex pieces are kept per l of the entrance pair (`psCoulByL`), at the pair's
+  radius. Either refuse a `channel_radius` on a THM entrance pair or carry the radius there. Not decided.
+- `SystemOfCompound.cpp` merges channels of equal (partition, kind, l, 2s) across J^pi blocks; a radius qualified
+  by J needs the radius in that comparison.
+- `ChannelTable`'s pair signatures and `WorkingCopy::ECSignature` still hold the pair's radius only (step 4).
+- Steps 2-5 (the record, the API's channel form, the signatures, dev's test) wait for the record's name.
+
+**Run here** (CRC, GCC 11.5): build; `wigner_limit_reference` (two new checks), `channel_threshold`,
+`channel_table_unit`, `physics_system_of_compound`, `pyazr_wigner_convention`, `upgrade_predictions`;
+`repo_consistency_test.py`. The full gate: see the end of this entry once the queue job is back. **Not run:** CI.
+
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 90 (one commit of mine: `scripts/sanitize_upgrade.sh`

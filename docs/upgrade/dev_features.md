@@ -56,6 +56,10 @@ radius; the cache of external-capture integrals knows the entries.
 
 Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8).
 
+*Step 1 is written* on `feature/upgrade-5-dev-channel-radii` (2026-11-15, the owner's session): `AChannel::GetRadius`,
+`PPair::GetChRad` renamed `GetPairRadius`, the radius in the channel table's key. HANDOFF has the entry and what it
+leaves open (THM, the system's merged channels, the two signatures).
+
 ## 3. General spin observables
 
 *On dev:* Re(c Tr(F A F† B))/Tr(F F†) for an operator token, on the plumbing of A_y, with its adjoint.

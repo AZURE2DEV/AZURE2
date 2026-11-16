@@ -289,7 +289,7 @@ bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, const Compound
   }
   double gridHi = std::min(eHi + 0.3, eAA - dk.bind - 0.5 * (eAA - dk.bind - eHi));
   std::string why = ls.empty() ? std::string("the entrance pair has no channel in the R matrix")
-                               : v->Build(x, dk, pair->GetChRad(), ls, eLo - 0.3, gridHi, energies);
+                               : v->Build(x, dk, pair->GetPairRadius(), ls, eLo - 0.3, gridHi, energies);
   if (!why.empty()) {
     configure.outStream << where << "vertexModel=dw: " << why << "." << std::endl;
     return false;
