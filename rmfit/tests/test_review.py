@@ -6,8 +6,26 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 from rmfit import AZURE2_ROOT
 from rmfit import review as rv
 
-SRC = os.path.join(AZURE2_ROOT, "tests", "13N")
+FIXTURE = os.path.join(AZURE2_ROOT, "tests", "13N")
 FAILS = []
+
+
+def make_run():
+    """A copy of the 13N test project with the output of the program's ``calculate`` (the tree ships no stored
+    output): returns its directory, or None when no AZURE2 binary is built ($AZURE2_BIN, else build/src/AZURE2)."""
+    import subprocess
+    exe = os.environ.get("AZURE2_BIN") or os.path.join(AZURE2_ROOT, "build", "src", "AZURE2")
+    if not os.path.exists(exe):
+        return None
+    d = tempfile.mkdtemp(prefix="rmfit_review_run_")
+    shutil.copy(os.path.join(FIXTURE, "13N.azr"), d)
+    shutil.copytree(os.path.join(FIXTURE, "data"), os.path.join(d, "data"))
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub))
+    r = subprocess.run([exe, "calculate", "13N.azr"], cwd=d, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(os.path.join(d, "output", "chiSquared.out")):
+        raise RuntimeError("AZURE2 calculate failed on the 13N copy:\n" + (r.stdout + r.stderr)[-1500:])
+    return d
 
 
 def check(name, ok, info=""):
@@ -17,6 +35,10 @@ def check(name, ok, info=""):
 
 
 def main():
+    SRC = make_run()
+    if SRC is None:
+        print("SKIP: no AZURE2 binary (set AZURE2_BIN or build the tree)")
+        return 77
     azr = os.path.join(SRC, "13N.azr"); odir = os.path.join(SRC, "output")
     # 1. the point table reproduces chiSquared.out (parsing, block assignment and the n*d / n*e convention)
     tab = rv.table_from_output(azr, odir)
@@ -32,18 +54,15 @@ def main():
     #     2026-11-15): the same output read through a copy of the model with segment 3 marked c.m.
     tmpc = tempfile.mkdtemp(prefix="rmfit_review_cm_")
     try:
-        lines = open(azr).read().split("\n")
-        i3 = [i for i, ln in enumerate(lines) if "meyer_84.dat" in ln][0]
-        f = lines[i3].split()
-        f[7] = "4"
-        lines[i3] = " ".join(f)
-        azr_cm = os.path.join(tmpc, "13N.azr")
-        open(azr_cm, "w").write("\n".join(lines))
+        import pyazr
+        prj = pyazr.Project.open(azr)
+        prj.set("meyer_84", columns="E_lab[MeV] theta_cm[deg] value error")
+        azr_cm = prj.save(os.path.join(tmpc, "13N.azr"))
         os.symlink(os.path.join(SRC, "data"), os.path.join(tmpc, "data"))
         tabc = rv.table_from_output(azr_cm, odir)
         from rmfit.model import base_segments
         segc = [s for s in base_segments(azr_cm) if s.key == 3][0]
-        check("differential-cm segment carries its angles", segc.observable == "differential-cm" and
+        check("a c.m.-angle data set carries its angles", segc.differential and "theta_cm" in segc.get("columns") and
               np.isfinite(tabc.ang[tabc.key == 3]).all() and np.allclose(tabc.ang[tabc.key == 3], tab.ang[tab.key == 3]),
               segc.observable)
     finally:

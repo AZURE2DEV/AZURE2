@@ -894,7 +894,7 @@ class Review:
     def level_support(self):
         t = self.tab
         # the data sets the engine folds (their record names a target, a beam or a detector)
-        ti_keys = {int(s.key) for s in (self.segments or []) if s.active and getattr(s, "folded", False)}
+        ti_keys = {int(s.key) for s in (self.segments or []) if getattr(s, "active", True) and getattr(s, "folded", False)}
         L = ["| level | Ex | Gamma | data sets within +-max(3 Gamma, 5 keV) | points | local Ex spacing | target-int segments |",
              "|---|---:|---:|---|---:|---:|---|"]
         nflag = 0
