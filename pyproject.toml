@@ -45,9 +45,11 @@ web = ["fastapi", "uvicorn", "httpx", "scipy>=1.7"]
 all = ["matplotlib", "emcee", "iminuit", "scipy>=1.7"]
 
 [project.scripts]
-# The command line (pyazr/cli.py; also python -m pyazr).  The program AZURE2 is installed beside it from the
-# wheel's scripts (src/CMakeLists.txt, the SKBUILD install rule).
+# The command line (pyazr/cli.py; also python -m pyazr), and the program AZURE2: the wheel carries it inside the
+# package (pyazr/bin/AZURE2; src/CMakeLists.txt, the SKBUILD install rule) and this script runs it in its own place
+# (pyazr/program.py says why it is not in the wheel's scripts).
 pyazr = "pyazr.cli:main"
+AZURE2 = "pyazr.program:main"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
