@@ -10,7 +10,8 @@
 //   4. local: nodes outside MeshChangedRegion do not move when an anchor changes;
 //   5. deterministic: the nodes of 1 and 3 (core E_r + k pitch, tail recurrence) are today's bits.
 // Cases: an isolated narrow level, two overlapping levels of different widths, a level at a support's edge, a level
-// outside the support but in reach, no level, a support of zero width, and 200 random cases (fixed seed).
+// outside the support but in reach, no level, a support of zero width, 200 random cases (fixed seed), and a
+// time-of-flight window at a thermal point (its own zero width).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -451,6 +452,43 @@ void HardEdges() {
   }
 }
 
+// A time-of-flight window (MeshSupport::zeroWidth = MeshTimeOfFlightZeroWidth): a thermal neutron point of 17O + n,
+// E_x = 8.0443 MeV, whose window is far below MeshZeroWidth().
+void TimeOfFlight() {
+  const double ex = 8.0443000277, p = 50.0, m = 20.0;
+  const double spacing = std::nextafter(ex, 10.0) - ex;
+  // +-15 % of 0.1 eV, 200 points: a ladder of distinct nodes that encloses the window
+  MeshSupport wide = Support(ex - 1.5e-8, ex + 1.5e-8, 200, p, m);
+  Expect(MeshLadderStep(wide) == 0.0, "time of flight: the absolute zero width makes the window one node");
+  wide.zeroWidth = azure2::MeshTimeOfFlightZeroWidth(wide.high);
+  Expect(wide.zeroWidth > 4000.0 * spacing && wide.zeroWidth < 5000.0 * spacing, "time of flight: zero width of 4096 spacings");
+  const double step = MeshLadderStep(wide);
+  Expect(step > 0.0 && step <= 3.0e-8 / 200 && step >= 0.5 * 3.0e-8 / 200, "time of flight: the ladder's step is the window's");
+  const MeshPlan plan = azure2::PlanMesh({}, {wide}, Tails());
+  const std::vector<double> &x = plan.nodes;
+  const std::size_t first = plan.ranges[0].first, last = plan.ranges[0].last;
+  Expect(last - first >= 200 && last - first <= 402, "time of flight: 200 to 400 intervals (" + std::to_string(last - first) + ")");
+  Expect(x[first] <= wide.low && x[last] >= wide.high, "time of flight: the nodes enclose the window");
+  bool distinct = true;
+  for (std::size_t i = first; i < last; i++) distinct = distinct && x[i + 1] - x[i] == step;
+  Expect(distinct, "time of flight: every interval is one step");
+  // a window of 3 spacings (a 0.2 ns kernel at 25 meV): one exact node at its high edge
+  MeshSupport narrow = Support(ex - spacing, ex + 2.0 * spacing, 200, p, m);
+  narrow.zeroWidth = azure2::MeshTimeOfFlightZeroWidth(narrow.high);
+  const MeshPlan one = azure2::PlanMesh({}, {narrow}, Tails());
+  Expect(one.ranges[0].first == one.ranges[0].last && one.nodes[one.ranges[0].first] == narrow.high,
+         "time of flight: below 4096 spacings a single node at the high edge");
+  // between: 8192 spacings asked for in 12800 parts (200 points, refined 64 times): the step is floored at one spacing
+  MeshSupport fine = Support(ex, ex + 8192.0 * spacing, 12800, p, m);
+  fine.zeroWidth = azure2::MeshTimeOfFlightZeroWidth(fine.high);
+  Expect(MeshLadderStep(fine) == spacing, "time of flight: the step is never below the spacing of the doubles");
+  // a support of MeshZeroWidth() or more is untouched by the floor
+  MeshSupport usual = Support(0.5, 0.5 + 2.0e-6, 1000, p, m);
+  int e = 0;
+  std::frexp(2.0e-6 / 1000, &e);
+  Expect(MeshLadderStep(usual) == std::ldexp(1.0, e - 1), "time of flight: the usual support's step is unchanged");
+}
+
 int main() {
   std::printf("mesh planner: named cases\n");
   NamedCases();
@@ -460,6 +498,7 @@ int main() {
   Locality();
   Ladder();
   HardEdges();
+  TimeOfFlight();
   std::printf("mesh planner: %d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

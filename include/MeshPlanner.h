@@ -1,7 +1,9 @@
 #ifndef AZURE2_MESHPLANNER_H
 #define AZURE2_MESHPLANNER_H
 
+#include <cmath>
 #include <cstddef>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -83,6 +85,21 @@ struct MeshSettings {
   double coreWidths = 20.0;      ///< m: half-extent of the uniform core, in widths
 };
 
+/// A support narrower than this (MeV) is a single exact node at its high edge, as today's grid of such a window is.
+constexpr double MeshZeroWidth() { return 1.0e-6; }
+
+/// The same for a time-of-flight window whose high edge is at E_x = high: 4096 spacings of the doubles there
+/// (7e-12 MeV at E_x = 8 MeV).  Such a window is a fixed fraction of the point's energy (twice the relative width of
+/// the delay distribution), so at a thermal neutron point it is far below MeshZeroWidth() and still wide against the
+/// structure of the cross section; with the absolute width every such point was a single node and the fold returned
+/// the cross section at the window's high edge (a bias of half the channel's relative width on 1/v).  Below 4096
+/// spacings a ladder cannot be laid (its step is floored at one spacing, MeshLadderStep), and the single node is then
+/// within 3e-4 of a 25 meV point's energy.
+inline double MeshTimeOfFlightZeroWidth(double high) {
+  const double x = std::fabs(high);
+  return 4096.0 * (std::nextafter(x, std::numeric_limits<double>::infinity()) - x);
+}
+
 /// The support of one folded point's kernel, in E_x (MeV), with its data set's settings.
 struct MeshSupport {
   double low = 0.0, high = 0.0;  ///< the kernel is non-zero on [low, high]
@@ -95,6 +112,9 @@ struct MeshSupport {
   int dataSet = 0;  ///< index of the data set, for the caller (the plan does not depend on it)
   std::string label;        ///< "data set NAME, point I (E_lab MeV)", for a message (the plan does not depend on it)
   double kernelWidth = 0.0; ///< MeV, the width of the point's own kernel support (unshifted), for a message
+  /// A support narrower than this (MeV) is a single exact node at its high edge: MeshZeroWidth(), or
+  /// MeshTimeOfFlightZeroWidth(high) for a time-of-flight window.
+  double zeroWidth = MeshZeroWidth();
 };
 
 /// The most nodes the plan of one compound nucleus may have (MeshPlanBudgetError beyond).  The largest plan of the
@@ -126,9 +146,6 @@ struct MeshPlan {
   std::vector<double> nodes;            ///< E_x, MeV, ascending and distinct
   std::vector<MeshNodeRange> ranges;    ///< per support, in the order given
 };
-
-/// A support narrower than this (MeV) is a single exact node at its high edge, as today's grid of such a window is.
-constexpr double MeshZeroWidth() { return 1.0e-6; }
 
 /// The smooth step a support's ladder uses: today's step S = window / ceil(window / smoothStep) quantized down to a
 /// power of two (MeV); 0 for a support narrower than MeshZeroWidth().

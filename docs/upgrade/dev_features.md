@@ -93,6 +93,10 @@ Estimate 12–24 h. An unfinished attempt exists (section 8).
 Test: dev's `tests/udr_low_energy` converted (`AZURE2 --convert` writes it with no notes, run). Estimate 5 h. An
 unfinished attempt exists (section 8).
 
+**Written 2026-11-15** on `feature/upgrade-5-dev-udr-low-energy` (not the attempt of section 8, which was not seen):
+`energy_grid.md` section 13. The mesh's zero width is not made relative for every kernel; a time-of-flight support
+carries its own, so nothing else can move.
+
 ## 5. Isospin-labelled levels across compound nuclei
 
 *On dev:* about 2,700 lines; a level ID spanning several compound nuclei is one isospin level, the member in a

@@ -142,7 +142,9 @@ void DopplerSupport(const KernelParameters &p, const SupportPoint &s, double &hi
   DopplerWindow(p, high, s.cmFactor, unused, hi);
   DopplerWindow(p, low, s.cmFactor, lo, unused);
   high = std::max(high, hi);
-  low = std::max(std::min(low, lo), 0.001);
+  // Under a time-of-flight kernel (SupportPoint::udr) the floor is that kernel's, relative to the point: a thermal
+  // neutron point has its whole window below the 1 keV of the other kernels (KernelUdr.cpp, UdrSupport).
+  low = std::max(std::min(low, lo), s.udr ? 1.0e-6 * s.energy : 0.001);
 }
 
 }  // namespace

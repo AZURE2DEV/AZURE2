@@ -161,7 +161,7 @@ bool AnchorLess(const MeshAnchor &a, const MeshAnchor &b) {
 
 double MeshLadderStep(const MeshSupport &support) {
   const double range = std::fabs(support.high - support.low);
-  if (!(range >= MeshZeroWidth())) return 0.0;
+  if (!(range >= support.zeroWidth)) return 0.0;
   // Today's smooth step (AdaptiveIntegrationGrid::GenerateGrid): the window in ceil(window / step) equal parts.
   double base = support.smoothStep;
   if (!(base > 0.0) || base > range) base = range;
@@ -170,7 +170,12 @@ double MeshLadderStep(const MeshSupport &support) {
   const double step = range / n;
   int exponent = 0;
   std::frexp(step, &exponent);  // step = f 2^exponent, f in [0.5, 1)
-  return std::ldexp(1.0, exponent - 1);
+  // Never below the spacing of the doubles at the support (a power of two): the ladder's nodes n * L stay distinct.
+  // Out of reach of a support of MeshZeroWidth() or more (1e-6 MeV over at most 1e6 nodes against 1e-15 MeV); a
+  // time-of-flight window at a thermal point comes within a few spacings.
+  const double top = std::max(std::fabs(support.high), std::fabs(support.low));
+  const double spacing = std::nextafter(top, std::numeric_limits<double>::infinity()) - top;
+  return std::max(std::ldexp(1.0, exponent - 1), spacing);
 }
 
 double MeshTailFactor(const MeshSettings &settings, const MeshTailConstants &tails) {

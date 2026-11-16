@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-udr-low-energy`: dev's time-of-flight kernels at low energy
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. dev's `a68474f0`
+(`dev_features.md` section 4), written for this structure. Design, the table of the six places and the measured
+numbers: `energy_grid.md` section 13.
+
+**Where it is.** `experiment/src/KernelUdr.cpp` (relative floor of the window, a one-node window is the node's
+value), `experiment/src/KernelDoppler.cpp` (the floor under a UDR kernel),
+`experiment/include/azure2/experiment/UdrKernel.h` (flight time and its inverse without cancellation),
+`src/TargetEffect.cpp` (`BuildUdrKernel`: the support includes the bracketing zero nodes),
+`include/MeshPlanner.h`, `src/MeshPlanner.cpp`, `src/MeshSlots.cpp`, `include/Unit.h`, `src/TargetSetup.cpp`
+(`MeshSupport::zeroWidth`, `SubGridSpec::timeOfFlight`, the ladder step's floor at one spacing of the doubles).
+`MeshZeroWidth()` itself is unchanged: no support without a `udr` detector can move.
+
+**Tests.** `tests/udr_low_energy` (dev's, model converted with `--convert`, the three kernels as detector records
+edited into it): passes here, fails on the base (3 of 3; zeros at 17, 7 and 3 of the 67 points).
+`tests/upgrade/mesh_planner_test.cpp`: the case "time of flight" (8 checks).
+
+**Run here** (CRC, GCC 11.5): the two above; `repo_consistency_test.py`. The full gate: see the end of this entry
+once the queue job is back. **Not run:** CI; a `udr` detector with a fitted energy shift at a thermal point.
+
+**Seen on the way, not changed:** `--convert` writes dev's negative channel width (|n| bins per decade of energy)
+as `channel -7.55 ns`; the engine still reads a negative number that way, so the unit on the line is wrong for it.
+A keyword of its own (bins per decade) would be the format's answer; it is the format owner's.
+
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 90 (one commit of mine: `scripts/sanitize_upgrade.sh`
