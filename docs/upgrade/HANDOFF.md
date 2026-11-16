@@ -2,6 +2,97 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 06:05) — merged: Linux is green; the Windows and macOS results of the eleventh push answered
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 92 (one commit of mine: one rule of the engine and its
+Python twin, pyazr's text files, tests, the workflow, documents). The base build is now `work/b-trial92`, the
+reference stays `tab-t74-1`, the quick set is 314 tests.
+
+**What the CI showed.**
+
+- *Linux* (the eleventh push): **the job passes**, for the first time on this branch: every regression check and
+  every unit test (`docs_build` skipped, no Sphinx there).
+- *Sanitizers* (the thirteenth push, the first run of the collision matrix and the observables as functions of
+  `physics/`; thread 89 minutes, address 56): both jobs pass, no failed step, no report.
+- *Windows* (the eleventh push): 165 of the 172 regression checks (159 before); 27 unit tests fail and 22 are
+  skipped (145 failed before). The seven checks: `upgrade`, `cli_route_exit`, `progress_bars`, `units_scales`,
+  `ratio_to_rutherford`, `cli_commands`, `gamma_decay`.
+- *macOS* (the eleventh push, the first with the GNU tools; 4 h 44 min): 164 of the 172 regression checks, 5 unit
+  tests fail. Three of the five were repaired in the thirteenth push (`upgrade_mesh_planner`,
+  `pyazr_fit_engine_control`, `pyazr_ui_engine_jobs`).
+
+**The causes read from the Windows annotations, and what was changed.** None of it was run on Windows.
+
+- *A path with a drive letter was relative.* The tests there hand the engine paths such as `D:/a/_temp/x.dat`
+  (`TMPDIR` is in Windows form), and `experiment::PathToOpen` knew a leading slash only, so every such file was
+  looked for under the project's directory: "cannot read" for data, temperature and covariance files, output in a
+  wrong place. Now one rule, `experiment::IsAbsolutePath` (`ProjectPaths.h`: a leading `/` or `\`, or a drive
+  letter with its separator), used by `PathToOpen`, the THM section's files (`src/ConfigThm.cpp`, which had its own
+  rule), the prior covariance file (`src/PriorCovariance.cpp`) and the binding's covariance reader. Its twin is
+  `pyazr.paths.is_absolute` (new module), which replaces `os.path.isabs` in six modules: Python on Windows does
+  not take `/tmp/x` as absolute, the engine does. Seen as the cause in seven unit tests (`pyazr_endf_write`,
+  `pyazr_endf_evaluation_check`, `pyazr_endf_export_support`, `pyazr_endf_amplitudes`, `pyazr_tabulate_thm`,
+  `pyazr_library_calls`, `pyazr_output_dir`) and in `pyazr_prior_builder`; **inferred, not seen**, for
+  `pyazr_reaction_rate`, `pyazr_rate_formats`, `pyazr_nds_rutherford` and one case of `pyazr_examples`.
+- *Text files.* pyazr opened text without naming an encoding, which is cp1252 there: 46 `open` calls of pyazr and
+  three of two tests now say `encoding="utf-8"` (`pyazr_project_recipe`, `pyazr_session_lock`).
+- `pyazr/cli.py` flushed the C library through `ctypes.CDLL(None)`, which Windows refuses; it calls
+  `engine_text.flush_c_stdout` (renamed from a private name). `pyazr_units_scales` formatted an mpmath number with
+  `format`, which MSYS2's mpmath does not have.
+- *Test scripts.* `tests/upgrade` looked for the binary without `.exe`; `cli_route_exit` wanted exit 255 where the
+  MSYS2 shell gives 127; `progress_bars` counted a bar line that ends `\r\n` as bad; `units_scales` and
+  `ratio_to_rutherford` compared a path that `--describe` prints with backslashes, and numbers with a carriage
+  return; `cli_commands` compares a description (a carriage return is the guess).
+- `pyazr_endf_check` is skipped on Windows with its reason: its stand-ins for the checking codes are one script
+  under seven names, run by its first line.
+
+**The causes read from the macOS annotations, and what was changed.** None of it was run on macOS.
+
+- *The shell is bash 3.2.* `tests/switch_options` and `spin_orbit_potential` expand an empty array under `set -u`
+  ("unbound variable" before bash 4.4); `tests/shift_fn` has a `case` without the opening parenthesis of its
+  pattern inside `$( )`; `tests/stopping_yield` has a here-document with an apostrophe inside `$( )`. The four are
+  written in the form bash 3.2 reads. **My count of 2026-11-15 ("no bash 4 construct was found") was wrong**: it
+  looked for bash 4's own constructs, not for what bash 3.2 reads differently; `FOR_THE_OWNER.md` is corrected.
+- *The temporary directory is a link* (`/var` to `/private/var`) and `--describe` prints the real path:
+  `tests/units_scales`, `ratio_to_rutherford` and `format3_engine` replace or accept both.
+- `pyazr_examples`: the row of the iminuit example asked for the fitted objective of T3 to eight digits. **A
+  guess**: another compiler's minimum differs in the last ones; the line with the number was cut from the output.
+  The row asks for five digits, and a failed example now prints its first three lines too.
+- `pyazr_ui_sampler_bands`: the linear band of T3 holds bounds that are not numbers. **Not understood, not
+  changed**; the test now says which set, how many, and what the fit and the band reported.
+- `tests/upgrade`: the failing line was above the 30 lines shown (the recovery and T2 parts pass, so it is the
+  golden comparison of T1 or T3). Not seen.
+
+**A gap in what the CI showed, mine.** `tests/run_tests.sh` prints the last 30 lines of a failed check's log, and
+the annotation took its failing lines from there: a check that failed more than 30 lines before the end showed
+none (`cli_commands`, `gamma_decay`). The script now prints the failing lines above the tail first, and the
+unit-test step writes one more annotation, the first failing lines of every failed unit test.
+
+**Not seen on Windows** (the new annotations should show them): `pyazr_schema`, `pyazr_validate`,
+`pyazr_light_excitation` (one check each), `repo_consistency` (one problem), `tools_runall`, three `skill_` tests,
+`physics_pathway_table` (186 of 12,918,447 checks), `tests/gamma_decay`.
+
+**My runs, on Linux** (`work/director/verify_l92.out`, `fits92b.out`): build with 0 warnings; every output file of
+every project in the three bases identical to `tab-t74-1` (887 Brune, 851 formal, 887 Park); the eight fits by
+command identical to the base build's; the tests not labelled slow: 314 of 314; `tests/run_tests.sh`: 172 of 172;
+the consistency test; the published pages. The path rule has checks in `experiment_grids` and
+`pyazr_output_dir` (drive letter, slash, backslash, `C:x`, an empty path). After the macOS edits, which came when
+that check had ended: the seven changed scripts, the examples test and the band test again. With bash 3.2 or a
+linked temporary directory: nothing, there is neither here.
+
+**A stale test, found by the way.** The slow row of the examples test for the ENDF start model expected 3941 lines
+of MF=6/MT=102, the count before a section was held to CHECKR's 200 energies; the example writes 1081 since then
+(the same on the base build). The slow tests are in no merge check of mine and not in the CI. The row is corrected;
+**the other slow tests were not run.**
+
+**Changed for a user:** on Windows, a path with a drive letter in a project is read as written. `C:x` (a drive
+without a separator), which the THM section alone took as absolute, is relative now. On Linux and macOS nothing.
+
+**Expected of this push.** Linux green. Windows: fewer failures, not green. macOS: not green (the band of T3
+and the golden comparison at least); its run takes five hours.
+
+**Not changed:** which tests the CI runs. **Open, for the PI:** as in the entry of 03:30.
+
 ## 2026-11-16 (director, 03:30) — merged: the collision matrix and observables in `physics/`; a site's members grouped
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 91: `feature/upgrade-6-site-split` (stage 1 only) and

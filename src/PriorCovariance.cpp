@@ -1,6 +1,7 @@
 #include "PriorCovariance.h"
 #include "Config.h"
 #include "InputFiles.h"
+#include "azure2/experiment/ProjectPaths.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -50,8 +51,8 @@ std::string Trim(const std::string &s) {
 
 std::string PriorCovariance::ResolvePath(const Config &configure) {
   const std::string &p = configure.priorCovariance;
-  if (p.empty() || p[0] == '/') return p;
-  const size_t slash = configure.configfile.find_last_of('/');
+  if (p.empty() || azure2::experiment::IsAbsolutePath(p)) return p;
+  const size_t slash = configure.configfile.find_last_of("/\\");
   if (slash == std::string::npos) return p;
   return configure.configfile.substr(0, slash + 1) + p;
 }

@@ -49,6 +49,12 @@ except Exception as err:                                   # engine not built
     sys.exit(77)
 
 
+from pyazr.paths import is_absolute  # noqa: E402
+
+check("is_absolute, the engine's rule on every system: /x, \\x, C:/x, c:\\x; not x, a/b, C:x, 1:/x, ''",
+      all(map(is_absolute, ["/x", "\\x", "C:/x", "c:\\x"])) and not any(map(is_absolute, ["x", "a/b", "C:x", "1:/x", ""])))
+
+
 def fresh_copy(dst):
     os.makedirs(dst)
     shutil.copy(os.path.join(SOURCE, AZR), dst)

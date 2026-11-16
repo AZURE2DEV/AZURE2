@@ -19,7 +19,7 @@ def fitted_norms(path="output/chiSquared.out", nsegments=None):
     footing as the model curve.
     """
     norms = {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             parts = [p.strip() for p in line.split(",")]
             if len(parts) < 4:

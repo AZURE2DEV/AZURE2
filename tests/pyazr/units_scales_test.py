@@ -149,7 +149,7 @@ with tempfile.TemporaryDirectory() as work:
           f"chi2 {cn.sum()!r} {ck.sum()!r}")
     check("the data are not trivial (chi^2 > 1)", cb.sum() > 1.0, f"{cb.sum()!r}")
     # E_cm[keV]: the c.m. energies by this script (non-relativistic, the <levels> masses)
-    rows_cm = [(format(cm_of_lab(mpmath.mpf(e) / 1000) * 1000, ".20g"), "0", repr(v), repr(dv))
+    rows_cm = [(mpmath.nstr(cm_of_lab(mpmath.mpf(e) / 1000) * 1000, 20), "0", repr(v), repr(dv))
                for e, v, dv in zip(E_KEV, nb, dnb)]
     in_cm = write_project(work, "cm", project_text(dataset("d.dat", unit="nb", columns="E_cm[keV] _ value error")),
                           {"d.dat": rows_cm})

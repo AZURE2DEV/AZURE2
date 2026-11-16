@@ -506,7 +506,10 @@ copies, `AZURE_POOL_CHECK`, `Site::ec_shifted_` (section 4.1, item 3); `AZUREAPI
 **Relative paths (done, branch 3, continued).**  A project's relative paths are resolved against one directory held
 by the run, never against the process's working directory, and pyazr no longer changes the working directory.
 - One rule, one function: `azure2::experiment::PathToOpen(directory, path)` (`experiment/.../ProjectPaths.h`; an
-  absolute path, or no directory, as written; an empty path is the directory itself).  The engine's
+  absolute path, or no directory, as written; an empty path is the directory itself).  Absolute is one rule too,
+  the same on every system (`IsAbsolutePath`, 2026-11-16; pyazr's twin is `pyazr.paths.is_absolute`): a leading `/`
+  or `\`, or a drive letter with its separator (`C:/...`, `C:\...`).  Before it, a Windows path with a drive letter
+  was taken as relative to the project (seen on the CI's Windows machine, never run elsewhere).  The engine's
   `Config::OpenPath(path)` applies it with `Config::baseDirectory`, which `Config::ReadConfigFile` sets to the
   project file's directory (made absolute once, at start, against the working directory: the file name is the
   caller's) unless the caller named one; pyazr names the session's `cwd` (`RuntimeOptions.base_directory`).

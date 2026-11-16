@@ -62,7 +62,7 @@ def main():
           f"  columns: {[(c.name, c.unit) for c in data.columns]}")
     kw = data.to_azr(out_dir, entrance=args.entrance, exit=args.exit_pair)
     print(f"  written: {kw['data_file']} (lab E in MeV, angle in deg, sigma and error in b)")
-    with open(kw["data_file"]) as f:
+    with open(kw["data_file"], encoding="utf-8") as f:
         for line in f.readlines()[:3]:
             print("   ", line.rstrip())
 

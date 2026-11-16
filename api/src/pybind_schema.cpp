@@ -16,6 +16,7 @@
 #include "azure2/experiment/CovarianceFile.h"
 #include "azure2/experiment/Grids.h"
 #include "azure2/experiment/Parsers.h"
+#include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/RecordReader.h"
 
@@ -101,7 +102,7 @@ void BindSchema(py::module_ &m) {
         namespace ex = azure2::experiment;
         ex::CovarianceFileAccess access;
         access.resolve = [&directory](const std::string &name) {
-          return name.empty() || name[0] == '/' || directory.empty() ? name : directory + "/" + name;
+          return name.empty() ? name : ex::PathToOpen(directory, name);
         };
         std::string why;
         const std::shared_ptr<ex::CovarianceFile> f = ex::ReadCovarianceFile(path, access, why);

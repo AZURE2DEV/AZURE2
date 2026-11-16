@@ -166,6 +166,10 @@ def test_linear_band_and_band_from_draws_agree(t3, fit_and_chain):
     ratios = []
     for a, b in zip(linear["result"]["bands"]["sets"], draws["result"]["bands"]["sets"]):
         assert a["name"] == b["name"] and len(a["lower"]) == len(b["upper"]) == points[a["name"]]
+        # a bound that is not a number arrives as None: say which set, how many, and what the two jobs reported
+        assert None not in a["lower"] + a["upper"] + b["lower"] + b["upper"], (
+            a["name"], [sum(v is None for v in r) for r in (a["lower"], a["upper"], b["lower"], b["upper"])],
+            {k: v for k, v in linear["result"].items() if k != "bands"}, fit["result"].get("errors"))
         half_linear = (np.array(a["upper"]) - np.array(a["lower"])) / 2
         half_draws = (np.array(b["upper"]) - np.array(b["lower"])) / 2
         ratios.append(half_draws[half_linear > 0] / half_linear[half_linear > 0])
