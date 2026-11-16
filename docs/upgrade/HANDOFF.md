@@ -31,6 +31,11 @@ channel's own radius; the refusal on pair 2 (l = 1, s = 3/2 and 5/2 at two radii
 
 **Run here** (CRC, GCC 11.5): build; the test above, `radius_override_test.py`. The full gate: see the end of this entry. **Not run:** CI.
 
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; `tests/channel_radii`
+passes; ctest 313 of 315, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 171
+pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line
+equal to the gate of the entry below.
+
 ## 2026-11-16 (owner's session, dev port) — per-channel radii, steps 2, 4, 5: the `channel_radius` record
 
 **Branch** `feature/upgrade-5-dev-channel-radii`, on `feature/upgrade` `f252ba30` merged into it (the handoff log
