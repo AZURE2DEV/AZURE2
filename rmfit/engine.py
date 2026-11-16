@@ -1141,10 +1141,6 @@ class Sharded(Evaluator):
         q_all = np.full(self.npts, np.nan)
         for si, entries in enumerate(self.layout):
             for ei, (p, (sa, sb), (ga, gb), ncol, nominal) in enumerate(entries):
-                if p.kind == "conv":
-                    with np.errstate(divide="ignore", invalid="ignore"):
-                        q_all[ga:gb] = p.conv.value / p.conv.error
-                    continue
                 if parts is None:
                     continue
                 d = parts[si]
@@ -1161,10 +1157,7 @@ class Sharded(Evaluator):
             blocks = []
             for entries in self.layout:
                 for p, _, (ga, gb), _, _ in entries:
-                    if p.kind == "conv":
-                        blocks.append(RowBlock(ga, gb, int(p.base_key), -np.inf, np.inf, "energy"))
-                    else:
-                        blocks.append(RowBlock(ga, gb, int(p.base_key), float(p.e_lo), float(p.e_hi), "file"))
+                    blocks.append(RowBlock(ga, gb, int(p.base_key), float(p.e_lo), float(p.e_hi), "file"))
             self.cov = Covariance.build(self.base_azr, os.path.dirname(self.base_azr), self.segments,
                                         blocks, self.npts)
             if self.cov is not None:
@@ -1183,15 +1176,6 @@ class Sharded(Evaluator):
                 raise RuntimeError("shards disagree on the R-matrix parameter block")
         self.n_rmatrix = len(rblocks[0])
         tailset = {k for i in infos for k in i["keys"][i["n_rmatrix"]:]}
-        conv_norm_nominal = {}
-        for s in self.shards:
-            for p in s.pieces:
-                if p.kind == "conv":
-                    d = self.segments.by_key(self.norm_groups.owner(p.base_key))
-                    if d.vary_norm:
-                        k = ParamKey("norm", seg=d.key)
-                        tailset.add(k)
-                        conv_norm_nominal[k] = d.norm
         tail = sorted(tailset, key=lambda k: (k.kind != "norm", k.seg, _TAIL_ORDER.get(k.kind, 0), k.term or 0))
         self.keys = list(rblocks[0]) + tail
         nfree = len(self.keys)
@@ -1203,9 +1187,6 @@ class Sharded(Evaluator):
         x0 = np.zeros(nfree)
         for m_, i in zip(self.maps, infos):
             x0[m_] = i["x0"]
-        for j, k in enumerate(self.keys):
-            if k in conv_norm_nominal:
-                x0[j] = conv_norm_nominal[k]
         self.x0 = x0
         # rows: shard order, piece order inside a shard.  self.layout[s] is a
         # list of (piece, shard_slice, global_slice, norm_col or None, nominal)
@@ -1213,7 +1194,6 @@ class Sharded(Evaluator):
         self.row_ranges = []
         self.shard_rows = []
         self.layout = []
-        self.has_conv = False
         off = 0
         for s, i in zip(self.shards, infos):
             a = off
@@ -1222,21 +1202,11 @@ class Sharded(Evaluator):
             if len(i["npts"]) != len(s.pieces):
                 raise RuntimeError(f"{s.name}: engine reports {len(i['npts'])} segments for {len(s.pieces)} pieces")
             for p, n in zip(s.pieces, i["npts"]):
-                if p.kind == "conv":
-                    if n != p.conv.n_grid:
-                        raise RuntimeError(f"{s.name}: conv piece {p.base_key} grid has {n} points, expected {p.conv.n_grid}")
-                    d = self.segments.by_key(self.norm_groups.owner(p.base_key))
-                    ncol = pos.get(ParamKey("norm", seg=d.key)) if d.vary_norm else None
-                    entries.append((p, (soff, soff + n), (off, off + p.conv.n_data), ncol, d.norm))
-                    self.row_ranges.append((int(p.base_key), (off, off + p.conv.n_data)))
-                    off += p.conv.n_data
-                    self.has_conv = True
-                else:
-                    if n != p.npts:
-                        raise RuntimeError(f"{s.name}: piece {p.base_key} [{p.e_lo},{p.e_hi}] loaded {n} points, planned {p.npts}")
-                    entries.append((p, (soff, soff + n), (off, off + n), None, None))
-                    self.row_ranges.append((int(p.base_key), (off, off + n)))
-                    off += n
+                if n != p.npts:
+                    raise RuntimeError(f"{s.name}: piece {p.base_key} [{p.e_lo},{p.e_hi}] loaded {n} points, planned {p.npts}")
+                entries.append((p, (soff, soff + n), (off, off + n), None, None))
+                self.row_ranges.append((int(p.base_key), (off, off + n)))
+                off += n
                 soff += n
             self.layout.append(entries)
             self.shard_rows.append((a, off))
@@ -1287,7 +1257,7 @@ class Sharded(Evaluator):
     def objective(self, x):
         x = np.asarray(x, float)
         t0 = time.time()
-        if (self.has_conv or not self.spec.plain or self.follow or self.cov is not None or self.park is not None
+        if (not self.spec.plain or self.follow or self.cov is not None or self.park is not None
                 or self.scat is not None):
             r, _ = self.residuals(x, jac=False)
             self.timings.append(time.time() - t0)
@@ -1345,24 +1315,6 @@ class Sharded(Evaluator):
                         for j, gj in enumerate(m_):
                             J[ga:gb, gj] += Js[sa:sb, j]
                     continue
-                c = p.conv
-                f = c.W @ rs[sa:sb]                   # convolved fit at the data energies
-                n = float(x[ncol]) if ncol is not None else float(nominal)
-                e = c.error * n
-                ok = e != 0
-                rr = np.zeros(c.n_data)
-                rr[ok] = (f[ok] - c.value[ok] * n) / e[ok]
-                r[ga:gb] = rr
-                if jac:
-                    Jc = c.W @ Js[sa:sb, :]             # (n_data, n_shard_free)
-                    scale = np.zeros(c.n_data)
-                    scale[ok] = 1.0 / e[ok]
-                    for j, gj in enumerate(m_):
-                        J[ga:gb, gj] += Jc[:, j] * scale
-                    if ncol is not None:
-                        dn = np.zeros(c.n_data)
-                        dn[ok] = -f[ok] / (c.error[ok] * n * n)
-                        J[ga:gb, ncol] += dn
         if self.cov is not None:
             if not np.all(np.isfinite(r)):
                 raise EvalError("non-finite residuals")
@@ -1402,7 +1354,7 @@ class Sharded(Evaluator):
         for entries, d in zip(self.layout, parts):
             exc = d.get("excitation", [])
             for q, (p, (sa, sb), (ga, gb), ncol, nom) in enumerate(entries):
-                if p.kind != "conv" and q < len(exc) and len(exc[q]) == gb - ga:
+                if q < len(exc) and len(exc[q]) == gb - ga:
                     out[ga:gb] = np.asarray(exc[q], float)
         return out
 

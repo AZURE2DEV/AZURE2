@@ -51,42 +51,8 @@ def points_in_segment(seg: Segment, base_dir: str) -> Optional[np.ndarray]:
 #
 # pyazr 2: a data set whose <targetInt> entry was a pure Gaussian convolution became a "conv" piece: the shard
 # evaluated the bare cross section on a grid and rmfit folded it.  On pyazr 3.0 the engine folds every data set
-# with its own kernels on the mesh of its session, so no conv piece is planned any more: a folded data set is a
-# plain piece, never split.  ConvSpec remains only as the record the evaluator's conv branch reads.
-
-@dataclass
-class ConvSpec:
-    """A pure-convolution segment evaluated on a fine grid instead of through
-    AZURE2's per-point sub-point quadrature (which costs ~40x a normal point).
-
-    The shard evaluates the *unconvolved* cross section on ``grid_cm`` (a
-    synthetic data file with value 0 and error 1, norm fixed at 1, so the
-    returned residuals *are* the fit values); the assembler folds them with
-    the same kernel AZURE2 uses (since dad58dc, 2026-10-11: one Gaussian in
-    c.m. energy per data point, sigma = TargetEffect::SigmaCM at the point,
-    truncated at +-3 sigma and normalized by its own integral, for a constant
-    sigma and for an expression alike; see build_conv_spec), and forms the
-    real residuals against the segment's data.  Exact up to quadrature (AZURE2
-    itself uses an adaptive grid + 2-point Gauss-Legendre with linear
-    interpolation); on a large model the difference is ~1e-5 of the
-    total objective, and every verified number comes from a single session
-    anyway.
-    """
-    e_lab: np.ndarray            # data energies (lab)
-    value: np.ndarray
-    error: np.ndarray
-    grid_cm: np.ndarray          # fine grid, c.m. energy, ascending
-    cm_conv: float
-    W: np.ndarray                # (n_data, n_grid) kernel weights
-
-    @property
-    def n_data(self):
-        return int(self.e_lab.size)
-
-    @property
-    def n_grid(self):
-        return int(self.grid_cm.size)
-
+# with its own kernels on the mesh of its session, so there is no conv piece: a folded data set is a plain piece,
+# never split.
 
 @dataclass
 class Piece:
@@ -97,9 +63,7 @@ class Piece:
     cls: str
     e_lo: Optional[float] = None
     e_hi: Optional[float] = None
-    kind: str = "data"          # data (conv: pyazr 2 only, never planned now)
-    conv: Optional[ConvSpec] = None
-    data_file: Optional[str] = None
+    kind: str = "data"
     split: bool = False         # one of several energy pieces of its data set
     name: str = ""              # the record's name in the shard file (write_shard)
     norm0: Optional[float] = None   # a normalization-group follower's fixed norm in the shard (write_shard)
@@ -295,8 +259,6 @@ def write_shard(base_azr: str, name: str, pieces: List[Piece], workdir: str) -> 
     seen: Dict[int, int] = {}
     datasets = []
     for p in pieces:
-        if p.kind != "data":
-            raise NotImplementedError("conv pieces are not written on pyazr 3.0")
         seg = segs.by_key(p.base_key)
         seen[p.base_key] = seen.get(p.base_key, 0) + 1
         p.name = seg.name if seen[p.base_key] == 1 else f"{seg.name}__p{seen[p.base_key]}"
