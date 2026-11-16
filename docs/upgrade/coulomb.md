@@ -755,3 +755,44 @@ before and after:
 (each one line in the output). The same 5000 points are drawn; 1066 lie beyond the turning point, and there the
 table's reference routine and GSL agree to the accuracy of `coulsm` (section 8.2: 7.6 × 10⁻¹⁰ in P, 7.9 × 10⁻⁹ in S
 against mpmath). The PASS line and its limit are unchanged.
+
+### 9.6 F alone at η = 0: what was measured
+
+*Who reads F by itself* (every use of the F of `CoulWaves` and of physics' `CoulombWaves` in `src/`, `api/src/`
+and `physics/src/`, read):
+
+- the external-capture integrand, `ECIntegral` (`fgEvaluate` for the data path, the fixed grid of the rate):
+  F W r^L and G W r^L are integrated separately;
+- what the binding returns to a caller: `Session.channel_functions` (`AZUREAPIChannelFunctions.cpp`) and
+  `pyazr.physics.coulomb_functions` (`pybind_physics.cpp`) hand out F and F′ as they are;
+- `physics/transfer` takes j_l from F at η = 0 (`ThmVertex.cpp`, `Riccati`), but from another routine:
+  `CoulombForMatching` calls `coulcc` inside the turning point and `coulfg` beyond it. Measured against mpmath
+  (l = 0–6, ρ = 7.5 × 10⁻⁴–19): F within 2.3 × 10⁻¹⁴, F′ within 6.5 × 10⁻¹⁵. Not affected;
+- the engine's own THM form factor takes j_l from GSL's `gsl_sf_bessel_jl`. Not affected.
+
+Everything else forms P, S, e^{−iφ} or H⁺ = G + iF.
+
+*The size of the defect* (`coulsm`, η = 0, against mpmath, largest relative error over ρ = 7.5 × 10⁻⁴–19; the
+largest is at the smallest ρ):
+
+| l | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| F | 4.6 × 10⁻¹⁴ | 1.6 × 10⁻¹⁰ | 4.2 × 10⁻³ | 2.6 × 10⁵ | 2.9 × 10¹³ | 5.2 × 10²¹ | 1.3 × 10³⁰ |
+| F′ | 9.5 × 10⁻¹⁶ | 7.9 × 10⁻¹¹ | 2.8 × 10⁻³ | 2.0 × 10⁵ | 2.3 × 10¹³ | 4.3 × 10²¹ | 1.1 × 10³⁰ |
+
+F′ has the same defect as F (section 8.2 named F only).
+
+*In the test projects* (scratch build of 27652262 with a probe at the two reads of `ECIntegral`; every project
+file, `calculate`, Brune, with the table; scripts and results in the director's `work/director/coul_probe/`,
+`f_all.sh`): one project reads the F of a neutral pair in an external-capture integrand, `ec_threshold` `ng`
+(neutron capture): 5535 reads, l ≤ 3, ρ ≥ 1.295. None is off by more than 10⁻⁸: the largest relative error is
+2.7 × 10⁻¹² (l = 3, ρ = 397), 2.6 × 10⁻¹³ of (F² + G²)^½. With GSL's F put in its place at those reads, 885 of 887
+output files are identical; the integrals (`intEC.dat` of `ng`) move by at most 1.0 × 10⁻¹⁵ relative, and one
+number of one observable file (`ng`, R = 3) changes in its last printed digit (8.4202213885 → …886 × 10⁻⁸,
+1.2 × 10⁻¹¹, the print's step). So no test project is affected: nothing above 10⁻¹⁰.
+
+*What is exposed.* A capture through a neutral channel with l ≥ 2 at ρ ≪ 1 (a d-wave neutron at eV energies), and a
+caller of `pyazr.physics.coulomb_functions` or `Session.channel_functions` who asks for F or F′ of a neutral pair at
+small ρ: at l = 4 and ρ ≈ 0.02 the F returned is off by about its own size (section 8.2). The routine was not changed; a
+repair (the closed forms ρ j_l(ρ), −ρ y_l(ρ) at η = 0, or `coulcc` there) moves P, S and φ of every neutral channel
+at about 10⁻¹⁶ and is its own decision.

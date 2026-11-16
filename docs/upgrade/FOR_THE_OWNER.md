@@ -392,6 +392,12 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
+- The Coulomb routine's F and F′ alone are inaccurate for a neutral pair with l ≥ 2 at ρ ≪ 1 (R, against mpmath:
+  relative error 4e-3 for l = 2, 3e5 for l = 3 at ρ = 7.5e-4); P, S and the phase are not (the error is below
+  2.5e-16 of the amplitude). Read alone only by the external-capture integrand and by the callers of
+  `pyazr.physics.coulomb_functions` and `Session.channel_functions`. No test project is affected (R: one project
+  reads such an F, at ρ ≥ 1.3, good to 2.7e-12); a d-wave neutron capture at eV energies would be.
+  `coulomb.md` section 9.6.
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
 
 ## 10. What is not finished
