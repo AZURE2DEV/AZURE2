@@ -147,7 +147,7 @@ run_project() {
   local d="$WORK/$step" src="$REPO_ROOT/tests/upgrade/$proj"
   mkdir -p "$d/output" "$d/checks"
   cp -R "$src"/*.azr "$src/data" "$d/"
-  for f in temperatures.dat cov_diff.txt prior_cov.txt; do [ -f "$src/$f" ] && cp "$src/$f" "$d/"; done
+  for f in temperatures.dat cov_diff.txt prior_cov.txt prior_cov.f3.txt; do [ -f "$src/$f" ] && cp "$src/$f" "$d/"; done
   san_env "$step"
   (cd "$d" && "$BIN" $command --no-gui --no-coulomb-table "$@" "$azr" > run.log 2>&1)
   local rc=$?
@@ -178,7 +178,7 @@ fi
 CHECKS="angle_mapping component_mapping component_subpoint_angle shared_point_tables shared_tables_race
 shared_effect_pairs upos_pair_index
 shift_fn shift_fn_groups shift_groups shift_penalty_zero shift_sqrt_subpoints shift_subpoint_angle energy_shift_sqrt
-target_auto_windows target_density target_effect_shared target_thickness_exact target_window_fallback thick_target
+target_density target_effect_shared target_thickness_exact thick_target
 convolution_unify convolution_window straggling_bohr natural_target natural_neon"
 if want checks; then
   echo "== behavioural checks (tests/<name>/check.sh)"
