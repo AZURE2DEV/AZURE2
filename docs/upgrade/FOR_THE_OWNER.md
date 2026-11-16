@@ -665,14 +665,20 @@ re-read against its design at the hand-over.
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
-   remove once the file is on `main`); look at its newest run. Its first run (2026-11-16): the Linux x86-64
-   wheels build and pass their test; the Linux aarch64 wheels build and the test fails, the failing check not
-   seen (the test writes it as an annotation from the next run on, if an annotation written inside the build's
-   container reaches the run, which was not seen either). macOS on Intel: the wheels build and the same test
-   fails, the check not seen. macOS on arm64: GitHub refused the runner (`macos-14`: "The configuration
-   'macos-14-arm64-us-default' is not supported"); the workflow asks for `macos-15` now, not seen to be
-   accepted. No Windows wheel; the Coulomb table's address is
-   empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
+   remove once the file is on `main`); look at its newest run. Its first two runs (2026-11-16):
+   - Linux x86-64: the wheels build and pass their test (`tests/pyazr/wheel_smoke.py`, whose failed checks are
+     annotations of the run).
+   - Linux aarch64, macOS on Intel and on arm64 (runner `macos-15`; `macos-14` was refused as not supported):
+     the wheels build. The objective at the start differs from the Linux x86-64 value by 2e-9 (T2 on aarch64,
+     T3 on macOS), where the test asked for 1e-9: it asks for 1e-7 now, with the measured values in the file.
+     Why the platforms differ at 2e-9 was not traced.
+   - macOS: the installed program `AZURE2` did not start (the wheel's own libgsl not found): delocate gives the
+     program a path relative to its place in the wheel, the scripts, and pip moves a script. The program is now
+     inside the package (`pyazr/bin/AZURE2`) and the console script `AZURE2` runs it (`pyazr/program.py`).
+     **Not seen to work on macOS yet**: the run after this change shows it. On Linux the test's container has a
+     system libgsl, so the test there cannot show whether auditwheel repaired the program.
+   No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
+   a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
 9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
