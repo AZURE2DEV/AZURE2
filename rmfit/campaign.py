@@ -788,7 +788,7 @@ class Campaign:
         ``levels`` = explicit key labels ("3/2-#1") instead of the automatic choice.  Returns dict(results, n, n_pass,
         n_located, fraction, passed_levels); ledger round "recall"; the child campaigns are kept for inspection."""
         from .structure import LevelCandidate, deactivate_level_variant
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         cid, x, obj, keys = self.incumbent()
         ev = self.sharded
         xs = take(x, keys, ev.keys, ev.x0)
@@ -1360,7 +1360,7 @@ class Campaign:
             # would be reported as widths.  They are also not counted in tau's k.
             dead = []
             try:
-                from pyazr import AzrModel
+                from rmfit.azr3 import Model as AzrModel
                 photon_pairs = {c.pair for lv in AzrModel.from_file(path).levels for c in lv.channels
                                 if getattr(c, "is_photon", False)}
                 gWw = ev2.wigner_widths(x2)          # particle channels only: photon amplitudes are linear, never "dead"
@@ -1655,7 +1655,7 @@ class Campaign:
             # the competing test (resolution on the driving segments, level removed) is named.
             near = []
             try:
-                from pyazr import AzrModel
+                from rmfit.azr3 import Model as AzrModel
                 for lv in AzrModel.from_file(self.base_azr).find(jpi=best.jpi):
                     if lv.channels and all(bool(c.channel_fixed) and float(c.gamma) == 0.0 for c in lv.channels):
                         continue       # a switched-off level (deactivate_level_variant: recall children) is not a neighbour
@@ -1871,7 +1871,7 @@ class Campaign:
         """The file energy of a level label like ``5/2+#9`` (``5/2+#9@23Ne`` with several compound nuclei), for the
         variant builders.  The ordinal counts the ACTIVE levels of that J^pi (and nucleus) in file order, as the
         engine does (pyazr ``AzrModel.engine_level_keys``)."""
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         k = ParamKey("energy", level=str(label))
         try:
             jpi, idx, nuc = k.jpi, k.ordinal, k.nucleus_tag

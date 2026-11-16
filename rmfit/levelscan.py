@@ -217,7 +217,7 @@ def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequenc
     ``jpis`` None/empty = the model's own groups; a J^pi no particle pair can couple to
     raises (structure.resolve_jpis, 2026-11-04 -- the old default was the half-integer
     list (17O-like), unphysical on integer-spin systems)."""
-    from pyazr import AzrModel
+    from rmfit.azr3 import Model as AzrModel
     # AZURE2's level-line reader mis-parses energies written with ~16 significant
     # digits (13N: a 17-character energy turned the model into garbage); keep 1 eV
     ex = round(float(ex), 6)
@@ -852,13 +852,9 @@ def review_figure(ev: Evaluator, x_before, x_after, ex: float, path: str, half_w
             # one energy, many angles (an angular distribution / analyzing power):
             # take the angles from the data file rows of this segment, in order
             try:
-                from .model import read_points
-                base_dir = os.path.dirname(os.path.abspath(ev.azr)) if hasattr(ev, "azr") else os.getcwd()
-                pts = read_points(os.path.join(base_dir, seg.data_file))
-                lab = np.asarray(d["energies"][i], float)
-                rows = [r for r in pts if seg.energy_min - 1e-9 <= r[0] <= seg.energy_max + 1e-9]
-                if len(rows) == lab.size:
-                    xaxis, xlabel = np.array([r[1] for r in rows])[sel], "angle (deg)"
+                ang = np.asarray(d["angles"][i], float)
+                if ang.size == Ex.size and np.all(np.isfinite(ang[sel])):
+                    xaxis, xlabel = ang[sel], "angle (deg)"
             except Exception:
                 pass
         panels.append(dict(key=key, name=name, x=xaxis, xlabel=xlabel, y=y[sel], e=e[sel], f0=np.asarray(c0[i], float)[sel],

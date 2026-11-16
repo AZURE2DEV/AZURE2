@@ -14,7 +14,7 @@ from rmfit.keys import take
 from rmfit.windows import window_variant, ladder_variants
 from rmfit.structure import (LevelCandidate, add_level_variant, deactivate_level_variant,
                              scan_jpi_on_window, frozen_removal_screen)
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 def check(name, ok, detail=""):

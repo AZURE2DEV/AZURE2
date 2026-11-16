@@ -6,7 +6,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 from rmfit import AZURE2_ROOT
 from rmfit.audit import audit_model, write_audit
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 SRC = os.path.join(AZURE2_ROOT, "tests", "13N")
 

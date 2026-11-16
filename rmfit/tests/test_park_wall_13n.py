@@ -27,7 +27,7 @@ from rmfit.engine import SingleSession, Sharded
 from rmfit.keys import take
 from rmfit.local import Bounds, polish
 from rmfit.model import single_variant
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 # the 13N fixture: from AZURE2_ROOT, or ~/AZURE2 when AZURE2_ROOT is a frozen build copy without tests/

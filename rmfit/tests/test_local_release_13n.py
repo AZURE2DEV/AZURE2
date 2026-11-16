@@ -25,7 +25,7 @@ from rmfit import search as S
 from rmfit.search import SearchConfig, sign_round, move_cols, polish_flip
 from rmfit.campaign import Campaign
 from rmfit.structure import LevelCandidate
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 failures = []
 def check(name, ok, detail=""):
     print(f"  {'ok  ' if ok else 'FAIL'}  {name}" + ("" if ok else f"  -- {detail}")); sys.stdout.flush()

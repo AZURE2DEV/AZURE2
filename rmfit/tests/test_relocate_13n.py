@@ -10,7 +10,7 @@ from rmfit import AZURE2_ROOT
 from rmfit.engine import Sharded
 from rmfit.local import BoundsPolicy, default_bounds, polish
 from rmfit.levelscan import relocate
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 FLAGS = {"use_brune": True}
 failures = []
 def check(name, ok, detail=""):

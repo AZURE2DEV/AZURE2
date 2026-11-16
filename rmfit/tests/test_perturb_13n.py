@@ -6,7 +6,7 @@ sys.path.insert(0, ROOT); os.environ.setdefault("OMP_NUM_THREADS", "1")
 import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.campaign import Campaign
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 def main():
     tmp = tempfile.mkdtemp(prefix="rmfit_pert_")
     shutil.copytree(os.path.join(AZURE2_ROOT, "tests", "13N", "data"), os.path.join(tmp, "data"))

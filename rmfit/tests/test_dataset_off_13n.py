@@ -15,7 +15,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 from rmfit import AZURE2_ROOT
 from rmfit.campaign import Campaign
 from rmfit.engine import base_segments
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 

@@ -334,3 +334,195 @@ def write_variant(base_azr: str, out_path: str, output_dir: str, datasets=None, 
             n += 1
             keys[name] = n
     return path, keys
+
+
+# -- the level scheme as rmfit edits it -------------------------------------------------
+#
+# rmfit's structure moves (add a level, switch one off, fix the levels outside a window, switch a data set off)
+# were written on pyazr 2's AzrModel.  Model below gives them the same small vocabulary on pyazr.Project: every
+# change is a Project edit (validated by the engine), every fact a field of Project.levels() / Project.pairs().
+
+class ModelChannel:
+    """One channel row of a level.  ``gamma``: the row's width column in its own convention (eV for an open
+    particle channel or a photon, the ANC for a closed one, MeV^1/2 for an amplitude row); assigning ``gamma``
+    or ``channel_fixed`` edits the project."""
+
+    def __init__(self, level, ch):
+        self._level, self._ch = level, ch
+
+    pair = property(lambda self: int(self._ch.pair))
+    L = property(lambda self: int(self._ch.l))
+    S = property(lambda self: float(self._ch.s))
+    active = property(lambda self: self._level.active)
+
+    @property
+    def gamma(self):
+        return float(self._ch.width)
+
+    @gamma.setter
+    def gamma(self, value):
+        self._level._edit_channel(self, width=float(value))
+
+    @property
+    def channel_fixed(self):
+        return bool(self._ch.fixed)
+
+    @channel_fixed.setter
+    def channel_fixed(self, value):
+        self._level._edit_channel(self, fixed=bool(value))
+
+    # the pair's facts (Project.pairs())
+    _pair = property(lambda self: self._level._model.pair(self.pair))
+    is_photon = property(lambda self: self._pair.kind_name == "photon")
+    ptype = property(lambda self: int(self._pair.kind))
+    J1 = property(lambda self: self._pair.two_j_light / 2.0)
+    J2 = property(lambda self: self._pair.two_j_heavy / 2.0)
+    parity1 = property(lambda self: int(self._pair.light_parity))
+    parity2 = property(lambda self: int(self._pair.heavy_parity))
+    M1 = property(lambda self: float(self._pair.light_mass))
+    M2 = property(lambda self: float(self._pair.heavy_mass))
+    Z1 = property(lambda self: int(self._pair.light[0]))
+    Z2 = property(lambda self: int(self._pair.heavy[0]))
+    sep_energy = property(lambda self: float(self._pair.separation_energy))
+    excitation = property(lambda self: float(self._pair.light_excitation) + float(self._pair.heavy_excitation))
+    channel_radius = property(lambda self: float(self._pair.radius))
+
+
+class ModelLevel:
+    def __init__(self, model, lv):
+        self._model, self._lv = model, lv
+
+    jpi = property(lambda self: self._lv.jpi)
+    J = property(lambda self: float(self._lv.J))
+    parity = property(lambda self: int(self._lv.parity))
+    energy = property(lambda self: float(self._lv.energy))
+    active = property(lambda self: bool(self._lv.active))
+    fixed = property(lambda self: bool(self._lv.fixed))
+    label = property(lambda self: self._lv.label)
+    nucleus = property(lambda self: self._lv.nucleus)
+    level_id = property(lambda self: (self._lv.ids[0] if self._lv.ids else None))
+    channels = property(lambda self: [ModelChannel(self, c) for c in self._lv.channels])
+
+    def _refresh(self):
+        ids = self._lv.ids
+        self._lv = next(lv for lv in self._model.project.levels() if lv.ids == ids)
+
+    def _edit_channel(self, ch, **kw):
+        self._model.project.set_channel(self._lv, ch.pair, ch.L, ch.S, **kw)
+        self._refresh()
+
+    def set_fixed(self, fixed=True):
+        """Fix (or free) the level's energy."""
+        self._model.project.set_level(self._lv, fixed=bool(fixed))
+        self._refresh()
+
+    def set_active(self, active=True):
+        self._model.project.set_level(self._lv, active=bool(active))
+        self._refresh()
+
+    def __str__(self):
+        return f"{self.jpi} {self.energy:g}"
+
+
+class Model:
+    """A project open for structure edits (see above).  ``project`` is the ``pyazr.Project``."""
+
+    def __init__(self, project):
+        self.project = project
+
+    @classmethod
+    def from_file(cls, path) -> "Model":
+        import pyazr
+        return cls(pyazr.Project.open(os.path.abspath(path)))
+
+    @property
+    def path(self):
+        return self.project.path
+
+    @property
+    def levels(self) -> List[ModelLevel]:
+        return [ModelLevel(self, lv) for lv in self.project.levels()]
+
+    @property
+    def active_levels(self) -> List[ModelLevel]:
+        return [lv for lv in self.levels if lv.active]
+
+    def pairs(self) -> list:
+        return list(self.project.pairs())
+
+    def pair(self, key):
+        for q in self.project.pairs():
+            if int(q.key) == int(key):
+                return q
+        raise KeyError(f"no pair with key {key}")
+
+    def find(self, jpi=None, energy=None, tol=1e-3) -> List[ModelLevel]:
+        """The active levels of ``jpi`` (all J^pi if None) within ``tol`` MeV of ``energy`` (any energy if None)."""
+        return [lv for lv in self.levels if lv.active and (jpi is None or lv.jpi == jpi)
+                and (energy is None or abs(lv.energy - float(energy)) <= tol)]
+
+    def pair_template(self, pair):
+        """The spins and parities of a pair: an object with ``J1``, ``parity1``, ``J2``, ``parity2``,
+        ``is_photon``; ValueError when the project has no such pair."""
+        try:
+            q = self.pair(pair)
+        except KeyError as err:
+            raise ValueError(str(err)) from None
+        return type("PairTemplate", (), dict(J1=q.two_j_light / 2.0, parity1=int(q.light_parity),
+                                             J2=q.two_j_heavy / 2.0, parity2=int(q.heavy_parity),
+                                             is_photon=(q.kind_name == "photon"), pair=int(q.key)))()
+
+    _pair_template = pair_template
+
+    def nucleus_of_pair(self, pair) -> str:
+        """The compound nucleus of a pair as a label (``"13N"``)."""
+        from pyazr.system import Nucleus
+        q = self.pair(pair)
+        return Nucleus(int(q.light[0]) + int(q.heavy[0]), int(q.light[1]) + int(q.heavy[1])).label
+
+    def add_level(self, J, parity, energy, channels, level_fixed=True) -> ModelLevel:
+        """Append a level; ``channels``: ``[{pair, L, S, gamma, fixed}]`` (``gamma`` in the row's convention).  The
+        group's other channels are written with width 0, fixed (``Project.add_level``)."""
+        before = {lv.ids for lv in self.project.levels()}
+        self.project.add_level(float(J), int(parity), float(energy),
+                               [dict(pair=int(c["pair"]), l=int(c["L"]), s=float(c["S"]),
+                                     width=float(c.get("gamma", 0.0)), fixed=bool(c.get("fixed", False)))
+                                for c in channels], fixed=bool(level_fixed))
+        new = [lv for lv in self.project.levels() if lv.ids not in before]
+        return ModelLevel(self, new[-1])
+
+    def remove_level(self, level) -> None:
+        """Remove a level (a ModelLevel, a label, or ``(J^pi, E_x)``) and its rows."""
+        self.project.remove_level(level._lv if isinstance(level, ModelLevel) else level)
+
+    def datasets(self, file_substr=None) -> List[str]:
+        """The names of the dataset records (those whose name or data file contains ``file_substr``)."""
+        out = []
+        for name, rec in self.project.records().items():
+            if rec.record_kind != "dataset":
+                continue
+            if file_substr is None or file_substr in name or file_substr in str(rec.get("file", "")):
+                out.append(name)
+        return out
+
+    def set_segment_active(self, file_substr, active) -> int:
+        names = self.datasets(file_substr)
+        for name in names:
+            self.project.set(name, active=("yes" if active else "no"))
+        return len(names)
+
+    def set_segment_norm(self, file_substr, vary=None, sys_error=None, value=1.0) -> int:
+        """Give the data sets matching ``file_substr`` their own normalization nuisance: fitted or fixed
+        (``vary``), with a prior of ``sys_error`` per cent around ``value`` when that is > 0."""
+        import pyazr
+        names = self.datasets(file_substr)
+        for name in names:
+            prior = (value, f"{sys_error:g}%") if sys_error else None
+            self.project.set(name, norm=pyazr.Nuisance(value, "fit" if vary else "fixed", prior=prior))
+        return len(names)
+
+    def set_output_dir(self, path):
+        self.project.set_config(output_dir=str(path).rstrip("/") + "/")
+
+    def write(self, path) -> str:
+        return self.project.save(path)

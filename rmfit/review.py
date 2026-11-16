@@ -317,7 +317,7 @@ def levels_from_azr(azr_path: str) -> List[Level]:
     particle channel or a photon channel, an ANC for a closed one -- ``AzrModel.apply_fit`` docstring).  Open means
     the level lies above the pair's threshold Ex (``entrance_sep_energy - sep_energy + excitation``).  These are
     the values the file was last saved with, not necessarily the fit's: prefer ``parameters.out`` when it exists."""
-    from pyazr import AzrModel
+    from rmfit.azr3 import Model as AzrModel
     from .spec import pair_lines
     m = AzrModel.from_file(azr_path)
     thr = {}

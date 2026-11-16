@@ -11,7 +11,7 @@ import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.campaign import Campaign
 from rmfit.structure import LevelCandidate
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 def check(name, ok, detail=""):

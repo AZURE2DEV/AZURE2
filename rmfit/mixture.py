@@ -54,7 +54,7 @@ from . import AZURE2_ROOT, ARCHIVE_FLAGS
 from .engine import _Worker, Evaluator, EvalError, ObjectiveSpec, Penalties
 from .keys import ParamKey
 from .model import single_variant, replace_block, set_output_dir_text, block_lines
-from pyazr.datasets import SegmentSet
+from rmfit.azr3 import SegmentTable as SegmentSet
 
 SHARED_GID_BASE = 900000       # global segment ids of shared data sets
 MEMBER_GID_STRIDE = 10000      # private segment gid = (member index + 1) * stride + key
@@ -846,7 +846,7 @@ with azure2({fit_azr!r}, cwd={os.path.dirname(fit_azr)!r}, **{m.flags!r}) as s:
 
 
 def AzrModel_from(path):
-    from pyazr.azrfile import AzrModel
+    from rmfit.azr3 import Model as AzrModel
     return AzrModel.from_file(path)
 
 

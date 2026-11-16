@@ -6,7 +6,7 @@ from rmfit import AZURE2_ROOT
 from rmfit import audit_subagent as asub
 from rmfit.audit import audit_model
 from rmfit.spec import FitSpec
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 SRC = os.path.join(AZURE2_ROOT, "tests", "13N")
 FAILS = []

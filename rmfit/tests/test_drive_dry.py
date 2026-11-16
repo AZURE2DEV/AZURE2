@@ -13,7 +13,7 @@ os.environ.pop("JOB_ID", None)
 from rmfit import AZURE2_ROOT
 from rmfit import drive as dv
 from rmfit.spec import Finding
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 FAILS = []
 

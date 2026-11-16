@@ -403,7 +403,7 @@ class Driver:
         if fw.get("Ex_MeV"):
             return float(fw["Ex_MeV"][1])
         try:
-            from pyazr.datasets import SegmentSet
+            from rmfit.azr3 import SegmentTable as SegmentSet
             from .model import cm_conversion, rows_in_segment
             from .windows import pair_separation
             text = open(self.model).read()
@@ -610,7 +610,7 @@ class Driver:
         prior_sigma as the systematic (percent); excluded -> segments off."""
         if self.campaign is not None:
             return "next", "campaign exists: roles were applied before init"
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         mdl = AzrModel.from_file(self.model)
         changed, rows = 0, []
         for ds in self.spec.data_sets:
@@ -664,7 +664,7 @@ class Driver:
         from .engine import SingleSession, bake
         from .model import single_variant
         from .local import BoundsPolicy
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         frac = float((self.spec.get("model") or {}).get("seed_frac", 0.01))
         eps = float((self.spec.get("bounds") or {}).get("sign_eps", BoundsPolicy().sign_eps))
         flags = self.spec.flags()
@@ -738,7 +738,7 @@ class Driver:
         """First fits item 3 as a check: excited states (ENSDF) of the model's residual nuclei whose partition opens below the
         top of the fit window and has no pair.  Reported and queued (default 'continue'); the pair builder is the
         supervisor's (reaction-specific radii, channel spins, summed segments)."""
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         top = self._ex_top()
         if top is None:
             return "next", "fit-window top unknown: skipped"
@@ -849,7 +849,7 @@ class Driver:
         if not cn:
             json.dump(dict(candidates=[], note="no compound_nucleus in the spec: empty bank"), open(path, "w"), indent=1)
             return "next", "no compound_nucleus in the spec: empty candidates.json"
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         top = self._ex_top()
         fw = (self.spec.get("model") or {}).get("fit_window") or {}
         lo = float(fw["Ex_MeV"][0]) if fw.get("Ex_MeV") else 0.0

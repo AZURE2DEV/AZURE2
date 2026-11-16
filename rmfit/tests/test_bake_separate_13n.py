@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2")))
 import numpy as np
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 import rmfit.enginepin as enginepin
 from rmfit.engine import SingleSession, Sharded, bake
 from rmfit.local import sanity, SAME_ENERGY_KEV

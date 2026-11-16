@@ -117,7 +117,7 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
 
     # -- pairs, levels ---------------------------------------------------------------------------------
     try:
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         model = AzrModel.from_file(azr_path)
     except Exception as err:
         out.append(Finding("HIGH", "model-parse", f"pyazr could not read the model: {err}"))

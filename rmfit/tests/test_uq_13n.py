@@ -26,7 +26,7 @@ def main():
     src = os.path.join(AZURE2_ROOT, "tests", "13N")
     shutil.copytree(os.path.join(src, "data"), os.path.join(tmp, "data"))
     os.makedirs(os.path.join(tmp, "output"))
-    from pyazr import AzrModel
+    from rmfit.azr3 import Model as AzrModel
     mdl = AzrModel.from_file(os.path.join(src, "13N.azr"))
     mdl.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
     for f in ("artemov", "seagrave", "skowronski_fels", "kettner_0."):     # the target-integrated sets: 2.7 s per gradient

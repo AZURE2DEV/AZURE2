@@ -118,7 +118,7 @@ def main():
         # (e) the removal-variant helpers find the level of the right nucleus
         from rmfit.campaign import Campaign
         from rmfit.structure import deactivate_level_variant
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         fake = Campaign.__new__(Campaign)
         fake.base_azr = azr
         e13, e15 = fake._level_energy("3/2-#1@13N"), fake._level_energy("3/2-#1@15N")

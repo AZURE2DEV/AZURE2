@@ -607,7 +607,7 @@ class UQ:
             obj = None
         # the stage's sessions write under uq/output, never into the campaign's or the fit's output directory; the data
         # files (relative paths in the .azr) are reached through links to the source directory's entries, as AzurePosterior does
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         src_dir = os.path.dirname(os.path.abspath(self.campaign.base_azr if self.campaign is not None else self.azr))
         for e in os.listdir(src_dir):
             if e in ("output", "checks", "uq") or e.endswith(".azr") or e.endswith(".sav"):

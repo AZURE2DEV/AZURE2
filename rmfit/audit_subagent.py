@@ -140,8 +140,8 @@ def subagent_prompt(kind: str, azr_path: str, campaign_dir: Optional[str] = None
                     machine_findings: Optional[List[Finding]] = None, out_dir: Optional[str] = None) -> str:
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}")
-    from pyazr import AzrModel
-    from pyazr.datasets import SegmentSet
+    from rmfit.azr3 import Model as AzrModel
+    from rmfit.azr3 import SegmentTable as SegmentSet
     azr_path = os.path.abspath(azr_path)
     base = os.path.dirname(azr_path)
     segs = SegmentSet.from_file(azr_path)

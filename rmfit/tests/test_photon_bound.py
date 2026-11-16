@@ -65,7 +65,7 @@ def main():
     from rmfit import AZURE2_ROOT
     from rmfit.engine import SingleSession
     from rmfit.model import single_variant
-    from pyazr import AzrModel
+    from rmfit.azr3 import Model as AzrModel
     tmp = tempfile.mkdtemp(prefix="rmfit_photon_"); work = os.path.join(tmp, "13N")
     shutil.copytree(os.path.join(AZURE2_ROOT, "tests", "13N"), work)
     shutil.rmtree(os.path.join(work, "output"), ignore_errors=True); os.makedirs(os.path.join(work, "output"))

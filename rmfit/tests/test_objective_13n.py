@@ -18,7 +18,7 @@ from rmfit import AZURE2_ROOT
 from rmfit.engine import SingleSession, Sharded, ObjectiveSpec, rho_sivia, verify
 from rmfit.model import single_variant
 from rmfit.local import BoundsPolicy, default_bounds, polish
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 

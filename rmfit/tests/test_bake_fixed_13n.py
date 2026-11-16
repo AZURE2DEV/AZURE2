@@ -17,7 +17,7 @@ PKG_PARENT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, PKG_PARENT)
 sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2")))
 import numpy as np
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 from rmfit.engine import SingleSession, bake
 from rmfit.model import single_variant
 AZ = os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2"))

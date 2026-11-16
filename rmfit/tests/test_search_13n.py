@@ -22,7 +22,7 @@ from rmfit.ledger import Ledger
 from rmfit.local import BoundsPolicy, default_bounds, polish
 from rmfit.moves import exposure, single_flips, pair_flips
 from rmfit.search import SearchConfig, sign_round
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 

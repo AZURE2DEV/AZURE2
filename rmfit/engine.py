@@ -203,7 +203,7 @@ class ScatLenRows:
     def build(cls, azr, keys, n_rmatrix, i1i2, sample):
         """``sample``: the worker's ``scatlen`` array at any vector (channel layout only); None if the
         model has no active line."""
-        from pyazr import AzrModel
+        from rmfit.azr3 import Model as AzrModel
         lines = [e for e in AzrModel.from_file(azr).scattering_lengths if e.active]
         if not lines:
             return None

@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 from rmfit import AZURE2_ROOT
 from rmfit import drive as dv
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 FAILS = []
 

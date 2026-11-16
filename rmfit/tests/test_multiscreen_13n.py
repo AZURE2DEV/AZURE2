@@ -22,7 +22,7 @@ from rmfit.moves import Move
 from rmfit.search import SearchConfig, screen, sign_round, crossover_round
 from rmfit.moves import crossover_moves
 from rmfit.keys import flip, sign_distance
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 
 failures = []
 

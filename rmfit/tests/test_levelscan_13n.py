@@ -16,7 +16,7 @@ from rmfit.local import BoundsPolicy, default_bounds, polish
 from rmfit.levelscan import candidate_energies, template_variant, template_screen, best_per_jpi, to_level_candidate, incumbent_on_variant, dummy_labels
 from rmfit.model import single_variant
 from rmfit.structure import JPI_GROUPS
-from pyazr import AzrModel
+from rmfit.azr3 import Model as AzrModel
 # Brune (observed) parameters: without them the boundary condition of a J^pi group is set by its
 # first level, so inserting a dummy level below the others redefines their formal parameters
 FLAGS = {"use_brune": True}
