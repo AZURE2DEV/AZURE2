@@ -192,7 +192,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     params.ReconcileBasis(compound(), configure());
   }
   // The support: the fit's limits, as AZUREMain sets them before a fit (the kinds' own and <parameterSettings>).
-  support_ = PosteriorSupport::OfFit(configure(), compound(), levels_.state, levels_.inputs, data(), params);
+  support_ = PosteriorSupportOfFit(configure(), compound(), levels_.state, levels_.inputs, data(), params);
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params(), levels_.state);
   compound()->CalcShiftFunctions(configure(), levels_.state);

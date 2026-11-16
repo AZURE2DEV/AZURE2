@@ -24,7 +24,7 @@
 #include "CovarianceBand.h"
 #include "Fitters.h"
 #include "Objective.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "ParameterLabel.h"
 #include "WorkingCopy.h"
 

@@ -55,7 +55,7 @@
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "Objective.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "ParameterLimitsManager.h"
 #include "PriorCovariance.h"
 #include "WorkingCopy.h"

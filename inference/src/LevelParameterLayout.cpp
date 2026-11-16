@@ -1,4 +1,7 @@
-#include "LevelParameterLayout.h"
+#include "azure2/inference/LevelParameterLayout.h"
+
+namespace azure2 {
+namespace inference {
 
 LevelParameterLayout::LevelParameterLayout(const std::vector<int> &numLevels, const std::vector<int> &numChannels) {
   int levelNumber = 1;
@@ -25,3 +28,6 @@ std::string LevelParameterLayout::Name(const Slot &slot) {
   if (slot.kind == Slot::Kind::kEnergy) return "energy_" + std::to_string(slot.levelNumber);
   return "width_" + std::to_string(slot.levelNumber) + "_" + std::to_string(slot.channel);
 }
+
+}  // namespace inference
+}  // namespace azure2

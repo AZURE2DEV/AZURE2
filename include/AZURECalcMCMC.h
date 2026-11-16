@@ -6,7 +6,7 @@
 #include "LevelInputs.h"
 #include "LevelState.h"
 #include "ObservedLevelTable.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "PosteriorSupport.h"
 #include "StatePool.h"
 #include "WorkingData.h"

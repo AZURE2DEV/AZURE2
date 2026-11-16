@@ -10,7 +10,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "Objective.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "PriorCovariance.h"
 #include "WorkingCopy.h"
 
@@ -94,7 +94,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
 
 bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) {
   ReadFitSettings();
-  return !PosteriorSupport::OfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
+  return !PosteriorSupportOfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
 }
 
 double AZUREAPI::LogProbabilityRWA(const vector_r &params) {

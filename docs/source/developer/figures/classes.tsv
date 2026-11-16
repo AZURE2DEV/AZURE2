@@ -16,6 +16,7 @@ azure2_io_record	io/CMakeLists.txt	the plain record structs of format 3 (header 
 azure2_stopping	stopping/CMakeLists.txt	stopping and straggling (SRIM-2013)	libraries	target	run
 azure2_experiment	experiment/CMakeLists.txt	the format-3 table: quantities, units, kernels, specs, frames	libraries	target	run
 azure2_experiment_reader	experiment/CMakeLists.txt	reads a format-3 project: document to validated specs	libraries	target	run
+azure2_inference	inference/CMakeLists.txt	the parameter vector as plain data: kinds, layout, index map, support	libraries	target	run
 azure2_convert_specs	convert/CMakeLists.txt	old lines as set-up specs (the converter's adaptor)	libraries	target	run
 azure2_convert	convert/CMakeLists.txt	the converter of old projects to format 3	libraries	target	run
 numcmc	numcmc/CMakeLists.txt	the affine-invariant ensemble sampler	libraries	target	run
@@ -40,7 +41,7 @@ AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup
 ALevel	include/ALevel.h	a level: its <levels> values, flags, final-state data	setup	class	immutable
 LevelInputs	include/LevelInputs.h	the levels' input values in the engine's basis: E, gamma, records' numbers	setup	class	run
 LevelState	include/LevelState.h	the levels at the vector: E, gamma, shift functions, J, N_f, fills, projectors, zero flags	setup	class	evaluation
-LevelParameterLayout	include/LevelParameterLayout.h	where each level's energy and amplitudes sit in the vector	setup	class	immutable
+azure2::inference::LevelParameterLayout	inference/include/azure2/inference/LevelParameterLayout.h	where each level's energy and amplitudes sit in the vector	setup	class	immutable
 ObservedLevelTable	include/ObservedLevelTable.h	the observed values of the levels at one vector, for the reports	setup	class	run
 SystemOfCompound	include/SystemOfCompound.h	the physics System of a compound system and its index map	setup	class	immutable
 azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable
@@ -85,9 +86,9 @@ Objective	include/Objective.h	the ordered list of chi^2 terms	inference	class	im
 ObjectiveTerm	include/Objective.h	one term: data, prior, penalty, model datum	inference	class	immutable
 AZUREParams	include/AZUREParams.h	the parameter vector with a record per entry	inference	class	run
 ROOT::Minuit2::MnUserParameters	external/minuit2/inc/Minuit2/MnUserParameters.h	Minuit's parameter list	inference	class	run
-ParameterRecord	include/ParameterKind.h	what a parameter is: kind and owner	inference	class	immutable
-ParamKindRow	include/ParameterKind.h	a row of the parameter-kind table	inference	class	immutable
-ParamIndexMap	include/AZUREGrad.h	where each parameter sits, for the gradient	inference	class	evaluation
+azure2::inference::ParameterRecord	inference/include/azure2/inference/ParameterKind.h	what a parameter is: kind and owner	inference	class	immutable
+azure2::inference::ParamKindRow	inference/include/azure2/inference/ParameterKind.h	a row of the parameter-kind table	inference	class	immutable
+azure2::inference::ParamIndexMap	inference/include/azure2/inference/ParameterIndexMap.h	where each parameter sits: full and packed index	inference	class	evaluation
 GradAccum	include/AZUREGrad.h	the gradient in physics coordinates	inference	class	evaluation
 ParameterLimitsManager	include/ParameterLimitsManager.h	nuisance limits and priors	inference	class	run
 FitterRow	include/Fitters.h	a fitter: name, switch, needs, its function	inference	class	immutable
@@ -97,7 +98,7 @@ FitProgress	include/FitControl.h	one step of a fit, handed to the sink	inference
 EvaluationObserver	include/FitControl.h	what the objective reports, the stop it obeys	inference	class	run
 FitEvaluations	include/FitEvaluations.h	the evaluations of a running fit: count, best point	inference	class	run
 AZURECalcMCMC	include/AZURECalcMCMC.h	the log-probability of the sampler	inference	class	run
-PosteriorSupport	include/PosteriorSupport.h	the fit's limits as the posterior's support	inference	class	run
+azure2::inference::PosteriorSupport	inference/include/azure2/inference/PosteriorSupport.h	the fit's limits as the posterior's support	inference	class	run
 nu::Mcmc	numcmc/include/numcmc/mcmc.h	the sampler's run	inference	class	run
 nu::Ensemble	numcmc/include/numcmc/ensemble.h	the walkers of the sampler	inference	class	run
 nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probability	inference	class	run

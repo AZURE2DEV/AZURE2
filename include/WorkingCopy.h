@@ -13,7 +13,7 @@
 #include "ThmGroup.h"
 #include "EvaluationCount.h"
 #include "Results.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include <functional>
 #include <memory>
 #include <atomic>
