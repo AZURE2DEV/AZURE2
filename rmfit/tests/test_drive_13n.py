@@ -26,8 +26,15 @@ def main():
     src = os.path.join(AZURE2_ROOT, "tests", "13N")
     shutil.copytree(os.path.join(src, "data"), os.path.join(tmp, "data"))
     os.makedirs(os.path.join(tmp, "output"))
-    if os.path.exists(os.path.join(src, "output", "chiSquared.out")):
-        shutil.copy2(os.path.join(src, "output", "chiSquared.out"), os.path.join(tmp, "output", "chiSquared.out"))
+    # the "archived" chiSquared.out REPRODUCE compares with: the fixture as it is, written by a session of this build
+    # (the tree ships no stored output)
+    import pyazr
+    ref = AzrModel.from_file(os.path.join(src, "13N.azr"))
+    ref.set_output_dir(os.path.join(tmp, "output"))
+    ref_azr = ref.write(os.path.join(tmp, "13N_reference.azr"))
+    with pyazr.Session(ref_azr, cwd=tmp) as s_ref:
+        s_ref.write_outputs()
+    os.remove(ref_azr)
     mdl = AzrModel.from_file(os.path.join(src, "13N.azr"))
     mdl.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
     # 2026-11-10: one background channel free at exactly zero -- SEED_CHANNELS must give it a placeholder and seed it (a zero
