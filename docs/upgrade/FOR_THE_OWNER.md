@@ -343,8 +343,8 @@ estimate from the 65 commits read, not a measurement).
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
   proton mass of the M1 capture integral (`include/Constants.h`).
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
-  run of `.github/workflows/wheels.yml` (never run); a Windows wheel (MinGW or MSVC); SRIM's two data files under
-  their authors' terms (`stopping/data/srim/README.md`); `.github/workflows/build.yml` still passes `USE_READLINE`.
+  run of `.github/workflows/wheels.yml` (section 10 item 7); a Windows wheel (MinGW or MSVC); SRIM's two data files
+  under their authors' terms (`stopping/data/srim/README.md`); `.github/workflows/build.yml` still passes `USE_READLINE`.
   The CI itself is red on this branch (section 10, the first item).
 
 ## 9. Known defects and limits
@@ -629,7 +629,11 @@ re-read against its design at the hand-over.
    of the site would rename the copies, not remove them. Measured: 11.6 MB for each further evaluation running
    at the same time on `tests/upgrade/T2`, 3.4 MB on `tests/13N`; a gradient fit holds one at any thread count.
    What could shrink a copy is holding a site's values by pointer and copying them when first written, at the
-   price of an indirection in every accessor: a decision, not started. The cost today is memory, not
+   price of an indirection in every accessor. **Decided 2026-11-16 (the PI, on the director's advice): not
+   done; the copies stay.** One object shared by evaluations that run at the same time is not possible for
+   what differs between them (each has its own parameter vector, so its own norms, shifted energies and
+   target values); what copy-on-write could share is the sites of a project without energy shifts and without
+   fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
 5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
    (1,533), `src/AZURECalc.cpp` (1,402), `src/AZURECalcMCMC.cpp` (1,316). The arithmetic of the collision matrix
@@ -643,7 +647,10 @@ re-read against its design at the hand-over.
    particle channels). There is no `inference/` library: the objective is `src/Objective.cpp`.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
-7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is
+7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
+   by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
+   branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
+   remove once the file is on `main`); look at its newest run. No Windows wheel; the Coulomb table's address is
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
