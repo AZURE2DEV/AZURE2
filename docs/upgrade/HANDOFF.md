@@ -43,7 +43,9 @@ After my last edits (Python and tests only): the consistency test, the published
 
 **3. The sanitizers pass with T2** (the twelfth push; thread 73 minutes, address 69): no failed step, no report.
 Everything `scripts/sanitize_upgrade.sh` runs is clean under clang 18's address, undefined-behaviour and thread
-sanitizers, with three entries for the OpenMP runtime's own libraries.
+sanitizers, with three entries for the OpenMP runtime's own libraries. **That run was of the code before the
+physics move.** This merge changes a comment of the script, which is what makes the two jobs run on a push: their
+result on the moved code is not known at this entry.
 
 **4. macOS, the ninth push's unit tests** (the last run without the GNU tools; `FOR_THE_OWNER.md` section 10
 item 1). Six failures that were new:
