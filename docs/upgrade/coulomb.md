@@ -781,7 +781,7 @@ largest is at the smallest ρ):
 | F | 4.6 × 10⁻¹⁴ | 1.6 × 10⁻¹⁰ | 4.2 × 10⁻³ | 2.6 × 10⁵ | 2.9 × 10¹³ | 5.2 × 10²¹ | 1.3 × 10³⁰ |
 | F′ | 9.5 × 10⁻¹⁶ | 7.9 × 10⁻¹¹ | 2.8 × 10⁻³ | 2.0 × 10⁵ | 2.3 × 10¹³ | 4.3 × 10²¹ | 1.1 × 10³⁰ |
 
-F′ has the same defect as F (section 8.2 named F only).
+F′ has the same defect as F (section 8.2 named F only). The table is the routine before section 10.
 
 *In the test projects* (scratch build of 27652262 with a probe at the two reads of `ECIntegral`; every project
 file, `calculate`, Brune, with the table; scripts and results in the director's `work/director/coul_probe/`,
@@ -792,8 +792,140 @@ output files are identical; the integrals (`intEC.dat` of `ng`) move by at most 
 number of one observable file (`ng`, R = 3) changes in its last printed digit (8.4202213885 → …886 × 10⁻⁸,
 1.2 × 10⁻¹¹, the print's step). So no test project is affected: nothing above 10⁻¹⁰.
 
-*What is exposed.* A capture through a neutral channel with l ≥ 2 at ρ ≪ 1 (a d-wave neutron at eV energies), and a
+*What was exposed* (until 2026-11-16; section 10 repaired it: F and F′ at η = 0 are now within 6.1 × 10⁻¹⁵ of
+mpmath for l = 0–8, ρ = 10⁻⁶–5 × 10⁴). A capture through a neutral channel with l ≥ 2 at ρ ≪ 1 (a d-wave neutron at eV energies), and a
 caller of `pyazr.physics.coulomb_functions` or `Session.channel_functions` who asks for F or F′ of a neutral pair at
 small ρ: at l = 4 and ρ ≈ 0.02 the F returned is off by about its own size (section 8.2). The routine was not changed; a
 repair (the closed forms ρ j_l(ρ), −ρ y_l(ρ) at η = 0, or `coulcc` there) moves P, S and φ of every neutral channel
 at about 10⁻¹⁶ and is its own decision.
+
+## 10. F and F′ of `coulsm` at η = 0 repaired (design, 2026-11-16)
+
+The PI approved the repair of section 9.6 ("Yes to all 3 your proposals", 2026-11-16): `coulsm`'s F and F′ of a
+neutral pair are to come from a stable evaluation of the Riccati-Bessel function, moving P, S and φ of every neutral
+channel by about 10⁻¹⁶. Nothing for η ≠ 0 changes.
+
+### 10.1 What is wrong, and where
+
+`physics/coulomb/coulsm/src/cwfcomp_accurate.cpp`, `solve_cwf`: for η = 0 and real ρ (tested as `eta == 0`, so a
+neutral pair only) the routine does not use cwfcomp's continued fractions. It starts from F_0 = sin ρ, F′_0 = cos ρ,
+G_0 = cos ρ, G′_0 = −sin ρ and climbs in l with `get_next_el_cwf` / `get_next_el_cwf_deriv` (A&S 14.2.1–2 at η = 0):
+
+    u_L = (L/ρ) u_{L−1} − u′_{L−1},      u′_L = u_{L−1} − (L/ρ) u_L,                                   (10.1)
+
+for u = F and u = G alike. For ρ < l, F_l ≈ ρ^{l+1}/(2l+1)!! is the recessive (minimal) solution of this recurrence
+and G_l ≈ (2l−1)!!/ρ^l the dominant one, so upward is G's stable direction and F's unstable one. In the first
+relation the two terms are each ≈ L ρ^{L−1}/(2L−1)!! and their difference is F_L ≈ ρ^{L+1}/(2L+1)!!: every step
+cancels a factor L(2L+1)/ρ² and the rounding of the previous step is magnified by it. The relative error of F_l is
+about ε ∏_{L=1}^{l} L(2L+1)/ρ²; at ρ = 7.5 × 10⁻⁴ (ε = 1.1 × 10⁻¹⁶) that is 6 × 10⁻¹⁰ (l = 1), 1 × 10⁻² (l = 2),
+4 × 10⁵ (l = 3), 2 × 10¹³ (l = 4) against the measured 1.6 × 10⁻¹⁰, 4.2 × 10⁻³, 2.6 × 10⁵, 2.9 × 10¹³ (section 9.6):
+the cause is the direction of the recurrence, not a series or the starting values (sin and cos are correctly
+rounded). F′_L is formed from F_{L−1} and F_L by the second relation and inherits F's error. G and G′ climb in their
+stable direction and are good to 5.4 × 10⁻¹⁶ (README.md); for ρ > l both are oscillatory and the recurrence is
+stable for F too, which is why only small ρ was found wrong.
+
+### 10.2 The repair
+
+(a) Only the defective part is replaced: for η = 0 and l ≥ 1, F and F′ come from a stable evaluation of
+u_l = ρ j_l(ρ); G and G′ stay the routine's (same bits), and so does l = 0, where the routine's F_0 = sin ρ,
+F′_0 = cos ρ are the closed forms themselves. (b), a new evaluation of all four functions at η = 0, would move G and
+G′ for no accuracy (they are at rounding already) and give two evaluations of G at η = 0 to keep consistent.
+
+The stable evaluation exists in physics/ already: `RiccatiBessel(l_max, x, u)` of `physics/src/transfer/
+DistortedWaves.cpp` (the plane waves of the transfer code) gives u_0 … u_{l_max} by upward recurrence of j_l where
+l_max < x and by Miller's downward recurrence normalised with Σ (2l+1) j_l² = 1 elsewhere, i.e. each in its stable
+direction. On the grid of the test below it is within 3.0 × 10⁻¹⁵ of mpmath for F, and F′ formed as
+u′_l = u_{l−1} − (l/ρ) u_l (the second relation of (10.1), which cancels by at most a factor (2l+1)/(l+1) < 2 at
+small ρ) within 6.1 × 10⁻¹⁵ (a scratch copy, measured before the change). Its interface fits (one ρ, every l up to
+l_max), but it is file-local in `physics/transfer`, a library above `azure2_physics`, so the routine cannot call it
+where it is. It moves, unchanged, to `physics/coulomb` as `riccati_bessel(int l_max, double x, double *u)`,
+declared in `Coulomb.h`; `DistortedWaves.cpp` calls it there (its numbers keep their bits). One implementation.
+`physics/transfer`'s other route to j_l, `CoulombForMatching` (COULCC inside the turning point, COULFG beyond), is
+not taken: COULCC is good to 4.5 × 10⁻¹³ at η = 0 (README.md), above the 10⁻¹³ asked for, and takes about 15 µs
+per call against `coulsm`'s 0.14 µs at η = 0.
+
+Where it plugs in: the adaptor `physics/coulomb/src/method_coulsm.cpp`, after the routine's call: for `eta == 0.0`
+and l ≥ 1 it overwrites F and F′ with u_l and u_{l−1} − (l/ρ) u_l. The third-party file stays as published (its
+F at η = 0 is computed and discarded; README.md records the change). What it replaces: the F and F′ of the η = 0
+branch of `solve_cwf` (lines 113–122), for every caller of `coulomb(…, Method::coulsm)`: the engine's
+`CoulombWavesAt` (channel functions, hybrid boundary values, external-capture integrands), `channel_functions` of
+physics/, and the binding (the physics table's row `coulomb_waves`, the session's `coulomb_functions` and
+`channel_functions`).
+`Method::coul` (the pre-2025-09 cwfcomp, a comparison method) keeps its own η = 0 path; it is not the engine's.
+
+### 10.3 Tests
+
+- `physics_coulomb_neutral` (new, `physics/tests/coulomb_neutral_test.cpp`): F, F′, G, G′ of `coulsm` at η = 0
+  against stored mpmath values (`physics/tests/data/neutral_coulomb.csv` from `make_neutral_coulomb.py`, committed
+  beside it: √(πρ/2) J_{l+½}, −√(πρ/2) Y_{l+½} at 40 digits, derivatives by A&S 14.2.1, independent of mpmath's
+  `coulombf`), l = 0–8 and 41 values of ρ from 10⁻⁶ to 5 × 10⁴ (small ρ for each l, every half integer from 0.5 to
+  10, large ρ): each function within 10⁻¹³ relative, and |F′G − FG′ − 1| ≤ 10⁻¹³. It prints the largest error per l
+  and function. It must fail on the routine before the repair (F at l ≥ 1, small ρ).
+- `physics_coulomb`: the bounds of `coulsm` at η = 0 (F 10⁴⁷, Wronskian 10³¹, written to record the defect) become
+  what the repaired routine measures there, by the test's rule (rounded up, times ten).
+- `coulomb_gsl_crosscheck`: at η = 0 it compared G and G′ only, because of F; F and F′ are compared too.
+- Nothing for η ≠ 0 moves: the existing Coulomb tests, and F, F′, G, G′, σ of `coulsm` before and after compared
+  bit for bit on a sample of charged arguments (l = 0–8; η from 10⁻³⁰⁰ to 300; ρ from 10⁻³ to 10³); G, G′ at η = 0
+  compared bit for bit on the grid of the new test.
+
+### 10.4 Effect on outputs; the external-capture signature
+
+P, S and φ of a neutral channel are formed from F and G; their change is that of F at the arguments of the test
+projects, below 2.5 × 10⁻¹⁶ of the amplitude (section 9.6), so a last printed digit may flip in a few files. The
+external-capture integrands of a neutral entrance pair read F alone (`ec_threshold` `ng`; moved by ≤ 10⁻¹⁵ when F
+was replaced by GSL's in section 9.6). An `intEC.dat` written before could hold integrals of the wrong F (a neutral
+d wave or higher at ρ ≪ 1), and the rule of CLAUDE.md is that a cache whose contents change is recomputed:
+`WorkingCopy::ECSignature` goes to v8, so every `intEC.dat` of v7 is recomputed once (the `intEC.dat.sig` file of
+every capture project changes), with a stale-file case (u) in `tests/ec_m1_exact` beside (t), fixture `stale_v7`.
+The Coulomb table holds charged pairs only and keeps its identity.
+
+### 10.5 As built (2026-11-16)
+
+Built as sections 10.2–10.4 say (commit 7c925f70; build `work/b-f0`, GCC 11.5 Release, pyazr on, 0 warnings).
+
+*Accuracy* (`physics_coulomb_neutral`, 369 points, largest relative error of F / F′):
+
+| l | before | after |
+|---|---|---|
+| 1 | 2.0 × 10⁻⁴ / 1.0 × 10⁻⁴ | 1.8 × 10⁻¹⁵ / 5.4 × 10⁻¹⁶ |
+| 2 | 3.0 × 10⁹ / 2.0 × 10⁹ | 7.4 × 10⁻¹⁶ / 8.6 × 10⁻¹⁶ |
+| 3 | 1.0 × 10²³ / 7.9 × 10²² | 2.2 × 10⁻¹⁵ / 6.1 × 10⁻¹⁵ |
+| 4 | 6.6 × 10³⁶ / 5.3 × 10³⁶ | 3.0 × 10⁻¹⁵ / 2.8 × 10⁻¹⁵ |
+| 5 | 6.5 × 10⁵⁰ / 5.5 × 10⁵⁰ | 6.4 × 10⁻¹⁶ / 1.4 × 10⁻¹⁵ |
+| 6 | 9.4 × 10⁶⁴ / 8.0 × 10⁶⁴ | 4.9 × 10⁻¹⁶ / 2.4 × 10⁻¹⁵ |
+| 7 | 1.8 × 10⁷⁹ / 1.6 × 10⁷⁹ | 7.4 × 10⁻¹⁶ / 2.0 × 10⁻¹⁵ |
+| 8 | 4.7 × 10⁹³ / 4.1 × 10⁹³ | 8.0 × 10⁻¹⁶ / 7.6 × 10⁻¹⁶ |
+
+(the largest errors before are at ρ = 10⁻⁶). l = 0 is unchanged (1.8 × 10⁻¹⁶). G, G′ unchanged, at most 5.9 × 10⁻¹⁵ and
+3.3 × 10⁻¹⁵; |F′G − FG′ − 1| at most 6.7 × 10⁻¹⁶ (4.6 × 10⁷⁷ before). On the library before the change the test fails
+at 98 of 369 points. A scratch sweep (201 values of ρ from 10⁻⁶ to 10⁵, l = 0–8, against mpmath) gave at most
+6.3 × 10⁻¹⁵. `physics_coulomb`: `coulsm` at η = 0 F 7.4 × 10⁻¹⁶, Wronskian 6.7 × 10⁻¹⁶ (bounds now 10⁻¹⁴).
+
+*Nothing for η ≠ 0 moved.* F, F′, G, G′, σ and status of `coulsm`, library before and after, on 1404 charged
+arguments (l = 0–8; η = 10⁻³⁰⁰, 10⁻¹², 10⁻³, 0.01, 0.1, 0.6449, 1, 3, 10, 50, 150, 300, −0.5; ρ = 10⁻³, 0.01, 0.1,
+0.5, 1, 1.2011, 3, 7.5, 10, 30, 100, 1000): the same bits (the 9 points at η = 300, ρ = 1000 fail both times). G, G′
+at η = 0 the same bits on 11380 points; l = 0 unchanged. Time per neutral call 0.08 → 0.29 µs.
+
+*Signature.* v8; `tests/ec_m1_exact` case (u) (fixture `stale_v7`) fails on the binary before the change and passes
+after, with and without a table.
+
+*Full check* (`work/director/verify_f0.out`, every project in three bases against `tab-trial99-1`): 30 files differ
+per basis (of 887, 851, 887), none new.
+
+- In each basis: the 23 `intEC.dat.sig` (v8), and `ec_threshold` `ng` `intEC.dat` (509 numbers, at most
+  3.9 × 10⁻¹⁴ per number, 2.3 × 10⁻¹⁶ of each complex value).
+- Brune and formal: `secondary_gamma` `spin2_minus`, `spin2_plus` `parameters.out`: a width printed
+  "1000.000000 eV" before and "1.000000 keV" after; `sum_lab_frame` `sum_data`, `sum_free` `chiSquared.out` and
+  `run.log`: χ² 3.98668 × 10⁻¹⁷ → 3.98735 × 10⁻¹⁷ (1.7 × 10⁻⁴ relative, 6.7 × 10⁻²¹ absolute).
+- Park: the same `sum_lab_frame` files (2.5 × 10⁻⁶; `run.log` 9.0 × 10⁻⁶); `6Li_d` `AZUREOut_aa=1_R=4.out` in the
+  last printed digit (1.39 × 10⁻¹¹) and its `run.log` χ² 9312.1177619 → 9312.11776191.
+
+The eight fits: six identical; `13N` gradient and Levenberg-Marquardt differ only in `intEC.dat.sig`, χ² unchanged
+(28100.1722989, 28100.1722579). `ctest -LE slow` 332 of 332, `tests/run_tests.sh` 172 of 172.
+
+The two rows above 10⁻¹⁰ stopped the step and were read by the reviewer (not the PI), 2026-11-16: the
+`sum_lab_frame` χ² is zero to rounding, not a moved χ²; the `secondary_gamma` row is the choice of unit at an
+exact boundary, and `parameters.out` chooses the unit by the printed value on the integration branch since
+rehearsal 101 (`ReportWidth`, `src/LevelReport.cpp`), which prints "1.000000 keV" there on both sides, so the row
+goes with that merge. The `6Li_d` rows are of the approved size. No expected file, tolerance or reference value
+was changed.
