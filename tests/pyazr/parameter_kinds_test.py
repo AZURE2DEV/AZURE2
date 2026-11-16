@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Parameter kinds: what a fit parameter is comes from the record its creation site writes, not from its name.
 
-The engine's table of kinds (include/ParameterKind.h, ``_azure2.parameter_kinds()``) has one row per kind, in their
+The engine's table of kinds (inference/include/azure2/inference/ParameterKind.h, ``_azure2.parameter_kinds()``) has
+one row per kind, in their
 order in the vector, with its key, unit and flags.  Each parameter's record (``Session.parameter_records()``) carries its kind and what
 it belongs to (level and channel, segment key, target effect, sample, THM combination).  Checked on projects that
 together hold every kind (tests/upgrade/T2: levels, abundance, norms, the three shift kinds, density;

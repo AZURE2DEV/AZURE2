@@ -1,4 +1,5 @@
-// The support of the posterior: the fit's limits of every parameter kind (include/PosteriorSupport.h).
+// The makers of the posterior's support from the fit's parameters (include/PosteriorSupport.h); the rule itself is
+// azure2/inference/PosteriorSupport.h.
 #include "PosteriorSupport.h"
 
 #include <limits>
@@ -6,17 +7,16 @@
 #include "AZUREParams.h"
 #include "ParameterLimitsManager.h"
 
-PosteriorSupport PosteriorSupport::OfFit(const Config &configure, const CompoundSystem *compound, const LevelState &state,
-                                         const LevelInputs &inputs, WorkingCopy *data,
-                                         AZUREParams &params) {
+PosteriorSupport PosteriorSupportOfFit(const Config &configure, const CompoundSystem *compound, const LevelState &state,
+                                       const LevelInputs &inputs, WorkingCopy *data, AZUREParams &params) {
   {
     ParameterLimitsManager settings(&configure, compound, state, inputs, data, &params);
     if (settings.ReadParameterSettings()) settings.ApplyAllParameterSettings(params);
   }
-  return OfParameters(params);
+  return PosteriorSupportOfParameters(params);
 }
 
-PosteriorSupport PosteriorSupport::OfParameters(const AZUREParams &params) {
+PosteriorSupport PosteriorSupportOfParameters(const AZUREParams &params) {
   PosteriorSupport support;
   const ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   for (int i = 0; i < (int)p.Params().size(); i++) {
@@ -26,10 +26,4 @@ PosteriorSupport PosteriorSupport::OfParameters(const AZUREParams &params) {
                               par.HasUpperLimit() ? par.UpperLimit() : std::numeric_limits<double>::infinity()});
   }
   return support;
-}
-
-bool PosteriorSupport::Contains(const vector_r &fitVector) const {
-  for (const Limit &l : limits)
-    if (l.index >= (int)fitVector.size() || !(fitVector[l.index] >= l.lower && fitVector[l.index] <= l.upper)) return false;
-  return true;
 }

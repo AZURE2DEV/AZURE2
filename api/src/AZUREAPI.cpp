@@ -26,7 +26,7 @@
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "CovarianceBand.h"
-#include "PriorCovariance.h"
+#include "PriorCovarianceFile.h"
 #include "AZURECalc.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
@@ -135,7 +135,7 @@ bool AZUREAPI::SetUpPriorCovariance() {
   std::shared_ptr<const PriorCovariance> prior;
   if (data() && (configure().paramMask & Config::CALCULATE_WITH_DATA) &&
       !(configure().paramMask & Config::CALCULATE_REACTION_RATE) &&
-      PriorCovariance::Load(configure(), names_, fixed_, AZUREParams::BasisForConfig(configure()), prior) < 0)
+      LoadPriorCovariance(configure(), names_, fixed_, AZUREParams::BasisForConfig(configure()), prior) < 0)
     return false;
   if (data()) data()->SetPriorCovariance(prior);
   // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
@@ -1103,8 +1103,7 @@ double AZUREAPI::NuisanceChi2(const vector_r &full) {
   for (int f = 0; f < (int)full.size(); f++) {
     double nominal, sigma;
     if (!NuisancePriorOf(f, nominal, sigma)) continue;
-    const double d = (full[f] - nominal) / sigma;
-    chi2 += d * d;
+    chi2 += GaussianPriorChi2(full[f], nominal, sigma);
   }
   return chi2;
 }
@@ -1112,7 +1111,7 @@ double AZUREAPI::NuisanceChi2(const vector_r &full) {
 void AZUREAPI::AddNuisanceGradient(const vector_r &full, vector_r &gradFull) {
   for (int f = 0; f < (int)full.size() && f < (int)gradFull.size(); f++) {
     double nominal, sigma;
-    if (NuisancePriorOf(f, nominal, sigma)) gradFull[f] += 2.0 * (full[f] - nominal) / (sigma * sigma);
+    if (NuisancePriorOf(f, nominal, sigma)) gradFull[f] += GaussianPriorGradient(full[f], nominal, sigma);
   }
 }
 
@@ -1143,7 +1142,7 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) {
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
   ForEachDiagonalPrior(data(), pmap, [&](int idx, double nominal, double sigma) {
     if (idx < 0 || idx >= (int)gradFull.size() || pmap.Desc(idx).kind == ParamKind::Abundance) return;
-    gradFull[idx] += 2.0 * (full[idx] - nominal) / (sigma * sigma);
+    gradFull[idx] += GaussianPriorGradient(full[idx], nominal, sigma);
   });
   AddNuisanceGradient(full, gradFull);
   if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) pc->AddGradient(full, gradFull);

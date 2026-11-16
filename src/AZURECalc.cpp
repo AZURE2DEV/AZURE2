@@ -4,7 +4,7 @@
 #include "ModelPass.h"
 #include "Objective.h"
 #include "ShiftedFold.h"
-#include "PriorCovariance.h"
+#include "InferenceTypes.h"
 #include "Profile.h"
 #include <algorithm>
 #include <atomic>
@@ -758,13 +758,13 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
-      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
     });
     ForEachDopplerPrior(ld, pmap, [&](int idx, double nominal, double e) {  // Doppler-temperature priors
-      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
     });
     ForEachThicknessPrior(ld, pmap, [&](int idx, double nominal, double e) {  // sample-thickness priors
-      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
     });
     for (int s = 1; s <= ld->Data().NumSegments(); s++) {  // normalizations
       const Segment *seg = ld->Data().GetSegment(s);
@@ -778,7 +778,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       double g = normData[s];
       double n0 = seg->GetNominalNorm();
       double nerr = n0 / 100.0 * seg->GetNormError();
-      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += 2.0 * (ld->State(*seg).norm - n0) / (nerr * nerr);
+      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += GaussianPriorGradient(ld->State(*seg).norm, n0, nerr);
       grad[idx] = g;
     }
   }
@@ -1097,8 +1097,8 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   ForEachDiagonalPrior(data(), pmap, [&](int idx, double nominal, double e) {
     if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
+    grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
+    g2[idx] += GaussianPriorCurvature(e);
   });
   // Park's wall and the abundance sum-to-one term are residual rows (AppendModelRows): in J^T r above.
   states_.gradient.g2At = p;
@@ -1126,7 +1126,7 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   // sum-to-one term and Park's wall are residual rows (AppendModelRows), in the sum above.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   ForEachDiagonalPrior(data(), pmap, [&](int idx, double, double e) {
-    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+    if (idx < (int)g2.size()) g2[idx] += GaussianPriorCurvature(e);
   });
   if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradTiming)) {
     int c = ++configure().diagnostics->g2Timings;
@@ -1316,7 +1316,7 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
     double nominalValue, paramError;
     if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
     // d/dp of ((p - nominal)/error)^2.
-    grad[f] += 2.0 * (p[f] - nominalValue) / (paramError * paramError);
+    grad[f] += GaussianPriorGradient(p[f], nominalValue, paramError);
   }
 }
 
@@ -1331,8 +1331,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
   for (int f = 0; f < (int)p.size(); f++) {
     double nominalValue, paramError;
     if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
-    double deviation = (p[f] - nominalValue) / paramError;
-    nuisanceChiSquared += deviation * deviation;
+    nuisanceChiSquared += GaussianPriorChi2(p[f], nominalValue, paramError);
   }
   return nuisanceChiSquared;
 }

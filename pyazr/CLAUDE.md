@@ -112,7 +112,8 @@ path of the row, or a path of the row never appears.
   only ways to evaluate: a number of `chiSquared.out` or `AZUREOut_*` is read from them, never rebuilt.  A session
   never switches between data and extrapolations: the other is a second session
   (`parameters.carry_model_parameters` carries a data session's vector to it).
-- **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
+- **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`; the list's sums are `inference/`'s
+  `TermList.h`), nothing in `pyazr/`; it appears in
   `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
   (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
 - **A new number a point carries** (an extra column of a data kind): one row of `PointOutputs()` in

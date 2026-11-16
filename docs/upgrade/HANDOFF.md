@@ -2,6 +2,107 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 12:45) — merged: the `inference/` library; the wheels' first run read to its end
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 95: the branch `feature/upgrade-2-inference` (an
+agent's; its entry follows this one). The reference stays `tab-trial94-1`; the base build is `work/b-trial95`;
+the quick set is 325 tests.
+
+**The library, and what it is not.** `inference/` (target `azure2_inference`) includes its own headers and the
+C++ standard library and links nothing; `inference_standalone` builds it alone and consistency check 8b refuses
+any other include. It holds what is defined without an engine object: the parameter kinds and the record of one
+parameter, the level block's layout, the index map of the vector, the posterior's support, one Gaussian prior
+(one statement in place of 30 written-out copies), the prior covariance (grammar, set-up, arithmetic), and the
+sums of an ordered list of terms. **It does not hold the objective's 13 terms** (`src/Objective.cpp`: each reads
+the working copy, the segments, the level state or the caller's `Results`), the vector's values (`AZUREParams`
+on Minuit2's parameters) or the fitters. The roadmap's box stays open and says so; `docs/upgrade/inference.md`
+is the design with what was done. I read the diff of the engine files: the arithmetic of each replaced line is
+kept; 11 places that wrote `pow(r, 2.0)` now form `r * r`, one multiplication in an optimised build either way
+(a build without optimisation could differ in a last digit there; not built).
+
+Questions the agent leaves for the PI: a `Total-...-Chi-Squared` field for the `gamma_decay` priors in
+`chiSquared.out` (without it that file's totals do not add up to the minimised chi-squared for such a project;
+it changes an output file); whether a `ParameterVector` class is wanted beside `AZUREParams`; whether the terms
+on arrays are wanted as a job of their own. Found by it and not changed: a session's `write_outputs` does not
+refresh the nuisance total; `AZUREAPI::EvaluateFilledChi2` is a second walk of the segments.
+
+**The wheels' first run, complete** (run 43828542307). Linux x86-64: built, tested, pass. Linux aarch64 and
+macOS on Intel: built, `wheel_smoke.py` fails, the check not seen; the test stores the objective of T1 to T3 from
+Linux x86-64 and compares to 1e-9, which is a guess at the cause and no more. macOS arm64: the runner `macos-14`
+was refused by GitHub as not supported; the workflow asks for `macos-15` now (not seen to be accepted).
+
+**The CI's build run.** The thirteenth push's macOS job ended (4 h 45 min) with the failures the fourteenth
+push answers and nothing new; `pyazr_ui_sampler_bands`, the iminuit example on T3 and `tests/upgrade` stay not
+understood. The first run with the fourteenth push's repairs (of `0c6167c1`) started at about 12:00.
+
+**Verified** (`work/director/verify_l95.out`, against `tab-trial94-1` and `work/b-trial94`): 0 warnings; 887,
+851 and 887 files identical, none differs, none new; the eight fits identical; 325 of 325 quick tests; 172 of
+172 regression scripts; the consistency test; the published pages. Not run: the slow tests on this tree,
+sanitizers, a build without optimisation, any other platform.
+
+**Running, not merged:** `feature/upgrade-1-gradient-functions`.
+
+## 2026-11-16 (inference agent, 11:40) — the `inference/` library: the parameter vector, the priors, the sums of the term list
+
+**Not merged.** Branch `feature/upgrade-2-inference` in `wt-infer`, cut from `feature/upgrade` at f252ba30, four
+commits: f0b6d536 (design note), ce2edbfd (the target and the parameter vector), 675738e9 (the priors and the term
+list), and the documents' commit at the head. Build `work/b-infer`. The whole account is `docs/upgrade/inference.md`
+(section 7 is what was done).
+
+**What was changed.**
+
+- *The target* (ce2edbfd). `inference/` is the CMake target `azure2_inference`, namespace `azure2::inference`; it
+  includes its own headers and the standard library and links nothing (check 8b of `repo_consistency_test.py`,
+  the ctest `inference_standalone`). `include/InferenceTypes.h` names its types for the engine and the binding.
+- *The parameter vector as plain data* (ce2edbfd). Moved: `ParameterKind.h`, `LevelParameterLayout.{h,cpp}`.
+  `ParamDesc` and `ParamIndexMap` left `AZUREGrad.{h,cpp}` for `ParameterIndexMap.{h,cpp}`: the two friend builders
+  are gone, the map is made by public appends and `Pack(fixed)`, and `BuildParamIndexMap` keeps the walk.
+  `PosteriorSupport` (limits, `Contains`) is the library's; its makers are the engine's `PosteriorSupportOfFit` and
+  `PosteriorSupportOfParameters`. Removed without a caller: `ParamIndexMap::EIndex`, `GammaIndex`, four offsets.
+- *The priors and the list* (675738e9). `GaussianPrior.h` (value, gradient, curvature) replaces 30 written-out
+  copies in the engine and the binding. `PriorCovariance.{h,cpp}` (grammar on a stream, set-up, arithmetic) is the
+  library's; path, cached open and messages are `src/PriorCovarianceFile.cpp`. `TermList.h` holds
+  `Term<Context>` and `TermList<Context>`; `ObjectiveTerm` is `Term<ObjectiveContext>` and `Objective` holds a
+  `TermList`.
+- Sizes: the library has 743 lines of headers, 421 of sources, 553 of tests. `src/Objective.cpp` 495 -> 468,
+  `include/Objective.h` 264 -> 252, `src/AZUREGrad.cpp` 1259 -> 1108, `include/AZUREGrad.h` 476 -> 348.
+- Documents: `inference.md`, `CLAUDE.md` (the Upgrade rule, the Layout table, three recipes), `FOR_THE_OWNER.md`
+  sections 5, 6, 10 item 5 and 11, `ROADMAP.md` (two rows of the state table, Phase 2), `ARCHITECTURE.md` section
+  3, `README.md`, `objective.md`, the Developer Guide (`architecture.rst`, `classes.rst`, `extending.rst`, the
+  class scheme's tables and three figures), `pyazr/CLAUDE.md`, `tests/consistency/` (checks 2, 8b, 23, 26, 31, 34,
+  38; `file_sizes.tsv` tightened, which also lowered records left high by earlier merges).
+
+**What was run** (`work/director/verify_branch.sh wt-infer infer tab-t74-1 trial92 6`, once per commit with code).
+
+- ce2edbfd: `work/director/verify_infer_stage1.out` (logs `work/director/vlinfer-stage1/`). 0 warnings; 887, 851
+  and 887 files identical in the three bases, none differs, none new; eight fits identical to `work/b-trial92`;
+  319 of 319 quick tests; 172 of 172 regression scripts.
+- 675738e9: `work/director/verify_infer_stage2.out` (logs `work/director/vlinfer/`; the first run's tables kept as
+  `work/cmp/*/tab-infer-1-stage1`). The same numbers, with 322 of 322 quick tests.
+- Instructions at one thread against `work/b-trial92` on 675738e9 (`work/director/infer_speed_stage2.out`): a
+  calculation of T2 1,242,597,477 -> 1,242,582,263 (-0.001 %), a gradient fit of T2 169,174,329,302 ->
+  169,559,125,470 (+0.23 %), a gradient fit of 13N 185,403,197,700 -> 185,402,404,063 (-0.0004 %); no output file
+  differs.
+- The documents' commit: `repo_consistency_test.py` and `ctest -R docs_build` (see the commit's message); the
+  whole gate was not run again on it (it changes comments of two Python files and no code).
+
+**What is not done.**
+
+- The thirteen terms, `ForEachDiagonalPrior`, `AppendModelRows` and `ReplaceDiagonalPriors` stay in the engine:
+  each term reads the working copy, the segments, the level state or the caller's `Results`. A library of them
+  needs the data chi-squared on arrays, a change of the evaluation. The roadmap box stays open.
+- No class `ParameterVector`: the values, limits and fixed flags are `AZUREParams` on Minuit2's parameters.
+- The fitters and the gradient are engine code.
+- The output writer was audited, not changed (`inference.md` section 6).
+- Not run: the slow tests, the sanitizers, the thread comparison, another compiler, the CI; no test was shown to
+  fail by an injected error.
+
+**Found on the way.** T11, the priors of the `gamma_decay` records, has no field in `chiSquared.out`: for such a
+project the file's totals do not add up to the minimised chi-squared. A session's `write_outputs` refreshes the
+model-only terms and the prior covariance before writing, not the nuisance total. `AZUREAPI::EvaluateFilledChi2`
+is a second walk of the segments beside the objective's first term (residual form). The +0.23 % of the T2 gradient
+fit was not traced to a function. Two one-thread compilations of test files ran while a six-thread gate ran.
+
 ## 2026-11-16 (director, 11:45) — merged: the engine's coupling coefficients from `physics/`; the wider Python call
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 94: the branch `feature/upgrade-1-coupling-engine`

@@ -26,8 +26,7 @@ const std::vector<ApparatusRow> &ApparatusRows() {
 
 double ApparatusParam::Penalty(double value) const {
   if (!declaration.vary || priorReplaced || !(declaration.sigma > 0.0)) return 0.0;
-  const double r = (value - declaration.centre) / declaration.sigma;
-  return r * r;
+  return GaussianPriorChi2(value, declaration.centre, declaration.sigma);
 }
 
 // ---------------------------------------------------------------- the row of a table kernel's own parameters
@@ -168,12 +167,7 @@ std::string ApparatusLabel(const DataSet &data, int k) {
   return std::string(a.Row().label) + " " + a.declaration.Name() + " (" + a.Row().doc + ")";
 }
 
-void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data, int &i) {
+void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data) {
   if (!data) return;
-  for (int k = 1; k <= data->Data().NumApparatusParams(); k++, i++) {
-    map.apparatusIndex_[k] = i;
-    ParamDesc d{ParamKind::Apparatus, -1, -1, -1, -1, false};
-    d.apparatus = k;
-    map.desc_.push_back(d);
-  }
+  for (int k = 1; k <= data->Data().NumApparatusParams(); k++) map.AppendApparatus(k);
 }

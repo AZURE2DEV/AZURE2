@@ -137,25 +137,25 @@ void Segment::InstallShiftFn(SegmentState &state, const Segment &owner, int owne
 void Segment::AddShiftPenalty(const SegmentState &state, double &chi) const {
   // A prior the prior covariance replaces is not added (objective.md D3).
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
-    chi += pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);  // nominal: 0 or the prior_centre row
+    chi += azure2::inference::GaussianPriorChi2(state.energyShift, energyShiftNominal_, energyShiftError_);  // nominal: 0 or the prior_centre row
   if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
-    chi += pow((state.energyShiftSqrt - energyShiftSqrtCentre_) / energyShiftSqrtError_, 2.0);
+    chi += azure2::inference::GaussianPriorChi2(state.energyShiftSqrt, energyShiftSqrtCentre_, energyShiftSqrtError_);
   // The shift function's parameters are penalised once, on the segment that owns them.
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
       if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
-        chi += pow((state.shiftFnValues[j] - shiftFnCentre_[j]) / shiftFnError_[j], 2.0);
+        chi += azure2::inference::GaussianPriorChi2(state.shiftFnValues[j], shiftFnCentre_[j], shiftFnError_[j]);
 }
 
 void Segment::ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const {
   constant = sqrtTerm = function = 0.0;
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
-    constant = pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);
+    constant = azure2::inference::GaussianPriorChi2(state.energyShift, energyShiftNominal_, energyShiftError_);
   if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
-    sqrtTerm = pow((state.energyShiftSqrt - energyShiftSqrtCentre_) / energyShiftSqrtError_, 2.0);
+    sqrtTerm = azure2::inference::GaussianPriorChi2(state.energyShiftSqrt, energyShiftSqrtCentre_, energyShiftSqrtError_);
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
       if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
-        function += pow((state.shiftFnValues[j] - shiftFnCentre_[j]) / shiftFnError_[j], 2.0);
+        function += azure2::inference::GaussianPriorChi2(state.shiftFnValues[j], shiftFnCentre_[j], shiftFnError_[j]);
 }
 

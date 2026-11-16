@@ -68,15 +68,15 @@ ApparatusRow KernelParameterRow();
 
 class AZUREParams;
 class DataSet;
-class ParamIndexMap;
+#include "InferenceTypes.h"
 /// The apparatus parameters' slots of the vector (WorkingCopy::FillMnParams), after every other kind.
 void AddApparatusParams(WorkingCopy &data, AZUREParams &params);
 /// The chiSquared.out lines of the rows with a fitted prior (WorkingCopy::WriteChiSquared).
 void WriteApparatusChiSquared(const WorkingCopy &data, std::ostream &out);
 /// The covariance files' label of apparatus parameter k (ParameterLabel.cpp).
 std::string ApparatusLabel(const DataSet &data, int k);
-/// The apparatus block of the index map, from full index \p i on (advanced past it); no analytic derivative: the
+/// The apparatus block of the index map, appended to it (the vector's last block); no analytic derivative: the
 /// parameters are differenced on the whole chi^2, as a density (AZURECalc.cpp).
-void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data, int &i);
+void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data);
 
 #endif

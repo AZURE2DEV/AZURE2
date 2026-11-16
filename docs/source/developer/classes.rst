@@ -87,7 +87,7 @@ evaluations (copies of the caller's state in ``FitterStates``, their pool a
 ``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
 and a copy per walker, the idle ones in the caller's ``SamplerStates``), the reaction rate, a limit's conversion and the
 sub-point grids. Where each level's energy and amplitudes sit in the
-parameter vector is the ``LevelParameterLayout`` (``CompoundSystem::ParameterLayout()``,
+parameter vector is the ``LevelParameterLayout`` of ``inference/`` (``CompoundSystem::ParameterLayout()``,
 built by ``Fill``): every walk of the level block reads it. ``CompoundSystem`` is not
 copied (its copy constructor is deleted): one object, made by ``SetUpCompoundSystem``
 (``include/CompoundSystemSetUp.h``) and owned by the run or the session as
@@ -157,7 +157,13 @@ the one
 ``Objective`` (``Objective::Engine()``), whose ``ObjectiveTerm`` list is fixed.
 ``AZUREParams`` holds Minuit's parameter list with one ``ParameterRecord``
 per parameter, whose kind is a row of ``ParamKindTable()``; the gradient makes
-a ``ParamIndexMap`` and accumulates into a ``GradAccum``. ``AZURECalcMCMC``
+a ``ParamIndexMap`` and accumulates into a ``GradAccum``. The boxes named
+``azure2::inference::`` are the library ``inference/``: plain data and
+arithmetic that include nothing of the engine (the records and kinds, the
+index map, the posterior's support, the prior covariance, and
+``TermList``, the sums of the objective's list, which ``Objective`` holds
+with the engine's context). The terms read the engine's objects and stay in
+``src/Objective.cpp``. ``AZURECalcMCMC``
 is the sampler's log-probability on pools of its own; it drives ``nu::Mcmc``,
 whose ``nu::Ensemble`` owns the walkers.
 

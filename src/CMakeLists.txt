@@ -1,6 +1,6 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
-ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
+ALevel.cpp LevelInputs.cpp LevelState.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
@@ -37,7 +37,7 @@ UnitExternalCapture.cpp
 SegmentParameters.cpp
 ShiftFrames.cpp
 ShiftedFold.cpp
-THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
 SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
 LevelInputMessages.cpp ProjectSetup.cpp)
@@ -88,6 +88,8 @@ endif (BUILD_LIBRARY)
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
+# azure2_inference (inference/: the parameter vector as plain data, docs/upgrade/inference.md) uses nothing and is
+# below the engine likewise; include/InferenceTypes.h names its types for the engine.
 target_link_libraries(AZURE2Core PUBLIC
     azure2_support
     azure2_physics
@@ -96,6 +98,7 @@ target_link_libraries(AZURE2Core PUBLIC
     azure2_io
     azure2_experiment
     azure2_experiment_reader
+    azure2_inference
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
