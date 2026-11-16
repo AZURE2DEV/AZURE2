@@ -2,6 +2,123 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 16:25) — merged: the three large files split; the Windows tests' repairs; Coulomb notes
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 98: `feature/upgrade-6-large-classes` (an agent's; its
+entry follows), `feature/upgrade-0-windows-tests-2` (the director's) and the first part of
+`feature/upgrade-1-coulomb-engine` (an agent's commits 575f7cc5 and 670e6b0f). The base build is
+`work/b-trial98`, the reference stays `tab-trial94-1`, the quick set is 328 tests.
+
+**The split.** `src/AZURECalc.cpp`, `src/AZURECalcMCMC.cpp` and `src/AZUREAPI.cpp` are divided by job into
+smaller files; functions moved as they are, no signature, public name or arithmetic changed (the agent's entry
+lists the files and the few new lines). The director's own comparison found every code line of the three old
+files in the new ones. At the merge `tests/consistency/file_sizes.tsv` kept `AMatrixFunc.cpp` at 1,966 (the
+gradient split of rehearsal 97) beside the agent's new rows.
+
+**The Windows tests** (the failures of run 43828542125, `FOR_THE_OWNER.md` section 10 item 1). Changed in tests
+and test helpers only, no engine code: text files opened as UTF-8 and compared without carriage returns
+(schema, command line, session lock, the makers of models and records); paths compared with forward slashes
+(`validate`, the pathway table's test); programs found with `shutil.which` (the upgrade scripts, `bash` in the
+run-all test); the command-line test's stand-in program skipped on Windows; check 48 skips `_azure2*`; three
+skill self-tests end with 77 (skip) where matplotlib or emcee is absent. **Not run on Windows** by anybody: the
+next CI run is the test. The cause given for `tools_runall` is a guess.
+
+**The Coulomb notes.** `docs/upgrade/coulomb.md` section 8: where GSL's Coulomb functions are still reached
+(only with `use_gsl_coul` / `--gsl-coul`, and one printed line of the table tool), how far they are from
+`coulsm` and from mpmath over the arguments of every test project, and what the option costs and saves.
+`include/CoulFunc.h` lost an include it did not use. The option's retirement (the PI's word, entry of 15:05) is
+the agent's running work and is not in this merge; its entry comes with that.
+
+**Verified** (`work/director/verify_l98.out`): 0 warnings; 887, 851 and 887 files identical to `tab-trial94-1`;
+the eight fits identical to `work/b-trial97`, same times; 328 of 328 quick tests; 172 of 172 regression
+scripts. Not run by me: the slow tests, sanitizers, instruction counts, anything on Windows or macOS.
+
+**Open, not put to the PI yet** (from the agents): a `ParameterVector` class beside `AZUREParams`; deprecating
+`angular_distribution`; `pyazr_evaluation`'s wall-time check, which fails under load; the 1.5e-10 degree
+difference of T1's phases with a Coulomb table, not understood; the gradient agent's three (entry of 15:05).
+
+**Not merged yet:** the rest of `feature/upgrade-1-coulomb-engine` and `feature/upgrade-8-pyazr-approved` (both
+running). Not started: the `gamma_decay` priors' total in `chiSquared.out`; the objective's terms on arrays.
+
+## 2026-11-16 (split agent, 14:45) — the three large files split by job: `AZURECalc.cpp`, `AZURECalcMCMC.cpp`, `AZUREAPI.cpp`
+
+**Merged.** Branch `feature/upgrade-6-large-classes` in `wt-split`, cut from `feature/upgrade` at 3ac4a34a, four
+commits: 3d50e600 (`AZURECalc.cpp`), 41ce8e71 (`AZURECalcMCMC.cpp`), 91836e43 (`AZUREAPI.cpp`), 686d8ce5 (documents
+and the size record). Build `work/b-split`. Not pushed.
+
+**What was changed.** Functions moved as they are; no signature, no public name, no arithmetic changed. A comparison
+of the non-blank lines of each old file with the union of its new files finds every old code line again; the only
+code lines that are new or changed are named below.
+
+- *`src/AZURECalc.cpp`* (1,395 lines) -> `AZURECalc.cpp` 224 (the evaluation: `operator()`, `PrecalculatePoints`,
+  `Chi2On`, `Chi2OnWith`, `Chi2Value`), `AZURECalcGradient.cpp` 593 (`Gradient`, `GradientBy`, `FixedMask`,
+  `GradientFromJacobian`, `G2`, `EnableG2`, the step `FdStep`), `AZURECalcJacobian.cpp` 325 (`FillShiftColumns`,
+  `ResidualJacobian`, `ResidualsOnly`, `ShiftTargets`), `AZURECalcNuisance.cpp` 105 (the limits manager's priors,
+  `HasNuisanceParameters`), `AZURECalcPool.cpp` 35 (the idle states of `FitterStates`), `AZURECalcOutput.cpp` 92
+  (`WriteIterationOutput`, `WriteParameters`), `AZURECalcDiagnostics.cpp` 119 (`DumpNonFinite`). New private header
+  `include/ShiftParamTarget.h` 49: the struct the Jacobian and the gradient share (it was in the unnamed namespace),
+  with the one new line, the declaration of `ShiftTargets`.
+- *`src/AZURECalcMCMC.cpp`* (1,309) -> `AZURECalcMCMC.cpp` 317 (a walker's log-likelihood and log-probability, the
+  map between the varying and the full vector), `AZURECalcMCMCPriors.cpp` 317 (`SetPriors`, `BuildAutoPriors`,
+  `SetUpPriorCovariance`, `PrepareRun`, `CalculateLogPrior`), `AZURECalcMCMCRun.cpp` 438 (`RunMCMCSampling`, the
+  walker-position files, `ParkNonPositiveLevels`, the callbacks), `AZURECalcMCMCChain.cpp` 291 (`RecordStep`,
+  `AfterStep`, `StartObservedLevels`, `LoadExistingSamples`, `robust_stod`), `AZURECalcMCMCPool.cpp` 39. New private
+  header `include/AZURECalcMCMCRun.h` 32: `AZURECalcMCMC::Run` and the declaration of `robust_stod`, both moved.
+- *`api/src/AZUREAPI.cpp`* (1,532) -> `AZUREAPI.cpp` 468 (the session's model: set-up, rebuild, prior covariance,
+  parameter vectors, bounds, index lists), `AZUREAPIReports.cpp` 371 (`ReportSegments`, `UpdateSegments*`,
+  `UpdateData`, `UpdateNorms`, the output files, the THM tables, scattering lengths, Park's norms),
+  `AZUREAPIChi2.cpp` 251 (the chi-squared in both bases, the nuisance priors, `CalculateObjectiveRWA`),
+  `AZUREAPIGradient.cpp` 459 (the gradient, the residual Jacobian, the model gradients), `AZUREAPIDiagnostics.cpp`
+  133 (`GetECIntegrals`, `GetCacheStats`). New private header `api/src/AZUREAPIInternal.h` 36: `PrecalculateAll` and
+  `MapPackedToFull`, which three files call; they were `static` functions and are `inline` there, bodies unchanged
+  (the only two changed code lines of the branch).
+- Lists that name a file followed their symbol, no entry added: the row of `fileMutex` in
+  `tests/consistency/allowed_state.tsv` (now `src/AZURECalcDiagnostics.cpp`; still 14 rows), and the allowed use of
+  `CovarianceChi2Correction` in check 11 of `repo_consistency_test.py` (was `api/src/AZUREAPI.cpp`, now the two files
+  its two uses are in). **The director should look at both**, since the lists are his.
+- `tests/consistency/file_sizes.tsv` tightened: the three files left the list, 7 remain.
+- Comments in `AZURECalc.h`, `AZURECalcMCMC.h`, `AZUREGrad.h`, `ApparatusParameters.h` name the new files;
+  `Segment.h` said `ForEachShiftPenalty` is in `AZURECalc.cpp`, it is in `Objective.h` (corrected).
+- Documents: `FOR_THE_OWNER.md` section 5 (7 files) and section 10 item 5, `ROADMAP.md`, `CLAUDE.md` (Layout table,
+  the apparatus recipe), `pyazr/CLAUDE.md`, the Developer Guide (`classes.rst`, `api.rst`, `architecture.rst`).
+
+**What was run.**
+
+- Full check on the head 686d8ce5 (`work/director/verify_split_1.out`, logs `work/director/vlsplit/`): 0 warnings;
+  887, 851 and 887 files identical to `tab-trial94-1` in the three bases, none differs, none new; the eight fits
+  identical to `work/b-trial95`; 325 of 325 quick tests; 172 of 172 regression scripts. Run once, after the last
+  split; not once per split.
+- Against `work/b-trial95`, file by file, on the final build (`work/director/split_extra.sh`,
+  `split_extra_final.out`): T2 gradient fit at 1 thread 14 files identical; T2 sampler 16 x 100 at 1 sampler thread
+  10 identical, at 4 sampler threads 10 identical; T2 MIGRAD with the numerical gradient at 4 threads
+  (`--max-calls=200`) 14 identical. The same four were identical after the second split (`split_extra_s2.out`).
+- User-space instructions at 1 thread, base -> branch: T2 gradient fit 169,675,628,883 -> 169,011,764,993
+  (-0.39 %; +0.10 % in the earlier run, so within the noise of the measurement); T2 sampler 1,254,457,502,100 ->
+  1,254,445,698,879 (-0.001 %).
+- Per split, before its commit: build with 0 warnings and a set of tests (8 of 8 with the slow
+  `pyazr_fit_with_engine` after the first, 7 of 7 after the second, 12 of 12 session tests after the third).
+- After the splits: `--tighten-sizes`, the consistency test (consistent), `ctest -R docs_build` (passed).
+
+**Not run.** The slow ctest set as a whole (only `pyazr_fit_with_engine` and the slow tests among those named
+above); the 13N gradient fit's instruction count; any sanitizer build; Clang, MinGW or macOS; the class scheme
+figures were not regenerated (no box or arrow changed: `classes.tsv` and `arrows.tsv` name headers and classes).
+
+**Not split cleanly, and found on the way.**
+
+- `AZURECalc::GradientBy` is one function of 447 lines (the adjoint, the THM rows, the finite differences, the
+  timing and the whole `AZURE_GRAD_CHECK` comparison). It moved whole; `AZURECalcGradient.cpp` is 593 lines because
+  of it. Taking the check out of it is a rewrite.
+- `load_walker_state` / `save_walker_state` are `static` and stay beside `RunMCMCSampling`, their only caller; by
+  subject they belong with the chain's files.
+- A comment block in the unnamed namespace of the old `AZURECalc.cpp` ("chi^2 contribution of a single segment
+  ...") describes a function that no longer exists. It moved unchanged to `AZURECalcGradient.cpp`; delete it.
+- Stale file references not touched: `tests/CLAUDE.md` (`setEnvVar`/`unsetEnvVar` "at the top of
+  `src/AZURECalc.cpp`": no such functions in `src/` or `include/`), `docs/source/theory/conventions.rst`
+  (`AZUREAPI.cpp:1871`). The design notes under `docs/upgrade/` (`evaluation.md`, `fit_threads.md`,
+  `objective.md`, ...) name the old files as logs of their date and were left.
+- Both `AZURECalcNuisance.cpp` and `AZUREAPIChi2.cpp` hold a copy of "the limits manager's prior of parameter f,
+  unless the prior covariance lists it" (`NuisancePriorOf`): two definitions of one rule, as before the split.
+
 ## 2026-11-16 (director, 15:05) — merged: the gradient's arithmetic in `physics/`; wheels green; Windows read
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 97: the branch `feature/upgrade-1-gradient-functions`
