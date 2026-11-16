@@ -22,10 +22,11 @@ its section 11 is the reading order for an agent, its section 10 what is not fin
 and on the phase branches cut from it (`feature/upgrade-<phase>-<topic>`), these rules apply on top of everything
 below (full text and reasons in `docs/upgrade/RULES.md`):
 
-- Code is shaped like the physics: `physics/`, `io/`, `stopping/`, `experiment/`, `convert/`, then the engine
-  (`src/`, `include/`) and the binding (`api/`), plus `support/` for plumbing. (The plan's `inference/` library was
-  not made: the objective is `src/Objective.cpp`.) Modules use only the modules below them; each is its own CMake
-  target, so a wrong dependency does not compile.
+- Code is shaped like the physics: `physics/`, `io/`, `stopping/`, `experiment/`, `inference/`, `convert/`, then
+  the engine (`src/`, `include/`) and the binding (`api/`), plus `support/` for plumbing. (`inference/` holds the
+  parameter vector as plain data, the priors and the rule of the objective's term list; the terms themselves read
+  the engine's objects and are `src/Objective.cpp`: `docs/upgrade/inference.md`.) Modules use only the modules below
+  them; each is its own CMake target, so a wrong dependency does not compile.
 - Design before code. Each piece of physics (a channel type, a basis or convention, an observable, a kernel, a
   prior) is a self-contained part with a stated interface, its inputs and outputs in physical units, and one test
   that would fail if it were wrong; parts fit together only through those interfaces (`ARCHITECTURE.md` §9), never by
@@ -90,6 +91,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
+| `inference/` | The fit's parameter vector as plain data (kinds and records, the level block's layout, the index map full ↔ packed, the posterior's support), one Gaussian prior, the prior covariance (grammar and arithmetic), the sums of a list of terms | Uses nothing (no engine headers, no Minuit2: check 8b, `inference_standalone`); the engine names its types through `include/InferenceTypes.h` and keeps the walks, the values of the vector (`AZUREParams`) and the terms (`src/Objective.cpp`); `docs/upgrade/inference.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by the engine's THM distortion (`src/ThmDistortion.cpp`) and the binding; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `numcmc/` | Ensemble MCMC sampler | |
@@ -209,7 +211,8 @@ how each was checked:
 
 The engine reads the `.azr` (format 3 only) once, through `io/` (`io::Document`, `Config::SectionStream`) and
 `experiment/`'s table (`Config::project`: the records validated and built into specs), and pyazr reads it
-through the same code in the binding; the χ² is assembled in one place, `src/Objective.cpp`. Each recipe below is
+through the same code in the binding; the χ² is assembled in one place, `src/Objective.cpp` (its terms; the rule of
+their sums is `inference/`'s `TermList.h`). Each recipe below is
 the whole list of places to touch; `tests/consistency/repo_consistency_test.py` fails when the rule in brackets is
 bypassed. Run it first (under a second), then the build and the tests of "Definition of done".
 
@@ -231,9 +234,14 @@ section (check 34).
 4. Docs: `reference/data_formats.rst` (records: `reference/format3.rst`, generated).
 
 **A term of the objective** (a prior, a penalty, a constraint).
-1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, in the term list (`docs/upgrade/objective.md` §4); its
-   gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in `AppendModelRows` if the
-   Levenberg-Marquardt path needs them. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
+1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, appended to the term list in the `Objective` constructor
+   (`docs/upgrade/objective.md` §4; `ObjectiveTerm` is `azure2::inference::Term<ObjectiveContext>`, whose defaults
+   say how the sampler takes a term); its gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in
+   `AppendModelRows` if the Levenberg-Marquardt path needs them. A Gaussian prior on one parameter is not a new
+   formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
+   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in `ForEachDiagonalPrior` (`include/Objective.h`).
+   Arithmetic that needs no engine object goes in `inference/` with its test in `inference/tests/` [check 8b: only
+   its own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
    [check 11: no term is added outside `src/Objective.cpp`].
 2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
    the same χ² (`tests/pyazr/objective_test.py`).
@@ -380,11 +388,14 @@ positions of the amplitudes they replace, one number per amplitude, and a map tu
 scheme, of a THM experiment; `docs/upgrade/parameter_kinds.md`). An apparatus record's number is the recipe above,
 not a kind. What a parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a
 parameter name].
-1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
+1. `inference/include/azure2/inference/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row
+   (key, unit, owner fields,
    `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CompoundSystem::FillMnParams` or
    `WorkingCopy::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
-3. Follow the layout in `BuildParamIndexMap` (a number of a level: a slot of `LevelParameterLayout`, which every
+3. Follow the layout in `BuildParamIndexMap` (`src/AZUREGrad.cpp`: one `Append...` of `ParamIndexMap`,
+   `inference/`'s `ParameterIndexMap.h`, at the kind's place in the vector, with its lookup and its case in
+   `inference/tests/parameter_index_map_test.cpp`; a number of a level: a slot of `LevelParameterLayout`, which every
    walk of the level block reads; Developer Guide, "A level parameter"); the fields that say what it belongs to are
    rows of the record table `ParameterFields()` (`api/src/pybind_records.cpp`: name, unit, the kinds it describes,
    owner flag, doc, reader), which pyazr's `Parameter` and `Parameters.table()` read with no Python edit
@@ -597,7 +608,7 @@ numbers compared by value (`1.0` equals `1`), progress lines of `run.log` droppe
 - Put a new feature in its **own class and file**, as `ShftFunc`,
   `CoulombTable`, `DataCovariance` and `ScatteringLength` are. Do not grow the
   large files further: every hand-written source file of `src/`, `include/`,
-  `physics/`, `io/`, `experiment/`, `api/src/`, `pyazr/` and `tools/` above
+  `physics/`, `io/`, `experiment/`, `inference/`, `api/src/`, `pyazr/` and `tools/` above
   1,000 lines is listed with its line count in
   `tests/consistency/file_sizes.tsv` [check 26: a listed file may not grow, an
   unlisted one may not pass 1,000 lines; only the director adds an entry].

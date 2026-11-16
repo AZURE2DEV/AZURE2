@@ -1,10 +1,11 @@
 # The `inference/` library: the parameter vector, the priors, the rule of the term list
 
-Status: design, written 2026-11-16 on `feature/upgrade-2-inference`, cut from `feature/upgrade` at `f252ba30`.
-Section 6, "Done", says what of it exists; until a line stands there, the rest is a plan. `ROADMAP.md` Phase 2 and
-`ARCHITECTURE.md` section 3 planned a library holding the fit's parameter vector θ and the objective χ²(θ). This note
-says which part of the two can be a library today, which part cannot without a redesign, and how each move is tested.
-Every output file stays identical: code is moved with its order of operations, not rewritten.
+Status: built, 2026-11-16, on `feature/upgrade-2-inference`, cut from `feature/upgrade` at `f252ba30`. Section 7,
+"Done", says what exists and what was run; sections 1 to 6 are the design as written before the code.
+`ROADMAP.md` Phase 2 and `ARCHITECTURE.md` section 3 planned a library holding the fit's parameter vector θ and the
+objective χ²(θ). This note says which part of the two can be a library today, which part cannot without a redesign,
+and how each move is tested. Every output file stays identical: code is moved with its order of operations, not
+rewritten.
 
 ## 1. What a library may be
 
@@ -114,6 +115,61 @@ not the nuisance total. A writer that asks the terms needs the compound, the lev
 which a `WorkingCopy` method does not have, and a new field changes an output file: not done here. Slice 2 removes
 (c): the writer and the term call the one `GaussianPrior`.
 
-## 7. Done
+## 7. Done (2026-11-16)
 
-Nothing yet.
+Slices 1 and 2 are built as designed, in two commits; slice 3 is the documents.
+
+**The library.** `inference/`: seven headers (743 lines), four sources (421 lines), seven test programs and their
+helper (553 lines). It includes `azure2/inference/` headers and the standard library, and links nothing. The
+engine names its types through `include/InferenceTypes.h` (35 lines).
+
+| header | holds | engine side that stays |
+|---|---|---|
+| `ParameterKind.h` (234) | `ParamKind`, `ParamKindTable()`, `ParameterRecord` | `AZUREParams` (the values) |
+| `LevelParameterLayout.h` (68) | the level block | `CompoundSystem::ParameterLayout()` |
+| `ParameterIndexMap.h` (153) | `ParamDesc`, `ParamIndexMap` | `BuildParamIndexMap` (`src/AZUREGrad.cpp`) |
+| `PosteriorSupport.h` (35) | the limits, `Contains` | `PosteriorSupportOfFit`, `PosteriorSupportOfParameters` |
+| `GaussianPrior.h` (34) | value, gradient, curvature | `ForEachDiagonalPrior` and its kin (`Objective.h`) |
+| `PriorCovariance.h` (113) | grammar, set-up, arithmetic | `src/PriorCovarianceFile.cpp` (path, cache, messages) |
+| `TermList.h` (106) | `Term<Context>`, `TermList<Context>` | the thirteen terms (`src/Objective.cpp`) |
+
+In the engine: `src/Objective.cpp` 495 → 468 lines, `include/Objective.h` 264 → 252, `src/AZUREGrad.cpp` 1259 → 1108,
+`include/AZUREGrad.h` 476 → 348; `include/ParameterKind.h`, `include/LevelParameterLayout.h`,
+`src/LevelParameterLayout.cpp`, `include/PriorCovariance.h` and `src/PriorCovariance.cpp` are gone. The Gaussian
+prior's three functions replace 30 written-out copies (the second commit's message says 25). Removed with no caller
+left: `ParamIndexMap::EIndex`, `GammaIndex` and the four block offsets.
+
+**Differences from the design.** `GaussianPriorChi2` forms the value as r·r, r = (x − x₀)/σ. Of the copies it
+replaces, 11 were written `pow(r, 2.0)` and 7 `r * r`. GCC at `-O3` compiles both to one multiplication (read in the
+assembly of a two-line file), so no number moved in the gate; a build without optimisation called the library's
+`pow` at those 11 places and no longer does, which can move a last digit there.
+
+**What was run.** `work/director/verify_branch.sh wt-infer infer tab-t74-1 trial92 6`, once per code commit.
+
+| commit | warnings | files identical | differ, new | fits identical | quick tests | regression scripts |
+|---|---|---|---|---|---|---|
+| slice 1 | 0 | 887, 851, 887 | 0, 0 | 8 of 8 | 319 of 319 | 172 of 172 |
+| slice 2 | 0 | 887, 851, 887 | 0, 0 | 8 of 8 | 322 of 322 | 172 of 172 |
+
+The three numbers of files are the Brune, the formal (`--no-brune`) and the Park parametrization, against the
+reference outputs `tab-t74-1`; the fits are compared with the base build `work/b-trial92`.
+
+The quick set had 314 tests at the start; the library adds eight (seven programs and the stand-alone build).
+User-space instructions at one thread, base build `work/b-trial92` against slice 2
+(`work/director/infer_speed.sh`): a calculation of T2 1,242,597,477 → 1,242,582,263 (−0.001 %); a gradient fit of
+T2 169,174,329,302 → 169,559,125,470 (+0.23 %); a gradient fit of 13N 185,403,197,700 → 185,402,404,063
+(−0.0004 %); no output file differs. The 0.23 % was not traced to a function.
+
+**Not run.** The slow tests (`ctest -L slow`), the sanitizers, the thread comparison, any other compiler or
+platform (the CI was not run: nothing was pushed), a build without optimisation. No test was shown to fail by an
+injected error.
+
+**Not done, and why.**
+
+- The terms, `ForEachDiagonalPrior`, `AppendModelRows` and `ReplaceDiagonalPriors` are engine code (section 2).
+  Roadmap box "`inference/` target" stays open for them.
+- No class `ParameterVector` (section 4): the values are `AZUREParams` on Minuit2's parameters.
+- The fitters and the gradient are engine code.
+- The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11 has no field in
+  `chiSquared.out`; adding one changes an output file and needs a decision.
+- `ObjectiveContext` still holds the two flags of a request (`thmOnly`, `segmentPriors`) beside what a term reads.

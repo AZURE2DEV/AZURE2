@@ -69,6 +69,20 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    whole project (``ReadFormat3Project``, ``ProjectReader.h``). It must not
    know the engine.
 
+``inference/`` (``azure2_inference``)
+   The fit's parameter vector as plain data and the arithmetic of the
+   objective that needs no engine object: the kinds of parameter and the
+   record of one parameter (``ParameterKind.h``), the layout of the level
+   block (``LevelParameterLayout.h``), the place of every parameter in the
+   full and the packed vector (``ParameterIndexMap.h``), the limits as the
+   posterior's support (``PosteriorSupport.h``), one Gaussian prior
+   (``GaussianPrior.h``), the prior covariance with its file grammar
+   (``PriorCovariance.h``) and the sums of an ordered list of terms
+   (``TermList.h``). It links nothing and builds as a project of its own. The
+   engine names its types through ``include/InferenceTypes.h``; the values of
+   the vector (``AZUREParams``, on Minuit2's parameters), the terms of the
+   objective and the fitters are engine code.
+
 ``convert/`` (``azure2_convert``, ``azure2_convert_specs``, ``azure2_convert_lines``)
    Everything that knows the old project formats: their line parsers
    (header-only ``azure2_convert_lines``), the converter to format 3
@@ -80,7 +94,7 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    The engine: the compound system (``CompoundSystem``), the data set and its working
    copies (``DataSet``, ``WorkingCopy``), the set-up of meshes and target
    effects, the point pass and the level-matrix routes, the model pass, the
-   objective (``src/Objective.cpp``), the gradients, the fitters' adapters,
+   objective's terms (``src/Objective.cpp``), the gradients, the fitters' adapters,
    the output files. It links every library above, Minuit2, GSL and BLAS.
    ``src/AZURE2.cpp`` (``main``) and ``src/ProjectCommands.cpp`` (the project
    commands ``--convert``, ``--validate``, ``--describe``, ``--schema``) make
@@ -251,7 +265,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``Results::model``.
 
 6. **Objective.** ``Objective::Engine().Chi2`` (``src/Objective.cpp``) sums
-   the ordered list of terms over an ``ObjectiveContext``: the data
+   the ordered list of terms (``azure2::inference::TermList``, whose order
+   is the order of the floating-point additions) over an
+   ``ObjectiveContext``: the data
    :math:`\chi^2` with each segment's priors, the data covariance, the
    nuisance priors, Park's :math:`J > 0` wall, the apparatus and abundance
    priors, the model data, the prior covariance.

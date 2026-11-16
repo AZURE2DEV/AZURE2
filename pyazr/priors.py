@@ -21,8 +21,8 @@ The values are in the parameter vector's own space, the one ``param.sav`` holds:
 amplitudes of the run's parametrization, normalizations, shifts, ...  A file whose tag differs from the run's
 parametrization is refused (the amplitudes would be in another basis; nothing is converted).
 
-The engine's reader (``src/PriorCovariance.cpp``, ``PriorCovariance::Read``) defines the grammar; :func:`read_prior`
-reads as it does and refuses what it refuses: a ``#parametrization`` tag counts only before the names line and must be
+The engine's reader (``inference/src/PriorCovariance.cpp``, ``PriorCovariance::Parse``) defines the grammar;
+:func:`read_prior` reads as it does and refuses what it refuses: a ``#parametrization`` tag counts only before the names line and must be
 0, 1 or 2 (a tag without a value is refused); a number is a whole C ``strtod`` token and finite (``nan``, ``inf``,
 ``1_0``, ``1d0`` are refused, a hexadecimal ``0x1p-3`` is read); tokens are separated by ASCII white space only; a
 name listed twice, a matrix not symmetric to 1e-10 of ``sqrt(C_ii C_jj)``, or one whose Cholesky factorization meets
@@ -85,7 +85,7 @@ def _tokens(text):
 
 def _cholesky_pivot(cov):
     """The row at which the engine's Cholesky factorization fails (a pivot not above 1e-13 of its diagonal entry),
-    or None when it succeeds: ``Cholesky`` of ``src/PriorCovariance.cpp``, its sums in the same order."""
+    or None when it succeeds: ``Cholesky`` of ``inference/src/PriorCovariance.cpp``, its sums in the same order."""
     A = np.array(cov, float)
     n = A.shape[0]
     for j in range(n):

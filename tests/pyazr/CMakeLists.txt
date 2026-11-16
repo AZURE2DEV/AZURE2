@@ -873,7 +873,8 @@ add_test(NAME pyazr_thickness
                  ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
 set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Parameter kinds (include/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's table of kinds, and on
+# Parameter kinds (inference/include/azure2/inference/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's
+# table of kinds, and on
 # projects holding every kind each parameter's name rebuilt from its record, the records' ordinals and keys, and
 # pyazr's Parameter.kind / sample / thm_* from the records.
 add_test(NAME pyazr_parameter_kinds

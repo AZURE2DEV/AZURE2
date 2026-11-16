@@ -209,7 +209,9 @@ one calculation, in the program and in pyazr alike:
    ratio, scale, yield) with one forward and one adjoint implementation (`src/ModelPass.cpp`).
 5. **Objective.** One ordered list of terms (`src/Objective.cpp`): data χ², nuisance priors, Park's wall, model
    data, prior covariance. The fitters (`src/Fitters.cpp`, one row each), the sampler and pyazr's `Objective` all
-   evaluate this list.
+   evaluate this list. What of the parameter vector and the objective needs no engine object is the library
+   `inference/` (`docs/upgrade/inference.md`): the kinds and records of the parameters, the layout of the level
+   block, the index map, the posterior's support, one Gaussian prior, the prior covariance, the sums of the list.
 
 **No hidden state.** Only constant tables are process-wide; what an evaluation writes belongs to its caller.
 Check 38 of `tests/consistency/repo_consistency_test.py` refuses any other `static`, `thread_local`, global or
@@ -218,7 +220,7 @@ Coulomb tables, the cache of input files, output-stream locks, the level-state v
 engine, its libraries or the binding has a `mutable` member. What the evaluations of a fit or of the sampler keep
 between calls (idle copies of the levels and of the working copy, the copies the intermediate files are written
 from, the last gradient) is in a `FitterStates` or `SamplerStates` that the caller owns and lends. No source
-file may grow: the 12 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
+file may grow: the 10 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
 
 ## 6. How to add to it
 
@@ -230,8 +232,8 @@ Each kind of extension is a row of one table and a test (`docs/source/developer/
 | A data quantity | `experiment/src/Quantities.cpp` row; its tree in `Schema::Build` | `experiment_quantities` |
 | An observable at a mesh energy | `Observables.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
 | An apparatus kernel | one `experiment/src/Kernel<Name>.cpp`; a line in `Kernels()` | `experiment_kernels` |
-| A parameter kind | `ParamKindTable()` row; a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records` |
-| A level parameter | a `LevelParameterLayout` slot; `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
+| A parameter kind | `ParamKindTable()` row (`inference/`); a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records`, `inference_parameter_kinds` |
+| A level parameter | a `LevelParameterLayout` slot (`inference/`); `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
 | A set-up fact of the compound | a `CompoundSystem` member written by `Fill` or `Initialize` | its own test |
 | A term of the objective | an `ObjectiveTerm` in `src/Objective.cpp`; gradient in `src/AZUREGrad.cpp` | check 11 |
 | A record kind, key or section | `experiment/src/Schema.cpp`: `FieldDef`, `Kinds()`, `Sections` | `experiment_schema` |
@@ -632,7 +634,7 @@ re-read against its design at the hand-over.
    price of an indirection in every accessor: a decision, not started. The cost today is memory, not
    correctness. The locks are as they were.
 5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
-   (1,533), `src/AZURECalc.cpp` (1,402), `src/AZURECalcMCMC.cpp` (1,316). The arithmetic of the collision matrix
+   (1,532), `src/AZURECalc.cpp` (1,395), `src/AZURECalcMCMC.cpp` (1,309). The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
@@ -640,7 +642,12 @@ re-read against its design at the hand-over.
    adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
    particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
    `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal levels,
-   particle channels). There is no `inference/` library: the objective is `src/Objective.cpp`.
+   particle channels). The `inference/` library exists since 2026-11-16 (`docs/upgrade/inference.md`) and holds
+   what is defined without an engine object: the parameter kinds and records, the level block's layout, the index
+   map, the posterior's support, one Gaussian prior, the prior covariance, the sums of a list of terms. The
+   objective's terms are still `src/Objective.cpp` (each reads the working copy, the segments, the level state or
+   the caller's `Results`), the vector's values are still `AZUREParams` on Minuit2's parameters, and the fitters
+   are still `src/Fit*.cpp`: making those a library means giving the data χ² arrays, a change of the evaluation.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
 7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is
@@ -694,7 +701,8 @@ by scripts that are not in the repository.
 
 **Where things are decided once:** the project format's table (`experiment/src/Schema.cpp`) gives the reader, the
 converter's target, `--validate`, pyazr's `Project` and the page's forms; the parameter kinds
-(`include/ParameterKind.h`) give the vector, the parameter file and pyazr's `Parameters`; the objective's terms
+(`inference/include/azure2/inference/ParameterKind.h`) give the vector, the parameter file and pyazr's `Parameters`;
+the objective's terms
 (`src/Objective.cpp`) reach every fitter, the sampler and pyazr's `Objective`. Add a row there; do not write a
 second copy in Python or in the page. New mutable process-wide state, a `const_cast`, an edit under `external/` and
 a number that moves without a stated reason are the four things to stop and ask about.

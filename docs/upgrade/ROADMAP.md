@@ -45,8 +45,8 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 1 | `channel_functions` replaces the old Coulomb code | done for the channel tables | GSL still called in `src/CoulFunc.cpp` and `src/ECIntegral.cpp`; the Coulomb table is kept by design |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
-| 2 | `inference/` target | the objective is `src/Objective.cpp` | not a library of its own |
-| 2 | Fit, gradient, API, writer call it | fit, gradient, API, sampler do | the output writer from stored totals: not audited |
+| 2 | `inference/` target | built in part (`inference.md`): the parameter vector as plain data (kinds, records, level layout, index map, support), one Gaussian prior, the prior covariance, the sums of the term list | the terms (`src/Objective.cpp`), the vector's values (`AZUREParams`, on Minuit2) and the fitters are engine code: a library of them needs the data χ² on arrays |
+| 2 | Fit, gradient, API, writer call it | fit, gradient, API, sampler do | the output writer audited (`inference.md` section 6): it reads the terms' stored totals and re-forms the diagonal priors' sums with the terms' functions; T11 (`gamma_decay` priors) has no field in `chiSquared.out` |
 | 3 | pyazr `sources/` | masses, levels (NDS), EXFOR | IAEA measured stopping; `pyazr libraries update`; provenance not audited |
 | 4 | The engine reads only format 3 | done, ticked | second round of validation not audited |
 | 4 | Recipe "a new kind of data" | done, ticked | — |
@@ -197,6 +197,11 @@ for the FCN, the LM/FD cost, the MCMC likelihood and the API; one enumeration of
 G2, least-squares rows and the MCMC; pyazr computes no prior (2.11.0). χ² bit-identical where no decision applies;
 PI decisions D1–D7 and "the MCMC shares the fit's configuration" applied, each change classified. Open: the writer
 from the terms rather than stored totals; `inference/` as a separate library (after Phase 4).*
+*2026-11-16, `feature/upgrade-2-inference` (`inference.md`): the library target `azure2_inference` holds what needs
+no engine object -- `ParameterKind.h`, `LevelParameterLayout`, `ParamIndexMap`, `PosteriorSupport`'s rule,
+`GaussianPrior.h`, `PriorCovariance`, `TermList.h` (the sums of the list) -- with seven test programs and a
+stand-alone build. Not a library: the terms, `AZUREParams`, the fitters (the box stays open). The writer was
+audited, not changed.*
 - [x] The sampler's posterior is −½ × the objective, zero outside the fit's limits of every kind, in both sampling
       bases (`PosteriorSupport`; objective.md section 6). Open: the API's log-probability on the same rule (pyazr).
 
