@@ -272,6 +272,10 @@ The file separates the two contributions::
   (``transmission n vary sigma`` or ``yield n vary sigma``,
   :doc:`segments`), is the sum of :math:`((n - n_0)/\sigma)^2` (a
   ``thicknessgroup`` counts once, with its first segment's prior).
+- **Total-Gamma-Decay-Chi-Squared**, when the project has a ``gamma_decay``
+  record (:doc:`gamma_decay`), is the sum of :math:`((q - c)/w)^2` over the
+  record's numbers with a prior (the remainder included) and the wall on a
+  negative remainder; 0 for a record without a prior.
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary

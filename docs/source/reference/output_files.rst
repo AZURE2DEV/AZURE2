@@ -346,6 +346,9 @@ With a ``<scatteringLengths>`` block the totals line ends with
 ``<modelData>`` section (:doc:`data_formats`) it also carries
 ``Total-Model-Data-Chi-Squared``, the sum over its data.  The two are the
 parts of one term of the objective, "model data".
+With a ``gamma_decay`` record (:doc:`../user_guide/gamma_decay`) the line
+carries ``Total-Gamma-Decay-Chi-Squared``, the priors on the record's numbers
+and the wall on a negative remainder; it is 0 for a record without a prior.
 The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
 ``write_outputs`` carries all three evaluated at the parameters it was

@@ -109,8 +109,9 @@ nuisance priors, the model data, the prior covariance. (b) Sums the writer forms
 the functions the terms call (`Segment::AddShiftPenalty`, `WorkingCopy::ScreeningPenalty`, `DensityPenalty`,
 `DopplerPenalty`, `ThicknessPenalty`, `ApparatusPenalty`): equal to the terms' while the working copy is the one
 the last evaluation filled. (c) The normalization prior of each segment, written out a second time in the writer.
-Found: T11 (the priors of the `gamma_decay` records) has no field, so for such a project the file's totals do not
-add up to the minimised χ²; a session's `write_outputs` refreshes the model-only terms and the prior covariance but
+Found: T11 (the priors of the `gamma_decay` records) had no field, so for such a project the file's totals did not
+add up to the minimised χ² (since 2026-11-16 the term stores its value in `Results::objective.gammaDecay` and the
+writer prints `Total-Gamma-Decay-Chi-Squared` whenever the project has a record; the PI's word); a session's `write_outputs` refreshes the model-only terms and the prior covariance but
 not the nuisance total. A writer that asks the terms needs the compound, the level state and the nuisance function,
 which a `WorkingCopy` method does not have, and a new field changes an output file: not done here. Slice 2 removes
 (c): the writer and the term call the one `GaussianPrior`.
@@ -170,6 +171,6 @@ injected error.
   Roadmap box "`inference/` target" stays open for them.
 - No class `ParameterVector` (section 4): the values are `AZUREParams` on Minuit2's parameters.
 - The fitters and the gradient are engine code.
-- The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11 has no field in
-  `chiSquared.out`; adding one changes an output file and needs a decision.
+- The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11's field in
+  `chiSquared.out` (`Total-Gamma-Decay-Chi-Squared`) was added afterwards, with the PI's word.
 - `ObjectiveContext` still holds the two flags of a request (`thmOnly`, `segmentPriors`) beside what a term reads.
