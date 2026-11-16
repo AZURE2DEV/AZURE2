@@ -229,6 +229,13 @@ release removed, so a skill that teaches something that no longer works fails a 
   reader of an old file; `AZURE2 --convert-params old.sav new.sav --project OLD.azr` (`pyazr.convert_params`)
   renames a parameter file of the old project to the conversion's names. User guide: "Coming from an older
   AZURE2" (`docs/source/user_guide/older_projects.rst`).
+- **`--gsl-coul` is gone** (the PI, 2026-11-16), with its `<config>` key `use_gsl_coul` and its pyazr keyword. It
+  chose GSL's Coulomb functions, which are wrong by up to 5 % in the penetrability inside the outer turning point
+  (below the Coulomb barrier; measured against mpmath, `coulomb.md` section 8). The flag is refused (exit 2), a
+  project with the key is refused with either value (`E_CONFIG_KEY_REMOVED`: delete the line), the keyword is a
+  `TypeError`; each message says why. Nothing changes for a run that did not use the option. A result computed
+  with it differs from the present one by up to percent (χ² of `tests/13N` 336479.96 → 335217.54), and a capture
+  calculation that used it for speed takes 4.5 times the instructions.
 - A `<parameterSettings>` row that names no parameter of the project is ignored with a warning
   (`W_PARAMETER_SETTING_UNKNOWN`, its line and name); it was ignored without a word.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
@@ -544,7 +551,8 @@ What a project computes used to depend on the file **and** on the flags it was r
 formalism its parameters are. The PI decided that these options are keys of `<config>` (`web_ui.md` decision 7).
 Eleven options, each under the name of its pyazr keyword, value 0 or 1: `use_brune`, `use_park`, `transform`,
 `ignore_externals`, `use_long_wavelength`, `ec_convection_current`, `use_rmc`, `use_gsl_coul`, `use_coulomb_table`,
-`use_ec_table`, `replace_grids`. A project in the standard parametrization says so once:
+`use_ec_table`, `replace_grids` (ten since 2026-11-16, when `use_gsl_coul` was removed: "What users
+notice"). A project in the standard parametrization says so once:
 
 ```
 <config>

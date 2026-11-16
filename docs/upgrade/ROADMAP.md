@@ -42,7 +42,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
 | 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
 | 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up; the collision matrix and the observables' sums are functions of arrays the engine calls (`physics_functions.md`) | the adjoints of those functions are functions of `physics/` too (stage 6 of `physics_functions.md`); the R_k of a secondary decay, the particle analysing power and the set-up of the formal levels are engine code; `pyazr.physics.collision_matrix` takes the three parametrizations and photon channels (stage 5) |
-| 1 | `channel_functions` replaces the old Coulomb code | done: with the default options the engine calls `physics/coulomb` only | GSL's routine is left in `src/CoulFunc.cpp` behind the option `use_gsl_coul`, which the PI decided on 2026-11-16 to retire (`coulomb.md` section 8; in work); the Coulomb table is kept by design |
+| 1 | `channel_functions` replaces the old Coulomb code | done: the engine calls `physics/coulomb` only; the option `use_gsl_coul` (GSL's routine) retired by the PI, 2026-11-16 (`coulomb.md` sections 8, 9) | the Coulomb table is kept by design; GSL's Coulomb functions are called only by the cross-check of `azure2-coulomb-table validate` and by the test `coulomb_gsl_crosscheck` |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
 | 2 | `inference/` target | built in part (`inference.md`): the parameter vector as plain data (kinds, records, level layout, index map, support), one Gaussian prior, the prior covariance, the sums of the term list | the terms (`src/Objective.cpp`), the vector's values (`AZUREParams`, on Minuit2) and the fitters are engine code: a library of them needs the data χ² on arrays |
@@ -59,8 +59,8 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller). The `Site` split of `evaluation.md` §4.1 is prepared (`Site::Values`) and not made: the copy is the evaluation's own state, so the split alone would not remove it (§7.8, with the measurement). Decided 2026-11-16: the values are not held by pointer, the copies stay |
 | 6 | No hidden state | done: 14 permanent rows, no pending row, no `mutable` member (`evaluation.md` §7.7) | — |
 | 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
-| 8 | Object binding | built; the level matrix in three parametrizations with photon channels and optical-model scattering bound (2026-11-16) | bound states, DWBA cross sections and continuum bins of `physics/transfer`; the Weisskopf width (no engine function) |
-| 8 | Rename and remove | most | `wigner_widths` probe, `tabulate` / `angular`, `modelavg` / `priors` into `bands` |
+| 8 | Object binding | built; the level matrix in three parametrizations with photon channels and optical-model scattering bound (2026-11-16) | bound states, DWBA cross sections and continuum bins of `physics/transfer` (the Weisskopf width is a row since 2026-11-16; the engine's sampler runs on a session: `Session.sample_with_engine`) |
+| 8 | Rename and remove | most | `tabulate` / `angular`, `modelavg` / `priors` into `bands` (`wigner_widths` is 2 P gamma_W^2 since 2026-11-16, the probe removed) |
 | 8 | Wheels | configuration written; the workflow runs on a push that changes a packaging file since 2026-11-16 | the workflow's result (`FOR_THE_OWNER.md` section 10 item 7); no Windows wheel; the Coulomb table's address empty |
 | 9 | `pyazr ui` | done, ticked | — |
 | 9 | The page for the median user | built | what its box lists as open |
@@ -136,7 +136,7 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       `external/coul` deleted, open-channel `channel_functions` and the kinematics in physics/ called by the engine;
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
-      GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
+      GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul` (retired 2026-11-16).*
       *The zero-energy fallback of coulsm just above a heavy-ion threshold takes K_0, K_1 from `bessel_k_scaled`
       (the owner's repair 56512d6a on `dev`, written as a listed local change, `physics/coulomb/README.md`; test
       `physics_coulomb_threshold`; branch `feature/upgrade-5-dev-repairs`, 2026-11-15).*
@@ -429,15 +429,16 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
         `api/src/pybind_records.cpp`); the numeric layouts `GetParameterInfo` / `GetPairsInfo` deleted.
   - [x] The physics table (`pyazr3.md` section 4, step 4): `api/src/pybind_physics.cpp`, 24 rows, `pyazr.physics`
         generated from them, a status per element, `Session.channel_functions`; a test per row (consistency check
-        41). Left: the transfer functions on potentials, `level_matrix`, the Weisskopf width (section 4, step 4).
+        41). Left: the transfer functions on potentials (section 4, step 4); `collision_matrix` and the row
+        `weisskopf_width` (25 rows) came on 2026-11-16.
   - [x] `Objective` and `Evaluation` beside today's methods (`pyazr3.md` section 7): `azure2.fit_objective()`,
         `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
         outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Rename and remove (`pyazr3.md` section 4, step 5): `Session`, one evaluation, one parameter vector, no
       physics in Python (`transform.py` deleted, `pyazr.system`, the extrapolations a session option: section 8);
       radius and potential as Project edits, `best_fit_params` without a live file, `pyazr.sources`,
-      `write_outputs`, 18 unused bindings removed, numpy the one dependency.  Open: the probe of `wigner_widths`
-      (the PI's decision), `tabulate` / `angular_distribution` on given energies, `modelavg` / `priors` into
+      `write_outputs`, 18 unused bindings removed, numpy the one dependency; `wigner_widths` is 2 P gamma_W^2
+      (2026-11-16, `pyazr3.md` section 11).  Open: `tabulate` / `angular_distribution` on given energies, `modelavg` / `priors` into
       `pyazr.bands`.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
       Built: `pyproject.toml` (scikit-build-core), the install rules, `pyazr coulomb-table fetch|build|where`,

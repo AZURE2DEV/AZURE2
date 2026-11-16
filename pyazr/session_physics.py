@@ -50,7 +50,7 @@ class SessionPhysics:
         rho-derivatives), ``P`` (penetrability), ``S`` (shift function), ``delta_hs`` (hard-sphere phase shift, rad,
         = -phi of :func:`pyazr.physics.hard_sphere_phase`), ``open`` (bool: E > 0 and the engine's functions defined
         there) and ``e_cm``.  The numbers follow the session's options: the Coulomb table when one is in use (about
-        1e-7 from the exact routine of :mod:`pyazr.physics`), GSL with ``use_gsl_coul``, the hybrid model's Numerov
+        1e-7 from the exact routine of :mod:`pyazr.physics`), the hybrid model's Numerov
         solution for a pair with a nuclear potential.  Where ``open`` is False every field but ``S`` is 0, and ``S``
         is the engine's closed-channel shift function at the channel radius (0 at another radius).
 
@@ -81,44 +81,55 @@ class SessionPhysics:
         raise ValueError("no particle pair to take the compound mass from.")
 
     @engine_call
-    def wigner_widths(self, params=None, eps=1e-4):
-        """``{free_index: Gamma_W}`` in eV: the engine's transformation of a probe vector, scaled by the Wigner limit.
+    def wigner_widths(self, params=None, eps=None):
+        """``{free_index: Gamma_W}`` in eV: the Wigner-limit width ``Gamma_W = 2 P_l(E_r) gamma_W^2`` of every free
+        particle channel that is open at its level's energy, at the fit vector ``params`` (default
+        ``parameters.x0``).
 
-        What the number is: the fit vector ``params`` (default ``parameters.x0``) with every *free* particle
-        reduced-width amplitude set to ``eps`` and every free photon amplitude to 0 is given to :meth:`transform`
-        (the engine's transformation, what the program writes into ``<levels>``); a channel's result is
-        ``Gamma_W = |Gamma_c(probe)| / eps^2 * gamma_W^2`` with ``gamma_W^2`` the row's ``wigner_limit``.  The
-        fixed widths keep their values and the level energies are those of ``params``.  Only free particle channels
-        open at the level's energy appear (a closed channel has an ANC, not a width).
+        - ``gamma_W^2 = 3 hbar^2 / (2 mu a^2)`` (MeV) is the engine's Wigner limit of the channel, the row's
+          ``wigner_limit`` (the Teichmann-Wigner sum-rule unit; :func:`pyazr.physics.wigner_limit`).
+        - ``P_l(E_r)`` is the penetrability of this session's own channel functions (:meth:`channel_functions`: the
+          Coulomb table when one is in use, the hybrid model's solution for a pair with a nuclear potential) at
+          the pair's channel radius.
+        - ``E_r`` is the pair's c.m. energy at the level's *physical* energy: the level's row of
+          :meth:`transform`, the observed energy the program writes into ``<levels>``, minus the pair's separation
+          and excitation energy.  In Brune's and Park's parametrizations that is the level's energy in ``params``; in
+          the formal one ``params`` holds the formal pole energy, which is not where the observed width is defined.
 
-        Where it is the single-channel ``2 P_l(E) gamma_W^2`` of the AZURE2 GUI (theta^2 = Gamma_c / Gamma_W): when
-        the probe makes the level's shift denominator 1 and leaves no mixing between the levels of a J-group, that is
-        in the Brune basis for a level whose particle widths are all free -- T1 and 13N agree with ``2 P gamma_W^2``
-        (P from :meth:`channel_functions` at the level's energy) to 5e-9.  Where it is not: a level with fixed
-        nonzero widths keeps their shift terms in the denominator (T2, Brune: the probe is 0.80-0.99 of ``2 P
-        gamma_W^2``), and where the levels of a J-group mix through the probe (the formal basis, closed channels) it
-        can differ by orders of magnitude (T2 formal up to 8e3, 17O from 0.05 to 1e4).
+        It is the number the AZURE2 GUI shows beside a channel, the denominator of ``theta^2 = Gamma_c / Gamma_W``
+        (:meth:`dimensionless_widths`), and the same in the three parametrizations of one level scheme.
+
+        No entry, as the key says: a fixed channel (no free index), a photon channel (its scale is the Weisskopf
+        estimate), a channel closed at ``E_r`` (``E_r <= 0``: it has an ANC, not a width, and P = 0) and a channel
+        without a Wigner limit in its record.
+
+        ``eps`` is accepted and ignored.  Before pyazr 3.0.0.dev5 the number was a probe of the engine's
+        transformation with every free amplitude set to ``eps``: equal to this one under Park and for a Brune level
+        whose particle widths are all free, smaller by the level's ``1 / (1 + sum gamma^2 dS/dE)`` of its fixed
+        widths otherwise, and not a property of the channel in the formal basis (``docs/upgrade/pyazr3.md``,
+        section 11, has the table).
         """
         x = np.asarray(self.parameters.x0 if params is None else params, float)
-        probe = x.copy()
-        for p in self.parameters.of_kind("width"):
-            if p.fixed or p.free_index is None or p.free_index >= probe.size:
-                continue
-            # photon channels are linear in the amplitude (external capture),
-            # so they must not pollute the probe
-            probe[p.free_index] = 0.0 if p.radiation_type in ("E", "M") else eps
-        probed = self.transform(probe)[self.parameters.free_mask]
-
+        physical = self.transform(x)
+        level_energy = {(p.jgroup, p.level): float(physical[p.index]) for p in self.parameters.of_kind("energy")}
         out = {}
         for p in self.parameters.of_kind("width"):
-            if (p.fixed or p.free_index is None or p.free_index >= probed.size
+            if (p.fixed or p.free_index is None or p.free_index >= x.size
                     or p.radiation_type in ("E", "M") or p.wigner_limit is None):
                 continue
-            pair = self.pairs.by_number(p.pair)
-            if not self._channel_open(p, x, pair):
+            ex = level_energy.get((p.jgroup, p.level))
+            if ex is None:
                 continue
-            two_p = abs(float(probed[p.free_index])) / eps ** 2
-            out[p.free_index] = two_p * p.wigner_limit
+            pair = self.pairs.by_number(p.pair)
+            e_r = ex - (pair.sep_energy + pair.excitation)
+            if not e_r > 0:
+                continue
+            potential = self.nuclear_potential(pair.number)
+            spin_orbit = potential.enabled and potential.spin_orbit is not None
+            functions = self.channel_functions(pair.key, e_r, p.L, J=p.J if spin_orbit else None)
+            if not functions["open"]:
+                continue
+            out[p.free_index] = 2.0 * float(functions["P"]) * p.wigner_limit * 1e6  # MeV -> eV
         return out
 
     def _level_energies(self, params=None):
@@ -146,17 +157,17 @@ class SessionPhysics:
         return ex > pair.sep_energy + pair.excitation
 
     @engine_call
-    def dimensionless_widths(self, params=None, eps=1e-4):
+    def dimensionless_widths(self, params=None, eps=None):
         """Every channel's width made dimensionless -- a :class:`WidthTable`.
 
         Particle channels get the Wigner limit and ``theta^2 = Gamma/Gamma_W``
-        (plus ``theta^2_formal = gamma^2/gamma^2_W``), with ``Gamma_W`` from
-        :meth:`wigner_widths` (the engine's transformation of a probe vector;
-        not the single-channel ``2 P gamma_W^2`` where a level has fixed widths
-        or the levels of a J-group mix: see there); photon channels get the
+        (plus ``theta^2_formal = gamma^2/gamma^2_W``), with ``Gamma_W = 2 P_l(E_r)
+        gamma_W^2`` from :meth:`wigner_widths` (free open channels; a fixed channel
+        has ``wigner_width`` and ``theta2`` ``None``); photon channels get the
         Weisskopf single-particle estimate and the strength in W.u.  ``params``
         is a fit vector -- pass a fit result to report
-        the fitted widths, or leave it out for the ``.azr``'s own values.
+        the fitted widths, or leave it out for the ``.azr``'s own values.  ``eps``
+        is accepted and ignored (:meth:`wigner_widths`).
 
         >>> t = m.dimensionless_widths(best)
         >>> print(t.photons.nonzero.table())

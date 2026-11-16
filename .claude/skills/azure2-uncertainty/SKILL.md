@@ -106,7 +106,9 @@ sampler's rule), with the priors of the project; never `s.evaluate(x).chi2` (dat
 5. Bands and derived quantities from the draws (section 5).
 
 One engine per worker process; keep workers × `OMP_NUM_THREADS` within the cores you hold. The program's own
-ensemble sampler (MCMC tab): `docs/source/user_guide/mcmc.rst`.
+ensemble sampler: `AZURE2 mcmc`, or `Session.sample_with_engine(walkers, steps, ...)` for the same chain as arrays
+(`docs/source/user_guide/mcmc.rst`); it has a fixed seed and no diagnostics of its own:
+`np.savez("chain.npz", x=r.chain.transpose(1, 0, 2))` gives `mcmc_stats.py` its (chains, draws, parameters).
 
 **Memory in long chains.** A sampler that changes the radius per draw or transforms widths per step must stay flat
 in memory; `s.cache_stats()` shows whether input files are re-read per rebuild (regression test:

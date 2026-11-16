@@ -66,7 +66,7 @@ vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const Level
         int l = channel->GetL();
         double levelEnergy = state.E(j, la);
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-        double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+        double dS = ChannelFunc(pair)
                         .ShiftDerivative(l, pair->SpinOrbitTwoJ(jg->GetJ()), resonanceEnergy);
         tab[j - 1][la - 1][ch - 1] = dS;
       }

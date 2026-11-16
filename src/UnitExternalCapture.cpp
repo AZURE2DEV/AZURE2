@@ -118,11 +118,11 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or
   // garbage there (e.g. a Gaussian-folding sub-point at E_cm <= 0).
-  if (ChannelFunc(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).IsClosed(cmEnergy))
+  if (ChannelFunc(entrancePair).IsClosed(cmEnergy))
     return complex(0.0, 0.0);
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
-  CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  CoulFunc theCoulombFunction(entrancePair);
   // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialMemo).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE))
     theCoulombFunction.SetRadialMemo(&configure.scratch->ForThisThread().ec.radial);

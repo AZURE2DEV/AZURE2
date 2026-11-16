@@ -84,7 +84,7 @@ python3 "$AZURE2_SRC/.claude/skills/azure2-fit/scripts/convert_sav_names.py" \
      E_c.m. = 5 keV–2.5 MeV;
    - the large differences were all `<targetInt>` segments (the target-effect rework) plus one (p,α₁) set about
      4 % low;
-   - `--gsl-coul` did not close the gap (χ² 142,804);
+   - `--gsl-coul` (GSL's Coulomb functions; the option no longer exists) did not close the gap (χ² 142,804);
    - the `.azr` had been edited four days after the fit, which confounds the comparison.
 
    Report the residual to the user; do not tune it away. A segment off by orders of magnitude (not percent) after
