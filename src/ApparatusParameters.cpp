@@ -11,6 +11,7 @@
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
 #include "Config.h"
+#include "DiagonalPriors.h"
 #include "WorkingCopy.h"
 
 std::string ApparatusDeclaration::Name() const {
@@ -22,11 +23,6 @@ std::string ApparatusDeclaration::Name() const {
 const std::vector<ApparatusRow> &ApparatusRows() {
   static const std::vector<ApparatusRow> rows = {StoppingScaleRow(), KernelParameterRow()};
   return rows;
-}
-
-double ApparatusParam::Penalty(double value) const {
-  if (!declaration.vary || priorReplaced || !(declaration.sigma > 0.0)) return 0.0;
-  return GaussianPriorChi2(value, declaration.centre, declaration.sigma);
 }
 
 // ---------------------------------------------------------------- the row of a table kernel's own parameters
@@ -140,25 +136,18 @@ void WorkingCopy::FillApparatusFromParams(const vector_r &p, const Config &confi
     if (anyOfRow[row] && ApparatusRows()[row].follow) ApparatusRows()[row].follow(*this, changed[row], configure);
 }
 
-double WorkingCopy::ApparatusPenalty(int row) const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumApparatusParams(); k++) {
-    const ApparatusParam &a = Data().GetApparatusParam(k);
-    if (row >= 0 && a.row != row) continue;
-    chi2 += a.Penalty(a.Row().read(*Data().GetTargetEffect(a.lead), a.declaration.slot, EffectValues(a.lead)));
-  }
-  return chi2;
-}
-
 // ---------------------------------------------------------------- outputs, labels, the API, the index map
 void WriteApparatusChiSquared(const WorkingCopy &data, std::ostream &out) {
+  // The priors as the objective's T8 adds them (AppendTargetPriors); each row's subtotal from 0.
+  DiagonalPriors priors;
+  AppendTargetPriors(data, PriorSource::kApparatus, nullptr, priors);
   for (int row = 0; row < (int)ApparatusRows().size(); row++) {
     bool anyPrior = false;
     for (int k = 1; k <= data.Data().NumApparatusParams(); k++) {
       const ApparatusParam &a = data.Data().GetApparatusParam(k);
       anyPrior = anyPrior || (a.row == row && a.declaration.vary && a.declaration.sigma > 0.0);
     }
-    if (anyPrior) out << " Total-" << ApparatusRows()[row].chiLabel << "-Chi-Squared: " << data.ApparatusPenalty(row);
+    if (anyPrior) out << " Total-" << ApparatusRows()[row].chiLabel << "-Chi-Squared: " << PriorsChi2(priors, PriorSource::kApparatus, row);
   }
 }
 

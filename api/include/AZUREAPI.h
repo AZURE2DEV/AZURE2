@@ -504,6 +504,8 @@ class AZUREAPI {
   double NuisanceChi2(const vector_r &full);
   void AddNuisanceGradient(const vector_r &full, vector_r &gradFull);
   bool NuisancePriorOf(int f, double &nominal, double &sigma);
+  /// The list of those priors at the full vector (NuisancePriorsOf, DiagonalPriors.h): index f, value full[f].
+  DiagonalPriors NuisancePriors(const vector_r &full);
   /// The fit's settings, read once per model: <parameterSettings> applied to a scratch parameter set (not to the
   /// session's parameters), from which come the nuisance priors, the fit's limits (GetParameterBounds) and the
   /// support of the posterior (OutsideSamplerSupport).

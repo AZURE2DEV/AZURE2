@@ -41,7 +41,7 @@ int PrepareFreeParams(const AZURECalc &self, const vector_r &full, const ROOT::M
   hi.assign(nFree, std::numeric_limits<double>::infinity());
   pen_nom.assign(nFree, 0.0);
   pen_inv2.assign(nFree, 0.0);
-  // The diagonal priors by full parameter index (p2f holds full indices of the same map; Objective.h).
+  // The diagonal priors by full parameter index (p2f holds full indices of the same map; DiagonalPriors.h).
   const ParamIndexMap pmap = BuildParamIndexMap(self.compound(), self.data(), std::vector<bool>());
   std::map<int, std::pair<double, double>> prior;  // full index -> (nominal, sigma)
   ForEachDiagonalPrior(self.data(), pmap,

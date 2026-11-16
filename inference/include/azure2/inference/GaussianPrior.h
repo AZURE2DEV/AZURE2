@@ -13,7 +13,7 @@ namespace inference {
  * The one statement of the formula for the objective's diagonal priors (normalizations, energy shifts, screening,
  * density, Doppler temperature, thickness, apparatus parameters, abundances and their sum, the nuisance priors),
  * their gradients, Minuit's G2 and the chiSquared.out writer.  Which parameters carry such a prior, and whether one is replaced by the prior covariance,
- * is the engine's enumeration (ForEachDiagonalPrior, Objective.h).  sigma = 0 is "no prior": the caller does not call.
+ * is the engine's gather (include/DiagonalPriors.h; the list: DiagonalPriors.h).  sigma = 0 is "no prior": the caller does not call.
  *
  * The value is the square of the pull r = (x - x0)/sigma, formed as r * r (one division, one product).
  */

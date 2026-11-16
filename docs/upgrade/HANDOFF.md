@@ -2,6 +2,82 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 20:30) — merged: the objective's diagonal priors on one list (slices 1-3)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 100: `feature/upgrade-7-objective-arrays` (an agent's;
+its entry follows): the design note `docs/upgrade/objective_arrays.md` and its slices 1 to 3. The base build is
+`work/b-trial100`, the reference stays `tab-trial99-1`, the quick set is 331 tests.
+
+**What it is.** Every Gaussian prior on one parameter (a normalization, the three kinds of energy shift,
+screening, density, Doppler temperature, thickness, an apparatus parameter, a nucleus's abundance, a nuisance of
+`<parameterSettings>`) is an entry of one list, `inference/include/azure2/inference/DiagonalPriors.h`, gathered
+by the engine in `src/DiagonalPriors.cpp`; the value, the gradient, the Levenberg-Marquardt rows and the writer
+of `chiSquared.out` read that list, where the rule "which parameter carries a prior" was written two to four
+times. `include/Objective.h` went from 252 to 134 lines. Before the switch the agent compared the old
+enumeration with the list in 343 runs (194 priors): no mismatch.
+
+**Verified** (`work/director/verify_l100.out`): 0 warnings; 887, 851 and 887 files identical to `tab-trial99-1`;
+the eight fits identical to `work/b-trial99`; 331 of 331 quick tests; 172 of 172 regression scripts. User-space
+instructions at one thread against `work/b-trial99` (`work/director/speed_l100.out`): T2 calculation
+1,242,387,186 -> 1,242,387,355; T2 gradient fit 168,626,591,786 -> 168,626,592,076; 13N gradient fit
+184,435,944,411 -> 184,435,959,325 (below 1e-7 each). Not run by me: the slow tests, sanitizers.
+
+**The note's other recommendations**, as the PI took them on 2026-11-16: no `ParameterVector` class; the three
+inconsistencies it lists are repaired (in work, `feature/upgrade-7-objective-repairs`: the first agent's commit
+of them was refused by its permission check because the PI's word reached it through a message; a new agent has
+it in its brief). Slices 4 to 6 (abundances, Park's wall, the profiled norms on arrays) are not started. After
+them: a term states its value, gradient, rows and output name in one place (the recipe trial's finding).
+
+**The PI, 2026-11-16 evening:** "Yes to all 3 your proposals" (the repair of `coulsm`'s F and F' at eta = 0, in
+work as `feature/upgrade-1-coulomb-neutral-f`; a converter note for an old project with the GSL box; the
+observed-level record with its penetrability and a safe output of `--schema`: the last three not started); "Use
+also 2e-5" (the golden comparison of `tests/upgrade` outside Linux; on the macOS branch, not merged yet).
+
+**Not merged yet:** `feature/upgrade-0-macos-3` (the macOS findings: the unit of a width in `parameters.out`
+chosen by the printed value, time limits of the CI's unit tests, the 2e-5), the two branches in work.
+
+## 2026-11-16 (objective agent) — slices 1-3 of objective_arrays.md: the diagonal priors on one list
+
+Worktree wt-obj, branch feature/upgrade-7-objective-arrays, three commits on 82766b85, not pushed:
+e7a50bab (slice 1, T8 and the writer's five T8 totals), eb532383 (slice 2, one enumeration of T3, T4, T8, T7's
+per-nucleus priors), 177f63e7 (slice 3, T5).  Tree clean at 177f63e7; work/b-obj built there (0 warnings).
+
+What exists now
+- inference/include/azure2/inference/DiagonalPriors.h: DiagonalPrior (index, value, centre, sigma, PriorSource
+  source, group), AddPriorsChi2, PriorsChi2 (by source and group), AddPriorsGradient (on p[index]),
+  AddPriorsCurvature; test inference_diagonal_priors (shown to fail on three injected errors).
+- src/DiagonalPriors.cpp (include/DiagonalPriors.h): AppendNormPrior, AppendShiftPriors, AppendSegmentPriors,
+  AppendTargetPriors, AppendAbundancePriors, DiagonalPriorsOf, ForEachDiagonalPrior (a loop over it),
+  NuisancePriorOf, NuisancePriorsOf.  Every eligibility rule of T3, T4, T5, T8 and T7's per-nucleus priors is here.
+- Gone: WorkingCopy::{Screening,Density,Doppler,Thickness,Apparatus}Penalty, TargetEffect::{Screening,Density,
+  Doppler}Penalty, Segment::ThicknessPenalty, ApparatusParam::Penalty, Segment::AddShiftPenalty,
+  ShiftPenaltyParts, the six ForEach...Prior helpers of Objective.h, AZURECalc::CoveredByPriorCovariance.
+- Check 11 (repo_consistency): AppendTargetPriors replaces the four gone names; the writer's uses are allowed.
+
+R4 (before slice 2, scratch build, not committed): the old enumeration against DiagonalPriorsOf on 343 processes
+(108 runs of tests/ in the Brune basis, 235 runs inside 26 regression scripts), 194 priors of every source: 0
+mismatches; 0 value-path priors without an index; writer and gradient norm rules 0 differences; shiftFnValues
+size 0 differences (59 owners); 0 NaN widths (the grammar refuses non-finite numbers); 0 T8 flags off; value read
+= p[index] in all (first evaluation only).
+
+Full check of slices 1-3 (verify_branch.sh wt-obj obj tab-trial94-1 trial98 6, head 177f63e7):
+0 warnings; brune 887 files, 886 identical; no-brune 851, 851; use-park 887, 886.  The two that differ are
+gamma_decay/models/record.azr chiSquared.out (brune, use-park): only the added "Total-Gamma-Decay-Chi-Squared: 0"
+(numbers 0 differ, text 2).  Eight fits identical to trial98.  ctest -LE slow 331 of 331.  run_tests 172 passed,
+0 failed.
+
+Not done: the coordinator's later items 4-6 (Park NaN gradient, shifts.out function penalty, EvaluateFilledChi2).
+The commit of item 4 was refused by the permission classifier: the original brief forbids these three, and the
+lifting came by an agent message, which is not the user's consent.  The work is kept, uncommitted and out of the
+tree, in work/director/entries/obj_agent_patches/: item4_park_nan.patch (fix + park_chi2_fallback variant E; the
+test failed on the old build and passed with the fix; park tests and scripts passed), item5_shifts_out_partial.patch
+(the writer change only, not built or run), shift_fn_case8.sh (the regression case, not run), efc_new.cpp (a draft of
+item 6, not built).  calculate_chi2 vs objective() before item 6, at x0 (pyazr, slice 3 build): T1 brune differ in
+the last bit, T3 no-brune and use-park, 13N no-brune differ in the last bit; others equal.
+
+Not run: ctest -L slow, sanitizers, the thread comparison, other compilers, infer_speed.sh (the 1 % instruction
+gate of the note was not measured).
+
 ## 2026-11-16 (director, 18:55) — merged: `--gsl-coul` retired, three pyazr jobs, the `gamma_decay` total, recipes
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 99: `feature/upgrade-8-pyazr-approved` and the rest of

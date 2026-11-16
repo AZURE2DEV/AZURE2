@@ -59,7 +59,6 @@ struct ApparatusParam {
   std::vector<int> effects;     ///< every target effect (copy, 1-based) of the parameter
   bool priorReplaced = false;   ///< the prior covariance holds its prior (Objective, ReplacedPriors)
   const ApparatusRow &Row() const { return ApparatusRows()[row]; }
-  double Penalty(double value) const;
 };
 
 /// The rows' own declarations (their files): the stopping scale (StoppingScale.cpp), a table kernel's parameter.

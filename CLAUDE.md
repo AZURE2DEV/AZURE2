@@ -241,7 +241,8 @@ section (check 34).
    say how the sampler takes a term); its gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in
    `AppendModelRows` if the Levenberg-Marquardt path needs them. A Gaussian prior on one parameter is not a new
    formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
-   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in `ForEachDiagonalPrior` (`include/Objective.h`).
+   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients,
+   the rows, the sampler and the writer read.
    Arithmetic that needs no engine object goes in `inference/` with its test in `inference/tests/` [check 8b: only
    its own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
    [check 11: no term is added outside `src/Objective.cpp`].
