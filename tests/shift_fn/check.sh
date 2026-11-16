@@ -92,7 +92,7 @@ mk() {
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$HERE/data" "$dir/data"
   # the records go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
-  RECORDS="$3" TARGETS="$(case "$3" in *"target         thin"*) printf '%s' "$THIN" ;; esac)" awk -v fix="$fix" '
+  RECORDS="$3" TARGETS="$(case "$3" in (*"target         thin"*) printf '%s' "$THIN" ;; esac)" awk -v fix="$fix" '
     /<levels>/ { inlev = 1; print; next }
     /<\/levels>/ { inlev = 0 }
     inlev && fix && NF > 12 { $4 = 1; $11 = 1; print; next }   # fix every energy and width

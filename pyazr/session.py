@@ -39,7 +39,7 @@ def _config_output_dir(path):
     """The output directory of a ``.azr``, parsed as Config::ReadConfigFile
     does: the line after the first one of ``<config>``, cut at its last
     ``#`` and trimmed ("" if there is none)."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
     try:
         i = next(k for k, line in enumerate(lines) if line.strip() == "<config>")  # a whole trimmed line (P2)

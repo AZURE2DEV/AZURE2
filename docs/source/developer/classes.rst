@@ -138,7 +138,7 @@ pass (``EnergyTaskList``); it reads the immutable tables built at set-up: the
 (``MeshPlan``) is made at set-up and again when an energy shift moves the
 points beyond their planned nodes. Everything an evaluation computes goes into
 the caller's ``Results``, whose ``TaskScratch`` (one per thread) holds the
-solvers: ``AMatrixFunc`` with one ``LevelMatrixSolver`` per group, and
+solvers: ``AMatrixFunc`` with one ``azure2::physics::LevelMatrixSolver`` per group, and
 ``THMMatrixFunc``. :doc:`level_matrix` and :doc:`data_model` describe them.
 
 Inference

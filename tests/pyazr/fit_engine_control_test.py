@@ -146,8 +146,8 @@ def main():
 
             def stopper(stop=stop, started=started, records=records, at_stop=at_stop):
                 started.wait(600)
+                stop.set()  # first the request, then the count: a record between the two is not one after it
                 at_stop.append(len(records))
-                stop.set()
             t = threading.Thread(target=stopper)
             t.start()
             r = s.fit_with_engine("migrad", progress=progress, stop=stop)

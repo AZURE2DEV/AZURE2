@@ -107,7 +107,7 @@ def _choice(text, arg):
 def _json_file(text, arg):
     _existing_file(text, arg)
     try:
-        with open(text) as f:
+        with open(text, encoding="utf-8") as f:
             value = json.load(f)
     except ValueError as e:
         raise CallError(2, f"{arg.name} {text}: not JSON ({e})", f"{arg.name}: a JSON file holding one object",
@@ -860,15 +860,12 @@ def _stdout_to_stderr():
     saved = os.dup(1)
     os.dup2(2, 1)
     real, sys.stdout = sys.stdout, sys.stderr
-    out = os.fdopen(os.dup(saved), "w")
+    out = os.fdopen(os.dup(saved), "w", encoding="utf-8")
     try:
         yield out
     finally:
-        try:
-            import ctypes
-            ctypes.CDLL(None).fflush(None)  # the engine's buffered output, before descriptor 1 is restored
-        except (OSError, AttributeError):
-            pass
+        from . import engine_text
+        engine_text.flush_c_stdout()  # the engine's buffered output, before descriptor 1 is restored
         sys.stdout = real
         os.dup2(saved, 1)
         os.close(saved)

@@ -44,7 +44,13 @@ The objects
    the compound energy alone (``Site::ChannelRowsKey``): one table per energy,
    computed by the first site there and held by every other site at that
    energy and by its node of the ``NodeTable``
-   (``WorkingCopy::FillChannelRows``).
+   (``WorkingCopy::FillChannelRows``). The members are in three groups by
+   who writes them: what the set-up fixes (the segment, the lab angle, the
+   nominal energy, the settings, the set-up's external-capture amplitudes),
+   what an evaluation's hand-over writes (``Site::Values``: the energies and
+   the c.m. angle after a shift, the Legendre and channel rows, the Coulomb
+   amplitudes, the screening energy, the stopping and the thickness, the row
+   set), and the place of the result record.
 
 ``Unit`` (``include/Unit.h``)
    A data point: a ``Site`` with its measurement row, its target-effect fold

@@ -54,10 +54,10 @@ try:
 finally:
     shutil.rmtree(work, ignore_errors=True)
 
-page = open(os.path.join(ROOT, "docs", "source", "user_guide", "project_from_python.rst")).read()
+page = open(os.path.join(ROOT, "docs", "source", "user_guide", "project_from_python.rst"), encoding="utf-8").read()
 check("the docs page includes the script's recipe block",
       "pyazr/examples/project_from_python.py" in page and ":start-after: # [recipe]" in page)
-skill = open(os.path.join(ROOT, ".claude", "skills", "azure2-setup", "references", "project-from-python.md")).read()
+skill = open(os.path.join(ROOT, ".claude", "skills", "azure2-setup", "references", "project-from-python.md"), encoding="utf-8").read()
 check("the skill's reference names the script", "pyazr/examples/project_from_python.py" in skill)
 print(f"{len(failures)} failure(s)" if failures else "PASS")
 sys.exit(1 if failures else 0)

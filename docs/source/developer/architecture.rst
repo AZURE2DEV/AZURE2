@@ -236,7 +236,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``src/EnergyPass.cpp``): ``CalculationPlan::EnergyTasks`` groups every
    unit (a point, or a slot of a folded point) by compound nucleus, route and
    energy; each energy task runs ``SolveAtOneEnergy``: the level matrix is
-   filled and factored once (``AMatrixFunc``, ``LevelMatrixSolver``; the
+   filled and factored once (``AMatrixFunc`` calling ``physics/``'s
+   ``CollisionMatrix.h``, ``LevelMatrixSolver.h`` and ``ChannelSolve.h``; the
    channel-matrix route ``RMatrixFunc`` when the A-matrix is off), a T-matrix
    is built once per (entrance, exit) group and every unit's observable is
    written into its record of ``Results``. Then each folded point is folded

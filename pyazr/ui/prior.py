@@ -10,6 +10,7 @@ null), with no call of its own.
 import os
 
 from .errors import Refused
+from ..paths import is_absolute
 
 #: The ``<config>`` key that names the prior file.
 PRIOR_KEY = "priorCovariance"
@@ -66,7 +67,7 @@ def prior_write(state, described, parts, path, rev=None):
     ``priorCovariance`` key to it: one history entry, which undo takes back with the file (removed, or restored as it
     was).  Refused when the engine would refuse the matrix."""
     from pyazr import priors
-    if not path or os.path.isabs(str(path)):
+    if not path or is_absolute(str(path)):
         raise Refused(f"{path!r}: a file name relative to the project's directory", allowed="a relative path",
                       fix="give the name the builder proposes, or another inside the project's directory")
     with state.lock:

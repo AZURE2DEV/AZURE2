@@ -29,7 +29,7 @@
 /// Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
 
 double Site::GetGeometricalFactor() const {
-  return geofactor_;
+  return values_.geofactor;
 }
 
 /*!
@@ -37,7 +37,7 @@ double Site::GetGeometricalFactor() const {
  */
 
 double Site::GetSFactorConversion() const {
-  return sfactorconv_;
+  return values_.sfactorconv;
 }
 
 /*!
@@ -46,7 +46,7 @@ double Site::GetSFactorConversion() const {
  */
 
 double Site::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
+  return values_.edep->penetrabilities[values_.edep->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -59,15 +59,15 @@ double Site::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
  */
 
 complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
-  if (!thm_vertex_) return 0.0;
-  const ThmVertexRows &t = *thm_vertex_;
+  if (!values_.thm_vertex) return 0.0;
+  const ThmVertexRows &t = *values_.thm_vertex;
   const int k = t.Find(jGroupNum, channelNum);
   if (k < 0) return 0.0;
   return (boundary - 1.0) * t.jl[k] - t.rhodjl[k] + t.coul[k];
 }
 
 complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
-  const ThmPsTable *t = thm_ps_.get();
+  const ThmPsTable *t = values_.thm_ps.get();
   if (!t || node < 0 || node >= t->nodes) return 0.0;
   if (jGroupNum < 1 || jGroupNum >= (int)t->offset.size() || channelNum < 1) return 0.0;
   const int flat = t->offset[jGroupNum - 1] + channelNum - 1;
@@ -85,7 +85,7 @@ complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, 
  */
 
 complex Site::GetLoElement(int jGroupNum, int channelNum) const {
-  return edep_->lo_elements[edep_->At(jGroupNum, channelNum)];
+  return values_.edep->lo_elements[values_.edep->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -95,7 +95,7 @@ complex Site::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex Site::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return edep_->coulombphase[edep_->At(jGroupNum, channelNum)];
+  return values_.edep->coulombphase[values_.edep->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -105,7 +105,7 @@ complex Site::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex Site::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return edep_->hardspherephase[edep_->At(jGroupNum, channelNum)];
+  return values_.edep->hardspherephase[values_.edep->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -113,17 +113,17 @@ complex Site::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
  */
 
 complex Site::GetCoulombAmplitude() const {
-  return coulombamplitude_;
+  return values_.coulombamplitude;
 }
 
 complex Site::GetCoulombAmplitude(double s) const {
   // Every pair but an identical one with spin returns the stored amplitude
   // untouched, so the spin-0 and distinguishable results cannot move.
-  if (!spinDependentCoulomb_) return coulombamplitude_;
+  if (!values_.spinDependentCoulomb) return values_.coulombamplitude;
   const int twoS = (int)std::lround(2.0 * s);
   // Channel spins of two identical particles are integers.
   const double sign = ((twoS / 2) % 2 == 0) ? 1.0 : -1.0;
-  return coulombdirect_ + sign * coulombexchange_;
+  return values_.coulombdirect + sign * values_.coulombexchange;
 }
 
 /*!
@@ -131,7 +131,7 @@ complex Site::GetCoulombAmplitude(double s) const {
  */
 
 void Site::SetGeometricalFactor(double geoFactor) {
-  geofactor_ = geoFactor;
+  values_.geofactor = geoFactor;
 }
 
 /*!
@@ -139,7 +139,7 @@ void Site::SetGeometricalFactor(double geoFactor) {
  */
 
 void Site::SetSFactorConversion(double conversion) {
-  sfactorconv_ = conversion;
+  values_.sfactorconv = conversion;
 }
 
 namespace {
@@ -239,10 +239,10 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
   // Electron screening: f = exp(pi eta U_e / E), so d ln f / d U_e = pi eta / E (charged particle pairs only).
-  screen_k_ = 0.0;
+  values_.screen_k = 0.0;
   if (entrancePair->GetPType() == 0 && entrancePair->GetZ(1) * entrancePair->GetZ(2) != 0 && this->GetCMEnergy() > 0.0) {
     const double eta = Kinematics::Channel(entrancePair).Eta(this->GetCMEnergy());
-    screen_k_ = pi * eta / this->GetCMEnergy();
+    values_.screen_k = pi * eta / this->GetCMEnergy();
   }
 
   // Every table below is rebuilt from scratch: a second call (a parent
@@ -252,11 +252,11 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
   // storage, as RecalcEDependentValues does, or taken whole from rowsOf; the
   // THM tables are made anew.
   if (rowsOf)
-    edep_ = rowsOf->edep_;
+    values_.edep = rowsOf->values_.edep;
   else
     this->ClearEDependentRows();
-  thm_ps_.reset();
-  thm_vertex_.reset();
+  values_.thm_ps.reset();
+  values_.thm_vertex.reset();
   std::shared_ptr<ThmVertexRows> vertexRows;
   if (this->IsTHM()) vertexRows = std::make_shared<ThmVertexRows>();
   std::shared_ptr<ThmPsTable> psTable;
@@ -426,7 +426,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
     vertexRows->jl.shrink_to_fit();
     vertexRows->rhodjl.shrink_to_fit();
     vertexRows->coul.shrink_to_fit();
-    thm_vertex_ = std::move(vertexRows);
+    values_.thm_vertex = std::move(vertexRows);
   }
   if (psTable) psTable->offset.back() = (int)psTable->slot.size();
   if (psTable && !psTable->slot.empty()) {  // no channel at all: no nodes, as before
@@ -436,37 +436,37 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
     psTable->rhodjl.shrink_to_fit();
     psTable->coul.shrink_to_fit();
     psTable->weight.shrink_to_fit();
-    thm_ps_ = psTable;
+    values_.thm_ps = psTable;
   }
   // The rows grew channel by channel (push_back): give back the spare capacity,
   // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
   // point is filled here once per energy (setup, grid re-placement); the shift
   // step refills its rows in place every evaluation and keeps their capacity.
   if (rows && rows->used) rows->used->insert(rows->used->end(), ownRows.begin(), ownRows.end());
-  if (edep_ && edep_.SoleOwner()) {
+  if (values_.edep && values_.edep.SoleOwner()) {
     EDependentTables &t = MutableEDep();
     t.ShrinkToFit();
   }
-  eDependentEnergy_ = this->GetCMEnergy();
-  eDependentValid_ = true;
+  values_.eDependentEnergy = this->GetCMEnergy();
+  values_.eDependentValid = true;
 }
 
 /*!
  * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
  */
 void Site::ClearEDependentRows() {
-  if (!edep_) return;
-  if (!edep_.SoleOwner()) {
+  if (!values_.edep) return;
+  if (!values_.edep.SoleOwner()) {
     // Shared with another point: start a table of our own with the same rows,
     // empty, rather than copying values that are about to be replaced.
     auto own = SharedTable<EDependentTables>::Make();
     EDependentTables &t = own.Mutable();
-    t.rowStart.reserve(edep_->rowStart.size());
-    t.lo_elements.reserve(edep_->lo_elements.size());
-    t.penetrabilities.reserve(edep_->penetrabilities.size());
-    t.coulombphase.reserve(edep_->coulombphase.size());
-    t.hardspherephase.reserve(edep_->hardspherephase.size());
-    edep_ = std::move(own);  // drops the shared table (release; SharedTable.h)
+    t.rowStart.reserve(values_.edep->rowStart.size());
+    t.lo_elements.reserve(values_.edep->lo_elements.size());
+    t.penetrabilities.reserve(values_.edep->penetrabilities.size());
+    t.coulombphase.reserve(values_.edep->coulombphase.size());
+    t.hardspherephase.reserve(values_.edep->hardspherephase.size());
+    values_.edep = std::move(own);  // drops the shared table (release; SharedTable.h)
     return;
   }
   MutableEDep().Clear();  // our own: emptied in place, keeping its storage
@@ -507,11 +507,11 @@ void Site::RecalcEDependentValues(WorkingCopy *data, const CompoundSystem *compo
  */
 
 Unit::EDependentTables &Site::MutableEDep() {
-  if (!edep_)
-    edep_ = SharedTable<EDependentTables>::Make();
-  else if (!edep_.SoleOwner())
-    edep_ = SharedTable<EDependentTables>::Make(*edep_);
-  return edep_.Mutable();
+  if (!values_.edep)
+    values_.edep = SharedTable<EDependentTables>::Make();
+  else if (!values_.edep.SoleOwner())
+    values_.edep = SharedTable<EDependentTables>::Make(*values_.edep);
+  return values_.edep.Mutable();
 }
 
 /*!
@@ -519,11 +519,11 @@ Unit::EDependentTables &Site::MutableEDep() {
  */
 
 vector_r &Site::MutableLegendre() {
-  if (!legendreP_)
-    legendreP_ = SharedTable<vector_r>::Make();
-  else if (!legendreP_.SoleOwner())
-    legendreP_ = SharedTable<vector_r>::Make(*legendreP_);
-  return legendreP_.Mutable();
+  if (!values_.legendreP)
+    values_.legendreP = SharedTable<vector_r>::Make();
+  else if (!values_.legendreP.SoleOwner())
+    values_.legendreP = SharedTable<vector_r>::Make(*values_.legendreP);
+  return values_.legendreP.Mutable();
 }
 
 /*!
@@ -537,14 +537,14 @@ Unit::EDependentShare Site::ShareEDependentValues() const {
   share.angle = this->GetCMAngle();
   share.entranceKey = this->GetEntranceKey();
   share.exitKey = this->GetExitKey();
-  share.geofactor = geofactor_;
-  share.sfactorconv = sfactorconv_;
-  share.screen_k = screen_k_;
-  if (eDependentValid_ && eDependentEnergy_ == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
-    share.tables = edep_;
-    share.legendre = legendreP_;
-    share.thmPs = thm_ps_;
-    share.thmVertex = thm_vertex_;
+  share.geofactor = values_.geofactor;
+  share.sfactorconv = values_.sfactorconv;
+  share.screen_k = values_.screen_k;
+  if (values_.eDependentValid && values_.eDependentEnergy == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
+    share.tables = values_.edep;
+    share.legendre = values_.legendreP;
+    share.thmPs = values_.thm_ps;
+    share.thmVertex = values_.thm_vertex;
   }
   return share;
 }
@@ -560,15 +560,15 @@ bool Site::AdoptEDependentValues(const EDependentShare &share) {
   if (!share.tables || !share.legendre || share.energy != this->GetCMEnergy() || share.angle != this->GetCMAngle() ||
       share.entranceKey != this->GetEntranceKey() || share.exitKey != this->GetExitKey())
     return false;
-  geofactor_ = share.geofactor;
-  sfactorconv_ = share.sfactorconv;
-  screen_k_ = share.screen_k;
-  edep_ = share.tables;
-  legendreP_ = share.legendre;
-  thm_ps_ = share.thmPs;
-  thm_vertex_ = share.thmVertex;
-  eDependentEnergy_ = this->GetCMEnergy();
-  eDependentValid_ = true;
+  values_.geofactor = share.geofactor;
+  values_.sfactorconv = share.sfactorconv;
+  values_.screen_k = share.screen_k;
+  values_.edep = share.tables;
+  values_.legendreP = share.legendre;
+  values_.thm_ps = share.thmPs;
+  values_.thm_vertex = share.thmVertex;
+  values_.eDependentEnergy = this->GetCMEnergy();
+  values_.eDependentValid = true;
   return true;
 }
 
@@ -657,11 +657,11 @@ void Site::CalcCoulombAmplitude(WorkingCopy *data, const CompoundSystem *compoun
   if (this->GetEntranceKey() == this->GetExitKey()) {
     const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(this->GetEntranceKey()));
     complex direct, exchange;
-    CoulombAmplitudesAt(entrancePair, this->GetCMEnergy(), this->GetCMAngle(), direct, exchange, spinDependentCoulomb_);
-    if (spinDependentCoulomb_) coulombdirect_ = direct, coulombexchange_ = exchange;
+    CoulombAmplitudesAt(entrancePair, this->GetCMEnergy(), this->GetCMAngle(), direct, exchange, values_.spinDependentCoulomb);
+    if (values_.spinDependentCoulomb) values_.coulombdirect = direct, values_.coulombexchange = exchange;
     this->SetCoulombAmplitude(direct);
   } else {
-    spinDependentCoulomb_ = false;
+    values_.spinDependentCoulomb = false;
     this->SetCoulombAmplitude(complex(0., 0.));
   }
 }
@@ -671,5 +671,5 @@ void Site::CalcCoulombAmplitude(WorkingCopy *data, const CompoundSystem *compoun
  */
 
 void Site::SetCoulombAmplitude(complex amplitude) {
-  coulombamplitude_ = amplitude;
+  values_.coulombamplitude = amplitude;
 }

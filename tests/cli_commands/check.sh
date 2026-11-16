@@ -151,7 +151,7 @@ for c in d["commands"]:
     print("command", c["name"])
     for o in c["options"]:
         print("option", c["name"], o["option"])
-' <<< "$json" 2>&1)"
+' <<< "$json" 2>&1 | tr -d '\r')"
 helped="$(awk '/^Commands/ { on = 1 } on && /^\t[a-z]+:/ { sub(/^\t/, ""); sub(/:.*/, ""); c = $0; print "command", c }
   on && /^ +Options: / { sub(/^ +Options: /, ""); sub(/\.$/, ""); n = split($0, o, ", ");
   for (i = 1; i <= n; i++) { sub(/=.*/, "", o[i]); print "option", c, o[i] } }' <<< "$help")"

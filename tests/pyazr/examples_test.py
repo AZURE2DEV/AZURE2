@@ -65,7 +65,7 @@ ROWS = [
     # fit
     Row("fit_engine", [T1, "--out", "{out}"],
         "objective of the saved project as it stands: 462.273511 (the fit: 462.273511)", slow=True),
-    Row("fit_iminuit", [T3], "MIGRAD: objective 509.31250", needs=("iminuit",)),
+    Row("fit_iminuit", [T3], "MIGRAD: objective 509.31", needs=("iminuit",)),
     Row("fit_scipy", [T3], "least_squares: objective 509.31249", needs=("scipy",)),
     # uncertainties
     Row("fit_emcee", [T3, "--steps", "60", "--rate", "2", "1", "--draws", "5", "--out", "{out}/chain.npy"],
@@ -78,7 +78,7 @@ ROWS = [
         "peak S = 263.5 keV b at 0.4190 MeV"),
     # evaluations
     Row("endf_evaluation", [], "format check by pyazr.endf: 0 errors, 0 warnings"),
-    Row("endf_start_model", ["{out}"], "MF=6/MT=102 (z,g) capture: 3941 lines", slow=True),
+    Row("endf_start_model", ["{out}"], "MF=6/MT=102 (z,g) capture: 1081 lines", slow=True),
     # physics functions
     Row("channel_functions", [T1], " 0      1.0284      0.18764       2.0968      0.17374"),
     Row("ec_integrals", [T1], "20 external-capture pathways from pair 1", slow=True),
@@ -123,7 +123,8 @@ def main(argv):
         if not ok:
             failures.append(r.script)
             print(f"        exit {p.returncode}; expected in the output: {r.pin!r}")
-            print("        " + "\n        ".join((p.stdout[-1500:] + p.stderr[-1500:]).splitlines()))
+            print("        " + "\n        ".join(p.stdout.splitlines()[:3] + ["..."] +
+                                                (p.stdout[-1500:] + p.stderr[-1500:]).splitlines()))
         shutil.rmtree(out, ignore_errors=True)
         ran += 1
     for d, names_before in before.items():

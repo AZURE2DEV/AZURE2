@@ -53,7 +53,7 @@ run() {
   rm -rf "$dir"; mkdir -p "$dir"
   cp -R "$TESTS/$folder/." "$dir/"
   rm -rf "$dir/output" "$dir/checks"; mkdir -p "$dir/output" "$dir/checks"
-  (cd "$dir" && env "${vars[@]}" "$AZURE2_BIN" $command --no-gui "$@" "$azr" > log 2>&1)
+  (cd "$dir" && env ${vars[@]+"${vars[@]}"} "$AZURE2_BIN" $command --no-gui "$@" "$azr" > log 2>&1)
   echo $? > "$dir/status"
 }
 same() { diff -r "$WORK/$1/output" "$WORK/$2/output" > /dev/null 2>&1; }
@@ -134,7 +134,7 @@ refused() {  # refused WHAT TEXT VAR=VALUE... -- FLAGS...
   local vars=()
   while [ $# -gt 0 ] && [ "$1" != -- ]; do vars+=("$1"); shift; done
   [ $# -gt 0 ] && shift
-  local out; out="$(cd "$WORK" && env "${vars[@]}" "$AZURE2_BIN" --no-gui "$@" no_such_project.azr < /dev/null 2>&1)"
+  local out; out="$(cd "$WORK" && env ${vars[@]+"${vars[@]}"} "$AZURE2_BIN" --no-gui "$@" no_such_project.azr < /dev/null 2>&1)"
   local rc=$?
   if [ "$rc" = 2 ] && grep -qF -- "$text" <<< "$out"; then ok "$what: exit 2, $text"
   else bad "$what: exit $rc, $(printf '%s' "$out" | sed -n '1,2p')"; fi

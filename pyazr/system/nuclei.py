@@ -21,6 +21,8 @@ isotope (``12C(p,p)12C + 13C(p,p)13C``), each weighted by its abundance.
 import os
 from typing import NamedTuple
 
+from ..paths import is_absolute
+
 __all__ = ["SYMBOLS", "Nucleus", "nucleus_of", "nucleus_of_pair", "merge_projects", "MergeReport"]
 
 
@@ -142,7 +144,7 @@ def merge_projects(projects, out, *, isotopes=None, target="natural", isotope_su
     for (src, c) in members:
         for name, r in c.records().items():
             f = r.get("file")
-            if isinstance(f, str) and f and not os.path.isabs(f.strip('"')):
+            if isinstance(f, str) and f and not is_absolute(f.strip('"')):
                 c.set(name, file=os.path.relpath(os.path.join(src.directory, f.strip('"')), out_dir))
     # the shared sets: the carrier's reaction is the sum of the members', the others dropped
     drop = set()

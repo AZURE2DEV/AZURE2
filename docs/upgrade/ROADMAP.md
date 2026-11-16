@@ -24,8 +24,15 @@ machine. macOS: read after its first full run and answered in rehearsal 88 with 
 three test repairs, none run on macOS. Sanitizers (tenth push): no report under either, both jobs pass, after
 three entries for the OpenMP runtime's own libraries; four steps (T2's calculation and fit, two target checks)
 failed there without a report because the sanitizer script did not copy T2's prior covariance file and listed
-two deleted checks (repaired in the twelfth push; T2 under a sanitizer is not yet seen). The gates' other parts (reference
-outputs, the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
+two deleted checks. With that repaired (the twelfth push) both jobs pass with no failed step and no report, T2
+included, and so does the thirteenth push's run, on the collision matrix as functions of `physics/`. **Since the
+eleventh push (2026-11-16) the Linux job passes**: every regression check and every unit test. Windows in that
+push: 165 of 172 regression checks, 27 unit tests failing; a path with a drive letter was taken as relative to the
+project, and pyazr read text in the local code page (answered in the fourteenth push, not run on Windows). macOS
+in that push, the first with the GNU tools: 164 of 172 regression checks and 5 unit tests failing; four scripts
+were not written for bash 3.2, three compared a path through the temporary directory's link, and two failures are
+not understood. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
+one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
 
@@ -34,7 +41,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 0 | Freeze announced on `dev` | dropped | `dev` moved on; the join is the owner's and the PI's |
 | 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
 | 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
-| 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up | the collision matrix and the observables are engine classes on `CompoundSystem`, not functions of the arrays |
+| 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up; the collision matrix and the observables' sums are functions of arrays the engine calls (`physics_functions.md`) | the analytic gradient of those functions, the R_k of a secondary decay and the particle analysing power are engine code; `pyazr.physics.collision_matrix` takes formal levels and particle channels only |
 | 1 | `channel_functions` replaces the old Coulomb code | done for the channel tables | GSL still called in `src/CoulFunc.cpp` and `src/ECIntegral.cpp`; the Coulomb table is kept by design |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
@@ -49,7 +56,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 5 | Lab data in the frame of the data | merged | not audited |
 | 5 | Stopping module | done | SRIM's two data files under their authors' terms: the owner's decision |
 | 5 | THM observable | wired into the engine | not audited against `THM.md` §1–2 |
-| 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller): the `Site` split of `evaluation.md` §4.1 |
+| 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller). The `Site` split of `evaluation.md` §4.1 is prepared (`Site::Values`) and not made: the copy is the evaluation's own state, so the split alone would not remove it (§7.8, with the measurement and the open decision) |
 | 6 | No hidden state | done: 14 permanent rows, no pending row, no `mutable` member (`evaluation.md` §7.7) | — |
 | 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
 | 8 | Object binding | built | transfer functions on potentials, the level matrix, the Weisskopf width |

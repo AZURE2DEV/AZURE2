@@ -1,8 +1,11 @@
-#ifndef LEVELMATRIXSOLVER_H
-#define LEVELMATRIXSOLVER_H
+#ifndef AZURE2_PHYSICS_LEVEL_MATRIX_SOLVER_H
+#define AZURE2_PHYSICS_LEVEL_MATRIX_SOLVER_H
 
-#include "Constants.h"
+#include <complex>
 #include <vector>
+
+namespace azure2 {
+namespace physics {
 
 /// A reusable dense complex LU factorization of the level matrix.
 
@@ -27,6 +30,9 @@
 
 class LevelMatrixSolver {
  public:
+  typedef std::complex<double> complex;
+  typedef std::vector<complex> vector_c;
+  typedef std::vector<vector_c> matrix_c;
   LevelMatrixSolver() :
     n_(0),
     singular_(false),
@@ -80,5 +86,8 @@ class LevelMatrixSolver {
   matrix_c inverse_;
   vector_c work_;
 };
+
+}  // namespace physics
+}  // namespace azure2
 
 #endif

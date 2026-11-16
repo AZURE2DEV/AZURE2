@@ -64,9 +64,9 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const Comp
       return ec_amplitudes_[k][m];
     // Sized from the requested indices: a point without stored amplitudes (a sub-point or a fit's
     // working copy) has an empty ec_amplitudes_, and sizing from it indexed past the end.
-    if (ec_shifted_.size() <= k) ec_shifted_.resize(k + 1);
-    if (ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
-    ShiftedECAmplitude &memo = ec_shifted_[k][m];
+    if (values_.ec_shifted.size() <= k) values_.ec_shifted.resize(k + 1);
+    if (values_.ec_shifted[k].size() <= m) values_.ec_shifted[k].resize(m + 1);
+    ShiftedECAmplitude &memo = values_.ec_shifted[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
     const int aa = compound->GetPairNumFromKey(this->GetEntranceKey());
@@ -274,5 +274,5 @@ void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, c
 void Site::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
-  ec_shifted_.clear();
+  values_.ec_shifted.clear();
 }

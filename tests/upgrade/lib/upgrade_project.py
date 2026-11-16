@@ -304,6 +304,8 @@ def find_binary(arg=None):
     """The AZURE2 CLI: the argument, $AZURE2_BIN, $AZURE2_BINARY, else the newest build*/src/AZURE2."""
     for cand in (arg, os.environ.get("AZURE2_BIN"), os.environ.get("AZURE2_BINARY")):
         if cand:
+            if not os.path.isfile(cand) and os.path.isfile(cand + ".exe"):
+                cand += ".exe"  # Windows: the shell runs build/src/AZURE2 by that name, the file has the suffix
             if not os.path.isfile(cand):
                 raise SystemExit(f"AZURE2 binary {cand!r} does not exist")
             return os.path.abspath(cand)
