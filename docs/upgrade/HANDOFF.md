@@ -2,6 +2,87 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — rmfit beside pyazr, on pyazr 3.0
+
+**Branch** `feature/upgrade-5-dev-rmfit`, cut from `feature/upgrade` (`e8b1fe94`). `rmfit/` is the package of `dev`
+(`527f63de`: PR #9 with the fix of PR #10) as a top-level directory beside `pyazr/`, re-written where it touched the
+engine or the project file; it imports pyazr 3.0's public names only (`Session`, `Objective`, `Evaluation`,
+`Parameters`, `Project`, `Nuisance`, `describe`, `convert_azr`, `fetch_levels`, `pyazr.physics`, `pyazr.bands`,
+`pyazr.parameters.read_parameter_file`, `pyazr.system.Nucleus`). The search, the ledger, the driver's logic and the
+criteria are dev's lines unchanged. The owner asked for it first of the remaining ports (2026-11-16).
+
+**How it sits on this structure** (`FOR_THE_OWNER.md` section 6a asked whether the 3.0 surface is enough: it is).
+- `rmfit/azr3.py` is the one module that reads or edits a project: `SegmentTable` (the data sets from
+  `pyazr.describe` and the records' fields; which nuisances are fitted from the description, their values and priors
+  from a session's parameter rows), `write_variant` (a shard or a copy as `Project` edits: `remove`, `set`, `rename`,
+  `add_dataset`, `set_config`), `Model` (levels, pairs, level and data-set edits through `Project`). No line of a
+  project is parsed.
+- `_worker.py`: one `Session` per process. Rows and Jacobian are `Objective.residuals` / `residuals_and_jacobian`;
+  the parent keeps the data rows, rebuilds the nuisances' priors from the parameter rows (`prior_centre`,
+  `prior_sigma`) once for all shards, and takes the rows between the data rows and the nuisance priors (model data, a
+  prior covariance, Park's wall, decay priors, abundance sums) as one block from one worker (`engine.ModelRows`; the
+  worker checks that the tail it cuts off is the nuisance priors). A single session's objective is
+  `Session.objective()` exactly. Nothing is evaluated when a worker starts, because the engine freezes a `relvector`
+  covariance model at a session's first evaluation.
+- Shards: a data set that names a target, a beam or a detector, or a shared `energy_scale`, is never split; a
+  `normalization` shared across shards is written out per member (the first carries the record's nuisance, a
+  follower the fixed norm 1 and is rescaled by the evaluator); extrapolations and `priorCovariance` are dropped from a
+  shard, model data kept. dev's convolution pieces are gone: the engine folds.
+- `bake` writes its files with `Session.save_fit(norms="nominal", verify=False)` in a process of its own, from a copy
+  of the base in the destination directory (`save_fit` refuses a data-covariance project in another directory), and
+  keeps rmfit's fresh-session check.
+- `audit`: masses, separation energies and file problems are the validator's (`Project.validate()`, code
+  `engine-validate`); `norm-error-units` became `norm-prior-tight`, `targetint-test` became `extrapolation-folded`.
+- `sampling.py` is dev's `pyazr/sampling.py` (NUTS, R-hat, ESS), which this branch does not have; its
+  `AzurePosterior` is on `Session.objective()` rows (analytic gradient, no finite differences).
+
+**Not ported, and why.** `rmfit/mixture.py` (the joint fit of several one-nucleus projects): dev's own README says
+it was superseded on 2026-10-13 by several compound nuclei in one project and runs only against one old build; the
+pyazr calls it needs exist on neither branch. The two convolution-piece tests went with the feature.
+
+**Refused or left out, as on dev or said here.** Fitted target densities, Doppler temperatures, sample thicknesses
+and screening potentials in shards (SingleSession only, as dev). A `priorCovariance` project in `Sharded` (new: a
+single session has the term through the model rows). `window_variant` and the split of a data set need a file whose
+`columns` name a lab-energy column (`E_lab[MeV|keV|eV]`); another layout is never split and a window on it is
+refused. A shard keeps the `<parameterSettings>` rows of removed data sets (the engine warns
+`W_PARAMETER_SETTING_UNKNOWN` at each shard start).
+
+**Files of this branch touched outside `rmfit/`:** `CMakeLists.txt` (one line: `add_subdirectory(rmfit/tests)`).
+Nothing of pyazr, the engine, the skills or the docs was edited. `rmfit/.claude/skills/rmfit-campaign/SKILL.md` is
+dev's skill with a section 0 on what pyazr 3.0 changes for an operator; this branch's own trimmed copy
+(`.claude/skills/rmfit-campaign`) is untouched: which of the two stays is the owner's question of
+`FOR_THE_OWNER.md` section 8. `rmfit/` is not in the size ratchet's directories; four of its files are above 1000
+lines (`campaign.py`, `engine.py`, `drive.py`, `review.py`), as on dev.
+
+**Tests.** `rmfit/tests/test_*.py`, one ctest each (`rmfit_<name>`, `rmfit/tests/CMakeLists.txt`): the scripts that
+take seconds run with `ctest -LE slow`, the ones that start campaigns on the 13N project carry the label `slow`.
+Of dev's 84 scripts 80 are here: `test_conv_spec_dad58dc`, `test_conv_windows` and `test_mixture_13n_pp` went with
+their features and dev's tree has no `test_jpi_default` fixture. About half needed no change; the others had their
+model set-up re-written on `Project` / `rmfit.azr3.Model` (they edited segment lines) and their engine reference on
+`Session`, with the same checks. The fixtures of `rmfit/tests/fixtures` were converted with `pyazr.convert_azr` (no
+questions; the reports' notes: unused group-member norms and an unused abundance sample dropped). What the scripts
+establish on this branch: a single session's rows and objective are the engine's (13N; T2 by hand, 10910.133804 with
+its data covariance, shared norm and energy scale, THM and prior covariance); `Sharded` equals `SingleSession` to
+rounding, split data sets, shared energy scales, shift functions and a normalization group across shards included;
+relvector covariances with a fixed reference; bake round trips (1.9e-7 after a polish, exact for a fixed width);
+`init --sav-fixed`; the full campaign on 13N (sign rounds, window scan, level add and remove, level scan, relocate,
+freeze, perturb, export); `uq` end to end (Laplace, NUTS, gates, bands); audit, review (on a run of this build's
+`AZURE2 calculate`), the driver's dry run and its end-to-end run.
+Three scripts state this branch's engine where it differs from dev's: `test_bake_separate_13n` (a parallel-amplitude
+pair levels off below the 1e-6 MeV coincidence gap, `FOR_THE_OWNER.md` section 3 row 4, where dev's grows as
+gap^-4), `test_sanity_same_jpi` and `test_separate_close_levels` (pinned to the rule for an engine that merges levels
+within 1 keV, which neither branch's engine is any more).
+
+**Open.** The owner's: which `rmfit-campaign` skill stays; whether `rmfit/` joins the size ratchet; whether
+`mixture.py` is wanted back. Technical: the nuisance kinds refused in shards (a target record is named, not
+numbered, on this branch, so densities and Doppler temperatures could now be shared across shards); the
+`<parameterSettings>` rows a shard keeps; `rmfit/DESIGN.md` and the history part of `rmfit/README.md` still speak
+of the old format; `tools/check_skills.py` does not look at `rmfit/.claude/skills`; no CI job runs the rmfit tests
+(the wheel does not package `rmfit/`).
+
+**Run here** (CRC, GCC 11.5): build; the consistency test; every script of `rmfit/tests` (a queue job, two at a time, and the
+driver's end-to-end script alone). The full gate: see the end of this entry. **Not run:** CI (the rmfit tests have never run on Windows or macOS).
+
 ## 2026-11-16 (director, 20:30) — merged: the objective's diagonal priors on one list (slices 1-3)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 100: `feature/upgrade-7-objective-arrays` (an agent's;

@@ -140,10 +140,11 @@ rmfit, capture into an unbound final state and fitted secondary γ transitions a
   nothing else guards it. Where the engine takes a final state as bound is tabulated in the entry of 2026-11-15 of
   `HANDOFF.md` ("a capture final state above a threshold is refused"): `src/ExternalCaptureFinalStates.cpp`,
   `src/NFIntegral.cpp`, `src/ECIntegral.cpp`, `src/UnitExternalCapture.cpp`, `src/ChannelTables.cpp`.
-- **rmfit** is expected as its own top-level package beside `pyazr/`, on pyazr 3.0's names only (`Session`,
-  `Objective`, `Project`, `Parameters`, `pyazr.sources`). It touches `tools/check_skills.py` (a second package's
-  skills) and the CI. The ported copy of the `rmfit-campaign` skill here is a question to the owner
-  (`FOR_THE_OWNER.md` section 8).
+- **rmfit** is a top-level package beside `pyazr/`, on pyazr 3.0's names only (branch
+  `feature/upgrade-5-dev-rmfit`, `HANDOFF.md` entry of 2026-11-16 "rmfit beside pyazr"): `rmfit/azr3.py` is its one
+  contact with a project, its rows are the engine's objective rows, its tests are ctests `rmfit_*`. Left to the
+  owner: which copy of the `rmfit-campaign` skill stays (`FOR_THE_OWNER.md` section 8), `tools/check_skills.py`
+  for a second package's skills, a CI job.
 
 ## 8. Three unfinished attempts (not in this branch)
 
