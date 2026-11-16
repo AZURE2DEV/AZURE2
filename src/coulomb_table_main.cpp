@@ -218,35 +218,43 @@ int Validate(const CoulombTable &t, long n, unsigned seed, int threads, double e
   mPhi.Print(limit, t.LMax());
   mB.Print(limit, t.LMax());
 
-  // the references themselves: Michel vs GSL's Coulomb functions, and the bound
-  // route at eta -> 0 vs the closed neutral form
+  // The references themselves: Michel (physics/coulomb's coulsm, the table's contents) against GSL's Coulomb functions
+  // beyond the outer turning point rho_tp = eta + sqrt(eta^2 + l(l+1)), where GSL is good to 1e-15; inside it GSL is
+  // wrong by up to 5 % in P (docs/upgrade/coulomb.md section 8.2) and says nothing about the table, so those points
+  // are not compared (they were until 2026-11-16, and the line printed percent-size numbers).  And the bound route at
+  // eta -> 0 against the closed neutral form, at every point.
   std::mt19937_64 rng(seed + 1);
   std::uniform_real_distribution<double> U(0.0, 1.0);
   double wP = 0, wS = 0, wN = 0;
-  int refused = 0;
+  int refused = 0, beyond = 0;
+  const int kPoints = 5000;
   gsl_set_error_handler_off();
-  for (int q = 0; q < 5000; q++) {
+  for (int q = 0; q < kPoints; q++) {
     const int l = std::min(t.LMax(), int(U(rng) * (t.LMax() + 1)));
     const double eta = std::pow(10.0, E.x0 + U(rng) * (E.Last() - E.x0));
     const double rho = std::pow(10.0, R.x0 + U(rng) * (R.Last() - R.x0));
-    gsl_sf_result F, Fp, G, Gp;
-    double eF, eG;
-    if (gsl_sf_coulomb_wave_FG_e(eta, rho, l, 0, &F, &Fp, &G, &Gp, &eF, &eG) != GSL_SUCCESS || eF != 0 || eG != 0) {
-      refused++;
-    } else {
-      const double d = F.val * F.val + G.val * G.val;
-      CoulombTable::Open eo = CoulombTable::ExactOpen(l, eta, rho);
-      if (std::isfinite(d) && d > 0) {
-        wP = std::max(wP, std::fabs(rho / d / eo.P - 1.0));
-        wS = std::max(wS, std::fabs(rho * (F.val * Fp.val + G.val * Gp.val) / d - eo.S) / std::max(1.0, std::fabs(eo.S)));
+    if (rho >= eta + std::sqrt(eta * eta + l * (l + 1.0))) {
+      gsl_sf_result F, Fp, G, Gp;
+      double eF, eG;
+      if (gsl_sf_coulomb_wave_FG_e(eta, rho, l, 0, &F, &Fp, &G, &Gp, &eF, &eG) != GSL_SUCCESS || eF != 0 || eG != 0) {
+        refused++;
+      } else {
+        const double d = F.val * F.val + G.val * G.val;
+        CoulombTable::Open eo = CoulombTable::ExactOpen(l, eta, rho);
+        if (std::isfinite(d) && d > 0) {
+          beyond++;
+          wP = std::max(wP, std::fabs(rho / d / eo.P - 1.0));
+          wS = std::max(wS, std::fabs(rho * (F.val * Fp.val + G.val * Gp.val) / d - eo.S) / std::max(1.0, std::fabs(eo.S)));
+        }
       }
     }
     wN = std::max(wN, std::fabs(CoulombTable::ExactBound(l, 0.0, rho) - ShftFunc::NeutralBoundShift(l, rho)) /
                           std::max(1.0, std::fabs(ShftFunc::NeutralBoundShift(l, rho))));
   }
-  std::printf("\nreferences: Michel vs GSL Coulomb P %.2e, S %.2e (%d of 5000 points GSL refused or scaled); "
-              "bound route at eta = 0 vs the neutral closed form %.2e\n",
-              wP, wS, refused, wN);
+  std::printf("\nreferences beyond the outer turning point (%d of %d random points; %d more refused or scaled by GSL): "
+              "Michel vs GSL Coulomb P %.2e, S %.2e; bound route at eta = 0 vs the neutral closed form (all %d points) "
+              "%.2e\n",
+              beyond, kPoints, refused, wP, wS, kPoints, wN);
 
   const bool pass = mP.worst < limit && mS.worst < limit && mPhi.worst < limit && mB.worst < limit && mP.bad == 0;
   std::printf("%s: interpolation error limit %.0e\n", pass ? "PASS" : "FAIL", limit);

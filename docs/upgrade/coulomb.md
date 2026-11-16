@@ -740,3 +740,18 @@ of a version note) and `tests/cli_help` (the flag's message without "Unknown opt
 `src/CoulFunc.cpp` includes no GSL header any more. What calls GSL's Coulomb functions now: `azure2-coulomb-table
 validate` (section 9.5) and the test `coulomb_gsl_crosscheck`, which prints "inside the outer turning point, 7
 points against mpmath: coulsm within 1.52e-10 (P and S); GSL's P off by 4.93e-03 to 5.20e-02" (GSL 2.6).
+
+### 9.5 The tool's cross-check as built
+
+`azure2-coulomb-table validate work/coulomb_table_v2.bin --n 200000` (the table of the upgrade's runs), last lines
+before and after:
+
+    references: Michel vs GSL Coulomb P 4.35e-02, S 5.70e-02 (0 of 5000 points GSL refused or scaled); bound route
+        at eta = 0 vs the neutral closed form 3.20e-15
+    references beyond the outer turning point (1066 of 5000 random points; 0 more refused or scaled by GSL): Michel
+        vs GSL Coulomb P 1.71e-09, S 7.85e-09; bound route at eta = 0 vs the neutral closed form (all 5000 points)
+        3.20e-15
+
+(each one line in the output). The same 5000 points are drawn; 1066 lie beyond the turning point, and there the
+table's reference routine and GSL agree to the accuracy of `coulsm` (section 8.2: 7.6 × 10⁻¹⁰ in P, 7.9 × 10⁻⁹ in S
+against mpmath). The PASS line and its limit are unchanged.
