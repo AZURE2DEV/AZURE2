@@ -21,12 +21,37 @@ hand, on a schedule a script can follow and an LLM agent can resume:
 Process guide (the Claude skill `rmfit-campaign`): `.claude/skills/rmfit-campaign/SKILL.md` in this repository,
 linked as `~/.claude/skills/rmfit-campaign`.  It lived in the AZURE2 repository until 2026-11-07.
 
+**This copy runs on pyazr 3.0** (`Session`, `Objective`, `Evaluation`, `Parameters`, `Project`; project format 3
+only).  It is rmfit of AZURE2 `dev` (527f63de, 2026-11-15) re-written where it touched the engine or the project
+file; the search, the ledger, the driver's logic and the criteria are unchanged.  What differs:
+
+- every project is format 3 (`AZURE2 --convert OLD NEW` first); rmfit reads it through `azr3.py` (the data sets
+  from the engine's description and the records' fields, levels and pairs from `pyazr.Project`) and never parses
+  a line of it;
+- the rows are the engine's: data rows from `Objective.residuals`, the priors of normalizations, shifts and the
+  other nuisances from the session's parameter rows, and the engine's model rows (model data such as a measured
+  scattering length, a prior covariance, Park's wall with them, decay priors, abundance sums) as one block
+  (`engine.ModelRows`); a single session's objective is `Session.objective()` exactly;
+- shards are record edits (`azr3.write_variant`); a data set the engine folds (it names a target, a beam or a
+  detector) or one of a shared energy scale is never split, and there are no convolution pieces;
+- `bake` writes its files with `Session.save_fit` and keeps rmfit's own fresh-session check;
+- `audit` takes masses, separation energies and file problems from the engine's validator;
+- `uq` samples with `sampling.py` (dev's NUTS, kept here because pyazr 3.0 has no sampling module);
+- `mixture.py` is gone (superseded by several compound nuclei in one project).
+
+The notes below this table are the history of rmfit on the old project format; where they name
+`<segmentsData>`, `<targetInt>`, `AzrModel` or a segment-line keyword, the format-3 counterpart is the record
+field of the same meaning (`norm`, `shift`, `covariance`, `target`, `beam`, `detector`, a `normalization` or
+`energy_scale` record).
+
 Layout (design rationale and roadmap: `DESIGN.md` in this directory; the plan file the first campaign readme cites is gone):
 
 | module | role |
 |---|---|
 | `keys.py` | structured parameter keys (energy, width, norm, shift, shift_sqrt, shift_fn, abundance, density, doppler, thickness, screening) and index maps between model variants; canonical sign patterns; `sign_distance` (minimal flips between two patterns modulo the gauge symmetries) |
-| `model.py` | model variants written as new `.azr` files (shards, windows, with/without level) |
+| `azr3.py` | the project as rmfit reads and edits it on pyazr 3.0: `SegmentTable` (data sets), `write_variant`, `Model` (level and data-set edits through `pyazr.Project`) |
+| `model.py` | model variants written as new `.azr` files (shards, single-session copies) |
+| `sampling.py` | NUTS, R-hat and ESS (dev's `pyazr/sampling.py`), `AzurePosterior` on `Session.objective()` |
 | `engine.py` | `SingleSession` (authoritative) and `Sharded` evaluators; `ObjectiveSpec` (plain chi2, reduced-chi2 per data set, Sivia loss) |
 | `local.py` | bounded trust-region polishes, staged fits, sanity checks |
 | `ledger.py` | candidate store, rounds, status |
