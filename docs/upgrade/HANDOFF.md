@@ -62,6 +62,14 @@ identity instead of the term's sharing key.
 **Run here** (CRC, GCC 11.5): build; the unit tests named above; the three projects; `repo_consistency_test.py`. The
 full gate: see the end of this entry. **Not run:** CI.
 
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; the regression suites 174
+pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), the three new
+directories passing and every other chi2 line equal to the base's; ctest 312 of 315: the base's two
+(`pyazr_park_dsde`, `pyazr_units_scales`) and `physics_standalone`, which reached its 300 s limit while two other
+jobs of the same account built on the cluster. Run again alone on a compute node it passes in 271 s (the base's own
+runs of it took 196 to 271 s here; this branch adds one source file and one test to what it builds): the limit of
+`physics/CMakeLists.txt` is tight on a loaded machine with or without this branch.
+
 ## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
 
 A new session of the director took over from `work/director/NEXT_AGENT.md` (local). This entry is documents and
