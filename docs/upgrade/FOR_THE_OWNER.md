@@ -607,6 +607,17 @@ re-read against its design at the hand-over.
      test now prints which and what the fit reported) and `tests/upgrade` (the golden comparison of T1 or T3;
      the failing line was not shown).
 
+   - *Windows with the fourteenth push's repairs* (run 43828542125 of `0c6167c1`, 2026-11-16): 170 of the 172
+     regression checks pass (`gamma_decay` and `upgrade` fail) and 12 unit tests fail (27 before); Linux passes
+     again. Read from the annotations, which now show every failing test's first lines, and answered in the
+     commit "test: the Windows job's failures ...", **again without a Windows machine**: nine are faults of the
+     tests there (CRLF from a program's standard output and from generated files, the code page, a path with
+     mixed separators, a path without `.exe`, the built module `.pyd` taken as a data file, a filter that looked
+     for forward slashes: the 186 failures of `physics_pathway_table`); `tools_runall` is answered with a guess
+     (the system directory's `bash.exe` is WSL's); three self-tests of skills need matplotlib or emcee, which
+     the Windows job does not install: two report skipped there, one skips its one emcee check. The macOS job
+     of that run had not ended when this was written.
+
    **The CI is green on Linux and for the sanitizers, not on Windows and macOS.** Linux passes since the
    eleventh push (every regression check and every unit test; `docs_build` is skipped, no Sphinx there). The
    one failure of the ninth push was `tests/shared_point_tables` (d), a bound on the peak memory of a fit
@@ -680,8 +691,9 @@ re-read against its design at the hand-over.
    - macOS: the installed program `AZURE2` did not start (the wheel's own libgsl not found): delocate gives the
      program a path relative to its place in the wheel, the scripts, and pip moves a script. The program is now
      inside the package (`pyazr/bin/AZURE2`) and the console script `AZURE2` runs it (`pyazr/program.py`).
-     **Not seen to work on macOS yet**: the run after this change shows it. On Linux the test's container has a
-     system libgsl, so the test there cannot show whether auditwheel repaired the program.
+     **The third run (43863727165) passes on all four platforms**: every wheel builds and its test passes, the
+     installed program on macOS included. On Linux the test's container has a system libgsl, so the test there
+     cannot show whether auditwheel repaired the program.
    No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
    a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
