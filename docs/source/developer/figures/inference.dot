@@ -14,7 +14,9 @@ digraph inference {
   n_azure2__Results [label=<<b>azure2::Results</b><br/><font point-size="12">the evaluation&#x27;s<br/>buffer: records,<br/>model, objective</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_ObjectiveContext [label=<<b>ObjectiveContext</b><br/><font point-size="12">what a term reads:<br/>copies, buffer, vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_Objective [label=<<b>Objective</b><br/><font point-size="12">the ordered list of<br/>chi^2 terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_ObjectiveTerm [label=<<b>ObjectiveTerm</b><br/><font point-size="12">one term: data, prior,<br/>penalty, model datum</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__inference__TermList [label=<<b>azure2::inference::TermList</b><br/><font point-size="12">the sums of an ordered<br/>list of terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__inference__Term [label=<<b>azure2::inference::Term</b><br/><font point-size="12">one term: data, prior,<br/>penalty, model datum<br/>(the engine&#x27;s<br/>ObjectiveTerm)</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__inference__PriorCovariance [label=<<b>azure2::inference::PriorCovariance</b><br/><font point-size="12">a multivariate<br/>Gaussian prior on<br/>listed parameters</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_AZUREParams [label=<<b>AZUREParams</b><br/><font point-size="12">the parameter vector<br/>with a record per<br/>entry</font>>, shape=box, style="filled", fillcolor="white"];
   n_ROOT__Minuit2__MnUserParameters [label=<<b>ROOT::Minuit2::MnUserParameters</b><br/><font point-size="12">Minuit&#x27;s parameter<br/>list</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2__inference__ParameterRecord [label=<<b>azure2::inference::ParameterRecord</b><br/><font point-size="12">what a parameter is:<br/>kind and owner</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
@@ -48,8 +50,10 @@ digraph inference {
   n_ObjectiveContext -> n_LevelState [style=dashed, arrowhead=vee, label=" nc"];
   n_ObjectiveContext -> n_WorkingCopy [style=dashed, arrowhead=vee, label=" nc"];
   n_ObjectiveContext -> n_azure2__Results [style=dashed, arrowhead=vee, label=" nc"];
-  n_Objective -> n_ObjectiveTerm [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_ObjectiveTerm -> n_ObjectiveContext [style=dashed, arrowhead=vee];
+  n_Objective -> n_azure2__inference__TermList [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_azure2__inference__TermList -> n_azure2__inference__Term [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_azure2__inference__Term -> n_ObjectiveContext [style=dashed, arrowhead=vee];
+  n_AZURECalcMCMC -> n_azure2__inference__PriorCovariance [style=dashed, arrowhead=vee];
   n_AZURECalc -> n_ParameterLimitsManager [style=dashed, arrowhead=vee, label=" nc"];
   n_AZUREParams -> n_ROOT__Minuit2__MnUserParameters [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZUREParams -> n_azure2__inference__ParameterRecord [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];

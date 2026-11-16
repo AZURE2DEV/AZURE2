@@ -26,8 +26,7 @@ const std::vector<ApparatusRow> &ApparatusRows() {
 
 double ApparatusParam::Penalty(double value) const {
   if (!declaration.vary || priorReplaced || !(declaration.sigma > 0.0)) return 0.0;
-  const double r = (value - declaration.centre) / declaration.sigma;
-  return r * r;
+  return GaussianPriorChi2(value, declaration.centre, declaration.sigma);
 }
 
 // ---------------------------------------------------------------- the row of a table kernel's own parameters

@@ -8,7 +8,7 @@
 #include "WorkingCopy.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
-#include "PriorCovariance.h"
+#include "PriorCovarianceFile.h"
 #include "GSLException.h"
 #include "ALevel.h"
 #include <iostream>
@@ -510,7 +510,7 @@ bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) {
   priorCov_.reset();
   if (!(configure().paramMask & Config::CALCULATE_WITH_DATA) || configure().priorCovariance.empty()) return true;
   const int basis = AZUREParams::BasisForConfig(configure());
-  if (PriorCovariance::Load(configure(), paramNames_, fixed_, basis, priorCov_) < 0) return false;
+  if (LoadPriorCovariance(configure(), paramNames_, fixed_, basis, priorCov_) < 0) return false;
   if (!useRWA) {
     // The prior is in the param.sav space: level energies and reduced-width amplitudes.  A physical-parameter chain
     // samples partial widths, so a prior on a level parameter would be applied to the wrong quantity.

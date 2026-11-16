@@ -22,7 +22,7 @@
 class Config;
 class WorkingCopy;
 class CompoundSystem;
-class PriorCovariance;
+#include "InferenceTypes.h"
 
 /// A function class to perform MCMC Bayesian calculation of parameters
 

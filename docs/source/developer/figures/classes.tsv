@@ -16,7 +16,7 @@ azure2_io_record	io/CMakeLists.txt	the plain record structs of format 3 (header 
 azure2_stopping	stopping/CMakeLists.txt	stopping and straggling (SRIM-2013)	libraries	target	run
 azure2_experiment	experiment/CMakeLists.txt	the format-3 table: quantities, units, kernels, specs, frames	libraries	target	run
 azure2_experiment_reader	experiment/CMakeLists.txt	reads a format-3 project: document to validated specs	libraries	target	run
-azure2_inference	inference/CMakeLists.txt	the parameter vector as plain data: kinds, layout, index map, support	libraries	target	run
+azure2_inference	inference/CMakeLists.txt	the parameter vector as plain data, the priors, the sums of the term list	libraries	target	run
 azure2_convert_specs	convert/CMakeLists.txt	old lines as set-up specs (the converter's adaptor)	libraries	target	run
 azure2_convert	convert/CMakeLists.txt	the converter of old projects to format 3	libraries	target	run
 numcmc	numcmc/CMakeLists.txt	the affine-invariant ensemble sampler	libraries	target	run
@@ -83,7 +83,9 @@ WorkingCopy	include/WorkingCopy.h	points, norms and shifts of one evaluation	inf
 azure2::Results	include/Results.h	the evaluation's buffer: records, model, objective	inference	class	evaluation
 ObjectiveContext	include/Objective.h	what a term reads: copies, buffer, vector	inference	class	evaluation
 Objective	include/Objective.h	the ordered list of chi^2 terms	inference	class	immutable
-ObjectiveTerm	include/Objective.h	one term: data, prior, penalty, model datum	inference	class	immutable
+azure2::inference::TermList	inference/include/azure2/inference/TermList.h	the sums of an ordered list of terms	inference	class	immutable
+azure2::inference::Term	inference/include/azure2/inference/TermList.h	one term: data, prior, penalty, model datum (the engine's ObjectiveTerm)	inference	class	immutable
+azure2::inference::PriorCovariance	inference/include/azure2/inference/PriorCovariance.h	a multivariate Gaussian prior on listed parameters	inference	class	immutable
 AZUREParams	include/AZUREParams.h	the parameter vector with a record per entry	inference	class	run
 ROOT::Minuit2::MnUserParameters	external/minuit2/inc/Minuit2/MnUserParameters.h	Minuit's parameter list	inference	class	run
 azure2::inference::ParameterRecord	inference/include/azure2/inference/ParameterKind.h	what a parameter is: kind and owner	inference	class	immutable

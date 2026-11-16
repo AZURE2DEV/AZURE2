@@ -116,10 +116,10 @@ void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configur
     samples.Of(k, sample, nucleus);
     const double s = samples.SumSigma(sample, configure.abundanceSumSigma);
     const double centre = samples.Sample(sample).sumCentre;
-    double g = (s > 0.0) ? 2.0 * (samples.Sum(values, sample) - centre) / (s * s) : 0.0;
+    double g = (s > 0.0) ? GaussianPriorGradient(samples.Sum(values, sample), centre, s) : 0.0;
     const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
     const double w = values[k - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (w - e.nominal) / (e.sigma * e.sigma);
+    if (e.sigma > 0.0 && !e.priorReplaced) g += GaussianPriorGradient(w, e.nominal, e.sigma);
     accum.AddAbundance(k, g);
   }
 }

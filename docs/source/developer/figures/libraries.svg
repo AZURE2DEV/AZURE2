@@ -132,9 +132,9 @@
 <polygon fill="white" stroke="black" points="124,-248 0,-248 0,-180 124,-180 124,-248"/>
 <text text-anchor="start" x="6" y="-234.8" font-family="Helvetica" font-weight="bold" font-size="14.00">azure2_inference</text>
 <text text-anchor="start" x="7.5" y="-222.4" font-family="Helvetica" font-size="12.00">the parameter vector</text>
-<text text-anchor="start" x="9" y="-210.4" font-family="Helvetica" font-size="12.00">as plain data: kinds,</text>
-<text text-anchor="start" x="14" y="-198.4" font-family="Helvetica" font-size="12.00">layout, index map,</text>
-<text text-anchor="start" x="41.5" y="-186.4" font-family="Helvetica" font-size="12.00">support</text>
+<text text-anchor="start" x="16.5" y="-210.4" font-family="Helvetica" font-size="12.00">as plain data, the</text>
+<text text-anchor="start" x="13.5" y="-198.4" font-family="Helvetica" font-size="12.00">priors, the sums of</text>
+<text text-anchor="start" x="31.5" y="-186.4" font-family="Helvetica" font-size="12.00">the term list</text>
 </g>
 <!-- n_azure2_convert_specs -->
 <g id="node10" class="node">

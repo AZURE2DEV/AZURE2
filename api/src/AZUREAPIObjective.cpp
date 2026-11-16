@@ -11,7 +11,7 @@
 #include "Config.h"
 #include "Objective.h"
 #include "InferenceTypes.h"
-#include "PriorCovariance.h"
+#include "InferenceTypes.h"
 #include "WorkingCopy.h"
 
 namespace {

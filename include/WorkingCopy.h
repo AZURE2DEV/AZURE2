@@ -40,7 +40,7 @@ class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class AZUREParams;
-class PriorCovariance;
+#include "InferenceTypes.h"
 class GSLException;
 struct BandData;
 namespace ROOT {

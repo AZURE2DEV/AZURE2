@@ -11,6 +11,7 @@
 #include "azure2/experiment/Frames.h"
 #include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/SetupSpecs.h"
+#include "azure2/inference/GaussianPrior.h"
 
 namespace azure2 {
 namespace experiment {
@@ -474,8 +475,7 @@ class Segment {
   /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
   double ThicknessPenalty(const SegmentState &state) const {
     if (!IsThicknessVaried() || thicknessPriorReplaced_ || !(thicknessSigma_ > 0.0)) return 0.0;
-    const double d = (state.thickness - thicknessCentre_) / thicknessSigma_;
-    return d * d;
+    return azure2::inference::GaussianPriorChi2(state.thickness, thicknessCentre_, thicknessSigma_);
   }
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.

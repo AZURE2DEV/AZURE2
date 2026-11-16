@@ -97,8 +97,10 @@ ObjectiveContext	CompoundSystem	reads	inference	const	ObjectiveContext::compound
 ObjectiveContext	LevelState	reads	inference	nonconst	ObjectiveContext::state (LevelState &): the evaluation's
 ObjectiveContext	WorkingCopy	reads	inference	nonconst	ObjectiveContext::data (WorkingCopy *)
 ObjectiveContext	azure2::Results	reads	inference	nonconst	ObjectiveContext::results (Results &: the terms store their totals)
-Objective	ObjectiveTerm	owns	inference		Objective::terms_ (std::vector<std::unique_ptr<ObjectiveTerm>>)
-ObjectiveTerm	ObjectiveContext	reads	inference	const	ObjectiveTerm::Add(const ObjectiveContext &, double &)
+Objective	azure2::inference::TermList	owns	inference		Objective::terms_ (azure2::inference::TermList<ObjectiveContext>)
+azure2::inference::TermList	azure2::inference::Term	owns	inference		TermList::terms_ (std::vector<std::unique_ptr<Term<Context>>>)
+azure2::inference::Term	ObjectiveContext	reads	inference	const	Term<ObjectiveContext>::Add(const ObjectiveContext &, double &): the terms of src/Objective.cpp
+AZURECalcMCMC	azure2::inference::PriorCovariance	reads	inference	const	AZURECalcMCMC::priorCov_ (std::shared_ptr<const PriorCovariance>, LoadPriorCovariance); the fit reads the run's through DataSet::GetPriorCovariance
 AZURECalc	ParameterLimitsManager	reads	inference	nonconst	AZURECalc::limitsManager_ (ParameterLimitsManager *)
 AZUREParams	ROOT::Minuit2::MnUserParameters	owns	inference		AZUREParams::params_
 AZUREParams	azure2::inference::ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<ParameterRecord>)
