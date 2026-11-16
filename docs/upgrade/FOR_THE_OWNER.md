@@ -699,6 +699,16 @@ re-read against its design at the hand-over.
    1 / (1 + sum gamma^2 dS/dE) of them (T2: by up to 20 %; T3: 1.6 % in one channel), in the formal basis by up
    to 8e3 on T2; unchanged under Park and for Brune levels with all widths free (T1, 13N). Against mpmath's
    Coulomb functions: 2.5e-10 on T1, T2, T3 and 13N in the three parametrizations (`pyazr3.md`, section 11).
+   The engine's ensemble sampler runs on a session since the same approval: `Session.sample_with_engine(walkers,
+   steps, sampler_threads=, basis=, parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)`,
+   the options of `AZURE2 mcmc` as keywords. What the command does after its set-up is one engine function now
+   (`RunSampler`, `src/SamplerRun.cpp`, moved out of `runMCMC` in `src/AZURE2.cpp`), called by the program and by
+   the session; `src/RunRequest.cpp` (the option table) moved into the engine library so that the session's
+   keywords are read by the command line's reader. The chain is the command's: `samples.mcmc`, `walkers.mcmc`,
+   `param.mcmc` and the best walker's output files byte for byte, the returned arrays number for number, on T1
+   and T3 at 1 and 2 sampler threads, in both bases, under Park, from a parameter file and from `x0`, with a
+   prior of `<mcmc>` and for a continued chain (`pyazr3.md`, section 12). The command has no seed, burn-in or
+   thinning option, so the call has none.
    Not renamed or removed as `pyazr3.md` planned:
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the

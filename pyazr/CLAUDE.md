@@ -105,6 +105,15 @@ path of the row, or a path of the row never appears.
   evaluated), `status` the fitter's word, `outcome` the shared word (`fitStatus.out`'s status), `notices` (fallback,
   a setting ignored, the best point kept), `minos` with `minos_valid` per side.  A new field is a member of
   `FitResult` (`include/FitControl.h`), a key of `FitWithEngineDict` and a field here.
+- The program's ensemble sampler on a session: `r = s.sample_with_engine(walkers, steps, sampler_threads=, basis=,
+  parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)` (`session_sampler.py`;
+  `api/src/pybind_sampler.cpp`, `AZUREAPISampler.cpp`): the command `mcmc` from its set-up on is one engine
+  function, `RunSampler` (`src/SamplerRun.cpp`), called by the program and by the session; the keywords are read
+  by the command line's own reader (`ReadRunCommand`), so a new option of the command is a row of `RunQuestions()`,
+  an argument of `SamplerRequest` and a keyword here, and no range is typed in Python.  The arrays of
+  `EngineSampleResult` are `samples.mcmc` read back by the engine.  The sampler makes its own parameter vector from
+  the levels' inputs: `CarryValuesToInputs` puts the session's values there and refuses what it cannot carry.
+  Test: the program's chain, number for number (`tests/pyazr/sample_with_engine_test.py`).
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
   `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; of a session made with

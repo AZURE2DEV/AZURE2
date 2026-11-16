@@ -546,6 +546,53 @@ the recipes above for a minimiser of your choice, for bounds as walls, for the s
 larger Python computation.  The program's MIGRAD stops at its EDM goal (on T2 9e-4 above the minimum that scipy's
 least squares finds); ``lm`` or the scipy recipes go further.
 
+The engine's own sampler
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``s.sample_with_engine(walkers, steps, sampler_threads=1, basis="rwa", parameter_spread=5.0, energy_spread=1.0,
+overwrite_samples=False, x0=None, progress=None, stop=None)`` runs the program's ensemble sampler (``AZURE2 mcmc``,
+:doc:`mcmc`) on the session, in the process, through the engine function the command calls. The keywords are the
+command's options with its ranges (``--walkers`` 2 to 1000, ``--steps`` 100 to 10\ :sup:`7`, ``--sampler-threads``,
+``--basis=rwa|physical``, ``--parameter-spread`` in percent, ``--energy-spread`` in keV, ``--overwrite-samples``;
+:doc:`../reference/command_line`); a value outside its range is refused with the command line's words. The command
+has no seed, burn-in or thinning option and the call has none: the sampler's seed is fixed in the engine, so the
+same call gives the same chain, and every step is kept (cut the burn-in from the array). ``x0`` (a fit vector,
+default ``parameters.x0``) is the start, what ``--parameter-file`` is to the command; a session made with
+``parameter_file=`` starts from that file, its fixed values included. The Gaussian priors are the engine's and the
+rows of the project's ``<mcmc>`` section.
+
+It returns an ``EngineSampleResult``: ``chain`` with the shape (steps, walkers, parameters), the last axis in the
+order of ``names`` and in the units of ``basis``; ``log_prob``, ``log_likelihood`` and ``log_prior`` with the shape
+(steps, walkers); ``status`` (``"completed"`` or ``"stopped"``); ``samples_file``, ``walkers_file``,
+``output_dir``; ``log`` (the sampler's lines: its table of parameters and priors, the acceptance fraction, its
+warnings). The arrays are ``samples.mcmc`` read back by the engine: the file has 17 digits, so they are the numbers
+the sampler held, every step of the file (those of an earlier run that this one continued included). As the
+command, the call writes into the session's output directory: ``samples.mcmc``, ``walkers.mcmc`` and, every 10
+steps, the best walker's output files and ``param.mcmc``; with ``overwrite_samples=False`` (the command's default)
+an existing ``samples.mcmc`` is continued. The session's parameter values are not changed. ``progress`` is called
+after every step with ``step``, ``steps``, ``log_prob``, ``log_likelihood`` and ``log_prior`` of the step's best
+walker; ``stop`` (a ``pyazr.session_fit.StopRequest`` or a ``threading.Event``) is looked at after every step and
+ends the run there with status ``"stopped"``, the files complete to that step. A run the sampler refuses (no walker
+of the start ensemble with a finite probability, a row of ``<mcmc>`` that names no parameter) raises
+``pyazr.EngineError`` with the sampler's words.
+
+.. code-block:: python
+
+   s = pyazr.Session("T3.azr")
+   r = s.sample_with_engine(walkers=20, steps=500, sampler_threads=2, overwrite_samples=True)
+   draws = r.chain[200:].reshape(-1, len(r.names))       # after a burn-in of 200 steps
+   print(dict(zip(r.names, draws.mean(axis=0))), r.log_prob.max())
+
+On the test projects T1 and T3 the files and the arrays are the command's, byte for byte and number for number, at
+one and at two sampler threads, in both bases and under Park, from a parameter file and from ``x0``, with a prior of
+``<mcmc>`` and for a continued chain (``tests/pyazr/sample_with_engine_test.py``). Not offered: the command's
+``--capture-amplitudes`` (a session computes its external-capture amplitudes), and two cases the sampler cannot be
+given a session's values for, each refused with the reason: a project with ``gamma_decay`` records started from
+values that are not the project's, and a parameter file whose fixed normalizations or energy shifts are not the
+project's. Which to use: ``sample_with_engine`` for the program's chain without a subprocess; ``objective().log_prob``
+with emcee or a gradient sampler (``fit_emcee.py``, the skill ``azure2-uncertainty``) for a sampler of your choice,
+its diagnostics and a seed.
+
 Editing the model
 -----------------
 

@@ -309,8 +309,11 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    intermediate files through ``ProgramProgress``, then HESSE for the band,
    MINOS, ``fitStatus.out``, ``covariance_matrix.out`` and ``param.sav``.
    The sampler is ``runMCMC`` (``src/AZURE2.cpp``), which sets up its own
-   ``CompoundSystem`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
-   ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
+   ``CompoundSystem`` and ``WorkingCopy`` and calls ``RunSampler``
+   (``src/SamplerRun.cpp``: the start vector, the priors of ``<mcmc>``,
+   ``AZURECalcMCMC::RunMCMCSampling`` on ``nu::Mcmc``); a session calls the
+   same function (``Session.sample_with_engine``,
+   ``api/src/AZUREAPISampler.cpp``). *pyazr*: ``Session.fit_with_engine`` runs a row on the
    session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
    binding releases the GIL), or the fit is Python's (SciPy or iminuit on
    ``Session.objective().value_and_grad``), with the same gradient through

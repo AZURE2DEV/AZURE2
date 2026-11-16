@@ -26,6 +26,11 @@ radius or nuclear potential is an edit of the project and a new session.
 fitter table on the session with the program's functions
 (``Session.fit_with_engine``; the binding ``api/src/pybind_fit.cpp`` releases
 the GIL and adds ``StopRequest`` and ``fitters()``).
+``SampleWithEngine`` (``api/src/AZUREAPISampler.cpp``) runs the engine's
+ensemble sampler on the session through ``RunSampler``
+(``src/SamplerRun.cpp``), the function the command ``mcmc`` calls, with the
+command's answers read by ``ReadRunCommand`` (``Session.sample_with_engine``;
+the binding ``api/src/pybind_sampler.cpp``).
 
 The module ``_azure2``
 ----------------------

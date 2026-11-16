@@ -1220,6 +1220,13 @@ set_tests_properties(pyazr_wheel PROPERTIES LABELS slow PROCESSORS 2 TIMEOUT 720
 add_test(NAME pyazr_fit_with_engine COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_with_engine_test.py)
 set_tests_properties(pyazr_fit_with_engine PROPERTIES LABELS slow
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The engine's ensemble sampler on a session (docs/upgrade/pyazr3.md section 12): sample_with_engine against the
+# program's command mcmc (the chain number for number at 1 and 2 sampler threads, both bases, Park, a parameter file
+# and x0, a prior of <mcmc>, a continued chain) and its controls; about 80 s.
+add_test(NAME pyazr_sample_with_engine
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/sample_with_engine_test.py)
+set_tests_properties(pyazr_sample_with_engine PROPERTIES PROCESSORS 2
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 add_test(NAME pyazr_fit_engine_control
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)
 set_tests_properties(pyazr_fit_engine_control PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")

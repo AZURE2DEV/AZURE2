@@ -1267,8 +1267,9 @@ mass_number)` calls the row and keeps its `None` outside the domain. No formula 
 `tests/pyazr/wigner_widths_test.py` against mpmath's Coulomb functions, 2.5e-10 with the Coulomb table and 3.6e-10
 with the exact routine, on T1, T2, T3 and 13N in the three parametrizations (14 entries in each: 13 against
 mpmath, among them the neutral 7Be + n channel of T3, which also equals the closed form of P_0 to 1e-12); the
-three parametrizations agree to 1e-6. The alpha + 4He pair of T3 has a hybrid nuclear potential: its entry is 2 P gamma_W^2
-with the hybrid model's P (0.85 % from the Coulomb value), checked against `channel_functions`, not against mpmath.
+three parametrizations agree to 1e-6. The alpha + 4He pair of T3 has a hybrid nuclear potential: its entry is
+2 P gamma_W^2 with the hybrid model's P (0.85 % from the Coulomb value), checked against `channel_functions`, not
+against mpmath.
 No test of the repository had the probe's number as its expected value (41 tests that use these calls pass
 unchanged: the examples and the skill's self-test use T1, whose levels have every particle width free); the
 skill `azure2-check` gained a self-test on T2, where the level norm J = theta^2 / theta^2_formal of its script was
@@ -1276,6 +1277,37 @@ skill `azure2-check` gained a self-test on T2, where the level norm J = theta^2 
 Left as it was: `ChannelWidth.level_energy`, `is_open` and the transition energy of a photon row are taken at the
 level's energy in the fit vector, which in the formal basis is the formal pole energy (section 11.1 takes Gamma_W at
 the physical one).
+
+**The engine's sampler on a session.** Built as section 12 says: `Session.sample_with_engine`
+(`pyazr/session_sampler.py`, `EngineSampleResult`), `api/src/pybind_sampler.cpp`, `api/src/AZUREAPISampler.cpp`
+(`SamplerRequest`, `SampleWithEngine`), `src/SamplerRun.cpp` (`RunSampler`). Differences from the design, found by
+the test:
+
+- The sampler makes its own parameter vector from the levels' inputs (`AZURECalcMCMC::UpdateParameterVectors`:
+  `FillMnParams`, then, in the program's run only, the user's parameter file again), and takes from it the fixed
+  values and the start levels it writes into `parameters.out`. A session's values that are not the project's (a
+  session made with `parameter_file=`, or `x0`) are therefore put into the copy of the inputs handed to the
+  sampler (`CarryValuesToInputs`), and the vector the sampler will make is checked against the session's. Without
+  it the chain of `x0` was the program's but `parameters.out` held the project's observed widths, and a parameter
+  file's fixed values would not have reached the sampler.
+- Two cases cannot be carried and are refused with the reason: a project with `gamma_decay` records whose level
+  values are not the project's (their numbers are not amplitudes of the inputs), and a fixed normalization or
+  energy shift of a parameter file that is not the project's (the sampler reads the fixed data parameters from the
+  data).
+- `--steps` has a lower bound of 100 in the option table, so the shortest chain of the test is 100 steps.
+- `api/src/pybind_api.cpp` may not grow (the size ratchet): the session's method takes its keywords as one
+  `py::kwargs`, and `ReadProjectText` moved to `pybind_project.cpp`; the file is 3 lines shorter.
+
+Measured (`tests/pyazr/sample_with_engine_test.py`, 105 checks, about 80 s): `samples.mcmc`, `walkers.mcmc`,
+`param.mcmc`, `parameters.out` and the `AZUREOut_*` files of the best walker equal the program's byte for byte, and
+the returned arrays equal the numbers of the program's `samples.mcmc` exactly, in ten comparisons: T3 rwa at 1 and
+2 sampler threads, T3 physical at 2, T1 rwa at 2, T3 under Park in the physical basis, T3 from a parameter file
+against `x0` in both bases, T3 from a parameter file with its fixed level values moved by 1 % against a session
+made with the file, T3 with a prior of `<mcmc>`, T3 continued from 100 to 200 steps. The chain at 2 sampler threads
+is the chain at 1. A stop request set at step 30 leaves 30 steps, equal to the first 30 of the uninterrupted chain.
+Lines changed in `src/AZURECalcMCMC.cpp`, `src/AZURECalc.cpp` and `api/src/AZUREAPI.cpp`: none.
+No row in `pyazr.kinds()` or in the command table of `python -m pyazr`: neither has a table of run commands (the
+fitters' table is the engine's `Fitters()`, which the sampler is not a row of).
 
 ## 11. `Session.wigner_widths` as 2 P gamma_W^2 (design; approved by the PI on 2026-11-16)
 
