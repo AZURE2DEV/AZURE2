@@ -404,9 +404,9 @@ class Driver:
             return float(fw["Ex_MeV"][1])
         try:
             from rmfit.azr3 import SegmentTable as SegmentSet
-            from .model import cm_conversion, rows_in_segment
-            from .windows import pair_separation
-            text = open(self.model).read()
+            from .model import rows_in_segment
+            from .windows import pair_separation, cm_conversion
+            text = self.model
             segs = SegmentSet.from_file(self.model)
             base = os.path.dirname(self.model)
             top = None
@@ -414,7 +414,7 @@ class Driver:
                 if not s.active:
                     continue
                 r = rows_in_segment(s, base)
-                if r.shape[0] == 0:
+                if r is None or r.shape[0] == 0:
                     continue
                 e = float(r[:, 0].max())
                 e = min(e, s.energy_max) if s.energy_max > 0 else e
@@ -750,8 +750,8 @@ class Driver:
             if bool(getattr(c, "is_photon", False)):
                 continue
             try:
-                z1, m1, z2, m2 = c._get("z1", int), c._get("m1", float), c._get("z2", int), c._get("m2", float)
-                sep, e2 = c._get("sepE", float), c._get("e2", float)
+                z1, m1, z2, m2 = c.Z1, c.M1, c.Z2, c.M2
+                sep, e2 = c.sep_energy, c.heavy_excitation
             except Exception:  # noqa: BLE001
                 continue
             part = (z1, int(round(m1)), z2, int(round(m2)))
@@ -760,7 +760,7 @@ class Driver:
             d["keys"].append(key)
             rows.append(f"pair {key}: {_nuc(z1, m1)} + {_nuc(z2, m2)}(E* {e2:.4f}) threshold Ex {sep + e2:.4f}")
         try:
-            from pyazr.nds import fetch_levels
+            from pyazr import fetch_levels
         except Exception as err:  # noqa: BLE001
             self._finding_rows("PAIR_COMPLETENESS", rows + [f"ENSDF client unavailable ({err})"])
             return "next", "pyazr.nds unavailable: pairs listed only"
@@ -856,7 +856,7 @@ class Driver:
         mdl = AzrModel.from_file(self.model)
         have = [(lv.jpi, float(lv.energy)) for lv in mdl.active_levels]
         try:
-            from pyazr.nds import fetch_levels
+            from pyazr import fetch_levels
             levels = fetch_levels(cn.lower())
         except Exception as err:  # noqa: BLE001
             json.dump(dict(candidates=[], note=f"ENSDF fetch failed: {err}"), open(path, "w"), indent=1)
@@ -1424,27 +1424,9 @@ def _nuc(z, m):
 
 
 def _vary_shifts_with_error(mdl) -> int:
-    """Set varyShift on every active ``<segmentsData>`` line whose shift uncertainty is > 0 (the fields after dataNorm:
-    varyNorm, normError, shift, shiftError, varyShift; dataNorm sits two fields later for phase-shift lines).  Returns the count."""
-    out, inside, n = [], False, 0
-    for line in mdl._suffix.splitlines():
-        s = line.strip()
-        if s == "<segmentsData>":
-            inside = True
-        elif s == "</segmentsData>":
-            inside = False
-        elif inside and s and not s.startswith("#"):
-            t = line.split()
-            try:
-                i = 8 + (2 if int(t[7]) % 10 == 2 else 0)
-                if t[0] == "1" and float(t[i + 4]) > 0 and t[i + 5] == "0":
-                    t[i + 5] = "1"; n += 1
-                    line = " ".join(t)
-            except (ValueError, IndexError):
-                pass
-        out.append(line)
-    mdl._suffix = "\n".join(out)
-    return n
+    """Fit the energy shift of every active data set whose shift is fixed with an uncertainty > 0
+    (:meth:`rmfit.azr3.Model.vary_shifts_with_error`).  Returns the count."""
+    return mdl.vary_shifts_with_error()
 
 
 def write_job_script(directory, spec: FitSpec, cfg: Optional[dict], name="run_crc_drive", overwrite=False, max_minutes=600) -> str:

@@ -388,6 +388,23 @@ class ModelChannel:
     channel_radius = property(lambda self: float(self._pair.radius))
 
 
+class ModelPair:
+    """One pair of the project with the names rmfit's reports use (``Project.pairs()`` underneath)."""
+
+    def __init__(self, q):
+        self._pair = q
+
+    pair = property(lambda self: int(self._pair.key))
+    is_photon = ModelChannel.is_photon
+    ptype = ModelChannel.ptype
+    J1, J2, parity1, parity2 = ModelChannel.J1, ModelChannel.J2, ModelChannel.parity1, ModelChannel.parity2
+    M1, M2, Z1, Z2 = ModelChannel.M1, ModelChannel.M2, ModelChannel.Z1, ModelChannel.Z2
+    sep_energy, excitation, channel_radius = ModelChannel.sep_energy, ModelChannel.excitation, ModelChannel.channel_radius
+    heavy_excitation = property(lambda self: float(self._pair.heavy_excitation))
+    light_excitation = property(lambda self: float(self._pair.light_excitation))
+    label = property(lambda self: self._pair.label)
+
+
 class ModelLevel:
     def __init__(self, model, lv):
         self._model, self._lv = model, lv
@@ -455,6 +472,31 @@ class Model:
             if int(q.key) == int(key):
                 return q
         raise KeyError(f"no pair with key {key}")
+
+    def pair_lines(self) -> Dict[int, ModelPair]:
+        """``{pair key: ModelPair}`` of every pair of the project."""
+        return {int(q.key): ModelPair(q) for q in self.project.pairs()}
+
+    def vary_shifts_with_error(self) -> int:
+        """Fit the constant energy shift of every active data set that states its own shift nuisance as fixed with
+        a prior (the word ``fixed`` of the field becomes ``fit``; a shared energy scale is left alone).  Returns
+        the count."""
+        n = 0
+        for name, rec in list(self.project.records().items()):
+            if rec.record_kind != "dataset" or str(rec.get("active", "yes")) == "no":
+                continue
+            words = str(rec.get("shift", "") or "").split()
+            if "prior" not in words or "fixed" not in words:
+                continue
+            try:
+                sigma = float(words[words.index("prior") + 2].rstrip("%"))
+            except (IndexError, ValueError):
+                continue
+            if sigma > 0:
+                words[words.index("fixed")] = "fit"
+                self.project.set(name, shift=" ".join(words))
+                n += 1
+        return n
 
     def find(self, jpi=None, energy=None, tol=1e-3) -> List[ModelLevel]:
         """The active levels of ``jpi`` (all J^pi if None) within ``tol`` MeV of ``energy`` (any energy if None)."""
