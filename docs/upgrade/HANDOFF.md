@@ -2,6 +2,119 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 11:45) — merged: the engine's coupling coefficients from `physics/`; the wider Python call
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 94: the branch `feature/upgrade-1-coupling-engine`
+(mine), the branch `feature/upgrade-8-pyazr-level-matrix` (an agent's; its entry follows this one and says "not
+merged", which was true when it was written), the external-capture signature v7, one change of the wheel's test.
+**The reference of the tables is now `tab-trial94-1`, the base build `work/b-trial94`**; the quick set is 317
+tests.
+
+**The coupling coefficients (numbers move at rounding; the PI's word given).** `AngCoeff::ClebGord` and
+`AngCoeff::Racah` call `clebsch_gordan` and `racah_w` of `physics/` instead of GSL's 3j and 6j symbols. The
+whole evidence is `cnuc_split.md` section 9, "The engine's own coefficients": coefficients within 4.1e-15 of the
+former ones on 2.1 million argument sets (`physics_engine_coupling_gsl`); 23 files per basis differ from
+`tab-t74-1` (20 `intEC.dat` within 1.3e-14, the others in zeros by cancellation within 3.2e-16 of the column's
+largest value; one width in Park's basis printed in eV instead of meV); six of the eight fits identical, the two
+of `tests/13N` with the same iterations, chi-squared and parameters and 131 output numbers differing in the last
+printed digit (5e-11). The rule agreed before was 1e-13; the PI was shown these numbers on 2026-11-16 and
+answered "I think that is fine for the calculation, we have a very good precision anyway", which I took as his
+yes for the whole change. **The external-capture file's signature is v7**, so a file written before is
+recomputed once (`tests/ec_m1_exact` case (t), with a file written by `f252ba30`; that build was seen to reuse
+it without a word, so the case fails without the new version). GSL's Legendre functions are still called by
+`AngCoeff` (`LegendreP1`, `SphericalHarmonic`).
+
+**The Python call** (the agent's entry below has the detail; I read its whole diff: no file of `src/`,
+`include/` or `physics/`). `pyazr.physics.collision_matrix` takes Brune's and Park's parameters and photon
+channels; `pyazr.physics.optical_scattering` is new; pyazr is 3.0.0.dev4. Its audit of pyazr against the engine
+is `pyazr3.md` section 10. Open from it, for the PI: whether `Session.wigner_widths` becomes 2 P gamma_W^2,
+whether the Weisskopf estimate moves into `physics/`, whether pyazr gets a call for the engine's own sampler,
+whether `angular_distribution` may be deprecated. Not understood: with a Coulomb table file the T1 phase shift
+formed from `Session.channel_functions` is 1.5e-10 degrees from the evaluation's (7e-13 without a table).
+
+**The wheels, first run on GitHub** (run 43828542307 of the push of entry e96): the four Linux x86-64 wheels
+build and pass `wheel_smoke.py`. Linux aarch64: the wheels build and the test command fails; which check is not
+visible (the log needs a login). `wheel_smoke.py` now writes each failed check as an annotation when
+`GITHUB_ACTIONS` is set, and `[tool.cibuildwheel.linux]` passes that variable into the container; **whether an
+annotation written inside the container reaches the run was not seen** (the next run shows it). The two macOS
+jobs had not ended when this was written.
+
+**The slow tests** (`ctest -L slow` on `work/b-trial92`, which no merge check runs): 17 of 17 pass.
+
+**Verified** (`work/director/verify_l94.out`, against `tab-gslc-1` and `work/b-gslc`, the coupling branch's own
+check being `verify_gslc.out` against `tab-t74-1` and `work/b-trial92`): 0 warnings; in each basis only the 23
+signature files differ; the eight fits identical but for that file; 317 of 317 quick tests; 172 of 172
+regression scripts; the consistency test; the published pages. Not run: sanitizers, any other platform.
+
+**Not merged yet:** `feature/upgrade-2-inference` (reported, read, next rehearsal) and
+`feature/upgrade-1-gradient-functions` (running).
+
+## 2026-11-16 (pyazr agent, 10:40) — the level matrix's three parametrizations in pyazr; is pyazr in step?
+
+**Not merged.** Branch `feature/upgrade-8-pyazr-level-matrix` in `wt-pylm`, cut from `feature/upgrade` at f252ba30,
+two commits: e9204628 (the doors and their tests), 23955367 (documents and the audit). Build `work/b-pylm`. Binding
+and Python only: no file of `src/`, `include/` or `physics/` is touched. The account is
+`docs/upgrade/physics_functions.md` (stage 5) and `docs/upgrade/pyazr3.md` (section 10, the audit).
+
+**What was changed.**
+
+- `pyazr.physics.collision_matrix` (door `api/src/pybind_collision_matrix.cpp`) gains `parametrization=`
+  ("formal", "brune", "park"), `shift_at_levels=` (S_c at each level energy, levels x channels),
+  `shift_derivative_at_levels_per_MeV=` (read only for two levels closer than 1e-6 MeV), `park_norms=` (J_l),
+  `photon_channels=` (bool per channel) and `use_rmc=`. `boundary=` belongs to the formal levels and is refused
+  with the other two.
+- `pyazr.physics.optical_scattering(z1, z2, m1_u, m2_u, e_cm, potential, angles_deg=, projectile_spin=, l_max=,
+  step_fm=, matching_radius_fm=)` (new door `api/src/pybind_optical.cpp` over `physics/transfer`): S per partial
+  wave, sigma/sigma_R (mb/sr for a neutral pair), the reaction cross section.
+- pyazr 3.0.0.dev3 -> 3.0.0.dev4.
+- Tests: `tests/pyazr/collision_matrix_test.py` (46 checks, numpy), `collision_matrix_session_test.py` (new: T1,
+  T2, T3 in the three parametrizations against `Session.evaluate`), `optical_scattering_test.py` (new: FRESCO's
+  reference files, closed forms).
+- Documents: the User Guide's `pyazr.rst`, the Developer Guide's `physics_core.rst`, `pyazr/CLAUDE.md`,
+  `physics_functions.md`, `pyazr3.md` section 10, `FOR_THE_OWNER.md` section 10 items 5 and 9, `ROADMAP.md` rows
+  "Object binding" and "Physics tab plots every function". Two stale sentences corrected (`pyazr/widths.py`, the
+  skill `azure2-check`'s `references/widths.md`: the API does expose the penetrability).
+
+**Agreement measured.** Numpy: A against Brune's Eq. (33) and Park's Eqs. (21), (22) to 1e-15; U of three formal
+levels against U of their Brune and Park parameters (made in numpy) to 1.4e-14. Session: phase shifts to 1.5e-10 deg
+(T1; 7e-13 without the Coulomb table) and 2e-14 deg (T3); cross sections and a ratio to between 1e-15 and 1.6e-13
+relative, in each parametrization; the capture cross sections on a copy of T1 without external capture. FRESCO: S
+to 1.0e-5, sigma/sigma_R to 4.8e-5, the reaction cross section to 2.8e-7.
+
+**What was run** on 23955367 (`work/director/verify_branch.sh wt-pylm pylm tab-t74-1 trial92 4`, output
+`work/director/verify_pylm.out`, logs `work/director/vlpylm/`): 0 warnings; 887, 851 and 887 files identical in
+the three bases, none differs, none new; eight fits identical to `work/b-trial92`; 316 of 316 quick tests (314 and
+the two new ones); 172 of 172 regression scripts. Besides: `tests/consistency/repo_consistency_test.py`
+(consistent), `ctest -R docs_build` (60 pages, no warning), `tools/check_skills.py` (passes), the ten skill
+self-tests (`ctest -R skill_`: 10 of 10, none skipped; `work/director/pylm_skills.out`),
+`tools/check_doc_names.py` (7 names, none stale).
+
+**Not run.** The slow tests (`ctest -L slow`, 17 of them pyazr's): nothing they cover was changed, and the
+director's run of the slow set was in progress on another build. No sanitizer build, no other platform.
+
+**The audit** (`pyazr3.md` section 10). In step: the 14 options against the session's keywords, the program's
+commands against pyazr's calls, the 97 public names against the docs, the 24 physics rows, the skills. Not in
+step: no pyazr call runs the engine's ensemble sampler (`mcmc`); `--capture-amplitudes`, `--threads` and the
+number switches have no session keyword; `__version__` stood at dev3 through four API additions (2026-11-14 to
+16); four public members of `Session` are named nowhere in `docs/source` (`SHIFT_PENALTY_FROM_ZERO`, `is_alive`,
+`mass_number`, `model_gradients`). The names `pyazr3.md` planned to rename or remove are all in use (table of
+section 10.3); none was removed.
+
+**What is not done.**
+
+- The Weisskopf width has no door: `physics/` has no such function (it is the one formula of `pyazr/widths.py`).
+- Bound states, DWBA cross sections and continuum bins of `physics/transfer` have no door.
+- The Physics tab does not show `collision_matrix` or `optical_scattering`: its rows are one number per element.
+- With the Coulomb table, `Session.channel_functions` and the evaluation differ in the last digits (1.5e-10 deg
+  in T1's phase shift); not looked into.
+- The class scheme tables have no box for a function of `pyazr.physics`; nothing was added there.
+
+**For the PI.** (1) Should `Session.wigner_widths` become 2 P gamma_W^2 with P of `channel_functions` (it changes
+`dimensionless_widths` where the probe is not that)? (2) Should the Weisskopf estimate move into `physics/` as an
+engine function? (3) Is a pyazr call for the engine's own sampler wanted, or is `Objective.log_prob` with emcee
+the intended route? (4) May `angular_distribution` be deprecated once the skill `azure2-plot` and its example use
+an extrapolation record?
+
 ## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
 
 A new session of the director took over from `work/director/NEXT_AGENT.md` (local). This entry is documents and

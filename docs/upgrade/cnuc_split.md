@@ -396,7 +396,7 @@ amplitudes, the particle analysing power, the R_k of a secondary decay) called G
 they now call `clebsch_gordan` and `racah_w` of `physics/`, so the engine has one implementation.  Evidence:
 (a) `physics_engine_coupling_gsl`: 322 959 Clebsch-Gordan and 1 771 561 Racah argument sets (2j <= 12 and 10)
 against the former GSL expressions, largest difference 4.1 x 10^-15, no keep-test mismatch.  (b) Every project in
-three bases against `tab-t74-1`: 23 of 887 files differ in Brune's and the formal basis, 23 of 887 in Park's.  Of
+three bases against `tab-t74-1`: 23 files differ in each (of 887, 851 and 887 for Brune, formal and Park).  Of
 these 20 are `intEC.dat` (every amplitude within 1.3 x 10^-14 relative), and the observable files are
 `angle_mapping` R = 1, `ec_e1m1_phase` `s_1` R = 3 and (Brune, formal) `gamma_lab_frame` `cm` R = 2: every changed
 number is within 3.2 x 10^-16 of its column's largest value (zeros by cancellation).  In Park's basis
@@ -405,7 +405,7 @@ unit's boundary.  (c) The eight fits against the engine before: six identical fi
 `tests/13N` keep their number of iterations, chi-squared (every printed digit) and `parameters.out`, and 131
 numbers of their output files differ in the last printed digit (at most 5 x 10^-11 of the value; the PI accepted
 this on 2026-11-16).  (d) The external-capture file's signature is v7, so a file written before is recomputed
-(`tests/ec_m1_exact` case (t)).
+(`tests/ec_m1_exact` case (t)); with it the 23 signature files of each basis differ too, and nothing else.
 
 ### Step 6a (branch `feature/upgrade-1-pathways`, 2026-11-09)
 

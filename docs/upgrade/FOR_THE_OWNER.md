@@ -114,6 +114,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 15 | Analytic gradient of an E1-only or E2-only sum with a component | gradient | 2026-11 | owner |
 | 16 | A MIGRAD fit stopped by its call limit ends at its lowest objective | see line | 2026-11-14 | owner |
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
+| 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -153,6 +154,11 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     7087.92418676 now, with a notice; `fitStatus.out` has one writer and new keys (`fitter`, `fitter_status`).
 17. The resonance strength stays ω Γ_γ Γ_p / Σ Γ_particle, as on `dev`. New is only the record `gamma_decay` (Γ_γ,
     branchings, mixing ratios; `user_guide/gamma_decay.rst`), which gives the same partial widths as `<levels>`.
+18. The coefficients agree with GSL's within 4.1e-15. External-capture amplitudes move by at most 1.3e-14, a
+    calculated observable only where it is a zero by cancellation; two gradient fits of `tests/13N` end at the
+    same chi-squared and parameters with output numbers differing in the last printed digit (5e-11). An
+    `intEC.dat` written before is recomputed once (signature v7). `cnuc_split.md` section 9;
+    `physics_engine_coupling_gsl`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".
@@ -652,7 +658,10 @@ re-read against its design at the hand-over.
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
-   remove once the file is on `main`); look at its newest run. No Windows wheel; the Coulomb table's address is
+   remove once the file is on `main`); look at its newest run. Its first run (2026-11-16): the Linux x86-64
+   wheels build and pass their test; the Linux aarch64 wheels build and the test fails, the failing check not
+   seen (the test writes it as an annotation from the next run on, if an annotation written inside the build's
+   container reaches the run, which was not seen either). No Windows wheel; the Coulomb table's address is
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
