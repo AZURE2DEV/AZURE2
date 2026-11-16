@@ -8,7 +8,7 @@ api/src/pybind_api.cpp	1017
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/sources/nds.py	1450
-src/AMatrixFunc.cpp	2380
+src/AMatrixFunc.cpp	1966
 src/AZURECalc.cpp	1395
 src/AZURECalcMCMC.cpp	1309
 src/AZUREGrad.cpp	1108

@@ -210,7 +210,8 @@ one calculation, in the program and in pyazr alike:
 3. **Working copy on the shared mesh.** The data as set up are one immutable `DataSet`; what an evaluation changes
    (norms, shifts, apparatus values) is a `WorkingCopy`. Each mesh node is one calculation site (`Site`).
 4. **Model pass.** One level-matrix solve per compound energy (`src/EnergyPass.cpp`; the arithmetic is in
-   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`) into the caller's `Results`,
+   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`, and for the analytic gradient their
+   adjoints `CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`) into the caller's `Results`,
    then each folded point over its sites (`src/PointFold.cpp`); each data set's value is an expression tree (sum,
    ratio, scale, yield) with one forward and one adjoint implementation (`src/ModelPass.cpp`).
 5. **Objective.** One ordered list of terms (`src/Objective.cpp`): data χ², nuisance priors, Park's wall, model
@@ -236,7 +237,7 @@ Each kind of extension is a row of one table and a test (`docs/source/developer/
 | Kind | The named places | The test that fails |
 |---|---|---|
 | A data quantity | `experiment/src/Quantities.cpp` row; its tree in `Schema::Build` | `experiment_quantities` |
-| An observable at a mesh energy | `Observables.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
+| An observable at a mesh energy | `Observables.h`, `ObservablesAdjoint.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
 | An apparatus kernel | one `experiment/src/Kernel<Name>.cpp`; a line in `Kernels()` | `experiment_kernels` |
 | A parameter kind | `ParamKindTable()` row (`inference/`); a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records`, `inference_parameter_kinds` |
 | A level parameter | a `LevelParameterLayout` slot (`inference/`); `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
@@ -643,14 +644,18 @@ re-read against its design at the hand-over.
    target values); what copy-on-write could share is the sites of a project without energy shifts and without
    fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
-5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
+5. **Large classes.** `src/AMatrixFunc.cpp` (1,966 lines; 2,766 before the moves below), `api/src/AZUREAPI.cpp`
    (1,532), `src/AZURECalc.cpp` (1,395), `src/AZURECalcMCMC.cpp` (1,309). The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
-   `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
-   adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
-   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
+   `GenMatrixFunc` collect the arrays of a site and call them. The arithmetic of the analytic gradient is there
+   too since 2026-11-16 (`CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`, each
+   function tested against finite differences of its forward function; `physics_functions.md`, stage 6), with
+   every gradient output identical; `AMatrixFunc` keeps the walk, and `PointTBar` is still about 450 lines of
+   gates and of that walk. Still engine code: the R_k of a secondary decay, the particle analysing power and its
+   adjoint, the set-up of the formal levels (`ChannelSpace::Update`) and the arrays `ChannelSpace` keeps per
+   parameter set for the gradient. From Python,
    `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal, Brune's
    or Park's levels; particle and photon channels; the Reich-Moore term), checked against numpy and against a
    session's phase shifts and cross sections on T1-T3 in the three parametrizations (`physics_functions.md`,
