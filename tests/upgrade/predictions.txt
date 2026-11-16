@@ -270,6 +270,33 @@ data ecm_p14n: sigma(1->3)
 data ecm_p14n: sigma(1->3)
 == tests/ec_threshold/models/ng.azr
 data ng: sigma(1->3)
+== tests/ec_unbound_final/models/c10b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c10u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c20b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c20u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c40b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c40u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/full.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/grad.azr
+data pseudo: sigma(1->3)
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/pure_b.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+extrapolation x4: sigma(1->3)
+== tests/ec_unbound_final/models/pure_u.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+extrapolation x4: sigma(1->3)
 == tests/electron_screening/bare.azr
 data: set-up failed
 exit 1
