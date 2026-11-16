@@ -14,7 +14,7 @@
 
 struct ThmPsTable;  // defined below, named by EDependentShare
 
-/// The energy-dependent channel tables of a point (one row per J group); see Site::edep_ (include/Site.h).
+/// The energy-dependent channel tables of a point (one row per J group); see Site::Values::edep (include/Site.h).
 /// Packed: one flat array per kind and one row index, five allocations a point
 /// instead of four per J group (natural neon: ~60 a sub-point).  Row j (from 1)
 /// holds the channels of J group j, at slots [rowStart[j-1], rowStart[j]).

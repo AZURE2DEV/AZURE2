@@ -46,11 +46,15 @@ def main():
         os.chmod(engine, 0o755)
         res = os.path.join(work, "cmp", "brune", "t")
 
+        # The caller's REPLACE_TAG is not this test's (a run of all projects exports it), and no tool reads the
+        # caller's standard input (the fake engine's `cat` would wait on an open socket).
+        base = {k: v for k, v in os.environ.items() if k != "REPLACE_TAG"}
+
         def runall(value, extra=None):
-            env = dict(os.environ, SRC_TESTS=tests, WORK=work, JOBS="1", AZURE2_COULOMB_TABLE=engine, FAKE_VALUE=value)
+            env = dict(base, SRC_TESTS=tests, WORK=work, JOBS="1", AZURE2_COULOMB_TABLE=engine, FAKE_VALUE=value)
             env.update(extra or {})
             return subprocess.run(["bash", os.path.join(TOOLS, "runall.sh"), engine, "t", ""], env=env,
-                                  capture_output=True, text=True)
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True)
 
         def value(folder, azr):
             path = os.path.join(res, ".res-" + folder, azr, "output", "value.out")
@@ -69,16 +73,16 @@ def main():
               r.returncode == 0 and value("a", "a.azr") == "3" and value("c", "c.azr") == "3" and
               not os.path.exists(os.path.join(res, ".res-b")), "exit %d, a %s, .res-b %s" %
               (r.returncode, value("a", "a.azr"), os.path.exists(os.path.join(res, ".res-b"))))
-        env = dict(os.environ, AZURE2_COULOMB_TABLE=engine, FAKE_VALUE="4")
+        env = dict(base, AZURE2_COULOMB_TABLE=engine, FAKE_VALUE="4")
         r = subprocess.run(["bash", os.path.join(TOOLS, "run_one.sh"), tests, os.path.join(work, "cmp"), "t", engine, "",
-                            "a"], env=env, capture_output=True, text=True)
+                            "a"], env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         check("4. run_one.sh replaces an existing, non-empty output folder", r.returncode == 0 and
               value("a", "a.azr") == "4", "exit %d, value %s: %s" % (r.returncode, value("a", "a.azr"), r.stderr))
         block = os.path.join(work, "cmp", "brune", "u", ".res-a")  # a file where the results of a/ go
-        env = dict(os.environ, SRC_TESTS=tests, WORK=work, JOBS="1", AZURE2_COULOMB_TABLE=engine, FAKE_VALUE="5",
+        env = dict(base, SRC_TESTS=tests, WORK=work, JOBS="1", AZURE2_COULOMB_TABLE=engine, FAKE_VALUE="5",
                    FAKE_BLOCK=block)
-        r = subprocess.run(["bash", os.path.join(TOOLS, "runall.sh"), engine, "u", ""], env=env, capture_output=True,
-                           text=True)
+        r = subprocess.run(["bash", os.path.join(TOOLS, "runall.sh"), engine, "u", ""], env=env,
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True)
         check("5. a result that cannot be moved: printed, runall.sh exits 1 with FAILED",
               r.returncode == 1 and "could not be moved" in r.stderr and "FAILED" in r.stderr and
               "runs done u\n" not in r.stdout, "exit %d: %s %s" % (r.returncode, r.stdout, r.stderr))

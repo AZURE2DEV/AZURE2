@@ -1,5 +1,10 @@
-#include "LevelMatrixSolver.h"
+#include "azure2/physics/LevelMatrixSolver.h"
+
 #include <cmath>
+#include <utility>
+
+namespace azure2 {
+namespace physics {
 
 /*!
  * Right-looking LU with partial pivoting.  The pivot is chosen on \f$ |z|^2 \f$,
@@ -86,7 +91,7 @@ void LevelMatrixSolver::SolveInto(const vector_c &b, vector_c &x) const {
  * replaces the double loop over levels that an explicit inverse would require.
  */
 
-complex LevelMatrixSolver::Bilinear(const vector_c &u, const vector_c &v) {
+LevelMatrixSolver::complex LevelMatrixSolver::Bilinear(const vector_c &u, const vector_c &v) {
   if (n_ == 0) return complex(0.0, 0.0);
   work_.assign(v.begin(), v.end());
   this->Solve(&work_[0]);
@@ -95,7 +100,7 @@ complex LevelMatrixSolver::Bilinear(const vector_c &u, const vector_c &v) {
   return sum;
 }
 
-const matrix_c &LevelMatrixSolver::Inverse() {
+const LevelMatrixSolver::matrix_c &LevelMatrixSolver::Inverse() {
   if (!inverse_valid_) {
     inverse_.resize(n_);
     for (int i = 0; i < n_; i++) inverse_[i].assign(n_, complex(0.0, 0.0));
@@ -110,3 +115,6 @@ const matrix_c &LevelMatrixSolver::Inverse() {
   }
   return inverse_;
 }
+
+}  // namespace physics
+}  // namespace azure2
