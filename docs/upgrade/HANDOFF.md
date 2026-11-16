@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
+
+A new session of the director took over from `work/director/NEXT_AGENT.md` (local). This entry is documents and
+one workflow file; no C++, no Python, no test changed.
+
+**The PI's decisions of 2026-11-16.**
+
+| Item | Decision |
+|---|---|
+| The engine's GSL coupling coefficients replaced by those of `physics/` | yes |
+| The analytic gradient as functions of `physics/` | yes |
+| `pyazr.physics.collision_matrix` with Brune's and Park's parameters and photon channels | yes |
+| The `inference/` library and the parameter vector | yes |
+| A site holding its values by pointer (`evaluation.md` section 7.8, way (c)) | no; the copies stay |
+| Large classes; the GSL Coulomb functions still called in the engine | to continue |
+| The join with `dev`, a port of its features | wait |
+| The wheels | to be run (asked 2026-11-16) |
+
+On the copies he asked later how hard one shared object without copies would be; the answer given is the last
+part of `evaluation.md` section 7.8 (what differs between evaluations running at the same time exists once per
+evaluation in any design; the slots of a project without shifts could be shared until written: a few days, 9 %
+of T2's peak memory at four threads, nothing at one). Not started.
+
+**The wheel workflow.** `.github/workflows/wheels.yml` started by hand or on a pull request only. GitHub offers
+the hand start only for a workflow file of the default branch, and `main` has none (the public list of the
+repository's workflows does not hold `wheels`), so it could not be started on this branch at all. It now also
+runs on a push to `feature/upgrade` that changes one of the packaging files it already named, itself included,
+so the push of this entry starts it for the first time. It publishes nothing. The trigger is to be removed once
+the file is on `main`. Not changed: which tests `build.yml` runs.
+
+**The CI at the time of this entry.** Thirteenth push (`397c4a1a`): Linux passes (136 minutes), the sanitizers
+pass, Windows fails as on the eleventh push (its repairs are in the fourteenth), macOS still running. Fourteenth
+push (`f252ba30`): its build run waits behind that macOS job; a push replaces a waiting run, so this push's run
+takes its place with the same code.
+
+**Running, not merged:** two branches with one agent each, `feature/upgrade-2-inference` (design note first) and
+`feature/upgrade-8-pyazr-level-matrix` (the wider Python call and an audit of pyazr against the engine); the
+slow tests (`ctest -L slow`) on `work/b-trial92`, which no merge check runs.
+
+**Verified for this entry:** the consistency test, the published pages' build; the workflow file read by a YAML
+parser. Not run: the workflow itself (it cannot run here).
+
 ## 2026-11-16 (director, 06:05) — merged: Linux is green; the Windows and macOS results of the eleventh push answered
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 92 (one commit of mine: one rule of the engine and its

@@ -362,7 +362,8 @@ Each is a commit series that leaves the tree passing (all projects × 3 bases id
    classified by who writes them, and the 25 that an evaluation writes are one struct of the site
    (`Site::Values`).  The classification shows that the hand-over table of this item is nearly the whole site
    (280 of 392 bytes) and that `Clone` already copies the evaluation's state and little else, so moving the
-   values out of the site would not remove the copies; how to go on is a decision (section 7.8).
+   values out of the site would not remove the copies.  **Decided 2026-11-16: the copies stay** (section 7.8, the
+   last part).
 4. **`CNuc` split, the parameter vector out** (`cnuc_split.md` step 7, another agent's area): `cnuc_pool_` goes; the
    sampler's and the fitter's state become non-`const` objects of the minimiser adapter; the MCMC globals become a run
    object.  Gate: memory of a fit at 1, 3 and 12 threads equal within the `Results` size per thread.
@@ -752,6 +753,29 @@ with its numerical gradient at 4 threads.  User-space instructions at one thread
 1.718033e11 / 1.717964e11, 13N gradient fit 1.864297e11 / 1.864300e11, T2 sampler 1.271775e12 / 1.271426e12.  Peak
 resident memory, kB, one run each: 161 908 / 161 860, 135 448 / 135 608, 153 928 / 153 064.  `sizeof(Site)` and
 `sizeof(Unit)` are what they were (392, 504).
+
+**Decided 2026-11-16.**  The PI accepted the director's advice: way (c) is not taken, the copies stay, and
+milestone 3 is closed as "not done as designed".  He asked the same day how hard it would be to have one shared
+object and no copies.  The answer given:
+
+- *One object for evaluations that run at the same time cannot hold what differs between them.*  Two walkers of
+  the sampler, or two points of Minuit2's numerical gradient, are at two parameter vectors: each has its own
+  norms, and with an energy shift or a fitted target parameter its own energies, frames, channel rows, Coulomb
+  amplitudes, stopping and thickness in every site.  Those values exist once per evaluation in any design.
+- *What can still be shared is what an evaluation does not write.*  In a project without energy shifts, fitted
+  target-effect parameters or re-placed grids an evaluation writes no site after the set-up, and the units and
+  slots (the slots alone are 14 422 x 392 bytes = 5.7 MB of the 11.6 MB of T2, and 0.9 of the 3.4 MB of 13N;
+  the units were not counted) could be one block shared by the copies and copied when first
+  written.  Per block the cost is one pointer in `WorkingCopy` and no further indirection in
+  a site's accessors, but every non-`const` path to a site (`SlotAt`, `SiteAt`, `Slots`, `UnitAt`; about 450
+  calls in about 30 files) must first be sorted into readers and writers, because a writer detaches the block.
+  In a project with a shift or a fitted target parameter every copy detaches at its first hand-over and nothing
+  is saved.
+- *Size and gain.*  A few days of work with the full comparison (every output, the eight fits, the sampler
+  chains at 1 and 4 threads, instruction counts).  The saving on T2 at four threads (three further copies,
+  peak 196.6 MB) is 17 MB (9 %) for the slots and cannot pass 35 MB (18 %); it is nothing at one thread, in a
+  fit with the analytic gradient (one working copy at any thread count) and in a project with a shift or a
+  fitted target parameter.  Not started.
 
 ## 8. The environment record and the run's diagnostics (milestone 5): design
 
