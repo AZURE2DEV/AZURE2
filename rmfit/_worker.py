@@ -63,10 +63,6 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
                 # J > 0 wall rows (engine.ParkWall)
                 park_levels=([level_label(p.J, p.parity, p.level, p.jgroup, tags) for p in P.of_kind("energy")]
                              if flags.get("use_park") else []),
-                # measured scattering lengths (engine.ScatLenRows, 2026-11-07): 1/((2j1+1)(2j2+1)) per pair key,
-                # the weight of the coherent combination
-                pair_i1i2={int(q.key): float(q.i1i2factor) for q in m.pairs
-                           if getattr(q, "i1i2factor", None) is not None},
                 # the nuisances and the priors of the engine's objective, by parameter row (azr3.nuisance_rows)
                 nuisances=nuisance_rows(P),
             )
@@ -170,28 +166,6 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
                             D.append((np.asarray(m.park_norms(xp), float) - np.asarray(m.park_norms(xm), float))
                                      / (2.0 * h))
                         conn.send(("ok", np.asarray(D, float).reshape(len(cols), -1)))
-                    elif cmd == "scatlen":
-                        # every pair's s-wave scattering lengths at x (pyazr azure2.scattering_lengths), one row
-                        # per (pair, channel spin): pair, s, parity, Re a0, Im a0, has_levels (engine.ScatLenRows)
-                        v = m.scattering_lengths(np.asarray(payload, float))
-                        conn.send(("ok", np.asarray([[q.pair, q.s, q.parity, q.a0.real, q.a0.imag,
-                                                      float(q.has_levels)] for q in v], float).reshape(-1, 6)))
-                    elif cmd == "scatlen_jac":
-                        # d(Re a0, Im a0)/dx by central differences on the given free columns,
-                        # (len(cols), n_channels, 2); steps as park_jac (energy 1e-6 MeV, amplitude 1e-6 relative)
-                        x, cols = payload
-                        x = np.asarray(x, float)
-
-                        def _a(xx):
-                            return np.asarray([[q.a0.real, q.a0.imag] for q in m.scattering_lengths(xx)], float)
-                        D = []
-                        for c in cols:
-                            h = 1e-6 if keys[c].kind == "energy" else max(1e-6 * abs(x[c]), 1e-9)
-                            xp, xm = x.copy(), x.copy()
-                            xp[c] += h
-                            xm[c] -= h
-                            D.append((_a(xp) - _a(xm)) / (2.0 * h))
-                        conn.send(("ok", np.asarray(D, float).reshape(len(cols), -1, 2)))
                     elif cmd == "wigner_widths":
                         conn.send(("ok", dict(m.wigner_widths(np.asarray(payload, float)))))
                     elif cmd == "snapshot":

@@ -27,7 +27,7 @@ is for, how it is built and what is still open.  How to use it in a session is i
 |---|---|
 | `engine.py`, `model.py`, `_worker.py` | exact evaluation sharded over single-thread pyazr sessions (chi-squared is additive over segments); Jacobian-cost shard balancing |
 | `local.py` | bounded trust-region polishes in reduced-width-amplitude space with the analytic Jacobian; Wigner-limit caps, energy windows, sign locks; sanity checks |
-| `search.py`, `moves.py`, `mixture.py` | interference-sign rounds (single, pair, channel, group flips screened by one Gauss-Newton step) and the population stage (sign-perturbed restarts polished to convergence plus crossover between them: the step that crosses basins) |
+| `search.py`, `moves.py` | interference-sign rounds (single, pair, channel, group flips screened by one Gauss-Newton step) and the population stage (sign-perturbed restarts polished to convergence plus crossover between them: the step that crosses basins) |
 | `structure.py`, `levelscan.py`, `windows.py` | level add / remove / relocate with a required hypothesis per candidate; residual-driven level search; energy-window variants |
 | `keys.py` | sign-pattern keys and distances between solutions |
 | `covariance.py` | data covariance matrices, normalization groups, shift groups, model-scaled (relative) terms with a fixed reference model |

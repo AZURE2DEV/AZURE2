@@ -46,7 +46,6 @@ Layout (design rationale and roadmap: `DESIGN.md` in this directory; the plan fi
 | `audit_subagent.py` | `rmfit audit --kind input\|data\|literature`: the three idle-time reviews of skill section 3b as self-contained subagent prompts (`audits/<kind>/PROMPT.md`, from `templates/audit_*.md`: segment table, data files, machine findings, spec roles and standing decisions, readme head); parser of their `FINDINGS.md` (`--findings`, `--status KIND N confirmed`) |
 | `audit.py` | `rmfit audit`: engine-free pre-flight checks of the model and data -> `AUDIT.md` (zero free widths, 1 keV level merges, nominal norms != 1, normError as a fraction, FLAG columns as errors, tiny errors, duplicates, spikes, cross-file duplicates, thresholds, `<targetInt>` on test segments, legacy .sav names, output path, engine pin) |
 | `covariance.py` | data covariance matrices (`covariance <file>`) and normalization groups (`normgroup <label>`): the engine's whitening redone on the evaluator's rows, the normgroup leader map (2026-10-22) |
-| `mixture.py` | joint fit of several projects (one compound nucleus each) to data they share -- natural-abundance or compound targets: one worker per member, member-tagged keys, abundance weights (fixed or free with a sum-to-one row), one normalization per shared data set; `freeze_and_exchange` writes every member back as a standalone stage-1 file with the others as `mixture` tables (`python3 -m rmfit.mixture <dir> init|polish|freeze|status`) |
 
 
 Running: `rmfit` is not installed as a package; put its parent on the path:
@@ -58,22 +57,11 @@ were seconds when written (2026-09-05); since the mid-September target-integrati
 session opens in ~5 min and evaluates in ~8 s (about 100 sub-points per point, 370k external-capture
 amplitudes), so the spine test's polish section now runs 1-2 h -- give it a long timeout or a quiet node.
 
-Joint fits (`rmfit.mixture`): a directory with `mixture.json` naming the member projects
-(`name`, `azr`, `flags`, `weight`, `weight_free`, `weight_sigma`) and the shared data sets
-(`name`, `segments: {member: that member's <segmentsData> key}`); every member's file carries
-the shared data as an ordinary segment (same data file, window and observable, its own
-normalization free and 1).  The model of a shared data set is `sum_k w_k f_k`, its one
-normalization applies to all members, and a member's energy shift of it stays at the file's
-value.  Test (13N and the p+p model sharing a 90-degree elastic set, ~20 min):
-`python3 rmfit/tests/test_mixture_13n_pp.py`.  First use: a natural-neon target, the 20Ne compound with
-the 22Ne and 21Ne admixtures (2026-10-12).  Since 2026-10-13 the mixture feature
-(engine, pyazr API) is not on AZURE2 `dev` but on `feature/multi-compound-nucleus`: run anything that
-imports `rmfit.mixture` with `AZURE2_ROOT` pointing at a build of that branch AT COMMIT bc3bd57 (the last
-one with the mixture pyazr API; the branch moved on to several compound nuclei in one project on
-2026-10-13, which supersedes `rmfit.mixture`).  For that one-file feature, `keys.py` knows a parameter kind
-`abundance` (`ParamKey.nucleus = (Z, A)`) and `Penalties.from_segments(keys, segs, azr)` adds the
-`<abundances>` priors as rows (the sum-to-one term is not a row); on `dev`'s engine neither path is ever
-taken.  Two 2026-10-13 regressions, both fixed the same day: `from_segments` was first called with
+Several compound nuclei in one project (a natural or compound target) are the engine's own: `keys.py`
+knows a parameter kind `abundance` (`ParamKey.nucleus = (Z, A)`), its prior is one of the nuisance rows and
+the engine's abundance-sum term comes with its model rows (`engine.ModelRows`).  The earlier joint fit of
+several one-nucleus projects (`rmfit.mixture`, 2026-10-12; superseded on 2026-10-13 and since then runnable
+only against one old build) is not part of rmfit on pyazr 3.0.  Two 2026-10-13 regressions, both fixed the same day: `from_segments` was first called with
 `self.azr` from `Sharded`, which only has `base_azr` (killed five sharded jobs),
 and `sign_distance` enumerated pair nodes without the stage-2 member tag (`KeyError` on every call;
 `keys.py.bak-2026-10-13c`).  Any edit here must pass `tests/test_keys.py` (seconds) and a `Sharded` fixture
