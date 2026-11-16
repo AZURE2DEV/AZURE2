@@ -644,7 +644,8 @@ below its barrier lives; an option that selects it selects wrong numbers.
 - *The converter.* Old files (formats 1 and 2) have no such key: the GSL choice of the old setup program was a bit
   of `<lastRun>`, which the converter removes with the rest of that section (the PI, 2026-11-13, `qt_parity.md`):
   the converted project is computed with the program's own functions, as any project without the key. Nothing
-  changes in `convert/`. This differs from what the old program did for a user who had ticked the box, by the
+  changes in the converted file; since 2026-11-16 (the PI) the converter says so in a note when the box was ticked
+  (bit 12 of the first number of `<lastRun>`, `convert/src/Convert.cpp`, `convert_constructs`). This differs from what the old program did for a user who had ticked the box, by the
   amounts of section 8.3, and is row 19 of `FOR_THE_OWNER.md` section 3.
 
 *What goes.* The two `gsl_sf_coulomb_wave_FG_e` calls and `useGSLFunctions_` in `CoulFunc`; the constructor

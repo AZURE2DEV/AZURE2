@@ -84,7 +84,8 @@ class Objective {
   static const Objective &Engine();
   /// The chi-squared of c.p (model values already computed).
   double Chi2(const ObjectiveContext &c) const;
-  /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors.
+  /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors: the API's data
+  /// chi-squared (AZUREAPI::EvaluateFilledChi2, pyazr's calculate_chi2_rwa).
   double DataChi2(ObjectiveContext c) const;
   /// The ensemble sampler's -2 ln L: every term's AddForSampler, in the table's order (segment priors off).
   double SamplerChi2(ObjectiveContext c) const;
