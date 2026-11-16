@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #
 # The upgrade test projects T1 and T3 (tests/upgrade/T1, T3) against today's engine:
-#   (a) golden/golden.py: the calculate, extrapolate and rate outputs equal the golden files to 1e-6 relative;
+#   (a) golden/golden.py: the calculate, extrapolate and rate outputs equal the golden files to 1e-6 relative on
+#       Linux (where the golden files were made), to 2e-5 on another system (the PI, 2026-11-16: "Use also 2e-5";
+#       golden.py's own bound across compilers and C libraries: T3's alpha+alpha d-wave phase at 0.783 MeV, a
+#       difference of two terms of 0.57 deg leaving 0.0025 deg, moved by 3.7e-6 on macOS and by 1e-6 to 2.4e-6
+#       on Linux when the last bit of the complex elementary functions was perturbed);
 #   (b) recover.py: a MIGRAD fit from the moved start model returns the true parameters (|pull| <= 4 on the
 #       committed noisy data, <= 0.05 on noise-free data) with chi2(fit) <= chi2(truth);
 #   (c) golden/T2/regen_compare.py: the T2 calculations at the start values and at the truth equal the golden
@@ -23,7 +27,9 @@ if [ -z "$PY" ] || ! "$PY" -c 'import numpy' 2>/dev/null; then
   echo "skip: python3 with numpy not found"; exit 0
 fi
 failures=0
-"$PY" "$HERE/golden/golden.py" || failures=$((failures + 1))
+GOLDEN_RTOL=1e-6
+[ "$(uname -s)" = Linux ] || GOLDEN_RTOL=2e-5
+"$PY" "$HERE/golden/golden.py" --rtol "$GOLDEN_RTOL" || failures=$((failures + 1))
 "$PY" "$HERE/recover.py" || failures=$((failures + 1))
 "$PY" "$HERE/golden/T2/regen_compare.py" --binary "$AZURE2_BIN" --threads "$OMP_NUM_THREADS" \
   --only calc_start --only calc_truth || failures=$((failures + 1))
