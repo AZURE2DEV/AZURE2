@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <random>
 #include <set>
 #include <string>
@@ -151,7 +152,14 @@ void CheckNeverCoarser(const MeshPlan &plan, size_t index, const MeshSupport &s,
   for (size_t j = r.first; j < r.last; j++) {
     const double lo = std::max(x[j], s.low), hi = std::min(x[j + 1], s.high);
     if (!(hi > lo)) continue;
-    const double len = hi - lo, inset = 1.0e-9 * len;
+    // The step is asked a little inside the interval, so that a node lying on a core's edge (E_r +- m widths) reads
+    // the tail's step of its interval and not the core's.  "A little" is no less than the rounding of the node
+    // itself: with widths of 1e-7 MeV the intervals are 1e-8 MeV, and 1e-9 of that is below one ulp at 1 MeV.
+    // Without the floor 374 of 400 other seeds fail here on such nodes (in the cases looked at the mesh there is
+    // today's grid node for node, or finer); with it none of 1000.  The fixed seed draws other cases under libc++
+    // (std's distributions are not specified), which is how the CI's macOS job met it.
+    const double len = hi - lo;
+    const double inset = std::max(1.0e-9 * len, 4.0 * std::numeric_limits<double>::epsilon() * std::fabs(hi));
     const double allowed = today.MinOn(lo + inset, hi - inset);
     if (!(len <= allowed * (1.0 + 1.0e-9) + 1.0e-14)) {
       char buf[256];
