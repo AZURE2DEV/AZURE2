@@ -1,7 +1,8 @@
 # inference/: the fit's parameter vector as plain data, its priors and the rule of the objective's term list
 # (docs/upgrade/inference.md): what a parameter is (the kinds' table and the record of one parameter), where the
 # level block and every other parameter sit in the full and the packed vector, the support of the posterior, one
-# Gaussian prior, the prior covariance (grammar, set-up, arithmetic) and the sums of a list of terms over a context.  It uses nothing else of AZURE2: no engine header (src/, include/,
+# Gaussian prior, the list of the objective's diagonal priors, the prior covariance (grammar, set-up, arithmetic) and the
+# sums of a list of terms over a context.  It uses nothing else of AZURE2: no engine header (src/, include/,
 # api/), no other library, no Minuit2, GSL or OpenMP.  The rule is enforced three times, as for physics/: the target
 # links nothing; the ctest inference_standalone configures and builds this directory as a project of its own; and
 # repo_consistency refuses any include but azure2/inference/ and the C++ standard library.  The engine keeps the
@@ -39,9 +40,12 @@ endif()
 #   prior_covariance         a 2 x 2 and a 3 x 3 covariance by hand: chi2, gradient, rows, marginalisation, the
 #                            normalisation, each refusal of the grammar
 #   term_list                terms that add known numbers: the order of the sum, the breakdown, the sampler's sum
+#   diagonal_priors          a list of five priors by hand: the running sum and the subtotals bit for bit, the
+#                            gradient at p and the curvature against central differences, an empty list
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src parameter_kinds_test.cpp level_parameter_layout_test.cpp parameter_index_map_test.cpp
-             posterior_support_test.cpp gaussian_prior_test.cpp prior_covariance_test.cpp term_list_test.cpp)
+             posterior_support_test.cpp gaussian_prior_test.cpp prior_covariance_test.cpp term_list_test.cpp
+             diagonal_priors_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(inference_${_t}_test tests/${_src})
   target_link_libraries(inference_${_t}_test PRIVATE azure2_inference)

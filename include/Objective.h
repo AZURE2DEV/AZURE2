@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "AZUREGrad.h"
+#include "DiagonalPriors.h"
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
@@ -31,10 +32,12 @@
  *   T2     the data covariance correction;
  *   T5     nuisance priors (<parameterSettings> useAsNuisance);
  *   T6     Park's J > 0 wall;
- *   T8     electron-screening, target-density, Doppler-temperature and sample-thickness priors (four terms);
+ *   T8     electron-screening, target-density, Doppler-temperature, sample-thickness and apparatus-parameter priors
+ *          (five terms; each the subtotal of its priors as AppendTargetPriors, DiagonalPriors.h, gathers them);
  *   T7     abundance priors and sum-to-one;
- *   T9     the model data (ModelData.h): measured scattering lengths;
- *   T10    the prior parameter covariance.
+ *   T9     the model data (ModelData.h): scattering lengths and the level quantities of <modelData>;
+ *   T10    the prior parameter covariance;
+ *   T11    the priors of the gamma_decay records and the wall on a negative remainder.
  */
 /// Scale of Park's J > 0 wall (T6): a level at J = -kParkNormScale costs one unit of chi-squared, so the wall is steep
 /// on the scale of J but smooth.
@@ -108,128 +111,17 @@ class Objective {
   azure2::inference::TermList<ObjectiveContext> terms_;
 };
 
-
-/*
- * The diagonal priors (x - nominal)^2 / sigma^2 of single parameters, as (full parameter index, nominal, sigma), for
- * the code that needs their derivatives or their least-squares rows rather than their value: d/dx = 2 (x - nominal) /
- * sigma^2, curvature 2 / sigma^2.  Exactly the terms the objective adds (T3, T4, T8 and T7's per-nucleus priors), so
- * the gradients, G2 and the least-squares rows stay consistent with chi^2.
+/*!
+ * The least-squares rows of the model terms that are sums of squares but not single-parameter priors
+ * (docs/upgrade/objective.md D2, D7), appended to `residuals` (and, with `jac` and `pmap`, their Jacobian rows over
+ * nCols packed columns): Park's J > 0 wall, one row per R-matrix level, J/s while J < 0 and 0 otherwise (Park
+ * formalism only; the shift functions and their derivatives must be current); the rows of the gamma_decay records'
+ * priors and wall (GammaDecaySet::PenaltyRows); the abundance sum-to-one term, one row per sample with a width,
+ * ((sum w) - c)/s.  The number of rows does not depend on the parameters.  The diagonal priors' rows are the caller's,
+ * from ForEachDiagonalPrior (DiagonalPriors.h).
  */
-
-// The shift penalties as (full parameter index, nominal, sigma), for the code
-// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
-// / sigma^2, curvature 2 / sigma^2.  Exactly the terms Segment::AddShiftPenalty
-// adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.  The nominal is each term's prior centre, 0 unless written (the file's
-// value is only the start; docs/upgrade/parameter_kinds.md section 4).
-template <class F>
-inline void ForEachShiftPenalty(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const Segment *seg = data->Data().GetSegment(s);
-    if (!seg) continue;
-    int idx;
-    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && !seg->IsShiftPriorReplaced() &&
-        (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
-    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 && !seg->IsShiftSqrtPriorReplaced() &&
-        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, seg->GetEnergyShiftSqrtCentre(), seg->GetEnergyShiftSqrtError());
-    if (seg->OwnsShiftFn() && seg->HasShiftFn())
-      for (int j = 0; j < seg->NumShiftFnParams(); j++)
-        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && !seg->IsShiftFnPriorReplaced(j) &&
-            (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, seg->GetShiftFnCentres()[j], seg->GetShiftFnErrors()[j]);
-  }
-}
-
-// The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
-// screening parameter with sigma > 0 (WorkingCopy::ScreeningPenalty is their sum).
-template <class F>
-inline void ForEachScreeningPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
-    const TargetEffect *te = data->Data().GetScreeningTargetEffect(k);
-    if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried() || te->IsScreeningPriorReplaced()) continue;
-    const int idx = pmap.ScreeningIndex(k);
-    if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
-  }
-}
-
-// The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
-// parameter with sigma > 0 (WorkingCopy::DensityPenalty is their sum).
-template <class F>
-inline void ForEachDensityPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
-    const TargetEffect *te = data->Data().GetDensityTargetEffect(k);
-    if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried() || te->IsDensityPriorReplaced()) continue;
-    const int idx = pmap.DensityIndex(k);
-    if (idx >= 0) f(idx, te->GetDensityCentre(), te->GetDensitySigma());
-  }
-}
-
-// The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
-// parameter with sigma > 0 (WorkingCopy::DopplerPenalty is their sum).
-template <class F>
-inline void ForEachDopplerPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
-    const TargetEffect *te = data->Data().GetDopplerTargetEffect(k);
-    if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried() || te->IsDopplerPriorReplaced()) continue;
-    const int idx = pmap.DopplerIndex(k);
-    if (idx >= 0) f(idx, te->GetDopplerCentre(), te->GetDopplerSigma());
-  }
-}
-
-// The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
-// thickness parameter with sigma > 0 that owns its value (WorkingCopy::ThicknessPenalty is their sum; a thickness-group
-// follower's parameter is fixed and carries no prior).
-template <class F>
-inline void ForEachThicknessPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
-    const Segment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
-    if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried() || seg->IsThicknessPriorReplaced()) continue;
-    const int idx = pmap.ThicknessIndex(k);
-    if (idx >= 0) f(idx, seg->GetThicknessCentre(), seg->GetThicknessSigma());
-  }
-}
-
-// The priors ((x - x0)/sigma)^2 of the apparatus parameters (ApparatusParameters.h): f(full index, nominal, sigma) for
-// each fitted one with sigma > 0 (WorkingCopy::ApparatusPenalty is their sum).
-template <class F>
-inline void ForEachApparatusPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->Data().NumApparatusParams(); k++) {
-    const ApparatusParam &a = data->Data().GetApparatusParam(k);
-    if (a.declaration.sigma <= 0.0 || !a.declaration.vary || a.priorReplaced) continue;
-    const int idx = pmap.ApparatusIndex(k);
-    if (idx >= 0) f(idx, a.declaration.centre, a.declaration.sigma);
-  }
-}
-
-// Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
-// abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
-template <class F>
-inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
-  for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const Segment *seg = data->Data().GetSegment(s);
-    int idx;
-    if (!seg || !seg->IsVaryNorm() || seg->IsNormPriorReplaced() || (idx = pmap.NormIndex(s)) < 0) continue;
-    const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
-    if (nerr != 0.0) f(idx, n0, nerr);
-  }
-  ForEachShiftPenalty(data, pmap, f);
-  ForEachScreeningPrior(data, pmap, f);
-  ForEachDensityPrior(data, pmap, f);
-  ForEachDopplerPrior(data, pmap, f);
-  ForEachThicknessPrior(data, pmap, f);
-  ForEachApparatusPrior(data, pmap, f);
-  const AbundanceSamples &samples = data->Data().Abundances();
-  for (int k = 1; k <= samples.NumParams(); k++) {
-    const int idx = pmap.AbundanceIndex(k);
-    if (idx < 0) continue;
-    int sample, nucleus;
-    samples.Of(k, sample, nucleus);
-    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
-  }
-}
+void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+                     vector_r &residuals, vector_r *jac);
 
 /*!
  * The prior covariance (<config> priorCovariance=) replaces the diagonal prior of each of its parameters
@@ -237,16 +129,6 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F
  * are skipped by index, AZURECalc::NuisancePriorOf).  Returns the names of the parameters whose own prior it
  * replaced, for a note.  Call once, after the covariance is set (WorkingCopy::SetPriorCovariance).
  */
-/*!
- * The least-squares rows of the model terms that are sums of squares but not single-parameter priors
- * (docs/upgrade/objective.md D2, D7), appended to `residuals` (and, with `jac` and `pmap`, their Jacobian rows over
- * nCols packed columns): Park's J > 0 wall, one row per R-matrix level, J/s while J < 0 and 0 otherwise (Park
- * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
- * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
- */
-void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
-                     vector_r &residuals, vector_r *jac);
-
 std::vector<std::string> ReplaceDiagonalPriors(const CompoundSystem *compound, WorkingCopy *data, const PriorCovariance &pc);
 
 #endif

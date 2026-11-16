@@ -11,7 +11,6 @@
 #include "TargetStopping.h"
 #include "azure2/experiment/Kernels.h"
 #include "azure2/experiment/SetupSpecs.h"
-#include "azure2/inference/GaussianPrior.h"
 
 /// An AZURE target effect entry
 
@@ -81,12 +80,6 @@ class TargetEffect {
   bool IsDopplerPriorReplaced() const { return dopplerPriorReplaced_; }
   /// Prior width in eV, 0 = no prior.
   double GetScreeningSigma() const { return screeningSigma_; }
-  /// ((U_e - nominal) / sigma)^2 at the present U_e (eV, a working copy's TargetEffectValues), or 0 without a prior or
-  /// when U_e is fixed (a fixed parameter pays no prior, docs/upgrade/objective.md D5).
-  double ScreeningPenalty(double ue) const {
-    if (!hasScreening_ || !screeningVary_ || screeningPriorReplaced_ || screeningSigma_ <= 0.0) return 0.0;
-    return azure2::inference::GaussianPriorChi2(ue, screeningNominal_, screeningSigma_);
-  }
   /*!
    * Fitted target density (`densityfit vary sigma` on a target-integration line, sigma in atoms/cm^2 or as a
    * percentage of the line's density, "2.3%"): the areal density is a fit parameter `density_<n>` (WorkingCopy::
@@ -116,11 +109,6 @@ class TargetEffect {
   double GetDensitySigma() const { return densitySigma_; }
   /// The `densitygroup` label, empty without one.
   const std::string &GetDensityGroup() const { return densityGroup_; }
-  /// ((N - N0)/sigma)^2 at the present density N (atoms/cm^2), or 0 without a prior or when N is fixed (objective.md D5).
-  double DensityPenalty(double density) const {
-    if (!hasDensityFit_ || !densityVary_ || densityPriorReplaced_ || densitySigma_ <= 0.0) return 0.0;
-    return azure2::inference::GaussianPriorChi2(density, densityCentre_, densitySigma_);
-  }
   /// The density the sub-point grids span (the line's density when it is not fitted).
   double GetLayoutDensity() const { return (layoutDensity_ > 0.0) ? layoutDensity_ : density_; }
   void SetLayoutDensity(double n) { layoutDensity_ = n; }
@@ -317,11 +305,6 @@ class TargetEffect {
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
   /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
   double GetDopplerMinimum() const { return 0.25 * this->GetDopplerLayoutBase(); }
-  /// ((T - T0)/sigma)^2 at the present temperature T (K), or 0 without a prior or when T is fixed (objective.md D5).
-  double DopplerPenalty(double temperature) const {
-    if (!dopplerFit_ || !dopplerVary_ || dopplerPriorReplaced_ || dopplerSigma_ <= 0.0) return 0.0;
-    return azure2::inference::GaussianPriorChi2(temperature, dopplerCentre_, dopplerSigma_);
-  }
   /// Does the line also carry a kernel applied after the Doppler step (Gaussian, UDR, target integration,
   /// beam profile)?  Without one the value is sigma_D at the point.
   bool HasResolutionStage() const { return kernels_.resolution != nullptr; }

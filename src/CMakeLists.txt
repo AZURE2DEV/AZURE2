@@ -23,7 +23,7 @@ MeshPlanner.cpp
 MeshSlots.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
-HandOver.cpp
+HandOver.cpp DiagonalPriors.cpp
 TaskScratch.cpp
 RunScratch.cpp
 RunDiagnostics.cpp

@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
            F{{"reaction", "15N(p,a)12C[4.43891]"}, {"quantity", "sigma"}, {"unit", "b"}, {"secondary_gamma", "L 2 Ic 3/2 delta 0.12"},
              {"file", "u1.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}});
   }
-  // ---- sqrtshift b e v (prior about 0, Segment::AddShiftPenalty); shiftfn on one line: its own energy_scale
+  // ---- sqrtshift b e v (prior about 0, AppendShiftPriors); shiftfn on one line: its own energy_scale
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat sqrtshift 0.001 0.003 1\n"
                                      "1 1 2 0.2 1.4 0 180 0 1 0 0 0.002 0 0 s2.dat shiftfn \"a0*(x-0.8)\" 1 0 0.01 1\n",
