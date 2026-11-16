@@ -149,6 +149,10 @@ Contains the **physical** (observable) parameters resulting from the fit. If
 the user wishes to use these as new starting values, they must be manually
 entered into the **Levels and Channels** tab.
 
+A partial width Γ is printed in keV, eV or meV with six decimals: the largest of
+the three in which it prints as at least 1.000000 (a width of 0.9999999999 keV,
+the round trip of a width entered as 1 keV, prints as ``1.000000 keV``).
+
 relativistic.out
 ^^^^^^^^^^^^^^^^
 
