@@ -139,4 +139,17 @@ else
   bad "(s) intEC.dat from before the GSL-free Whittaker function was reused"
 fi
 
+# (t) an intEC.dat written with GSL's coupling coefficients (models/stale_v6: p14n_s1 with --no-coulomb-table by
+# feature/upgrade f252ba30, signature v6) is refused and recomputed; its integrals differ from the new ones by
+# ~1e-14, so only the signature catches it.  Both runs name --no-coulomb-table, as the file's writer did, so that
+# the signature's version is the only difference on any machine.
+run p14n_s1_exact p14n_s1 "--no-coulomb-table"
+mkdir -p "$WORK/p14n_stale6/output" && cp "$HERE/models/stale_v6/intEC.dat" "$HERE/models/stale_v6/intEC.dat.sig" "$WORK/p14n_stale6/output/"
+run p14n_stale6 p14n_s1 "--no-coulomb-table" output/intEC.dat
+if grep -q "$SIGWARN" "$WORK/p14n_stale6/run.log" && same4 "$WORK/p14n_s1_exact/$OUT" "$WORK/p14n_stale6/$OUT"; then
+  ok "(t) intEC.dat from before the coupling coefficients of physics/ is refused and recomputed"
+else
+  bad "(t) intEC.dat from before the coupling coefficients of physics/ was reused"
+fi
+
 if [ "$failures" -eq 0 ]; then echo "ec_m1_exact: PASS"; else echo "ec_m1_exact: FAIL ($failures)"; exit 1; fi
