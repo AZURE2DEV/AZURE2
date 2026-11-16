@@ -143,8 +143,7 @@ class SegmentTable(list):
         import pyazr
         path = os.path.abspath(path)
         project = pyazr.Project.open(path)
-        described = pyazr.DescribedDatasets.from_description(
-            pyazr.described.describe_project(path, cwd or os.path.dirname(path)))
+        described = pyazr.DescribedDatasets.from_description(pyazr.describe(path, as_json=True))
         kinds = {name: rec.record_kind for name, rec in project.records().items()}
         out = cls()
         for d in described:
