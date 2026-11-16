@@ -897,8 +897,7 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("max_temp"), py::arg("temp_step"), py::arg("temperature_file"),
            "N_A<sigma v> (cm^3 mol^-1 s^-1) of a rate session (Session(..., rate_entrance, rate_exit)) at every "
            "parameter value (params_all_rwa() layout), as the program's rate command: [(T9, rate)] on min_temp + i "
-           "temp_step (GK) up to max_temp, sorted, or on the temperatures of temperature_file in its order when "
-           "that is not empty.")
+           "temp_step (GK) up to max_temp, sorted, or on the temperatures of temperature_file in its order when that is not empty.")
       .def("option_sources", &Session::option_sources,
            "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
            "<config> key) or 'keyword' (given to the session).")
@@ -1003,8 +1002,7 @@ PYBIND11_MODULE(_azure2, m) {
            "entrance channel and level, <|M_l|^2> over the window and |M_l|^2 at p_s = 0.")
       .def("thm_distortion", &Session::thm_distortion, PrecisionGuard(), py::arg("name"), py::arg("energies"),
            "Distortion factor R(E) of THM experiment `name` (distortion=coulomb|optical|table) at "
-           "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the "
-           "model uses it (R_model).")
+           "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the model uses it (R_model).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa, PrecisionGuard(),
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, PrecisionGuard(), py::arg("request"))
