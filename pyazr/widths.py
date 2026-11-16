@@ -38,9 +38,10 @@ The Weisskopf estimate (:func:`weisskopf_width`) is the engine's too: the row ``
 
 Where the penetrability comes from
 ----------------------------------
-``Gamma_W`` needs ``P_l(E_r)``: :meth:`pyazr.Session.wigner_widths` takes it from the session's own channel
-functions (``Session.channel_functions``: AZURE2's Coulomb functions, radii and options) at the level's physical
-energy and multiplies it by the row's ``wigner_limit``.  (Before pyazr 3.0.0.dev5 it was read off the engine's
+``Gamma_W`` needs ``P_l(E_r)``: :meth:`pyazr.Session.wigner_widths` and :meth:`pyazr.Session.dimensionless_widths`
+take it from the engine's observed-level record, the penetrability the observed width was formed with (the session's
+own channel functions, as ``Session.channel_functions`` gives them: AZURE2's Coulomb functions, radii and options),
+at the level's physical energy, and multiply it by the row's ``wigner_limit``, for free and fixed channels alike.  (Before pyazr 3.0.0.dev5 it was read off the engine's
 transformation of a probe vector, which is that number only under Park and for a Brune level whose widths are all
 free.)
 
@@ -88,7 +89,8 @@ class ChannelWidth:
     jgroup: int
     level: int
     jpi: str                        # the level's J^pi as the engine writes it: "1/2+", "2-"
-    level_energy: float             # excitation energy of the level (MeV)
+    level_energy: float             # physical excitation energy of the level (MeV; the
+                                    # row of Session.transform, in every basis)
     pair: int
     L: int
     S: Optional[float]

@@ -22,7 +22,15 @@ On T1, T2, T3 (tests/upgrade) and tests/13N, in Brune's, the formal and Park's p
 (f) the numbers of the design note's table (section 11.3), at 1e-6: T2 width_1_3 is 4.020247e6 eV (the probe gave
     3.208103e6), T1 width_3_1 is 1.210273e6 eV in the formal basis too (the probe gave 1.827438e6);
 (g) a pair with a spin-orbit potential (tests/spin_orbit_potential): the entry is 2 P gamma_W^2 with P of
-    channel_functions at the level's J.
+    channel_functions at the level's J;
+(h) dimensionless_widths of a FIXED particle channel (pyazr3.md section 13): open at the level's physical energy, its
+    wigner_width is 2 P gamma_W^2 of mpmath (or of channel_functions on a hybrid pair) as a free one's, to 1e-8, and
+    theta2 = |value| / wigner_width; closed, both None;
+(i) level_energy, is_open and a photon's e_gamma are taken at the physical energy (the row of transform): in Brune's
+    and Park's parametrization equal bit for bit to the fit vector's energy (what they were before), in the formal
+    one every row equal to Brune's (level_energy and e_gamma to 1e-6, is_open the same);
+(j) the entries equal 2 P gamma_W^2 with P of channel_functions at E_r = E_x - (S + e), the route of pyazr
+    3.0.0.dev5, bit for bit (the record's P is the same function at the same channel energy).
 
 Run from anywhere:  python3 tests/pyazr/wigner_widths_test.py
 """
@@ -76,7 +84,7 @@ PROJECTS = {"T1": ("tests/upgrade/T1", "T1.azr"), "T2": ("tests/upgrade/T2", "T2
 MODES = {"Brune": dict(use_brune=True), "formal": dict(use_brune=False), "Park": dict(use_park=True)}
 tmp = tempfile.mkdtemp(prefix="wigner_widths_")
 try:
-    by_mode = {}
+    by_mode, rows_by_name = {}, {}
     worst_all = 0.0
     for name, (directory, azr) in PROJECTS.items():
         for mode, options in MODES.items():
@@ -134,9 +142,60 @@ try:
                 ok = all(c.wigner_width == got[c.free_index] for c in particle) and all(
                     c.theta2 is None or abs(c.theta2 - abs(c.value) / got[c.free_index]) <= 1e-15 * c.theta2
                     for c in particle)
-                fixed_none = all(c.wigner_width is None and c.theta2 is None for c in table.particles if c.fixed)
-                check(f"(e) {name}, {mode}: ChannelWidth.wigner_width is the entry, theta2 = |Gamma| / Gamma_W; a "
-                      f"fixed channel has neither", ok and fixed_none)
+                check(f"(e) {name}, {mode}: ChannelWidth.wigner_width is the entry, theta2 = |Gamma| / Gamma_W", ok)
+                # (h) fixed particle channels
+                n_open, n_closed, worst_fixed, fixed_ok = 0, 0, 0.0, True
+                for c in table.particles:
+                    if not c.fixed:
+                        continue
+                    pair = s.pairs.by_number(c.pair)
+                    q = next(q for q in s.parameters.of_kind("width") if q.index == c.index)
+                    e = ex[(c.jgroup, c.level)] - pair.sep_energy - pair.excitation
+                    if e > 0 and q.wigner_limit:
+                        n_open += 1
+                        if s.nuclear_potential(pair.number).enabled:
+                            want = 2 * float(s.channel_functions(pair.key, e, c.L)["P"]) * q.wigner_limit * 1e6
+                        else:
+                            want = mp_wigner_width(pair, c.L, e)[0]
+                        if c.wigner_width is None:
+                            fixed_ok = False
+                            continue
+                        worst_fixed = max(worst_fixed, abs(c.wigner_width / want - 1))
+                        fixed_ok = fixed_ok and c.is_open and (c.value is None or c.theta2 == abs(c.value) / c.wigner_width)
+                    else:
+                        n_closed += 1
+                        fixed_ok = fixed_ok and c.wigner_width is None and c.theta2 is None
+                check(f"(h) {name}, {mode}: {n_open} fixed open channels have wigner_width = 2 P gamma_W^2 (largest "
+                      f"relative difference {worst_fixed:.1e}, <= {TOL:g}) and theta2 = |value| / wigner_width; "
+                      f"{n_closed} fixed closed ones neither", fixed_ok and worst_fixed <= TOL)
+                # (i) the physical energy; Brune and Park: the fit vector's, as before
+                rows_by_name[(name, mode)] = {c.name: c for c in table}
+                energy_ok = all(c.level_energy == ex[(c.jgroup, c.level)] for c in table)
+                if mode != "formal":
+                    before = {}
+                    for q in s.parameters.of_kind("energy"):
+                        free_e = not q.fixed and q.free_index is not None and q.free_index < x.size
+                        before[(q.jgroup, q.level)] = (float(x[q.free_index]) if free_e
+                                                       else (0.0 if q.level_energy is None else q.level_energy))
+                    same = all(c.level_energy == before[(c.jgroup, c.level)] for c in table) and all(
+                        c.is_open == (before[(c.jgroup, c.level)] > c.threshold) for c in table.particles) and all(
+                        c.e_gamma == before[(c.jgroup, c.level)] - s.pairs.by_number(c.pair).excitation
+                        for c in table.photons)
+                    check(f"(i) {name}, {mode}: level_energy is the physical energy, equal bit for bit to the fit "
+                          f"vector's, and is_open, e_gamma as before", energy_ok and same)
+                else:
+                    check(f"(i) {name}, formal: level_energy is the physical energy (the row of transform)", energy_ok)
+                # (j) the route of 3.0.0.dev5: P of channel_functions at E_x - (S + e)
+                same_route = True
+                for k, v in got.items():
+                    q = rows[k]
+                    pair = s.pairs.by_number(q.pair)
+                    potential = s.nuclear_potential(pair.number)
+                    spin_orbit = potential.enabled and potential.spin_orbit is not None
+                    P = float(s.channel_functions(pair.key, ex[(q.jgroup, q.level)] - (pair.sep_energy + pair.excitation),
+                                                  q.L, J=q.J if spin_orbit else None)["P"])
+                    same_route = same_route and v == 2.0 * P * q.wigner_limit * 1e6
+                check(f"(j) {name}, {mode}: {len(got)} entries equal the channel_functions route bit for bit", same_route)
                 if mode == "Brune":
                     with pyazr.locking.session_lock(s):
                         amplitudes = np.asarray(s._engine.params_all_rwa(), float)   # the binding: fixed amplitudes
@@ -174,6 +233,17 @@ try:
         same = all(set(by_mode[(name, mode)]) == set(ref) for mode in ("formal", "Park"))
         check(f"(c) {name}: the same channels and numbers in the three parametrizations, largest relative difference "
               f"{worst:.1e} (<= 5e-6)", same and worst <= 5e-6)
+    for name in PROJECTS:
+        brune, formal = rows_by_name[(name, "Brune")], rows_by_name[(name, "formal")]
+        de = max(abs(formal[k].level_energy - c.level_energy) for k, c in brune.items())
+        dg = max((abs(formal[k].e_gamma - c.e_gamma) for k, c in brune.items() if c.is_photon), default=0.0)
+        dw = max((abs(formal[k].wigner_width / c.wigner_width - 1) for k, c in brune.items()
+                  if c.wigner_width and formal[k].wigner_width), default=0.0)
+        same_open = all(formal[k].is_open == c.is_open and (formal[k].wigner_width is None) == (c.wigner_width is None)
+                        for k, c in brune.items())
+        check(f"(i) {name}: the formal basis's rows are Brune's: level_energy {de:.1e} MeV, e_gamma {dg:.1e} MeV "
+              f"(<= 1e-6), wigner_width {dw:.1e} (free and fixed, <= 5e-6), is_open the same",
+              set(formal) == set(brune) and de <= 1e-6 and dg <= 1e-6 and dw <= 5e-6 and same_open)
     t2, t1f = by_mode[("T2", "Brune")]["width_1_3"], by_mode[("T1", "formal")]["width_3_1"]
     check(f"(f) T2 width_1_3: {t2:.7g} eV = 4.020247e6 (the probe gave 3.208103e6); T1 formal width_3_1: {t1f:.7g} eV "
           f"= 1.210273e6 (the probe gave 1.827438e6)",

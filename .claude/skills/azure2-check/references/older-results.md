@@ -139,3 +139,9 @@ for particle exits, a few per cent off, and changed results even with every Q = 
   norm J = θ²/θ²_formal was too large by it. In the formal basis (`use_brune=False`) Γ_W could be wrong by orders
   of magnitude. Park sessions and Brune levels whose particle widths are all free are unaffected. Recompute θ² and
   J with a current build before comparing.
+- builds before 2026-11-17 (expires: 2027-02-10): `dimensionless_widths` left `wigner_width` and `theta2` of a
+  fixed open particle channel `None` (`widths_check.py` then took Γ_W from `pyazr.physics.single_particle_width`
+  with the exact Coulomb functions at the row's energy), and in the formal basis it took `level_energy`, `is_open`
+  and a photon's `e_gamma` (hence its W.u.) at the formal pole energy, not at the physical level energy. Brune and
+  Park sessions are otherwise unaffected. Recompute formal-basis tables and θ² of fixed channels with a current
+  build.

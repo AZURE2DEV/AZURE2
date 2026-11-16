@@ -369,3 +369,22 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) {
   }
   return out;
 }
+
+vector_r AZUREAPI::ObservedLevelRowsAllRWA(const vector_r &p) {
+  if (p.size() != all_rwa_.size())
+    throw std::invalid_argument("observed levels: expected every parameter (" + std::to_string(all_rwa_.size()) +
+                                " values, fixed ones included), got " + std::to_string(p.size()));
+  const vector_r &params = p;
+  const CompoundSystem *localCompound = compound();
+  localCompound->FillCompoundFromParams(params, state());
+  const ObservedLevelTable table = localCompound->TransformOut(configure(), state(), inputs());
+  vector_r out;
+  for (int j = 1; j <= localCompound->NumJGroups(); j++)
+    for (int la = 1; la <= localCompound->GetJGroup(j)->NumLevels(); la++) {
+      const ObservedLevel &level = table.Level(j, la);
+      for (int ch = 1; ch <= localCompound->GetJGroup(j)->NumChannels(); ch++)
+        out.insert(out.end(), {(double)j, (double)la, (double)ch, level.E, (double)level.kind[ch - 1], level.W[ch - 1],
+                               level.value[ch - 1], level.P[ch - 1], level.mu_u[ch - 1], level.a_fm[ch - 1]});
+    }
+  return out;
+}

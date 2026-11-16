@@ -382,6 +382,7 @@ class Session {
     expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
+  py::array_t<double> observed_levels_all_rwa(const py::array_t<double, py::array::forcecast> &p) { return to_array(api_->ObservedLevelRowsAllRWA(to_vector(p))); }
   py::array_t<double> prior_covariance_residuals(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p);
     expect_free(v, "prior_covariance_residuals");
@@ -945,6 +946,7 @@ PYBIND11_MODULE(_azure2, m) {
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
+      .def("observed_levels_all_rwa", &Session::observed_levels_all_rwa, py::arg("params"))
       .def("prior_covariance_residuals", &Session::prior_covariance_residuals, py::arg("params"),
            "Prior parameter covariance (<config> priorCovariance=): the whitened residuals L^-1 (p - mu) at the free "
            "RWA parameters (empty without one); their squared sum is the prior's chi2 term.")
