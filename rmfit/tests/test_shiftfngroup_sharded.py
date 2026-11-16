@@ -51,14 +51,11 @@ def perturbed(keys, x0):
 
 def main():
     import rmfit  # noqa: F401  (puts AZURE2_ROOT on sys.path)
-    import pyazr.datasets as ds
-    if "shiftfngroup" not in getattr(ds, "_KEYWORDS", {}):
-        print(f"SKIP: the pyazr at {os.path.dirname(ds.__file__)} does not know shiftfngroup (AZURE2 dev >= 62392fc)")
-        return 0
-    from pyazr import azure2
+    from pyazr import Session
     from rmfit.engine import SingleSession, Sharded
     from rmfit.keys import take
-    from rmfit.covariance import shift_fn_groups, line_keyword, segment_lines
+    from rmfit.covariance import shift_fn_groups
+    from rmfit.azr3 import segments as _segments
     work = tempfile.mkdtemp(prefix="rmfit_sfg_")
     try:
         shutil.copytree(FIX, os.path.join(work, "fix"))
@@ -71,7 +68,7 @@ def main():
             flags = dict(use_brune=brune)
             print(f"== use_brune={brune}", flush=True)
             S = SingleSession(azr, cwd=fix, flags=flags, name=f"s_{int(brune)}")
-            E = azure2(azr, cwd=fix, **flags)
+            E = Session(azr, cwd=fix, **flags)
             try:
                 kinds = sorted({k.kind for k in S.keys})
                 check(sum(k.kind == "shift_fn" for k in S.keys) == 2 and sum(k.kind == "shift" for k in S.keys) == 2,
@@ -79,11 +76,11 @@ def main():
                 x1 = perturbed(S.keys, S.x0)
                 # (a)
                 rS, JS = S.residuals(x1, jac=True)
-                rE, JE = E.residual_jacobian(x1)
+                rE, JE = E.objective().residuals_and_jacobian(x1)
                 n = S.npts
-                check(rel(rS[:n], rE) < 1e-9, f"(a) rows = engine's (rel {rel(rS[:n], rE):.1e})")
+                check(rel(rS[:n], np.asarray(rE)[:n]) < 1e-9, f"(a) rows = engine's (rel {rel(rS[:n], np.asarray(rE)[:n]):.1e})")
                 sc = S.score(x1)
-                etot = float(np.sum(E.calculate_chi2_rwa(x1)))
+                etot = float(E.evaluate(x1).chi2)
                 check(abs(sc.chi2 - etot) < 1e-10 * etot, f"(a) chi2 {sc.chi2:.8f} = engine {etot:.8f}")
                 sseg = np.array([sc.segment_chi2[k] for k, _ in S.row_ranges])
                 # (b)
@@ -99,13 +96,13 @@ def main():
                     check(any(sum(k == m for keys in lay for k in keys) > 1 for m in (5, 6)),
                           "(b) an ungrouped 48-point segment IS split (the test can split)")
                     for s in H.shards:
-                        lines = segment_lines(s.azr)
-                        for lab in ("F", "G"):
-                            mine = [t for t in lines if line_keyword(t, "shiftfngroup") == lab]
+                        table = _segments(s.azr)
+                        for lab, mem in (("F", (1, 2)), ("G", (3, 4))):
+                            mine = [p for p in s.pieces if p.base_key in mem]
                             if mine:
-                                decl = [i for i, t in enumerate(mine) if "shiftfn" in [x.lower() for x in t]]
-                                check(decl == [0], f"(b) {os.path.basename(s.azr)}: group {lab} declares its function "
-                                                   f"once, on its first line ({decl})")
+                                named = [table.by_name(p.name).shift_group for p in mine]
+                                check(named == [lab] * len(mem), f"(b) {os.path.basename(s.azr)}: both members of group "
+                                                                 f"{lab} name its energy scale ({named})")
                     h1 = take(x1, S.keys, H.keys, H.x0)
                     check(set(H.keys) == set(S.keys), "(b) Sharded and Single have the same free parameters")
                     oS, oH = S.objective(x1), H.objective(h1)

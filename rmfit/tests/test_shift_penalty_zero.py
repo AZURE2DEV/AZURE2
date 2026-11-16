@@ -29,19 +29,14 @@ def check(cond, what):
 
 def main():
     import rmfit  # noqa: F401
-    import pyazr.datasets as ds
-    if "shiftfngroup" not in getattr(ds, "_KEYWORDS", {}):
-        print("SKIP: pyazr without shiftfngroup")
-        return 0
-    from pyazr import azure2
+    import pyazr
+    from pyazr import Session
     from rmfit.engine import SingleSession, Sharded
-    try:
-        from rmfit.engine import _shift_penalty_from_zero
-    except ImportError:   # an rmfit from before 2026-10-25: report the engine's convention from pyazr itself
-        def _shift_penalty_from_zero():
-            return bool(getattr(azure2, "SHIFT_PENALTY_FROM_ZERO", False))
+
+    def _shift_penalty_from_zero():
+        return bool(getattr(Session, "SHIFT_PENALTY_FROM_ZERO", False))
     from rmfit.keys import take
-    print(f"pyazr {os.path.dirname(ds.__file__)}: penalties from zero = {_shift_penalty_from_zero()}")
+    print(f"pyazr {os.path.dirname(pyazr.__file__)}: penalties from zero = {_shift_penalty_from_zero()}")
     work = tempfile.mkdtemp(prefix="rmfit_spz_")
     try:
         fix = os.path.join(work, "fix")
@@ -49,26 +44,27 @@ def main():
         for d in ("output", "checks"):
             os.makedirs(os.path.join(fix, d), exist_ok=True)
         azr = os.path.join(fix, "sfg.azr")
-        s = open(azr).read()
-        s = s.replace("0 0.001 1 1 data/xs_40_lin_mislabelled.dat", "0 0.001 0.002 1 data/xs_40_lin_mislabelled.dat")
-        s = s.replace('2 0.001 1 1 0.0002 1 1', '2 0.001 0.002 1 0.0002 0.002 1')
-        s = s.replace("0 -0.002 1 1 data/xs_90_lin_mislabelled_p3.dat", "0 -0.002 0.002 1 data/xs_90_lin_mislabelled_p3.dat")
-        open(azr, "w").write(s)
+        # priors 0.002 wide on the free shift terms: the two own offsets and both parameters of the shared function
+        prj = pyazr.Project.open(azr)
+        prj.set("xs_40_lin_mislabelled", shift=["offset 0.001 MeV fit prior 0 0.002", "F"])
+        prj.set("xs_90_lin_mislabelled_p3", shift=["offset -0.002 MeV fit prior 0 0.002", "F"])
+        prj.set("F", param=["a0 0.001 fit prior 0 0.002", "a1 0.0002 fit prior 0 0.002"])
+        prj.save()
         for brune in (False, True):
             flags = dict(use_brune=brune)
             S = SingleSession(azr, cwd=fix, flags=flags, name=f"s_{int(brune)}")
-            E = azure2(azr, cwd=fix, **flags)
+            E = Session(azr, cwd=fix, **flags)
             H = Sharded(azr, os.path.join(work, f"sh_{int(brune)}"), nshards=3, flags=flags)
             try:
-                pen0 = E.penalties(np.asarray(S.x0, float))
-                shiftpen = float(np.sum(pen0["shift"]) + np.sum(pen0["shift_fn"]))
+                ev0 = E.evaluate(np.asarray(S.x0, float))
+                shiftpen = float(sum((d.shift_constant_chi2 or 0.0) + (d.shift_function_chi2 or 0.0) for d in ev0.data))
                 check(shiftpen > 0.1 if _shift_penalty_from_zero() else shiftpen < 1e-12,
                       f"use_brune={brune}: engine shift penalty at the start {shiftpen:.6g} "
                       f"({'from zero' if _shift_penalty_from_zero() else 'from the .azr value'})")
                 for tag, x in (("start", np.asarray(S.x0, float)),
                                ("perturbed", np.asarray(S.x0, float) + np.where(
                                    [k.kind in ("shift", "shift_fn") for k in S.keys], 0.0015, 0.0))):
-                    oE = float(E.objective(x))
+                    oE = float(E.objective()(x))
                     oS = float(S.objective(x))
                     oH = float(H.objective(take(x, S.keys, H.keys, H.x0)))
                     check(abs(oS - oE) < 1e-9 * oE and abs(oH - oE) < 1e-9 * oE,
@@ -76,6 +72,7 @@ def main():
             finally:
                 H.close()
                 S.close()
+                E.close()
     finally:
         shutil.rmtree(work, ignore_errors=True)
     print("ALL PASSED" if not failures else f"FAILED: {len(failures)}")

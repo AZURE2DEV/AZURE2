@@ -32,40 +32,31 @@ def check(name, ok, detail=""):
 
 
 def build(tmp):
-    # fix the 3/2- 3.5032 E1 photon line (pair 2, l = 2, -0.49 eV): column 11 is the width's fix flag
-    lines, f = [], False
-    for t in open(os.path.join(AZ, "tests", "13N", "13N.azr")).read().splitlines():
-        if t.strip() == "<levels>":
-            f = True
-        elif t.strip() == "</levels>":
-            f = False
-        elif f and t.split() and t.split()[0] == "1.5" and t.split()[2] == "3.5032" and t.split()[11] == "-0.49":
-            a = t.split(); a[10] = "1"; t = " ".join(a)
-        lines.append(t)
-    p = os.path.join(tmp, "13N_fixed.azr")
-    open(p, "w").write("\n".join(lines) + "\n")
-    mdl = AzrModel.from_file(p)
+    # fix the 3/2- 3.5032 E1 photon channel (pair 2, l = 2, -0.49 eV)
+    mdl = AzrModel.from_file(os.path.join(AZ, "tests", "13N", "13N.azr"))
+    lv = mdl.find(jpi="3/2-", energy=3.5032)[0]
+    c = next(c for c in lv.channels if c.pair == 2 and abs(c.gamma + 0.49) < 1e-12)
+    c.channel_fixed = True
     mdl.set_output_dir(os.path.join(tmp, "output"))
-    return mdl.write(p)
+    return mdl.write(os.path.join(tmp, "13N_fixed.azr"))
 
 
 def fixed_value(azr):
     for l in AzrModel.from_file(azr).levels:
         if l.jpi == "3/2-" and abs(l.energy - 3.5032) < 1e-3:
-            for c in l.channels:                    # the line build() fixed (pair 2, fix flag 1)
-                if c.tokens[5] == "2" and c.tokens[10] == "1":
+            for c in l.channels:                    # the channel build() fixed (pair 2, the only fixed nonzero one)
+                if c.pair == 2 and c.channel_fixed and c.gamma != 0.0:
                     return float(c.gamma)
     raise AssertionError("3/2- 3.5032 photon line not found in " + azr)
 
 
 def fixed_rwa(azr, tmp, tag):
-    from pyazr import azure2
-    with azure2(azr, cwd=tmp, **FLAGS) as m:
-        allr = np.asarray(m.sess.params_all_rwa(), float)
-        for i, p in enumerate(m.parameters):
-            if p.kind == "width" and p.fixed and allr[i] != 0.0 and abs((p.level_energy or 0) - 3.5032) < 1e-2 \
-                    and {q.number: q.key for q in m.pairs}.get(p.pair) == 2:
-                return float(allr[i])
+    from pyazr import Session
+    with Session(azr, cwd=tmp, **FLAGS) as m:
+        for p in m.parameters:
+            if p.kind == "width" and p.fixed and p.start != 0.0 and abs((p.level_energy or 0) - 3.5032) < 1e-2 \
+                    and p.pair_key == 2:
+                return float(p.start)
     return None
 
 

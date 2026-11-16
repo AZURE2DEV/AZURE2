@@ -149,9 +149,13 @@ class SegmentTable(list):
         out = cls()
         for d in described:
             rec = project[d.name]
-            flds = tuple((str(k), str(v)) for k, v in rec.items())
+            flds = tuple((str(k), str(x)) for k, v in rec.items()
+                         for x in (v if isinstance(v, (list, tuple)) else [v]))
             get = dict(reversed(flds)).get
-            norm, shift = get("norm", ""), get("shift", "")
+            # ``shift`` may be given more than once: a data set's own offset beside a shared energy scale
+            shifts = [v for k, v in flds if k == "shift"]
+            norm, shift = get("norm", ""), " ; ".join(shifts)
+            scale = next((v for v in shifts if kinds.get(v) == "energy_scale"), "")
             out.append(Segment(
                 key=d.key, name=d.name, active=d.active, entrance_key=d.entrance_key, exit_key=d.exit_key,
                 energy_min=d.energy_min, energy_max=d.energy_max, angle_min=d.angle_min, angle_max=d.angle_max,
@@ -159,7 +163,7 @@ class SegmentTable(list):
                 data_file_resolved=d.data_file_resolved, rows_read=d.rows_read, rows_kept=d.rows_kept,
                 covariance=get("covariance", ""), norm_text=norm, shift_text=shift,
                 norm_group=norm if kinds.get(norm) == "normalization" else "",
-                shift_group=shift if kinds.get(shift) == "energy_scale" else "", fields=flds))
+                shift_group=scale, fields=flds))
             # which nuisances are fitted, as the engine describes the record (no session needed): a member of a
             # shared record other than the first reads "fixed (the group's is its first member's)"
             s, fn = out[-1], []
