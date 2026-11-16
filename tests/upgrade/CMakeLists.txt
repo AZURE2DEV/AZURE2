@@ -70,6 +70,12 @@ add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
 
+# The engine's Clebsch-Gordan and Racah coefficients (AngCoeff, those of physics/) against the GSL expressions AngCoeff
+# held before 2026-11-16.
+add_executable(engine_coupling_gsl_test engine_coupling_gsl_test.cpp)
+target_link_libraries(engine_coupling_gsl_test PRIVATE AZURE2Core)
+add_test(NAME physics_engine_coupling_gsl COMMAND engine_coupling_gsl_test)
+
 # Properties of the pathway table checked against the loaded CompoundSystem without the builder's loops, on every .azr under
 # tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1).
 add_executable(pathway_table_test pathway_table_test.cpp)
