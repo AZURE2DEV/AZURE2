@@ -60,6 +60,24 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
 run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
 PY="$(command -v python3 || command -v python)"
+# The gradient checks (d) and (j) in DIR, their exit status and wall time in DIR/status: the rows are printed only at the
+# end of the run, so a run stopped by the limit lists none, and the message must say so (the macOS job of 0c6167c1
+# listed 0 rows in (j) and nothing else).  GRAD_LIMIT: the limit in seconds.
+GRAD_LIMIT="${GRAD_LIMIT:-1200}"
+grad_run() {
+  local t0=$SECONDS rc=0
+  (cd "$1" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+     run_limited "$GRAD_LIMIT" "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1) || rc=$?
+  echo "$rc $((SECONDS - t0))" > "$1/status"
+}
+grad_run_said() {
+  local rc s one
+  read -r rc s < "$1/status"
+  one="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] one Chi2Value:/ { print $4, $5 }' "$1/run.log")"
+  if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then
+    echo "the run was stopped by the ${GRAD_LIMIT} s limit after ${s} s (one chi2 evaluation: ${one:-not reached})"
+  else echo "the run ended with exit status $rc after ${s} s (one chi2 evaluation: ${one:-not reached})"; fi
+}
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/transmission_yield.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
@@ -118,8 +136,7 @@ grep -q "transmission of n = $NNAT atoms/b" "$WORK/natT/output/AZUREOut_sample_s
 # (d) gradient check
 run gcalc grad calculate n12C
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$WORK/models/data" "$WORK/fit/data"; cp "$WORK/models/grad.azr" "$WORK/fit/t.azr"
-(cd "$WORK/fit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
+grad_run "$WORK/fit"
 chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/fit/run.log")"
 want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/gcalc/output/chiSquared.out")"
 if [ -n "$chi" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then
@@ -130,7 +147,8 @@ awk '{ sub(/\r$/, "") }
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
        print a, f, j }' "$WORK/fit/run.log" > "$WORK/fit/rows"
 nrow="$(awk 'END { print NR }' "$WORK/fit/rows")"
-if [ "$nrow" -lt 3 ]; then bad "(d) gradient check listed $nrow parameters"
+if [ "$nrow" -lt 3 ]; then bad "(d) gradient check listed $nrow parameters; $(grad_run_said "$WORK/fit")"
+  tail -5 "$WORK/fit/run.log" | sed 's/^/          /'
 else
   read -r fd jac <<< "$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a
                                d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
@@ -219,15 +237,15 @@ else bad "(h) fit data not built"; fi
 # (j) gradient check with the thicknesses free
 mkdir -p "$WORK/tfit/output" "$WORK/tfit/checks"; ln -s "$WORK/models/data" "$WORK/tfit/data"
 cp "$WORK/models/grad_fit.azr" "$WORK/tfit/t.azr"
-(cd "$WORK/tfit" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
-   run_limited 1200 "$AZURE2_BIN" fit --use-gradient --no-grid-replacement --no-gui t.azr > run.log 2>&1)
+grad_run "$WORK/tfit"
 awk '{ sub(/\r$/, "") }
      /^\[grad-check\] idx / { a = f = j = ""
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
        print a, f, j, $4 }' "$WORK/tfit/run.log" > "$WORK/tfit/rows"
 nrow="$(awk 'END { print NR }' "$WORK/tfit/rows")"
 nthk="$(awk '$4 == "thickness"' "$WORK/tfit/rows" | grep -c .)"
-if [ "$nthk" -ne 7 ] || [ "$nrow" -lt 10 ]; then bad "(j) gradient check listed $nrow parameters, $nthk thicknesses (want 7)"
+if [ "$nthk" -ne 7 ] || [ "$nrow" -lt 10 ]; then bad "(j) gradient check listed $nrow parameters, $nthk thicknesses (want 7); $(grad_run_said "$WORK/tfit")"
+  tail -5 "$WORK/tfit/run.log" | sed 's/^/          /'
 else
   read -r fd jac <<< "$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a
                                d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
