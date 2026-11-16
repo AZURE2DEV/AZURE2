@@ -721,10 +721,30 @@ re-read against its design at the hand-over.
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
    FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
-   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
-   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
-   code and the owner's decision).
-   Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
+   of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
+   (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
+   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
+   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
+   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
+   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
+   `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
+   transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
+   3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes
+   where the probe was not that number: for a Brune level with fixed widths it falls by the level's
+   1 / (1 + sum gamma^2 dS/dE) of them (T2: by up to 20 %; T3: 1.6 % in one channel), in the formal basis by up
+   to 8e3 on T2; unchanged under Park and for Brune levels with all widths free (T1, 13N). Against mpmath's
+   Coulomb functions: 2.5e-10 on T1, T2, T3 and 13N in the three parametrizations (`pyazr3.md`, section 11).
+   The engine's ensemble sampler runs on a session since the same approval: `Session.sample_with_engine(walkers,
+   steps, sampler_threads=, basis=, parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)`,
+   the options of `AZURE2 mcmc` as keywords. What the command does after its set-up is one engine function now
+   (`RunSampler`, `src/SamplerRun.cpp`, moved out of `runMCMC` in `src/AZURE2.cpp`), called by the program and by
+   the session; `src/RunRequest.cpp` (the option table) moved into the engine library so that the session's
+   keywords are read by the command line's reader. The chain is the command's: `samples.mcmc`, `walkers.mcmc`,
+   `param.mcmc` and the best walker's output files byte for byte, the returned arrays number for number, on T1
+   and T3 at 1 and 2 sampler threads, in both bases, under Park, from a parameter file and from `x0`, with a
+   prior of `<mcmc>` and for a continued chain (`pyazr3.md`, section 12). The command has no seed, burn-in or
+   thinning option, so the call has none.
+   Not renamed or removed as `pyazr3.md` planned:
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the
    page plots the rows of the physics table (one number per element); `collision_matrix` and

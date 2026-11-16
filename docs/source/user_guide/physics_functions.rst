@@ -857,6 +857,52 @@ Library: ``physics/Widths.h: photon_penetrability``.  Plot axis: ``e_gamma``.
      - fm^-(2L+1)
      - photon penetrability
 
+``weisskopf_width(e_gamma, multipolarity, mass_number, radiation='E')``
+-----------------------------------------------------------------------
+
+Weisskopf single-particle estimate of a gamma width, Gamma_W(XL) (eV).  The total radiative width hbar lambda of an
+electric or magnetic 2^L-pole transition of energy E_gamma in a nucleus of mass number A: Gamma_W(EL) = c_EL A^(2L/3)
+E_gamma^(2L+1), Gamma_W(ML) = c_ML A^((2L-2)/3) E_gamma^(2L+1), with the two-digit textbook coefficients for R = 1.2
+A^(1/3) fm (c_E1..E4 = 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21; c_M1..M4 = 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21 eV MeV^-(2L+1);
+Blatt and Weisskopf 1952), 0.8 to 3.1 % from the closed form they round (M4: 7.2 %).  Gamma_gamma / Gamma_W is the
+strength in Weisskopf units.
+
+Library: ``physics/Widths.h: weisskopf_width_eV``.  Plot axis: ``e_gamma``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - argument
+     - unit
+     - domain
+     - meaning
+   * - ``e_gamma``
+     - MeV
+     - finite > 0
+     - transition energy
+   * - ``multipolarity``
+     - --
+     - integer in [1, 4]
+     - multipolarity L
+   * - ``mass_number``
+     - --
+     - finite > 0
+     - mass number A of the emitting nucleus
+   * - ``radiation``
+     - --
+     - one of E, M
+     - electric or magnetic transition
+
+.. list-table::
+   :header-rows: 1
+
+   * - returns
+     - unit
+     - meaning
+   * - ``gamma_W``
+     - eV
+     - Weisskopf estimate of the width
+
 ``statistical_factor(two_J, two_ja, two_jA, identical=False)``
 --------------------------------------------------------------
 

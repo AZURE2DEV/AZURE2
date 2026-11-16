@@ -267,6 +267,17 @@ Check files
    others, with the same contents as ``AZURE2 calculate`` writes on the same
    project. Set to the screen, they are printed before the chain starts.
 
+From Python
+-----------
+
+``pyazr.Session.sample_with_engine(walkers, steps, sampler_threads=1, basis="rwa", parameter_spread=5.0,
+energy_spread=1.0, overwrite_samples=False, x0=None, progress=None, stop=None)`` runs this sampler on a session,
+with the options above as keywords and the same ranges, and returns the chain and the three log-probabilities as
+arrays of the shapes (steps, walkers, parameters) and (steps, walkers) beside the files (:doc:`pyazr`, "The
+engine's own sampler"). It is the same engine function as the command: the files and the numbers are the
+command's. ``progress`` receives the progress line's numbers after every step, and ``stop`` ends the run after a
+step, as the GUI's stop button did.
+
 Resuming
 --------
 

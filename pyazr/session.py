@@ -26,7 +26,7 @@ except ImportError as err:                            # pragma: no cover
     ) from err
 
 from .errors import AZURE2Error, close_names, listed
-from . import engine_text, session_checks, session_fit, session_options, session_physics, session_thm
+from . import engine_text, session_checks, session_fit, session_options, session_physics, session_sampler, session_thm
 from .locking import engine_call
 from .parameter_file import apply_parameter_file
 from .parameters import Parameter, Parameters
@@ -64,7 +64,7 @@ def basis_of(options):
 class Session(
         _HybridPotentials,
         session_physics.SessionPhysics,
-        session_thm.SessionTHM, session_fit.SessionFit,
+        session_thm.SessionTHM, session_fit.SessionFit, session_sampler.SessionSampler,
 ):
     """One calculation session: a format-3 project set up by the engine in this interpreter (options: see __init__).
 
