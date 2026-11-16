@@ -557,10 +557,17 @@ re-read against its design at the hand-over.
    the design's last step is not done: an evaluation of a fit or of the sampler still runs on a copy of the
    working copy (`WorkingCopy::Clone`, `WorkingData`), one per evaluation running at the same time, plus one for
    the intermediate output files. They are the caller's now (`FitterStates`, `SamplerStates`) and no longer
-   members written by `const` methods; removing them needs the split of `Site` into what the set-up fixes and
-   what an evaluation writes (`evaluation.md` section 4.1, about 40 accessors). The cost today is memory (one
-   copy per thread that evaluates), not correctness. The locks are as they were: this step changed who owns the
-   state, not how threads share it.
+   members written by `const` methods. The design expected to remove them by a split of `Site` into what the
+   set-up fixes and what an evaluation writes (`evaluation.md` section 4.1). That split was prepared and not
+   made (2026-11-15, `evaluation.md` section 7.8): every member of a site is classified from the code, and the
+   25 that an evaluation writes are one struct of the site (`Site::Values`, 280 of a site's 392 bytes). The
+   classification shows that the copy is the evaluation's own state and little else (the `DataSet`, the channel
+   table, the compound system and the large tables of the sites are shared already), so taking the values out
+   of the site would rename the copies, not remove them. Measured: 11.6 MB for each further evaluation running
+   at the same time on `tests/upgrade/T2`, 3.4 MB on `tests/13N`; a gradient fit holds one at any thread count.
+   What could shrink a copy is holding a site's values by pointer and copying them when first written, at the
+   price of an indirection in every accessor: a decision, not started. The cost today is memory, not
+   correctness. The locks are as they were.
 5. **Large classes.** `src/AMatrixFunc.cpp` (2,766 lines), `api/src/AZUREAPI.cpp` (1,533), `src/AZURECalc.cpp`
    (1,402), `src/AZURECalcMCMC.cpp` (1,316). The collision matrix and the observables are engine classes on
    `CompoundSystem`, not functions of `physics/` on the arrays of `System`, which is what `ARCHITECTURE.md` drew.

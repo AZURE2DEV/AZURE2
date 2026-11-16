@@ -49,7 +49,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 5 | Lab data in the frame of the data | merged | not audited |
 | 5 | Stopping module | done | SRIM's two data files under their authors' terms: the owner's decision |
 | 5 | THM observable | wired into the engine | not audited against `THM.md` §1–2 |
-| 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller): the `Site` split of `evaluation.md` §4.1 |
+| 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller). The `Site` split of `evaluation.md` §4.1 is prepared (`Site::Values`) and not made: the copy is the evaluation's own state, so the split alone would not remove it (§7.8, with the measurement and the open decision) |
 | 6 | No hidden state | done: 14 permanent rows, no pending row, no `mutable` member (`evaluation.md` §7.7) | — |
 | 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
 | 8 | Object binding | built | transfer functions on potentials, the level matrix, the Weisskopf width |
