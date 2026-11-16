@@ -70,7 +70,9 @@ What it contains
        ``collision_matrix`` for a whole block (:math:`A`, :math:`U`,
        :math:`T`), which Python calls as
        ``pyazr.physics.collision_matrix``
-       (``api/src/pybind_collision_matrix.cpp``). :doc:`level_matrix`.
+       (``api/src/pybind_collision_matrix.cpp``: the three
+       parametrizations, photon channels and the Reich-Moore term as
+       arguments). :doc:`level_matrix`.
    * - ``ChannelSolve.h``
      - The channel route at one energy on the formal levels of a block
        (``channel_space::FormalBlock``, ``ChannelSolve``):
@@ -119,7 +121,11 @@ optical potentials and the global optical sets (``OpticalPotential.h``,
 continuum bins (``DistortedWaves.h``, ``Continuum.h``), the DWBA transfer
 amplitude (``Transfer.h``) and the THM vertex (``ThmVertex.h``,
 ``ZeroRangeWeight.h``). It is checked against FRESCO
-(``physics/tests/transfer_fresco_test.cpp``).
+(``physics/tests/transfer_fresco_test.cpp``). Python calls the distorted
+waves of one pair as ``pyazr.physics.optical_scattering``
+(``api/src/pybind_optical.cpp``: the S-matrix elements, the elastic angular
+distribution, the reaction cross section); bound states, the DWBA
+amplitude and the continuum bins have no call of their own in Python.
 
 How the engine uses it
 ----------------------

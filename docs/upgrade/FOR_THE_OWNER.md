@@ -639,21 +639,30 @@ re-read against its design at the hand-over.
    `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
    adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
    particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
-   `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal levels,
-   particle channels). There is no `inference/` library: the objective is `src/Objective.cpp`.
+   `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal, Brune's
+   or Park's levels; particle and photon channels; the Reich-Moore term), checked against numpy and against a
+   session's phase shifts and cross sections on T1-T3 in the three parametrizations (`physics_functions.md`,
+   stage 5). There is no `inference/` library: the objective is `src/Objective.cpp`.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
 7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
-9. **pyazr.** Not in the binding: transfer functions on optical potentials, the Weisskopf width, and the level
-   matrix with Brune's or Park's parameters or photon channels (`pyazr.physics.collision_matrix` gives A, U and T
-   for formal levels and particle channels; item 5).
+9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
+   photon channels (`pyazr.physics.collision_matrix`, item 5), and elastic scattering on an optical potential
+   (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
+   FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
+   well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
+   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
+   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
+   code and the owner's decision).
    Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
-   `pyazr/bands.py`). The Physics tab of the page plots what the binding has: the level matrix and the transfer
-   functions are not there.
+   `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the
+   page plots the rows of the physics table (one number per element); `collision_matrix` and
+   `optical_scattering` take matrices or a potential and are not rows, so the tab does not show them: a form
+   for them is page code that is not written.
 10. **`pyazr.sources`.** No reader of the IAEA's measured stopping data; no `pyazr libraries update` command; the
     provenance records of imported numbers were not audited.
 11. **Transfer (DWBA) validation.** The ⁶Li bins, and ³He and ¹⁴N break-up to the continuum, were not validated

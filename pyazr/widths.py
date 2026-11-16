@@ -38,7 +38,8 @@ counterpart.  Every other number of the table is the engine's (``Session.transfo
 
 Getting the penetrability without a Coulomb-function implementation
 -------------------------------------------------------------------
-``Gamma_W`` needs ``P_l(E_r)``, which the API does not expose.  Rather than
+``Gamma_W`` needs ``P_l(E_r)``, which ``Session.channel_functions`` and ``pyazr.physics.penetrability`` also
+give (:meth:`pyazr.Session.wigner_widths` documents where the probe below differs from it).  Rather than
 re-implement Coulomb wave functions, this module asks AZURE2 itself: it
 transforms a *probe* vector in which every reduced-width amplitude is set to a
 tiny ``eps`` (so the level-shift denominator is 1 to O(eps^2), and the levels of
