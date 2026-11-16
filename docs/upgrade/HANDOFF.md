@@ -44,6 +44,11 @@ combination has to be added where the two meet.
 **Run here** (CRC, GCC 11.5): build; `tests/capture_cascade`, `tests/secondary_gamma`. The full gate: see the end of
 this entry. **Not run:** CI.
 
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 323 of 325, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+171 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/capture_cascade` passing.
+
 ## 2026-11-16 (director, 13:25) — merged: the wheel's program inside the package; the PI's five answers
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 96: the branch `feature/upgrade-8-wheel-program`
