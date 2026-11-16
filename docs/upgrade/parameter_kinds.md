@@ -32,6 +32,8 @@ kinds in the order of their codes, except that the abundances (6) follow the lev
 | 11 | `ThmCoherent` (`cbkg`) | HOES amplitude (c1 per MeV) | thmExperiment, jGroup, channel, exitChannel, thmTerm | owners `EData::BuildThmGroups` (`EDataThm.cpp`), added in `EData::FillMnParams` | `ThmCoherentParamStem` + `re0`… |
 | 12 | `Apparatus` (`apparatus`) | the row's (`ParameterRecord::apparatusUnit`) | effect (the first target effect), `apparatus` (the row of `ApparatusRows()`), `owner` | grouped by sharing key in `WorkingCopy::SetUpApparatusParams` (`src/ApparatusParameters.cpp`), added last by `AddApparatusParams`; rows: the stopping scale (`src/StoppingScale.cpp`), a table kernel's own parameter (any `KernelParameter` with `fittable`) | the owner's values joined by `.`: `stopping_scale.<material>.<projectile>`, `<record>.<field>.<parameter>` (`apparatus_parameters.md`) |
 | 13 | `RadiativeDecay` (`radiative`) | eV (`total_width`), 1 (`branching`, `mixing`) | jGroup, level, channel (the photon channel whose slot it holds), levelNumber, `decayRecord`, `decayPart`, `finalState` | `GammaDecaySet::AddParameter` (`src/GammaDecayMap.cpp`), called by `CNuc::FillMnParams` at the slots of the level's photon amplitudes; `CNuc::FillCompoundFromParams` maps them to amplitudes (`gamma_parametrisation.md`) | `<record>.total_width`, `<record>.branching.<final state>`, `<record>.mixing.<final state>` |
+| 14 | `IsospinShift` (`isospin_shift`) | MeV | `isospinRecord`, nucleus, nucleusZ, nucleusA | `IsospinSet::AddParameters` (`src/IsospinTies.cpp`), right after the level block | `<record>.shift` |
+| 15 | `IsospinMix` (`isospin_mix`) | MeV^1/2 | `isospinRecord`, jGroup, level, channel (the channel whose slot follows it) | `IsospinSet::AddParameters`, after the shifts | `<record>.amplitude` |
 
 Every record also has `ordinal`, its place among the parameters of its kind (the `k` of `GetScreeningEffect(k)`,
 `GetThicknessSegment(k)`, …), set by `AZUREParams::Add`. The table's three flags answer the questions the name
@@ -56,6 +58,7 @@ MINUIT keeps the fit inside them, and the ensemble sampler's posterior is zero o
 | `norm`, `abundance`, `screening`, `thickness` | ≥ 0 | `WorkingCopy::FillMnParams`, `CNuc::FillMnParams` |
 | `density`, `doppler`, `apparatus` | [f·b, H(b)], the layout range (section 4) | `WorkingCopy::FillMnParams`, `AddApparatusParams` |
 | `radiative` | Γ_γ ≥ 0, b_f ∈ [0, 1], δ none | `GammaDecaySet::AddParameter` |
+| `isospin_shift`, `isospin_mix` | none | `IsospinSet::AddParameters` |
 
 ## 2. The sites that recognised a kind by name (before this change), and what they decide now
 

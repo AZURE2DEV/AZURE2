@@ -874,8 +874,6 @@ int main() {
         return ok;
       };
       const std::string base = config + "format=3\n</config>\n";
-      check("E_UNKNOWN_SECTION: <isospin> named as a newer AZURE2's block",
-            one(base + "<isospin>\nreference 1\n</isospin>\n", "E_UNKNOWN_SECTION", 15, "isospin ties"));
       check("E_UNKNOWN_SECTION: a section of no AZURE2", one(base + "<notes>\nhello\n</notes>\n", "E_UNKNOWN_SECTION", 15,
                                                               "not a section of format 3"));
       check("E_UNKNOWN_SECTION: a section inside <mcmc> other than <parameters>",

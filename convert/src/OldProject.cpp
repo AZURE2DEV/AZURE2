@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <stdexcept>
 #include <sstream>
 #include <vector>
 
@@ -263,6 +265,44 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     std::istringstream in(text);
     out.potential = ReadPotentialBlock(in);
     out.hasPotential = true;
+  }
+
+  // <isospin> of dev (2026-10-17): "reference Z A key", "shift Z A key value vary centre sigma", "level id T",
+  // "mix id key l s value vary sigma", "factor id key value", "pairT key t1 t2", "soft id sigmaE sigmaGamma", as
+  // IsospinLevels::Read read them.  A block whose first line is an isospin_* record is format 3 already and is left
+  // alone.
+  if (const io::Document::Section *s = doc.Find("isospin")) {
+    if (s->close == io::Document::Section::npos) return "<isospin> is not closed";
+    const std::map<std::string, std::size_t> kFields = {{"reference", 3}, {"shift", 7}, {"level", 2}, {"mix", 7},
+                                                        {"factor", 3},    {"pairT", 3}, {"soft", 3}};
+    bool first = true;
+    for (const std::string &raw : doc.Body(*s)) {
+      const std::string line = raw.substr(0, raw.find('#'));
+      if (BlankLine(line)) continue;
+      std::istringstream in(line);
+      OldProject::IsospinLine c;
+      c.text = raw;
+      in >> c.kind;
+      if (first && c.kind.compare(0, 8, "isospin_") == 0) break;
+      first = false;
+      std::string field;
+      while (in >> field) c.fields.push_back(field);
+      const auto known = kFields.find(c.kind);
+      if (known == kFields.end())
+        return "<isospin> line \"" + raw + "\": unknown keyword \"" + c.kind + "\" (reference, shift, level, mix, factor, pairT, soft)";
+      if (c.fields.size() != known->second)
+        return "<isospin> line \"" + raw + "\": " + c.kind + " takes " + std::to_string(known->second) + " fields";
+      for (const std::string &f : c.fields) {
+        try {
+          std::size_t used = 0;
+          (void)std::stod(f, &used);
+          if (used != f.size()) throw std::invalid_argument(f);
+        } catch (...) {
+          return "<isospin> line \"" + raw + "\": \"" + f + "\" is not a number";
+        }
+      }
+      out.isospin.push_back(c);
+    }
   }
 
   // <channelRadii> of dev (2026-11-10): "<pair key> <l> <radius> [s=<s>] [J=<J>]" a line, as CNuc read it.  A block

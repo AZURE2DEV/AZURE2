@@ -632,7 +632,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CompoundSystem *c
   // The coherent backgrounds are the last block of the parameter vector
   // (FillMnParams sets the offset again when it lays the vector out).
   if (!Draft().thmCoherentParams_.empty()) {
-    int offset = compound->ParameterLayout().Size();
+    int offset = compound->NumParameters();
     for (int s = 1; s <= Draft().NumSegments(); s++) {
       if (Draft().GetSegment(s)->IsVaryNorm() && !Draft().GetSegment(s)->IsProfiledNorm()) offset++;
       offset++;  // energy shift

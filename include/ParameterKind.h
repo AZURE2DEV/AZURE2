@@ -37,13 +37,21 @@ enum class ParamKind {
   Thickness = 10,       ///< fitted sample thickness of a transmission / yield segment
   ThmCoherent = 11,     ///< Re or Im of a THM coherent-background coefficient (cbackground=)
   Apparatus = 12,       ///< a number of an apparatus record (ApparatusParameters.h: a stopping scale, a kernel's width)
-  RadiativeDecay = 13   ///< Gamma_gamma, a branching or a mixing ratio of a gamma_decay record, in a photon channel's slot
+  RadiativeDecay = 13,  ///< Gamma_gamma, a branching or a mixing ratio of a gamma_decay record, in a photon channel's slot
+  IsospinShift = 14,    ///< internal Coulomb shift of the isospin levels of a compound nucleus (an isospin_shift record)
+  IsospinMix = 15       ///< amplitude of an isospin-forbidden channel of an isospin level (an isospin_mix record)
 };
 
 /// A parameter in a level's slot of the vector: its energy, a channel's amplitude, or a number of a gamma_decay record
 /// that the map of GammaDecayMap.h turns into a photon amplitude.  The R-matrix gradient covers them all.
 inline bool IsLevelSlot(ParamKind kind) {
   return kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::RadiativeDecay;
+}
+
+/// A parameter the R-matrix adjoint differentiates: a level slot, or an isospin shift or mix, which derived level
+/// slots follow (IsospinTies.h; the chain rule of GradAccum::Scatter).
+inline bool IsRMatrixParameter(ParamKind kind) {
+  return IsLevelSlot(kind) || kind == ParamKind::IsospinShift || kind == ParamKind::IsospinMix;
 }
 
 /// One row per kind: what a maintainer and the API need to know about it.
@@ -100,6 +108,14 @@ inline const std::vector<ParamKindRow> &ParamKindTable() {
        "a number of a level's gamma_decay record (docs/upgrade/gamma_parametrisation.md): the total radiative width, the "
        "branching to a final state, or its mixing ratio (Krane-Steffen), at the position of one of the level's photon "
        "amplitudes"},
+      {ParamKind::IsospinShift, "isospin_shift", "MeV", "isospinRecord, nucleus, nucleusZ, nucleusA", true, false, true,
+       "internal Coulomb energy shift of the isospin levels of a compound nucleus (an isospin_shift record of <isospin>, "
+       "named <record>.shift): "
+       "the members of the nucleus sit at the reference member's energy above threshold plus this shift"},
+      {ParamKind::IsospinMix, "isospin_mix", "MeV^1/2", "isospinRecord, jGroup, level, channel", true, false, true,
+       "amplitude of an isospin-forbidden channel of an isospin level (an isospin_mix record of <isospin>, named "
+       "<record>.amplitude), which the "
+       "channel's slot of the level follows"},
   };
   return table;
 }
@@ -148,6 +164,8 @@ struct ParameterRecord {
   std::string decayPart;    ///< total_width, branching or mixing (RadiativeDecay)
   std::string finalState;   ///< the final state's photon pair as the record writes it (branching, mixing)
 
+  std::string isospinRecord;  ///< the isospin_shift or isospin_mix record (IsospinShift, IsospinMix)
+
   const ParamKindRow &Row() const { return KindRow(kind); }
 
   static ParameterRecord LevelEnergy(int jGroup, int level, int levelNumber) {
@@ -172,6 +190,26 @@ struct ParameterRecord {
     r.decayRecord = record;
     r.decayPart = part;
     r.finalState = finalState;
+    return r;
+  }
+  /// The shift of an isospin_shift record: compound nucleus `nucleus` (1-based) with its Z and A.
+  static ParameterRecord IsospinShift(const std::string &record, int nucleus, int z, int a) {
+    ParameterRecord r;
+    r.kind = ParamKind::IsospinShift;
+    r.isospinRecord = record;
+    r.nucleus = nucleus;
+    r.nucleusZ = z;
+    r.nucleusA = a;
+    return r;
+  }
+  /// The amplitude of an isospin_mix record, which channel `channel` of (jGroup, level) follows.
+  static ParameterRecord IsospinMix(const std::string &record, int jGroup, int level, int channel) {
+    ParameterRecord r;
+    r.kind = ParamKind::IsospinMix;
+    r.isospinRecord = record;
+    r.jGroup = jGroup;
+    r.level = level;
+    r.channel = channel;
     return r;
   }
   /// A parameter of data segment `segment` (Norm, EnergyShift, EnergyShiftSqrt, Thickness).

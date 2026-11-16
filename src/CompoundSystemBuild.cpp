@@ -240,12 +240,14 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
       std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
       if (lvl == levelNucleus.end()) {
         levelNucleus[Line.levelID()] = nucleusNum;
-      } else if (lvl->second != nucleusNum) {
+      } else if (lvl->second != nucleusNum && !(configure.project && configure.project->built.isospin.Declares(Line.levelID()))) {
+        // (the lines of a level ID an isospin_level record declares may span nuclei: one isospin level, IsospinTies.h)
         configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
                             << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
                             << " MeV) has channels of two compound nuclei, "
                             << this->NucleusLabel(lvl->second) << " and " << this->NucleusLabel(nucleusNum)
-                            << ": a level belongs to one nucleus." << std::endl;
+                            << ": a level belongs to one nucleus (an isospin level across nuclei needs an "
+                            << "isospin_level record of <isospin>)." << std::endl;
         return -1;
       }
       JGroup NewJGroup(Line);
@@ -376,6 +378,8 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
 
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   if (std::shared_ptr<const GammaDecaySet> read = GammaDecaySet::Read(*this, configure, section.rows)) gammaDecays_ = read; else return -1;
+  if (std::shared_ptr<const IsospinSet> read = IsospinSet::Read(*this, configure)) isospin_ = read; else return -1;
+  state.SetIsospinValues(isospin_->FileValues());
   // The input values: the <levels> rows', a gamma_decay record's level with the partial widths of the record.
   inputs = LevelInputs(numLevels, numChannels);
   for (int j = 1; j <= this->NumJGroups(); j++)
@@ -543,6 +547,21 @@ void CompoundSystem::CalcBoundaryConditions(const Config &configure, const Level
       const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies, cf);
       const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
       for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
+      // A group that holds an isospin level, formal basis: B_c = -l_c on its particle channels, the same in every
+      // nucleus, so that the formal parameters of isospin partners are related by Clebsch-Gordan factors (Hale;
+      // IsospinTies.h).  A photon or beta channel copies channel 1's value, as everywhere.
+      if (formal && isospin_->Groups().count(structure.map.groupOfBlock[b])) {
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+          AChannel *channel = theJGroup->GetChannel(ch);
+          if (this->GetPair(channel->GetPairNum())->GetPType() == 0) channel->SetBoundaryCondition(-(double)channel->GetL());
+        }
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+          AChannel *channel = theJGroup->GetChannel(ch);
+          if (this->GetPair(channel->GetPairNum())->GetPType() != 0)
+            channel->SetBoundaryCondition(theJGroup->GetChannel(1)->GetBoundaryCondition());
+        }
+        continue;
+      }
       // Builds before 2026-11-07 took B_c at the first listed level: formal parameters they wrote for a group listed
       // out of energy order (param.sav, param.par, --no-transform input) belong to another B_c.
       if (formal && !energies.empty()) {

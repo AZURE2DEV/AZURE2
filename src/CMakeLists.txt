@@ -6,7 +6,7 @@ ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp Channe
 PPair.cpp AZURECalc.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
-WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
+WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp IsospinTies.cpp GradFreeMask.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp

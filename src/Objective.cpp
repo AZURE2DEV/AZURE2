@@ -235,6 +235,22 @@ class GammaDecayTerm : public ObjectiveTerm {
   }
 };
 
+// T12: the priors of the fitted isospin shifts and mixes and the soft ties of the isospin levels (IsospinTies.h), at
+// the levels and isospin values of the last fill.
+class IsospinTerm : public ObjectiveTerm {
+ public:
+  bool ModelOnly() const override { return true; }
+  std::string Name() const override { return "isospin priors and soft ties"; }
+  void Add(const ObjectiveContext &c, double &chi2) const override {
+    const IsospinSet &isospin = c.compound->GetIsospin();
+    if (!isospin.HasPenalty()) return;
+    const double v = isospin.Penalty(*c.compound, c.state);
+    chi2 += v;
+    c.results.objective.isospin = v;
+    c.results.objective.hasIsospin = true;
+  }
+};
+
 // T10: the prior parameter covariance (<config> priorCovariance=), (p - mu)^T C^-1 (p - mu).
 class PriorCovarianceTerm : public ObjectiveTerm {
  public:
@@ -266,6 +282,7 @@ Objective::Objective() {
   terms_.emplace_back(new ModelDataTerm);
   terms_.emplace_back(new PriorCovarianceTerm);
   terms_.emplace_back(new GammaDecayTerm);
+  terms_.emplace_back(new IsospinTerm);
 }
 
 const Objective &Objective::Engine() {
@@ -316,6 +333,8 @@ bool Objective::ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap
   // T11 (gamma_decay priors, the remainder's wall) depends on the parameters alone: its gradient goes straight to their
   // indices (GradAccum::direct).
   c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, c.state, accum.direct);
+  // T12 (isospin priors and soft ties) likewise.
+  c.compound->GetIsospin().AddPenaltyGradient(*c.compound, c.state, accum.direct);
   return ModelData::Gradient(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
 }
 
@@ -475,6 +494,9 @@ void AppendModelRows(const CompoundSystem *compound, const LevelState &state, co
   }
   // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
   for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound, state))
+    appendRow(row.r, nullptr, &row.d);
+  // The isospin priors and soft ties: r and dr/dq (IsospinSet::PenaltyRows).
+  for (const IsospinSet::PenaltyRow &row : compound->GetIsospin().PenaltyRows(*compound, state))
     appendRow(row.r, nullptr, &row.d);
   // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
   const AbundanceSamples &samples = data.Data().Abundances();

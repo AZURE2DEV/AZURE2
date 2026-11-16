@@ -305,6 +305,10 @@ void WriteParametersOut(const CompoundSystem &compound, const LevelState &state,
         out << "  E_level = " << std::setw(8) << theLevel.E << " MeV"
             << "  ITERATIONS = " << std::setw(5) << theLevel.iterations;
         if (compound.NumNuclei() > 1) out << "  NUCLEUS " << compound.NucleusLabel(theJGroup->GetNucleus());
+        if (compound.GetIsospin().Active()) {
+          const std::string iso = compound.GetIsospin().MemberLabel(j, la);
+          if (!iso.empty()) out << "  " << iso;
+        }
         out << std::endl;
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
           const AChannel *theChannel = theJGroup->GetChannel(ch);
@@ -362,6 +366,8 @@ void WriteParametersOut(const CompoundSystem &compound, const LevelState &state,
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
   if (configure.relativistic) WriteRelativisticOut(compound, table, configure);
+  // isospin.out: the isospin levels at the same parameters (IsospinTies.h).
+  compound.GetIsospin().Write(configure, compound, state);
 }
 
 /*!

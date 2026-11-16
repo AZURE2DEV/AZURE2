@@ -1,0 +1,136 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+2 -1 5.000000 1 1 1 2 2 1 1 1 2000000 0.5 1 0.5 1 0 1.007825 3.016029 1 2 0.0 0.0 0 0 0.0 0 4.9 0 0 0
+2 -1 4.140000 0 1 2 2 2 1 1 0 2000000 0.5 1 0.5 1 0 1.008665 3.016049 0 1 0.0 0.0 0 0 0.0 0 4.9 0 0 0
+2 -1 24.173600 0 1 3 2 2 1 1 0 1000000 0.5 1 0.5 1 0 1.007825 3.016049 1 1 19.8136 19.8136 0 0 0.0 0 4.9 0 0 0
+2 -1 24.173600 0 1 4 2 2 1 1 0 1000000 0.5 1 0.5 1 0 1.008665 3.016029 0 2 19.8136 20.5776 0 0 0.0 0 4.9 0 0 0
+2 -1 24.173600 0 1 5 2 2 1 1 0 0 1 1 1 1 0 2.014102 2.014102 1 1 19.8136 23.8465 0 0 0.0 0 7.0 0 0 0
+
+2 -1 24.500000 1 1 3 2 2 2 1 1 500000 0.5 1 0.5 1 0 1.007825 3.016049 1 1 19.8136 19.8136 0 0 0.0 0 4.9 0 0 0
+2 -1 24.500000 1 1 4 2 2 2 1 1 -500000 0.5 1 0.5 1 0 1.008665 3.016029 0 2 19.8136 20.5776 0 0 0.0 0 4.9 0 0 0
+2 -1 24.500000 1 1 5 2 2 2 1 1 300000 1 1 1 1 0 2.014102 2.014102 1 1 19.8136 23.8465 0 0 0.0 0 7.0 0 0 0
+
+</levels>
+<isospin>
+isospin_reference reference_4Li
+    nucleus        4Li
+    threshold      p+3He
+
+isospin_shift shift_4H
+    nucleus        4H
+    threshold      n+3H
+    shift          -0.5 MeV fit
+
+isospin_shift shift_4He
+    nucleus        4He
+    threshold      p+3H
+    shift          -0.4 MeV fit
+
+isospin_level level_1
+    level          1
+    T              1
+
+isospin_level level_2
+    level          2
+    T              0
+
+isospin_mix mix_1
+    level          1
+    pair           d+2H
+    l              1
+    s              1
+    amplitude      0.0 fit
+</isospin>
+<data>
+# <segmentsData> line 1
+dataset nt
+    reaction       3H(n,n)3H
+    quantity       sigma
+    unit           b
+    file           nt.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  2.0 12.0 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset ptn
+    reaction       3H(p,n)3He
+    quantity       sigma
+    unit           b
+    file           ptn.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.2 10.0 MeV
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset ddp
+    reaction       2H(d,p)3H
+    quantity       sigma
+    unit           b
+    file           ddp.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.1 4.0 MeV
+    norm           1 fixed
+
+# <segmentsData> line 4
+dataset ddn
+    reaction       2H(d,n)3He
+    quantity       sigma
+    unit           b
+    file           ddn.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.1 4.0 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+# <segmentsTest> line 1
+extrapolation x1
+    reaction       3He(p,p)3He
+    quantity       dsigma_domega
+    unit           b/sr
+    energies       range 2.0 12.0 MeV lab step 0.05
+    angles         list 120 deg lab
+
+# <segmentsTest> line 2
+extrapolation x2
+    reaction       3H(n,n)3H
+    quantity       sigma
+    unit           b
+    energies       range 2.0 12.0 MeV lab step 0.05
+
+# <segmentsTest> line 3
+extrapolation x3
+    reaction       3H(p,n)3He
+    quantity       sigma
+    unit           b
+    energies       range 1.2 10.0 MeV lab step 0.05
+
+# <segmentsTest> line 4
+extrapolation x4
+    reaction       2H(d,p)3H
+    quantity       sigma
+    unit           b
+    energies       range 0.1 4.0 MeV lab step 0.02
+
+# <segmentsTest> line 5
+extrapolation x5
+    reaction       2H(d,n)3He
+    quantity       sigma
+    unit           b
+    energies       range 0.1 4.0 MeV lab step 0.02
+</extrapolations>
+<targets>
+</targets>

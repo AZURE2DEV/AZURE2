@@ -31,6 +31,8 @@ Sections
      - ``gamma_decay``
    * - ``<channelRadii>``
      - ``channel_radius``
+   * - ``<isospin>``
+     - ``isospin_reference``, ``isospin_shift``, ``isospin_level``, ``isospin_mix``, ``isospin_factor``, ``isospin_pair``
 
 Value types
 -----------
@@ -757,6 +759,190 @@ Channel radius, in ``<channelRadii>``.  A radius of their own for some channels 
      - ``<J>``
      - optional
      - only the channels of this total angular momentum; absent: every J
+
+isospin_reference
+~~~~~~~~~~~~~~~~~
+
+Isospin reference nucleus, in ``<isospin>``.  The compound nucleus whose members of the isospin levels carry the free parameters: their energies and amplitudes are fitted, those of the other nuclei follow from them.  Exactly one.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``nucleus``
+     - ``<A><Symbol>``
+     - required
+     - the compound nucleus, e.g. 4Li
+   * - ``threshold``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+
+isospin_shift
+~~~~~~~~~~~~~
+
+Isospin Coulomb shift of a nucleus, in ``<isospin>``.  Another compound nucleus of the isospin levels and the internal Coulomb shift of its members: the energy of a member above its threshold pair is the reference member's above the reference's threshold pair, plus this shift minus the reference's.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``nucleus``
+     - ``<A><Symbol>``
+     - required
+     - the compound nucleus, e.g. 4H
+   * - ``threshold``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``shift``
+     - ``<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - required
+     - the internal Coulomb energy shift of the nucleus's isospin levels
+
+isospin_level
+~~~~~~~~~~~~~
+
+Isospin level, in ``<isospin>``.  The isospin T of the level with this ID.  Its lines of <levels> may span compound nuclei; in each, its particle amplitudes are the Clebsch-Gordan projections of one amplitude per isospin channel, and an isospin-forbidden channel is zero.  With the two soft widths the derived energies and amplitudes are free parameters instead, each with a penalty ((value - tie)/width)^2.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``T``
+     - ``<J>``
+     - required
+     - the isospin T of the level
+   * - ``soft_energy``
+     - ``<number> <energy unit>``
+     - optional
+     - the width of the penalty on the derived level energies (with soft_amplitude)
+   * - ``soft_amplitude``
+     - ``<number > 0>``
+     - optional
+     - the width of the penalty on the derived reduced-width amplitudes, MeV^1/2 (with soft_energy)
+
+isospin_mix
+~~~~~~~~~~~
+
+Isospin-forbidden amplitude, in ``<isospin>``.  An amplitude of its own for an isospin-forbidden channel (pair, l, s) of an isospin level, in place of zero: isospin mixing as a parameter.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair of the channel by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``l``
+     - ``<integer >= 0>``
+     - required
+     - the l of the channel
+   * - ``s``
+     - ``<J>``
+     - required
+     - the channel spin of the channel
+   * - ``amplitude``
+     - ``<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - required
+     - the reduced-width amplitude of the channel, MeV^1/2
+
+isospin_factor
+~~~~~~~~~~~~~~
+
+Isospin factor, in ``<isospin>``.  The factor of the channels of one pair in an isospin level, in place of the Clebsch-Gordan coefficient computed from the particles' isospins.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``factor``
+     - ``<number>``
+     - required
+     - the factor; 0 makes the pair's channels isospin-forbidden
+
+isospin_pair
+~~~~~~~~~~~~
+
+Isospins of a pair's particles, in ``<isospin>``.  The isospins of the two particles of a pair where they are not \|N - Z\|/2 (an excited state of another isospin).  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``t_light``
+     - ``<J>``
+     - required
+     - the isospin t of the light particle
+   * - ``t_heavy``
+     - ``<J>``
+     - required
+     - the isospin t of the heavy particle
 
 Quantities
 ----------
@@ -2119,6 +2305,12 @@ Diagnostic codes
    * - ``E_CHANNEL_RADIUS_THM``
      - error
      - a channel_radius record on the entrance pair of a THM data set (the vertex is built at the pair's radius)
+   * - ``E_ISOSPIN_RECORD``
+     - error
+     - a record of <isospin> that another record or <levels> contradicts: a nucleus or a level named twice, no or a second reference, a level ID no level has, a mix or a factor on a level without an isospin_level record, a soft tie with one width, a profiled number
+   * - ``E_ISOSPIN_PAIR``
+     - error
+     - a pair of an <isospin> record that is not a particle pair, or a threshold pair that does not form the record's nucleus
    * - ``E_POTENTIAL_RELATIVISTIC``
      - error
      - a potential record in a project with relativistic kinematics
@@ -2133,7 +2325,7 @@ Diagnostic codes
      - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)
    * - ``E_UNKNOWN_SECTION``
      - error
-     - a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it
+     - a section format 3 does not have (a newer AZURE2's section, a misspelt name), or a section inside one that does not hold it: nothing would read it
    * - ``E_UNREAD_LINE``
      - error
      - a <config> key format 3 does not have, a <config> line after the eleven entries that is not key=value, or a line of <mcmc> outside <parameters>: nothing would read it

@@ -82,6 +82,9 @@ class LevelState {
   bool HasGammaDecayFill(int r) const { return r >= 0 && r < (int)gammaDecayFills_.size(); }
   /// What the last fill left for record r: its values (slot order) and the parts of its photon amplitudes.
   const GammaDecayFill &GammaDecayFillOf(int r) const { return gammaDecayFills_[r]; }
+  /// The isospin parameters of the last fill (IsospinTies.h: the shifts, then the mixes); the records' values until a
+  /// fill from a vector that holds them.  Empty without <isospin> records.
+  const std::vector<double> &IsospinValues() const { return isospinValues_; }
   /// The projector Pi = T^-1 P T of capture-mask slot `slot` (CompoundSystem::FormalCaptureMaskOf), row-major over the slot's
   /// levels; empty: Pi = P (no masked level, or every masked level decoupled).
   const std::vector<double> &CaptureProjector(int slot) const { return captureProjectors_[slot]; }
@@ -100,6 +103,7 @@ class LevelState {
   void SetFirstDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d1Energy[la - 1] = energy; }
   void SetSecondDerivativesEnergy(int j, int la, double energy) { groups_[j - 1].d2Energy[la - 1] = energy; }
   void SetGammaDecayFill(int r, GammaDecayFill fill);
+  void SetIsospinValues(std::vector<double> values) { isospinValues_ = std::move(values); }
   /// `slots` capture-mask slots, every projector empty (CompoundSystem's set-up).
   void ShapeCaptureProjectors(std::size_t slots) { captureProjectors_.assign(slots, std::vector<double>()); }
   void SetCaptureProjector(int slot, std::vector<double> projector) { captureProjectors_[slot] = std::move(projector); }
@@ -119,6 +123,7 @@ class LevelState {
   std::vector<Group> groups_;
   std::vector<GammaDecayFill> gammaDecayFills_;          ///< per gamma_decay record, once a fill has stored it
   std::vector<std::vector<double>> captureProjectors_;  ///< per capture-mask slot
+  std::vector<double> isospinValues_;                    ///< per isospin parameter
 };
 
 /// The shift function of channel ch between levels la and lb of J-group j at this state, as the level matrices hold

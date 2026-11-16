@@ -3,6 +3,7 @@
 
 #include "Constants.h"
 #include "ParameterKind.h"
+#include "IsospinTies.h"
 #include <vector>
 #include <map>
 #include <tuple>
@@ -117,6 +118,8 @@ class ParamIndexMap {
   }
 
   /// Number of entries in the full (unfiltered) parameter vector.
+  /// The derived slots of isospin levels as linear functions of free slots (empty without <isospin> records).
+  const std::vector<IsospinTie> &IsospinTies() const { return isospinTies_; }
   int NumFull() const { return (int)desc_.size(); }
   /// Number of non-fixed (packed) parameters.
   int NumPacked() const { return numPacked_; }
@@ -145,6 +148,7 @@ class ParamIndexMap {
   std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
   std::vector<std::vector<std::vector<int>>> gammaFlat_; ///< [j-1][la-1][ch-1] -> full idx
   std::vector<ParamDesc> desc_;                          ///< per full index
+  std::vector<IsospinTie> isospinTies_;
   std::map<std::pair<int, int>, int> eIndex_;            ///< (j,la) -> full idx
   std::map<std::tuple<int, int, int>, int> gammaIndex_;  ///< (j,la,ch) -> full idx
   std::map<int, int> normIndex_;                         ///< segment -> full idx

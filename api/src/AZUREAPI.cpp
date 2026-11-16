@@ -320,6 +320,14 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localData = data();
 
   AZUREParams params;
+  if (localCompound->GetIsospin().Active()) {
+    // The transformation from observed widths mixes the levels of a J^pi group, so the observed values of derived
+    // isospin members would leak into the free ones (IsospinTies.h): the fit-basis calls take such a project.
+    configure().outStream << "ERROR: a project with isospin levels takes parameters in the fit's basis "
+                          << "(UpdateSegmentsRWA / CalculateChi2RWA), not observed ones." << std::endl;
+    ReportSegments(nullptr, nullptr);
+    return -1;
+  }
   localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure(), state(), inputs());
@@ -873,6 +881,12 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) {
   WorkingCopy *localData = data();
 
   AZUREParams params;
+  if (localCompound->GetIsospin().Active()) {
+    // See UpdateSegments: observed parameters are not available with isospin levels.
+    configure().outStream << "ERROR: a project with isospin levels takes parameters in the fit's basis "
+                          << "(CalculateChi2RWA), not observed ones." << std::endl;
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure(), state(), inputs());
@@ -1045,7 +1059,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
     // THM coherent backgrounds (cbackground=) are columns of the THM rows above.
-    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm ||
+    if (eg && (IsRMatrixParameter(kind) || kind == ParamKind::Norm ||
                kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
                kind == ParamKind::ThmCoherent))
       continue;

@@ -28,7 +28,9 @@
  *   T8     electron-screening, target-density, Doppler-temperature and sample-thickness priors (four terms);
  *   T7     abundance priors and sum-to-one;
  *   T9     the model data (ModelData.h): measured scattering lengths;
- *   T10    the prior parameter covariance.
+ *   T10    the prior parameter covariance;
+ *   T11    the priors of the gamma_decay records and the remainder's wall;
+ *   T12    the priors of the isospin shifts and mixes and the soft ties of the isospin levels.
  */
 /// Scale of Park's J > 0 wall (T6): a level at J = -kParkNormScale costs one unit of chi-squared, so the wall is steep
 /// on the scale of J but smooth.

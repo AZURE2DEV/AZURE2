@@ -183,8 +183,10 @@ void CompoundSystem::SetUpECFinalBlocks(const Config &configure, const LevelInpu
       if (inputs.E(j, levels[lb]) < inputs.E(j, levels[lowest])) lowest = lb;
     // A lowest-level final state whose energy a fit may move leaves the energy where B_c was taken, and its formal
     // amplitude then differs from its Brune one at second order: it is recomputed too (external_capture.md section 4).
+    // A group that holds an isospin level has B_c = -l_c (IsospinTies.h): none of its levels sits where B_c was taken.
+    const bool atBoundary = !isospin_->Groups().count(j);
     for (std::size_t lb = 0; lb < levels.size(); lb++)
-      if ((lb != lowest || !group->GetLevel(levels[lb])->EnergyFixed()) && group->GetLevel(levels[lb])->IsECLevel()) {
+      if ((lb != lowest || !atBoundary || !group->GetLevel(levels[lb])->EnergyFixed()) && group->GetLevel(levels[lb])->IsECLevel()) {
         record->blocks.push_back(b);
         break;
       }

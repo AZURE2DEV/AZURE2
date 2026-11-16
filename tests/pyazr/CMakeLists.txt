@@ -50,6 +50,13 @@ add_test(NAME pyazr_channel_radius_record
                  ${CMAKE_CURRENT_SOURCE_DIR}/channel_radius_record_test.py)
 set_tests_properties(pyazr_channel_radius_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Isospin levels across compound nuclei in a session: the shift and mix parameters and their priors, the objective and
+# its rows, the gradient and the Jacobian through the ties.
+add_test(NAME pyazr_isospin_levels
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/isospin_levels_test.py)
+set_tests_properties(pyazr_isospin_levels PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A session parses its .azr once: evaluate().data[i].model / objective do not re-read the file per segment per
 # call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
 add_test(NAME pyazr_azr_parse_cache

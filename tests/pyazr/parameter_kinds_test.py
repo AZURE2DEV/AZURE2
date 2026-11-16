@@ -5,7 +5,7 @@ The engine's table of kinds (include/ParameterKind.h, ``_azure2.parameter_kinds(
 order in the vector, with its key, unit and flags.  Each parameter's record (``Session.parameter_records()``) carries its kind and what
 it belongs to (level and channel, segment key, target effect, sample, THM combination).  Checked on projects that
 together hold every kind (tests/upgrade/T2: levels, abundance, norms, the three shift kinds, density;
-tests/screening_6li/fit.azr: screening; the grad_fit models of tests/doppler_fgm and tests/transmission_yield:
+tests/screening_6li/fit.azr: screening; tests/isospin_levels/models/iso_free.azr: the isospin shifts and mix; the grad_fit models of tests/doppler_fgm and tests/transmission_yield:
 Doppler temperature and sample thickness; tests/18O_p_a_thm with a cbackground=: THM coherent background; all in
 project format 3, whose parameter names are made from the records' names, docs/upgrade/project_format3.md):
 
@@ -69,6 +69,10 @@ def name_from_record(r, project):
         return f"width_{r['level_number']}_{r['channel']}"
     if k == "radiative":  # <record>.<part>[.<final state>] (GammaDecaySet::AddParameter)
         return f"{r['decay_record']}.{r['decay_part']}" + (f".{r['final_state']}" if r["final_state"] else "")
+    if k == "isospin_shift":  # <record>.shift (IsospinSet::AddParameters)
+        return f"{r['isospin_record']}.shift"
+    if k == "isospin_mix":
+        return f"{r['isospin_record']}.amplitude"
     if k == "apparatus":  # the owner's values joined by '.' (ApparatusDeclaration::Name)
         return ".".join(v for _, v in r["owner"])
     if k == "cbkg":
@@ -168,15 +172,17 @@ kinds = parameter_kinds()
 check("no numeric type codes", all("code" not in k for k in kinds), kinds[0])
 keys = [k["key"] for k in kinds]
 check("keys", keys == ["energy", "width", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"], keys)
+                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative", "isospin_shift",
+                       "isospin_mix"], keys)
 check("every row has a unit, owner and doc", all(k["unit"] and k["owner"] and k["doc"] for k in kinds))
-check("own_prior: the nuisance kinds 2..10, 12 and 13",
-      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["apparatus", "radiative"])
+check("own_prior: the nuisance kinds 2..10 and 12..15",
+      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["apparatus", "radiative", "isospin_shift", "isospin_mix"])
 check("segment_field: norm, the shifts, thickness",
       [k["key"] for k in kinds if k["segment_field"]] == ["norm", "shift", "shift_sqrt", "shift_fn", "thickness"])
 check("vary_from_project: the shifts, screening, density, Doppler, thickness, apparatus parameters",
       [k["key"] for k in kinds if k["vary_from_project"]] ==
-      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "apparatus", "radiative"])
+      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "apparatus", "radiative",
+       "isospin_shift", "isospin_mix"])
 
 seen = set()
 with tempfile.TemporaryDirectory() as tmp:
@@ -235,6 +241,21 @@ with tempfile.TemporaryDirectory() as tmp:
     kinds_gd = check_project("gamma_decay", os.path.join(d, "record.azr"), d, {"radiative", "width"})
     check("gamma_decay: one radiative parameter per photon channel of level 5 (8)", kinds_gd.get("radiative") == 8, kinds_gd)
     seen |= set(kinds_gd)
+
+    print("tests/isospin_levels/models/iso_free.azr: two shifts and a mix of isospin levels across three nuclei")
+    d = os.path.join(tmp, "iso")
+    os.makedirs(d)
+    shutil.copy(os.path.join(ROOT, "tests", "isospin_levels", "models", "iso_free.azr"), d)
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub))
+    # its four data files (the suite's check.sh writes them from a truth run): three points each, any numbers
+    for name, energies in (("nt", (3.0, 5.0, 7.0)), ("ptn", (2.0, 4.0, 6.0)), ("ddp", (0.5, 1.5, 2.5)), ("ddn", (0.5, 1.5, 2.5))):
+        with open(os.path.join(d, name + ".dat"), "w") as f:
+            f.write("".join(f"{e:.6f} 0 1.0e-01 1.0e-03\n" for e in energies))
+    kinds_iso = check_project("isospin_levels", os.path.join(d, "iso_free.azr"), d, {"isospin_shift", "isospin_mix"})
+    check("isospin_levels: two shifts (4H, 4He) and one mix", kinds_iso.get("isospin_shift") == 2 and kinds_iso.get("isospin_mix") == 1,
+          kinds_iso)
+    seen |= set(kinds_iso)
 
 check("the projects hold every kind", seen == set(keys), sorted(set(keys) - seen))
 

@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "GradFreeMask.h"
 #include "Objective.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
@@ -258,6 +259,15 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
     int ti = map.ThicknessIndex(k + 1);
     if (ti >= 0 && ti < (int)gradFull.size()) gradFull[ti] += thickness[k];
   }
+  // Isospin levels (IsospinTies.h): a derived slot is a linear function of free slots, so its gradient passes on to
+  // them (chain rule); its own entry is cleared (it is fixed).  Last, after everything else has reached the slots.
+  for (const IsospinTie &t : map.IsospinTies()) {
+    if (t.slot < 0 || t.slot >= (int)gradFull.size()) continue;
+    const double g = gradFull[t.slot];
+    for (const auto &src : t.sources)
+      if (src.first >= 0 && src.first < (int)gradFull.size()) gradFull[src.first] += src.second * g;
+    gradFull[t.slot] = 0.0;
+  }
 }
 
 /*!
@@ -354,6 +364,16 @@ ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, const WorkingCo
     }
     i++;
   }
+
+  // --- Isospin shifts, then mix amplitudes, only with <isospin> records (CompoundSystem::FillMnParams). ---
+  for (int k = 0; k < compound->GetIsospin().NumParams(); k++) {
+    const ParameterRecord record = compound->GetIsospin().RecordOf(k);
+    ParamDesc d{record.kind, record.jGroup, record.level, record.channel, -1, false};
+    d.nucleus = record.nucleus;
+    map.desc_.push_back(d);
+    i++;
+  }
+  map.isospinTies_ = compound->GetIsospin().Ties();
 
   // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
   for (int k = 1; data && k <= data->Data().Abundances().NumParams(); k++) {
@@ -813,40 +833,6 @@ bool AccumulateEGammaGradient(const CompoundSystem *compound, const LevelState &
   return true;
 }
 
-namespace {
-
-// The free level parameters of the packed vector, per J-group (FormalBasis).
-AMatrixFunc::FreeMask BuildFreeMask(const CompoundSystem *compound, const ParamIndexMap &pmap) {
-  AMatrixFunc::FreeMask mask;
-  const int nJ = compound->NumJGroups();
-  mask.e.assign(nJ, {});
-  mask.g.assign(nJ, {});
-  auto isFree = [&pmap](int full) { return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0; };
-  for (int j = 1; j <= nJ; j++) {
-    const JGroup *jg = compound->GetJGroup(j);
-    const int nl = jg->NumLevels(), nch = jg->NumChannels();
-    mask.e[j - 1].assign(nl, 0);
-    mask.g[j - 1].assign(nl, std::vector<char>(nch, 0));
-    for (int la = 1; la <= nl; la++) {
-      mask.e[j - 1][la - 1] = isFree(pmap.EIndexFlat(j, la));
-      for (int ch = 1; ch <= nch; ch++) mask.g[j - 1][la - 1][ch - 1] = isFree(pmap.GammaIndexFlat(j, la, ch));
-      // A gamma_decay level: its photon amplitudes move with any free number of the level (the record's, its energy,
-      // its particle amplitudes), so their cotangents are needed for the pull-back (GammaDecayMap.h).
-      // With external capture also with the final states' amplitudes (GammaDecaySet::InputIndices).
-      const GammaDecaySet &decays = compound->GetGammaDecays();
-      const int record = decays.RecordOf(j, la);
-      if (record < 0) continue;
-      bool anyFree = false;
-      for (const int index : decays.InputIndices(pmap, record)) anyFree = anyFree || isFree(index);
-      if (anyFree)
-        for (const int ch : decays.Levels()[record].photonChannels) mask.g[j - 1][la - 1][ch - 1] = 1;
-    }
-  }
-  return mask;
-}
-
-}  // namespace
-
 bool ComputeResidualJacobian(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
@@ -1105,7 +1091,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
         for (int c = 0; c < nCols; c++) {
           const int f = pmap.PackedToFull(c);
           const ParamDesc &desc = pmap.Desc(f);
-          if (IsLevelSlot(desc.kind))
+          if (IsRMatrixParameter(desc.kind))
             row[c] = fullRow[f];
           else if (desc.kind == ParamKind::ThmCoherent && desc.channel >= 1 && desc.channel <= nCoherent)
             row[c] = coherentBar[desc.channel - 1];
@@ -1141,7 +1127,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
           rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
       continue;
     }
-    if (!IsLevelSlot(kind)) continue;
+    if (!IsRMatrixParameter(kind)) continue;
     const double x0 = full[f];
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     vector_r pp = full;

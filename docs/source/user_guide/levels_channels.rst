@@ -87,7 +87,125 @@ its own nucleus's pairs only, the missing-J\ :sup:`π` report is given per
 nucleus, and two levels with the same J\ :sup:`π` and energy in different
 nuclei are different levels. A level cannot be moved to another nucleus; add
 it again there. The file keeps one block of level lines per nucleus; the
-engine refuses a level whose channels name two nuclei.
+engine refuses a level whose channels name two nuclei, unless an
+``isospin_level`` record declares it one isospin level (below).
+
+Isospin Levels Across Compound Nuclei
+-------------------------------------
+
+Several compound nuclei can share isospin-labelled levels, as in Hale's
+charge-independent R-matrix analysis of the A = 4 system (Tilley, Weller and
+Hale, Nucl. Phys. A541, 1 (1992)). Such a level is one level ID whose
+``<levels>`` lines span every nucleus it lives in (each line with that
+nucleus's own excitation energy), declared by the records of ``<isospin>``
+(:doc:`../reference/format3`)::
+
+   <isospin>
+   isospin_reference ref_4Li          # 4Li: energies measured from p+3He
+       nucleus    4Li
+       threshold  p+3He
+   isospin_shift shift_4H             # 4H: its threshold pair and internal Coulomb shift
+       nucleus    4H
+       threshold  n+3H
+       shift      -0.86 MeV fit prior -0.86 0.3
+   isospin_shift shift_4He
+       nucleus    4He
+       threshold  p+3H
+       shift      -0.64 MeV fit prior -0.64 0.3
+   isospin_level T1                   # the level with ID 1 has T = 1
+       level      1
+       T          1
+   isospin_level T0                   # the level with ID 2 has T = 0, soft-tied
+       level      2
+       T          0
+       soft_energy    50 keV
+       soft_amplitude 0.02
+   isospin_mix dd_T1                  # level 1, channel d+d, l = 1, s = 1: an amplitude of its own
+       level      1
+       pair       d+2H
+       l          1
+       s          1
+       amplitude  0.0 fit prior 0 0.1
+   isospin_factor f                   # optional: in place of a computed Clebsch-Gordan factor
+       level      1
+       pair       p+3H
+       factor     0.7071
+   isospin_pair t                     # optional: the particle isospins of a pair
+       pair       p+12C[15.11]
+       t_light    1/2
+       t_heavy    1
+   </isospin>
+
+- In each nucleus, a level's reduced-width amplitude in a channel of pair
+  (a, b) is :math:`\langle t_a t_{3a}\, t_b t_{3b} | T T_3\rangle` times one
+  amplitude per isospin channel (arrangement, l, s). Particle isospins default
+  to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose particles match in
+  mass number, spin, parity, isospin and state form one arrangement, and
+  partner channels (same l, s and J) must share a channel radius (a
+  ``channel_radius`` record may set it per l, s or J, the same for every pair
+  of the arrangement). A particle's state is the rank of its excitation energy
+  among the particles of the project with the same Z, A, spin and parity (the
+  lowest listed is the first): mirror partners are ranked each in its own
+  nucleus, so the n-th listed state of a spin and parity pairs with the n-th,
+  and a nucleus that is its own mirror pairs each state with itself. The
+  start-up report and ``isospin.out`` mark a state after the first, e.g.
+  ``0+#2`` for :math:`^{12}`\ C(7.654) beside the 0+ ground state.
+- The member in the reference nucleus holds the free parameters. The others
+  are derived: energies
+  :math:`E_m = E_\mathrm{ref} - T_\mathrm{ref} + T_m + \Delta_m - \Delta_\mathrm{ref}`
+  (:math:`T` the threshold pair's excitation energy, :math:`\Delta_m` the
+  nucleus's shift, the parameter ``<record>.shift`` of its ``isospin_shift``
+  record; the reference has none), amplitudes the factor ratio times the free
+  one. A channel with factor 0 is zero unless an ``isospin_mix`` record gives
+  it an amplitude (the parameter ``<record>.amplitude``). Derived
+  slots stay in the parameter list, fixed, and are written synced
+  (``param.sav``); the two kinds of parameter follow the level parameters.
+- The two soft widths relax one level's tie: its derived slots become free
+  parameters with the penalty :math:`((x - x_\mathrm{tie})/\sigma)^2` each
+  (forbidden channels centred on 0), reported with the priors of the shifts and
+  mixes as ``Total-Isospin-Chi-Squared`` (``chiSquared.out``) and in
+  ``isospin.out``; they start on their tie values. A soft level takes no
+  ``isospin_mix`` record. Every fitter carries the penalty (the least-squares
+  fitters as residual rows), and the sampler has it in its likelihood.
+- The ties act on the fitted parameters of the run's basis. In the formal
+  basis (``--no-brune``, Hale's formulation) these are the formal amplitudes
+  and eigenenergies, and every J-group holding an isospin level uses
+  :math:`B_c = -l_c`, so partners share their boundary values. In the Brune
+  basis (the default) they are the Brune (on-resonance) amplitudes and the
+  observed energies, and no boundary value enters. For a level alone in its
+  J-group the Brune amplitudes equal the formal ones, so the amplitude ties are
+  the same statement; with other levels of the same :math:`J^\pi` in the group
+  (background poles) the two differ through level mixing. The energy relation
+  differs in either case: an observed energy carries its nucleus's boundary
+  (Thomas-Ehrman) shift,
+  :math:`\tilde E = E_\lambda - \sum_c \gamma_c^2 (S_c(\tilde E) - B_c)`, which
+  depends on the level, so one shift :math:`\Delta_m` per nucleus describes the
+  formal energies better than the observed ones. In a Brune run give the
+  energies a soft tie with a wide ``soft_energy``, or fix them at their measured
+  values, unless one level per nucleus is tied. Park's basis (``--use-park``)
+  and the RMC formalism are refused. The analytic gradient, the least-squares
+  fitters and the sampler work through the ties (a derived slot's derivative
+  passes to the free slots it follows); the sampler and a session take
+  parameters in the fit's basis only, since the transformation from observed
+  widths would mix the derived members into the free ones.
+- Photon and beta channels of a J-group that holds an isospin level stay
+  outside the ties: Hale's relations are between the particle reduced-width
+  amplitudes of isospin partners, and an electromagnetic or weak amplitude is
+  not charge independent. Each nucleus keeps its own gamma widths (and feeding
+  amplitudes), free or fixed as its channel lines say; the start-up log counts
+  them per member as "not tied". Capture to a tied bound state uses that
+  member's own energy and particle amplitude, so in a tied model the
+  asymptotic normalization of a derived member follows the reference nucleus's
+  amplitude.
+- The start-up log prints every factor; ``isospin.out`` lists the fitted
+  (formal, or Brune) parameters of every member, and ``parameters.out`` labels
+  the members.
+
+``AZURE2 --convert`` turns the ``<isospin>`` block of the ``dev`` branch
+(``reference``, ``shift``, ``level``, ``mix``, ``factor``, ``pairT``, ``soft``
+lines) into these records, and ``AZURE2 --convert-params`` the names of its
+parameter files (``isospin_shift_<Z>_<A>``, ``isospin_mix_<k>``) into the
+records' (``shift_4H.shift``, ``mix_1.amplitude``).
 
 Channels
 --------

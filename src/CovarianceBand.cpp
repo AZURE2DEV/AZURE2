@@ -38,6 +38,8 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Doppler: return std::make_tuple(kind, d.doppler, -1, -1);
     case ParamKind::Thickness: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::Apparatus: return std::make_tuple(kind, d.apparatus, -1, -1);
+    case ParamKind::IsospinShift: return std::make_tuple(kind, d.nucleus, -1, -1);
+    case ParamKind::IsospinMix: return std::make_tuple(kind, d.jGroup, d.level, d.channel);
   }
   return std::make_tuple(kind, -1, -1, -1);
 }
@@ -49,7 +51,7 @@ std::vector<int> BandPackedColumns(const ParamIndexMap &pmap) {
   const int n = pmap.NumPacked();
   for (int a = 0; a < n; a++) {
     ParamKind k = pmap.Desc(pmap.PackedToFull(a)).kind;
-    if (IsLevelSlot(k) || k == ParamKind::ThmCoherent) cols.push_back(a);
+    if (IsRMatrixParameter(k) || k == ParamKind::ThmCoherent) cols.push_back(a);
   }
   return cols;
 }
