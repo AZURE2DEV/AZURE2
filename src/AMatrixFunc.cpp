@@ -28,18 +28,22 @@
 #endif
 
 namespace {
-/// The sink of the adjoints of azure2/physics/CollisionMatrixAdjoint.h over a gradient accumulator: level r and
-/// channel d of J-group j (from 0) are the accumulator's cells; `levelOf` maps an active level (1-based) to its
-/// level number where a block leaves levels out (THM), else every level is active.
+/// The sink of the adjoints of azure2/physics/CollisionMatrixAdjoint.h and ChannelSolveAdjoint.h over the cells of
+/// a gradient accumulator: level r and channel d of a J-group (from 0) are e[r] and gamma[r][d], or, where
+/// `levelNumber` is given, those of level number levelNumber[r] (1-based: a block that leaves levels out).
 struct LevelSink {
+  LevelSink(std::vector<double> &e, std::vector<std::vector<double>> &gamma, const int *levelNumber = nullptr)
+      : e(e), gamma(gamma), levelNumber(levelNumber) {}
+  /// The level energies and widths of J-group j; `levelOf` maps an active level (1-based) to its level number.
   LevelSink(GradAccum &accum, int j, const std::vector<int> *levelOf = nullptr)
-      : e(accum.e[j - 1]), gamma(accum.gamma[j - 1]), levelOf(levelOf) {}
-  int row(int r) const { return levelOf ? (*levelOf)[r + 1] - 1 : r; }
+      : LevelSink(accum.e[j - 1], accum.gamma[j - 1], levelOf ? levelOf->data() + 1 : nullptr) {}
+  int row(int r) const { return levelNumber ? levelNumber[r] - 1 : r; }
   void energy(int r, double v) { e[row(r)] += v; }
   void width(int r, int d, double v) { gamma[row(r)][d] += v; }
+  double *widths(int r) { return &gamma[row(r)][0]; }
   std::vector<double> &e;
   std::vector<std::vector<double>> &gamma;
-  const std::vector<int> *levelOf;
+  const int *levelNumber;
 };
 }  // namespace
 
@@ -1445,41 +1449,10 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
         bool same = true;
         for (int k = 0; k < n && same; k++) same = (std::real(solve[k]) == f.gcut[(size_t)k * f.nch + chNum - 1]);
         if (same && !f.pencil) {
-          const vector_c &uf = this->FormalSolve(jGroupNum, chNum - 1);
-          if (f.identity)
-            solve = uf;
-          else
-            for (int r = 0; r < n; r++) {
-              const double *vr = &f.V[(size_t)r * n];
-              complex sum(0.0, 0.0);
-              for (int k = 0; k < n; k++) sum += vr[k] * uf[k];
-              solve[r] = sum;
-            }
+          azure2::physics::channel_space::level_solve_from_formal(f, this->FormalSolve(jGroupNum, chNum - 1), solve);
         } else if (same) {
           // Pencil: A g_c = Z X (e_c + z),  (1 - Lambda R) z = Lambda R e_c.
-          ChannelState &st = chan_[jGroupNum - 1];
-          const int m = (int)f.act.size(), b = f.pos[chNum - 1];
-          std::fill(solve.begin(), solve.end(), complex(0.0, 0.0));
-          if (b >= 0) {
-            vector_c &z = st.wz;
-            z.resize(m);
-            for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
-            this->SolveBordered(jGroupNum, nullptr, z.data());
-            z[b] += 1.0;
-            vector_c &y = st.w4;
-            y.resize(n);
-            for (int k = 0; k < n; k++) {
-              complex sum(0.0, 0.0);
-              for (int a = 0; a < m; a++) sum += st.X[(size_t)k * m + a] * z[a];
-              y[k] = sum;
-            }
-            for (int r = 0; r < n; r++) {
-              const double *zr = &f.Z[(size_t)r * n];
-              complex sum(0.0, 0.0);
-              for (int k = 0; k < n; k++) sum += zr[k] * y[k];
-              solve[r] = sum;
-            }
-          }
+          azure2::physics::channel_space::pencil_channel_solve(f, chan_[jGroupNum - 1], f.pos[chNum - 1], solve);
         } else {
           vector_c &tmp = chan_[jGroupNum - 1].w3;
           tmp = solve;
@@ -1752,15 +1725,7 @@ const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
   vector_c &u = st.usolve[ch0];
   if (!st.uvalid[ch0]) {
     AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
-    const int n = f.n, m = (int)f.act.size();
-    u.assign(n, complex(0.0, 0.0));
-    const int b = f.pos[ch0];
-    if (b >= 0) {
-      vector_c &w = st.w2;
-      w.resize(n);
-      for (int k = 0; k < n; k++) w[k] = f.gamma[(size_t)k * m + b];
-      this->FormalApply(j, w.data(), u.data());
-    }
+    azure2::physics::channel_space::formal_channel_solve(f, st, ch0, u);
     st.uvalid[ch0] = 1;
   }
   return u;
@@ -1787,30 +1752,14 @@ void AMatrixFunc::FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &
   std::vector<std::vector<double>> &gOut = toFormal ? accum.fgamma[j - 1] : accum.gamma[j - 1];
   const std::vector<int> &lev = active_levels_[j - 1];
   vector_c ya(nch), yb(nch);
-  auto column = [&](int c0, vector_c &y) {
-    std::fill(y.begin(), y.end(), complex(0.0, 0.0));
-    y[c0] = 1.0;
-    const int b = f.pos[c0];
-    if (b < 0) return;
-    const complex *Fb = this->FColumn(j, b);
-    const int m = (int)f.act.size();
-    for (int a = 0; a < m; a++) y[f.act[a]] += st.lamAct[a] * Fb[a];
-  };
+  LevelSink sink(eOut, gOut, toFormal ? nullptr : lev.data());
   for (const BilinearTerm &t : terms) {
     const int a = t.ch - 1, b = t.chp - 1;
-    const complex cb = conj(t.beta);
     const vector_c &ua = this->FormalSolve(j, a);
     const vector_c &ub = this->FormalSolve(j, b);
-    column(a, ya);
-    column(b, yb);
-    for (int k = 0; k < n; k++) {
-      const int row = toFormal ? k : lev[k] - 1;
-      const complex pa = cb * ua[k], pb = cb * ub[k];
-      eOut[row] -= std::real(pa * ub[k]);
-      if (pa == complex(0.0, 0.0) && pb == complex(0.0, 0.0)) continue;
-      double *g = &gOut[row][0];
-      for (int d = 0; d < nch; d++) g[d] += std::real(pa * yb[d] + pb * ya[d]);
-    }
+    azure2::physics::channel_space::kernel_column(f, st, a, ya);
+    azure2::physics::channel_space::kernel_column(f, st, b, yb);
+    azure2::physics::channel_space::formal_bilinear_adjoint(t, ua.data(), ub.data(), ya.data(), yb.data(), n, nch, sink);
   }
 }
 
@@ -1836,13 +1785,8 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     if (!accum.lmUsed[j - 1]) continue;
     const JGroup *jg = compound()->GetJGroup(j);
     const int n = (int)std::lround(std::sqrt((double)accum.lmK[j - 1].size()));
-    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        const double xk = accum.lmK[j - 1][(size_t)r * n + c], xn = accum.lmN[j - 1][(size_t)r * n + c];
-        X1[r][c] = xk - xn;
-        X2[r][c] = xn;
-      }
+    matrix_c X1, X2;
+    azure2::physics::deferred_level_cotangents(accum.lmK[j - 1].data(), accum.lmN[j - 1].data(), n, X1, X2);
     const std::vector<complex> zero(jg->NumChannels(), complex(0.0, 0.0));
     this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, zero.data());
     this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, zero.data());
@@ -1864,78 +1808,20 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     formal_jgroup_[j - 1] = jg;
     ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
     ChannelSpace::Update(jg, state(), j, active_levels_[j - 1], configure(), f);
-    const int n = f.n, nch = f.nch, m = (int)f.act.size();
-    const std::vector<double> &ebar = accum.fe[j - 1];
-    const std::vector<std::vector<double>> &gbar = accum.fgamma[j - 1];
-    std::vector<double> e(n);
-    for (int k = 0; k < n; k++) e[k] = std::real(f.e[k]);
-    // H = Gamma Gammabar^T over the coupled channels.
-    std::vector<double> H((size_t)n * n, 0.0);
-    for (int k = 0; k < n; k++)
-      for (int l = 0; l < n; l++) {
-        double s = 0.0;
-        for (int a = 0; a < m; a++) s += f.gamma[(size_t)k * m + a] * gbar[l][f.act[a]];
-        H[(size_t)k * n + l] = s;
-      }
-    std::vector<double> Phi((size_t)n * n, 0.0), Psi((size_t)n * n, 0.0);
-    for (int l = 0; l < n; l++) {
-      Phi[(size_t)l * n + l] = ebar[l];
-      Psi[(size_t)l * n + l] = -e[l] * ebar[l] - 0.5 * H[(size_t)l * n + l];
-      for (int k = 0; k < n; k++) {
-        if (k == l) continue;
-        const double num = H[(size_t)k * n + l] - H[(size_t)l * n + k];
-        const double den = e[l] - e[k];
-        const double ratio = (num == 0.0 || den == 0.0) ? 0.0 : num / (2.0 * den);
-        Phi[(size_t)k * n + l] = ratio;
-        Psi[(size_t)k * n + l] = -e[l] * ratio - 0.5 * H[(size_t)l * n + k];
-      }
-    }
-    // Psi as built is symmetric only up to round-off; use its symmetric part.
-    for (int k = 0; k < n; k++)
-      for (int l = k + 1; l < n; l++) {
-        const double s = 0.5 * (Psi[(size_t)k * n + l] + Psi[(size_t)l * n + k]);
-        Psi[(size_t)k * n + l] = Psi[(size_t)l * n + k] = s;
-      }
-    // V X V^T for X = Phi, Psi.
-    auto congruence = [&](const std::vector<double> &X) {
-      std::vector<double> T((size_t)n * n, 0.0), out((size_t)n * n, 0.0);
-      for (int r = 0; r < n; r++)
-        for (int l = 0; l < n; l++) {
-          double s = 0.0;
-          for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * X[(size_t)k * n + l];
-          T[(size_t)r * n + l] = s;
-        }
-      for (int r = 0; r < n; r++)
-        for (int c = 0; c < n; c++) {
-          double s = 0.0;
-          for (int l = 0; l < n; l++) s += T[(size_t)r * n + l] * f.V[(size_t)c * n + l];
-          out[(size_t)r * n + c] = s;
-        }
-      return out;
-    };
-    const std::vector<double> Kbar = congruence(Phi), Nbar = congruence(Psi);
-    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        X1[r][c] = Kbar[(size_t)r * n + c] + Nbar[(size_t)r * n + c];
-        X2[r][c] = -Nbar[(size_t)r * n + c];
-      }
+    const int nch = f.nch;
+    azure2::physics::channel_space::FormalResolve resolved;
+    azure2::physics::channel_space::resolve_formal_cotangents(f, accum.fe[j - 1], accum.fgamma[j - 1], resolved);
     // The kernel: zero, but for the reference shifts that Update moved into K
     // (constants, like the kernel: F does not depend on them).
     std::vector<complex> kernel(nch, complex(0.0, 0.0));
     for (int c = 0; c < nch; c++)
       if (jg->GetChannel(c + 1)->GetRadType() == 'P')
         kernel[c] = jg->GetChannel(c + 1)->GetBoundaryCondition() - f.lamShift[c];
-    this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, kernel.data());
-    this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, kernel.data());
+    this->LevelMatrixAdjoint(nullptr, j, resolved.X1, 0.0, accum, shiftDeriv, kernel.data());
+    this->LevelMatrixAdjoint(nullptr, j, resolved.X2, 1.0, accum, shiftDeriv, kernel.data());
     // Gbar = V Gammabar.
-    const std::vector<int> &lev = active_levels_[j - 1];
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < nch; c++) {
-        double s = 0.0;
-        for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * gbar[k][c];
-        accum.gamma[j - 1][lev[r] - 1][c] += s;
-      }
+    azure2::physics::channel_space::add_level_widths_from_formal(
+        f, accum.fgamma[j - 1], LevelSink(accum.e[j - 1], accum.gamma[j - 1], active_levels_[j - 1].data()));
     for (size_t k = 0; k < accum.fe[j - 1].size(); k++) {
       accum.fe[j - 1][k] = 0.0;
       std::fill(accum.fgamma[j - 1][k].begin(), accum.fgamma[j - 1][k].end(), 0.0);

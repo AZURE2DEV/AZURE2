@@ -14,6 +14,7 @@
 // Nothing here knows the engine: a caller hands over the arrays of the block and a *sink*, an object with
 //   void energy(int level, double value);              // dL/dE_level += value
 //   void width(int level, int channel, double value);  // dL/dgamma_{level, channel} += value
+//   double *widths(int level);                         // the level's width cotangents, one per channel
 // (levels and channels of the block from 0).  The functions add through it term by term, in the order of the
 // engine's routines they were moved from (AMatrixFunc::LevelMatrixAdjoint, BilinearAdjoint, LevelAdjoint): the
 // gradients of every project depend on that order to the last digit.  LevelCotangents is a sink over two arrays.
@@ -45,6 +46,7 @@ struct LevelCotangents {
   LevelCotangents(int levels, int channels) : n(levels), nc(channels), e(levels, 0.0), gamma((std::size_t)levels * channels, 0.0) {}
   void energy(int l, double v) { e[l] += v; }
   void width(int l, int c, double v) { gamma[(std::size_t)l * nc + c] += v; }
+  double *widths(int l) { return &gamma[(std::size_t)l * nc]; }
 };
 
 /// What level_matrix_adjoint reads of one block: n levels, nc channels; the pointers are borrowed.  Arrays over
@@ -378,6 +380,21 @@ void deferred_bilinear_adjoint(const BilinearTerm &term, const std::complex<doub
       nr[c] += inEnergy * v;
     }
   }
+}
+
+/// The sums of deferred_bilinear_adjoint (K = sum Re Mbar, N = sum E Re Mbar; n x n row-major) as the two matrices
+/// the structural adjoint contracts once per pass: <K, dK> - <N, dN> = LMA(X1, 0) + LMA(X2, 1) with a zero kernel,
+/// X1 = K - N, X2 = N (level_matrix_adjoint(X, E) contracts X with dK - E dN).
+inline void deferred_level_cotangents(const double *K, const double *N, int n, LevelMatrixSolver::matrix_c &X1,
+                                      LevelMatrixSolver::matrix_c &X2) {
+  X1.assign(n, std::vector<std::complex<double>>(n));
+  X2.assign(n, std::vector<std::complex<double>>(n));
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++) {
+      const double xk = K[(std::size_t)r * n + c], xn = N[(std::size_t)r * n + c];
+      X1[r][c] = xk - xn;
+      X2[r][c] = xn;
+    }
 }
 
 /// The derivative of K and N of a block's level matrix M = K - E N - G Lambda G^T by one level parameter (the energy

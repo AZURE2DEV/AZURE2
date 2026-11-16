@@ -4,6 +4,7 @@
 #include "GenMatrixFunc.h"
 #include "azure2/physics/CollisionMatrix.h"
 #include "azure2/physics/CollisionMatrixAdjoint.h"
+#include "azure2/physics/ChannelSolveAdjoint.h"
 #include "ChannelSpace.h"
 #include <memory>
 
