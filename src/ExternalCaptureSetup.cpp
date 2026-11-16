@@ -20,6 +20,7 @@
 #include "ExternalCaptureExit.h"
 #include "WorkingCopy.h"
 #include "GSLException.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 const azure2::ExitRow &ExternalCaptureExit(const CompoundSystem &compound, int entrancePair, int exitPair, int segmentKey) {
   const azure2::EntrancePathways &P = compound.Pathways().Entrance(entrancePair);
@@ -483,6 +484,7 @@ int WorkingCopy::CalculateECAmplitudes(const CompoundSystem *compound, const Con
                 bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
+                  const azure2::support::ExtendedPrecisionScope fpPrecision;
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = segment->GetPoint(*this, i);
                   // Mapped points compute their own amplitudes too: the
@@ -589,6 +591,7 @@ int WorkingCopy::LeafECAmplitudes(const CompoundSystem *compound, const Config &
                 bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
+                  const azure2::support::ExtendedPrecisionScope fpPrecision;
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                   try {

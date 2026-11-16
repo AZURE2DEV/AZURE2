@@ -1561,6 +1561,67 @@ if not OLD_COMPOUND_NAME.search("const CNuc *c") or not OLD_COMPOUND_NAME.search
         or not COMPOUND_CLONE.search("std::unique_ptr<CompoundSystem> Clone() const;"):
     problems.append("check 59: the old-name pattern no longer matches the forms it guards; update this check")
 
+# 60. Every thread computes long double with a 64-bit mantissa (azure2/support/FloatingPointPrecision.h in support/):
+#     on Windows a thread's x87 precision is the runtime's that made it (53 bits in a Python thread, 64 in the main
+#     one), and a pyazr call in a Python thread gave other bits than in the main thread.  The body of every OpenMP
+#     parallel region of the engine, the binding and numcmc opens with `const azure2::support::ExtendedPrecisionScope`
+#     (the first statement after the region's or its loop's opening brace), and the binding releases the GIL only
+#     through EngineCallScope (api/src/pybind_engine_call.h), which takes the same scope.
+PRECISION_DIRS = ("src/", "include/", "api/src/", "numcmc/src/", "numcmc/include/")
+PRECISION_SCOPE = re.compile(r"\s*const\s+azure2::support::ExtendedPrecisionScope\s+\w+\s*;")
+
+
+def regions_without_precision_scope(text):
+    """The line numbers of the OpenMP parallel regions of `text` whose body does not open with the scope."""
+    bad = []
+    for m in re.finditer(r"^[ \t]*#[ \t]*pragma[ \t]+omp[ \t]+parallel\b(?:[^\n]*\\\n)*[^\n]*\n", text, re.M):
+        i = m.end()
+        while True:  # preprocessor lines between the pragma and the statement
+            pp = re.match(r"[ \t]*#[^\n]*\n", text[i:])
+            if not pp:
+                break
+            i += pp.end()
+        i += len(text[i:]) - len(text[i:].lstrip())
+        if text.startswith("for", i):  # a parallel for: the loop's body
+            depth, j = 0, text.index("(", i)
+            for j in range(j, len(text)):
+                depth += {"(": 1, ")": -1}.get(text[j], 0)
+                if depth == 0:
+                    break
+            i = j + 1 + len(text[j + 1:]) - len(text[j + 1:].lstrip())
+        if not (text.startswith("{", i) and PRECISION_SCOPE.match(text, i + 1)):
+            bad.append(text.count("\n", 0, m.start()) + 1)
+    return bad
+
+
+_precision_regions = 0
+for rel in tracked_files():
+    if not rel.startswith(PRECISION_DIRS) or not rel.endswith((".cpp", ".h", ".hpp")):
+        continue
+    try:
+        text = read(rel)
+    except (OSError, UnicodeDecodeError):
+        continue
+    _precision_regions += len(re.findall(r"^[ \t]*#[ \t]*pragma[ \t]+omp[ \t]+parallel\b", text, re.M))
+    for number in regions_without_precision_scope(text):
+        problems.append(f"{rel}:{number}: an OpenMP parallel region whose body does not open with "
+                        "`const azure2::support::ExtendedPrecisionScope fpPrecision;` (check 60)")
+    if rel.startswith("api/src/") and rel != "api/src/pybind_engine_call.h":
+        for number, line in enumerate(text.splitlines(), 1):
+            if "gil_scoped_release" in line:
+                problems.append(f"{rel}:{number}: releases the GIL without the engine's precision scope; use "
+                                "EngineCallScope (api/src/pybind_engine_call.h) (check 60)")
+_good = ("#pragma omp parallel for schedule(dynamic)\n  for (int k = 0; k < (int)v.size(); k++) {\n"
+         "    const azure2::support::ExtendedPrecisionScope fpPrecision;\n    f(k);\n  }\n"
+         "#pragma omp parallel \\\n    num_threads(2)\n  {\n"
+         "    const azure2::support::ExtendedPrecisionScope s;\n  }\n")
+_bad = "#pragma omp parallel for\n  for (int k = 0; k < n; k++) f(k);\n#pragma omp parallel\n  {\n    int x = 0;\n  }\n"
+if regions_without_precision_scope(_good) or regions_without_precision_scope(_bad) != [1, 3]:
+    problems.append("check 60: the planted regions are misjudged; update regions_without_precision_scope")
+if _precision_regions < 39:
+    problems.append(f"check 60: {_precision_regions} OpenMP parallel regions found (39 on 2026-11-16); the scan "
+                    "misses them")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1575,4 +1636,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
       f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
-      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files")
+      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files, "
+      f"{_precision_regions} parallel regions in the x87 precision scope")

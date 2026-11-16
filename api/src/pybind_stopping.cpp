@@ -21,6 +21,7 @@
 #include "azure2/stopping/EnergyLoss.h"
 #include "azure2/stopping/Stopping.h"
 #include "azure2/stopping/Straggling.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace st = azure2::stopping;
@@ -336,7 +337,7 @@ py::tuple EvaluateStopping(const std::string &name, const std::string &formula, 
   double *v = values.mutable_data();
   int *stp = status.mutable_data();
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     std::vector<double> a(na), o(no);
     std::vector<double> made(kCommon, rows::kNaN);  // the common arguments of the material and projectile made
     st::Material material;

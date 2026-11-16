@@ -33,6 +33,7 @@
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "azure2/physics/transfer/ThmVertex.h"
 #include "pybind_rows.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -490,7 +491,7 @@ py::tuple Evaluate(const std::string &name, const std::vector<Column> &columns) 
   double *v = values.mutable_data();
   int *st = status.mutable_data();
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     std::vector<double> a(na), o(no);
     for (py::ssize_t i = 0; i < n; i++) {
       for (std::size_t k = 0; k < na; k++) a[k] = in[k][i];

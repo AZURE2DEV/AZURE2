@@ -47,6 +47,7 @@
 #include "CompoundSystemChecks.h"
 #include <optional>
 #include "azure2/io/ConfigSection.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -100,7 +101,7 @@ py::array_t<double> to_array(const vector_r &v) {
 // GIL-free call (copy in, destroy out), and a temporary converted from a
 // Python list then crashed (segfault on calculate_chi2_rwa([...]), October
 // 2026).  The others convert their argument with the GIL held and release it
-// only around the engine call (an inner block: gil_scoped_release, so that
+// only around the engine call (an inner block: EngineCallScope, so that
 // the GIL is taken back before the result is converted); they may take the
 // array by value.
 vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
@@ -354,7 +355,7 @@ class Session {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa");
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->TransformAllRWAParameters(v, include_fixed);
     }
     return to_array(out);
@@ -407,7 +408,7 @@ class Session {
     expect_all(v, "reaction_rate");
     std::vector<std::pair<double, double>> out;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       Config &configure = *config_;
       configure.rateParams.useFile = !temperatureFile.empty();
       configure.rateParams.temperatureFile = temperatureFile;
@@ -428,7 +429,7 @@ class Session {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_chi2_grad_rwa");
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->CalculateChi2GradRWA(v);
     }
     return to_array(out);
@@ -444,7 +445,7 @@ class Session {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_objective_grad_rwa");
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->CalculateObjectiveGradRWA(v);
     }
     return to_array(out);
@@ -509,7 +510,7 @@ class Session {
         throw AZURE2Error("calculate_residual_jacobian_rwa: skip column " + std::to_string(c) + " is outside the " +
                           std::to_string(v.size()) + " free parameters.");
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->CalculateResidualJacobianRWA(v, skip);
     }
     return to_array(out);
@@ -517,7 +518,7 @@ class Session {
   py::array_t<double> calculate_residuals_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->CalculateResidualsRWA(v);
     }
     return to_array(out);
@@ -594,7 +595,7 @@ class Session {
     bool ok;
     {
       // The DW vertex and R(E) can take seconds: without the GIL.
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       ok = api_->GetThmVertex(name, energies, r, why);
     }
     if (!ok) throw AZURE2Error(why);
@@ -680,7 +681,7 @@ class Session {
     const vector_r energies = to_vector(e);
     bool ok;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       ok = api_->GetThmDistortion(name, energies, r, why);
     }
     if (!ok) throw AZURE2Error(why);
@@ -715,7 +716,7 @@ class Session {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_model_gradients_rwa");
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->CalculateModelGradientsRWA(v);
     }
     return to_array(out);
@@ -726,7 +727,7 @@ class Session {
   py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->GetCoulombFunctions(v);
     }
     return to_array(out);
@@ -734,7 +735,7 @@ class Session {
   py::array_t<double> ec_integrals(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->GetECIntegrals(v);
     }
     return to_array(out);
@@ -742,7 +743,7 @@ class Session {
   py::array_t<double> cache_stats() const {
     vector_r out;
     {
-      py::gil_scoped_release release;
+      EngineCallScope engine;
       out = api_->GetCacheStats();
     }
     return to_array(out);
@@ -791,6 +792,7 @@ void BindConvert(py::module_ &m);  // pybind_convert.cpp: format-3 validation an
 void BindProject(py::module_ &m);  // pybind_project.cpp: the project file as a document
 void BindDescription(py::module_ &m);  // pybind_describe.cpp: what pyazr.describe() and pyazr.kinds() read
 void BindRecordFields(py::module_ &m);  // pybind_records.cpp: the fields of the parameter and pair records
+void BindPrecision(py::module_ &m);  // pybind_precision.cpp: the x87 control words (a diagnostic, a test hook)
 
 namespace {
 
@@ -832,6 +834,7 @@ PYBIND11_MODULE(_azure2, m) {
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
   BindFit(m);  // pybind_fit.cpp: the engine's fitters (fitters(), StopRequest)
   BindDataRows(m);  // pybind_data_rows.cpp: a data set's file as the engine reads it (data_rows)
+  BindPrecision(m);  // pybind_precision.cpp: _x87_control_words, _set_x87_control_word
 
   m.def(
       "parameter_kinds",
@@ -883,11 +886,11 @@ PYBIND11_MODULE(_azure2, m) {
            "the file is missing or the model will not initialize.  rate_entrance (not 0) and rate_exit: a session "
            "for the reaction rate of those pairs (reaction_rate), set up as the program's rate command.")
       .def("write_output_files", &Session::write_output_files,
-           py::call_guard<py::gil_scoped_release>(),
+           py::call_guard<EngineCallScope>(),
            "Write AZUREOut_*, chiSquared.out and the rest into the output "
            "directory, from the cross sections currently on the points.")
       .def("calculate_external_capture", &Session::calculate_external_capture,
-           py::call_guard<py::gil_scoped_release>(),
+           py::call_guard<EngineCallScope>(),
            "Recompute every external-capture integral from scratch.")
       .def("reaction_rate", &Session::reaction_rate, py::arg("params"), py::arg("min_temp"), py::arg("max_temp"),
            py::arg("temp_step"), py::arg("temperature_file"),
@@ -900,7 +903,7 @@ PYBIND11_MODULE(_azure2, m) {
            "<config> key) or 'keyword' (given to the session).")
       .def("get_potential", &Session::get_potential, py::arg("pair"),
            "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step) for a pair.")
-      .def("update_data", &Session::update_data, py::call_guard<py::gil_scoped_release>(),
+      .def("update_data", &Session::update_data, py::call_guard<EngineCallScope>(),
            "Refill the data arrays; returns the number of segments.")
       .def("parameter_records", &Session::parameter_records,
            "Every parameter as a dict of named fields (parameter_record_fields()), in params_names() order.")
@@ -927,19 +930,19 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculated_excitation_energies", &Session::calculated_excitation_energies, py::arg("segment"))
       .def("calculated_conv", &Session::calculated_conv, py::arg("segment"))
       .def("update_segments", &Session::update_segments,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+           py::call_guard<EngineCallScope>(), py::arg("params"))
       .def("update_segments_rwa", &Session::update_segments_rwa,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+           py::call_guard<EngineCallScope>(), py::arg("params"))
       .def("set_params_all_rwa", &Session::set_params_all_rwa,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"),
+           py::call_guard<EngineCallScope>(), py::arg("params"),
            "Set every parameter, fixed ones included (params_all_rwa layout), "
            "without calculating.  Fixed values are what the free-vector calls use.")
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+           py::call_guard<EngineCallScope>(), py::arg("params"))
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
            py::arg("include_fixed") = false)
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+           py::call_guard<EngineCallScope>(), py::arg("params"))
       .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, py::arg("params"),
            "s-wave scattering lengths of every particle pair at a free RWA vector: 6 numbers per channel "
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
@@ -954,7 +957,7 @@ PYBIND11_MODULE(_azure2, m) {
            "Data covariances: forget the model frozen for the relvector terms; the next chi2 evaluation "
            "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,
-           py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+           py::call_guard<EngineCallScope>(), py::arg("params"))
       .def("calculate_objective_rwa", &Session::calculate_objective_rwa, py::arg("params"),
            "The fit's objective at the free RWA parameters: data chi^2 plus every prior and constraint.")
       .def("calculate_objective_grad_rwa", &Session::calculate_objective_grad_rwa, py::arg("params"),
