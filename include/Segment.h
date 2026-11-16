@@ -471,12 +471,6 @@ class Segment {
     thicknessLeaderPos_ = pos;
     startThickness_ = n;
   }
-  /// The prior ((n - n0)/sigma)^2 of a free thickness parameter that owns its value (no follower), 0 otherwise (a
-  /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
-  double ThicknessPenalty(const SegmentState &state) const {
-    if (!IsThicknessVaried() || thicknessPriorReplaced_ || !(thicknessSigma_ > 0.0)) return 0.0;
-    return azure2::inference::GaussianPriorChi2(state.thickness, thicknessCentre_, thicknessSigma_);
-  }
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }

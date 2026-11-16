@@ -17,6 +17,7 @@
 #include "ModelPass.h"
 #include "InferenceTypes.h"
 #include "ModelData.h"
+#include "DiagonalPriors.h"
 
 namespace {
 
@@ -140,7 +141,8 @@ class ParkTerm : public ObjectiveTerm {
   }
 };
 
-// T8: one term per kind of target-effect prior, in the engine's order.
+// T8: one term per kind of target-effect prior, in the engine's order: the subtotal from 0 of its priors
+// (AppendTargetPriors, DiagonalPriors.h), added to the running sum.
 class TargetPriorTerm : public ObjectiveTerm {
  public:
   enum Kind { Screening, Density, Doppler, Thickness, Apparatus };
@@ -153,16 +155,22 @@ class TargetPriorTerm : public ObjectiveTerm {
     return names[kind_];
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    switch (kind_) {
-      case Screening: chi2 += c.data->ScreeningPenalty(); break;
-      case Density: chi2 += c.data->DensityPenalty(); break;
-      case Doppler: chi2 += c.data->DopplerPenalty(); break;
-      case Thickness: chi2 += c.data->ThicknessPenalty(); break;
-      case Apparatus: chi2 += c.data->ApparatusPenalty(); break;
-    }
+    DiagonalPriors priors;
+    AppendTargetPriors(*c.data, Source(), nullptr, priors);
+    chi2 += PriorsChi2(priors);
   }
 
  private:
+  PriorSource Source() const {
+    switch (kind_) {
+      case Screening: return PriorSource::kScreening;
+      case Density: return PriorSource::kDensity;
+      case Doppler: return PriorSource::kDoppler;
+      case Thickness: return PriorSource::kThickness;
+      case Apparatus: break;
+    }
+    return PriorSource::kApparatus;
+  }
   Kind kind_;
 };
 

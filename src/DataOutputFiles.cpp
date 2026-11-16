@@ -15,6 +15,7 @@
 #include "AZUREOutput.h"
 #include "Config.h"
 #include "CovarianceBand.h"
+#include "DiagonalPriors.h"
 #include "WorkingCopy.h"
 
 /*!
@@ -364,19 +365,26 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   // Isotopic abundances: their priors and the sum-to-one term.
   if (results.objective.abundance != 0.0)
     chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
+  // The target-effect priors as the objective's T8 adds them (AppendTargetPriors, DiagonalPriors.h): the subtotal of
+  // one kind at the working copy's present values.
+  auto targetPriors = [this](PriorSource source) {
+    DiagonalPriors priors;
+    AppendTargetPriors(*this, source, nullptr, priors);
+    return PriorsChi2(priors);
+  };
   // Electron-screening priors, when a screening potential has one.
   {
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumScreeningParams(); k++)
       if (Data().GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
+    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << targetPriors(PriorSource::kScreening);
   }
   // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
   if (Data().NumDensityParams() > 0) {
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumDensityParams(); k++)
       if (Data().GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
+    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << targetPriors(PriorSource::kDensity);
   }
   // Apparatus parameters (stopping scales, a kernel's width): one line per row with a fitted prior.
   WriteApparatusChiSquared(*this, chiOut);
@@ -385,7 +393,7 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumDopplerParams(); k++)
       if (Data().GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
+    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << targetPriors(PriorSource::kDoppler);
   }
   // Fitted sample thicknesses: their priors.
   if (Data().NumThicknessParams() > 0) {
@@ -394,7 +402,7 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
       const Segment *seg = &set_->segments_[Data().GetThicknessSegment(k) - 1];
       if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
     }
-    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
+    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << targetPriors(PriorSource::kThickness);
   }
   // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
   if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
