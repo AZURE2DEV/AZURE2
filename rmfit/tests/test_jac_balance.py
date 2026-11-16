@@ -119,10 +119,9 @@ def compare(name, azr, cwd, tmp, nshards, flags, perturb):
 def main():
     synthetic()
     import rmfit  # noqa: F401
-    import pyazr.datasets as ds
     tmp = tempfile.mkdtemp(prefix="rmfit_jacbal_")
     try:
-        if "shiftfngroup" in getattr(ds, "_KEYWORDS", {}):
+        if True:
             fix = os.path.join(HERE, "fixtures", "shift_fn_groups")
             d = os.path.join(tmp, "sfg")
             shutil.copytree(fix, d)
