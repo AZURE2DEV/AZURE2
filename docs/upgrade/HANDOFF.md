@@ -2,6 +2,123 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 21:50) — merged: the macOS findings, three objective repairs, the converter's GSL note
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 101: `feature/upgrade-0-macos-3`,
+`feature/upgrade-7-objective-repairs`, `feature/upgrade-0-small-traps` (agents'; the last two's entries follow, the
+first's findings are below). The base build is `work/b-trial101`, **the reference tag is `tab-trial101-1`**, the
+quick set is 331 tests.
+
+**The macOS job of run 43828542125** (170 of 172 regression scripts; the unit tests cut off at six hours).
+
+- *T3's `parameters.out`, 1000 against 1.* A width entered as 1000 eV goes to a reduced width and back and lands
+  one rounding step above or below 1e-3 MeV; `WriteParametersOut` chose keV or eV by that exact comparison.
+  Reproduced on Linux by moving the level (17.66 and 17.67 MeV print eV). Repaired: `ReportWidth`
+  (`src/LevelReport.cpp`) takes the largest unit in which the six-decimal print is at least 1.000000. **This
+  changes the printed unit, not the value, of a width within 5e-7 of a unit boundary:** against `tab-trial99-1`
+  22 `parameters.out` files differ (5, 5 and 12 in the three bases), every differing token "1000.000000 eV" ->
+  "1.000000 keV" (17) or "1000.000000 meV" -> "1.000000 eV" (5), read token by token by the director.
+- *T3's alpha+alpha d-wave phase, 3.7e-6.* A difference of two terms of 0.57 deg leaving 0.0025 deg; a one-bit
+  change of the complex elementary functions on Linux moves it by 1e-6 to 2.4e-6 and every other number by at
+  most 2.9e-9 (the agent's preload shim). Not an engine fault. **The PI, asked: "Use also 2e-5":**
+  `tests/upgrade/check.sh` compares at 1e-6 on Linux and 2e-5 on another system (the director's reading of
+  "also"; no golden file changed).
+- *`transmission_yield` (j), 0 parameters listed.* The run takes 540 s here under a 1200 s limit and prints its
+  rows only at the end; a stopped run prints the CI's line. Not shown that macOS hit the limit: the script now
+  says whether it did and what one evaluation took.
+- *The unit tests.* 127 of 327 had no time limit. Now: 40 minutes per test, the step ends 20 minutes before the
+  job's limit and names the tests still running, every run lists its 15 slowest tests. The cause is not found;
+  libomp's waiting was tried on Linux and ruled out there. The tests run are the same.
+
+The agent's full account: `work/director/entries/mac_agent.md` (local, not in the repository).
+
+**The three repairs** (the PI: "The 3 problems need solving"): the Park gradient skips a NaN norm; `shifts.out`'s
+function penalty is the function's own priors (no test project's file changes; the wrong case needed a prior
+covariance); the API's data chi-squared is the objective's term (largest change of the returned value 2.5e-16).
+
+**Small:** the converter notes a ticked "use GSL Coulomb functions" box of an old `<lastRun>` (bit 12 of its first
+number, from the old program's source); `--schema-out=FILE` writes the schema all or nothing, and the recipes
+use it.
+
+**Verified** (`work/director/verify_l101.out`): 0 warnings; 882, 846 and 875 of 887, 851 and 887 files identical
+to `tab-trial99-1`, the 22 others as above; the eight fits identical to `work/b-trial100`; 331 of 331 quick tests;
+172 of 172 regression scripts. Not run by me: the slow tests, sanitizers, any other platform.
+
+**The PI, 2026-11-16 about 22:00: "Okay, add these to the plan, then we are finished."** The closing plan (local
+`NEXT_AGENT.md`, block 0i): what runs; the CI; the objective to the end (abundances, Park's wall, profiled norms
+on arrays; a term stated in one place); a fitter without a `Config.h` bit and a datum quantity declared once;
+the long files (`AMatrixFunc.cpp`, `WorkingCopy.cpp`, `AZUREGrad.cpp`, `pybind_api.cpp`); the data term computed
+once per `evaluate()` and the T2 gradient fit's +0.3 to 0.6 %; then the close. Not in it: shared read-only
+data; everything that waits for the owner.
+
+**Not merged yet:** `feature/upgrade-1-coulomb-neutral-f` (reported: F and F' at eta = 0 within 6e-15 of mpmath;
+EC signature v8) and `feature/upgrade-8-observed-level` (in its check).
+
+## 2026-11-16 (objective repairs agent) — three objective inconsistencies repaired (Park NaN, shifts.out, API chi2)
+
+Branch feature/upgrade-7-objective-repairs, worktree wt-fix3, cut at 01a701ad.  The PI's word: "The 3 problems need
+solving".  Not pushed.
+
+Commits:
+- 48dc8f89 fix(grad): the Park wall's gradient skips a NaN J as its value and rows do
+- 1e5a80a7 fix(output): shifts.out prints the shift function's own priors
+- 1ac8cd41 fix(api): the API's data chi-squared is the objective's data term
+- 940965e6 docs(upgrade): the commits of the three repairs in objective_arrays.md (hashes only)
+
+(1) src/AZUREGrad.cpp AddParkPenaltyGradient: `J >= 0` -> `!(J < 0)`, one line, file stays 1108 lines.
+    Test: ctest park_chi2_fallback, variant E (NanVariant, from the previous worker's draft, checked): with the wall
+    level's J set to NaN the gradient is 0 in every component, value 0, rows 0.  Ran on work/b-fix3 built with the
+    test and without the fix: "no gradient from it" FAIL, the rest ok; with the fix: pass.  Outputs: none moved.
+(2) src/DataOutputFiles.cpp WriteShiftsFile: the function line's penalty is PriorsChi2(owner priors, kShiftFn, s)
+    (was: owner's shift priors minus the offset's prior formed again, also when the prior covariance replaced it).
+    Test: tests/shift_fn/check.sh case 8 (nopcov: 9 and Total-Shift 13; pcov: Total-Prior-Covariance 4, Total-Shift
+    9, function penalty 9).  On work/b-trial99 and on the pre-fix b-fix3: penalty 5.0000e+00, FAIL; after: pass.
+    Before the change: the new binary on the 8 projects of tests/ whose shifts.out has a function line, 3 bases
+    (24 files), against tab-trial99-1: every '#' line the same.  No expected/ file holds a shifts.out.
+    Docs: reference/output_files.rst (the function lines and the penalty column).
+(3) api/src/AZUREAPIChi2.cpp EvaluateFilledChi2: model pass, then Objective::DataChi2 (previous worker's efc_new.cpp,
+    checked); the rows as before (Pull at NormUsed; THM rows from ThmGroupResiduals).  Check 11's allowed entry
+    (AZUREAPIChi2.cpp, CovarianceChi2Correction) removed.  Test: tests/pyazr/objective_test.py section 6:
+    calculate_chi2_rwa(x) == terms[data] + terms[data covariance] + model terms, bit for bit, T1-T3 and 13N, three
+    bases, x0 and level parameters x(1 + 1e-4), with no segment prior active (asserted).  Before: 11 of 24 FAIL (on
+    b-trial99 and the pre-fix b-fix3); after: pass.  calculate_chi2_rwa before -> after: 11 of 24 moved, largest
+    relative change 2.5e-16 (scratch: work/fix3/probe_chi2.py, probe_pre.txt, probe_post.txt).
+
+Full check (verify_branch.sh wt-fix3 fix3 tab-trial99-1 trial99 6, work/director/verify_fix3.out, at 940965e6):
+warnings 0; brune 887 of 887, no-brune 851 of 851, use-park 887 of 887 files identical, 0 differ, 0 new; the eight
+fits identical to trial99; ctest -LE slow 331 of 331 passed; tests/run_tests.sh passed 172, failed 0.
+
+Not run: ctest -L slow, sanitizers, thread comparison, CI, other compilers.  Not done: CLAUDE.md unchanged (its check-11
+sentence is now true without an exception); inference.md had no sentence made untrue.  The data term still runs a
+second time in evaluate()/objective() (EvaluateFilledChi2 then Objective::Chi2), as before.
+
+## 2026-11-16 (small-traps agent) — a note for a ticked GSL box of an old file; `--schema-out`
+
+**Merged.** Branch `feature/upgrade-0-small-traps` in `wt-traps`, two commits: e6c9ec53 (the converter's note) and
+26592499 (`--schema-out`). Build `work/b-traps`, 0 warnings. No number of any calculation changes; no `expected/` file,
+tolerance or reference value was touched.
+
+**Job 1, the converter's note.** The old program's check box "use GSL Coulomb functions" is bit 12 (4096) of the first
+number of `<lastRun>` (dev: `gui/src/AZURESetup.cpp` `writeLastRun` writes `paramMask` first, `readLastRun` reads it
+with `>>`; `include/Config.h` `USE_GSL_COULOMB_FUNC = 1 << 12`). `ConvertToFormat3` (`convert/src/Convert.cpp`) reads
+the bit of a format-1 file before `ConvertToFormat2` removes the section and adds one `ConvertNote`, construct
+"<lastRun> use GSL Coulomb functions": the report, `--json-report`, `pyazr.convert_azr`. The converted text is
+byte for byte the same with and without the note. No committed fixture has the bit set (masks 0, 1857, 1865, 9985,
+9997, 10025, 10089), so no committed conversion changes. Test: `convert_constructs` (masks 9997 off; 14093 and 4096
+on). It failed 3 checks without the change. Docs: `older_projects.rst`, `coulomb.md` 9.1 (which said "nothing
+changes in `convert/`").
+
+**Job 2, `--schema-out=FILE`.** `src/ProjectCommands.cpp` `writeSchemaOut`: FILE.tmp, stream checked after write,
+flush and close, then `std::filesystem::rename`; FILE untouched on any error, exit 1 (empty FILE: exit 2). Help line,
+`command_line.rst`, `repo_consistency_test.py` (`handled_in_main`). The redirect form is gone from `CLAUDE.md`,
+`extending.rst`, `experiment/README.md`, two test messages and `tools/gen_schema_docs.py`. Test: `tests/cli_commands`
+section 5. Shown failing against the old binary and with the temporary name made equal to FILE.
+
+**Not verified / open.** The unwritable-folder case is skipped (printed as ok) when the user is root; the taken-name
+and FILE-is-a-directory cases cover the same code path then. Windows: `std::filesystem::rename` replaces an existing
+file there; not run. A format-2 file with a `<lastRun>` (hand-made) gets no note, as `ConvertToFormat2` does not
+remove its section either.
+
 ## 2026-11-16 (director, 20:30) — merged: the objective's diagonal priors on one list (slices 1-3)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 100: `feature/upgrade-7-objective-arrays` (an agent's;
