@@ -54,7 +54,7 @@ else:
 check("sections", s["sections"] == {"data": ["dataset", "normalization", "energy_scale"],
                                     "targets": ["target", "beam", "detector"],
                                     "extrapolations": ["extrapolation"], "modelData": ["datum"],
-                                    "potentials": ["potential"], "gammaDecays": ["gamma_decay"]})
+                                    "potentials": ["potential"], "gammaDecays": ["gamma_decay"], "channelRadii": ["channel_radius"]})
 pot = s["records"]["potential"]["fields"]
 check("potential: pair, coulomb_radius and central required; matching_radius and step with their defaults",
       pot["pair"].get("required") is True and pot["coulomb_radius"].get("required") is True and

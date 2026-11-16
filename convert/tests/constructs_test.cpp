@@ -795,11 +795,17 @@ int main(int argc, char **argv) {
   //      dev's general spin observables (a type followed by a spin operator); each refused, with what to do
   {
     const std::string line = "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat\n";
-    const ConvertResult cr = Convert({line, "", "", "<channelRadii>\n1 0 5.5\n</channelRadii>\n", ""});
-    check("<channelRadii>: refused as a newer AZURE2's section, with the way out",
-          !cr.ok && cr.refusal.find("<channelRadii>") != std::string::npos &&
-              cr.refusal.find("newer AZURE2 (its dev branch: radii of single channels") != std::string::npos &&
-              cr.refusal.find("convert a copy without the section") != std::string::npos);
+    const ConvertResult cr = Convert({line, "", "", "<channelRadii>\n1 0 5.5\n1 1 4.5 J=3/2   # one wave\n</channelRadii>\n", ""});
+    check("<channelRadii> of dev: one channel_radius record per line, in the same section",
+          cr.ok && cr.text.find("<channelRadii>\nchannel_radius ") != std::string::npos &&
+              cr.text.find("radius") != std::string::npos && cr.text.find("5.5 fm") != std::string::npos &&
+              cr.text.find("4.5 fm") != std::string::npos && cr.text.find("3/2") != std::string::npos &&
+              cr.text.find("1 0 5.5") == std::string::npos);
+    const ConvertResult badRadius = Convert({line, "", "", "<channelRadii>\n1 one 4.0\n</channelRadii>\n", ""});
+    check("<channelRadii>: a line that is not pair, l, radius is refused",
+          !badRadius.ok && badRadius.refusal.find("<channelRadii> line") != std::string::npos);
+    const ConvertResult noPair = Convert({line, "", "", "<channelRadii>\n9 1 4.0\n</channelRadii>\n", ""});
+    check("<channelRadii>: an unknown pair key is refused", !noPair.ok && noPair.refusal.find("pair key 9") != std::string::npos);
     const ConvertResult iso = Convert({line, "", "", "<isospin>\nreference 1\n</isospin>\n", ""});
     check("<isospin>: refused as a newer AZURE2's section", !iso.ok && iso.refusal.find("isospin ties") != std::string::npos);
     const ConvertResult notes = Convert({line, "", "", "<notes>\nrun 7 was bad\n</notes>\n", ""});

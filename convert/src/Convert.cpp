@@ -258,6 +258,8 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   }
   // <potential> -> <potentials> where the block was (none when no pair gets a potential)
   ReplaceSection(doc, "potential", built.potentials.records.empty() ? "" : "potentials", io::WriteRecords(built.potentials));
+  // dev's <channelRadii> lines -> `channel_radius` records, in the same section
+  if (!built.channelRadii.records.empty()) ReplaceSection(doc, "channelRadii", "channelRadii", io::WriteRecords(built.channelRadii));
   for (const auto &b : built.bodies) {
     if (b.first == "mcmc/parameters") {
       if (const io::Document::Section *m = doc.Find("mcmc"))

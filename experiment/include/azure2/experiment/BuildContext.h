@@ -87,6 +87,10 @@ void EnergyWindow(const ValidatedRecord &r, DatasetSpec &d);
 /// refusals that need the pairs, the THM data sets and the relativistic flag.  After the data sets are built.
 void BuildPotentials(Context &c);
 
+/// The `channel_radius` records of <channelRadii> (ChannelRadii.cpp): one entry per record into out_.channelRadii, and
+/// the refusals that need the pairs (a photon or beta pair, a selection of channels given twice).
+void BuildChannelRadii(Context &c);
+
 /// The effects of targets, beams and detectors on the data sets and extrapolations, the abundances of the targets'
 /// isotopes and the sample thicknesses (BuildEffects.cpp).
 void BuildEffects(Context &c);

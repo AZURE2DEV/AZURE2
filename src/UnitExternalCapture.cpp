@@ -115,17 +115,14 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   const PPair *entrancePair = compound->GetPair(entrance);
   const int j = pathway.final_group;
   const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
-  // Two radii.  The radial integral runs from the final channel's a_c (the wave it folds is in that channel's
-  // partition).  The entrance wave's closed test and hard-sphere phase are taken at the entrance channel's a_c: for
-  // channel capture that is the entrance channel of the internal pathway the capture passes through, which may be
-  // of another partition (12C+alpha in, capture in 15N+p); for direct capture the entrance and final channels are
-  // of one partition, and their radii must agree (with radii per channel that has to be refused at set-up --
-  // docs/upgrade/dev_features.md section 2).
+  // Two radii.  The radial integral runs from the final channel's a_c; the wave it folds is in the exit channel of
+  // the internal pathway the capture goes through, of the final channel's partition, and the set-up refuses a model in
+  // which that channel's radius is another (RefuseCaptureAcrossRadii).  The entrance wave's closed test and
+  // hard-sphere phase are taken at the entrance channel's a_c, which for channel capture may be of another partition
+  // (12C+alpha in, capture in 15N+p).
   const double radius = theFinalChannel->GetRadius();
-  const double entranceRadius =
-      pathway.channel_capture
-          ? compound->GetJGroup(P.internal[pathway.cc_row].group)->GetChannel(P.internal[pathway.cc_row].ch)->GetRadius()
-          : radius;
+  const azure2::InternalRow &throughRow = P.internal[pathway.through_row];
+  const double entranceRadius = compound->GetJGroup(throughRow.group)->GetChannel(throughRow.ch)->GetRadius();
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or

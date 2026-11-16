@@ -31,6 +31,7 @@ add_library(azure2_experiment STATIC
   src/BuildEffects.cpp
   src/BuildFinalStates.cpp
   src/BuildPotentials.cpp
+  src/ChannelRadii.cpp
   src/BuildUnits.cpp
   src/Expression.cpp
   src/Frames.cpp

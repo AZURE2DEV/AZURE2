@@ -162,6 +162,9 @@ constexpr const char *kLabJacobianAtLimit = "E_LAB_JACOBIAN_AT_LIMIT";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";
 constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";
+constexpr const char *kChannelRadiusTwice = "E_CHANNEL_RADIUS_TWICE";
+constexpr const char *kChannelRadiusPairKind = "E_CHANNEL_RADIUS_PAIR_KIND";
+constexpr const char *kChannelRadiusThm = "E_CHANNEL_RADIUS_THM";
 constexpr const char *kPotentialRelativistic = "E_POTENTIAL_RELATIVISTIC";
 constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";

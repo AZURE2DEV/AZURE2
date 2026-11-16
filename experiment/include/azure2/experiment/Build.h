@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/experiment/ChannelRadii.h"
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/experiment/GammaDecay.h"
 #include "azure2/experiment/HybridPotentialSettings.h"
@@ -76,6 +77,9 @@ struct BuiltProject {
   /// The `potential` records of <potentials>: one setting per pair key, no default (a pair without a record has no
   /// potential).
   HybridPotentialSettings potentials;
+  /// The `channel_radius` records of <channelRadii>, in record order (BuildChannelRadii): the channels that take a
+  /// radius of their own.  Which channel takes which is the set-up's (ChannelRadiusFor), which knows the channels.
+  std::vector<ChannelRadiusEntry> channelRadii;
   /// The record of each pair's potential: pair key -> (record name, line).
   std::map<int, std::pair<std::string, int>> potentialRecords;
   /// The defaults of the table the potential records used (matching radius, step), one line each for the log.

@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — per-channel radii, steps 2, 4, 5: the `channel_radius` record
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on `feature/upgrade` `f252ba30` merged into it (the handoff log
+kept both sides' entries; no other conflict). The PI decided on 2026-11-16 that this branch's choices hold for the
+three open points of the dev ports: column 32 of a level line stays the THM binding energy (dev's light-particle
+excitation needs a named key here), the formal boundary condition is at the lowest level of a group, and the record
+names are this branch's (`channel_radius`, `isospin_*`, `spin_observable`).
+
+**What is new.**
+- Record kind `channel_radius` of section `<channelRadii>` (`experiment/src/Schema.cpp`): `pair`, `pair_key`, `l`,
+  `radius`, optional `s` and `J`. `<channelRadii>` left `Schema::NewerSections()`. Schema version unchanged (no
+  existing project changes meaning); `tests/schema/schema_v3.json` and `format3.rst` regenerated.
+- Build (`experiment/src/ChannelRadii.cpp`, `ChannelRadii.h`): one `ChannelRadiusEntry` a record into
+  `BuiltProject::channelRadii`; `ChannelRadiusFor` picks the most specific entry for a channel (l+s+J, then one of s
+  and J, then l) and reports the s-only/J-only tie. Codes `E_CHANNEL_RADIUS_TWICE`, `E_CHANNEL_RADIUS_PAIR_KIND`,
+  `E_CHANNEL_RADIUS_THM` (a THM data set whose entrance pair has an entry: the vertex is at the pair's radius).
+- Set-up (`CompoundSystem::ApplyChannelRadii`, `CompoundSystemBuild.cpp`): after every channel exists (hard-sphere
+  groups included) and after a session's pair override; the tie is an ERROR, an entry that names no channel a
+  WARNING.
+- External capture: `ExternalRow::through_row`, the internal pathway a capture goes through, for direct capture
+  too. The entrance wave's closed test and hard-sphere phase are at that pathway's entrance channel's radius, the
+  integral at the final channel's; `RefuseCaptureAcrossRadii` refuses a model in which the folded wave's channel and
+  the final channel have different radii (dev's rule; DeBoer, 2026-11-10). `WorkingCopy::ECSignature` adds the two
+  radii of a pathway only where one is not its pair's, so an existing integrals file keeps its signature.
+- `physics::System` is unchanged, and this is **open for its owner**: a system channel is (partition, kind, l, s),
+  one for every J^pi block that has it, and `System` refuses two that differ in anything else. A record with `J`
+  gives the blocks different radii, so `Channel::radius_fm` (the first block's) is then not the radius of the others.
+  Nothing in `physics/` or `src/` reads that member today (the engine reads `AChannel::GetRadius`); whoever first
+  reads it needs the radius per block and channel instead. Tried and taken back: making the radius part of the
+  channel's identity in `SystemOfCompound.cpp` (the constructor refuses it: "same (partition, kind, l, s)").
+- Converter: dev's lines `<pair key> <l> <radius> [s=<s>] [J=<J>]` become records in the same section
+  (`OldProject.cpp`, `Builder::BuildChannelRadii`); a block that starts with a `channel_radius` record is left alone.
+- `tests/channel_radii` (dev's test, re-written for records): phase shifts wave by wave on both routes and both
+  bases against the model with the pair's radius changed, every l against the plain models, 13N with external
+  capture, the refusals and the warning.
+
+**Not written.** Step 3: `AZUREAPI::SetRadius` has no channel form, and a pyazr session cannot set a channel's
+radius except through the project's records. The compound-nucleus check and `describe` do not list the entries.
+`ChannelTable`'s pair signatures hold the pair's radius only; its rows are keyed by the radius, so a stale row is
+not found, but the reuse test does not see a changed entry. THM stays refused rather than carried.
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`, `experiment_diagnostics`, `experiment_schema`,
+`pyazr_schema`, `convert_constructs`, `convert_fixtures`, `physics_system_of_compound`, `physics_pathway_table`;
+`tests/channel_radii/check.sh`. The full gate: see the end of this entry. **Not run:** CI.
+
 ## 2026-11-16 (director, 06:05) — merged: Linux is green; the Windows and macOS results of the eleventh push answered
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 92 (one commit of mine: one rule of the engine and its

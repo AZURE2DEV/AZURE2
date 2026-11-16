@@ -139,6 +139,19 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const Compound
               hash->Add(finalChannel->GetS());
               hash->Add(compound->GetPair(finalChannel->GetPairNum())->GetPairKey());
               pairs->insert(finalChannel->GetPairNum());
+              // A channel's own radius (<channelRadii>) only where it is not its pair's, which the pairs' part of the
+              // signature holds: a file written before the records keeps its signature.
+              {
+                const azure2::InternalRow &through = P.internal[pathway.through_row];
+                const AChannel *entranceChannel = compound->GetJGroup(through.group)->GetChannel(through.ch);
+                const double finalRadius = finalChannel->GetRadius(), entranceRadius = entranceChannel->GetRadius();
+                if (finalRadius != compound->GetPair(finalChannel->GetPairNum())->GetPairRadius() ||
+                    entranceRadius != compound->GetPair(entranceChannel->GetPairNum())->GetPairRadius()) {
+                  hash->Add("channel radii");
+                  hash->Add(finalRadius);
+                  hash->Add(entranceRadius);
+                }
+              }
               hash->Add(pathway.channel_capture ? 1 : 0);
               if (pathway.channel_capture) {
                 const azure2::InternalRow &chanCap = P.internal[pathway.cc_row];

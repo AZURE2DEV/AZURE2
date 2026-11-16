@@ -266,7 +266,7 @@ absent. A ``<config>`` key that is not a row of ``io::ConfigKeys()``, a
 ``<parameters>`` are refused the same way (``E_UNREAD_LINE``). The converter
 refuses an old section it does not convert (``kConvertedSections`` in
 ``convert/src/Convert.cpp``); the sections of a newer AZURE2 that this build
-does not compute (``<channelRadii>``, ``<isospin>``) are named with what they
+does not compute (``<isospin>``) are named with what they
 state in ``Schema::NewerSections()``, whose words both refusals use. A section
 that a newer program adds is therefore refused until its row and its reader
 are written.

@@ -30,8 +30,9 @@ commits were not read. The hours are estimates of an agent that did not do the w
   four models agree across level orders and between the two bases. **Not run:** a final state that is not the
   lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. Port dev's
   `tests/formal_ec_final_state` (51 checks) and repair what it finds.
-- **dev's new blocks in an old project file** (`<channelRadii>`, `<isospin>`, spin-operator data types): refused by
-  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands.
+- **dev's new blocks in an old project file** (`<isospin>`, spin-operator data types): refused by
+  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands
+  (`<channelRadii>`: lifted, section 2).
 - **The flight path of a UDR record** is in metres (it was mis-scaled here; repaired).
 
 ## 2. Per-channel radii
@@ -59,6 +60,13 @@ Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8
 *Step 1 is written* on `feature/upgrade-5-dev-channel-radii` (2026-11-15, the owner's session): `AChannel::GetRadius`,
 `PPair::GetChRad` renamed `GetPairRadius`, the radius in the channel table's key. HANDOFF has the entry and what it
 leaves open (THM, the system's merged channels, the two signatures).
+
+*Steps 2, 4 and 5 are written* there too (2026-11-16): the record kind `channel_radius` of `<channelRadii>` (names by
+the PI's decision of 2026-11-16: this branch's), its build and its application at set-up, the converter of dev's
+block, the refusal of an external-capture transition across two radii, the radii in the signature of the capture
+integrals' file, and `tests/channel_radii`. A `channel_radius` on the entrance pair of a THM data set is refused
+(`E_CHANNEL_RADIUS_THM`). *Not written:* step 3 (the session's channel form of `AZUREAPI::SetRadius`), the radii in
+the compound-nucleus check's report and in `describe`.
 
 ## 3. General spin observables
 

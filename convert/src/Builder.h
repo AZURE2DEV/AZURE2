@@ -166,6 +166,7 @@ struct Construct {
   static constexpr const char *kMcmc = "<mcmc> priors";
   static constexpr const char *kPriorCovariance = "priorCovariance";
   static constexpr const char *kPotential = "<potential>";
+  static constexpr const char *kChannelRadii = "<channelRadii>";
   static constexpr const char *kAdaptiveGrid = "useAdaptiveGrid";
 };
 
@@ -327,6 +328,7 @@ class Builder {
   void RewriteSettings();
   void RewriteConfigAndPriors();
   void BuildPotentials();
+  void BuildChannelRadii();
 
   /// The reaction field of a line (base pair keys, components, operation, frame of fixed angles).
   /// `pairKeys` receives the entrance_pair and exit_pair fields the record needs: of the single reaction whose label

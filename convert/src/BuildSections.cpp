@@ -1,5 +1,6 @@
 // The sections that are not records: <scatteringLengths> as model data, <thm>, <parameterSettings>, <config> and
 // the prior-covariance copy (Builder.h).
+#include <cctype>
 #include "Builder.h"
 
 namespace azure2 {
@@ -235,6 +236,51 @@ void Builder::BuildPotentials() {
   }
   for (const std::string &n : r.notes) Note(Construct::kPotential, "", n);
   out_.potentials = r.records;
+}
+
+// ================================================================ <channelRadii>
+// dev's block (2026-11-10) -> one `channel_radius` record per line, in the lines' order: the pair by its label (with
+// pair_key where the label names two pairs), l, the radius in fm as written, and s and J where the line gives them.
+// A line on an unknown pair or on a photon or beta pair was refused by dev's engine, and is here.
+void Builder::BuildChannelRadii() {
+  for (const OldProject::ChannelRadiusLine &c : old_.channelRadii) {
+    const OldPair *pair = Pair(c.key);
+    if (!pair) {
+      res_.refusal = "<channelRadii> line \"" + c.text + "\" names pair key " + std::to_string(c.key) + ", which <levels> does not have";
+      return;
+    }
+    if (pair->pType != 0) {
+      res_.refusal = "<channelRadii> line \"" + c.text + "\" names pair " + std::to_string(c.key) + ", a " +
+                     (pair->pType == 10 ? "photon" : "beta") + " pair; only a particle channel has a radius";
+      return;
+    }
+    io::Record r;
+    r.kind = "channel_radius";
+    // "p+12C" -> "p12C" (as the potential records' names): a format-3 name
+    std::string base;
+    for (char ch : PairLabel(*pair)) {
+      if (ch == '+' || ch == ']') continue;
+      base += std::isalnum((unsigned char)ch) ? ch : '_';
+    }
+    if (base.empty() || !std::isalpha((unsigned char)base[0])) base = "p" + base;
+    base += "_l" + std::to_string(c.l);
+    auto plain = [](std::string v) {
+      for (char &ch : v)
+        if (ch == '/') ch = '_';
+      return v;
+    };
+    if (!c.s.empty()) base += "_s" + plain(c.s);
+    if (!c.J.empty()) base += "_J" + plain(c.J);
+    r.name = Unique(base);
+    Add(r, "pair", PairLabel(*pair));
+    if (Ambiguous(*pair)) Add(r, "pair_key", std::to_string(pair->key));
+    Add(r, "l", std::to_string(c.l));
+    Add(r, "radius", c.radius + " fm");
+    if (!c.s.empty()) Add(r, "s", c.s);
+    if (!c.J.empty()) Add(r, "J", c.J);
+    out_.channelRadii.records.push_back(r);
+    Count(Construct::kChannelRadii);
+  }
 }
 
 }  // namespace convert
