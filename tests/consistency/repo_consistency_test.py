@@ -1228,7 +1228,9 @@ except (OSError, IndexError, KeyError) as e:
 #     build may leave out (AbsentFitters()), is a row of docs/source/reference/command_line.rst; every row's name is
 #     in the fitter table of docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets
 #     (Config::USE_*_MINIMIZER, Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be
-#     selected outside the table.
+#     selected outside the table.  The prose that lists the fitters beside that table names every row too: the
+#     section "The engine's own fitters" of user_guide/pyazr.rst (the method), the page user_guide/web_interface.rst
+#     (the job method ``engine_<name>``) and the section "Minimizer Selection" of user_guide/calculate.rst (the switch).
 _fitter_rows = []
 try:
     _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
@@ -1257,6 +1259,28 @@ try:
         if _bit != "absent" and _fit_table and f"``{_name}``" not in _fit_table:
             problems.append(f"docs/source/user_guide/fitting.rst: the fitter '{_name}' is not in the table of "
                             "\"The Engine's Fitters\" (check 46)")
+    def _prose_section(_text, _title):
+        """The text from the heading `_title` to the next heading (a line followed by an underline of =-~^)."""
+        _heading = re.compile(r"^(\S[^\n]*)\n([=\-~^]{4,})$", re.M)
+        _found = [m for m in _heading.finditer(_text)]
+        for _k, _m in enumerate(_found):
+            if _m.group(1).strip() == _title:
+                return _text[_m.end():_found[_k + 1].start() if _k + 1 < len(_found) else len(_text)]
+        return ""
+    _prose = [("docs/source/user_guide/pyazr.rst", "The engine's own fitters", lambda n, o: f"``{n}``"),
+              ("docs/source/user_guide/web_interface.rst", None, lambda n, o: f"``engine_{n}``"),
+              ("docs/source/user_guide/calculate.rst", "Minimizer Selection", lambda n, o: f"``{o}``" if o else "")]
+    for _page, _title, _form in _prose:
+        _text = read(_page)
+        _scope = _prose_section(_text, _title) if _title else _text
+        if not _scope:
+            problems.append(f"{_page}: no section \"{_title}\" (check 46)")
+            continue
+        for _name, _option in {_n: _o for _n, _o, _b in _fitter_rows}.items():  # a row once, absent or not
+            _word = _form(_name, _option)
+            if _word and _word not in _scope:
+                problems.append(f"{_page}: the fitter '{_name}' of Fitters() is not named ({_word}) in "
+                                f"{'the section \"' + _title + '\"' if _title else 'the page'} (check 46)")
     _row_bits = {_bit for _n, _o, _bit in _fitter_rows}
     for _bit in sorted(set(re.findall(r"Config::(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)", read("src/AZURE2.cpp")))):
         if "Config::" + _bit not in _row_bits:
