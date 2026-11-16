@@ -463,7 +463,10 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
 5. **The API's own data χ²** (read): `AZUREAPI::EvaluateFilledChi2` (`AZUREAPIChi2.cpp` 68-125) forms T1, T1a, T1b and
    T2 a second time, with the sum of `Pull()²` where `SegmentTerms` sums `Chi2()` ((d/e)² against d²/e²: different
    rounding). pyazr's `calculate_chi2` and its `objective()` (`Objective::Chi2`) can therefore differ in the last bits
-   of the data part. Not changed by any slice; unifying it changes pyazr numbers.
+   of the data part. **Repaired** 2026-11-16 (commit "fix(api): the API's data chi-squared is the objective's data
+   term", the PI's word): `EvaluateFilledChi2` evaluates the model and then calls `Objective::DataChi2`; its rows
+   are read from `Results::objective`. `calculate_chi2_rwa` moved by at most 2.5e-16 relative on T1-T3 and 13N
+   (three bases, two points; 11 of 24 cases moved); `tests/pyazr/objective_test.py` section 6.
 6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient did not (`AZUREGrad.cpp` 90 tested
    `>= 0.0`). **Repaired** 2026-11-16 (commit "fix(grad): the Park wall's gradient skips a NaN J as its value and
    rows do", the PI's word): the gradient tests `!(J < 0)`; ctest `park_chi2_fallback`, variant E.
@@ -494,8 +497,8 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
   refreshes `ModelChi2` only (T6, T7, T9, T11); the prior covariance total is set by the last `CalculateChi2RWA`.
 - The comment of `AZUREAPI::WriteOutputFiles` (`AZUREAPIReports.cpp` 275-279) says pyazr adds the Park, abundance and
   scattering-length terms in Python; `objective.md` §4 step 4 says pyazr computes no prior since pyazr 2.11.0.
-- `CLAUDE.md` check 11 says no term is added outside `src/Objective.cpp`; `AZUREAPI::EvaluateFilledChi2` re-forms the
-  data terms (item 5 of section 6).
+- `CLAUDE.md` check 11 says no term is added outside `src/Objective.cpp`; `AZUREAPI::EvaluateFilledChi2` re-formed the
+  data terms (item 5 of section 6; repaired 2026-11-16, and its entry in check 11's allowed list removed).
 - In `include/Objective.h` 234-250 the comment of `ReplaceDiagonalPriors` stands above that of `AppendModelRows`, and
   the latter names Park's wall and the abundance sums but not the `gamma_decay` rows the function also appends
   (`Objective.cpp` 452-454).
