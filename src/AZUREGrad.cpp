@@ -103,25 +103,15 @@ void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &st
 }
 
 /*!
- * Gradient of the abundance term of the objective (T7): the prior
- * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
+ * Gradient of the abundance term of the objective (T7; AbundanceGradient of inference/'s AbundancePriors.h on the
+ * gather AbundanceBlockOf): the prior ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
  * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
 void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum) {
-  const AbundanceSamples &samples = data.Data().Abundances();
-  if (!samples.Present()) return;
-  const std::vector<double> &values = data.AbundanceValues();
-  for (int k = 1; k <= samples.NumParams(); k++) {
-    int sample, nucleus;
-    samples.Of(k, sample, nucleus);
-    const double s = samples.SumSigma(sample, configure.abundanceSumSigma);
-    const double centre = samples.Sample(sample).sumCentre;
-    double g = (s > 0.0) ? GaussianPriorGradient(samples.Sum(values, sample), centre, s) : 0.0;
-    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
-    const double w = values[k - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) g += GaussianPriorGradient(w, e.nominal, e.sigma);
-    accum.AddAbundance(k, g);
-  }
+  if (!data.Data().Abundances().Present()) return;
+  std::vector<double> dw;
+  AbundanceGradient(AbundanceBlockOf(data, configure.abundanceSumSigma), dw);
+  for (int k = 1; k <= (int)dw.size(); k++) accum.AddAbundance(k, dw[k - 1]);
 }
 
 /*!

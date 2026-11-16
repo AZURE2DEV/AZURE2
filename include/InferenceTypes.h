@@ -5,11 +5,13 @@
  * The engine's names of the inference/ library's types (docs/upgrade/inference.md): what a fit parameter is
  * (ParameterKind.h), where the level block and every other parameter sit in the vector (LevelParameterLayout.h,
  * ParameterIndexMap.h), the posterior's support (PosteriorSupport.h), one Gaussian prior (GaussianPrior.h), the list of
- * the diagonal priors (DiagonalPriors.h) and the prior covariance (PriorCovariance.h).  The rule of the objective's
+ * the diagonal priors (DiagonalPriors.h), the abundance term (AbundancePriors.h) and the prior covariance
+ * (PriorCovariance.h).  The rule of the objective's
  * term list (TermList.h) is named by Objective.h, which instantiates it.  The library is below the engine and
  * includes nothing of it; the engine and the binding spell its types without the namespace, as ChannelSpace.h does
  * for physics/'s constants.
  */
+#include "azure2/inference/AbundancePriors.h"
 #include "azure2/inference/DiagonalPriors.h"
 #include "azure2/inference/GaussianPrior.h"
 #include "azure2/inference/LevelParameterLayout.h"
@@ -18,6 +20,11 @@
 #include "azure2/inference/PosteriorSupport.h"
 #include "azure2/inference/PriorCovariance.h"
 
+using azure2::inference::AbundanceBlock;
+using azure2::inference::AbundanceChi2;
+using azure2::inference::AbundanceGradient;
+using azure2::inference::AbundanceSumRow;
+using azure2::inference::AbundanceSumRows;
 using azure2::inference::AddPriorsChi2;
 using azure2::inference::AddPriorsCurvature;
 using azure2::inference::AddPriorsGradient;

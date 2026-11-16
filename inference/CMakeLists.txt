@@ -42,10 +42,13 @@ endif()
 #   term_list                terms that add known numbers: the order of the sum, the breakdown, the sampler's sum
 #   diagonal_priors          a list of five priors by hand: the running sum and the subtotals bit for bit, the
 #                            gradient at p and the curvature against central differences, an empty list
+#   abundance_priors         two samples of two nuclei by hand (a replaced prior, a sample without a sum term): the
+#                            value bit for bit the objective's loop, the gradient and the sum rows against central
+#                            differences, the rows' squares = the sums' part
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src parameter_kinds_test.cpp level_parameter_layout_test.cpp parameter_index_map_test.cpp
              posterior_support_test.cpp gaussian_prior_test.cpp prior_covariance_test.cpp term_list_test.cpp
-             diagonal_priors_test.cpp)
+             diagonal_priors_test.cpp abundance_priors_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(inference_${_t}_test tests/${_src})
   target_link_libraries(inference_${_t}_test PRIVATE azure2_inference)

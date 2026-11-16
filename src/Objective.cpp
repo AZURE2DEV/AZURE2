@@ -176,7 +176,8 @@ class TargetPriorTerm : public ObjectiveTerm {
 
 // T7: isotopic abundances (the samples of DataSet::Abundances at the working copy's values), summed over samples:
 // every entry with a prior adds ((w - w0)/sigma)^2, and each sample whose width s is > 0 adds ((sum w) - c)^2 / s^2,
-// c the sum's centre (1 unless written).
+// c the sum's centre (1 unless written).  The gather is AbundanceBlockOf (DiagonalPriors.h), the arithmetic
+// inference/'s AbundancePriors.h, which the gradient (AddAbundancePenaltyGradient) and the rows (AppendModelRows) call.
 class AbundanceTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -185,32 +186,13 @@ class AbundanceTerm : public ObjectiveTerm {
   // term, which couples them, is here.
   // (Adding the full term there counted the per-nucleus priors twice: an abundance's posterior 1/sqrt(2) too narrow.)
   void AddForSampler(const ObjectiveContext &c, double &chi2) const override {
-    if (c.data->Data().Abundances().Present()) chi2 += Penalty(c, Parts::kSumsOnly);
+    if (c.data->Data().Abundances().Present()) chi2 += AbundanceChi2(AbundanceBlockOf(*c.data, c.config.abundanceSumSigma), false);
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!c.data->Data().Abundances().Present()) return;
-    const double abundancePenalty = Penalty(c, Parts::kPriorsAndSums);
+    const double abundancePenalty = AbundanceChi2(AbundanceBlockOf(*c.data, c.config.abundanceSumSigma), true);
     chi2 += abundancePenalty;
     c.results.objective.abundance = abundancePenalty;
-  }
-
- private:
-  enum class Parts { kSumsOnly, kPriorsAndSums };
-  static double Penalty(const ObjectiveContext &c, Parts parts) {
-    const AbundanceSamples &samples = c.data->Data().Abundances();
-    const std::vector<double> &values = c.data->AbundanceValues();
-    double penalty = 0.0;
-    for (int s = 1; s <= samples.NumSamples(); s++) {
-      const AbundanceSample &sample = samples.Sample(s);
-      for (int i = 1; parts == Parts::kPriorsAndSums && i <= (int)sample.entries.size(); i++) {
-        const SampleAbundance &e = sample.entries[i - 1];
-        const double w = values[samples.Ordinal(s, i) - 1];
-        if (e.sigma > 0.0 && !e.priorReplaced) penalty += GaussianPriorChi2(w, e.nominal, e.sigma);
-      }
-      const double sig = samples.SumSigma(s, c.config.abundanceSumSigma);
-      if (sig > 0.0) penalty += GaussianPriorChi2(samples.Sum(values, s), sample.sumCentre, sig);
-    }
-    return penalty;
   }
 };
 
@@ -460,20 +442,16 @@ void AppendModelRows(const CompoundSystem *compound, const LevelState &state, co
   // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
   for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound, state))
     appendRow(row.r, nullptr, &row.d);
-  // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
+  // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every
+  // abundance of the sample (AbundanceSumRows).
   const AbundanceSamples &samples = data.Data().Abundances();
   if (samples.Present()) {
-    for (int smp = 1; smp <= samples.NumSamples(); smp++) {
-      const double s = samples.SumSigma(smp, config.abundanceSumSigma);
-      if (!(s > 0.0)) continue;
+    const AbundanceBlock block = AbundanceBlockOf(data, config.abundanceSumSigma);
+    for (const AbundanceSumRow &row : AbundanceSumRows(block)) {
       std::vector<std::pair<int, double>> direct;
       if (pmap)
-        for (int k = 1; k <= samples.NumParams(); k++) {
-          int sample, nucleus;
-          samples.Of(k, sample, nucleus);
-          if (sample == smp) direct.push_back({pmap->AbundanceIndex(k), 1.0 / s});
-        }
-      appendRow((samples.Sum(data.AbundanceValues(), smp) - samples.Sample(smp).sumCentre) / s, nullptr, &direct);
+        for (int i = 1; i <= block.numNuclei; i++) direct.push_back({pmap->AbundanceIndex(samples.Ordinal(row.sample, i)), row.derivative});
+      appendRow(row.residual, nullptr, &direct);
     }
   }
 }
