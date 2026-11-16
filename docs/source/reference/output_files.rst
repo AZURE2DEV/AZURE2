@@ -324,8 +324,9 @@ the start of a fit, so it never describes an earlier one)::
     call_limit     none
 
 ``minimizer`` is the fitter that ran and ``fitter`` the one the switches chose
-(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when
-``lm`` or ``gsl-lm`` ran ``migrad`` for a model without an analytic Jacobian.
+(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when the
+fitter that ran is the row named in the ``fallback`` column of the one chosen
+(a least-squares fitter on a model without an analytic Jacobian).
 ``status`` is the outcome in the words every fitter shares: ``converged``,
 ``call_limit`` (stopped at the ``--max-calls`` limit), ``iteration_limit``
 (LM's or GSL's 200 iterations), ``stopped``, ``invalid`` (MIGRAD's minimum is
