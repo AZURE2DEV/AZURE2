@@ -31,11 +31,10 @@ import numpy as np
 
 from .spec import Finding
 
-# observables measured at an angle (pyazr.datasets._OBSERVABLE names).  "differential-cm" (isDiff 4) was missing until
-# 2026-11-15: every c.m. differential set lost its angles, so the angle checks (norm-angle-trend, detector curves) skipped
-# them.
-ANGLE_OBS = ("differential", "differential-cm", "analyzing-power", "phase-shift")
-RATIO_OBS_SKIP = ("analyzing-power", "phase-shift")      # fit/data ratios mean nothing there
+# A data set measured at an angle is one the engine gives an angle window (Segment.differential: the quantities whose
+# ``angle_axis`` is required in pyazr.kinds()["data"], and a yield with an angle column), in either frame.
+# Quantities (the engine's names) whose fit/data ratios mean nothing:
+RATIO_OBS_SKIP = ("analyzing_power", "phase_shift")
 BLUR_SCALES = (0.02, 0.05, 0.1, 0.2)                       # MeV in Ex
 UNIT_MEV = {"meV": 1e-9, "eV": 1e-6, "keV": 1e-3, "MeV": 1.0}
 
@@ -174,17 +173,19 @@ def _blocks(path: str) -> List[np.ndarray]:
 
 
 def output_dir_of(azr_path: str) -> str:
-    """The ``<fileDir>`` of the .azr (its output path, possibly relative to the .azr) or ``output/`` next to it."""
-    text = open(azr_path).read()
-    m = re.search(r"<fileDir>\s*\n?(.*?)\n?\s*</fileDir>", text, re.S)
+    """The output directory the project names (``output_dir`` of ``<config>``, relative to the project) when it
+    holds a run's files, else ``output/`` next to the project."""
     base = os.path.dirname(os.path.abspath(azr_path))
-    if m:
-        p = m.group(1).strip().splitlines()[0].strip() if m.group(1).strip() else ""
-        if p:
-            p = os.path.expanduser(p)
-            p = p if os.path.isabs(p) else os.path.join(base, p)
-            if os.path.isdir(p) and any(f.startswith("AZUREOut_") for f in os.listdir(p)):
-                return p
+    try:
+        import pyazr
+        p = str(pyazr.Project.open(os.path.abspath(azr_path)).config().get("output_dir", "") or "")
+    except Exception:
+        p = ""
+    if p:
+        p = os.path.expanduser(p)
+        p = p if os.path.isabs(p) else os.path.join(base, p)
+        if os.path.isdir(p) and any(f.startswith("AZUREOut_") for f in os.listdir(p)):
+            return p
     return os.path.join(base, "output")
 
 
@@ -217,7 +218,8 @@ def table_from_output(azr_path: str, output_dir: Optional[str] = None) -> PointT
         for s in group:
             n = chisq.get(s.key, {}).get("n")
             if n is None:
-                n = int(rows_in_segment(s, base).shape[0])
+                rows = rows_in_segment(s, base)
+                n = int(s.rows_kept if rows is None else rows.shape[0])
             expected.append(n)
         if len(blocks) != len(group) or any(b.shape[0] != n for b, n in zip(blocks, expected)):
             allrows = np.concatenate(blocks) if blocks else np.zeros((0, 9))
@@ -239,7 +241,7 @@ def table_from_output(azr_path: str, output_dir: Optional[str] = None) -> PointT
             cols["key"].append(np.full(m, s.key, int))
             cols["name"].append(np.array([dataset_name(s.data_file)] * m, dtype=object))
             cols["ecm"].append(b[:, 0]); cols["ex"].append(b[:, 1])
-            cols["ang"].append(b[:, 2] if s.observable in ANGLE_OBS else np.full(m, np.nan))
+            cols["ang"].append(b[:, 2] if s.differential else np.full(m, np.nan))
             cols["fit"].append(b[:, 3])
             cols["data"].append(b[:, 5] / n); cols["err"].append(np.abs(b[:, 6]) / n)
             cols["norm"].append(np.full(m, n))
@@ -275,7 +277,7 @@ def table_from_evaluator(ev, x) -> PointTable:
         cols["ecm"].append(np.asarray(d["energies"][i], float) if i < len(d.get("energies", [])) else np.full(m, np.nan))
         cols["ex"].append(ex)
         ang = np.asarray(angles[i], float) if i < len(angles) and len(angles[i]) == m else np.full(m, np.nan)
-        if seg is not None and seg.observable not in ANGLE_OBS:
+        if seg is not None and not seg.differential:
             ang = np.full(m, np.nan)
         cols["ang"].append(ang)
         cols["fit"].append(fit); cols["data"].append(dat); cols["err"].append(err); cols["norm"].append(np.full(m, n))
@@ -315,7 +317,7 @@ def levels_from_parameters_out(path: str) -> List[Level]:
 def levels_from_azr(azr_path: str) -> List[Level]:
     """Levels of the .azr with total widths from its ``gamma`` fields, which hold PHYSICAL values (eV for an open
     particle channel or a photon channel, an ANC for a closed one -- ``AzrModel.apply_fit`` docstring).  Open means
-    the level lies above the pair's threshold Ex (``entrance_sep_energy - sep_energy + excitation``).  These are
+    the level lies above the pair's threshold Ex (``Project.pairs()``: separation energy + excitation).  These are
     the values the file was last saved with, not necessarily the fit's: prefer ``parameters.out`` when it exists."""
     from rmfit.azr3 import Model as AzrModel
     from .spec import pair_lines
@@ -323,16 +325,13 @@ def levels_from_azr(azr_path: str) -> List[Level]:
     thr = {}
     for key, c in pair_lines(m).items():
         try:
-            if c.ptype == 10 or getattr(c, "is_photon", False):
+            if getattr(c, "is_photon", False):
                 thr[key] = None            # photon: always "open"
             else:
-                thr[key] = float(c.entrance_sep_energy - c.sep_energy + c.excitation)
+                thr[key] = float(c.threshold)
         except Exception:
             thr[key] = float("nan")
-    try:
-        levels = m.active_levels()
-    except Exception:
-        levels = m.levels
+    levels = m.active_levels
     out = []
     for lv in levels:
         j = float(lv.J); pi = "+" if int(lv.parity) > 0 else "-"
@@ -893,16 +892,9 @@ class Review:
 
     # ---- 7. level support ---------------------------------------------------------------------------------------
     def level_support(self):
-        from .model import target_int_entries
         t = self.tab
-        ti_keys = set()
-        if self.azr_text:
-            try:
-                for active, keys, _ in target_int_entries(self.azr_text):
-                    if active:
-                        ti_keys.update(int(k) for k in keys)
-            except Exception:
-                pass
+        # the data sets the engine folds (their record names a target, a beam or a detector)
+        ti_keys = {int(s.key) for s in (self.segments or []) if s.active and getattr(s, "folded", False)}
         L = ["| level | Ex | Gamma | data sets within +-max(3 Gamma, 5 keV) | points | local Ex spacing | target-int segments |",
              "|---|---:|---:|---|---:|---:|---|"]
         nflag = 0

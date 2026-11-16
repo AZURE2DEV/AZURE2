@@ -403,6 +403,7 @@ class ModelPair:
     heavy_excitation = property(lambda self: float(self._pair.heavy_excitation))
     light_excitation = property(lambda self: float(self._pair.light_excitation))
     label = property(lambda self: self._pair.label)
+    threshold = property(lambda self: float(self._pair.threshold))
 
 
 class ModelLevel:
