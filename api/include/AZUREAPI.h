@@ -554,14 +554,12 @@ class AZUREAPI {
   void FillFromFullRWA(const vector_r &full);
 
   /*!
-   * Forward model and data chi-squared on the already-filled compound/data,
-   * exactly as the CLI's AZURECalc::operator() computes the data term: every
-   * point's model is stored on it, a profiled (free THM) norm is set to its
-   * optimum and contributes S_dd - S_md^2/S_mm, and the per-segment value is
-   * stored on the segment.  No penalties.  If res is given it receives the
-   * standardized residual (m - n d)/(n e) of every point (0 where e = 0), in
-   * the row order of ComputeResidualJacobian -- with the profiled n, so that
-   * sum r^2 is the returned chi-squared.
+   * Forward model and data chi-squared on the already-filled compound/data: every point's model value into the
+   * session's Results, then the objective's own data terms (Objective::DataChi2: T1 with the profiled norms and the
+   * THM profiles, T2), which store each segment's chi^2 and a profiled norm's optimum in Results::objective.  No
+   * penalties.  If res is given it receives the standardized residual (m - n d)/(n e) of every point (0 where
+   * e = 0), in the row order of ComputeResidualJacobian -- with the profiled n, so that sum r^2 is the returned
+   * chi-squared to rounding (without a data covariance; with one, the caller whitens the rows).
    */
   double EvaluateFilledChi2(vector_r *res);
   /// Park's J > 0 wall, the abundance priors and the scattering-length chi^2 on the filled compound: the terms

@@ -529,19 +529,17 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
             hi = std::max(hi, x);
           }
         }
-        // The function's own penalty: the owner's shift penalties minus those of its
-        // constant and sqrt(E) terms.
+        // The function's own penalty: the priors of its own parameters a_j as the objective holds them (the owner's
+        // entries of source kShiftFn, AppendShiftPriors), so that a prior the prior covariance replaced is absent by
+        // the objective's rule.
         DiagonalPriors ownerPriors;
         AppendShiftPriors(*this, pos + 1, nullptr, ownerPriors);
-        const double pen = PriorsChi2(ownerPriors);
-        double penOwn = 0.0;
-        if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = GaussianPriorChi2(State(owner).energyShift, owner.GetNominalEnergyShift(), owner.GetEnergyShiftError());
+        const double fnPenalty = PriorsChi2(ownerPriors, PriorSource::kShiftFn, pos + 1);
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << State(owner).energyShift << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << State(owner).shiftFnValues[q];
         out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(State(owner), lo) << "," << owner.TotalEnergyShift(State(owner), hi) << ","
-            << pen - penOwn << std::endl;
+            << fnPenalty << std::endl;
       }
       if (header) out << "# Total-Shift-Chi-Squared: " << totalShiftChi << std::endl;
       out.flush();
